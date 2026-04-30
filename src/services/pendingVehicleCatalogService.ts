@@ -22,12 +22,26 @@ export type VehicleCatalogMatchParams = {
   /** OEM chassis / frame index (e.g. M900A) */
   chassis_code?: string;
   body_type?: string;
+  // Hybrid catalog matching disambiguators (server-side ilike filters):
+  drivetrain?: string;
+  transmission?: string;
+  fuel_type?: string;
+  fuel_grade?: string;
+  engine_code?: string;
+  engine_type?: string;
+  catalog_trim?: string;
+  full_model_code?: string;
 };
 
-export async function listVehicleCatalogMatches(
-  accessToken: string,
-  params: VehicleCatalogMatchParams,
-): Promise<VehicleCatalogRecord[]> {
+export type VehicleCatalogMatchResponse = {
+  items: VehicleCatalogRecord[];
+  /** items.length capped at the SELECT limit; used to decide auto-match vs. force-pick. */
+  exactCount: number;
+  /** True when the result was capped by the SELECT limit (40 rows today). */
+  truncated: boolean;
+};
+
+function buildVehicleCatalogMatchSearchParams(params: VehicleCatalogMatchParams): URLSearchParams {
   const sp = new URLSearchParams();
   if (params.make) sp.set("make", params.make);
   if (params.model) sp.set("model", params.model);
@@ -36,13 +50,45 @@ export async function listVehicleCatalogMatches(
   if (params.trim_series) sp.set("trim_series", params.trim_series);
   if (params.chassis_code) sp.set("chassis_code", params.chassis_code);
   if (params.body_type) sp.set("body_type", params.body_type);
+  if (params.drivetrain) sp.set("drivetrain", params.drivetrain);
+  if (params.transmission) sp.set("transmission", params.transmission);
+  if (params.fuel_type) sp.set("fuel_type", params.fuel_type);
+  if (params.fuel_grade) sp.set("fuel_grade", params.fuel_grade);
+  if (params.engine_code) sp.set("engine_code", params.engine_code);
+  if (params.engine_type) sp.set("engine_type", params.engine_type);
+  if (params.catalog_trim) sp.set("catalog_trim", params.catalog_trim);
+  if (params.full_model_code) sp.set("full_model_code", params.full_model_code);
+  return sp;
+}
+
+/**
+ * Legacy shape used by older callers — returns the items array directly.
+ * Prefer {@link listVehicleCatalogMatchesWithCount} when you need the
+ * `exactCount` signal for auto-match vs. force-pick decisions.
+ */
+export async function listVehicleCatalogMatches(
+  accessToken: string,
+  params: VehicleCatalogMatchParams,
+): Promise<VehicleCatalogRecord[]> {
+  const { items } = await listVehicleCatalogMatchesWithCount(accessToken, params);
+  return items;
+}
+
+export async function listVehicleCatalogMatchesWithCount(
+  accessToken: string,
+  params: VehicleCatalogMatchParams,
+): Promise<VehicleCatalogMatchResponse> {
+  const sp = buildVehicleCatalogMatchSearchParams(params);
   const res = await fetch(
     `${API_ENDPOINTS.fleet}/vehicle-catalog-matches?${sp.toString()}`,
     { headers: edgeHeaders(accessToken) },
   );
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
-  return (data.items || []) as VehicleCatalogRecord[];
+  const items = (data.items || []) as VehicleCatalogRecord[];
+  const exactCount = typeof data.exactCount === "number" ? data.exactCount : items.length;
+  const truncated = data.truncated === true;
+  return { items, exactCount, truncated };
 }
 
 /** Tenant-safe: only returns catalog row if org has a vehicle linked to this id (or platform role). */

@@ -4,7 +4,7 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { Loader2, Upload, FileText, Check, Camera, Car, FileCheck, Sparkles, AlertTriangle } from 'lucide-react';
+import { Loader2, Upload, FileText, Check, Camera, Car, FileCheck, Sparkles, AlertTriangle, Tag } from 'lucide-react';
 import { api } from '../../services/api';
 import { toast } from 'sonner@2.0.3';
 import { Vehicle } from '../../types/vehicle';
@@ -12,6 +12,8 @@ import { cn } from "../ui/utils";
 import { convertPdfToImage } from '../../utils/pdf-helper';
 import { findMatchingVehicle } from '../../utils/identityMatcher';
 import { showCatalogGateToastIfApplicable } from '../../utils/catalogGateErrors';
+import { CatalogVariantPicker, type CatalogVariantPickerSource } from './CatalogVariantPicker';
+import type { VehicleCatalogRecord } from '../../types/vehicleCatalog';
 
 interface AddVehicleModalProps {
   isOpen: boolean;
@@ -133,8 +135,11 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
   const [step, setStep] = useState(1); // 1 = Upload docs, 2 = Verify Details
   /** Step 1: fitness upload → parse review → registration upload → combined verify. */
   const [uploadSubStep, setUploadSubStep] = useState<"fitness" | "fitness_review" | "registration">("fitness");
-  /** Step 2: switch between registration and fitness field editors. */
-  const [verifyDocTab, setVerifyDocTab] = useState<"registration" | "fitness">("registration");
+  /**
+   * Step 2: switch between registration, fitness, and the new "motor type"
+   * (catalog variant) field editors. The catalog tab hosts CatalogVariantPicker.
+   */
+  const [verifyDocTab, setVerifyDocTab] = useState<"registration" | "fitness" | "catalog">("registration");
   const [isLoading, setIsLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [fitnessFile, setFitnessFile] = useState<File | null>(null);
@@ -166,8 +171,43 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
     vin: '',
     controlNumber: '',
     registrationIssueDate: '',
-    registrationExpiryDate: ''
+    registrationExpiryDate: '',
+
+    // Hybrid catalog matching disambiguators (collected on the new "motor type"
+    // tab). Sent both to the matches endpoint and stamped on the vehicle so
+    // the server-side resolver picks the same row when the user has not
+    // explicitly selected a candidate.
+    trim: '',
+    /** 1-12; narrows production span when same MMY has facelift / mid-cycle changes. */
+    productionMonth: '',
+    drivetrain: '',
+    transmission: '',
+    fuelType: '',
   });
+
+  /**
+   * Catalog row picked (or auto-picked) by CatalogVariantPicker. We stamp
+   * vehicle_catalog_id + hints from this row before posting to the server so
+   * the resolver can confirm the match deterministically and the pending
+   * queue (when 0 matches) gets the richest possible payload.
+   */
+  const [selectedCatalogRow, setSelectedCatalogRow] = useState<VehicleCatalogRecord | null>(null);
+  const [catalogPickerSource, setCatalogPickerSource] = useState<CatalogVariantPickerSource | null>(null);
+
+  const handleCatalogPickerChange = React.useCallback(
+    (row: VehicleCatalogRecord | null, source: CatalogVariantPickerSource) => {
+      setSelectedCatalogRow(row);
+      setCatalogPickerSource(source);
+    },
+    [],
+  );
+
+  /**
+   * When the picker is in force-pick mode (2+ candidates) we must block save
+   * until the operator chooses a row. Auto-match (1) and no-match (0) are
+   * both fine to save — the server gates operational use either way.
+   */
+  const catalogSaveBlocked = catalogPickerSource === "pending";
 
   const matchedVehicle = React.useMemo(() => {
       if (!formData.licensePlate) return null;
@@ -316,6 +356,14 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
       return;
     }
 
+    // Hybrid catalog matching: when the picker has 2+ candidates we must not
+    // silently guess. Force the operator onto the catalog tab to pick.
+    if (catalogSaveBlocked) {
+      toast.error("Pick the matching motor type before saving.");
+      setVerifyDocTab("catalog");
+      return;
+    }
+
     setIsLoading(true);
     try {
       // Upload Documents & Generate Image
@@ -367,6 +415,50 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
         ? existingVehicles.find(v => (v.licensePlate || '').toUpperCase() === plateToUse || v.id === plateToUse)
         : null;
 
+      // Hybrid catalog matching: gather all the disambiguator hints we will
+      // stamp on the vehicle. When the picker auto-matched or the operator
+      // explicitly picked a row, we stamp the canonical values from that row;
+      // otherwise we stamp whatever the operator typed so the pending request
+      // is still rich.
+      const trimToHint = (v: string | null | undefined) => {
+        const s = (v ?? "").toString().trim();
+        return s === "" ? undefined : s;
+      };
+      const monthNum = parseInt(String(formData.productionMonth ?? "").trim(), 10);
+      const stampedMonth =
+        Number.isFinite(monthNum) && monthNum >= 1 && monthNum <= 12 ? monthNum : undefined;
+      const catalogHints: Partial<Vehicle> = selectedCatalogRow
+        ? {
+            vehicle_catalog_id: selectedCatalogRow.id,
+            vehicle_catalog_trim_hint: trimToHint(selectedCatalogRow.trim_series ?? formData.trim),
+            vehicle_catalog_chassis_hint: trimToHint(selectedCatalogRow.chassis_code),
+            vehicle_catalog_generation_hint: trimToHint(selectedCatalogRow.generation),
+            vehicle_catalog_engine_code_hint: trimToHint(selectedCatalogRow.engine_code),
+            vehicle_catalog_engine_type_hint: trimToHint(selectedCatalogRow.engine_type),
+            vehicle_catalog_full_model_code_hint: trimToHint(selectedCatalogRow.full_model_code),
+            vehicle_catalog_catalog_trim_hint: trimToHint(selectedCatalogRow.catalog_trim),
+            vehicle_catalog_emissions_prefix_hint: trimToHint(selectedCatalogRow.emissions_prefix),
+            vehicle_catalog_trim_suffix_hint: trimToHint(selectedCatalogRow.trim_suffix_code),
+            vehicle_catalog_drivetrain_hint:
+              trimToHint(selectedCatalogRow.drivetrain) ?? trimToHint(formData.drivetrain),
+            vehicle_catalog_fuel_type_hint:
+              trimToHint(selectedCatalogRow.fuel_type) ?? trimToHint(formData.fuelType),
+            vehicle_catalog_transmission_hint:
+              trimToHint(selectedCatalogRow.transmission) ?? trimToHint(formData.transmission),
+            vehicle_catalog_fuel_category_hint: trimToHint(selectedCatalogRow.fuel_category),
+            vehicle_catalog_fuel_grade_hint: trimToHint(selectedCatalogRow.fuel_grade),
+            vehicle_catalog_production_month_hint: stampedMonth,
+          }
+        : {
+            // No match yet — server will park + queue. Send everything we have
+            // so the platform admin sees the full picture in the pending UI.
+            vehicle_catalog_trim_hint: trimToHint(formData.trim),
+            vehicle_catalog_drivetrain_hint: trimToHint(formData.drivetrain),
+            vehicle_catalog_fuel_type_hint: trimToHint(formData.fuelType),
+            vehicle_catalog_transmission_hint: trimToHint(formData.transmission),
+            vehicle_catalog_production_month_hint: stampedMonth,
+          };
+
       let finalVehicle: Vehicle;
 
       if (existingVehicle) {
@@ -400,6 +492,9 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
               // Update URLs only if new files
               fitnessCertificateUrl: fitnessUrl || existingVehicle.fitnessCertificateUrl,
               registrationCertificateUrl: registrationUrl || existingVehicle.registrationCertificateUrl,
+
+              // Hybrid catalog matching: catalog id + hints from the picker.
+              ...catalogHints,
           };
           toast.info(`Updated existing vehicle: ${plateToUse}`);
       } else {
@@ -442,7 +537,10 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
             fitnessCertificateUrl: fitnessUrl,
             registrationCertificateUrl: registrationUrl,
             mvid: formData.mvid,
-            laNumber: formData.laNumber
+            laNumber: formData.laNumber,
+
+            // Hybrid catalog matching: catalog id + hints from the picker.
+            ...catalogHints,
           };
       }
 
@@ -486,12 +584,15 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
         status: 'Inactive',
         make: '', model: '', year: new Date().getFullYear().toString(),
         color: '', bodyType: '', engineNumber: '', ccRating: '', fitnessIssueDate: '', fitnessExpiryDate: '',
-        laNumber: '', licensePlate: '', mvid: '', vin: '', controlNumber: '', registrationIssueDate: '', registrationExpiryDate: ''
+        laNumber: '', licensePlate: '', mvid: '', vin: '', controlNumber: '', registrationIssueDate: '', registrationExpiryDate: '',
+        trim: '', productionMonth: '', drivetrain: '', transmission: '', fuelType: ''
     });
     setFitnessFile(null);
     setRegistrationFile(null);
     setUploadSubStep("fitness");
     setVerifyDocTab("registration");
+    setSelectedCatalogRow(null);
+    setCatalogPickerSource(null);
     setStep(1);
     onClose();
   };
@@ -639,6 +740,28 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
                         <FileCheck className="h-4 w-4 shrink-0 text-emerald-600" />
                         <span className="truncate">Fitness</span>
                       </button>
+                      <button
+                        type="button"
+                        id="verify-tab-catalog"
+                        role="tab"
+                        aria-selected={verifyDocTab === "catalog"}
+                        onClick={() => setVerifyDocTab("catalog")}
+                        className={cn(
+                          "flex-1 inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors min-h-[2.5rem] relative",
+                          verifyDocTab === "catalog"
+                            ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/80"
+                            : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/80",
+                        )}
+                      >
+                        <Tag className="h-4 w-4 shrink-0 text-indigo-600" />
+                        <span className="truncate">Motor type</span>
+                        {catalogSaveBlocked && (
+                          <span
+                            aria-hidden
+                            className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-white"
+                          />
+                        )}
+                      </button>
                     </div>
                     <Button
                       variant="link"
@@ -733,6 +856,118 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
                 </div>
                 )}
 
+                {verifyDocTab === "catalog" && (
+                <div
+                  className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-3 max-w-lg mx-auto"
+                  role="tabpanel"
+                  id="verify-panel-catalog"
+                  aria-labelledby="verify-tab-catalog"
+                >
+                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                    <Tag className="h-4 w-4 text-indigo-600" />
+                    Confirm motor type
+                  </div>
+                  <p className="text-xs text-slate-600">
+                    The exact variant matters for service intervals, parts, and reporting.
+                    Add any details that distinguish this vehicle from similar ones, then pick the matching catalog row.
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <Label className="text-xs text-slate-500">Trim / series (optional)</Label>
+                      <Input
+                        value={formData.trim}
+                        onChange={(e) => setFormData({ ...formData, trim: e.target.value })}
+                        placeholder="e.g. XLE, Custom G"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-slate-500">Production month (optional)</Label>
+                      <Input
+                        value={formData.productionMonth}
+                        onChange={(e) => setFormData({ ...formData, productionMonth: e.target.value })}
+                        inputMode="numeric"
+                        placeholder="1–12"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-slate-500">Drivetrain (optional)</Label>
+                      <Select
+                        value={formData.drivetrain || "_blank"}
+                        onValueChange={(v) => setFormData({ ...formData, drivetrain: v === "_blank" ? "" : v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="_blank">— not sure —</SelectItem>
+                          <SelectItem value="FWD">FWD</SelectItem>
+                          <SelectItem value="RWD">RWD</SelectItem>
+                          <SelectItem value="AWD">AWD</SelectItem>
+                          <SelectItem value="4WD">4WD</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-slate-500">Transmission (optional)</Label>
+                      <Select
+                        value={formData.transmission || "_blank"}
+                        onValueChange={(v) => setFormData({ ...formData, transmission: v === "_blank" ? "" : v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="_blank">— not sure —</SelectItem>
+                          <SelectItem value="AT">Automatic</SelectItem>
+                          <SelectItem value="MT">Manual</SelectItem>
+                          <SelectItem value="CVT">CVT</SelectItem>
+                          <SelectItem value="DCT">DCT</SelectItem>
+                          <SelectItem value="AMT">AMT</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <Label className="text-xs text-slate-500">Fuel type (optional)</Label>
+                      <Select
+                        value={formData.fuelType || "_blank"}
+                        onValueChange={(v) => setFormData({ ...formData, fuelType: v === "_blank" ? "" : v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="_blank">— not sure —</SelectItem>
+                          <SelectItem value="Gasoline">Gasoline</SelectItem>
+                          <SelectItem value="Diesel">Diesel</SelectItem>
+                          <SelectItem value="Hybrid">Hybrid</SelectItem>
+                          <SelectItem value="EV">Electric (EV)</SelectItem>
+                          <SelectItem value="LPG">LPG</SelectItem>
+                          <SelectItem value="CNG">CNG</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="pt-2">
+                    <CatalogVariantPicker
+                      make={formData.make}
+                      model={formData.model}
+                      year={formData.year}
+                      month={formData.productionMonth}
+                      trim={formData.trim}
+                      drivetrain={formData.drivetrain}
+                      transmission={formData.transmission}
+                      fuel_type={formData.fuelType}
+                      body_type={formData.bodyType}
+                      value={selectedCatalogRow?.id ?? null}
+                      onChange={handleCatalogPickerChange}
+                      disabled={isLoading}
+                    />
+                  </div>
+                </div>
+                )}
+
                 <div className="max-w-lg mx-auto border-t pt-4 space-y-2">
                     <Label className="text-xs text-slate-500 mb-1.5 block">Vehicle Status</Label>
                     <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 flex gap-2 text-xs text-amber-900">
@@ -806,9 +1041,13 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
                 </Button>
               </>
             ) : step === 1 ? null : (
-                <Button type="submit" disabled={isLoading}>
+                <Button
+                  type="submit"
+                  disabled={isLoading || catalogSaveBlocked}
+                  title={catalogSaveBlocked ? "Pick the matching motor type on the Motor type tab to continue" : undefined}
+                >
                     {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Add Vehicle
+                    {catalogSaveBlocked ? "Pick motor type to continue" : "Add Vehicle"}
                 </Button>
             )}
           </DialogFooter>

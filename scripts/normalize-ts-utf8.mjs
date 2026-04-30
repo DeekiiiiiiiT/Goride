@@ -6,6 +6,8 @@ const roots = [
   "src/supabase/functions/server/vehicle_catalog_gate.ts",
   "src/utils/vehicleCatalogGate.ts",
   "src/utils/catalogGateErrors.ts",
+  "src/components/vehicles/CatalogVariantPicker.tsx",
+  "supabase/migrations/20260430120000_vehicle_catalog_pending_disambiguators.sql",
 ];
 
 function decodeBest(buf) {

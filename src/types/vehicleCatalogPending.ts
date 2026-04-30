@@ -25,6 +25,12 @@ export interface VehicleCatalogPendingRequest {
   proposed_trim_suffix_code?: string | null;
   proposed_fuel_category?: string | null;
   proposed_fuel_grade?: string | null;
+  /** Drivetrain hint (e.g. FWD, RWD, AWD, 4WD) - hybrid matcher disambiguator. */
+  proposed_drivetrain?: string | null;
+  /** Transmission hint (e.g. CVT, AT, MT, DCT) - hybrid matcher disambiguator. */
+  proposed_transmission?: string | null;
+  /** Fuel type hint (e.g. Gasoline, Diesel, Hybrid, EV) - hybrid matcher disambiguator. */
+  proposed_fuel_type?: string | null;
   proposed_body_type: string | null;
   source: "scan" | "manual";
   ocr_snapshot: Record<string, unknown> | null;

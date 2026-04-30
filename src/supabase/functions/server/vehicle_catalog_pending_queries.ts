@@ -41,7 +41,13 @@ export async function upsertPendingFromKvVehicle(
   const y = parseYear(args.vehicle.year);
   const proposed_production_start_year = y;
   const proposed_production_end_year = y;
-  const proposed_trim = null;
+  // Bugfix: previously hard-coded to null. Now reads the trim hint that
+  // AddVehicleModal / VehicleDetail send so admins see what the operator entered.
+  const proposed_trim = pickStrVehicle(args.vehicle, [
+    "vehicle_catalog_trim_hint",
+    "trim_series",
+    "trim",
+  ]);
   const proposed_body_type = args.vehicle.bodyType != null
     ? String(args.vehicle.bodyType).trim() || null
     : null;
@@ -68,7 +74,28 @@ export async function upsertPendingFromKvVehicle(
     .maybeSingle();
   if (selErr) throw selErr;
 
-  const rowBase = {
+  // Bugfix: engine code was declared on the type but never written.
+  const proposed_engine_code = pickStrVehicle(args.vehicle, [
+    "vehicle_catalog_engine_code_hint",
+    "engine_code",
+  ]);
+  // Hybrid catalog matching: persist the new disambiguators so admins reviewing
+  // the pending request see exactly what the fleet operator picked.
+  const proposed_drivetrain = pickStrVehicle(args.vehicle, [
+    "vehicle_catalog_drivetrain_hint",
+    "drivetrain",
+  ]);
+  const proposed_transmission = pickStrVehicle(args.vehicle, [
+    "vehicle_catalog_transmission_hint",
+    "transmission",
+  ]);
+  const proposed_fuel_type = pickStrVehicle(args.vehicle, [
+    "vehicle_catalog_fuel_type_hint",
+    "fuel_type",
+    "fuelType",
+  ]);
+
+  const rowBase: Record<string, unknown> = {
     organization_id: args.organizationId,
     fleet_vehicle_id: args.fleetVehicleId,
     proposed_make,
@@ -78,6 +105,7 @@ export async function upsertPendingFromKvVehicle(
     proposed_production_start_month,
     proposed_production_end_month,
     proposed_trim_series: proposed_trim,
+    proposed_engine_code,
     proposed_full_model_code: pickStrVehicle(args.vehicle, [
       "vehicle_catalog_full_model_code_hint",
       "full_model_code",
@@ -93,26 +121,47 @@ export async function upsertPendingFromKvVehicle(
     ]),
     proposed_fuel_category: pickStrVehicle(args.vehicle, ["vehicle_catalog_fuel_category_hint"]),
     proposed_fuel_grade: pickStrVehicle(args.vehicle, ["vehicle_catalog_fuel_grade_hint"]),
+    proposed_drivetrain,
+    proposed_transmission,
+    proposed_fuel_type,
     proposed_body_type,
     source: args.source,
     updated_at: new Date().toISOString(),
   };
 
-  if (existing?.id) {
-    // Keep status (e.g. needs_info) - only refresh proposed fields from KV.
-    const { error: upErr } = await supabase
-      .from("vehicle_catalog_pending_requests")
-      .update(rowBase)
-      .eq("id", existing.id);
-    if (upErr) throw upErr;
-  } else {
-    const { error: insErr } = await supabase.from("vehicle_catalog_pending_requests").insert({
-      ...rowBase,
-      status: "pending" as const,
-      created_at: new Date().toISOString(),
-    });
-    if (insErr) throw insErr;
-  }
+  // Optional columns (added in a later migration) are stripped on legacy DBs
+  // so the upsert doesn't break customers who haven't run the migration yet.
+  const OPTIONAL_NEW_COLUMNS = ["proposed_drivetrain", "proposed_transmission", "proposed_fuel_type"] as const;
+  const isMissingColumnError = (err: unknown): string | null => {
+    const msg = err instanceof Error ? err.message : String(err ?? "");
+    for (const col of OPTIONAL_NEW_COLUMNS) {
+      if (msg.includes(col) && /column|schema|cache|not found|does not exist|could not find/i.test(msg)) {
+        return col;
+      }
+    }
+    return null;
+  };
+
+  const writeWithFallback = async (row: Record<string, unknown>): Promise<void> => {
+    let attempt = { ...row };
+    for (let i = 0; i < OPTIONAL_NEW_COLUMNS.length + 1; i++) {
+      const op = existing?.id
+        ? supabase.from("vehicle_catalog_pending_requests").update(attempt).eq("id", existing.id)
+        : supabase.from("vehicle_catalog_pending_requests").insert({
+          ...attempt,
+          status: "pending" as const,
+          created_at: new Date().toISOString(),
+        });
+      const { error } = await op;
+      if (!error) return;
+      const missing = isMissingColumnError(error);
+      if (!missing) throw error;
+      console.warn(`[pending-upsert] dropping optional column ${missing} (legacy schema)`);
+      delete attempt[missing];
+    }
+  };
+
+  await writeWithFallback(rowBase);
 }
 
 export async function supersedePendingRequestsForVehicle(

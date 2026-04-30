@@ -132,6 +132,16 @@ export function registerPendingVehicleCatalogRoutes(
         const chassisQ = (c.req.query("chassis_code") ?? "").trim();
         const bodyQ = (c.req.query("body_type") ?? "").trim();
         const monthQ = (c.req.query("month") ?? "").trim();
+        // Hybrid catalog matching: extra disambiguators sent by
+        // CatalogVariantPicker so we get a precise candidate list at create time.
+        const drivetrainQ = (c.req.query("drivetrain") ?? "").trim();
+        const transmissionQ = (c.req.query("transmission") ?? "").trim();
+        const fuelTypeQ = (c.req.query("fuel_type") ?? "").trim();
+        const fuelGradeQ = (c.req.query("fuel_grade") ?? "").trim();
+        const engineCodeQ = (c.req.query("engine_code") ?? "").trim();
+        const engineTypeQ = (c.req.query("engine_type") ?? "").trim();
+        const catalogTrimQ = (c.req.query("catalog_trim") ?? "").trim();
+        const fullModelCodeQ = (c.req.query("full_model_code") ?? "").trim();
         const fleetMonth = monthQ === "" ? null : parseInt(monthQ, 10);
         const monthFilter =
           fleetMonth != null && Number.isFinite(fleetMonth) && fleetMonth >= 1 && fleetMonth <= 12
@@ -155,6 +165,14 @@ export function registerPendingVehicleCatalogRoutes(
             else q = q.ilike("chassis_code", `%${chassisQ}%`);
           }
           if (bodyQ.length >= 1) q = q.ilike("body_type", `%${bodyQ}%`);
+          if (drivetrainQ.length >= 1) q = q.ilike("drivetrain", `%${drivetrainQ}%`);
+          if (transmissionQ.length >= 1) q = q.ilike("transmission", `%${transmissionQ}%`);
+          if (fuelTypeQ.length >= 1) q = q.ilike("fuel_type", `%${fuelTypeQ}%`);
+          if (fuelGradeQ.length >= 1) q = q.ilike("fuel_grade", `%${fuelGradeQ}%`);
+          if (engineCodeQ.length >= 1) q = q.ilike("engine_code", `%${engineCodeQ}%`);
+          if (engineTypeQ.length >= 1) q = q.ilike("engine_type", `%${engineTypeQ}%`);
+          if (catalogTrimQ.length >= 1) q = q.ilike("catalog_trim", `%${catalogTrimQ}%`);
+          if (fullModelCodeQ.length >= 1) q = q.ilike("full_model_code", `%${fullModelCodeQ}%`);
           return q.order("make").order("model");
         };
 
@@ -164,7 +182,26 @@ export function registerPendingVehicleCatalogRoutes(
           data = r2.data;
           error = r2.error;
         }
-        if (error) throw error;
+        if (error) {
+          // Some optional disambiguator columns may not exist on legacy schemas;
+          // re-run without them so we still return useful candidates instead of
+          // 500ing the picker. The narrowing is done client-side in that case.
+          if (drivetrainQ || transmissionQ || fuelTypeQ || fuelGradeQ || engineCodeQ || engineTypeQ || catalogTrimQ || fullModelCodeQ) {
+            console.warn("[vehicle-catalog-matches] disambiguator filter failed, retrying without optional cols:", error.message);
+            const fallback = await supabase
+              .from("vehicle_catalog")
+              .select("*")
+              .limit(40)
+              .ilike("make", make.length >= 2 ? `%${make}%` : "%")
+              .ilike("model", model.length >= 2 ? `%${model}%` : "%")
+              .order("make")
+              .order("model");
+            if (fallback.error) throw fallback.error;
+            data = fallback.data;
+          } else {
+            throw error;
+          }
+        }
         let rows = data || [];
         if (monthFilter != null && yearQ != null && yearQ !== "") {
           const y = parseInt(yearQ, 10);
@@ -187,7 +224,9 @@ export function registerPendingVehicleCatalogRoutes(
           }
         }
         const items = rows.map((row) => catalogRowForApi(row as Record<string, unknown>));
-        return c.json({ items });
+        // exactCount = items.length capped at 40 (the SELECT limit). Picker uses
+        // this to decide auto-match (1) vs force-pick (>=2) vs no-match (0).
+        return c.json({ items, exactCount: items.length, truncated: items.length === 40 });
       } catch (e: unknown) {
         return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
       }

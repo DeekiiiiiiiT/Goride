@@ -330,16 +330,44 @@ export function PendingVehicleCatalogManager() {
                       <p className="text-xs font-medium text-muted-foreground">Source</p>
                       <p className="text-foreground">{selected.source}</p>
                     </div>
-                    {(selected.proposed_trim_series || selected.proposed_body_type) && (
-                      <>
-                        <div className="space-y-0.5 sm:col-span-2">
-                          <p className="text-xs font-medium text-muted-foreground">Proposed trim / body (from request)</p>
-                          <p className="text-foreground">
-                            {[selected.proposed_trim_series, selected.proposed_body_type].filter(Boolean).join(" · ") || "—"}
+                    {(() => {
+                      // Hybrid catalog matching: surface every proposed_* field
+                      // the fleet operator sent so admins can confirm without
+                      // pinging back for clarifications.
+                      const proposedRows: Array<{ label: string; value: string | null | undefined }> = [
+                        { label: "Trim / series", value: selected.proposed_trim_series },
+                        { label: "Body type", value: selected.proposed_body_type },
+                        { label: "Catalog trim", value: selected.proposed_catalog_trim },
+                        { label: "Full model code", value: selected.proposed_full_model_code },
+                        { label: "Emissions prefix", value: selected.proposed_emissions_prefix },
+                        { label: "Trim suffix code", value: selected.proposed_trim_suffix_code },
+                        { label: "Engine code", value: selected.proposed_engine_code },
+                        { label: "Drivetrain", value: selected.proposed_drivetrain },
+                        { label: "Transmission", value: selected.proposed_transmission },
+                        { label: "Fuel type", value: selected.proposed_fuel_type },
+                        { label: "Fuel category", value: selected.proposed_fuel_category },
+                        { label: "Fuel grade", value: selected.proposed_fuel_grade },
+                      ];
+                      const visible = proposedRows.filter(
+                        (r) => typeof r.value === "string" && r.value.trim() !== "",
+                      );
+                      if (visible.length === 0) return null;
+                      return (
+                        <div className="space-y-1 sm:col-span-2 rounded-md border border-indigo-100 bg-indigo-50/60 p-3">
+                          <p className="text-xs font-medium text-indigo-900">
+                            Proposed by fleet (from the catalog picker)
                           </p>
+                          <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-xs sm:grid-cols-2">
+                            {visible.map((row) => (
+                              <div key={row.label} className="flex gap-1">
+                                <dt className="text-indigo-700">{row.label}:</dt>
+                                <dd className="text-indigo-950">{row.value}</dd>
+                              </div>
+                            ))}
+                          </dl>
                         </div>
-                      </>
-                    )}
+                      );
+                    })()}
                     {selected.status === "needs_info" && selected.info_request_message && (
                       <div className="space-y-0.5 sm:col-span-2 rounded-md border border-amber-200 bg-amber-50/80 p-3">
                         <p className="text-xs font-medium text-amber-900">Message to fleet</p>
