@@ -39,6 +39,11 @@ ALTER TABLE public.vehicle_catalog
   ADD COLUMN IF NOT EXISTS fuel_category text,
   ADD COLUMN IF NOT EXISTS fuel_grade text;
 
+-- Fuel economy / range (CSV: fuel economy (km/L), Estimated (Km) per re-fuel)
+ALTER TABLE public.vehicle_catalog
+  ADD COLUMN IF NOT EXISTS fuel_economy_km_per_l numeric,
+  ADD COLUMN IF NOT EXISTS estimated_km_per_refuel numeric;
+
 ALTER TABLE public.vehicle_catalog
   DROP CONSTRAINT IF EXISTS vehicle_catalog_engine_type_check;
 
@@ -55,6 +60,7 @@ NOTIFY pgrst, 'reload schema';
 -- WHERE table_schema = 'public' AND table_name = 'vehicle_catalog'
 --   AND column_name IN (
 --     'production_start_month','production_end_month','engine_code','full_model_code',
---     'catalog_trim','emissions_prefix','trim_suffix_code','fuel_category','fuel_grade','engine_type'
+--     'catalog_trim','emissions_prefix','trim_suffix_code','fuel_category','fuel_grade','engine_type',
+--     'fuel_economy_km_per_l','estimated_km_per_refuel'
 --   )
 -- ORDER BY column_name;
