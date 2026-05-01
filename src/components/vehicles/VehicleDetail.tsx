@@ -112,7 +112,12 @@ import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { getFleetVehicleCatalog } from '../../services/pendingVehicleCatalogService';
 import { useMyPendingCatalogRequests } from '../../hooks/useMyPendingCatalogRequests';
 import { formatCatalogProductionWindow, type VehicleCatalogRecord } from '../../types/vehicleCatalog';
-import { isVehicleParked, catalogStatusLabel, deriveCatalogStatus } from '../../utils/vehicleCatalogGate';
+import {
+  isVehicleParked,
+  isVehicleCatalogMatched,
+  catalogStatusLabel,
+  deriveCatalogStatus,
+} from '../../utils/vehicleCatalogGate';
 import { showCatalogGateToastIfApplicable } from '../../utils/catalogGateErrors';
 import { CatalogVariantPicker, type CatalogVariantPickerSource } from './CatalogVariantPicker';
 import { CatalogFacetSelect } from './CatalogFacetSelect';
@@ -153,12 +158,23 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
   // Centralised hook handles window-focus refetch + conditional polling.
   const { data: myPendingCatalog } = useMyPendingCatalogRequests();
 
-  const { data: linkedCatalog } = useQuery({
+  const {
+    data: linkedCatalog,
+    isSuccess: linkedCatalogSuccess,
+    isError: linkedCatalogIsError,
+  } = useQuery({
     queryKey: ['fleet-vehicle-catalog', vehicle.vehicle_catalog_id, token],
     queryFn: () => getFleetVehicleCatalog(token!, vehicle.vehicle_catalog_id!),
     enabled: Boolean(token && vehicle.vehicle_catalog_id),
     retry: false,
   });
+
+  const showCatalogVerifiedBadge =
+    isVehicleCatalogMatched(vehicle) && linkedCatalogSuccess && Boolean(linkedCatalog);
+  const showCatalogLinkBrokenBadge =
+    isVehicleCatalogMatched(vehicle) &&
+    Boolean(vehicle.vehicle_catalog_id?.trim()) &&
+    linkedCatalogIsError;
 
   const fleetKey = vehicle.id || vehicle.licensePlate;
   const catalogPendingRow = useMemo(() => {
@@ -1221,7 +1237,30 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                      <div>
                          <div className="flex justify-between items-start">
                              <div>
-                                 <h1 className="text-2xl font-bold text-slate-900">{vehicle.year} {vehicle.model}</h1>
+                                 <div className="flex flex-wrap items-center gap-2">
+                                   <h1 className="text-2xl font-bold text-slate-900">
+                                     {vehicle.year} {vehicle.model}
+                                   </h1>
+                                   {showCatalogVerifiedBadge && (
+                                     <Badge
+                                       className="border-0 bg-emerald-600 text-white hover:bg-emerald-600 gap-1 font-medium shadow-sm"
+                                       title="This vehicle is linked to a motor catalog row (verified)."
+                                     >
+                                       <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
+                                       Catalog verified
+                                     </Badge>
+                                   )}
+                                   {showCatalogLinkBrokenBadge && (
+                                     <Badge
+                                       variant="outline"
+                                       className="gap-1 border-amber-500 bg-amber-50 text-amber-900 font-medium"
+                                       title="Catalog row missing or unreachable. Re-align from Profile if specs look wrong."
+                                     >
+                                       <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+                                       Catalog link issue
+                                     </Badge>
+                                   )}
+                                 </div>
                                  <div className="flex items-center gap-2 mt-1">
                                      <span className="font-mono text-sm bg-slate-100 px-2 py-0.5 rounded text-slate-600">{vehicle.licensePlate}</span>
                                      <span className="text-sm text-slate-400">|</span>
