@@ -4,7 +4,7 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { Loader2, Upload, FileText, Check, Camera, Car, FileCheck, Sparkles, AlertTriangle, Tag } from 'lucide-react';
+import { Loader2, FileText, Check, Car, FileCheck, Sparkles, AlertTriangle, Tag, Image as ImageIcon } from 'lucide-react';
 import { api } from '../../services/api';
 import { toast } from 'sonner@2.0.3';
 import { Vehicle } from '../../types/vehicle';
@@ -25,113 +25,141 @@ interface AddVehicleModalProps {
   existingVehicles?: Vehicle[];
 }
 
-const FileUploadZone = ({ 
-    label, 
-    file, 
-    onFileSelect, 
-    accept = "image/*,.pdf",
-    icon: Icon = Upload,
-    required = false,
-    className,
-    uploadLabel = "Upload File",
-    scanLabel = "Scan / Photo"
-}: { 
-    label: string, 
-    file: File | null, 
-    onFileSelect: (f: File) => void,
-    accept?: string,
-    icon?: any,
-    required?: boolean,
-    className?: string,
-    uploadLabel?: string,
-    scanLabel?: string
+const ACCEPT_IMAGE_ONLY = 'image/*';
+const ACCEPT_PDF_ONLY = '.pdf,application/pdf';
+
+/** Desktop-first: image-only or PDF-only file pick (no camera / scan). */
+const FileUploadZone = ({
+  label,
+  file,
+  onFileSelect,
+  required = false,
+  className,
+}: {
+  label: string;
+  file: File | null;
+  onFileSelect: (f: File) => void;
+  required?: boolean;
+  className?: string;
 }) => {
-    const inputRef = useRef<HTMLInputElement>(null);
-    const cameraInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
 
-    // Helper to render hidden inputs safely
-    const renderHiddenInputs = () => (
-        <>
-            <input 
-                ref={inputRef}
-                type="file" 
-                className="hidden" 
-                accept={accept}
-                onChange={(e) => {
-                    if (e.target.files?.[0]) onFileSelect(e.target.files[0]);
-                    e.target.value = '';
-                }}
-            />
-            <input 
-                ref={cameraInputRef}
-                type="file" 
-                className="hidden" 
-                accept="image/*"
-                capture="environment"
-                onChange={(e) => {
-                    if (e.target.files?.[0]) onFileSelect(e.target.files[0]);
-                    e.target.value = '';
-                }}
-            />
-        </>
-    );
+  const hiddenInputs = (
+    <>
+      <input
+        ref={imageInputRef}
+        type="file"
+        className="hidden"
+        accept={ACCEPT_IMAGE_ONLY}
+        onChange={(e) => {
+          if (e.target.files?.[0]) onFileSelect(e.target.files[0]);
+          e.target.value = '';
+        }}
+      />
+      <input
+        ref={pdfInputRef}
+        type="file"
+        className="hidden"
+        accept={ACCEPT_PDF_ONLY}
+        onChange={(e) => {
+          if (e.target.files?.[0]) onFileSelect(e.target.files[0]);
+          e.target.value = '';
+        }}
+      />
+    </>
+  );
 
-    if (file) {
-        return (
-             <div className={cn("space-y-2", className)}>
-                <Label className={cn("text-xs font-medium uppercase text-slate-500", required && "after:content-['*'] after:ml-0.5 after:text-red-500")}>
-                    {label}
-                </Label>
-                <div 
-                    className="border-2 border-dashed border-emerald-500 bg-emerald-50/50 rounded-lg p-4 flex flex-col items-center justify-center text-center gap-2 h-32 cursor-pointer transition-colors hover:bg-emerald-100/50" 
-                    onClick={() => inputRef.current?.click()}
-                >
-                    {renderHiddenInputs()}
-                    <div className="bg-emerald-100 p-2 rounded-full">
-                        <Check className="h-5 w-5 text-emerald-600" />
-                    </div>
-                    <div className="text-sm font-medium text-emerald-900 w-full truncate px-2">
-                        {file.name}
-                    </div>
-                    <div className="text-xs text-emerald-600 font-medium">Click to change</div>
-                </div>
-            </div>
-        )
-    }
-
+  if (file) {
     return (
-        <div className={cn("space-y-2", className)}>
-            <Label className={cn("text-xs font-medium uppercase text-slate-500", required && "after:content-['*'] after:ml-0.5 after:text-red-500")}>
-                {label}
-            </Label>
-            
-            {renderHiddenInputs()}
-
-            <div className="flex flex-col gap-2">
-                {/* Primary: Scan Camera */}
-                <button
-                    type="button"
-                    onClick={(e) => { e.preventDefault(); cameraInputRef.current?.click(); }}
-                    className="flex flex-col items-center justify-center gap-2 h-24 bg-white hover:bg-slate-50 border-2 border-slate-200 hover:border-slate-900 border-dashed rounded-xl transition-all text-slate-700 group shadow-sm hover:shadow-md"
-                >
-                    <div className="bg-slate-50 p-2 rounded-full group-hover:bg-slate-900 group-hover:text-white transition-colors">
-                        <Camera className="h-5 w-5" />
-                    </div>
-                    <span className="text-xs font-semibold">{scanLabel}</span>
-                </button>
-
-                {/* Secondary: Upload File */}
-                <button
-                    type="button"
-                    onClick={(e) => { e.preventDefault(); inputRef.current?.click(); }}
-                    className="flex items-center justify-center gap-2 py-2 px-3 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors border border-transparent hover:border-slate-200"
-                >
-                    <Icon className="h-3.5 w-3.5" />
-                    {uploadLabel}
-                </button>
-            </div>
+      <div className={cn('space-y-2', className)}>
+        <Label
+          className={cn(
+            'text-xs font-medium uppercase text-slate-500',
+            required && "after:content-['*'] after:ml-0.5 after:text-red-500",
+          )}
+        >
+          {label}
+        </Label>
+        {hiddenInputs}
+        <div className="border-2 border-dashed border-emerald-500 bg-emerald-50/50 rounded-lg p-4 flex flex-col items-center justify-center text-center gap-2 min-h-[7rem]">
+          <div className="bg-emerald-100 p-2 rounded-full">
+            <Check className="h-5 w-5 text-emerald-600" />
+          </div>
+          <div className="text-sm font-medium text-emerald-900 w-full truncate px-2">{file.name}</div>
+          <div className="text-xs text-emerald-600 font-medium">Replace file</div>
         </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              imageInputRef.current?.click();
+            }}
+            className="flex items-center justify-center gap-2 py-2.5 px-3 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-colors"
+          >
+            <ImageIcon className="h-4 w-4 shrink-0" />
+            Replace with image
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              pdfInputRef.current?.click();
+            }}
+            className="flex items-center justify-center gap-2 py-2.5 px-3 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-colors"
+          >
+            <FileText className="h-4 w-4 shrink-0" />
+            Replace with PDF
+          </button>
+        </div>
+      </div>
     );
+  }
+
+  return (
+    <div className={cn('space-y-2', className)}>
+      <Label
+        className={cn(
+          'text-xs font-medium uppercase text-slate-500',
+          required && "after:content-['*'] after:ml-0.5 after:text-red-500",
+        )}
+      >
+        {label}
+      </Label>
+      {hiddenInputs}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            imageInputRef.current?.click();
+          }}
+          className="flex flex-col items-center justify-center gap-2 min-h-[6.5rem] bg-white hover:bg-slate-50 border-2 border-slate-200 hover:border-slate-900 border-dashed rounded-xl transition-all text-slate-700 group shadow-sm hover:shadow-md"
+        >
+          <div className="bg-slate-50 p-2 rounded-full group-hover:bg-slate-900 group-hover:text-white transition-colors">
+            <ImageIcon className="h-5 w-5" />
+          </div>
+          <span className="text-xs font-semibold">Upload image</span>
+          <span className="text-[10px] text-slate-500 px-2 text-center">JPEG or PNG</span>
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            pdfInputRef.current?.click();
+          }}
+          className="flex flex-col items-center justify-center gap-2 min-h-[6.5rem] bg-white hover:bg-slate-50 border-2 border-slate-200 hover:border-slate-900 border-dashed rounded-xl transition-all text-slate-700 group shadow-sm hover:shadow-md"
+        >
+          <div className="bg-slate-50 p-2 rounded-full group-hover:bg-slate-900 group-hover:text-white transition-colors">
+            <FileText className="h-5 w-5" />
+          </div>
+          <span className="text-xs font-semibold">Upload PDF</span>
+          <span className="text-[10px] text-slate-500 px-2 text-center">.pdf only</span>
+        </button>
+      </div>
+    </div>
+  );
 };
 
 export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehicles = [] }: AddVehicleModalProps) {
@@ -677,11 +705,11 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
           <DialogTitle>Add New Vehicle</DialogTitle>
           <DialogDescription>
             {step === 1 && uploadSubStep === "fitness"
-                ? "Step 1 of 3 — Add your Certificate of Fitness (scan or upload)."
+                ? "Step 1 of 3 — Add your Certificate of Fitness (image or PDF)."
                 : step === 1 && uploadSubStep === "fitness_review"
                   ? "Step 2 of 3 — Review what we extracted from your fitness certificate."
                   : step === 1 && uploadSubStep === "registration"
-                    ? "Step 3 of 3 — Add your Motor Vehicle Registration (scan or upload)."
+                    ? "Step 3 of 3 — Add your Motor Vehicle Registration (image or PDF)."
                     : "Review registration details and submit. Fitness was confirmed in an earlier step."}
           </DialogDescription>
         </DialogHeader>
@@ -690,15 +718,7 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
           {/* Documents Section - Always visible in Step 1, minimized in Step 2? No, just keep simple logic */}
           {step === 1 && uploadSubStep === "fitness" && (
             <div className="space-y-3 max-w-md mx-auto">
-              <FileUploadZone
-                label="Certificate of Fitness"
-                file={fitnessFile}
-                onFileSelect={setFitnessFile}
-                accept="image/*,.pdf"
-                icon={FileCheck}
-                uploadLabel="Upload Fitness"
-                scanLabel="Scan Fitness"
-              />
+              <FileUploadZone label="Certificate of Fitness" file={fitnessFile} onFileSelect={setFitnessFile} />
             </div>
           )}
           {step === 1 && uploadSubStep === "fitness_review" && (
@@ -715,15 +735,7 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
           )}
           {step === 1 && uploadSubStep === "registration" && (
             <div className="space-y-3 max-w-md mx-auto">
-              <FileUploadZone
-                label="Motor Vehicle Registration"
-                file={registrationFile}
-                onFileSelect={setRegistrationFile}
-                accept="image/*,.pdf"
-                icon={Car}
-                uploadLabel="Upload Registration"
-                scanLabel="Scan Registration"
-              />
+              <FileUploadZone label="Motor Vehicle Registration" file={registrationFile} onFileSelect={setRegistrationFile} />
             </div>
           )}
           
