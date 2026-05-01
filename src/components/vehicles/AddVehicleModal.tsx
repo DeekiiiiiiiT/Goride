@@ -3,7 +3,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Loader2, FileText, Check, Car, FileCheck, Sparkles, AlertTriangle, Tag, Image as ImageIcon } from 'lucide-react';
 import { api } from '../../services/api';
 import { toast } from 'sonner@2.0.3';
@@ -281,28 +280,48 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
   } = useVehicleCatalogAnchorFacets(verifySearchMake, verifySearchModel);
 
   const onVerifyMakeChange = useCallback((v: string) => {
+    const next = v.trim();
+    const prev = verifySearchMake.trim();
+    // CatalogFacetSelect auto-snaps casing (e.g. TOYOTA → Toyota) via the same
+    // onChange as a user pick. Only treat a real make change as cascading.
+    if (prev.length > 0 && next.length > 0 && next.toLowerCase() === prev.toLowerCase()) {
+      setVerifySearchMake(v);
+      return;
+    }
     setVerifySearchMake(v);
     setVerifySearchModel('');
     setVerifySearchYear('');
     setVerifySearchChassis('');
     setVerifySearchDrivetrain('');
     setVerifySearchTransmission('');
-  }, []);
+  }, [verifySearchMake]);
 
   const onVerifyModelChange = useCallback((v: string) => {
+    const next = v.trim();
+    const prev = verifySearchModel.trim();
+    if (prev.length > 0 && next.length > 0 && next.toLowerCase() === prev.toLowerCase()) {
+      setVerifySearchModel(v);
+      return;
+    }
     setVerifySearchModel(v);
     setVerifySearchYear('');
     setVerifySearchChassis('');
     setVerifySearchDrivetrain('');
     setVerifySearchTransmission('');
-  }, []);
+  }, [verifySearchModel]);
 
   const onVerifyYearChange = useCallback((v: string) => {
+    const next = v.trim();
+    const prev = verifySearchYear.trim();
+    if (prev.length > 0 && next.length > 0 && next.toLowerCase() === prev.toLowerCase()) {
+      setVerifySearchYear(v);
+      return;
+    }
     setVerifySearchYear(v);
     setVerifySearchChassis('');
     setVerifySearchDrivetrain('');
     setVerifySearchTransmission('');
-  }, []);
+  }, [verifySearchYear]);
 
   /**
    * Seed verify-tab inputs from the parsed registration + fitness the first
@@ -468,7 +487,7 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
 
       setFormData(newData);
       setIsScanning(false);
-      setVerifyDocTab("registration");
+      setVerifyDocTab("verify");
       setStep(2);
 
       if (scanSuccess) {
@@ -1102,33 +1121,6 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
                   </div>
                 </div>
                 )}
-
-                <div className="max-w-lg mx-auto border-t pt-4 space-y-2">
-                    <Label className="text-xs text-slate-500 mb-1.5 block">Vehicle Status</Label>
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 flex gap-2 text-xs text-amber-900">
-                        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                        <div>
-                            <div className="font-semibold">New vehicles start parked.</div>
-                            <p className="mt-0.5 text-amber-800">
-                                The vehicle will be saved as <span className="font-medium">Inactive</span> while it is verified
-                                against the platform motor catalog. You'll be able to set it Active from the vehicle's detail
-                                page once it is approved.
-                            </p>
-                        </div>
-                    </div>
-                    <Select
-                        value="Inactive"
-                        onValueChange={() => {/* locked at create — see banner above */}}
-                        disabled
-                    >
-                    <SelectTrigger className="w-full">
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="Inactive">Inactive (parked, pending catalog)</SelectItem>
-                    </SelectContent>
-                    </Select>
-                </div>
             </div>
           )}
           

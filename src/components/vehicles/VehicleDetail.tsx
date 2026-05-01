@@ -240,28 +240,46 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
   } = useVehicleCatalogAnchorFacets(alignSearchMake, alignSearchModel);
 
   const onAlignMakeChange = useCallback((v: string) => {
+    const next = v.trim();
+    const prev = alignSearchMake.trim();
+    if (prev.length > 0 && next.length > 0 && next.toLowerCase() === prev.toLowerCase()) {
+      setAlignSearchMake(v);
+      return;
+    }
     setAlignSearchMake(v);
     setAlignSearchModel('');
     setAlignSearchYear('');
     setAlignSearchChassis('');
     setAlignSearchDrivetrain('');
     setAlignSearchTransmission('');
-  }, []);
+  }, [alignSearchMake]);
 
   const onAlignModelChange = useCallback((v: string) => {
+    const next = v.trim();
+    const prev = alignSearchModel.trim();
+    if (prev.length > 0 && next.length > 0 && next.toLowerCase() === prev.toLowerCase()) {
+      setAlignSearchModel(v);
+      return;
+    }
     setAlignSearchModel(v);
     setAlignSearchYear('');
     setAlignSearchChassis('');
     setAlignSearchDrivetrain('');
     setAlignSearchTransmission('');
-  }, []);
+  }, [alignSearchModel]);
 
   const onAlignYearChange = useCallback((v: string) => {
+    const next = v.trim();
+    const prev = alignSearchYear.trim();
+    if (prev.length > 0 && next.length > 0 && next.toLowerCase() === prev.toLowerCase()) {
+      setAlignSearchYear(v);
+      return;
+    }
     setAlignSearchYear(v);
     setAlignSearchChassis('');
     setAlignSearchDrivetrain('');
     setAlignSearchTransmission('');
-  }, []);
+  }, [alignSearchYear]);
 
   useEffect(() => {
     if (!alignModalOpen) return;
