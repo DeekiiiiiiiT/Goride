@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -15,6 +15,7 @@ import { showCatalogGateToastIfApplicable } from '../../utils/catalogGateErrors'
 import { CatalogVariantPicker, type CatalogVariantPickerSource } from './CatalogVariantPicker';
 import { CatalogFacetSelect } from './CatalogFacetSelect';
 import { useCatalogCandidates } from '../../hooks/useCatalogCandidates';
+import { useVehicleCatalogAnchorFacets } from '../../hooks/useVehicleCatalogAnchorFacets';
 import { extractChassisPrefix } from '../../utils/chassisPrefix';
 import type { VehicleCatalogRecord } from '../../types/vehicleCatalog';
 
@@ -167,10 +168,12 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
   /** Step 1: fitness upload → parse review → registration upload → combined verify. */
   const [uploadSubStep, setUploadSubStep] = useState<"fitness" | "fitness_review" | "registration">("fitness");
   /**
-   * Step 2: switch between registration, fitness, and the new "motor type"
-   * (catalog variant) field editors. The catalog tab hosts CatalogVariantPicker.
+   * Step 2: switch between registration, fitness, and the "Verify vehicle"
+   * (catalog variant) field editors. The verify tab mirrors VehicleDetail's
+   * "Align with motor catalog" overlay so behaviour stays identical across
+   * the app.
    */
-  const [verifyDocTab, setVerifyDocTab] = useState<"registration" | "fitness" | "catalog">("registration");
+  const [verifyDocTab, setVerifyDocTab] = useState<"registration" | "fitness" | "verify">("registration");
   const [isLoading, setIsLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [fitnessFile, setFitnessFile] = useState<File | null>(null);
@@ -204,13 +207,12 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
     registrationIssueDate: '',
     registrationExpiryDate: '',
 
-    // Hybrid catalog matching disambiguators (collected on the new "motor type"
-    // tab). Sent both to the matches endpoint and stamped on the vehicle so
-    // the server-side resolver picks the same row when the user has not
-    // explicitly selected a candidate.
+    // Hybrid catalog matching disambiguators (collected from the parsed docs;
+    // the Verify vehicle tab seeds its own dropdowns from these). Sent both to
+    // the matches endpoint and stamped on the vehicle so the server-side
+    // resolver picks the same row when the user has not explicitly selected a
+    // candidate.
     trim: '',
-    /** 1-12; narrows production span when same MMY has facelift / mid-cycle changes. */
-    productionMonth: '',
     drivetrain: '',
     transmission: '',
     fuelType: '',
@@ -242,14 +244,90 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
    */
   const catalogSaveBlocked = catalogPickerSource === "pending";
 
-  // Single source of truth for the DB-backed dropdowns on the "Motor type"
-  // tab. Anchors are make + model + year + chassis prefix.
-  const { facets: catalogFacets, loading: catalogFacetsLoading } = useCatalogCandidates({
-    make: formData.make,
-    model: formData.model,
-    year: formData.year,
-    chassis: formData.chassis,
+  // ---------------------------------------------------------------------------
+  // Verify vehicle tab — mirrors VehicleDetail's "Align with motor catalog"
+  // overlay. Make/Model/Year/Chassis are catalog-backed dropdowns (so the
+  // strings line up with the DB), seeded from parsed registration + fitness.
+  // ---------------------------------------------------------------------------
+  const [verifySearchMake, setVerifySearchMake] = useState('');
+  const [verifySearchModel, setVerifySearchModel] = useState('');
+  const [verifySearchYear, setVerifySearchYear] = useState('');
+  const [verifySearchChassis, setVerifySearchChassis] = useState('');
+  const [verifySearchDrivetrain, setVerifySearchDrivetrain] = useState('');
+  const [verifySearchTransmission, setVerifySearchTransmission] = useState('');
+
+  // MMY-only fetch: distinct chassis codes for the mandatory chassis dropdown.
+  const { facets: verifyMmyFacets, loading: verifyMmyLoading } = useCatalogCandidates({
+    make: verifySearchMake,
+    model: verifySearchModel,
+    year: verifySearchYear,
+    skipChassisFilter: true,
   });
+  // After chassis is chosen: drivetrain / transmission facets + picker narrowing.
+  const { facets: verifyFacets, loading: verifyFacetsLoading } = useCatalogCandidates({
+    make: verifySearchMake,
+    model: verifySearchModel,
+    year: verifySearchYear,
+    chassis: verifySearchChassis,
+  });
+
+  const {
+    makes: verifyMakeOptions,
+    models: verifyModelOptions,
+    years: verifyYearOptions,
+    loadingMakes: verifyMakesLoading,
+    loadingModels: verifyModelsLoading,
+    loadingYears: verifyYearsLoading,
+  } = useVehicleCatalogAnchorFacets(verifySearchMake, verifySearchModel);
+
+  const onVerifyMakeChange = useCallback((v: string) => {
+    setVerifySearchMake(v);
+    setVerifySearchModel('');
+    setVerifySearchYear('');
+    setVerifySearchChassis('');
+    setVerifySearchDrivetrain('');
+    setVerifySearchTransmission('');
+  }, []);
+
+  const onVerifyModelChange = useCallback((v: string) => {
+    setVerifySearchModel(v);
+    setVerifySearchYear('');
+    setVerifySearchChassis('');
+    setVerifySearchDrivetrain('');
+    setVerifySearchTransmission('');
+  }, []);
+
+  const onVerifyYearChange = useCallback((v: string) => {
+    setVerifySearchYear(v);
+    setVerifySearchChassis('');
+    setVerifySearchDrivetrain('');
+    setVerifySearchTransmission('');
+  }, []);
+
+  /**
+   * Seed verify-tab inputs from the parsed registration + fitness the first
+   * time the user lands on the tab. After that we let them edit freely; we
+   * only re-seed on a fresh open of the modal (handleClose resets the ref).
+   */
+  const verifySeededRef = useRef(false);
+  useEffect(() => {
+    if (verifyDocTab !== 'verify') return;
+    if (verifySeededRef.current) return;
+    setVerifySearchMake(formData.make || '');
+    setVerifySearchModel(formData.model || '');
+    setVerifySearchYear(formData.year || '');
+    setVerifySearchChassis((formData.chassis || extractChassisPrefix(formData.vin)) ?? '');
+    setVerifySearchDrivetrain(formData.drivetrain || '');
+    setVerifySearchTransmission(formData.transmission || '');
+    verifySeededRef.current = true;
+  }, [verifyDocTab, formData.make, formData.model, formData.year, formData.chassis, formData.vin, formData.drivetrain, formData.transmission]);
+
+  /** Reset the picker selection whenever the anchor inputs change. */
+  useEffect(() => {
+    if (verifyDocTab !== 'verify') return;
+    setSelectedCatalogRow(null);
+    setCatalogPickerSource(null);
+  }, [verifyDocTab, verifySearchMake, verifySearchModel, verifySearchYear, verifySearchChassis]);
 
   const matchedVehicle = React.useMemo(() => {
       if (!formData.licensePlate) return null;
@@ -413,8 +491,8 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
     // Hybrid catalog matching: when the picker has 2+ candidates we must not
     // silently guess. Force the operator onto the catalog tab to pick.
     if (catalogSaveBlocked) {
-      toast.error("Pick the matching motor type before saving.");
-      setVerifyDocTab("catalog");
+      toast.error("Verify the vehicle on the Verify vehicle tab before saving.");
+      setVerifyDocTab("verify");
       return;
     }
 
@@ -473,20 +551,22 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
       // stamp on the vehicle. When the picker auto-matched or the operator
       // explicitly picked a row, we stamp the canonical values from that row;
       // otherwise we stamp whatever the operator typed so the pending request
-      // is still rich.
+      // is still rich. Verify-tab values (catalog-backed) win over the raw
+      // parsed fields when both are present, since those are what actually
+      // matched the catalog.
       const trimToHint = (v: string | null | undefined) => {
         const s = (v ?? "").toString().trim();
         return s === "" ? undefined : s;
       };
-      const monthNum = parseInt(String(formData.productionMonth ?? "").trim(), 10);
-      const stampedMonth =
-        Number.isFinite(monthNum) && monthNum >= 1 && monthNum <= 12 ? monthNum : undefined;
+      const verifyChassisHint = trimToHint(verifySearchChassis) ?? trimToHint(formData.chassis);
+      const verifyDrivetrainHint = trimToHint(verifySearchDrivetrain) ?? trimToHint(formData.drivetrain);
+      const verifyTransmissionHint = trimToHint(verifySearchTransmission) ?? trimToHint(formData.transmission);
       const catalogHints: Partial<Vehicle> = selectedCatalogRow
         ? {
             vehicle_catalog_id: selectedCatalogRow.id,
             vehicle_catalog_trim_hint: trimToHint(selectedCatalogRow.trim_series ?? formData.trim),
             vehicle_catalog_chassis_hint:
-              trimToHint(selectedCatalogRow.chassis_code) ?? trimToHint(formData.chassis),
+              trimToHint(selectedCatalogRow.chassis_code) ?? verifyChassisHint,
             vehicle_catalog_generation_hint: trimToHint(selectedCatalogRow.generation),
             vehicle_catalog_engine_code_hint: trimToHint(selectedCatalogRow.engine_code),
             vehicle_catalog_engine_type_hint: trimToHint(selectedCatalogRow.engine_type),
@@ -495,25 +575,29 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
             vehicle_catalog_emissions_prefix_hint: trimToHint(selectedCatalogRow.emissions_prefix),
             vehicle_catalog_trim_suffix_hint: trimToHint(selectedCatalogRow.trim_suffix_code),
             vehicle_catalog_drivetrain_hint:
-              trimToHint(selectedCatalogRow.drivetrain) ?? trimToHint(formData.drivetrain),
+              trimToHint(selectedCatalogRow.drivetrain) ?? verifyDrivetrainHint,
             vehicle_catalog_fuel_type_hint:
               trimToHint(selectedCatalogRow.fuel_type) ?? trimToHint(formData.fuelType),
             vehicle_catalog_transmission_hint:
-              trimToHint(selectedCatalogRow.transmission) ?? trimToHint(formData.transmission),
+              trimToHint(selectedCatalogRow.transmission) ?? verifyTransmissionHint,
             vehicle_catalog_fuel_category_hint: trimToHint(selectedCatalogRow.fuel_category),
             vehicle_catalog_fuel_grade_hint: trimToHint(selectedCatalogRow.fuel_grade),
-            vehicle_catalog_production_month_hint: stampedMonth,
           }
         : {
             // No match yet — server will park + queue. Send everything we have
             // so the platform admin sees the full picture in the pending UI.
             vehicle_catalog_trim_hint: trimToHint(formData.trim),
-            vehicle_catalog_chassis_hint: trimToHint(formData.chassis),
-            vehicle_catalog_drivetrain_hint: trimToHint(formData.drivetrain),
+            vehicle_catalog_chassis_hint: verifyChassisHint,
+            vehicle_catalog_drivetrain_hint: verifyDrivetrainHint,
             vehicle_catalog_fuel_type_hint: trimToHint(formData.fuelType),
-            vehicle_catalog_transmission_hint: trimToHint(formData.transmission),
-            vehicle_catalog_production_month_hint: stampedMonth,
+            vehicle_catalog_transmission_hint: verifyTransmissionHint,
           };
+
+      // Verify-tab values are catalog-backed; prefer them as the "make / model
+      // / year" stamped on the vehicle so the resolver picks the same row.
+      const stampedMake = verifySearchMake.trim() || formData.make;
+      const stampedModel = verifySearchModel.trim() || formData.model;
+      const stampedYear = /^\d{4}$/.test(verifySearchYear.trim()) ? verifySearchYear.trim() : formData.year;
 
       let finalVehicle: Vehicle;
 
@@ -521,10 +605,11 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
           // MERGE
           finalVehicle = {
               ...existingVehicle,
-              // Update fields if they have value in formData
-              make: formData.make || existingVehicle.make,
-              model: formData.model || existingVehicle.model,
-              year: formData.year || existingVehicle.year,
+              // Verify-tab values win (they came from the catalog dropdowns);
+              // fall back to parsed formData, then the existing record.
+              make: stampedMake || existingVehicle.make,
+              model: stampedModel || existingVehicle.model,
+              year: stampedYear || existingVehicle.year,
               color: formData.color || existingVehicle.color,
               bodyType: formData.bodyType || existingVehicle.bodyType,
               vin: formData.vin || existingVehicle.vin,
@@ -558,9 +643,9 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
           finalVehicle = {
             id: plateToUse || fallbackId,
             licensePlate: plateToUse, // Can be empty
-            make: formData.make || 'Unknown',
-            model: formData.model || 'Unknown',
-            year: formData.year,
+            make: stampedMake || 'Unknown',
+            model: stampedModel || 'Unknown',
+            year: stampedYear,
             vin: formData.vin || (plateToUse ? `${plateToUse}-VIN` : ''),
             // Always create as Inactive. If the server confirms a catalog
             // match the operator can promote to Active afterwards. If there
@@ -641,7 +726,7 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
         make: '', model: '', year: new Date().getFullYear().toString(),
         color: '', bodyType: '', engineNumber: '', ccRating: '', fitnessIssueDate: '', fitnessExpiryDate: '',
         laNumber: '', licensePlate: '', mvid: '', vin: '', controlNumber: '', registrationIssueDate: '', registrationExpiryDate: '',
-        trim: '', productionMonth: '', drivetrain: '', transmission: '', fuelType: '', chassis: ''
+        trim: '', drivetrain: '', transmission: '', fuelType: '', chassis: ''
     });
     setFitnessFile(null);
     setRegistrationFile(null);
@@ -649,6 +734,13 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
     setVerifyDocTab("registration");
     setSelectedCatalogRow(null);
     setCatalogPickerSource(null);
+    setVerifySearchMake('');
+    setVerifySearchModel('');
+    setVerifySearchYear('');
+    setVerifySearchChassis('');
+    setVerifySearchDrivetrain('');
+    setVerifySearchTransmission('');
+    verifySeededRef.current = false;
     setStep(1);
     onClose();
   };
@@ -782,19 +874,19 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
                       </button>
                       <button
                         type="button"
-                        id="verify-tab-catalog"
+                        id="verify-tab-verify"
                         role="tab"
-                        aria-selected={verifyDocTab === "catalog"}
-                        onClick={() => setVerifyDocTab("catalog")}
+                        aria-selected={verifyDocTab === "verify"}
+                        onClick={() => setVerifyDocTab("verify")}
                         className={cn(
                           "flex-1 inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors min-h-[2.5rem] relative",
-                          verifyDocTab === "catalog"
+                          verifyDocTab === "verify"
                             ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/80"
                             : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/80",
                         )}
                       >
                         <Tag className="h-4 w-4 shrink-0 text-indigo-600" />
-                        <span className="truncate">Motor type</span>
+                        <span className="truncate">Verify vehicle</span>
                         {catalogSaveBlocked && (
                           <span
                             aria-hidden
@@ -896,91 +988,117 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
                 </div>
                 )}
 
-                {verifyDocTab === "catalog" && (
+                {verifyDocTab === "verify" && (
                 <div
                   className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-3 max-w-lg mx-auto"
                   role="tabpanel"
-                  id="verify-panel-catalog"
-                  aria-labelledby="verify-tab-catalog"
+                  id="verify-panel-verify"
+                  aria-labelledby="verify-tab-verify"
                 >
                   <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                     <Tag className="h-4 w-4 text-indigo-600" />
-                    Confirm motor type
+                    Verify vehicle
                   </div>
                   <p className="text-xs text-slate-600">
-                    The exact variant matters for service intervals, parts, and reporting.
-                    Add any details that distinguish this vehicle from similar ones, then pick the matching catalog row.
+                    Choose make, model, and year from the catalog, then a chassis code (required).
+                    Optionally narrow with drivetrain and transmission. We auto-match when only one
+                    catalog row fits.
                   </p>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                    <div className="sm:col-span-2">
-                      <Label className="text-xs text-slate-500">Chassis code (auto-detected from registration)</Label>
-                      <Input
-                        value={formData.chassis}
-                        onChange={(e) => setFormData({ ...formData, chassis: e.target.value.toUpperCase() })}
-                        placeholder="e.g. M900A"
-                      />
-                      <p className="mt-1 text-[11px] text-slate-500">
-                        We use the chassis prefix to filter the catalog. Edit if it looks wrong.
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-xs text-slate-500">Production month (optional)</Label>
-                      <Input
-                        value={formData.productionMonth}
-                        onChange={(e) => setFormData({ ...formData, productionMonth: e.target.value })}
-                        inputMode="numeric"
-                        placeholder={"1\u201312"}
-                      />
-                    </div>
-                    <CatalogFacetSelect
-                      label="Trim / series"
-                      value={formData.trim}
-                      onChange={(v) => setFormData({ ...formData, trim: v })}
-                      options={catalogFacets.trim_series}
-                      loading={catalogFacetsLoading}
-                    />
-                    <CatalogFacetSelect
-                      label="Drivetrain"
-                      value={formData.drivetrain}
-                      onChange={(v) => setFormData({ ...formData, drivetrain: v })}
-                      options={catalogFacets.drivetrain}
-                      loading={catalogFacetsLoading}
-                    />
-                    <CatalogFacetSelect
-                      label="Transmission"
-                      value={formData.transmission}
-                      onChange={(v) => setFormData({ ...formData, transmission: v })}
-                      options={catalogFacets.transmission}
-                      loading={catalogFacetsLoading}
-                    />
-                    <div className="sm:col-span-2">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 pt-1">
+                    <div className="space-y-1.5">
                       <CatalogFacetSelect
-                        label="Fuel type"
-                        value={formData.fuelType}
-                        onChange={(v) => setFormData({ ...formData, fuelType: v })}
-                        options={catalogFacets.fuel_type}
-                        loading={catalogFacetsLoading}
+                        label="Make"
+                        value={verifySearchMake}
+                        onChange={onVerifyMakeChange}
+                        options={verifyMakeOptions}
+                        loading={verifyMakesLoading}
+                        optional={false}
+                        allowAny={false}
+                        emptyHint="Could not load makes from catalog"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <CatalogFacetSelect
+                        label="Model"
+                        value={verifySearchModel}
+                        onChange={onVerifyModelChange}
+                        options={verifyModelOptions}
+                        loading={verifyModelsLoading}
+                        optional={false}
+                        allowAny={false}
+                        emptyHint={verifySearchMake.trim().length >= 2 ? "No models for this make" : "Select a make first"}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <CatalogFacetSelect
+                        label="Year"
+                        value={verifySearchYear}
+                        onChange={onVerifyYearChange}
+                        options={verifyYearOptions}
+                        loading={verifyYearsLoading}
+                        optional={false}
+                        allowAny={false}
+                        emptyHint={
+                          verifySearchMake.trim().length >= 2 && verifySearchModel.trim().length >= 2
+                            ? "No years for this make/model"
+                            : "Select make and model first"
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1.5 sm:col-span-3">
+                      <CatalogFacetSelect
+                        label="Chassis code"
+                        value={verifySearchChassis}
+                        onChange={(v) => setVerifySearchChassis(v.toUpperCase())}
+                        options={verifyMmyFacets.chassis_code}
+                        loading={verifyMmyLoading}
+                        optional={false}
+                        allowAny={false}
+                        emptyHint="No chassis codes in the catalog for this make/model/year"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <CatalogFacetSelect
+                        label="Drivetrain"
+                        value={verifySearchDrivetrain}
+                        onChange={setVerifySearchDrivetrain}
+                        options={verifyFacets.drivetrain}
+                        loading={verifyFacetsLoading}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <CatalogFacetSelect
+                        label="Transmission"
+                        value={verifySearchTransmission}
+                        onChange={setVerifySearchTransmission}
+                        options={verifyFacets.transmission}
+                        loading={verifyFacetsLoading}
                       />
                     </div>
                   </div>
 
                   <div className="pt-2">
-                    <CatalogVariantPicker
-                      make={formData.make}
-                      model={formData.model}
-                      year={formData.year}
-                      month={formData.productionMonth}
-                      trim={formData.trim}
-                      drivetrain={formData.drivetrain}
-                      transmission={formData.transmission}
-                      fuel_type={formData.fuelType}
-                      body_type={formData.bodyType}
-                      chassis_code={formData.chassis || undefined}
-                      value={selectedCatalogRow?.id ?? null}
-                      onChange={handleCatalogPickerChange}
-                      disabled={isLoading}
-                    />
+                    {verifySearchChassis.trim() &&
+                    /^\d{4}$/.test(verifySearchYear.trim()) &&
+                    verifySearchMake.trim().length >= 2 &&
+                    verifySearchModel.trim().length >= 2 ? (
+                      <CatalogVariantPicker
+                        make={verifySearchMake}
+                        model={verifySearchModel}
+                        year={verifySearchYear}
+                        drivetrain={verifySearchDrivetrain}
+                        transmission={verifySearchTransmission}
+                        chassis_code={verifySearchChassis}
+                        value={selectedCatalogRow?.id ?? null}
+                        onChange={handleCatalogPickerChange}
+                        disabled={isLoading}
+                      />
+                    ) : (
+                      <p className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+                        Select make, model, year, and chassis above to search the motor catalog.
+                      </p>
+                    )}
                   </div>
                 </div>
                 )}
@@ -1061,10 +1179,10 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
                 <Button
                   type="submit"
                   disabled={isLoading || catalogSaveBlocked}
-                  title={catalogSaveBlocked ? "Pick the matching motor type on the Motor type tab to continue" : undefined}
+                  title={catalogSaveBlocked ? "Verify the vehicle on the Verify vehicle tab to continue" : undefined}
                 >
                     {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    {catalogSaveBlocked ? "Pick motor type to continue" : "Add Vehicle"}
+                    {catalogSaveBlocked ? "Verify vehicle to continue" : "Add Vehicle"}
                 </Button>
             )}
           </DialogFooter>
