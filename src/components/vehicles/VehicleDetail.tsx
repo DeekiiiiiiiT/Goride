@@ -1251,14 +1251,25 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                                      </Badge>
                                    )}
                                    {showCatalogLinkBrokenBadge && (
-                                     <Badge
-                                       variant="outline"
-                                       className="gap-1 border-amber-500 bg-amber-50 text-amber-900 font-medium"
-                                       title="Catalog row missing or unreachable. Re-align from Profile if specs look wrong."
-                                     >
-                                       <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
-                                       Catalog link issue
-                                     </Badge>
+                                     <>
+                                       <Badge
+                                         variant="outline"
+                                         className="gap-1 border-amber-500 bg-amber-50 text-amber-900 font-medium"
+                                         title="The saved catalog id no longer exists (e.g. after a catalog re-import). Use Fix catalog link to pick the current row."
+                                       >
+                                         <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+                                         Catalog link issue
+                                       </Badge>
+                                       <Button
+                                         type="button"
+                                         size="sm"
+                                         className="h-8 gap-1.5 bg-amber-600 text-white shadow-sm hover:bg-amber-700"
+                                         onClick={() => setAlignModalOpen(true)}
+                                       >
+                                         <ListChecks className="h-3.5 w-3.5" aria-hidden />
+                                         Fix catalog link
+                                       </Button>
+                                     </>
                                    )}
                                  </div>
                                  <div className="flex items-center gap-2 mt-1">
