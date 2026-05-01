@@ -340,6 +340,8 @@ export const VEHICLE_CATALOG_CSV_COLUMNS: CsvColumn<VehicleCatalogRecord>[] = [
     { key: "torque_unit", label: "Torque unit" },
     { key: "fuel_tank_capacity", label: "Fuel tank capacity" },
     { key: "fuel_tank_unit", label: "Fuel tank unit" },
+    { key: "fuel_economy_km_per_l", label: "fuel economy (km/L)" },
+    { key: "estimated_km_per_refuel", label: "Estimated (Km) per re-fuel" },
     { key: "seating_capacity", label: "Seating capacity" },
     { key: "curb_weight_kg", label: "Curb weight kg" },
     { key: "gross_vehicle_weight_kg", label: "Gross vehicle weight kg" },

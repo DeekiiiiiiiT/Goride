@@ -55,6 +55,10 @@ export interface VehicleCatalogRecord {
   torque_unit: string | null;
   fuel_tank_capacity: number | null;
   fuel_tank_unit: string | null;
+  /** Combined / rated fuel economy in km per liter (CSV: fuel economy (km/L)). */
+  fuel_economy_km_per_l: number | null;
+  /** Typical km per full tank at that economy (CSV: Estimated (Km) per re-fuel). */
+  estimated_km_per_refuel: number | null;
   seating_capacity: number | null;
   curb_weight_kg: number | null;
   gross_vehicle_weight_kg: number | null;

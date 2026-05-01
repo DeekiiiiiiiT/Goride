@@ -200,6 +200,10 @@ const FUEL_SYSTEM_FLUIDS_FIELD_HINTS = {
     "The minimum recommended octane rating or specific grade required at the pump (e.g., 87, 90, ULSD).",
   fuelTankCapacity: "The maximum volume the fuel tank can hold from empty to full.",
   fuelTankUnit: "The unit of measurement for the fuel tank capacity (typically L for Liters).",
+  fuelEconomyKmPerL:
+    "Combined or rated fuel economy in kilometers per liter (km/L)—from manufacturer figures or your working assumption.",
+  estimatedKmPerRefuel:
+    "Approximate kilometers from a full tank at that economy (tank capacity × km/L when the tank is in liters).",
   engineOilCapacityL: "The estimated amount of engine oil required for a standard oil and filter change.",
   coolantCapacityL: "The estimated total fluid volume of the engine's cooling system.",
 } as const;
@@ -278,6 +282,8 @@ type FormState = {
   torque_unit: string;
   fuel_tank_capacity: string;
   fuel_tank_unit: string;
+  fuel_economy_km_per_l: string;
+  estimated_km_per_refuel: string;
   seating_capacity: string;
   curb_weight_kg: string;
   gross_vehicle_weight_kg: string;
@@ -337,6 +343,8 @@ function emptyForm(): FormState {
     torque_unit: "Nm",
     fuel_tank_capacity: "",
     fuel_tank_unit: "L",
+    fuel_economy_km_per_l: "",
+    estimated_km_per_refuel: "",
     seating_capacity: "",
     curb_weight_kg: "",
     gross_vehicle_weight_kg: "",
@@ -385,7 +393,9 @@ function recordToForm(r: VehicleCatalogRecord): FormState {
     engine_displacement_l: s(r.engine_displacement_l),
     engine_displacement_cc: s(r.engine_displacement_cc),
     engine_configuration: t(r.engine_configuration),
+    fuel_category: t(r.fuel_category),
     fuel_type: t(r.fuel_type),
+    fuel_grade: t(r.fuel_grade),
     transmission: t(r.transmission),
     drivetrain: t(r.drivetrain),
     horsepower: s(r.horsepower),
@@ -393,6 +403,8 @@ function recordToForm(r: VehicleCatalogRecord): FormState {
     torque_unit: t(r.torque_unit) || "Nm",
     fuel_tank_capacity: s(r.fuel_tank_capacity),
     fuel_tank_unit: t(r.fuel_tank_unit) || "L",
+    fuel_economy_km_per_l: s(r.fuel_economy_km_per_l),
+    estimated_km_per_refuel: s(r.estimated_km_per_refuel),
     seating_capacity: s(r.seating_capacity),
     curb_weight_kg: s(r.curb_weight_kg),
     gross_vehicle_weight_kg: s(r.gross_vehicle_weight_kg),
@@ -475,6 +487,8 @@ function toCreatePayload(form: FormState): VehicleCatalogCreatePayload {
   assign("torque_unit", form.torque_unit.trim() || null);
   assign("fuel_tank_capacity", optNum(form.fuel_tank_capacity));
   assign("fuel_tank_unit", form.fuel_tank_unit.trim() || null);
+  assign("fuel_economy_km_per_l", optNum(form.fuel_economy_km_per_l));
+  assign("estimated_km_per_refuel", optNum(form.estimated_km_per_refuel));
   assign("seating_capacity", optInt(form.seating_capacity));
   assign("curb_weight_kg", optNum(form.curb_weight_kg));
   assign("gross_vehicle_weight_kg", optNum(form.gross_vehicle_weight_kg));
@@ -532,6 +546,8 @@ function toPatchPayload(form: FormState): Partial<VehicleCatalogRecord> {
     torque_unit: form.torque_unit.trim() || null,
     fuel_tank_capacity: optNum(form.fuel_tank_capacity),
     fuel_tank_unit: form.fuel_tank_unit.trim() || null,
+    fuel_economy_km_per_l: optNum(form.fuel_economy_km_per_l),
+    estimated_km_per_refuel: optNum(form.estimated_km_per_refuel),
     seating_capacity: optInt(form.seating_capacity),
     curb_weight_kg: optNum(form.curb_weight_kg),
     gross_vehicle_weight_kg: optNum(form.gross_vehicle_weight_kg),
@@ -1507,6 +1523,20 @@ export function VehicleCatalogManager() {
                   placeholder="L"
                 />
                 <FieldWithHint
+                  label="Fuel economy (km/L)"
+                  hint={FUEL_SYSTEM_FLUIDS_FIELD_HINTS.fuelEconomyKmPerL}
+                  value={form.fuel_economy_km_per_l}
+                  onChange={update("fuel_economy_km_per_l")}
+                  type="number"
+                />
+                <FieldWithHint
+                  label="Estimated (Km) per re-fuel"
+                  hint={FUEL_SYSTEM_FLUIDS_FIELD_HINTS.estimatedKmPerRefuel}
+                  value={form.estimated_km_per_refuel}
+                  onChange={update("estimated_km_per_refuel")}
+                  type="number"
+                />
+                <FieldWithHint
                   label="Engine oil capacity L"
                   hint={FUEL_SYSTEM_FLUIDS_FIELD_HINTS.engineOilCapacityL}
                   value={form.engine_oil_capacity_l}
@@ -2067,9 +2097,15 @@ function VehicleViewBody({ record: r }: { record: VehicleCatalogRecord }) {
                   <VehicleSpecItem icon={Fuel} label="Fuel type" value={viewText(r.fuel_type)} />
                   <VehicleSpecItem icon={Fuel} label="Fuel grade" value={viewText(r.fuel_grade)} />
                   <VehicleSpecItem icon={Fuel} label="Fuel tank capacity" value={viewText(r.fuel_tank_capacity)} />
+                  <VehicleSpecItem icon={Fuel} label="Fuel economy (km/L)" value={viewText(r.fuel_economy_km_per_l)} />
                 </div>
                 <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 sm:border-t-0">
                   <VehicleSpecItem icon={Fuel} label="Fuel tank unit" value={viewText(r.fuel_tank_unit)} />
+                  <VehicleSpecItem
+                    icon={Fuel}
+                    label="Estimated (Km) per re-fuel"
+                    value={viewText(r.estimated_km_per_refuel)}
+                  />
                   <VehicleSpecItem icon={Gauge} label="Engine oil capacity L" value={viewText(r.engine_oil_capacity_l)} />
                   <VehicleSpecItem icon={Gauge} label="Coolant capacity L" value={viewText(r.coolant_capacity_l)} />
                 </div>

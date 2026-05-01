@@ -105,4 +105,20 @@ describe("buildVehicleCatalogCreatePayload", () => {
       expect(r.payload.fuel_grade).toBe("87");
     }
   });
+
+  it("maps fuel economy CSV headers", () => {
+    const canon = remapCsvRowToCanonical({
+      Make: "Honda",
+      Model: "Accord",
+      "Production start year": "2020",
+      "fuel economy (km/L)": "30",
+      "Estimated (Km) per re-fuel": "1650",
+    });
+    const r = buildVehicleCatalogCreatePayload(canon);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.payload.fuel_economy_km_per_l).toBe(30);
+      expect(r.payload.estimated_km_per_refuel).toBe(1650);
+    }
+  });
 });

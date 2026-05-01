@@ -12,6 +12,8 @@ const DRIFT_KEYS = [
   "engine_type",
   "fuel_category",
   "fuel_grade",
+  "fuel_economy_km_per_l",
+  "estimated_km_per_refuel",
 ] as const;
 
 function sentMeaningful(v: unknown): boolean {
