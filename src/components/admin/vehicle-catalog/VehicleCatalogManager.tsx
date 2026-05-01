@@ -6,6 +6,7 @@ import {
   CarFront,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
   CircleDot,
   DoorOpen,
   Download,
@@ -580,6 +581,43 @@ export function VehicleCatalogManager() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(() => emptyForm());
 
+  /** Grouped table: make → model → variants */
+  const [expandedMakes, setExpandedMakes] = useState<Set<string>>(() => new Set());
+  const [expandedModels, setExpandedModels] = useState<Set<string>>(() => new Set());
+
+  const groupedCatalog = useMemo(() => {
+    const byMake = new Map<string, Map<string, VehicleCatalogRecord[]>>();
+    for (const row of items) {
+      const make = (row.make ?? "").trim() || "—";
+      const model = (row.model ?? "").trim() || "—";
+      if (!byMake.has(make)) byMake.set(make, new Map());
+      const byModel = byMake.get(make)!;
+      if (!byModel.has(model)) byModel.set(model, []);
+      byModel.get(model)!.push(row);
+    }
+    const variantSort = (a: VehicleCatalogRecord, b: VehicleCatalogRecord) => {
+      const ya = a.production_start_year ?? 0;
+      const yb = b.production_start_year ?? 0;
+      if (yb !== ya) return yb - ya;
+      const ma = a.production_start_month ?? 0;
+      const mb = b.production_start_month ?? 0;
+      return mb - ma;
+    };
+    const makes = [...byMake.keys()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+    return makes.map((make) => {
+      const byModel = byMake.get(make)!;
+      const models = [...byModel.keys()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+      const modelGroups = models.map((model) => ({
+        model,
+        rows: [...(byModel.get(model) ?? [])].sort(variantSort),
+      }));
+      const variantCount = modelGroups.reduce((n, g) => n + g.rows.length, 0);
+      return { make, modelGroups, variantCount };
+    });
+  }, [items]);
+
+  const modelGroupKey = (make: string, model: string) => `${make}\u001f${model}`;
+
   const startYearDropdownYears = useMemo(
     () => modelYearsForForm(form.production_start_year, standardModelYears),
     [form.production_start_year, standardModelYears],
@@ -825,11 +863,11 @@ export function VehicleCatalogManager() {
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4 sm:p-6 text-slate-900 [color-scheme:light]">
+    <div className="flex flex-col gap-4 p-4 sm:p-6 text-slate-200">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">Motor vehicles</h2>
-          <p className="text-sm text-slate-500">
+          <h2 className="text-lg font-semibold text-white">Motor vehicles</h2>
+          <p className="text-sm text-slate-400">
             Platform-wide reference variants—use separate rows and year ranges for major facelifts (e.g.
             Pre-Facelift vs Facelift). Used as reference data for fleets.
           </p>
@@ -846,7 +884,7 @@ export function VehicleCatalogManager() {
           <Button
             type="button"
             variant="outline"
-            className="gap-2 border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
+            className="gap-2 border-slate-600 bg-slate-800/80 text-slate-200 hover:bg-slate-700 hover:text-white"
             onClick={handleImportPick}
             disabled={loading || importStep === "importing"}
             title="Import rows from CSV (export first to use as a template)"
@@ -857,7 +895,7 @@ export function VehicleCatalogManager() {
           <Button
             type="button"
             variant="outline"
-            className="gap-2 border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
+            className="gap-2 border-slate-600 bg-slate-800/80 text-slate-200 hover:bg-slate-700 hover:text-white"
             onClick={handleExportCsv}
             disabled={loading}
             title={
@@ -869,14 +907,14 @@ export function VehicleCatalogManager() {
             <Download className="w-4 h-4" />
             Export CSV
           </Button>
-          <Button onClick={openCreate} className="gap-2">
+          <Button onClick={openCreate} className="gap-2 bg-amber-500 text-slate-950 hover:bg-amber-400">
             <Plus className="w-4 h-4" />
             Add vehicle
           </Button>
           <Button
             type="button"
             variant="outline"
-            className="gap-2 border-red-200 bg-white text-red-700 hover:bg-red-50 hover:text-red-800"
+            className="gap-2 border-red-500/40 bg-slate-800/80 text-red-400 hover:bg-red-950/40 hover:text-red-300"
             disabled={loading || items.length === 0 || importStep === "importing"}
             title="Remove every row in the motor vehicle catalog (cannot be undone)"
             onClick={() => {
@@ -891,7 +929,7 @@ export function VehicleCatalogManager() {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+        <div className="rounded-lg border border-red-500/30 bg-red-950/40 px-3 py-2 text-sm text-red-200">
           {error}
         </div>
       )}
@@ -901,89 +939,175 @@ export function VehicleCatalogManager() {
           <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
         </div>
       ) : (
-        <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <Table className="[&_th]:text-slate-800 [&_td]:text-slate-900 [&_tbody_tr]:border-slate-200 [&_tbody_tr:hover]:bg-slate-50">
+        <div className="rounded-lg border border-slate-800 bg-slate-900/60 shadow-sm overflow-hidden [&_tbody_td]:!text-slate-200 [&_thead_th]:!text-slate-300">
+          <Table className="[&_th]:!text-slate-300 [&_td]:!text-slate-200 [&_tbody_tr]:border-slate-800 [&_tbody_tr:hover]:bg-slate-800/40">
           <TableHeader>
-            <TableRow className="border-slate-200 hover:bg-transparent">
-              <TableHead className="bg-slate-50/90">Make</TableHead>
-              <TableHead className="bg-slate-50/90">Model</TableHead>
-              <TableHead className="bg-slate-50/90">Years</TableHead>
+            <TableRow className="border-slate-700 hover:bg-transparent bg-slate-800/90">
+              <TableHead className="!bg-transparent text-slate-300">Make</TableHead>
+              <TableHead className="!bg-transparent text-slate-300">Model</TableHead>
+              <TableHead className="!bg-transparent text-slate-300">Years</TableHead>
               <TableHead
-                className="hidden md:table-cell bg-slate-50/90"
+                className="hidden md:table-cell !bg-transparent text-slate-300"
                 title="Series, facelift phase, or trim grade"
               >
                 Series / facelift
               </TableHead>
               <TableHead
-                className="hidden lg:table-cell bg-slate-50/90"
+                className="hidden lg:table-cell !bg-transparent text-slate-300"
                 title="Full model code or chassis"
               >
                 Code
               </TableHead>
-              <TableHead className="hidden lg:table-cell bg-slate-50/90">Body</TableHead>
-              <TableHead className="w-[140px] text-right bg-slate-50/90">Actions</TableHead>
+              <TableHead className="hidden lg:table-cell !bg-transparent text-slate-300">Body</TableHead>
+              <TableHead className="w-[140px] text-right !bg-transparent text-slate-300">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {items.length === 0 ? (
-              <TableRow className="hover:bg-transparent border-slate-200">
-                <TableCell colSpan={7} className="text-center text-slate-600 py-12">
+              <TableRow className="hover:bg-transparent border-slate-800">
+                <TableCell colSpan={7} className="text-center text-slate-500 py-12">
                   No vehicles yet. Add one to get started.
                 </TableCell>
               </TableRow>
             ) : (
-              items.map((row) => (
-                <TableRow key={row.id} className="border-slate-200 hover:bg-slate-50 data-[state=selected]:bg-slate-50">
-                  <TableCell className="font-medium text-slate-900">{row.make}</TableCell>
-                  <TableCell className="text-slate-900">{row.model}</TableCell>
-                  <TableCell className="text-slate-900 tabular-nums">
-                    {formatCatalogProductionWindow(row)}
-                  </TableCell>
-                  <TableCell className="hidden md:table-cell text-slate-700">
-                    {row.trim_series ?? "—"}
-                  </TableCell>
-                  <TableCell className="hidden lg:table-cell text-slate-700">
-                    {row.full_model_code ?? row.chassis_code ?? row.generation ?? "—"}
-                  </TableCell>
-                  <TableCell className="hidden lg:table-cell text-slate-700">
-                    {row.body_type ?? "—"}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="inline-flex gap-1 justify-end">
-                      <Button
+              groupedCatalog.flatMap((makeGroup) => {
+                const makeOpen = expandedMakes.has(makeGroup.make);
+                const rowsOut: React.ReactNode[] = [];
+                rowsOut.push(
+                  <TableRow
+                    key={`make:${makeGroup.make}`}
+                    className="border-slate-700 !bg-slate-800 hover:!bg-slate-700/95 [&_td]:!bg-slate-800 hover:[&_td]:!bg-slate-700/95 [&_td]:!text-slate-100"
+                  >
+                    <TableCell className="!bg-slate-800 font-semibold !text-slate-100">
+                      <button
                         type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-slate-700 hover:text-slate-900 hover:bg-slate-100"
-                        onClick={() => setViewRecord(row)}
-                        title="View details"
+                        className="inline-flex items-center gap-2 rounded-md py-1 pr-2 text-left -ml-1 text-slate-100 hover:bg-slate-700/80"
+                        onClick={() =>
+                          setExpandedMakes((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(makeGroup.make)) next.delete(makeGroup.make);
+                            else next.add(makeGroup.make);
+                            return next;
+                          })
+                        }
+                        aria-expanded={makeOpen}
                       >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-slate-700 hover:text-slate-900 hover:bg-slate-100"
-                        onClick={() => openEdit(row)}
-                        title="Edit"
+                        <ChevronRight
+                          className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${makeOpen ? "rotate-90" : ""}`}
+                          aria-hidden
+                        />
+                        {makeGroup.make}
+                      </button>
+                    </TableCell>
+                    <TableCell className="!bg-slate-800 !text-slate-400 text-sm font-medium" colSpan={5}>
+                      {makeGroup.modelGroups.length} model
+                      {makeGroup.modelGroups.length === 1 ? "" : "s"} · {makeGroup.variantCount} variant
+                      {makeGroup.variantCount === 1 ? "" : "s"}
+                    </TableCell>
+                    <TableCell className="!bg-slate-800" />
+                  </TableRow>,
+                );
+                if (!makeOpen) return rowsOut;
+
+                for (const mg of makeGroup.modelGroups) {
+                  const mk = modelGroupKey(makeGroup.make, mg.model);
+                  const modelOpen = expandedModels.has(mk);
+                  rowsOut.push(
+                    <TableRow
+                      key={`model:${mk}`}
+                      className="border-slate-700/80 !bg-slate-900/85 hover:!bg-slate-800/90 [&_td]:!bg-slate-900/85 hover:[&_td]:!bg-slate-800/90 [&_td]:!text-slate-100"
+                    >
+                      <TableCell className="!bg-slate-900/85 pl-8 font-medium !text-slate-100">
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-2 rounded-md py-1 pr-2 text-left -ml-1 text-slate-100 hover:bg-slate-800"
+                          onClick={() =>
+                            setExpandedModels((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(mk)) next.delete(mk);
+                              else next.add(mk);
+                              return next;
+                            })
+                          }
+                          aria-expanded={modelOpen}
+                        >
+                          <ChevronRight
+                            className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${modelOpen ? "rotate-90" : ""}`}
+                            aria-hidden
+                          />
+                          {mg.model}
+                        </button>
+                      </TableCell>
+                      <TableCell className="!bg-slate-900/85 !text-slate-400 text-sm font-medium" colSpan={5}>
+                        {mg.rows.length} variant{mg.rows.length === 1 ? "" : "s"}
+                      </TableCell>
+                      <TableCell className="!bg-slate-900/85" />
+                    </TableRow>,
+                  );
+                  if (!modelOpen) continue;
+                  for (const row of mg.rows) {
+                    rowsOut.push(
+                      <TableRow
+                        key={row.id}
+                        className="border-slate-800 !bg-slate-950/40 hover:!bg-slate-800/35 data-[state=selected]:!bg-slate-800/50 [&_td]:!text-slate-200"
                       >
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-red-600 hover:text-red-700"
-                        onClick={() => handleDelete(row)}
-                        title="Delete"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
+                        <TableCell
+                          className="w-8 min-w-[2rem] border-l-2 border-slate-600 bg-slate-900/50 pl-3"
+                          aria-hidden
+                        />
+                        <TableCell className="!text-slate-100 font-medium">{row.model}</TableCell>
+                        <TableCell className="!text-slate-200 tabular-nums">
+                          {formatCatalogProductionWindow(row)}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-slate-400">
+                          {row.trim_series ?? "—"}
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell text-slate-400">
+                          {row.full_model_code ?? row.chassis_code ?? row.generation ?? "—"}
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell text-slate-400">
+                          {row.body_type ?? "—"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="inline-flex gap-1 justify-end">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-slate-400 hover:text-white hover:bg-slate-800"
+                              onClick={() => setViewRecord(row)}
+                              title="View details"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-slate-400 hover:text-white hover:bg-slate-800"
+                              onClick={() => openEdit(row)}
+                              title="Edit"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-950/50"
+                              onClick={() => handleDelete(row)}
+                              title="Delete"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>,
+                    );
+                  }
+                }
+                return rowsOut;
+              })
             )}
           </TableBody>
         </Table>
