@@ -12824,14 +12824,12 @@ app.post("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c)
     }
     row.updated_at = new Date().toISOString();
     /**
-     * PostgREST often **silently omits** JSON keys not in its schema cache (no error). That left brakes/tires NULL.
-     * SQL RPC writes the full row first; PostgREST is only fallback (legacy DBs, RPC errors).
+     * Prefer PostgREST insert first so **new columns** (fuel economy, etc.) are applied whenever the
+     * DB + schema cache include them. An older `edge_insert_vehicle_catalog_row` RPC on the project may
+     * omit newer columns but still return success — that made NOTIFY useless because RPC ran first.
+     * Keep RPC as fallback when insert fails (legacy `year`, stale cache, missing RPC-handled paths).
      */
-    const rpcIns = await supabase.rpc("edge_insert_vehicle_catalog_row", { p: row });
-    let ins =
-      !rpcIns.error && rpcIns.data != null
-        ? { data: rpcIns.data as Record<string, unknown>, error: null as typeof rpcIns.error }
-        : await supabase.from("vehicle_catalog").insert(row).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
+    let ins = await supabase.from("vehicle_catalog").insert(row).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
 
     /** Legacy DB: `year NOT NULL` only — map production_start_year → year. */
     if (ins.error && isLegacyVehicleCatalogYearNotNullError(ins.error)) {
@@ -12842,6 +12840,11 @@ app.post("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c)
       const rpc = await supabase.rpc("edge_insert_vehicle_catalog_row", { p: row });
       if (!rpc.error && rpc.data != null) {
         ins = { data: rpc.data as Record<string, unknown>, error: null };
+      }
+    } else if (ins.error) {
+      const rpcIns = await supabase.rpc("edge_insert_vehicle_catalog_row", { p: row });
+      if (!rpcIns.error && rpcIns.data != null) {
+        ins = { data: rpcIns.data as Record<string, unknown>, error: null };
       }
     }
     if (!ins.error) {

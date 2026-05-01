@@ -723,11 +723,8 @@ export function registerPendingVehicleCatalogRoutes(
           rowRec.generation_code = rowRec.chassis_code;
         }
         row.updated_at = new Date().toISOString();
-        const rpcIns = await supabase.rpc("edge_insert_vehicle_catalog_row", { p: rowRec });
-        let ins =
-          !rpcIns.error && rpcIns.data != null
-            ? { data: rpcIns.data as Record<string, unknown>, error: null as typeof rpcIns.error }
-            : await supabase.from("vehicle_catalog").insert(row).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
+        /** Prefer PostgREST insert first — see index.tsx POST /admin/vehicle-catalog. */
+        let ins = await supabase.from("vehicle_catalog").insert(row).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
         if (ins.error && isLegacyVehicleCatalogYearNotNullError(ins.error)) {
           const legacyRow = insertRowForLegacyDb(
             stripVehicleCatalogOptionalMigrationColumns(row as Record<string, unknown>),
@@ -738,6 +735,11 @@ export function registerPendingVehicleCatalogRoutes(
           const rpc = await supabase.rpc("edge_insert_vehicle_catalog_row", { p: rowRec });
           if (!rpc.error && rpc.data != null) {
             ins = { data: rpc.data as Record<string, unknown>, error: null };
+          }
+        } else if (ins.error) {
+          const rpcIns = await supabase.rpc("edge_insert_vehicle_catalog_row", { p: rowRec });
+          if (!rpcIns.error && rpcIns.data != null) {
+            ins = { data: rpcIns.data as Record<string, unknown>, error: null };
           }
         }
         if (!ins.error) {
