@@ -41,10 +41,10 @@ import {
   Fuel,
   CreditCard,
   FileSpreadsheet,
-  LayoutGrid,
   TrendingUp,
   Award,
-  Wrench
+  Wrench,
+  CarFront
 } from "lucide-react";
 
 import { NotificationCenter } from "../notifications/NotificationCenter";
@@ -99,6 +99,7 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
   const isTollManagementOpen = ['toll-logs', 'toll-tags', 'tag-inventory', 'claimable-loss', 'toll-analytics'].includes(currentPage);
   const isFuelManagementOpen = ['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration', 'fuel-reimbursements', 'fuel-audit', 'fuel-integrity-gap'].includes(currentPage);
   const isDriverOpsOpen = ['drivers', 'performance', 'tier-config', 'driver-ledger'].includes(currentPage);
+  const isVehicleOpsOpen = ['vehicles', 'maintenance-hub', 'fleet'].includes(currentPage);
 
   return (
     <Sidebar className="border-r border-slate-200 dark:border-slate-800">
@@ -180,30 +181,50 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
             </SidebarMenuItem>
           </Collapsible>
           )}
-          
-          {canView('vehicles') && (
-          <NavItem 
-            icon={<Car className="h-4 w-4" />} 
-            label={v('vehiclesPageTitle')} 
-            active={currentPage === 'vehicles'}
-            onClick={() => onNavigate?.('vehicles')}
-          />
-          )}
-          {canView('maintenance-hub') && (
-          <NavItem 
-            icon={<Wrench className="h-4 w-4" />} 
-            label="Maintenance" 
-            active={currentPage === 'maintenance-hub'}
-            onClick={() => onNavigate?.('maintenance-hub')}
-          />
-          )}
-          {canView('fleet') && (
-          <NavItem 
-            icon={<LayoutGrid className="h-4 w-4" />} 
-            label="Inventory & Asset Management" 
-            active={currentPage === 'fleet'}
-            onClick={() => onNavigate?.('fleet')}
-          />
+
+          {(canView('vehicles') || canView('maintenance-hub') || canView('fleet')) && (
+          <Collapsible defaultOpen={isVehicleOpsOpen} className="group/collapsible">
+            <SidebarMenuItem>
+              <CollapsibleTrigger asChild>
+                <SidebarMenuButton tooltip="Vehicle operations">
+                  <CarFront className="h-4 w-4" />
+                  <span>Vehicle operations</span>
+                  <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                </SidebarMenuButton>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <SidebarMenuSub>
+                  {canView('vehicles') && (
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'vehicles'} onClick={() => onNavigate?.('vehicles')}>
+                      <button type="button" className="w-full text-left cursor-pointer">
+                        <span>{v('vehiclesPageTitle')}</span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  )}
+                  {canView('maintenance-hub') && (
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'maintenance-hub'} onClick={() => onNavigate?.('maintenance-hub')}>
+                      <button type="button" className="w-full text-left cursor-pointer">
+                        <span>Maintenance</span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  )}
+                  {canView('fleet') && (
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'fleet'} onClick={() => onNavigate?.('fleet')}>
+                      <button type="button" className="w-full text-left cursor-pointer">
+                        <span>Inventory & Asset Management</span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  )}
+                </SidebarMenuSub>
+              </CollapsibleContent>
+            </SidebarMenuItem>
+          </Collapsible>
           )}
           
           {/* Fuel Management Section */}

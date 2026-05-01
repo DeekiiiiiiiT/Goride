@@ -111,7 +111,7 @@ import { useAuth } from '../auth/AuthContext';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { getFleetVehicleCatalog } from '../../services/pendingVehicleCatalogService';
 import { useMyPendingCatalogRequests } from '../../hooks/useMyPendingCatalogRequests';
-import { formatCatalogProductionWindow, type VehicleCatalogRecord } from '../../types/vehicleCatalog';
+import type { VehicleCatalogRecord } from '../../types/vehicleCatalog';
 import {
   isVehicleParked,
   isVehicleCatalogMatched,
@@ -1161,47 +1161,6 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
             </div>
           </AlertDescription>
         </Alert>
-      )}
-
-      {vehicle.vehicle_catalog_id && linkedCatalog && (
-        <Card className="border-slate-200 bg-white shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold text-slate-900">Motor catalog reference</CardTitle>
-            <CardDescription className="text-slate-600">
-              Platform specs for maintenance and parts. Fleet-specific details (color, plate, VIN) stay on this vehicle
-              record.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3 text-sm text-slate-800 sm:grid-cols-2">
-            <div>
-              <span className="text-slate-500">Variant</span>
-              <p className="font-medium">
-                {formatCatalogProductionWindow(linkedCatalog)} {linkedCatalog.make} {linkedCatalog.model}
-                {linkedCatalog.trim_series ? ` · ${linkedCatalog.trim_series}` : ''}
-              </p>
-              {linkedCatalog.chassis_code && (
-                <p className="text-xs text-slate-500">
-                  Chassis: {linkedCatalog.chassis_code}
-                </p>
-              )}
-            </div>
-            <div>
-              <span className="text-slate-500">Key specs</span>
-              <p className="text-slate-800">
-                {[linkedCatalog.engine_displacement_cc ? `${linkedCatalog.engine_displacement_cc} cc` : null, linkedCatalog.transmission, linkedCatalog.drivetrain]
-                  .filter(Boolean)
-                  .join(' · ') || '—'}
-              </p>
-              {(linkedCatalog.tire_size || linkedCatalog.engine_oil_capacity_l != null) && (
-                <p className="text-xs text-slate-500 mt-1">
-                  {[linkedCatalog.tire_size ? `Tires ${linkedCatalog.tire_size}` : null, linkedCatalog.engine_oil_capacity_l != null ? `Oil ${linkedCatalog.engine_oil_capacity_l} L` : null]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
       )}
 
       {/* --- Header Section --- */}
