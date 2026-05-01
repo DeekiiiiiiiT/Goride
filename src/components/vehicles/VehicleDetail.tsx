@@ -176,6 +176,53 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
     Boolean(vehicle.vehicle_catalog_id?.trim()) &&
     linkedCatalogIsError;
 
+  /** Profile → General Info: fleet identity + catalog fuel/specs when linked. */
+  const generalInfoFields = useMemo(() => {
+    const dash = '—';
+    const make =
+      linkedCatalog?.make?.trim() || vehicle.make?.trim() || dash;
+    const model =
+      linkedCatalog?.model?.trim() || vehicle.model?.trim() || dash;
+    const year = vehicle.year?.toString().trim() || dash;
+    const fuelType =
+      linkedCatalog?.fuel_type?.trim() ||
+      vehicle.vehicle_catalog_fuel_type_hint?.trim() ||
+      dash;
+    const fuelGrade =
+      linkedCatalog?.fuel_grade?.trim() ||
+      vehicle.vehicle_catalog_fuel_grade_hint?.trim() ||
+      dash;
+
+    let fuelTank = dash;
+    const catCap = linkedCatalog?.fuel_tank_capacity;
+    if (
+      linkedCatalog &&
+      catCap != null &&
+      Number.isFinite(Number(catCap))
+    ) {
+      const u = linkedCatalog.fuel_tank_unit?.trim() || 'L';
+      fuelTank = `${catCap} ${u}`;
+    } else {
+      const tc =
+        vehicle.specifications?.tankCapacity ?? vehicle.fuelSettings?.tankCapacity;
+      if (tc != null && tc !== '' && Number(tc) !== 0) {
+        fuelTank = `${tc} L`;
+      }
+    }
+
+    const vin = vehicle.vin?.trim() || dash;
+
+    return {
+      make,
+      model,
+      year,
+      fuelType,
+      fuelGrade,
+      fuelTank,
+      vin,
+    };
+  }, [linkedCatalog, vehicle]);
+
   const fleetKey = vehicle.id || vehicle.licensePlate;
   const catalogPendingRow = useMemo(() => {
     return (myPendingCatalog?.items ?? []).find((r) => r.fleet_vehicle_id === fleetKey) ?? null;
@@ -511,66 +558,6 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
       from: subDays(new Date(), 29),
       to: new Date(),
   });
-
-  // Specifications State
-  const [isEditingSpecs, setIsEditingSpecs] = useState(false);
-  const [specsForm, setSpecsForm] = useState({
-      engineType: vehicle.specifications?.engineType || '3-cylinder',
-      engineSize: vehicle.specifications?.engineSize || '1.0L',
-      transmission: vehicle.specifications?.transmission || 'CVT Automatic',
-      driveType: vehicle.specifications?.driveType || 'FWD',
-      kerbWeight: vehicle.specifications?.kerbWeight || '1070 kg',
-      aerodynamicAids: vehicle.specifications?.aerodynamicAids || 'Standard',
-      fuelType: vehicle.fuelSettings?.fuelType || 'Gasoline_87',
-      fuelEconomy: vehicle.specifications?.fuelEconomy || '24.6',
-      tankCapacity: vehicle.specifications?.tankCapacity || '36',
-      estimatedRangeMin: vehicle.specifications?.estimatedRangeMin || 650,
-      estimatedRangeMax: vehicle.specifications?.estimatedRangeMax || 720,
-      bodyType: vehicle.bodyType || 'MPV',
-      fuelScenarioId: vehicle.fuelScenarioId || ''
-  });
-
-  const handleSaveSpecs = async () => {
-      try {
-          // Normalize fuel type for backend
-          const validFuelType = ['Gasoline_87', 'Gasoline_91', 'Gasoline_93', 'Diesel', 'Electric', 'Hybrid'].includes(specsForm.fuelType) 
-            ? specsForm.fuelType as any 
-            : 'Gasoline_87';
-
-          const updatedVehicle = {
-              ...vehicle,
-              bodyType: specsForm.bodyType,
-              fuelScenarioId: (specsForm.fuelScenarioId && specsForm.fuelScenarioId !== 'none') ? specsForm.fuelScenarioId : undefined,
-              specifications: { 
-                  ...vehicle.specifications,
-                  engineType: specsForm.engineType,
-                  engineSize: specsForm.engineSize,
-                  transmission: specsForm.transmission,
-                  driveType: specsForm.driveType,
-                  kerbWeight: specsForm.kerbWeight,
-                  aerodynamicAids: specsForm.aerodynamicAids,
-                  fuelEconomy: specsForm.fuelEconomy,
-                  tankCapacity: specsForm.tankCapacity,
-                  estimatedRangeMin: Number(specsForm.estimatedRangeMin),
-                  estimatedRangeMax: Number(specsForm.estimatedRangeMax),
-              },
-              fuelSettings: {
-                  ...vehicle.fuelSettings,
-                  fuelType: validFuelType,
-                  // Keep existing or update if logical
-                  tankCapacity: parseFloat(specsForm.tankCapacity) || vehicle.fuelSettings?.tankCapacity || 0,
-                  efficiencyCity: parseFloat(specsForm.fuelEconomy) || vehicle.fuelSettings?.efficiencyCity || 0,
-                  efficiencyHighway: vehicle.fuelSettings?.efficiencyHighway || 0
-              }
-          };
-          await api.saveVehicle(updatedVehicle);
-          if (onUpdate) onUpdate(updatedVehicle);
-          setIsEditingSpecs(false);
-          toast.success("Specifications updated");
-      } catch (error) {
-          toast.error("Failed to update specifications");
-      }
-  };
 
   const [uploadForm, setUploadForm] = useState({
     type: 'Registration',
@@ -1969,87 +1956,38 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                   <TabsContent value="general" className="space-y-6">
                       <Card>
                           <CardHeader>
-                              <div className="flex justify-between items-center">
-                                  <CardTitle>Vehicle Specifications</CardTitle>
-                                  <Button variant="ghost" size="sm" onClick={() => setIsEditingSpecs(!isEditingSpecs)}>
-                                      <Pencil className="h-4 w-4 mr-2" />
-                                      {isEditingSpecs ? 'Cancel' : 'Edit'}
-                                  </Button>
-                              </div>
+                              <CardTitle>Vehicle details</CardTitle>
                           </CardHeader>
                           <CardContent className="space-y-4">
-                              <div className="grid grid-cols-2 gap-4">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
                                   <div>
-                                      <Label className="text-xs text-slate-500">Engine Type</Label>
-                                      {isEditingSpecs ? (
-                                          <Input value={specsForm.engineType} onChange={e => setSpecsForm({...specsForm, engineType: e.target.value})} />
-                                      ) : (
-                                          <p className="font-medium">{vehicle.specifications?.engineType || '-'}</p>
-                                      )}
+                                      <Label className="text-xs text-slate-500">Make</Label>
+                                      <p className="font-medium text-slate-900 mt-0.5">{generalInfoFields.make}</p>
                                   </div>
                                   <div>
-                                      <Label className="text-xs text-slate-500">Transmission</Label>
-                                      {isEditingSpecs ? (
-                                          <Input value={specsForm.transmission} onChange={e => setSpecsForm({...specsForm, transmission: e.target.value})} />
-                                      ) : (
-                                          <p className="font-medium">{vehicle.specifications?.transmission || '-'}</p>
-                                      )}
+                                      <Label className="text-xs text-slate-500">Model</Label>
+                                      <p className="font-medium text-slate-900 mt-0.5">{generalInfoFields.model}</p>
                                   </div>
                                   <div>
-                                      <Label className="text-xs text-slate-500">Tank Capacity (Liters)</Label>
-                                      {isEditingSpecs ? (
-                                          <Input 
-                                              type="number"
-                                              value={specsForm.tankCapacity} 
-                                              onChange={e => setSpecsForm({...specsForm, tankCapacity: e.target.value})} 
-                                          />
-                                      ) : (
-                                          <p className="font-medium">{vehicle.specifications?.tankCapacity || vehicle.fuelSettings?.tankCapacity || '-'} L</p>
-                                      )}
+                                      <Label className="text-xs text-slate-500">Year</Label>
+                                      <p className="font-medium text-slate-900 mt-0.5">{generalInfoFields.year}</p>
                                   </div>
                                   <div>
-                                      <Label className="text-xs text-slate-500">Fuel Economy (km/L)</Label>
-                                      {isEditingSpecs ? (
-                                          <Input 
-                                              type="number"
-                                              value={specsForm.fuelEconomy} 
-                                              onChange={e => setSpecsForm({...specsForm, fuelEconomy: e.target.value})} 
-                                          />
-                                      ) : (
-                                          <p className="font-medium">{vehicle.specifications?.fuelEconomy || vehicle.fuelSettings?.efficiencyCity || '-'} km/L</p>
-                                      )}
+                                      <Label className="text-xs text-slate-500">Fuel type</Label>
+                                      <p className="font-medium text-slate-900 mt-0.5">{generalInfoFields.fuelType}</p>
                                   </div>
                                   <div>
-                                      <Label className="text-xs text-slate-500">Estimated Range (km)</Label>
-                                      {isEditingSpecs ? (
-                                          <div className="flex gap-2 items-center">
-                                              <Input 
-                                                  type="number"
-                                                  value={specsForm.estimatedRangeMin} 
-                                                  onChange={e => setSpecsForm({...specsForm, estimatedRangeMin: e.target.value})} 
-                                                  placeholder="Min"
-                                              />
-                                              <span className="text-slate-400">to</span>
-                                              <Input 
-                                                  type="number"
-                                                  value={specsForm.estimatedRangeMax} 
-                                                  onChange={e => setSpecsForm({...specsForm, estimatedRangeMax: e.target.value})} 
-                                                  placeholder="Max"
-                                              />
-                                          </div>
-                                      ) : (
-                                          <p className="font-medium">
-                                              {vehicle.specifications?.estimatedRangeMin && vehicle.specifications?.estimatedRangeMax 
-                                                  ? `${vehicle.specifications.estimatedRangeMin} km - ${vehicle.specifications.estimatedRangeMax} km` 
-                                                  : '-'}
-                                          </p>
-                                      )}
+                                      <Label className="text-xs text-slate-500">Fuel grade</Label>
+                                      <p className="font-medium text-slate-900 mt-0.5">{generalInfoFields.fuelGrade}</p>
                                   </div>
-                                  {isEditingSpecs && (
-                                      <div className="col-span-2 mt-4">
-                                          <Button onClick={handleSaveSpecs} className="w-full">Save Changes</Button>
-                                      </div>
-                                  )}
+                                  <div>
+                                      <Label className="text-xs text-slate-500">Fuel tank capacity</Label>
+                                      <p className="font-medium text-slate-900 mt-0.5">{generalInfoFields.fuelTank}</p>
+                                  </div>
+                                  <div className="sm:col-span-2">
+                                      <Label className="text-xs text-slate-500">VIN</Label>
+                                      <p className="font-medium text-slate-900 mt-0.5 font-mono text-sm tracking-wide">{generalInfoFields.vin}</p>
+                                  </div>
                               </div>
                           </CardContent>
                       </Card>
