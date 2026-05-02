@@ -173,6 +173,10 @@ function normalizeEdgePathname(pathname: string): string {
   if (pathname.startsWith("/admin/")) {
     return `/make-server-37f42386${pathname}`;
   }
+  // API Command Center (same pattern as /admin/): gateway strips the function slug and leaves /api-center/...
+  if (pathname === "/api-center" || pathname.startsWith("/api-center/")) {
+    return `/make-server-37f42386${pathname}`;
+  }
   if (
     pathname.startsWith("/ledger/") ||
     pathname.startsWith("/toll-reconciliation/") ||
