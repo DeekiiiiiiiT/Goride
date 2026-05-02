@@ -56,6 +56,37 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../ui/select";
+import { cn } from "../../ui/utils";
+
+/** Super Admin is `dark` — Radix default select styling is nearly invisible there. */
+const adminSelectTrigger = cn(
+  "h-9 border shadow-sm",
+  "border-slate-300 bg-white text-slate-900",
+  "data-[placeholder]:text-slate-500 [&_svg]:text-slate-600",
+  "dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100",
+  "dark:data-[placeholder]:text-slate-400 dark:[&_svg]:text-slate-400",
+  "dark:hover:bg-slate-700",
+);
+
+const adminSelectContent = cn(
+  "z-[200] border shadow-lg",
+  "border-slate-200 bg-white text-slate-900",
+  "dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100",
+);
+
+const adminSelectItem = cn(
+  "cursor-pointer",
+  "focus:bg-amber-100 focus:text-slate-900",
+  "dark:focus:bg-amber-500/20 dark:focus:text-amber-50",
+);
+
+const adminLabel = "text-slate-700 dark:text-slate-300";
+
+const adminTableWrap = cn(
+  "rounded-lg border overflow-hidden",
+  "border-slate-200 bg-white",
+  "dark:border-slate-700 dark:bg-slate-900/90",
+);
 
 type MainTab = "categories" | "parts" | "suppliers" | "fitment" | "offers";
 
@@ -349,14 +380,14 @@ export function PartsSourcingManager() {
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-4 max-w-[1400px] mx-auto">
+    <div className="p-4 md:p-6 space-y-4 max-w-[1400px] mx-auto text-slate-900 dark:text-slate-100">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <Package className="w-6 h-6 text-amber-600" />
             Parts sourcing
           </h1>
-          <p className="text-sm text-slate-600 mt-1">
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
             Master catalog: categories, parts, suppliers, fitment to motor vehicles, and offers. Fleet apps read compatible
             parts via the catalog link on each vehicle.
           </p>
@@ -398,21 +429,21 @@ export function PartsSourcingManager() {
               Add category
             </Button>
           </div>
-          <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
+          <div className={adminTableWrap}>
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Label</TableHead>
-                  <TableHead>Slug</TableHead>
-                  <TableHead className="text-right">Parts</TableHead>
+                <TableRow className="border-slate-200 dark:border-slate-700">
+                  <TableHead className="text-slate-900 dark:text-slate-100">Label</TableHead>
+                  <TableHead className="text-slate-900 dark:text-slate-100">Slug</TableHead>
+                  <TableHead className="text-right text-slate-900 dark:text-slate-100">Parts</TableHead>
                   <TableHead className="w-[100px]" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {categories.map((c) => (
                   <TableRow key={c.id}>
-                    <TableCell className="font-medium">{c.label}</TableCell>
-                    <TableCell className="text-slate-500 text-sm">{c.slug}</TableCell>
+                    <TableCell className="font-medium text-slate-900 dark:text-slate-100">{c.label}</TableCell>
+                    <TableCell className="text-slate-600 dark:text-slate-400 text-sm">{c.slug}</TableCell>
                     <TableCell className="text-right">{c.part_count ?? 0}</TableCell>
                     <TableCell>
                       <Button
@@ -444,15 +475,17 @@ export function PartsSourcingManager() {
         <TabsContent value="parts" className="mt-4 space-y-3">
           <div className="flex flex-wrap gap-2 items-end justify-between">
             <div className="space-y-1">
-              <Label>Filter by category</Label>
+              <Label className={adminLabel}>Filter by category</Label>
               <Select value={partsCategoryFilter || "__all__"} onValueChange={(v) => setPartsCategoryFilter(v === "__all__" ? "" : v)}>
-                <SelectTrigger className="w-[240px]">
+                <SelectTrigger className={cn(adminSelectTrigger, "w-[240px] sm:w-[280px]")}>
                   <SelectValue placeholder="All categories" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">All categories</SelectItem>
+                <SelectContent className={adminSelectContent}>
+                  <SelectItem className={adminSelectItem} value="__all__">
+                    All categories
+                  </SelectItem>
                   {categories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
+                    <SelectItem className={adminSelectItem} key={c.id} value={c.id}>
                       {c.label}
                     </SelectItem>
                   ))}
@@ -464,22 +497,22 @@ export function PartsSourcingManager() {
               Add part
             </Button>
           </div>
-          <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
+          <div className={adminTableWrap}>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>OEM #</TableHead>
+                  <TableHead className="text-slate-900 dark:text-slate-100">Name</TableHead>
+                  <TableHead className="text-slate-900 dark:text-slate-100">Category</TableHead>
+                  <TableHead className="text-slate-900 dark:text-slate-100">OEM #</TableHead>
                   <TableHead className="w-[80px]" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {parts.map((p) => (
                   <TableRow key={p.id}>
-                    <TableCell className="font-medium">{p.name}</TableCell>
-                    <TableCell className="text-sm text-slate-600">{p.part_category?.label ?? "—"}</TableCell>
-                    <TableCell className="text-sm">{p.oem_part_number ?? "—"}</TableCell>
+                    <TableCell className="font-medium text-slate-900 dark:text-slate-100">{p.name}</TableCell>
+                    <TableCell className="text-sm text-slate-600 dark:text-slate-400">{p.part_category?.label ?? "—"}</TableCell>
+                    <TableCell className="text-sm text-slate-800 dark:text-slate-200">{p.oem_part_number ?? "—"}</TableCell>
                     <TableCell>
                       <Button
                         type="button"
@@ -514,21 +547,21 @@ export function PartsSourcingManager() {
               Add supplier
             </Button>
           </div>
-          <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
+          <div className={adminTableWrap}>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Contact</TableHead>
-                  <TableHead>Default lead (d)</TableHead>
+                  <TableHead className="text-slate-900 dark:text-slate-100">Name</TableHead>
+                  <TableHead className="text-slate-900 dark:text-slate-100">Contact</TableHead>
+                  <TableHead className="text-slate-900 dark:text-slate-100">Default lead (d)</TableHead>
                   <TableHead className="w-[80px]" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {suppliers.map((s) => (
                   <TableRow key={s.id}>
-                    <TableCell className="font-medium">{s.name}</TableCell>
-                    <TableCell className="text-sm text-slate-600">
+                    <TableCell className="font-medium text-slate-900 dark:text-slate-100">{s.name}</TableCell>
+                    <TableCell className="text-sm text-slate-600 dark:text-slate-400">
                       {[s.contact_email, s.contact_phone].filter(Boolean).join(" · ") || "—"}
                     </TableCell>
                     <TableCell>{s.default_lead_time_days ?? "—"}</TableCell>
@@ -562,18 +595,20 @@ export function PartsSourcingManager() {
         <TabsContent value="fitment" className="mt-4 space-y-3">
           <div className="flex flex-wrap gap-2 items-end">
             <div className="space-y-1 flex-1 min-w-[200px]">
-              <Label>Filter by motor catalog row</Label>
+              <Label className={adminLabel}>Filter by motor catalog row</Label>
               <Select
                 value={fitmentCatalogFilter || "__all__"}
                 onValueChange={(v) => setFitmentCatalogFilter(v === "__all__" ? "" : v)}
               >
-                <SelectTrigger>
+                <SelectTrigger className={cn(adminSelectTrigger, "w-full min-w-0")}>
                   <SelectValue placeholder="All catalog rows" />
                 </SelectTrigger>
-                <SelectContent className="max-h-72">
-                  <SelectItem value="__all__">All</SelectItem>
+                <SelectContent className={cn(adminSelectContent, "max-h-72")}>
+                  <SelectItem className={adminSelectItem} value="__all__">
+                    All
+                  </SelectItem>
                   {catalog.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>
+                    <SelectItem className={adminSelectItem} key={r.id} value={r.id}>
                       {r.make} {r.model} ({r.production_start_year}
                       {r.production_end_year != null ? `–${r.production_end_year}` : ""})
                     </SelectItem>
@@ -586,26 +621,26 @@ export function PartsSourcingManager() {
               Add fitment
             </Button>
           </div>
-          <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
+          <div className={adminTableWrap}>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Part</TableHead>
-                  <TableHead>Catalog ID</TableHead>
-                  <TableHead>Chassis / Engine gate</TableHead>
-                  <TableHead>Years</TableHead>
+                  <TableHead className="text-slate-900 dark:text-slate-100">Part</TableHead>
+                  <TableHead className="text-slate-900 dark:text-slate-100">Catalog ID</TableHead>
+                  <TableHead className="text-slate-900 dark:text-slate-100">Chassis / Engine gate</TableHead>
+                  <TableHead className="text-slate-900 dark:text-slate-100">Years</TableHead>
                   <TableHead className="w-[80px]" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {fitments.map((f) => (
                   <TableRow key={f.id}>
-                    <TableCell className="font-medium">{f.part_master?.name ?? f.part_id}</TableCell>
-                    <TableCell className="font-mono text-xs">{f.vehicle_catalog_id.slice(0, 8)}…</TableCell>
-                    <TableCell className="text-sm text-slate-600">
+                    <TableCell className="font-medium text-slate-900 dark:text-slate-100">{f.part_master?.name ?? f.part_id}</TableCell>
+                    <TableCell className="font-mono text-xs text-slate-700 dark:text-slate-300">{f.vehicle_catalog_id.slice(0, 8)}…</TableCell>
+                    <TableCell className="text-sm text-slate-600 dark:text-slate-400">
                       {[f.chassis_code, f.engine_code].filter(Boolean).join(" / ") || "— (catalog id only)"}
                     </TableCell>
-                    <TableCell className="text-sm">
+                    <TableCell className="text-sm text-slate-800 dark:text-slate-200">
                       {f.year_from ?? "—"} – {f.year_to ?? "—"}
                     </TableCell>
                     <TableCell>
@@ -642,28 +677,28 @@ export function PartsSourcingManager() {
               Add offer
             </Button>
           </div>
-          <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
+          <div className={adminTableWrap}>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Part</TableHead>
-                  <TableHead>Supplier</TableHead>
-                  <TableHead>SKU</TableHead>
-                  <TableHead>Price</TableHead>
-                  <TableHead>Lead (d)</TableHead>
+                  <TableHead className="text-slate-900 dark:text-slate-100">Part</TableHead>
+                  <TableHead className="text-slate-900 dark:text-slate-100">Supplier</TableHead>
+                  <TableHead className="text-slate-900 dark:text-slate-100">SKU</TableHead>
+                  <TableHead className="text-slate-900 dark:text-slate-100">Price</TableHead>
+                  <TableHead className="text-slate-900 dark:text-slate-100">Lead (d)</TableHead>
                   <TableHead className="w-[80px]" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {offers.map((o) => (
                   <TableRow key={o.id}>
-                    <TableCell className="font-medium">{o.part_master?.name ?? o.part_id}</TableCell>
-                    <TableCell>{o.supplier?.name ?? o.supplier_id}</TableCell>
-                    <TableCell className="font-mono text-sm">{o.supplier_sku}</TableCell>
-                    <TableCell>
+                    <TableCell className="font-medium text-slate-900 dark:text-slate-100">{o.part_master?.name ?? o.part_id}</TableCell>
+                    <TableCell className="text-slate-800 dark:text-slate-200">{o.supplier?.name ?? o.supplier_id}</TableCell>
+                    <TableCell className="font-mono text-sm text-slate-800 dark:text-slate-200">{o.supplier_sku}</TableCell>
+                    <TableCell className="text-slate-800 dark:text-slate-200">
                       {o.currency} {Number(o.unit_price).toFixed(2)}
                     </TableCell>
-                    <TableCell>{o.lead_time_days ?? o.supplier?.default_lead_time_days ?? "—"}</TableCell>
+                    <TableCell className="text-slate-800 dark:text-slate-200">{o.lead_time_days ?? o.supplier?.default_lead_time_days ?? "—"}</TableCell>
                     <TableCell>
                       <Button
                         type="button"
@@ -700,15 +735,21 @@ export function PartsSourcingManager() {
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div>
-              <Label htmlFor="pc-slug">Slug</Label>
+              <Label className={adminLabel} htmlFor="pc-slug">
+                Slug
+              </Label>
               <Input id="pc-slug" value={catSlug} onChange={(e) => setCatSlug(e.target.value)} placeholder="e.g. brake-pads" />
             </div>
             <div>
-              <Label htmlFor="pc-label">Label</Label>
+              <Label className={adminLabel} htmlFor="pc-label">
+                Label
+              </Label>
               <Input id="pc-label" value={catLabel} onChange={(e) => setCatLabel(e.target.value)} placeholder="Display name" />
             </div>
             <div>
-              <Label htmlFor="pc-sort">Sort order</Label>
+              <Label className={adminLabel} htmlFor="pc-sort">
+                Sort order
+              </Label>
               <Input id="pc-sort" type="number" value={catSort} onChange={(e) => setCatSort(e.target.value)} />
             </div>
           </div>
@@ -728,14 +769,14 @@ export function PartsSourcingManager() {
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div>
-              <Label>Category</Label>
+              <Label className={adminLabel}>Category</Label>
               <Select value={partCategoryId} onValueChange={setPartCategoryId}>
-                <SelectTrigger>
+                <SelectTrigger className={cn(adminSelectTrigger, "w-full")}>
                   <SelectValue placeholder="Select" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className={adminSelectContent}>
                   {categories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
+                    <SelectItem className={adminSelectItem} key={c.id} value={c.id}>
                       {c.label}
                     </SelectItem>
                   ))}
@@ -743,15 +784,21 @@ export function PartsSourcingManager() {
               </Select>
             </div>
             <div>
-              <Label htmlFor="pn">Name</Label>
+              <Label className={adminLabel} htmlFor="pn">
+                Name
+              </Label>
               <Input id="pn" value={partName} onChange={(e) => setPartName(e.target.value)} />
             </div>
             <div>
-              <Label htmlFor="po">OEM part number</Label>
+              <Label className={adminLabel} htmlFor="po">
+                OEM part number
+              </Label>
               <Input id="po" value={partOem} onChange={(e) => setPartOem(e.target.value)} />
             </div>
             <div>
-              <Label htmlFor="pd">Description</Label>
+              <Label className={adminLabel} htmlFor="pd">
+                Description
+              </Label>
               <Textarea id="pd" value={partDesc} onChange={(e) => setPartDesc(e.target.value)} rows={2} />
             </div>
           </div>
@@ -771,19 +818,27 @@ export function PartsSourcingManager() {
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div>
-              <Label htmlFor="sn">Name</Label>
+              <Label className={adminLabel} htmlFor="sn">
+                Name
+              </Label>
               <Input id="sn" value={supName} onChange={(e) => setSupName(e.target.value)} />
             </div>
             <div>
-              <Label htmlFor="se">Email</Label>
+              <Label className={adminLabel} htmlFor="se">
+                Email
+              </Label>
               <Input id="se" type="email" value={supEmail} onChange={(e) => setSupEmail(e.target.value)} />
             </div>
             <div>
-              <Label htmlFor="sp">Phone</Label>
+              <Label className={adminLabel} htmlFor="sp">
+                Phone
+              </Label>
               <Input id="sp" value={supPhone} onChange={(e) => setSupPhone(e.target.value)} />
             </div>
             <div>
-              <Label htmlFor="sl">Default lead time (days)</Label>
+              <Label className={adminLabel} htmlFor="sl">
+                Default lead time (days)
+              </Label>
               <Input id="sl" type="number" value={supLead} onChange={(e) => setSupLead(e.target.value)} />
             </div>
           </div>
@@ -803,14 +858,14 @@ export function PartsSourcingManager() {
           </DialogHeader>
           <div className="space-y-3 py-2 max-h-[60vh] overflow-y-auto">
             <div>
-              <Label>Supplier</Label>
+              <Label className={adminLabel}>Supplier</Label>
               <Select value={offSupplierId} onValueChange={setOffSupplierId}>
-                <SelectTrigger>
+                <SelectTrigger className={cn(adminSelectTrigger, "w-full")}>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className={adminSelectContent}>
                   {suppliers.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
+                    <SelectItem className={adminSelectItem} key={s.id} value={s.id}>
                       {s.name}
                     </SelectItem>
                   ))}
@@ -818,14 +873,14 @@ export function PartsSourcingManager() {
               </Select>
             </div>
             <div>
-              <Label>Part</Label>
+              <Label className={adminLabel}>Part</Label>
               <Select value={offPartId} onValueChange={setOffPartId}>
-                <SelectTrigger>
+                <SelectTrigger className={cn(adminSelectTrigger, "w-full")}>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="max-h-64">
+                <SelectContent className={cn(adminSelectContent, "max-h-64")}>
                   {parts.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
+                    <SelectItem className={adminSelectItem} key={p.id} value={p.id}>
                       {p.name}
                     </SelectItem>
                   ))}
@@ -833,21 +888,29 @@ export function PartsSourcingManager() {
               </Select>
             </div>
             <div>
-              <Label htmlFor="osku">Supplier SKU</Label>
+              <Label className={adminLabel} htmlFor="osku">
+                Supplier SKU
+              </Label>
               <Input id="osku" value={offSku} onChange={(e) => setOffSku(e.target.value)} />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label htmlFor="opr">Price</Label>
+                <Label className={adminLabel} htmlFor="opr">
+                  Price
+                </Label>
                 <Input id="opr" type="number" step="0.01" value={offPrice} onChange={(e) => setOffPrice(e.target.value)} />
               </div>
               <div>
-                <Label htmlFor="ocu">Currency</Label>
+                <Label className={adminLabel} htmlFor="ocu">
+                  Currency
+                </Label>
                 <Input id="ocu" value={offCurrency} onChange={(e) => setOffCurrency(e.target.value)} />
               </div>
             </div>
             <div>
-              <Label htmlFor="old">Lead time override (days)</Label>
+              <Label className={adminLabel} htmlFor="old">
+                Lead time override (days)
+              </Label>
               <Input id="old" type="number" value={offLead} onChange={(e) => setOffLead(e.target.value)} />
             </div>
           </div>
@@ -868,14 +931,14 @@ export function PartsSourcingManager() {
           </DialogHeader>
           <div className="space-y-3 py-2 max-h-[60vh] overflow-y-auto">
             <div>
-              <Label>Part</Label>
+              <Label className={adminLabel}>Part</Label>
               <Select value={fitPartId} onValueChange={setFitPartId}>
-                <SelectTrigger>
+                <SelectTrigger className={cn(adminSelectTrigger, "w-full")}>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="max-h-64">
+                <SelectContent className={cn(adminSelectContent, "max-h-64")}>
                   {parts.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
+                    <SelectItem className={adminSelectItem} key={p.id} value={p.id}>
                       {p.name}
                     </SelectItem>
                   ))}
@@ -883,14 +946,14 @@ export function PartsSourcingManager() {
               </Select>
             </div>
             <div>
-              <Label>Motor catalog row</Label>
+              <Label className={adminLabel}>Motor catalog row</Label>
               <Select value={fitCatalogId} onValueChange={setFitCatalogId}>
-                <SelectTrigger>
+                <SelectTrigger className={cn(adminSelectTrigger, "w-full")}>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="max-h-64">
+                <SelectContent className={cn(adminSelectContent, "max-h-64")}>
                   {catalog.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>
+                    <SelectItem className={adminSelectItem} key={r.id} value={r.id}>
                       {r.make} {r.model} ({r.production_start_year})
                     </SelectItem>
                   ))}
@@ -899,21 +962,29 @@ export function PartsSourcingManager() {
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label htmlFor="fc">Chassis gate (optional)</Label>
+                <Label className={adminLabel} htmlFor="fc">
+                  Chassis gate (optional)
+                </Label>
                 <Input id="fc" value={fitChassis} onChange={(e) => setFitChassis(e.target.value)} />
               </div>
               <div>
-                <Label htmlFor="fe">Engine gate (optional)</Label>
+                <Label className={adminLabel} htmlFor="fe">
+                  Engine gate (optional)
+                </Label>
                 <Input id="fe" value={fitEngine} onChange={(e) => setFitEngine(e.target.value)} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label htmlFor="yf">Year from</Label>
+                <Label className={adminLabel} htmlFor="yf">
+                  Year from
+                </Label>
                 <Input id="yf" type="number" value={fitYearFrom} onChange={(e) => setFitYearFrom(e.target.value)} />
               </div>
               <div>
-                <Label htmlFor="yt">Year to</Label>
+                <Label className={adminLabel} htmlFor="yt">
+                  Year to
+                </Label>
                 <Input id="yt" type="number" value={fitYearTo} onChange={(e) => setFitYearTo(e.target.value)} />
               </div>
             </div>
