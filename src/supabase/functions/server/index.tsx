@@ -69,6 +69,7 @@ import { suggestStationMatches } from './vendor_matcher.ts';
 import { checkRateLimit, recordFailedAttempt, clearRateLimit, getClientIp, getRateLimitStats } from './rate_limiter.ts';
 import { registerMaintenanceRoutes } from "./maintenance_routes.ts";
 import { registerPendingVehicleCatalogRoutes } from "./pending_vehicle_catalog_routes.ts";
+import { registerPartSourcingRoutes } from "./part_sourcing_routes.ts";
 import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
 import {
   applyCatalogGateOnCreate,
@@ -210,6 +211,7 @@ const supabase = createClient(
 
 registerMaintenanceRoutes(app, supabase);
 registerPendingVehicleCatalogRoutes(app, supabase);
+registerPartSourcingRoutes(app, supabase);
 
 // ─── Toll Ledger Primary Write Helper (Phase 6) ──────────────────────────
 // Tolls are now written ONLY to toll_ledger:* (single source of truth).

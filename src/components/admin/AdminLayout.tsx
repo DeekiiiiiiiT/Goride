@@ -29,14 +29,15 @@ import {
   Tags,
   Wrench,
   Inbox,
+  ShoppingCart,
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { resolveRole } from '../../utils/permissions';
 
 // Phase 11: Define which admin pages each platform role can access
 const PLATFORM_ROLE_PAGES: Record<string, string[]> = {
-  platform_owner:   ['dashboard', 'customers', 'platform-team', 'drivers', 'team-members', 'activity-log', 'fuel-stations', 'fuel-analytics', 'toll-stations', 'toll-info', 'motor-vehicles', 'pending-motor-vehicles', 'maintenance-templates', 'settings', 'settings-general', 'settings-features', 'settings-registration', 'settings-security', 'settings-announcements', 'settings-danger', 'db-management', 'db-settings'],
-  platform_support: ['dashboard', 'customers', 'drivers', 'team-members', 'fuel-stations', 'fuel-analytics', 'toll-stations', 'toll-info', 'motor-vehicles', 'pending-motor-vehicles', 'maintenance-templates'],
+  platform_owner:   ['dashboard', 'customers', 'platform-team', 'drivers', 'team-members', 'activity-log', 'fuel-stations', 'fuel-analytics', 'toll-stations', 'toll-info', 'motor-vehicles', 'pending-motor-vehicles', 'maintenance-templates', 'parts-sourcing', 'settings', 'settings-general', 'settings-features', 'settings-registration', 'settings-security', 'settings-announcements', 'settings-danger', 'db-management', 'db-settings'],
+  platform_support: ['dashboard', 'customers', 'drivers', 'team-members', 'fuel-stations', 'fuel-analytics', 'toll-stations', 'toll-info', 'motor-vehicles', 'pending-motor-vehicles', 'maintenance-templates', 'parts-sourcing'],
   platform_analyst: ['dashboard'],
 };
 
@@ -76,6 +77,7 @@ const VEHICLE_DATABASE_CHILDREN = [
   { id: 'motor-vehicles', label: 'Motor Vehicles', icon: Car },
   { id: 'pending-motor-vehicles', label: 'Pending motor vehicles', icon: Inbox },
   { id: 'maintenance-templates', label: 'Maintenance templates', icon: Wrench },
+  { id: 'parts-sourcing', label: 'Parts sourcing', icon: ShoppingCart },
 ];
 
 // Collapsible section for Platform Settings

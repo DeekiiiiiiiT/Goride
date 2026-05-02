@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Loader2, ListChecks, Plus, Wrench } from "lucide-react";
+import { Loader2, ListChecks, Package, Plus, Wrench } from "lucide-react";
 import { api } from "../../services/api";
 import { Button } from "../ui/button";
 import {
@@ -33,6 +33,7 @@ import type {
   VehicleMaintenanceScheduleRowApi,
 } from "../../types/maintenance";
 import { toast } from "sonner@2.0.3";
+import type { CompatiblePartsResponse } from "../../types/partSourcing";
 
 export interface FleetMaintenanceHubProps {
   onNavigate?: (page: string) => void;
@@ -111,6 +112,11 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   const [logVehicleId, setLogVehicleId] = useState<string>("");
   const [catalogForLog, setCatalogForLog] = useState<CatalogMaintenanceTaskOption[]>([]);
   const [defaultOdoForLog, setDefaultOdoForLog] = useState<number | undefined>(undefined);
+
+  const [partsDialogOpen, setPartsDialogOpen] = useState(false);
+  const [partsVehicleId, setPartsVehicleId] = useState<string>("");
+  const [partsLoading, setPartsLoading] = useState(false);
+  const [partsData, setPartsData] = useState<CompatiblePartsResponse | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -202,6 +208,32 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
     void load();
   }, [load]);
 
+  const handleOpenPartsDialog = useCallback(() => {
+    setPartsVehicleId(items[0]?.vehicleId ?? "");
+    setPartsData(null);
+    setPartsDialogOpen(true);
+  }, [items]);
+
+  const handleLoadCompatibleParts = useCallback(async () => {
+    if (!partsVehicleId) {
+      toast.error("Select a vehicle");
+      return;
+    }
+    setPartsLoading(true);
+    try {
+      const res = await api.getCompatibleParts(partsVehicleId);
+      setPartsData(res);
+      if (!res.catalogMatched && res.message) {
+        toast.info(res.message);
+      }
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Failed to load parts");
+      setPartsData(null);
+    } finally {
+      setPartsLoading(false);
+    }
+  }, [partsVehicleId]);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -240,6 +272,17 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
           </Button>
           <Button type="button" variant="outline" onClick={load} disabled={loading} className="shrink-0">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Refresh"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleOpenPartsDialog}
+            disabled={loading || items.length === 0}
+            className="shrink-0 gap-2"
+            title="Parts from Super Admin catalog (requires motor catalog link on the vehicle)"
+          >
+            <Package className="w-4 h-4" />
+            Compatible parts
           </Button>
         </div>
       </div>
@@ -283,6 +326,91 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
             </Button>
             <Button type="button" onClick={() => void handleContinueFromPicker()} disabled={!pickerVehicleId || scheduleLoading}>
               {scheduleLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Continue"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={partsDialogOpen} onOpenChange={setPartsDialogOpen}>
+        <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Compatible parts</DialogTitle>
+            <DialogDescription>
+              Lists parts configured in Super Admin that fit this fleet vehicle’s linked motor catalog row (and optional
+              chassis/engine gates).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2 shrink-0">
+            <div className="flex flex-wrap gap-2 items-end">
+              <div className="space-y-1 flex-1 min-w-[200px]">
+                <Label htmlFor="parts-veh">Vehicle</Label>
+                <Select value={partsVehicleId} onValueChange={setPartsVehicleId}>
+                  <SelectTrigger id="parts-veh">
+                    <SelectValue placeholder="Select vehicle" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {items.map((row) => (
+                      <SelectItem key={row.vehicleId} value={row.vehicleId}>
+                        {vehicleLabel(row)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button type="button" onClick={() => void handleLoadCompatibleParts()} disabled={!partsVehicleId || partsLoading}>
+                {partsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Load"}
+              </Button>
+            </div>
+            {partsData && !partsData.catalogMatched && (
+              <p className="text-sm text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+                {partsData.message ?? "This vehicle is not linked to the motor catalog yet."}
+              </p>
+            )}
+          </div>
+          <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 dark:border-slate-700">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Part</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>OEM</TableHead>
+                  <TableHead>Suppliers / price</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {!partsData?.items?.length ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center text-slate-500 py-8">
+                      {partsData?.catalogMatched ? "No matching parts in catalog." : "Choose a vehicle and tap Load."}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  partsData.items.map((row) => {
+                    const cat = row.part?.part_category?.label ?? "—";
+                    const offers = row.offers ?? [];
+                    const offerLine = offers.length
+                      ? offers
+                          .map((o: { supplier?: { name?: string }; unit_price?: number; currency?: string }) =>
+                            `${o.supplier?.name ?? "?"}: ${o.currency ?? ""} ${Number(o.unit_price ?? 0).toFixed(2)}`,
+                          )
+                          .join(" · ")
+                      : "—";
+                    return (
+                      <TableRow key={row.fitmentId}>
+                        <TableCell className="font-medium">{row.part?.name ?? "—"}</TableCell>
+                        <TableCell className="text-sm text-slate-600 dark:text-slate-400">{cat}</TableCell>
+                        <TableCell className="text-sm font-mono">{row.part?.oem_part_number ?? "—"}</TableCell>
+                        <TableCell className="text-sm max-w-md">{offerLine}</TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+          <DialogFooter className="shrink-0">
+            <Button type="button" variant="outline" onClick={() => setPartsDialogOpen(false)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

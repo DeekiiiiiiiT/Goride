@@ -374,7 +374,7 @@ export function MaintenanceTemplatesManager() {
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4 sm:p-6 text-slate-900 [color-scheme:light]">
+    <div className="flex flex-col gap-4 p-4 sm:p-6 text-slate-900">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
@@ -408,16 +408,20 @@ export function MaintenanceTemplatesManager() {
         onValueChange={(v) => setTemplateScopeTab(v as "global" | "catalog")}
         className="w-full max-w-2xl"
       >
-        <TabsList className="grid w-full max-w-md grid-cols-2 bg-slate-100/80 p-1 rounded-xl border border-slate-200/80">
+        {/*
+          Admin shell uses `.dark`; base TabsTrigger applies dark:muted styles that fight light slate track.
+          Explicit light + dark overrides keep contrast; active state uses amber to match Super Admin accents.
+        */}
+        <TabsList className="grid w-full max-w-md grid-cols-2 rounded-xl border border-slate-200/90 bg-slate-100 p-1 dark:border-slate-600 dark:bg-slate-900/70">
           <TabsTrigger
             value="global"
-            className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-slate-900 text-slate-600"
+            className="rounded-lg font-medium transition-colors text-slate-700 shadow-none border-0 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm dark:text-slate-300 dark:data-[state=active]:bg-amber-500/20 dark:data-[state=active]:text-amber-50 dark:data-[state=active]:shadow-none dark:data-[state=active]:ring-1 dark:data-[state=active]:ring-amber-400/45"
           >
             Fleet defaults
           </TabsTrigger>
           <TabsTrigger
             value="catalog"
-            className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-slate-900 text-slate-600"
+            className="rounded-lg font-medium transition-colors text-slate-700 shadow-none border-0 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm dark:text-slate-300 dark:data-[state=active]:bg-amber-500/20 dark:data-[state=active]:text-amber-50 dark:data-[state=active]:shadow-none dark:data-[state=active]:ring-1 dark:data-[state=active]:ring-amber-400/45"
           >
             Per motor vehicle
           </TabsTrigger>

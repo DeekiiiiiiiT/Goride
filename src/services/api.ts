@@ -5,6 +5,7 @@ import type { AppendCanonicalLedgerResult, CanonicalLedgerEventInput } from '../
 import { OdometerReading } from '../types/vehicle';
 import { TollPlaza } from '../types/toll';
 import { API_ENDPOINTS } from './apiConfig';
+import type { CompatiblePartsResponse } from '../types/partSourcing';
 import { compressImage } from '../utils/compressImage';
 import { isTollCategory } from '../utils/tollCategoryHelper';
 
@@ -1351,6 +1352,19 @@ export const api = {
           servicesAttentionTruncated: boolean;
         }>;
       }>;
+  },
+
+  async getCompatibleParts(vehicleId: string, categoryId?: string) {
+      const q = categoryId ? `?category_id=${encodeURIComponent(categoryId)}` : "";
+      const response = await fetchWithRetry(
+        `${API_ENDPOINTS.fleet}/vehicles/${encodeURIComponent(vehicleId)}/compatible-parts${q}`,
+        { headers: await getHeaders(null) },
+      );
+      if (!response.ok) {
+        const err = await response.text().catch(() => "");
+        throw new Error(err || "Failed to fetch compatible parts");
+      }
+      return response.json() as Promise<CompatiblePartsResponse>;
   },
 
   async bootstrapMaintenanceFleet() {

@@ -18,6 +18,7 @@ import { BusinessType } from '../../types/data';
 import { VehicleCatalogManager } from './vehicle-catalog/VehicleCatalogManager';
 import { PendingVehicleCatalogManager } from './vehicle-catalog/PendingVehicleCatalogManager';
 import { MaintenanceTemplatesManager } from './maintenance-templates/MaintenanceTemplatesManager';
+import { PartsSourcingManager } from './parts-sourcing/PartsSourcingManager';
 import { StationDatabaseView } from '../fuel/stations/StationDatabaseView';
 import { GasStationAnalytics } from '../fuel/stations/GasStationAnalytics';
 import { fuelService } from '../../services/fuelService';
@@ -148,6 +149,11 @@ export function AdminPortal() {
       {currentPage === 'maintenance-templates' && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px]">
           <MaintenanceTemplatesManager />
+        </div>
+      )}
+      {currentPage === 'parts-sourcing' && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px]">
+          <PartsSourcingManager />
         </div>
       )}
       {currentPage === 'settings' && (
