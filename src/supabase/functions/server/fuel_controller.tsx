@@ -9,6 +9,7 @@ import * as memCache from "./memory_cache.ts";
 import * as fuelLogic from "./fuel_logic.ts";
 import { auditLogic } from "./audit_logic.ts";
 import { findMatchingStation, findMatchingStationSmart, calculateDistance } from "./geo_matcher.ts";
+import { trackedProviderCall, ProviderBlockedError } from "./api_usage_logger.ts";
 
 const app = new Hono();
 
@@ -3289,11 +3290,19 @@ app.post(`${BASE_PATH}/geo/geocode`, async (c) => {
         if (!address) return c.json({ error: "Address is required" }, 400);
         if (!apiKey) return c.json({ error: "Google Maps API Key not configured" }, 500);
 
-        const response = await fetch(
-            `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`
-        );
-        
-        const data = await response.json();
+        const data: any = await trackedProviderCall({
+            provider: "google_maps",
+            service: "geocoding",
+            route: `${BASE_PATH}/geo/geocode`,
+            requests: 1,
+            run: async () => {
+                const response = await fetch(
+                    `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`
+                );
+                return await response.json();
+            },
+            extractUsage: () => ({ requests: 1 }),
+        });
         
         if (data.status !== "OK") {
             return c.json({ error: `Geocoding failed: ${data.status}`, details: data.error_message }, 400);
@@ -3318,6 +3327,7 @@ app.post(`${BASE_PATH}/geo/geocode`, async (c) => {
             parish
         });
     } catch (e: any) {
+        if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
         console.error("[Geocode Error]", e);
         return c.json({ error: e.message }, 500);
     }
@@ -3332,11 +3342,19 @@ app.post(`${BASE_PATH}/geo/reverse-geocode`, async (c) => {
         if (lat == null || lng == null) return c.json({ error: "lat and lng are required" }, 400);
         if (!apiKey) return c.json({ error: "Google Maps API Key not configured" }, 500);
 
-        const response = await fetch(
-            `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`
-        );
-        
-        const data = await response.json();
+        const data: any = await trackedProviderCall({
+            provider: "google_maps",
+            service: "reverse_geocoding",
+            route: `${BASE_PATH}/geo/reverse-geocode`,
+            requests: 1,
+            run: async () => {
+                const response = await fetch(
+                    `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`
+                );
+                return await response.json();
+            },
+            extractUsage: () => ({ requests: 1 }),
+        });
         
         if (data.status !== "OK") {
             return c.json({ error: `Reverse geocoding failed: ${data.status}`, details: data.error_message }, 400);
@@ -3414,6 +3432,7 @@ app.post(`${BASE_PATH}/geo/reverse-geocode`, async (c) => {
             lng,
         });
     } catch (e: any) {
+        if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
         console.error("[Reverse Geocode Error]", e);
         return c.json({ error: e.message }, 500);
     }

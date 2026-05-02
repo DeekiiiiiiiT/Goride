@@ -7,6 +7,7 @@ import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 import { Buffer } from "node:buffer";
 import * as kv from "./kv_store.tsx";
 import { generatePerformanceReport } from "./performance-metrics.tsx";
+import { trackedProviderCall, ProviderBlockedError } from "./api_usage_logger.ts";
 
 const app = new Hono();
 
@@ -68,15 +69,26 @@ app.post("/ai-services/parse-document", async (c) => {
     const arrayBuffer = await file.arrayBuffer();
     const base64Data = Buffer.from(arrayBuffer).toString('base64');
 
-    const result = await model.generateContent([
-        prompt,
-        { inlineData: { data: base64Data, mimeType: file.type } }
-    ]);
+    const result = await trackedProviderCall({
+        provider: "gemini",
+        service: "vision",
+        route: "/ai-services/parse-document",
+        model: "gemini-1.5-flash",
+        run: () => model.generateContent([
+            prompt,
+            { inlineData: { data: base64Data, mimeType: file.type } }
+        ]),
+        extractUsage: (r: any) => ({
+            inputTokens: r?.response?.usageMetadata?.promptTokenCount,
+            outputTokens: r?.response?.usageMetadata?.candidatesTokenCount,
+        }),
+    });
     
     const text = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
     return c.json({ success: true, data: JSON.parse(text) });
 
   } catch (e: any) {
+    if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
     return c.json({ error: e.message }, 500);
   }
 });
@@ -95,19 +107,34 @@ app.post("/ai-services/generate-vehicle-image", async (c) => {
 
     for (const modelName of modelCandidates) {
         try {
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:predict?key=${apiKey}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ instances: [{ prompt }], parameters: { sampleCount: 1, aspectRatio: "4:3" } })
+            const data: any = await trackedProviderCall({
+                provider: "gemini",
+                service: "image",
+                route: "/ai-services/generate-vehicle-image",
+                model: modelName,
+                images: 1,
+                run: async () => {
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:predict?key=${apiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ instances: [{ prompt }], parameters: { sampleCount: 1, aspectRatio: "4:3" } })
+                    });
+                    if (!response.ok) {
+                        const text = await response.text();
+                        const err = new Error(`Imagen ${modelName}: ${response.status} ${text}`);
+                        (err as any).status = response.status;
+                        throw err;
+                    }
+                    return await response.json();
+                },
+                extractUsage: () => ({ images: 1 }),
             });
-            if (response.ok) {
-                const data = await response.json();
-                imageB64 = data.predictions?.[0]?.bytesBase64Encoded;
-                if (imageB64) break;
-            } else {
-                lastError = await response.text();
-            }
-        } catch (e) { lastError = e.toString(); }
+            imageB64 = data?.predictions?.[0]?.bytesBase64Encoded;
+            if (imageB64) break;
+        } catch (e: any) {
+            if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
+            lastError = e?.message || String(e);
+        }
     }
 
     if (!imageB64) {
@@ -116,9 +143,19 @@ app.post("/ai-services/generate-vehicle-image", async (c) => {
          if (openaiKey) {
             try {
                 const openai = new OpenAI({ apiKey: openaiKey });
-                const dalle = await openai.images.generate({ model: "dall-e-3", prompt, n: 1, size: "1024x1024", response_format: "b64_json" });
+                const dalle: any = await trackedProviderCall({
+                    provider: "openai",
+                    service: "image",
+                    route: "/ai-services/generate-vehicle-image (fallback)",
+                    model: "dall-e-3",
+                    images: 1,
+                    run: () => openai.images.generate({ model: "dall-e-3", prompt, n: 1, size: "1024x1024", response_format: "b64_json" }),
+                    extractUsage: () => ({ images: 1 }),
+                });
                 imageB64 = dalle.data[0].b64_json;
-            } catch (e) {}
+            } catch (e: any) {
+                if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
+            }
          }
          if (!imageB64) return c.json({ error: `Image Gen failed. Google Error: ${lastError}` }, 500);
     }
@@ -150,11 +187,22 @@ app.post("/ai-services/ai/map-csv", async (c) => {
     
     const prompt = `Map CSV headers ${JSON.stringify(headers)} (Sample: ${JSON.stringify(sample.slice(0,3))}) to target fields: ${JSON.stringify(targetFields)}. Return JSON object { Header: TargetField }. Do not use markdown.`;
     
-    const result = await model.generateContent(prompt);
+    const result = await trackedProviderCall({
+        provider: "gemini",
+        service: "text",
+        route: "/ai-services/ai/map-csv",
+        model: "gemini-1.5-flash",
+        run: () => model.generateContent(prompt),
+        extractUsage: (r: any) => ({
+            inputTokens: r?.response?.usageMetadata?.promptTokenCount,
+            outputTokens: r?.response?.usageMetadata?.candidatesTokenCount,
+        }),
+    });
     const text = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
     
     return c.json({ success: true, mapping: JSON.parse(text) });
   } catch (e: any) {
+    if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
     return c.json({ error: e.message }, 500);
   }
 });
@@ -167,7 +215,17 @@ app.post("/ai-services/analyze-fleet", async (c) => {
         const genAI = new GoogleGenerativeAI(apiKey);
         const prompt = `Analyze fleet CSV data and return SINGLE JSON object with keys: metadata, drivers, vehicles, financials, insights. \nDATA: ${payload}`;
         const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
-        const result = await model.generateContent(prompt);
+        const result = await trackedProviderCall({
+            provider: "gemini",
+            service: "text",
+            route: "/ai-services/analyze-fleet",
+            model: "gemini-2.0-flash-exp",
+            run: () => model.generateContent(prompt),
+            extractUsage: (r: any) => ({
+                inputTokens: r?.response?.usageMetadata?.promptTokenCount,
+                outputTokens: r?.response?.usageMetadata?.candidatesTokenCount,
+            }),
+        });
         const text = result.response.text();
         // Basic cleanup
         const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -176,6 +234,7 @@ app.post("/ai-services/analyze-fleet", async (c) => {
         const cleanJson = (firstOpen !== -1 && lastClose !== -1) ? jsonStr.substring(firstOpen, lastClose + 1) : jsonStr;
         return c.json({ success: true, data: JSON.parse(cleanJson) });
     } catch(e: any) {
+        if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
         return c.json({ error: e.message }, 500);
     }
 });
@@ -191,13 +250,26 @@ app.post("/ai-services/parse-invoice", async (c) => {
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
         const arrayBuffer = await file.arrayBuffer();
         const base64Data = Buffer.from(arrayBuffer).toString('base64');
-        const result = await model.generateContent([
-            `Analyze invoice. Return JSON: date, type (oil/tires/etc), cost, odometer, notes.`,
-            { inlineData: { data: base64Data, mimeType: file.type } }
-        ]);
+        const result = await trackedProviderCall({
+            provider: "gemini",
+            service: "vision",
+            route: "/ai-services/parse-invoice",
+            model: "gemini-1.5-flash",
+            run: () => model.generateContent([
+                `Analyze invoice. Return JSON: date, type (oil/tires/etc), cost, odometer, notes.`,
+                { inlineData: { data: base64Data, mimeType: file.type } }
+            ]),
+            extractUsage: (r: any) => ({
+                inputTokens: r?.response?.usageMetadata?.promptTokenCount,
+                outputTokens: r?.response?.usageMetadata?.candidatesTokenCount,
+            }),
+        });
         const text = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
         return c.json({ success: true, data: JSON.parse(text) });
-    } catch(e: any) { return c.json({ error: e.message }, 500); }
+    } catch(e: any) {
+        if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
+        return c.json({ error: e.message }, 500);
+    }
 });
 
 app.post("/ai-services/parse-inspection", async (c) => {
@@ -211,13 +283,26 @@ app.post("/ai-services/parse-inspection", async (c) => {
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
         const arrayBuffer = await file.arrayBuffer();
         const base64Data = Buffer.from(arrayBuffer).toString('base64');
-        const result = await model.generateContent([
-            `Analyze inspection report. Return JSON: issues (array of strings), notes (summary).`,
-            { inlineData: { data: base64Data, mimeType: file.type } }
-        ]);
+        const result = await trackedProviderCall({
+            provider: "gemini",
+            service: "vision",
+            route: "/ai-services/parse-inspection",
+            model: "gemini-1.5-flash",
+            run: () => model.generateContent([
+                `Analyze inspection report. Return JSON: issues (array of strings), notes (summary).`,
+                { inlineData: { data: base64Data, mimeType: file.type } }
+            ]),
+            extractUsage: (r: any) => ({
+                inputTokens: r?.response?.usageMetadata?.promptTokenCount,
+                outputTokens: r?.response?.usageMetadata?.candidatesTokenCount,
+            }),
+        });
         const text = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
         return c.json({ success: true, data: JSON.parse(text) });
-    } catch(e: any) { return c.json({ error: e.message }, 500); }
+    } catch(e: any) {
+        if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
+        return c.json({ error: e.message }, 500);
+    }
 });
 
 app.post("/ai-services/ai/parse-toll-csv", async (c) => {
@@ -231,10 +316,23 @@ app.post("/ai-services/ai/parse-toll-csv", async (c) => {
 
         const prompt = `Parse this toll CSV content into a JSON object with a 'transactions' array (date, tagId, location, laneId, amount, type). Ignore headers. CSV:\n${csvContent.substring(0, 30000)}`;
         
-        const result = await model.generateContent(prompt);
+        const result = await trackedProviderCall({
+            provider: "gemini",
+            service: "text",
+            route: "/ai-services/ai/parse-toll-csv",
+            model: "gemini-1.5-flash",
+            run: () => model.generateContent(prompt),
+            extractUsage: (r: any) => ({
+                inputTokens: r?.response?.usageMetadata?.promptTokenCount,
+                outputTokens: r?.response?.usageMetadata?.candidatesTokenCount,
+            }),
+        });
         const text = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
         return c.json({ success: true, data: JSON.parse(text).transactions || [] });
-    } catch(e: any) { return c.json({ error: e.message }, 500); }
+    } catch(e: any) {
+        if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
+        return c.json({ error: e.message }, 500);
+    }
 });
 
 app.post("/ai-services/ai/parse-toll-image", async (c) => {
@@ -252,14 +350,27 @@ app.post("/ai-services/ai/parse-toll-image", async (c) => {
         const arrayBuffer = await file.arrayBuffer();
         const base64Data = Buffer.from(arrayBuffer).toString('base64');
         
-        const result = await model.generateContent([
-            "Extract toll transactions from this image into a JSON object with a 'transactions' array.",
-            { inlineData: { data: base64Data, mimeType: file.type } }
-        ]);
+        const result = await trackedProviderCall({
+            provider: "gemini",
+            service: "vision",
+            route: "/ai-services/ai/parse-toll-image",
+            model: "gemini-1.5-flash",
+            run: () => model.generateContent([
+                "Extract toll transactions from this image into a JSON object with a 'transactions' array.",
+                { inlineData: { data: base64Data, mimeType: file.type } }
+            ]),
+            extractUsage: (r: any) => ({
+                inputTokens: r?.response?.usageMetadata?.promptTokenCount,
+                outputTokens: r?.response?.usageMetadata?.candidatesTokenCount,
+            }),
+        });
 
         const text = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
         return c.json({ success: true, data: JSON.parse(text).transactions || [] });
-    } catch(e: any) { return c.json({ error: e.message }, 500); }
+    } catch(e: any) {
+        if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
+        return c.json({ error: e.message }, 500);
+    }
 });
 
 // Helper for Performance Report

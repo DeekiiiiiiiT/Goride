@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "npm:@google/generative-ai";
+import { trackedProviderCall } from "./api_usage_logger.ts";
 
 const API_KEY = Deno.env.get("GEMINI_API_KEY")!;
 const genAI = new GoogleGenerativeAI(API_KEY);
@@ -34,15 +35,25 @@ export async function processFuelReceiptVision(imageBase64: string): Promise<OCR
     `;
 
     try {
-        const result = await model.generateContent([
-            prompt,
-            {
-                inlineData: {
-                    data: imageBase64.split(",")[1] || imageBase64,
-                    mimeType: "image/jpeg"
+        const result = await trackedProviderCall({
+            provider: "gemini",
+            service: "vision",
+            route: "gemini_service/processFuelReceiptVision",
+            model: "gemini-2.5-flash",
+            run: () => model.generateContent([
+                prompt,
+                {
+                    inlineData: {
+                        data: imageBase64.split(",")[1] || imageBase64,
+                        mimeType: "image/jpeg"
+                    }
                 }
-            }
-        ]);
+            ]),
+            extractUsage: (r: any) => ({
+                inputTokens: r?.response?.usageMetadata?.promptTokenCount,
+                outputTokens: r?.response?.usageMetadata?.candidatesTokenCount,
+            }),
+        });
 
         const text = result.response.text();
         const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -113,7 +124,17 @@ export async function verifyOdometerLogic(currentOdo: number, previousOdo: numbe
         }
     `;
 
-    const result = await model.generateContent(prompt);
+    const result = await trackedProviderCall({
+        provider: "gemini",
+        service: "text",
+        route: "gemini_service/verifyOdometerLogic",
+        model: "gemini-2.5-flash",
+        run: () => model.generateContent(prompt),
+        extractUsage: (r: any) => ({
+            inputTokens: r?.response?.usageMetadata?.promptTokenCount,
+            outputTokens: r?.response?.usageMetadata?.candidatesTokenCount,
+        }),
+    });
     const text = result.response.text();
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     return jsonMatch ? JSON.parse(jsonMatch[0]) : { isValid: true, confidence: 1, message: "No issues detected" };

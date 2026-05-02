@@ -30,15 +30,20 @@ import {
   Wrench,
   Inbox,
   ShoppingCart,
+  Gauge,
+  KeyRound,
+  ShieldAlert,
+  Receipt,
+  Activity,
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { resolveRole } from '../../utils/permissions';
 
 // Phase 11: Define which admin pages each platform role can access
 const PLATFORM_ROLE_PAGES: Record<string, string[]> = {
-  platform_owner:   ['dashboard', 'customers', 'platform-team', 'drivers', 'team-members', 'activity-log', 'fuel-stations', 'fuel-analytics', 'toll-stations', 'toll-info', 'motor-vehicles', 'pending-motor-vehicles', 'maintenance-templates', 'parts-sourcing', 'settings', 'settings-general', 'settings-features', 'settings-registration', 'settings-security', 'settings-announcements', 'settings-danger', 'db-management', 'db-settings'],
+  platform_owner:   ['dashboard', 'customers', 'platform-team', 'drivers', 'team-members', 'activity-log', 'fuel-stations', 'fuel-analytics', 'toll-stations', 'toll-info', 'motor-vehicles', 'pending-motor-vehicles', 'maintenance-templates', 'parts-sourcing', 'api-center', 'api-center-overview', 'api-center-usage', 'api-center-keys', 'api-center-budgets', 'api-center-logs', 'api-center-billing', 'settings', 'settings-general', 'settings-features', 'settings-registration', 'settings-security', 'settings-announcements', 'settings-danger', 'db-management', 'db-settings'],
   platform_support: ['dashboard', 'customers', 'drivers', 'team-members', 'fuel-stations', 'fuel-analytics', 'toll-stations', 'toll-info', 'motor-vehicles', 'pending-motor-vehicles', 'maintenance-templates', 'parts-sourcing'],
-  platform_analyst: ['dashboard'],
+  platform_analyst: ['dashboard', 'api-center', 'api-center-overview', 'api-center-usage', 'api-center-logs'],
 };
 
 interface AdminLayoutProps {
@@ -90,6 +95,17 @@ const SETTINGS_CHILDREN = [
   { id: 'settings-danger', label: 'Danger Zone', icon: AlertTriangle },
 ];
 
+// Collapsible section for the API Command Center (platform_owner + read-only
+// subset for platform_analyst — see PLATFORM_ROLE_PAGES above).
+const API_CENTER_CHILDREN = [
+  { id: 'api-center-overview', label: 'Overview',         icon: Gauge },
+  { id: 'api-center-usage',    label: 'Usage & Costs',    icon: BarChart3 },
+  { id: 'api-center-keys',     label: 'API Keys',         icon: KeyRound },
+  { id: 'api-center-budgets',  label: 'Budgets & Limits', icon: ShieldAlert },
+  { id: 'api-center-logs',     label: 'Call Log',         icon: ClipboardList },
+  { id: 'api-center-billing',  label: 'Provider Billing', icon: Receipt },
+];
+
 /** Database Management — platform owner only (see PLATFORM_ROLE_PAGES). Now a single entry with drill-down pages. */
 const DATABASE_MANAGEMENT_ITEM = { id: 'db-management', label: 'Database Management', icon: Database };
 
@@ -108,6 +124,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const visibleTollChildren = TOLL_MANAGEMENT_CHILDREN.filter(c => canViewPage(c.id));
   const visibleVehicleDbChildren = VEHICLE_DATABASE_CHILDREN.filter(c => canViewPage(c.id));
   const visibleSettingsChildren = SETTINGS_CHILDREN.filter(c => canViewPage(c.id));
+  const visibleApiCenterChildren = API_CENTER_CHILDREN.filter(c => canViewPage(c.id));
   const canViewDbManagement = canViewPage('db-management');
 
   const isUserMgmtChild = visibleUserMgmtChildren.some(c => c.id === currentPage);
@@ -120,6 +137,8 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const [vehicleDbOpen, setVehicleDbOpen] = useState(isVehicleDbChild);
   const isSettingsChild = visibleSettingsChildren.some(c => c.id === currentPage);
   const [settingsOpen, setSettingsOpen] = useState(isSettingsChild);
+  const isApiCenterChild = visibleApiCenterChildren.some(c => c.id === currentPage);
+  const [apiCenterOpen, setApiCenterOpen] = useState(isApiCenterChild);
   const isDbPage = currentPage === 'db-management' || currentPage === 'db-settings' || currentPage.startsWith('db-biz-') || currentPage.startsWith('db-customer-');
 
   // Keep section open when navigating to a child
@@ -138,6 +157,9 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
     }
     if (visibleSettingsChildren.some(c => c.id === currentPage)) {
       setSettingsOpen(true);
+    }
+    if (visibleApiCenterChildren.some(c => c.id === currentPage)) {
+      setApiCenterOpen(true);
     }
   }, [currentPage]);
 
@@ -388,6 +410,54 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
             {vehicleDbOpen && (
               <div className="ml-4 mt-1 space-y-0.5 border-l border-slate-800 pl-2">
                 {visibleVehicleDbChildren.map(child => {
+                  const ChildIcon = child.icon;
+                  const active = currentPage === child.id;
+                  return (
+                    <button
+                      key={child.id}
+                      onClick={() => handleNav(child.id)}
+                      className={`
+                        w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                        ${active
+                          ? 'bg-amber-500/10 text-amber-300'
+                          : 'text-slate-500 hover:text-white hover:bg-slate-800'
+                        }
+                      `}
+                    >
+                      <ChildIcon className="w-4 h-4 shrink-0" />
+                      <span className="truncate">{child.label}</span>
+                      {active && <ChevronRight className="w-3 h-3 ml-auto text-amber-400/60" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          )}
+
+          {/* API Command Center collapsible section */}
+          {visibleApiCenterChildren.length > 0 && (
+          <div>
+            <button
+              onClick={() => setApiCenterOpen(!apiCenterOpen)}
+              className={`
+                w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+                ${isApiCenterChild
+                  ? 'bg-amber-500/15 text-amber-300'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                }
+              `}
+            >
+              <Activity className="w-4.5 h-4.5 shrink-0" />
+              <span className="truncate">API Command Center</span>
+              {apiCenterOpen
+                ? <ChevronDown className="w-3.5 h-3.5 ml-auto text-slate-500" />
+                : <ChevronRight className="w-3.5 h-3.5 ml-auto text-slate-500" />
+              }
+            </button>
+            {apiCenterOpen && (
+              <div className="ml-4 mt-1 space-y-0.5 border-l border-slate-800 pl-2">
+                {visibleApiCenterChildren.map(child => {
                   const ChildIcon = child.icon;
                   const active = currentPage === child.id;
                   return (

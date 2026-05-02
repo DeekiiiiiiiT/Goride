@@ -10,6 +10,7 @@ import { ActivityLog } from './ActivityLog';
 import { TollDatabaseView } from '../toll/TollDatabaseView';
 import { TollInfoPage } from '../toll/TollInfoPage';
 import { PlatformSettings } from './PlatformSettings';
+import { ApiCommandCenter } from './api-center/ApiCommandCenter';
 import { DatabaseManagement } from '../database/DatabaseManagement';
 import { BusinessTypeCustomers } from '../database/BusinessTypeCustomers';
 import { CustomerLedgerView } from '../database/CustomerLedgerView';
@@ -161,6 +162,12 @@ export function AdminPortal() {
       )}
       {currentPage.startsWith('settings-') && (
         <PlatformSettings activeTab={currentPage.replace('settings-', '')} />
+      )}
+      {(currentPage === 'api-center' || currentPage.startsWith('api-center-')) && (
+        <ApiCommandCenter
+          activeTab={currentPage === 'api-center' ? 'overview' : currentPage.replace('api-center-', '')}
+          onNavigate={setCurrentPage}
+        />
       )}
       {currentPage === 'db-management' && (
         <DatabaseManagement onNavigate={handleNavigate} />

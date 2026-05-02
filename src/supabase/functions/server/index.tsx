@@ -9,6 +9,7 @@ import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 import * as kv from "./kv_store.tsx";
 import * as cache from "./cache.ts";
 import * as gemini from "./gemini_service.ts";
+import { trackedProviderCall, logProviderCall, checkProviderGuards, ProviderBlockedError } from "./api_usage_logger.ts";
 import * as memCache from "./memory_cache.ts";
 import { generatePerformanceReport } from "./performance-metrics.tsx";
 import { pMap } from "./concurrency.ts";
@@ -63,6 +64,7 @@ import tollApp, {
   executeTollResetForReconciliation,
 } from "./toll_controller.tsx";
 import disputeRefundApp from "./dispute_refund_controller.tsx";
+import apiCenterApp from "./api_command_center.tsx";
 import { getFleetTimezone } from "./timezone_helper.tsx";
 import * as unverifiedVendor from './unverified_vendor_controller.tsx';
 import { suggestStationMatches } from './vendor_matcher.ts';
@@ -1355,10 +1357,21 @@ app.route("/", safetyApp);
 app.route("/", syncApp);
 app.route("/", tollApp);
 app.route("/", disputeRefundApp);
+app.route("/", apiCenterApp);
 
 // Google Maps Config Endpoint
-app.get("/make-server-37f42386/maps-config", (c) => {
+app.get("/make-server-37f42386/maps-config", async (c) => {
   const apiKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
+  // Log as a proxy for client-side JS Maps loads — we cannot meter tile loads
+  // directly, but each fresh Maps JS load fetches this endpoint once.
+  logProviderCall({
+    provider: "google_maps",
+    service: "maps_js_load",
+    route: "/make-server-37f42386/maps-config",
+    status: "success",
+    httpStatus: 200,
+    requests: 1,
+  }).catch(() => { /* never break the primary call */ });
   return c.json({ apiKey: apiKey || "", timestamp: Date.now() });
 });
 
@@ -5771,18 +5784,29 @@ app.post("/make-server-37f42386/scan-receipt", async (c) => {
       Output only valid JSON. Do not use markdown code blocks.
     `;
 
-    const response = await openai.chat.completions.create({
+    const response = await trackedProviderCall({
+        provider: "openai",
+        service: "vision",
+        route: "/make-server-37f42386/scan-receipt",
         model: "gpt-4o",
-        messages: [
-            {
-                role: "user",
-                content: [
-                    { type: "text", text: prompt },
-                    { type: "image_url", image_url: { url: dataUrl } }
-                ]
-            }
-        ],
-        response_format: { type: "json_object" }
+        run: () => openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [
+                {
+                    role: "user",
+                    content: [
+                        { type: "text", text: prompt },
+                        { type: "image_url", image_url: { url: dataUrl } }
+                    ]
+                }
+            ],
+            response_format: { type: "json_object" }
+        }),
+        extractUsage: (r: any) => ({
+            inputTokens: r?.usage?.prompt_tokens,
+            outputTokens: r?.usage?.completion_tokens,
+            requestId: r?.id,
+        }),
     });
 
     const text = response.choices[0].message.content || "{}";
@@ -5794,6 +5818,7 @@ app.post("/make-server-37f42386/scan-receipt", async (c) => {
 
   } catch (e: any) {
     console.error("Scan Receipt Error:", e);
+    if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
     return c.json({ error: e.message }, 500);
   }
 });
@@ -5828,18 +5853,29 @@ app.post("/make-server-37f42386/scan-odometer", async (c) => {
       Output only valid JSON.
     `;
 
-    const response = await openai.chat.completions.create({
+    const response = await trackedProviderCall({
+        provider: "openai",
+        service: "vision",
+        route: "/make-server-37f42386/scan-odometer",
         model: "gpt-4o",
-        messages: [
-            {
-                role: "user",
-                content: [
-                    { type: "text", text: prompt },
-                    { type: "image_url", image_url: { url: dataUrl } }
-                ]
-            }
-        ],
-        response_format: { type: "json_object" }
+        run: () => openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [
+                {
+                    role: "user",
+                    content: [
+                        { type: "text", text: prompt },
+                        { type: "image_url", image_url: { url: dataUrl } }
+                    ]
+                }
+            ],
+            response_format: { type: "json_object" }
+        }),
+        extractUsage: (r: any) => ({
+            inputTokens: r?.usage?.prompt_tokens,
+            outputTokens: r?.usage?.completion_tokens,
+            requestId: r?.id,
+        }),
     });
 
     const text = response.choices[0].message.content || "{}";
@@ -5849,6 +5885,7 @@ app.post("/make-server-37f42386/scan-odometer", async (c) => {
 
   } catch (e: any) {
     console.error("Scan Odometer Error:", e);
+    if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
     return c.json({ error: e.message }, 500);
   }
 });
@@ -6886,21 +6923,33 @@ app.post("/make-server-37f42386/parse-document", async (c) => {
          contentPayload.push({ type: "image_url", image_url: { url: backUrl } });
     }
 
-    const response = await openai.chat.completions.create({
+    const response = await trackedProviderCall({
+        provider: "openai",
+        service: "vision",
+        route: "/make-server-37f42386/parse-document",
         model: "gpt-4o",
-        messages: [
-            {
-                role: "user",
-                content: contentPayload
-            }
-        ],
-        response_format: { type: "json_object" }
+        run: () => openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [
+                {
+                    role: "user",
+                    content: contentPayload
+                }
+            ],
+            response_format: { type: "json_object" }
+        }),
+        extractUsage: (r: any) => ({
+            inputTokens: r?.usage?.prompt_tokens,
+            outputTokens: r?.usage?.completion_tokens,
+            requestId: r?.id,
+        }),
     });
     
     const text = response.choices[0].message.content || "{}";
     return c.json({ success: true, data: JSON.parse(text) });
 
   } catch (e: any) {
+    if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
     return c.json({ error: e.message }, 500);
   }
 });
@@ -7072,28 +7121,36 @@ app.post("/make-server-37f42386/generate-vehicle-image", async (c) => {
     try {
         // Using Imagen 4.0 (Production Standard 2026) as requested
         // Endpoint: Google Generative Language API (Gemini API)
-        const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict?key=${apiKey}`,
-            {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    instances: [{ prompt: prompt }],
-                    parameters: { 
-                        sampleCount: 1, 
-                        aspectRatio: "1:1"
+        const data: any = await trackedProviderCall({
+            provider: "gemini",
+            service: "image",
+            route: "/make-server-37f42386/generate-vehicle-image",
+            model: "imagen-4.0-generate-001",
+            images: 1,
+            run: async () => {
+                const response = await fetch(
+                    `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict?key=${apiKey}`,
+                    {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            instances: [{ prompt: prompt }],
+                            parameters: {
+                                sampleCount: 1,
+                                aspectRatio: "1:1"
+                            }
+                        })
                     }
-                })
-            }
-        );
+                );
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Google Imagen API Error: ${response.status} - ${errorText}`);
+                }
+                return await response.json();
+            },
+            extractUsage: () => ({ images: 1 }),
+        });
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Google Imagen API Error: ${response.status} - ${errorText}`);
-        }
-
-        const data = await response.json();
-        
         // Handle Imagen response structure
         // The API returns { predictions: [ { bytesBase64Encoded: "..." } ] }
         if (data.predictions && data.predictions[0]) {
@@ -7106,6 +7163,7 @@ app.post("/make-server-37f42386/generate-vehicle-image", async (c) => {
         }
 
     } catch (e: any) {
+        if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
         lastError = e.message;
         console.error("Gemini Imagen Failed:", e);
     }
@@ -8326,14 +8384,25 @@ app.post("/make-server-37f42386/ai/map-csv", async (c) => {
       }
     `;
 
-    const response = await openai.chat.completions.create({
+    const response = await trackedProviderCall({
+      provider: "openai",
+      service: "chat",
+      route: "/make-server-37f42386/ai/map-csv",
       model: "gpt-4o",
-      messages: [
-        { role: "system", content: "You are a JSON mapping assistant." },
-        { role: "user", content: prompt }
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0
+      run: () => openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: "You are a JSON mapping assistant." },
+          { role: "user", content: prompt }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0
+      }),
+      extractUsage: (r: any) => ({
+        inputTokens: r?.usage?.prompt_tokens,
+        outputTokens: r?.usage?.completion_tokens,
+        requestId: r?.id,
+      }),
     });
 
     const content = response.choices[0].message.content;
@@ -8342,6 +8411,7 @@ app.post("/make-server-37f42386/ai/map-csv", async (c) => {
     return c.json({ success: true, mapping });
   } catch (e: any) {
     console.error("AI Mapping Error:", e);
+    if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
     return c.json({ error: e.message }, 500);
   }
 });
@@ -8842,9 +8912,20 @@ app.post("/make-server-37f42386/analyze-fleet", async (c) => {
         try {
             console.log(`Attempting analysis with model: ${modelName}`);
             const model = genAI.getGenerativeModel({ model: modelName });
-            result = await model.generateContent(prompt);
-            if (result) break; 
+            result = await trackedProviderCall({
+                provider: "gemini",
+                service: "text",
+                route: "/make-server-37f42386/analyze-fleet",
+                model: modelName,
+                run: () => model.generateContent(prompt),
+                extractUsage: (r: any) => ({
+                    inputTokens: r?.response?.usageMetadata?.promptTokenCount,
+                    outputTokens: r?.response?.usageMetadata?.candidatesTokenCount,
+                }),
+            });
+            if (result) break;
         } catch (e: any) {
+            if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
             console.warn(`Model ${modelName} failed:`, e.message);
             lastError = e;
         }
@@ -8857,17 +8938,29 @@ app.post("/make-server-37f42386/analyze-fleet", async (c) => {
         if (openaiKey) {
             try {
                 const openai = new OpenAI({ apiKey: openaiKey });
-                const completion = await openai.chat.completions.create({
+                const completion = await trackedProviderCall({
+                    provider: "openai",
+                    service: "chat",
+                    route: "/make-server-37f42386/analyze-fleet",
                     model: "gpt-4o",
-                    messages: [
-                        { role: "system", content: "You are an expert Fleet Management Data Analyst AI." },
-                        { role: "user", content: prompt }
-                    ],
-                    response_format: { type: "json_object" }
+                    run: () => openai.chat.completions.create({
+                        model: "gpt-4o",
+                        messages: [
+                            { role: "system", content: "You are an expert Fleet Management Data Analyst AI." },
+                            { role: "user", content: prompt }
+                        ],
+                        response_format: { type: "json_object" }
+                    }),
+                    extractUsage: (r: any) => ({
+                        inputTokens: r?.usage?.prompt_tokens,
+                        outputTokens: r?.usage?.completion_tokens,
+                        requestId: r?.id,
+                    }),
                 });
                 text = completion.choices[0].message.content || "{}";
                 console.log("OpenAI Fallback Successful");
             } catch (openaiError: any) {
+                 if (openaiError instanceof ProviderBlockedError) return c.json({ error: openaiError.message, code: openaiError.code }, openaiError.httpStatus);
                  console.error("OpenAI Fallback Failed:", openaiError);
                  throw new Error(`Both Gemini and OpenAI failed. Gemini Error: ${lastError?.message}`);
             }
@@ -9126,17 +9219,28 @@ app.post("/make-server-37f42386/parse-invoice", async (c) => {
             try {
                 console.log(`Attempting invoice analysis with model: ${modelName}`);
                 const model = genAI.getGenerativeModel({ model: modelName });
-                result = await model.generateContent([
-                    prompt,
-                    {
-                        inlineData: {
-                            data: base64Data,
-                            mimeType: mimeType
+                result = await trackedProviderCall({
+                    provider: "gemini",
+                    service: "vision",
+                    route: "/make-server-37f42386/parse-invoice",
+                    model: modelName,
+                    run: () => model.generateContent([
+                        prompt,
+                        {
+                            inlineData: {
+                                data: base64Data,
+                                mimeType: mimeType
+                            }
                         }
-                    }
-                ]);
+                    ]),
+                    extractUsage: (r: any) => ({
+                        inputTokens: r?.response?.usageMetadata?.promptTokenCount,
+                        outputTokens: r?.response?.usageMetadata?.candidatesTokenCount,
+                    }),
+                });
                 if (result) break;
             } catch (e: any) {
+                if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
                 console.warn(`Model ${modelName} failed:`, e.message);
                 lastError = e;
             }
@@ -9230,17 +9334,28 @@ app.post("/make-server-37f42386/parse-inspection", async (c) => {
             try {
                 console.log(`Attempting inspection analysis with model: ${modelName}`);
                 const model = genAI.getGenerativeModel({ model: modelName });
-                result = await model.generateContent([
-                    prompt,
-                    {
-                        inlineData: {
-                            data: base64Data,
-                            mimeType: mimeType
+                result = await trackedProviderCall({
+                    provider: "gemini",
+                    service: "vision",
+                    route: "/make-server-37f42386/parse-inspection",
+                    model: modelName,
+                    run: () => model.generateContent([
+                        prompt,
+                        {
+                            inlineData: {
+                                data: base64Data,
+                                mimeType: mimeType
+                            }
                         }
-                    }
-                ]);
+                    ]),
+                    extractUsage: (r: any) => ({
+                        inputTokens: r?.response?.usageMetadata?.promptTokenCount,
+                        outputTokens: r?.response?.usageMetadata?.candidatesTokenCount,
+                    }),
+                });
                 if (result) break;
             } catch (e: any) {
+                if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
                 console.warn(`Model ${modelName} failed:`, e.message);
                 lastError = e;
             }
@@ -9365,14 +9480,25 @@ app.post("/make-server-37f42386/ai/parse-toll-csv", async (c) => {
       ${csvContent.substring(0, 15000)}
     `;
 
-    const response = await openai.chat.completions.create({
+    const response = await trackedProviderCall({
+      provider: "openai",
+      service: "chat",
+      route: "/make-server-37f42386/ai/parse-toll-csv",
       model: "gpt-4o",
-      messages: [
-        { role: "system", content: "You are a JSON parsing assistant." },
-        { role: "user", content: prompt }
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0
+      run: () => openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: "You are a JSON parsing assistant." },
+          { role: "user", content: prompt }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0
+      }),
+      extractUsage: (r: any) => ({
+        inputTokens: r?.usage?.prompt_tokens,
+        outputTokens: r?.usage?.completion_tokens,
+        requestId: r?.id,
+      }),
     });
 
     const content = response.choices[0].message.content;
@@ -9384,6 +9510,7 @@ app.post("/make-server-37f42386/ai/parse-toll-csv", async (c) => {
     return c.json({ success: true, data: corrected });
   } catch (e: any) {
     console.error("AI Toll Parse Error:", e);
+    if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
     return c.json({ error: e.message }, 500);
   }
 });
@@ -9456,23 +9583,34 @@ app.post("/make-server-37f42386/ai/parse-toll-image", async (c) => {
       11. Extract "Payment After Discount / Bonus" if present.
     `;
 
-    const response = await openai.chat.completions.create({
+    const response = await trackedProviderCall({
+      provider: "openai",
+      service: "vision",
+      route: "/make-server-37f42386/ai/parse-toll-image",
       model: "gpt-4o",
-      messages: [
-        {
-          role: "system",
-          content: "You are a JSON parsing assistant."
-        },
-        {
-          role: "user",
-          content: [
-             { type: "text", text: prompt },
-             { type: "image_url", image_url: { url: base64Image } }
-          ]
-        }
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0
+      run: () => openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content: "You are a JSON parsing assistant."
+          },
+          {
+            role: "user",
+            content: [
+               { type: "text", text: prompt },
+               { type: "image_url", image_url: { url: base64Image } }
+            ]
+          }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0
+      }),
+      extractUsage: (r: any) => ({
+        inputTokens: r?.usage?.prompt_tokens,
+        outputTokens: r?.usage?.completion_tokens,
+        requestId: r?.id,
+      }),
     });
 
     const content = response.choices[0].message.content;
@@ -9485,6 +9623,7 @@ app.post("/make-server-37f42386/ai/parse-toll-image", async (c) => {
 
   } catch (e: any) {
     console.error("AI Toll Image Parse Error:", e);
+    if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
     return c.json({ error: e.message }, 500);
   }
 });
@@ -11555,20 +11694,31 @@ app.post("/make-server-37f42386/scan-receipt", async (c) => {
 
         Return ONLY the JSON object, no markdown.`;
 
-        const response = await openai.chat.completions.create({
+        const response = await trackedProviderCall({
+            provider: "openai",
+            service: "vision",
+            route: "/make-server-37f42386/scan-receipt (dup)",
             model: "gpt-4o",
-            messages: [
-                { role: "system", content: "You are a receipt scanning assistant that outputs strict JSON." },
-                { 
-                  role: "user", 
-                  content: [
-                      { type: "text", text: prompt },
-                      { type: "image_url", image_url: { url: base64Image } }
-                  ] 
-                }
-            ],
-            response_format: { type: "json_object" },
-            temperature: 0
+            run: () => openai.chat.completions.create({
+                model: "gpt-4o",
+                messages: [
+                    { role: "system", content: "You are a receipt scanning assistant that outputs strict JSON." },
+                    {
+                      role: "user",
+                      content: [
+                          { type: "text", text: prompt },
+                          { type: "image_url", image_url: { url: base64Image } }
+                      ]
+                    }
+                ],
+                response_format: { type: "json_object" },
+                temperature: 0
+            }),
+            extractUsage: (r: any) => ({
+                inputTokens: r?.usage?.prompt_tokens,
+                outputTokens: r?.usage?.completion_tokens,
+                requestId: r?.id,
+            }),
         });
 
         const content = response.choices[0].message.content;
@@ -11578,6 +11728,7 @@ app.post("/make-server-37f42386/scan-receipt", async (c) => {
 
     } catch (e: any) {
         console.error("Receipt Scan Error:", e);
+        if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
         return c.json({ error: e.message }, 500);
     }
 });

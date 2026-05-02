@@ -6,6 +6,7 @@ import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 import { Buffer } from "node:buffer";
 import * as kv from "./kv_store.tsx";
 import { deleteCanonicalLedgerBySource } from "../server/ledger_canonical.ts";
+import { trackedProviderCall, ProviderBlockedError } from "./api_usage_logger.ts";
 
 const app = new Hono();
 
@@ -67,10 +68,20 @@ app.post("/financial-operations/scan-receipt", async (c) => {
       Output only valid JSON. Do not use markdown code blocks.
     `;
 
-    const result = await model.generateContent([
-        prompt,
-        { inlineData: { data: base64Data, mimeType: file.type } }
-    ]);
+    const result = await trackedProviderCall({
+        provider: "gemini",
+        service: "vision",
+        route: "/financial-operations/scan-receipt",
+        model: "gemini-1.5-flash",
+        run: () => model.generateContent([
+            prompt,
+            { inlineData: { data: base64Data, mimeType: file.type } }
+        ]),
+        extractUsage: (r: any) => ({
+            inputTokens: r?.response?.usageMetadata?.promptTokenCount,
+            outputTokens: r?.response?.usageMetadata?.candidatesTokenCount,
+        }),
+    });
 
     const text = result.response.text();
     const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -80,6 +91,7 @@ app.post("/financial-operations/scan-receipt", async (c) => {
 
   } catch (e: any) {
     console.error("Scan Receipt Error:", e);
+    if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
     return c.json({ error: e.message }, 500);
   }
 });

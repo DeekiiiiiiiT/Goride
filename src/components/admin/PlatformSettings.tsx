@@ -29,6 +29,7 @@ import {
   AtSign,
   X,
   KeyRound,
+  Activity,
   Timer,
   ShieldAlert,
   Ban,
@@ -532,20 +533,23 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
         title="Security"
         description="API keys, password policies, session management, and emergency controls."
       >
-        {/* Sub-area 1: API Keys */}
+        {/* Sub-area 1: API Keys — moved to API Command Center */}
         <div className="mb-5">
           <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
             <KeyRound className="w-3.5 h-3.5" /> API Keys & Secrets
           </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <SecretField label="OpenAI API Key" configured />
-            <SecretField label="Gemini API Key" configured />
-            <SecretField label="Google Maps API Key" configured />
-            <SecretField label="Supabase Service Role Key" configured />
+          <div className="bg-slate-800/40 border border-slate-700 rounded-lg px-4 py-3 flex items-start gap-3 text-sm">
+            <Activity className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <p className="text-slate-300">
+                API key management has moved to the <strong className="text-amber-300">API Command Center</strong>.
+              </p>
+              <p className="text-xs text-slate-500 mt-1">
+                Use the sidebar to open <strong className="text-slate-300">API Command Center → API Keys</strong> to
+                view masked keys, see rotation history, and rotate keys via the Supabase Management API.
+              </p>
+            </div>
           </div>
-          <p className="text-xs text-slate-500 mt-2">
-            API keys are stored as Supabase secrets and cannot be viewed here. To rotate a key, update it in the Supabase dashboard.
-          </p>
         </div>
 
         {/* Sub-area 2: Password Policy */}
