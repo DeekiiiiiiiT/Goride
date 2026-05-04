@@ -5460,6 +5460,7 @@ app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), a
     const scopedByActivityRange = !!(startDateParam && endDateParam);
     let minDateMs: number;
     let maxDateMs: number;
+    const nowMs = Date.now();
     if (scopedByActivityRange) {
       minDateMs = new Date(startDateParam! + "T00:00:00").getTime();
       maxDateMs = new Date(endDateParam! + "T23:59:59").getTime();
@@ -5468,9 +5469,19 @@ app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), a
         minDateMs = maxDateMs;
         maxDateMs = x;
       }
+      // Never project past "now" — avoids empty future weeks from bad client dates.
+      maxDateMs = Math.min(maxDateMs, nowMs);
+      // Earnings rows are ledger-backed; do not start buckets before the first canonical ledger date.
+      if (allDatesEH.length > 0) {
+        const ledgerMin = Math.min(...allDatesEH);
+        minDateMs = Math.max(minDateMs, ledgerMin);
+      }
+      if (minDateMs > maxDateMs) {
+        return c.json({ success: true, data: [], durationMs: Date.now() - startMs });
+      }
     } else if (allDatesEH.length > 0) {
       minDateMs = Math.min(...allDatesEH);
-      maxDateMs = Math.min(Math.max(...allDatesEH), Date.now());
+      maxDateMs = Math.min(Math.max(...allDatesEH), nowMs);
     } else {
       return c.json({ success: true, data: [], durationMs: Date.now() - startMs });
     }
@@ -5666,23 +5677,21 @@ app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), a
       };
     });
 
-    // Activity-scoped range: show every period in range (zeros) — matches other Financials tabs.
-    // Auto range (ledger-only dates): hide empty periods to keep the table small.
-    const activeRows = scopedByActivityRange
-      ? rowsEH.slice().reverse()
-      : rowsEH
-          .filter((r: any) => {
-            if (r.tripCount > 0 || r.transactionCount > 0) return true;
-            if ((r.ledgerEventCount || 0) > 0) return true;
-            if (Math.abs(r.grossRevenue || 0) > 1e-6) return true;
-            if (Math.abs(r.tips || 0) > 1e-6) return true;
-            if (Math.abs(r.payouts || 0) > 1e-6) return true;
-            if (Math.abs(r.tolls || 0) > 1e-6) return true;
-            if (Math.abs(r.platformFees || 0) > 1e-6) return true;
-            if (Math.abs(r.expenses || 0) > 1e-6) return true;
-            return false;
-          })
-          .reverse();
+    // Drop periods with no ledger-backed activity so we do not list empty weeks before CSV /
+    // first payout or pad with trailing zeros up to "today".
+    function rowHasActivityEH(r: any): boolean {
+      if (r.tripCount > 0 || r.transactionCount > 0) return true;
+      if ((r.ledgerEventCount || 0) > 0) return true;
+      if (Math.abs(r.grossRevenue || 0) > 1e-6) return true;
+      if (Math.abs(r.tips || 0) > 1e-6) return true;
+      if (Math.abs(r.payouts || 0) > 1e-6) return true;
+      if (Math.abs(r.tolls || 0) > 1e-6) return true;
+      if (Math.abs(r.platformFees || 0) > 1e-6) return true;
+      if (Math.abs(r.expenses || 0) > 1e-6) return true;
+      return false;
+    }
+
+    const activeRows = rowsEH.filter(rowHasActivityEH).reverse();
 
     const durationMs = Date.now() - startMs;
     const totalGross = activeRows.reduce((s: number, r: any) => s + r.grossRevenue, 0);
