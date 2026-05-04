@@ -8,6 +8,7 @@ import {
     UberSsotTotals,
 } from './uberSsot';
 import { isUberTripFareAdjustOrderDescription } from './uberTripFareAdjustOrder';
+import { coerceDriverMetricPeriodIfDegenerate } from './driverMetricPeriod';
 
 // ... (Legacy code support if needed, but we focus on new logic)
 
@@ -1777,14 +1778,22 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
 
                  if (dId) {
                      const driverId = dId;
+
+                     const anchorPay = safeDateISO(file.reportDate) || batchFallbackDate;
+                     const psRow = safeDateISO(row['Period Start'] || row['Start Date'] || row['Statement Period Start'] || '');
+                     const peRow = safeDateISO(row['Period End'] || row['End Date'] || row['Statement Period End'] || '');
+                     const initPayPeriod = coerceDriverMetricPeriodIfDegenerate(
+                         psRow || anchorPay,
+                         peRow || psRow || anchorPay,
+                     );
                      
                      // Get existing or init
                      const current = driverMetricsMap.get(driverId) || {
                          id: `dm-pay-${driverId}-${Math.random()}`,
                          driverId: driverId,
                          driverName: 'Unknown Driver',
-                         periodStart: new Date().toISOString(),
-                         periodEnd: new Date().toISOString(),
+                         periodStart: initPayPeriod.periodStart,
+                         periodEnd: initPayPeriod.periodEnd,
                          totalEarnings: 0, refundsAndExpenses: 0, cashCollected: 0,
                          netEarnings: 0, cashFlowRisk: 'OK', expenseRatio: 0,
                          acceptanceRate: 0, cancellationRate: 0, completionRate: 0,
@@ -2244,6 +2253,9 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
         }
         
         return true;
+    }).map((d) => {
+        const c = coerceDriverMetricPeriodIfDegenerate(d.periodStart, d.periodEnd);
+        return { ...d, periodStart: c.periodStart, periodEnd: c.periodEnd };
     });
 
     const mergedTrips = Array.from(tripMap.values()).map(t => {

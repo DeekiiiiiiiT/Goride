@@ -146,6 +146,7 @@ import { DriverPayoutHistory } from './DriverPayoutHistory';
 import { DistanceByPlatform } from './DistanceByPlatform';
 import { FinancialSubTabs } from './FinancialSubTabs';
 import { OverviewMetricsGrid, MetricCard as ExtractedMetricCard, PLATFORM_COLORS as EXTRACTED_PLATFORM_COLORS, getPlatformColor as extractedGetPlatformColor } from './OverviewMetricsGrid';
+import { UberCashDebugPanel } from './UberCashDebugPanel';
 import { DriverIndriveWalletTab } from './DriverIndriveWalletTab';
 import { FuelWalletView } from './FuelWalletView';
 import { TimeFilterDropdown, TimeFilterValue, isHourInTimeFilter } from './TimeFilterDropdown';
@@ -155,6 +156,7 @@ import { TierCalculations } from '../../utils/tierCalculations';
 import { TierConfig } from '../../types/data';
 import { getEffectiveTripEarnings } from '../../utils/tripEarnings';
 import { normalizePlatform } from '../../utils/normalizePlatform';
+import { isValidDriverMetricPeriod } from '../../utils/driverMetricPeriod';
 import { calculateAverageEnroute, estimateEnrouteFallback } from '../../utils/enrouteStrategy';
 import { Tooltip as UiTooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { Checkbox } from "../ui/checkbox";
@@ -1479,16 +1481,17 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      const isAllPlatforms = selectedPlatforms.has('All');
      
      const relevantCsvMetrics = (isAllPlatforms && csvMetrics) ? csvMetrics.filter(m => {
+        if (!isValidDriverMetricPeriod(m)) return false;
         const mStart = new Date(m.periodStart);
         const mEnd = new Date(m.periodEnd);
         return mStart <= end && mEnd >= start;
      }) : [];
 
-     // Uber CSV cash override: only use driver_metric rows whose **period overlaps** the selected range.
-     // Including every row with `uberPaymentsTransactionCashColumnSum` (ignoring dates) caused one
-     // stale import total to appear as Uber cash on **every** date range after partial deletes.
+     // Uber CSV cash override: only use driver_metric rows whose **period overlaps** the selected range
+     // and has a real span (periodEnd > periodStart). Same-timestamp rows are ignored.
      const relevantCsvMetricsForUberCash = (isAllPlatforms && csvMetrics)
        ? csvMetrics.filter(m => {
+           if (!isValidDriverMetricPeriod(m)) return false;
            const mStart = new Date(m.periodStart);
            const mEnd = new Date(m.periodEnd);
            return mStart <= end && mEnd >= start;
@@ -3019,6 +3022,16 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   setLedgerRefreshKey((k) => k + 1);
                 }}
               />
+              {dateRange?.from && (
+                <UberCashDebugPanel
+                  csvMetrics={csvMetrics}
+                  rangeFrom={dateRange.from}
+                  rangeTo={dateRange.to ?? dateRange.from}
+                  trips={allTrips}
+                  isAllPlatforms={selectedPlatforms.has('All')}
+                  resolvedUberCash={resolvedFinancials.platformStats?.Uber?.cashCollected}
+                />
+              )}
              {false && (<div>
                <MetricCard 
                   title={isToday ? "Today's Earnings" : "Period Earnings"} 
