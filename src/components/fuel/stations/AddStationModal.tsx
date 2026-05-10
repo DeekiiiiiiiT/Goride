@@ -523,7 +523,9 @@ export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate,
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[540px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[540px] flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0">
+        {/* Scroll body: avoids overflow when inputs grow (e.g. browser autofill) */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-6 pt-6 pb-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {isEditMode ? (
@@ -1071,6 +1073,7 @@ export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate,
             </Button>
           </DialogFooter>
         </form>
+        </div>
       </DialogContent>
     </Dialog>
   );
