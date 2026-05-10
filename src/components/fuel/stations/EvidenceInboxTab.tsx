@@ -352,7 +352,16 @@ export function EvidenceInboxTab({ onPromoted, onVerifyLocation }: EvidenceInbox
     }
   };
 
-  const notesPreview = (row: StationGateEvidenceRow) => {
+  /** Short label in the table (full server strings are verbose). */
+  const shortBlockedReason = (row: StationGateEvidenceRow): string => {
+    const combined = [row.gateReason, row.holdReason].filter(Boolean).join(' ');
+    if (/unverified\s+station/i.test(combined)) return 'Unverified station';
+    if (/no gps/i.test(combined)) return 'No GPS';
+    const beforeDash = combined.split(/\s*[—–]\s*/)[0]?.trim();
+    return beforeDash || combined || '—';
+  };
+
+  const fullBlockedDetail = (row: StationGateEvidenceRow) => {
     const parts = [row.gateReason, row.holdReason].filter(Boolean);
     return parts.join(' · ') || '—';
   };
@@ -460,10 +469,10 @@ export function EvidenceInboxTab({ onPromoted, onVerifyLocation }: EvidenceInbox
                     <TableCell className="max-w-[220px]">
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <p className="text-xs text-slate-600 line-clamp-2 cursor-help">{notesPreview(row)}</p>
+                          <p className="text-xs text-slate-600 line-clamp-2 cursor-help">{shortBlockedReason(row)}</p>
                         </TooltipTrigger>
                         <TooltipContent side="bottom" className="max-w-sm text-xs">
-                          {notesPreview(row)}
+                          {fullBlockedDetail(row)}
                           {row.locationStatus ? (
                             <span className="block mt-1 text-slate-500">locationStatus: {row.locationStatus}</span>
                           ) : null}
