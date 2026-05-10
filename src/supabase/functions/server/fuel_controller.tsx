@@ -615,6 +615,73 @@ async function releaseHeldTransaction(learnt: any, resolvedStationId: string, st
 }
 
 /**
+ * Ensure a learnt_location exists for a gate-held transaction so Evidence Inbox can reuse
+ * the same promote / merge flows as Learnt (STAGING). Creates staging from GPS when missing.
+ */
+async function ensureLearntForGateHeldTx(
+    transactionId: string,
+): Promise<{ learnt: any; learntId: string } | { error: string }> {
+    const tx = await kv.get(`transaction:${transactionId}`);
+    if (!tx) return { error: "Transaction not found" };
+
+    const meta = tx.metadata || {};
+    let learntId = meta.learntLocationId as string | undefined;
+
+    if (learntId) {
+        const existing = await kv.get(`learnt_location:${learntId}`);
+        if (existing) return { learnt: existing, learntId };
+
+        const lat = meta.locationMetadata?.lat;
+        const lng = meta.locationMetadata?.lng;
+        if (lat == null || lng == null) {
+            return {
+                error: "Learnt staging ID is missing from KV and this transaction has no GPS to recreate it.",
+            };
+        }
+        const learnt = {
+            id: learntId,
+            name: tx.vendor || meta.originalVendor || "Unknown Vendor",
+            location: {
+                lat,
+                lng,
+                accuracy: meta.locationMetadata?.accuracy,
+            },
+            timestamp: new Date().toISOString(),
+            transactionId: tx.id,
+            status: "learnt",
+        };
+        await kv.set(`learnt_location:${learntId}`, learnt);
+        return { learnt, learntId };
+    }
+
+    const lat = meta.locationMetadata?.lat;
+    const lng = meta.locationMetadata?.lng;
+    if (lat == null || lng == null) {
+        return {
+            error: "No learnt staging row and no GPS on this transaction — resolve from Learnt (STAGING) or link manually elsewhere.",
+        };
+    }
+
+    learntId = crypto.randomUUID();
+    const learnt = {
+        id: learntId,
+        name: tx.vendor || meta.originalVendor || "Unknown Vendor",
+        location: {
+            lat,
+            lng,
+            accuracy: meta.locationMetadata?.accuracy,
+        },
+        timestamp: new Date().toISOString(),
+        transactionId: tx.id,
+        status: "learnt",
+    };
+    await kv.set(`learnt_location:${learntId}`, learnt);
+    tx.metadata = { ...tx.metadata, learntLocationId: learntId };
+    await kv.set(`transaction:${transactionId}`, tx);
+    return { learnt, learntId };
+}
+
+/**
  * After spatial bulk-assign stamps a fuel transaction with a station, ensure a `fuel_entry:*`
  * record exists and is linked so Transaction Logs (which load fuel_entry only) show the row.
  */
@@ -1248,6 +1315,91 @@ async function linkOrphanEntriesToStation(
 
     return linkedCount;
 }
+
+/** Evidence Inbox — merge gate-held transaction into a station (same behavior as promote-learnt merge). */
+app.post(`${BASE_PATH}/admin/evidence-inbox/merge-to-station`, async (c) => {
+    try {
+        const { transactionId, targetStationId } = await c.req.json();
+        if (!transactionId || !targetStationId) {
+            return c.json({ error: "transactionId and targetStationId are required" }, 400);
+        }
+
+        const tx = await kv.get(`transaction:${transactionId}`);
+        if (!tx) return c.json({ error: "Transaction not found" }, 404);
+
+        const isFuel = tx.category === "Fuel" || tx.category === "Fuel Reimbursement";
+        if (!isFuel) return c.json({ error: "Not a fuel transaction" }, 400);
+
+        const held = tx.metadata?.stationGateHold === true || tx.metadata?.stationGateHold === "true";
+        if (!held) return c.json({ error: "Transaction is not on station gate hold" }, 400);
+
+        const ensured = await ensureLearntForGateHeldTx(transactionId);
+        if ("error" in ensured) return c.json({ error: ensured.error }, 400);
+
+        const { learnt, learntId } = ensured;
+        const station = await kv.get(`station:${targetStationId}`);
+        if (!station) return c.json({ error: "Target station not found" }, 404);
+
+        const newAlias = {
+            id: crypto.randomUUID(),
+            lat: learnt.location.lat,
+            lng: learnt.location.lng,
+            label: `Merged from Evidence Inbox: ${learnt.name || "Learnt"}`,
+            addedAt: new Date().toISOString(),
+        };
+
+        station.aliases = [...(station.aliases || []), newAlias];
+        station.gpsAliases = [
+            ...(station.gpsAliases || []),
+            {
+                lat: learnt.location.lat,
+                lng: learnt.location.lng,
+                mergedAt: new Date().toISOString(),
+            },
+        ];
+
+        await kv.set(`station:${station.id}`, station);
+
+        const linkedCount = await linkOrphanEntriesToStation(learnt, station.id, station.name);
+        const releasedCount = await releaseHeldTransaction(learnt, station.id, station.name);
+        await kv.del(`learnt_location:${learntId}`);
+
+        console.log(
+            `[EvidenceInbox] Merged gate-held tx ${transactionId} → station ${station.id}, linked ${linkedCount}, released ${releasedCount}`,
+        );
+
+        return c.json({
+            success: true,
+            message: "Merged successfully",
+            data: station,
+            linkedEntries: linkedCount,
+            releasedTransactions: releasedCount,
+        });
+    } catch (e: any) {
+        console.error("[EvidenceInbox] merge-to-station failed:", e);
+        return c.json({ error: e.message || "Merge failed" }, 500);
+    }
+});
+
+app.post(`${BASE_PATH}/admin/evidence-inbox/ensure-learnt`, async (c) => {
+    try {
+        const { transactionId } = await c.req.json();
+        if (!transactionId) return c.json({ error: "transactionId is required" }, 400);
+
+        const tx = await kv.get(`transaction:${transactionId}`);
+        if (!tx) return c.json({ error: "Transaction not found" }, 404);
+
+        const held = tx.metadata?.stationGateHold === true || tx.metadata?.stationGateHold === "true";
+        if (!held) return c.json({ error: "Transaction is not on station gate hold" }, 400);
+
+        const ensured = await ensureLearntForGateHeldTx(transactionId);
+        if ("error" in ensured) return c.json({ error: ensured.error }, 400);
+
+        return c.json({ success: true, learntId: ensured.learntId });
+    } catch (e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
 
 /**
  * Auto-cleanup resolved learnt locations.

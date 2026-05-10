@@ -650,7 +650,48 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
 
           {/* --- Evidence inbox: pending fuel txs with station gate hold (read-only) --- */}
           <TabsContent value="station-evidence-inbox" className="m-0 p-0 border-0">
-            <EvidenceInboxTab />
+            <EvidenceInboxTab
+              onPromoted={() => fetchData()}
+              onVerifyLocation={(learntLoc) => {
+                const pseudoStation: StationProfile = {
+                  id: generateStationId(
+                    normalizeStationName(learntLoc.name || 'Unknown Station'),
+                    learntLoc.address || `${learntLoc.location.lat},${learntLoc.location.lng}`,
+                  ),
+                  name: learntLoc.name || 'Unknown Station',
+                  brand: learntLoc.brand || 'Independent',
+                  address: learntLoc.address || '',
+                  city: learntLoc.city || '',
+                  parish: learntLoc.parish || '',
+                  country: learntLoc.country || 'Jamaica',
+                  plusCode: learntLoc.plusCode || '',
+                  location: {
+                    lat: learntLoc.location?.lat ?? 0,
+                    lng: learntLoc.location?.lng ?? 0,
+                  },
+                  isPreferred: false,
+                  stats: {
+                    avgPrice: 0,
+                    lastPrice: 0,
+                    priceTrend: 'Stable',
+                    totalVisits: 1,
+                    rating: 0,
+                    lastUpdated: learntLoc.timestamp || new Date().toISOString(),
+                  },
+                  amenities: [],
+                  dataSource: 'manual',
+                  contactInfo: {},
+                  status: 'unverified',
+                  operationalStatus: 'active',
+                  category: 'fuel',
+                } as StationProfile;
+
+                setEditingStation(pseudoStation);
+                setVerifyingLearntId(learntLoc.id);
+                setVerifyingNearbyStation(learntLoc.nearbyStation || null);
+                setIsAddStationOpen(true);
+              }}
+            />
           </TabsContent>
 
           {/* --- Spatial review (ambiguous GPS between verified stations) --- */}

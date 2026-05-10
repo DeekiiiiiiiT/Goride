@@ -1027,6 +1027,40 @@ export const api = {
     return response.json();
   },
 
+  /** Evidence Inbox — create learnt staging from GPS if needed (Secure Ledger / Verify Location). */
+  async ensureLearntForGateHeldTransaction(transactionId: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/evidence-inbox/ensure-learnt`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${publicAnonKey}`,
+      },
+      body: JSON.stringify({ transactionId }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || 'Failed to ensure learnt staging');
+    }
+    return response.json() as Promise<{ success: boolean; learntId: string }>;
+  },
+
+  /** Evidence Inbox — merge gate-held fuel reimbursement into a station (same as Learnt merge). */
+  async mergeGateHeldTransactionToStation(transactionId: string, targetStationId: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/evidence-inbox/merge-to-station`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${publicAnonKey}`,
+      },
+      body: JSON.stringify({ transactionId, targetStationId }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || 'Failed to merge transaction to station');
+    }
+    return response.json();
+  },
+
   async getStations() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations`, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }

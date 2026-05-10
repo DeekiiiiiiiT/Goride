@@ -972,7 +972,6 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
               dateRange={reimbursementDateRange}
               onDateRangeChange={setReimbursementDateRange}
               isRefreshing={isRefreshing}
-              onRefresh={() => loadData(true)}
           />
       )}
 

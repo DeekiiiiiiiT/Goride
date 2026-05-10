@@ -10,7 +10,7 @@ import {
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { FinancialTransaction } from '../../types/data';
-import { Check, X, Eye, FileText, Calendar, User, Truck, DollarSign, Plus, Pencil, Trash2, RefreshCw, Loader2, Camera, AlertTriangle, MapPin } from "lucide-react";
+import { Check, X, Eye, FileText, Calendar, User, Truck, DollarSign, Plus, Pencil, Trash2, Loader2, Camera, AlertTriangle, MapPin } from "lucide-react";
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../ui/dialog";
 import { Input } from "../ui/input";
@@ -157,7 +157,6 @@ interface FuelReimbursementTableProps {
     dateRange?: DateRange;
     onDateRangeChange?: (range: DateRange | undefined) => void;
     isRefreshing?: boolean;
-    onRefresh?: () => void;
 }
 
 export function FuelReimbursementTable({ 
@@ -172,8 +171,7 @@ export function FuelReimbursementTable({
     onApproveLogReview,
     dateRange,
     onDateRangeChange,
-    isRefreshing = false,
-    onRefresh
+    isRefreshing = false
 }: FuelReimbursementTableProps) {
     const { can } = usePermissions();
     const [selectedTx, setSelectedTx] = useState<FinancialTransaction | null>(null);
@@ -737,8 +735,8 @@ export function FuelReimbursementTable({
                                                 </Button>
                                             )}
 
-                                            {/* Edit Button - Enabled for History and Pending to allow metadata repair */}
-                                            {onEdit && (
+                                            {/* Edit — not on Awaiting station (station hold); fleet waits on master station verification */}
+                                            {onEdit && allowFinalizePendingActions && (
                                                 tx.metadata?.source === 'Manual' || 
                                                 tx.metadata?.source === 'Bulk Manual' || 
                                                 tx.metadata?.source === 'Manual Request' ||
@@ -908,18 +906,6 @@ export function FuelReimbursementTable({
                     </TabsList>
 
                     <div className="flex items-center gap-2">
-                        {onRefresh && (
-                            <Button 
-                                variant="outline" 
-                                size="sm" 
-                                onClick={onRefresh} 
-                                disabled={isRefreshing}
-                                className="h-9 px-2 text-slate-500 border-slate-200"
-                            >
-                                <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
-                            </Button>
-                        )}
-
                         {onDateRangeChange && (
                             <DatePickerWithRange 
                                 date={dateRange} 
@@ -1352,7 +1338,7 @@ export function FuelReimbursementTable({
                     {!action && selectedTx?.status === 'Pending' && (
                         <DialogFooter className="gap-2 sm:gap-0">
                             <div className="flex gap-2 w-full sm:w-auto mr-auto">
-                                {onEdit && (
+                                {onEdit && !metaFlagOn(selectedTx.metadata?.stationGateHold) && (
                                     selectedTx.metadata?.source === 'Manual' || 
                                     selectedTx.metadata?.source === 'Bulk Manual' || 
                                     selectedTx.metadata?.source === 'Manual Request' ||
