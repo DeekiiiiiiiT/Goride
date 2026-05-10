@@ -396,7 +396,6 @@ export function EvidenceInboxTab({ onPromoted, onVerifyLocation }: EvidenceInbox
               <TableHead>Date</TableHead>
               <TableHead>Driver</TableHead>
               <TableHead className="text-right">Amount</TableHead>
-              <TableHead>Vendor / notes</TableHead>
               <TableHead>GPS</TableHead>
               <TableHead>Learnt staging</TableHead>
               <TableHead className="max-w-[220px]">Why blocked</TableHead>
@@ -407,7 +406,7 @@ export function EvidenceInboxTab({ onPromoted, onVerifyLocation }: EvidenceInbox
           <TableBody>
             {rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="h-32 text-center text-slate-500">
+                <TableCell colSpan={8} className="h-32 text-center text-slate-500">
                   No pending fuel transactions are on station hold right now.
                 </TableCell>
               </TableRow>
@@ -423,9 +422,6 @@ export function EvidenceInboxTab({ onPromoted, onVerifyLocation }: EvidenceInbox
                     <TableCell className="text-sm">{row.driverName || '—'}</TableCell>
                     <TableCell className="text-right font-semibold tabular-nums">
                       ${Math.abs(Number(row.amount) || 0).toFixed(2)}
-                    </TableCell>
-                    <TableCell className="max-w-[180px]">
-                      <span className="text-sm line-clamp-2">{row.vendor || row.description || '—'}</span>
                     </TableCell>
                     <TableCell>
                       {row.hasGps && row.lat != null && row.lng != null ? (
