@@ -778,6 +778,22 @@ export const api = {
     return response.json();
   },
 
+  /** Pending fuel transactions with station gate hold (Station Database → Evidence inbox). */
+  async getStationGateEvidence(options?: { limit?: number }) {
+    const params = new URLSearchParams();
+    if (options?.limit != null) params.set('limit', String(options.limit));
+    const qs = params.toString();
+    const url = `${API_ENDPOINTS.financial}/admin/station-gate-evidence${qs ? `?${qs}` : ''}`;
+    const response = await fetchWithRetry(url, {
+      headers: await getHeaders(null),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || 'Failed to fetch station gate evidence');
+    }
+    return response.json();
+  },
+
   async saveTransaction(transaction: Partial<FinancialTransaction>) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/transactions`, {
         method: 'POST',

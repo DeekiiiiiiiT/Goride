@@ -39,6 +39,111 @@ function computeResolvedFuelLiters(tx: FinancialTransaction): number | null {
     return null;
 }
 
+function readMetaNum(v: unknown): number | undefined {
+    const n = typeof v === 'number' ? v : typeof v === 'string' ? parseFloat(v) : NaN;
+    return Number.isFinite(n) ? n : undefined;
+}
+
+/** Best-effort GPS from transaction metadata (driver portal / geo pipeline shapes vary). */
+function pickTransactionCoords(tx: FinancialTransaction): { lat: number; lng: number; accuracy?: number } | null {
+    const m = tx.metadata as Record<string, unknown> | undefined;
+    const lm = (m?.locationMetadata || m?.location) as Record<string, unknown> | undefined;
+    const gf = m?.geofenceMetadata as Record<string, unknown> | undefined;
+    const lat =
+        readMetaNum(lm?.lat) ??
+        readMetaNum(gf?.lat) ??
+        readMetaNum(m?.lat);
+    const lng =
+        readMetaNum(lm?.lng) ??
+        readMetaNum(gf?.lng) ??
+        readMetaNum(m?.lng);
+    if (lat == null || lng == null) return null;
+    const accuracy =
+        readMetaNum(lm?.accuracy) ??
+        readMetaNum(gf?.accuracy) ??
+        readMetaNum(m?.accuracy);
+    return {
+        lat,
+        lng,
+        ...(accuracy != null ? { accuracy } : {}),
+    };
+}
+
+function isGenericFuelVendor(vendor?: string): boolean {
+    const v = (vendor || '').trim();
+    if (!v) return true;
+    return /unspecified|unknown/i.test(v) || v === 'Unspecified Vendor';
+}
+
+/** Plain-language checklist for station-gate rows (shown in detail overlay). */
+function buildStationHoldDiagnostics(tx: FinancialTransaction): string[] {
+    const m = tx.metadata as Record<string, unknown> | undefined;
+    const lines: string[] = [];
+    const coords = pickTransactionCoords(tx);
+    const gateReason = typeof m?.gateReason === 'string' ? m.gateReason.trim() : '';
+    const holdReason = typeof m?.holdReason === 'string' ? m.holdReason.trim() : '';
+    const locationStatus =
+        typeof m?.locationStatus === 'string' ? m.locationStatus.trim() : '';
+    const learntRaw = m?.learntLocationId;
+    const learntId = typeof learntRaw === 'string' ? learntRaw.trim() : '';
+    const matchedId =
+        (typeof m?.matchedStationId === 'string' && m.matchedStationId) ||
+        (typeof (tx as FinancialTransaction & { matchedStationId?: string }).matchedStationId === 'string'
+            ? (tx as FinancialTransaction & { matchedStationId?: string }).matchedStationId
+            : '') ||
+        '';
+
+    if (coords) {
+        const acc =
+            coords.accuracy != null && Number.isFinite(coords.accuracy)
+                ? ` · GPS accuracy about ±${Math.round(coords.accuracy)} m`
+                : '';
+        lines.push(
+            `GPS saved (${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)})${acc}.`
+        );
+    } else {
+        lines.push(
+            'No GPS coordinates on this expense — the system cannot place this fill-up on the map or match it to a station.'
+        );
+    }
+
+    if (gateReason) {
+        lines.push(`Detail: ${gateReason}`);
+    } else if (holdReason) {
+        lines.push(`Detail: ${holdReason}`);
+    }
+
+    if (locationStatus && locationStatus !== 'verified') {
+        lines.push(`Station link state: ${locationStatus}.`);
+    }
+
+    if (!matchedId) {
+        lines.push('Not linked to a verified station in the master station list yet.');
+    }
+
+    if (learntId) {
+        const short = learntId.length > 14 ? `${learntId.slice(0, 8)}…${learntId.slice(-4)}` : learntId;
+        lines.push(
+            `Learnt (staging) reference: ${short} — in Super Admin → Station Database → Learnt, search or match using this ID if it appears there.`
+        );
+    } else {
+        lines.push(
+            'No Learnt staging record is attached to this transaction — Super Admin may see nothing under Learnt until GPS exists or the system creates a staging row.'
+        );
+    }
+
+    const vendorLabel =
+        (tx.vendor && tx.vendor.trim()) ||
+        (typeof m?.originalVendor === 'string' ? m.originalVendor.trim() : '');
+    if (isGenericFuelVendor(vendorLabel)) {
+        lines.push(
+            'Vendor / station name is missing or generic — add the real station when you edit, if you know it.'
+        );
+    }
+
+    return lines;
+}
+
 interface FuelReimbursementTableProps {
     transactions: FinancialTransaction[];
     logs?: FuelEntry[];
@@ -89,6 +194,7 @@ export function FuelReimbursementTable({
     const [approvalBrand, setApprovalBrand] = useState('');
     const [approvalMatchedStationId, setApprovalMatchedStationId] = useState('');
     const [approvalStationLocation, setApprovalStationLocation] = useState('');
+    const [pendingSubTab, setPendingSubTab] = useState<'ready' | 'station-hold'>('ready');
 
     useEffect(() => {
         if (!isDetailsOpen) return;
@@ -228,9 +334,12 @@ export function FuelReimbursementTable({
         return false;
     };
 
+    const metaFlagOn = (v: unknown) => v === true || v === 'true';
+
     /** Same rules as Log Review tab — for badges + Review action on Pending table. */
     const isLogReviewEligible = (t: FinancialTransaction) => {
         if (!isPendingFuelQueueRow(t)) return false;
+        if (metaFlagOn(t.metadata?.stationGateHold)) return false;
         if (isAdminManualFuelWithProvidedOdometer(t)) return false;
         if (t.metadata?.needsLogReview) return true;
         const method = t.metadata?.odometerMethod;
@@ -269,7 +378,9 @@ export function FuelReimbursementTable({
         return true;
     };
 
-    const pending = transactions.filter(t => isPendingFuelQueueRow(t));
+    const pendingAll = transactions.filter(t => isPendingFuelQueueRow(t));
+    const pendingStationHold = pendingAll.filter((t) => metaFlagOn(t.metadata?.stationGateHold));
+    const pendingReadyForReview = pendingAll.filter((t) => !metaFlagOn(t.metadata?.stationGateHold));
 
     const logReview = transactions.filter(isLogReviewEligible);
 
@@ -282,6 +393,7 @@ export function FuelReimbursementTable({
 
     const confirmAction = () => {
         if (!selectedTx || !action) return;
+        if (metaFlagOn(selectedTx.metadata?.stationGateHold)) return;
         if (action === 'approve') {
             onApprove(selectedTx.id, notes, {
                 matchedStationId: approvalMatchedStationId || undefined,
@@ -364,8 +476,6 @@ export function FuelReimbursementTable({
         }
     };
 
-    const metaFlagOn = (v: unknown) => v === true || v === 'true';
-
     /** Odometer uploads are saved on metadata.odometerProofUrl (admin manual); also check legacy/top-level fields. */
     const resolveOdometerProofUrl = (tx: FinancialTransaction): string | undefined => {
         const m = tx.metadata as Record<string, unknown> | undefined;
@@ -423,7 +533,12 @@ export function FuelReimbursementTable({
         return 'Unverified Station';
     };
 
-    const renderTable = (data: FinancialTransaction[], showActions = false, pendingQueueMode = false) => {
+    const renderTable = (
+        data: FinancialTransaction[],
+        showActions = false,
+        pendingQueueMode = false,
+        allowFinalizePendingActions = true
+    ) => {
         // Helper: resolve a display-friendly description, falling back to vendor or linked log data
         const resolveDescription = (tx: FinancialTransaction) => {
             const desc = tx.description || '';
@@ -610,7 +725,7 @@ export function FuelReimbursementTable({
                                                 <Eye className="h-4 w-4" />
                                             </Button>
 
-                                            {pendingQueueMode && showActions && isLogReviewEligible(tx) && onApproveLogReview && (
+                                            {pendingQueueMode && showActions && allowFinalizePendingActions && isLogReviewEligible(tx) && onApproveLogReview && (
                                                 <Button
                                                     size="sm"
                                                     className="bg-amber-600 hover:bg-amber-700 text-white"
@@ -640,7 +755,7 @@ export function FuelReimbursementTable({
                                                 </Button>
                                             )}
                                             
-                                            {showActions && tx.status === 'Pending' && (tx.metadata?.source === 'Manual' || !tx.metadata?.source) && (
+                                            {showActions && allowFinalizePendingActions && tx.status === 'Pending' && (tx.metadata?.source === 'Manual' || !tx.metadata?.source) && (
                                                 <>
                                                     {onDelete && (
                                                         <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700" onClick={() => onDelete(tx.id)} title="Delete">
@@ -650,7 +765,7 @@ export function FuelReimbursementTable({
                                                 </>
                                             )}
 
-                                            {showActions && (
+                                            {showActions && allowFinalizePendingActions && (
                                                 <>
                                                     <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); setAction('approve'); }} title="Approve">
                                                         <Check className="h-4 w-4" />
@@ -783,9 +898,9 @@ export function FuelReimbursementTable({
                         </TabsTrigger>
                         <TabsTrigger value="pending">
                             Pending
-                            {pending.length > 0 && (
+                            {pendingAll.length > 0 && (
                                 <Badge variant="secondary" className="ml-2 bg-orange-100 text-orange-700 hover:bg-orange-200">
-                                    {pending.length}
+                                    {pendingAll.length}
                                 </Badge>
                             )}
                         </TabsTrigger>
@@ -840,7 +955,57 @@ export function FuelReimbursementTable({
                             Synchronizing ledger and verifying manual entries...
                         </div>
                     )}
-                    {renderTable(pending, true, true)}
+                    <Tabs value={pendingSubTab} onValueChange={(v) => setPendingSubTab(v as 'ready' | 'station-hold')} className="w-full">
+                        <TabsList className="mb-1 h-9 w-full justify-start rounded-lg bg-slate-100/80 p-1 sm:w-auto">
+                            <TabsTrigger value="ready" className="text-xs sm:text-sm px-3">
+                                Ready for review
+                                {pendingReadyForReview.length > 0 && (
+                                    <Badge variant="secondary" className="ml-2 bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-0 font-normal">
+                                        {pendingReadyForReview.length}
+                                    </Badge>
+                                )}
+                            </TabsTrigger>
+                            <TabsTrigger value="station-hold" className="text-xs sm:text-sm px-3 gap-1">
+                                <MapPin className="h-3.5 w-3.5 opacity-70" />
+                                Awaiting station
+                                {pendingStationHold.length > 0 && (
+                                    <Badge variant="secondary" className="ml-2 bg-sky-100 text-sky-800 hover:bg-sky-100 border-0 font-normal">
+                                        {pendingStationHold.length}
+                                    </Badge>
+                                )}
+                            </TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="ready" className="mt-4 space-y-3 focus-visible:outline-none">
+                            {pendingReadyForReview.length === 0 ? (
+                                <div className="rounded-md border border-slate-200 bg-white p-8 text-center space-y-2">
+                                    <p className="text-sm text-slate-600">Nothing waiting for fleet approval right now.</p>
+                                    <p className="text-xs text-slate-400 max-w-md mx-auto">
+                                        Fuel rows held because the gas station is not verified yet appear under <span className="font-medium text-slate-600">Awaiting station</span> until they are matched in the station database.
+                                    </p>
+                                </div>
+                            ) : (
+                                renderTable(pendingReadyForReview, true, true, true)
+                            )}
+                        </TabsContent>
+                        <TabsContent value="station-hold" className="mt-4 space-y-3 focus-visible:outline-none">
+                            <div className="rounded-lg border border-sky-100 bg-sky-50/60 px-4 py-3 text-sm text-sky-900 flex gap-2 items-start">
+                                <MapPin className="h-4 w-4 shrink-0 mt-0.5 text-sky-700" />
+                                <p className="leading-snug">
+                                    These submissions are paused until a verified station exists in the master station database. Approve or reject is disabled here; open a row for specifics (GPS, staging ID, notes). Your team can still view details.
+                                </p>
+                            </div>
+                            {pendingStationHold.length === 0 ? (
+                                <div className="rounded-md border border-slate-200 bg-white p-8 text-center space-y-2">
+                                    <p className="text-sm text-slate-600">No transactions awaiting station verification.</p>
+                                    <p className="text-xs text-slate-400 max-w-md mx-auto">
+                                        When GPS does not match a verified station, entries appear here until resolved in the station admin workflow.
+                                    </p>
+                                </div>
+                            ) : (
+                                renderTable(pendingStationHold, true, true, false)
+                            )}
+                        </TabsContent>
+                    </Tabs>
                 </TabsContent>
 
                 <TabsContent value="history" className="space-y-4">
@@ -858,6 +1023,28 @@ export function FuelReimbursementTable({
                         </DialogDescription>
                     </DialogHeader>
 
+                    {selectedTx && metaFlagOn(selectedTx.metadata?.stationGateHold) && (
+                        <div className="space-y-3">
+                            <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2.5 text-sm text-sky-900 flex gap-2 items-start">
+                                <MapPin className="h-4 w-4 shrink-0 mt-0.5 text-sky-700" />
+                                <span>
+                                    This fuel stop is not linked to a verified station yet. Approve and reject stay disabled until station verification completes in the station database.
+                                </span>
+                            </div>
+                            <div className="rounded-md border border-amber-200 bg-amber-50/80 px-3 py-3 text-sm text-amber-950">
+                                <div className="flex items-center gap-2 font-semibold text-amber-900 mb-2">
+                                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                                    What&apos;s missing / why it&apos;s stuck
+                                </div>
+                                <ul className="list-disc pl-5 space-y-1.5 text-amber-950/95 leading-snug">
+                                    {buildStationHoldDiagnostics(selectedTx).map((line, i) => (
+                                        <li key={i}>{line}</li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </div>
+                    )}
+
                     {selectedTx && (() => {
                         const odometerPhotoUrl = resolveOdometerProofUrl(selectedTx);
                         const resolvedLiters = computeResolvedFuelLiters(selectedTx);
@@ -865,7 +1052,8 @@ export function FuelReimbursementTable({
                         const hasVerifiedStations = matchingStations.length > 0;
                         const showFuelStationPicker =
                             selectedTx.status === 'Pending' &&
-                            (selectedTx.category === 'Fuel' || selectedTx.category === 'Fuel Reimbursement');
+                            (selectedTx.category === 'Fuel' || selectedTx.category === 'Fuel Reimbursement') &&
+                            !metaFlagOn(selectedTx.metadata?.stationGateHold);
                         return (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
                             <div className="space-y-4">
@@ -1177,10 +1365,12 @@ export function FuelReimbursementTable({
                                 )}
                                 <Button variant="outline" className="flex-1 sm:flex-none" onClick={() => setIsDetailsOpen(false)}>Close</Button>
                             </div>
-                            <div className="flex gap-2 w-full sm:w-auto">
-                                {can('fuel.reject') && <Button variant="destructive" className="flex-1 sm:flex-none" onClick={() => setAction('reject')}>Reject</Button>}
-                                {can('fuel.approve') && <Button className="bg-emerald-600 hover:bg-emerald-700 flex-1 sm:flex-none" onClick={() => setAction('approve')}>Approve</Button>}
-                            </div>
+                            {!metaFlagOn(selectedTx.metadata?.stationGateHold) && (
+                                <div className="flex gap-2 w-full sm:w-auto">
+                                    {can('fuel.reject') && <Button variant="destructive" className="flex-1 sm:flex-none" onClick={() => setAction('reject')}>Reject</Button>}
+                                    {can('fuel.approve') && <Button className="bg-emerald-600 hover:bg-emerald-700 flex-1 sm:flex-none" onClick={() => setAction('approve')}>Approve</Button>}
+                                </div>
+                            )}
                         </DialogFooter>
                     )}
                     

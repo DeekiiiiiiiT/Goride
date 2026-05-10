@@ -12,6 +12,7 @@ import { BulkDeleteStationsModal } from './BulkDeleteStationsModal';
 import { ParentCompanyManager } from './ParentCompanyManager';
 import { VerifiedStationsTab } from './VerifiedStationsTab';
 import { LearntLocationsTab } from './LearntLocationsTab';
+import { EvidenceInboxTab } from './EvidenceInboxTab';
 import { SpatialReviewTab } from './SpatialReviewTab';
 import { UnverifiedVendorsTab } from './UnverifiedVendorsTab';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../ui/tabs';
@@ -449,6 +450,10 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
                 Learnt
                 <Badge variant="outline" className="h-4 px-1 text-[8px] border-amber-200 text-amber-500">STAGING</Badge>
               </TabsTrigger>
+              <TabsTrigger value="station-evidence-inbox" className="flex items-center gap-1.5">
+                Evidence
+                <Badge variant="outline" className="h-4 px-1 text-[8px] border-sky-200 text-sky-600">INBOX</Badge>
+              </TabsTrigger>
               <TabsTrigger value="spatial-review" className="flex items-center gap-1.5">
                 Spatial review
                 <Badge variant="outline" className="h-4 px-1 text-[8px] border-violet-200 text-violet-600">GPS</Badge>
@@ -641,6 +646,11 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
                  setIsAddStationOpen(true);
                }}
              />
+          </TabsContent>
+
+          {/* --- Evidence inbox: pending fuel txs with station gate hold (read-only) --- */}
+          <TabsContent value="station-evidence-inbox" className="m-0 p-0 border-0">
+            <EvidenceInboxTab />
           </TabsContent>
 
           {/* --- Spatial review (ambiguous GPS between verified stations) --- */}

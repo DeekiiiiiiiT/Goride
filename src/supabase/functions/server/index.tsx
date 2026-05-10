@@ -2519,6 +2519,105 @@ app.get("/make-server-37f42386/transactions", requireAuth(), async (c) => {
   }
 });
 
+/** Numbers from mixed metadata shapes (station Evidence inbox). */
+function evidenceReadMetaNum(v: unknown): number | undefined {
+    const n = typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) : NaN;
+    return Number.isFinite(n) ? n : undefined;
+}
+
+function extractTxCoordsForEvidence(metadata: Record<string, unknown> | undefined): {
+    lat: number;
+    lng: number;
+    accuracy?: number;
+} | null {
+    if (!metadata || typeof metadata !== "object") return null;
+    const lm = (metadata.locationMetadata || metadata.location) as Record<string, unknown> | undefined;
+    const gf = metadata.geofenceMetadata as Record<string, unknown> | undefined;
+    const lat =
+        evidenceReadMetaNum(lm?.lat) ??
+        evidenceReadMetaNum(gf?.lat) ??
+        evidenceReadMetaNum(metadata.lat);
+    const lng =
+        evidenceReadMetaNum(lm?.lng) ??
+        evidenceReadMetaNum(gf?.lng) ??
+        evidenceReadMetaNum(metadata.lng);
+    if (lat == null || lng == null) return null;
+    const accuracy =
+        evidenceReadMetaNum(lm?.accuracy) ??
+        evidenceReadMetaNum(gf?.accuracy) ??
+        evidenceReadMetaNum(metadata.accuracy);
+    return {
+        lat,
+        lng,
+        ...(accuracy != null ? { accuracy } : {}),
+    };
+}
+
+function mapStationGateEvidenceDto(t: Record<string, unknown>) {
+    const m = (t.metadata as Record<string, unknown>) || {};
+    const coords = extractTxCoordsForEvidence(m);
+    return {
+        id: t.id,
+        date: t.date,
+        time: t.time,
+        driverName: t.driverName,
+        driverId: t.driverId,
+        amount: t.amount,
+        vendor: t.vendor,
+        description: t.description,
+        holdReason: typeof m.holdReason === "string" ? m.holdReason : undefined,
+        gateReason: typeof m.gateReason === "string" ? m.gateReason : undefined,
+        locationStatus: typeof m.locationStatus === "string" ? m.locationStatus : undefined,
+        learntLocationId: typeof m.learntLocationId === "string" ? m.learntLocationId : undefined,
+        hasGps: coords != null,
+        lat: coords?.lat,
+        lng: coords?.lng,
+        accuracy: coords?.accuracy,
+    };
+}
+
+// Station Database — Evidence inbox: Pending fuel txs with station gate hold (read-only list).
+app.get("/make-server-37f42386/admin/station-gate-evidence", requireAuth(), async (c) => {
+    try {
+        const limitParam = c.req.query("limit");
+        const limit = Math.min(Math.max(parseInt(limitParam || "5000", 10) || 5000, 1), 10000);
+
+        const { data, error } = await supabase
+            .from("kv_store_37f42386")
+            .select("value")
+            .like("key", "transaction:%")
+            .order("value->>date", { ascending: false })
+            .range(0, limit - 1);
+
+        if (error) throw error;
+
+        const transactions = (data || []).map((d: any) => {
+            const v = d.value || {};
+            if (v.metadata?.receiptBase64) {
+                const metadata = { ...v.metadata };
+                delete metadata.receiptBase64;
+                return { ...v, metadata };
+            }
+            return v;
+        });
+
+        const scoped = filterByOrg(transactions, c);
+
+        const isFuel = (t: any) => t?.category === "Fuel" || t?.category === "Fuel Reimbursement";
+        const gateHold = (meta: any) => meta?.stationGateHold === true || meta?.stationGateHold === "true";
+
+        const gateHeld = scoped.filter(
+            (t: any) => t && isFuel(t) && t.status === "Pending" && gateHold(t.metadata),
+        );
+
+        const dto = gateHeld.map((t: any) => mapStationGateEvidenceDto(t));
+
+        return c.json(dto);
+    } catch (e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
+
 app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
   try {
     const transaction = await c.req.json();
@@ -5912,6 +6011,18 @@ app.post("/make-server-37f42386/expenses/approve", requireAuth(), requirePermiss
     const tx = await kv.get(`transaction:${id}`);
     if (!tx) return c.json({ error: "Transaction not found" }, 404);
 
+    const stationGateHeld =
+      tx.metadata?.stationGateHold === true || tx.metadata?.stationGateHold === "true";
+    if (stationGateHeld) {
+      return c.json(
+        {
+          error:
+            "This expense is waiting for station verification. It cannot be approved until the fuel stop is verified in the station database.",
+        },
+        409
+      );
+    }
+
     /** Admin Review Queue: optional verified station (same workflow as manual log entry). */
     let adminResolvedStation: any = null;
     const rawAdminStation = adminMatchedStationId != null ? String(adminMatchedStationId).trim() : "";
@@ -6183,6 +6294,18 @@ app.post("/make-server-37f42386/expenses/reject", requireAuth(), requirePermissi
 
     const tx = await kv.get(`transaction:${id}`);
     if (!tx) return c.json({ error: "Transaction not found" }, 404);
+
+    const stationGateHeldReject =
+      tx.metadata?.stationGateHold === true || tx.metadata?.stationGateHold === "true";
+    if (stationGateHeldReject) {
+      return c.json(
+        {
+          error:
+            "This expense is waiting for station verification. Reject is disabled until the fuel stop is verified or released by the station workflow.",
+        },
+        409
+      );
+    }
 
     tx.status = 'Rejected';
     tx.metadata = { 
