@@ -26,3 +26,4 @@ export * from './vehicle';
 export * from './vehicleCatalog';
 export * from './vehicleCatalogPending';
 export * from './vendor';
+export * from './delivery';
