@@ -1,0 +1,150 @@
+import React, { useMemo, useState } from 'react';
+import { format } from 'date-fns';
+import { Calendar, ChevronDown } from 'lucide-react';
+import { cn } from './utils';
+import {
+  generatePeriodWeekOptions,
+  findPeriodWeekOptionByRange,
+  type PeriodWeekOption,
+  ENTIRE_PERIOD_OPTION_ID,
+} from '../../utils/periodWeekOptions';
+
+function fmtYmd(ymd: string, fmt: string) {
+  const [y, m, d] = ymd.split('-').map(Number);
+  if (!y || !m || !d) return ymd;
+  return format(new Date(y, m - 1, d), fmt);
+}
+
+export interface PeriodWeekDropdownProps {
+  /** yyyy-MM-dd — when set with selectedEnd, highlights matching preset row */
+  selectedStart?: string;
+  selectedEnd?: string;
+  onSelect: (period: PeriodWeekOption) => void;
+  weekCount?: number;
+  /** When set, these options replace rolling week presets (e.g. weeks for a chosen date range). */
+  optionsOverride?: PeriodWeekOption[];
+  /** Context label on the trigger when no specific week is highlighted (e.g. overall range). Must not be set when a week row is selected, or it hides the selected week label. */
+  headerLabel?: string;
+  /** Prepends “Entire selected period” to clear a week drill-down. */
+  prependEntireOption?: boolean;
+  className?: string;
+  buttonClassName?: string;
+  placeholder?: string;
+  /** When true, the control is non-interactive (e.g. primary date preset is not “All time”). */
+  disabled?: boolean;
+  /** Native tooltip when disabled */
+  title?: string;
+}
+
+export function PeriodWeekDropdown({
+  selectedStart,
+  selectedEnd,
+  onSelect,
+  weekCount = 12,
+  optionsOverride,
+  headerLabel,
+  prependEntireOption = false,
+  className,
+  buttonClassName,
+  placeholder = 'Select week period',
+  disabled = false,
+  title,
+}: PeriodWeekDropdownProps) {
+  const [open, setOpen] = useState(false);
+  const options = useMemo(() => {
+    const base = optionsOverride ?? generatePeriodWeekOptions(weekCount);
+    if (prependEntireOption) {
+      const entire: PeriodWeekOption = {
+        id: ENTIRE_PERIOD_OPTION_ID,
+        label: 'Entire selected period',
+        startDate: '',
+        endDate: '',
+      };
+      return [entire, ...base];
+    }
+    return base;
+  }, [optionsOverride, weekCount, prependEntireOption]);
+  const matched = useMemo(() => {
+    if (prependEntireOption && !selectedStart && !selectedEnd) {
+      return options[0];
+    }
+    return findPeriodWeekOptionByRange(options, selectedStart, selectedEnd);
+  }, [prependEntireOption, options, selectedStart, selectedEnd]);
+  const displayLabel =
+    headerLabel && headerLabel.trim().length > 0
+      ? headerLabel
+      : (matched?.label ??
+        (selectedStart && selectedEnd
+          ? `${fmtYmd(selectedStart, 'MMM d, yyyy')} – ${fmtYmd(selectedEnd, 'MMM d, yyyy')}`
+          : placeholder));
+
+  return (
+    <div className={cn('relative', className)}>
+      <button
+        type="button"
+        title={title}
+        disabled={disabled}
+        onClick={() => !disabled && setOpen((o) => !o)}
+        className={cn(
+          'flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors',
+          matched
+            ? 'border-indigo-300 bg-indigo-50 dark:bg-indigo-900/25 text-indigo-800 dark:text-indigo-200'
+            : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-500',
+          disabled && 'opacity-50 cursor-not-allowed pointer-events-none',
+          buttonClassName,
+        )}
+      >
+        <Calendar className="h-3.5 w-3.5 shrink-0 opacity-70" />
+        <span className="truncate max-w-[200px] sm:max-w-[260px]">{displayLabel}</span>
+        <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 opacity-60 transition-transform', open && 'rotate-180')} />
+      </button>
+
+      {open && !disabled && (
+        <>
+          <div className="fixed inset-0 z-40" aria-hidden onClick={() => setOpen(false)} />
+          <div
+            className="absolute left-0 top-full z-50 mt-1 w-72 max-h-72 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800"
+            role="listbox"
+          >
+            <div className="border-b border-slate-100 px-3 py-2 dark:border-slate-700">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Week periods
+              </p>
+            </div>
+            <div className="py-1">
+              {options.map((period) => {
+                const isSel = matched?.id === period.id;
+                return (
+                  <button
+                    key={period.id}
+                    type="button"
+                    role="option"
+                    aria-selected={isSel}
+                    onClick={() => {
+                      onSelect(period);
+                      setOpen(false);
+                    }}
+                    className={cn(
+                      'flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs transition-colors',
+                      isSel
+                        ? 'bg-indigo-50 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-200'
+                        : 'text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50',
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'h-2 w-2 shrink-0 rounded-full',
+                        isSel ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600',
+                      )}
+                    />
+                    <span className="font-medium">{period.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
