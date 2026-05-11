@@ -78,6 +78,17 @@ export default function App() {
     }
   };
 
+  const cartItemCount = (() => {
+    try {
+      const saved = localStorage.getItem('roam-dash-cart');
+      if (saved) {
+        const { items } = JSON.parse(saved);
+        return items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 0;
+      }
+    } catch {}
+    return 0;
+  })();
+
   return (
     <CartProvider>
       <div className="min-h-screen bg-gray-50">
@@ -85,14 +96,17 @@ export default function App() {
           <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
             <button
               onClick={() => navigate('home')}
-              className="flex items-center gap-2"
+              className="flex items-center gap-2 group"
             >
-              <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg">R</span>
+              <div className="w-10 h-10 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-xl flex items-center justify-center shadow-md group-hover:shadow-lg transition-shadow">
+                <span className="text-white font-bold text-xl">R</span>
               </div>
-              <span className="text-xl font-bold text-gray-900">Roam Dash</span>
+              <div className="hidden sm:block">
+                <span className="text-xl font-bold text-gray-900">Roam</span>
+                <span className="text-xl font-bold text-emerald-500">Dash</span>
+              </div>
             </button>
-            <nav className="flex items-center gap-4">
+            <nav className="flex items-center gap-2 sm:gap-4">
               <button
                 onClick={() => navigate('cart')}
                 className="p-2 hover:bg-gray-100 rounded-full relative"
@@ -100,18 +114,23 @@ export default function App() {
                 <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
+                {cartItemCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-emerald-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+                    {cartItemCount > 9 ? '9+' : cartItemCount}
+                  </span>
+                )}
               </button>
               {session ? (
                 <button
                   onClick={() => navigate('orders')}
-                  className="text-sm font-medium text-gray-700 hover:text-emerald-600"
+                  className="text-sm font-medium text-gray-700 hover:text-emerald-600 px-3 py-2 rounded-lg hover:bg-gray-100"
                 >
                   My Orders
                 </button>
               ) : (
                 <button
                   onClick={() => navigate('login')}
-                  className="px-4 py-2 bg-emerald-500 text-white rounded-lg text-sm font-medium hover:bg-emerald-600"
+                  className="px-4 py-2 bg-emerald-500 text-white rounded-lg text-sm font-semibold hover:bg-emerald-600 shadow-sm"
                 >
                   Sign In
                 </button>
