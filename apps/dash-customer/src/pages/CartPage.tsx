@@ -1,14 +1,35 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { API_ENDPOINTS } from '@roam/api-client';
 import { 
   ArrowLeft, Minus, Plus, Trash2, CreditCard, Banknote, 
-  DollarSign, ShoppingBag, MapPin, MessageSquare 
+  DollarSign, ShoppingBag, MapPin, MessageSquare, Tag, X, Check, ChevronDown
 } from 'lucide-react';
 import { useCart } from '../hooks/useCart';
 import { toast } from 'sonner';
 
 type PaymentMethod = 'cash' | 'wipay' | 'paypal';
+
+interface SavedAddress {
+  id: string;
+  label: string;
+  address: string;
+}
+
+interface PromoCode {
+  code: string;
+  type: 'percentage' | 'fixed';
+  value: number;
+  minOrder: number;
+}
+
+const PROMO_CODES: Record<string, PromoCode> = {
+  'WELCOME10': { code: 'WELCOME10', type: 'percentage', value: 10, minOrder: 500 },
+  'FIRST50': { code: 'FIRST50', type: 'fixed', value: 50, minOrder: 300 },
+  'FREEDEL': { code: 'FREEDEL', type: 'fixed', value: 200, minOrder: 1000 },
+};
+
+const SAVED_ADDRESSES_KEY = 'roam-dash-addresses';
 
 interface CartPageProps {
   onNavigate: (page: string, data?: any) => void;
@@ -22,11 +43,89 @@ export default function CartPage({ onNavigate, session }: CartPageProps) {
   const [tip, setTip] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [promoCode, setPromoCode] = useState('');
+  const [appliedPromo, setAppliedPromo] = useState<PromoCode | null>(null);
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+  const [showAddressDropdown, setShowAddressDropdown] = useState(false);
+  const [saveCurrentAddress, setSaveCurrentAddress] = useState(false);
+  const [addressLabel, setAddressLabel] = useState('');
+
+  useEffect(() => {
+    const saved = localStorage.getItem(SAVED_ADDRESSES_KEY);
+    if (saved) {
+      try {
+        setSavedAddresses(JSON.parse(saved));
+      } catch (e) {
+        console.error('Failed to parse saved addresses', e);
+      }
+    }
+  }, []);
+
+  const saveAddress = () => {
+    if (!deliveryAddress.trim() || !addressLabel.trim()) return;
+    
+    const newAddress: SavedAddress = {
+      id: Date.now().toString(),
+      label: addressLabel,
+      address: deliveryAddress,
+    };
+    
+    const updated = [...savedAddresses, newAddress];
+    setSavedAddresses(updated);
+    localStorage.setItem(SAVED_ADDRESSES_KEY, JSON.stringify(updated));
+    setSaveCurrentAddress(false);
+    setAddressLabel('');
+    toast.success('Address saved');
+  };
+
+  const removeAddress = (id: string) => {
+    const updated = savedAddresses.filter(a => a.id !== id);
+    setSavedAddresses(updated);
+    localStorage.setItem(SAVED_ADDRESSES_KEY, JSON.stringify(updated));
+  };
+
+  const selectAddress = (address: SavedAddress) => {
+    setDeliveryAddress(address.address);
+    setShowAddressDropdown(false);
+  };
+
+  const applyPromoCode = () => {
+    const code = promoCode.toUpperCase().trim();
+    const promo = PROMO_CODES[code];
+    
+    if (!promo) {
+      toast.error('Invalid promo code');
+      return;
+    }
+    
+    if (subtotal < promo.minOrder) {
+      toast.error(`Minimum order of $${promo.minOrder} required`);
+      return;
+    }
+    
+    setAppliedPromo(promo);
+    toast.success(`Promo code applied: ${code}`);
+  };
+
+  const removePromoCode = () => {
+    setAppliedPromo(null);
+    setPromoCode('');
+  };
+
+  const calculateDiscount = () => {
+    if (!appliedPromo) return 0;
+    if (appliedPromo.type === 'percentage') {
+      return subtotal * (appliedPromo.value / 100);
+    }
+    return appliedPromo.value;
+  };
 
   const deliveryFee = 200;
-  const platformFee = subtotal * 0.05;
-  const tax = subtotal * 0.165;
-  const total = subtotal + deliveryFee + platformFee + tax + tip;
+  const discount = calculateDiscount();
+  const discountedSubtotal = subtotal - discount;
+  const platformFee = discountedSubtotal * 0.05;
+  const tax = discountedSubtotal * 0.165;
+  const total = discountedSubtotal + deliveryFee + platformFee + tax + tip;
 
   const handlePlaceOrder = async () => {
     if (!session) {
@@ -198,6 +297,43 @@ export default function CartPage({ onNavigate, session }: CartPageProps) {
           <MapPin className="w-5 h-5 text-gray-400" />
           Delivery Details
         </h2>
+        
+        {savedAddresses.length > 0 && (
+          <div className="mb-3">
+            <button
+              onClick={() => setShowAddressDropdown(!showAddressDropdown)}
+              className="w-full px-4 py-3 border border-gray-200 rounded-lg flex items-center justify-between hover:bg-gray-50"
+            >
+              <span className="text-gray-600">Select saved address</span>
+              <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${showAddressDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showAddressDropdown && (
+              <div className="mt-1 border border-gray-200 rounded-lg divide-y bg-white shadow-lg">
+                {savedAddresses.map(addr => (
+                  <div
+                    key={addr.id}
+                    className="flex items-center justify-between p-3 hover:bg-gray-50"
+                  >
+                    <button
+                      onClick={() => selectAddress(addr)}
+                      className="flex-1 text-left"
+                    >
+                      <p className="font-medium text-gray-900">{addr.label}</p>
+                      <p className="text-sm text-gray-500 truncate">{addr.address}</p>
+                    </button>
+                    <button
+                      onClick={() => removeAddress(addr.id)}
+                      className="p-1 text-gray-400 hover:text-red-500"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        
         <input
           type="text"
           placeholder="Enter your delivery address"
@@ -205,6 +341,46 @@ export default function CartPage({ onNavigate, session }: CartPageProps) {
           onChange={(e) => setDeliveryAddress(e.target.value)}
           className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 mb-3"
         />
+        
+        {deliveryAddress && !savedAddresses.find(a => a.address === deliveryAddress) && (
+          <div className="mb-3">
+            {!saveCurrentAddress ? (
+              <button
+                onClick={() => setSaveCurrentAddress(true)}
+                className="text-sm text-emerald-600 hover:text-emerald-700"
+              >
+                + Save this address
+              </button>
+            ) : (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Label (e.g., Home, Work)"
+                  value={addressLabel}
+                  onChange={(e) => setAddressLabel(e.target.value)}
+                  className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+                <button
+                  onClick={saveAddress}
+                  disabled={!addressLabel.trim()}
+                  className="px-3 py-2 bg-emerald-500 text-white rounded-lg text-sm disabled:opacity-50"
+                >
+                  <Check className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => {
+                    setSaveCurrentAddress(false);
+                    setAddressLabel('');
+                  }}
+                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        
         <div className="relative">
           <MessageSquare className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
           <textarea
@@ -215,6 +391,49 @@ export default function CartPage({ onNavigate, session }: CartPageProps) {
             className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
           />
         </div>
+      </div>
+
+      <div className="mt-6 bg-white rounded-xl shadow-sm p-4">
+        <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <Tag className="w-5 h-5 text-gray-400" />
+          Promo Code
+        </h2>
+        {appliedPromo ? (
+          <div className="flex items-center justify-between p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+            <div>
+              <p className="font-medium text-emerald-700">{appliedPromo.code}</p>
+              <p className="text-sm text-emerald-600">
+                {appliedPromo.type === 'percentage' 
+                  ? `${appliedPromo.value}% off` 
+                  : `$${appliedPromo.value} off`}
+              </p>
+            </div>
+            <button
+              onClick={removePromoCode}
+              className="p-2 text-emerald-600 hover:text-emerald-700"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Enter promo code"
+              value={promoCode}
+              onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+              className="flex-1 px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+            <button
+              onClick={applyPromoCode}
+              disabled={!promoCode.trim()}
+              className="px-4 py-3 bg-emerald-500 text-white rounded-lg font-medium hover:bg-emerald-600 disabled:opacity-50"
+            >
+              Apply
+            </button>
+          </div>
+        )}
+        <p className="text-xs text-gray-500 mt-2">Try: WELCOME10, FIRST50, FREEDEL</p>
       </div>
 
       <div className="mt-6 bg-white rounded-xl shadow-sm p-4">
@@ -303,6 +522,12 @@ export default function CartPage({ onNavigate, session }: CartPageProps) {
             <span className="text-gray-600">Subtotal ({items.reduce((s, i) => s + i.quantity, 0)} items)</span>
             <span className="font-medium">${subtotal.toFixed(2)}</span>
           </div>
+          {appliedPromo && discount > 0 && (
+            <div className="flex justify-between text-emerald-600">
+              <span>Discount ({appliedPromo.code})</span>
+              <span className="font-medium">-${discount.toFixed(2)}</span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span className="text-gray-600">Delivery fee</span>
             <span className="font-medium">${deliveryFee.toFixed(2)}</span>
