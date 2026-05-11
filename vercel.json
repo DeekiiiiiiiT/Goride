@@ -1,4 +1,4 @@
 {
-  "outputDirectory": "build",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "npx pnpm@10 install"
 }
