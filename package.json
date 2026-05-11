@@ -4,12 +4,17 @@
   "packageManager": "pnpm@11.1.0",
   "scripts": {
     "dev": "pnpm --filter @roam/fleet dev",
+    "dev:customer": "pnpm --filter @roam/dash-customer dev",
+    "dev:merchant": "pnpm --filter @roam/dash-merchant dev",
     "dev:all": "pnpm --parallel -r dev",
     "build": "pnpm -r build",
     "build:fleet": "pnpm --filter @roam/fleet build",
+    "build:customer": "pnpm --filter @roam/dash-customer build",
+    "build:merchant": "pnpm --filter @roam/dash-merchant build",
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
-    "deploy:edge": "npx supabase functions deploy make-server-37f42386 --use-api --project-ref csfllzzastacofsvcdsc"
+    "deploy:edge": "npx supabase functions deploy make-server-37f42386 --use-api --project-ref csfllzzastacofsvcdsc",
+    "deploy:delivery": "npx supabase functions deploy delivery --use-api --project-ref csfllzzastacofsvcdsc"
   },
   "devDependencies": {
     "typescript": "^5.4.0"
