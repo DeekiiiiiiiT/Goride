@@ -9,6 +9,6 @@
  * sometimes omits modules when only pulled in transitively from `index.tsx` (remote bundle
  * then fails with "Module not found").
  */
-import "../../../src/supabase/functions/server/toll_controller.tsx";
-import "../../../src/supabase/functions/server/maintenance_schedule_engine.ts";
-import "../../../src/supabase/functions/server/index.tsx";
+import "../../../apps/fleet/src/supabase/functions/server/toll_controller.tsx";
+import "../../../apps/fleet/src/supabase/functions/server/maintenance_schedule_engine.ts";
+import "../../../apps/fleet/src/supabase/functions/server/index.tsx";
