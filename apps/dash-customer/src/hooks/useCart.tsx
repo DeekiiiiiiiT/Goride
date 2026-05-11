@@ -1,12 +1,23 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
+interface ModifierSelection {
+  name: string;
+  priceAdjustment: number;
+}
+
+interface ItemOption {
+  name: string;
+  selections: ModifierSelection[];
+}
+
 export interface CartItem {
+  id: string;
   itemId: string;
   merchantId: string;
   name: string;
   price: number;
   quantity: number;
-  options?: { name: string; choice: string; price: number }[];
+  options?: ItemOption[];
   imageUrl?: string;
 }
 
@@ -14,9 +25,9 @@ interface CartContextType {
   items: CartItem[];
   merchantId: string | null;
   merchantName: string | null;
-  addItem: (item: CartItem, merchantName: string) => void;
-  removeItem: (itemId: string) => void;
-  updateQuantity: (itemId: string, quantity: number) => void;
+  addItem: (item: Omit<CartItem, 'id'>, merchantName: string) => void;
+  removeItem: (cartItemId: string) => void;
+  updateQuantity: (cartItemId: string, quantity: number) => void;
   clearCart: () => void;
   subtotal: number;
   itemCount: number;
@@ -25,6 +36,16 @@ interface CartContextType {
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 const CART_STORAGE_KEY = 'roam-dash-cart';
+
+const generateCartItemId = () => Math.random().toString(36).substring(2, 11);
+
+const getOptionsHash = (options?: ItemOption[]) => {
+  if (!options || options.length === 0) return '';
+  return JSON.stringify(options.map(o => ({
+    name: o.name,
+    selections: o.selections.map(s => s.name).sort(),
+  })));
+};
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
@@ -49,35 +70,39 @@ export function CartProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(CART_STORAGE_KEY, JSON.stringify({ items, merchantId, merchantName }));
   }, [items, merchantId, merchantName]);
 
-  const addItem = (item: CartItem, mName: string) => {
+  const addItem = (item: Omit<CartItem, 'id'>, mName: string) => {
     if (merchantId && merchantId !== item.merchantId) {
       if (!confirm(`You have items from ${merchantName} in your cart. Clear cart and add items from this restaurant?`)) {
         return;
       }
-      setItems([{ ...item, quantity: 1 }]);
+      setItems([{ ...item, id: generateCartItemId() }]);
       setMerchantId(item.merchantId);
       setMerchantName(mName);
       return;
     }
 
     setItems(prev => {
-      const existing = prev.find(i => i.itemId === item.itemId);
+      const newOptionsHash = getOptionsHash(item.options);
+      const existing = prev.find(i => 
+        i.itemId === item.itemId && getOptionsHash(i.options) === newOptionsHash
+      );
+      
       if (existing) {
         return prev.map(i =>
-          i.itemId === item.itemId
-            ? { ...i, quantity: i.quantity + 1 }
+          i.id === existing.id
+            ? { ...i, quantity: i.quantity + item.quantity }
             : i
         );
       }
-      return [...prev, { ...item, quantity: 1 }];
+      return [...prev, { ...item, id: generateCartItemId() }];
     });
     setMerchantId(item.merchantId);
     setMerchantName(mName);
   };
 
-  const removeItem = (itemId: string) => {
+  const removeItem = (cartItemId: string) => {
     setItems(prev => {
-      const newItems = prev.filter(i => i.itemId !== itemId);
+      const newItems = prev.filter(i => i.id !== cartItemId);
       if (newItems.length === 0) {
         setMerchantId(null);
         setMerchantName(null);
@@ -86,13 +111,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const updateQuantity = (itemId: string, quantity: number) => {
+  const updateQuantity = (cartItemId: string, quantity: number) => {
     if (quantity <= 0) {
-      removeItem(itemId);
+      removeItem(cartItemId);
       return;
     }
     setItems(prev =>
-      prev.map(i => (i.itemId === itemId ? { ...i, quantity } : i))
+      prev.map(i => (i.id === cartItemId ? { ...i, quantity } : i))
     );
   };
 
@@ -103,8 +128,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
 
   const subtotal = items.reduce((sum, item) => {
-    const optionsTotal = item.options?.reduce((s, o) => s + o.price, 0) || 0;
-    return sum + (item.price + optionsTotal) * item.quantity;
+    return sum + item.price * item.quantity;
   }, 0);
 
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
