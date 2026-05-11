@@ -123,6 +123,9 @@ app.post("/merchants", async (c) => {
       phone: body.phone,
       email: body.email,
       cuisine_type: body.cuisineType,
+      logo_url: body.logoUrl,
+      cover_image_url: body.coverImageUrl,
+      delivery_radius_km: body.deliveryRadiusKm || 10,
     })
     .select()
     .single();
@@ -175,6 +178,66 @@ app.get("/merchant/profile", async (c) => {
   }
   
   return c.json({ merchant });
+});
+
+// ============================================================================
+// Operating Hours
+// ============================================================================
+
+// Get merchant operating hours
+app.get("/merchants/:id/hours", async (c) => {
+  const supabase = getSupabase(null);
+  const { id } = c.req.param();
+  
+  const { data: hours, error } = await supabase
+    .from("merchant_hours")
+    .select("*")
+    .eq("merchant_id", id)
+    .order("day_of_week");
+  
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ hours: hours || [] });
+});
+
+// Set/update merchant operating hours (bulk upsert)
+app.post("/merchants/:id/hours", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+  
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+  
+  const { id } = c.req.param();
+  const body = await c.req.json();
+  const { hours } = body;
+  
+  if (!Array.isArray(hours)) {
+    return c.json({ error: "Hours must be an array" }, 400);
+  }
+  
+  // Delete existing hours for this merchant
+  await supabase
+    .from("merchant_hours")
+    .delete()
+    .eq("merchant_id", id);
+  
+  // Insert new hours
+  const hoursData = hours.map((h: any) => ({
+    merchant_id: id,
+    day_of_week: h.dayOfWeek,
+    open_time: h.openTime,
+    close_time: h.closeTime,
+    is_closed: h.isClosed || false,
+  }));
+  
+  const { data, error } = await supabase
+    .from("merchant_hours")
+    .insert(hoursData)
+    .select();
+  
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ hours: data }, 201);
 });
 
 // ============================================================================
