@@ -1,0 +1,157 @@
+GoRide?p=f&t=Y4A6DnMxN4qQYFkm-0:513 Running frontend commit 68a678d5ef4e7daa71b2bed3b14f62b8a3691d55
+vendor-core-0f06c244c7c593a2.min.js.br:54 Statsig is not ready to log exposures, will retry in 1 seconds
+(anonymous) @ vendor-core-0f06c244c7c593a2.min.js.br:54
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:1686
+l @ vendor-core-0f06c244c7c593a2.min.js.br:54
+setTimeout
+(anonymous) @ vendor-core-0f06c244c7c593a2.min.js.br:63
+logExposureForFeatureGateCheck @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:1686
+getFeatureGateFromInitialOptions @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:1686
+getFeatureGate @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:1686
+getFeatureGate @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:2090
+932235 @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:1652
+i @ runtime~figma_app__react_profile-e5221ad2623d662c.min.js.br:3
+759034 @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:483
+i @ runtime~figma_app__react_profile-e5221ad2623d662c.min.js.br:3
+781295 @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:1645
+i @ runtime~figma_app__react_profile-e5221ad2623d662c.min.js.br:3
+593464 @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:86
+i @ runtime~figma_app__react_profile-e5221ad2623d662c.min.js.br:3
+14444 @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:1839
+i @ runtime~figma_app__react_profile-e5221ad2623d662c.min.js.br:3
+523647 @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:1839
+i @ runtime~figma_app__react_profile-e5221ad2623d662c.min.js.br:3
+344653 @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:1725
+i @ runtime~figma_app__react_profile-e5221ad2623d662c.min.js.br:3
+912563 @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:1725
+i @ runtime~figma_app__react_profile-e5221ad2623d662c.min.js.br:3
+941181 @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:194
+i @ runtime~figma_app__react_profile-e5221ad2623d662c.min.js.br:3
+398773 @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:194
+i @ runtime~figma_app__react_profile-e5221ad2623d662c.min.js.br:3
+483051 @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:194
+i @ runtime~figma_app__react_profile-e5221ad2623d662c.min.js.br:3
+2437 @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:194
+i @ runtime~figma_app__react_profile-e5221ad2623d662c.min.js.br:3
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:2538
+(anonymous) @ runtime~figma_app__react_profile-e5221ad2623d662c.min.js.br:3
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:2538
+f @ runtime~figma_app__react_profile-e5221ad2623d662c.min.js.br:3
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:3
+vendor-core-0f06c244c7c593a2.min.js.br:54 Loaded 14 scripts (5800600b), 14 from cache (5800600b)
+figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:399 The powerPreference option is currently ignored when calling requestAdapter() on Windows. See https://crbug.com/369219127
+initialize @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:399
+_ @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:399
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+await in (anonymous)
+i @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:2211
+Ac @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+await in (anonymous)
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:2538
+(anonymous) @ vendor-core-0f06c244c7c593a2.min.js.br:46
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+dispatch @ vendor-core-0f06c244c7c593a2.min.js.br:46
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:2538
+(anonymous) @ vendor-core-0f06c244c7c593a2.min.js.br:46
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+dispatch @ vendor-core-0f06c244c7c593a2.min.js.br:46
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:2538
+(anonymous) @ vendor-core-0f06c244c7c593a2.min.js.br:46
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+dispatch @ vendor-core-0f06c244c7c593a2.min.js.br:46
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:197
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+(anonymous) @ vendor-core-0f06c244c7c593a2.min.js.br:46
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+dispatch @ vendor-core-0f06c244c7c593a2.min.js.br:46
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:995
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:197
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+(anonymous) @ vendor-core-0f06c244c7c593a2.min.js.br:46
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+d @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:1688
+X @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+time @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:441
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+await in (anonymous)
+nN @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:197
+OS @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:218
+ee @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:220
+2437 @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:220
+i @ runtime~figma_app__react_profile-e5221ad2623d662c.min.js.br:3
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:2538
+(anonymous) @ runtime~figma_app__react_profile-e5221ad2623d662c.min.js.br:3
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:2538
+f @ runtime~figma_app__react_profile-e5221ad2623d662c.min.js.br:3
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:3
+vendor-core-0f06c244c7c593a2.min.js.br:54 Autosave Changes not available or already claimed by another tab undefined
+chrome-extension://invalid/:1  GET chrome-extension://invalid/ net::ERR_FAILED
+Image
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:220
+ot @ vendor-core-0f06c244c7c593a2.min.js.br:11
+li @ vendor-core-0f06c244c7c593a2.min.js.br:11
+o2 @ vendor-core-0f06c244c7c593a2.min.js.br:11
+fl @ vendor-core-0f06c244c7c593a2.min.js.br:11
+(anonymous) @ vendor-core-0f06c244c7c593a2.min.js.br:11
+lt @ vendor-core-0f06c244c7c593a2.min.js.br:11
+oZ @ vendor-core-0f06c244c7c593a2.min.js.br:11
+(anonymous) @ vendor-core-0f06c244c7c593a2.min.js.br:54
+S @ vendor-core-0f06c244c7c593a2.min.js.br:54
+N @ vendor-core-0f06c244c7c593a2.min.js.br:54
+vendor-core-0f06c244c7c593a2.min.js.br:54 [import] git: 48589f4cb70c6245ed05d8f4e8e56d36d6b05fb3, stamp: 594A0F27E5DEFE4C
+vendor-core-0f06c244c7c593a2.min.js.br:54 [Fullscreen] Booting... (emscripten version 4.0.21)
+vendor-core-0f06c244c7c593a2.min.js.br:54 [GPU] graphicsAPI:"WebGPU", vendor:"Google Inc. (AMD)" renderer:"ANGLE (AMD, Radeon RX 580 Series (0x000067DF) Direct3D11 vs_5_0 ps_5_0, D3D11)" deviceArchitecture:"gcn-4" deviceDescription:"" webGPUDevice:"" webGPUVendor:"amd" bindings:"emdawnwebgpu"
+vendor-core-0f06c244c7c593a2.min.js.br:54 [Fullscreen] Ready in 1952.7ms
+vendor-core-0f06c244c7c593a2.min.js.br:54 [FullscreenApp] calling setEditorTheme and setting preference light
+vendor-core-0f06c244c7c593a2.min.js.br:54 [MultiplayerSession] connecting to wss://www.figma.com/api/multiplayer/iTvvmMZeHvtMVaQPh3M6e5?role=editor&tracking_session_id=j2FRZFMMjWyLoPZ6&version=151&recentReload=0&file-load-streaming-compression&user-id=1548222000785975801&client_release=68a678d5ef4e7daa71b2bed3b14f62b8a3691d55
+vendor-core-0f06c244c7c593a2.min.js.br:54 [FullscreenApp] calling setEditorTheme and setting preference light
+vendor-core-0f06c244c7c593a2.min.js.br:54 [MultiplayerSession] Joining file version 106 (initial load)
+vendor-core-0f06c244c7c593a2.min.js.br:54 Migration succeeded: context: fullscreen_migrate_SceneGraphManager, version: 106, duration: 0ms.
+vendor-core-0f06c244c7c593a2.min.js.br:54 [Fullscreen] loadtime=10.44s maxmem=680919564
+vendor-core-0f06c244c7c593a2.min.js.br:54 [devtools] Initialized LS
+vendor-core-0f06c244c7c593a2.min.js.br:54 [devtools] Initialized LS
+vendor-core-0f06c244c7c593a2.min.js.br:63  POST https://www.figma.com/api/make/fetch_ds_code_gen_status 400 (Bad Request)
+(anonymous) @ vendor-core-0f06c244c7c593a2.min.js.br:63
+h @ vendor-970726412e63103a.min.js.br:3
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:1725
+w @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:1725
+C @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:1725
+n @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:1725
+o @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:1579
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:1584
+(anonymous) @ figma_app__react_profile-d2c9c38e1a1a2e0e.min.js.br:1584
+ot @ vendor-core-0f06c244c7c593a2.min.js.br:11
+li @ vendor-core-0f06c244c7c593a2.min.js.br:11
+(anonymous) @ vendor-core-0f06c244c7c593a2.min.js.br:11
+lt @ vendor-core-0f06c244c7c593a2.min.js.br:11
+o2 @ vendor-core-0f06c244c7c593a2.min.js.br:11
+fl @ vendor-core-0f06c244c7c593a2.min.js.br:11
+li @ vendor-core-0f06c244c7c593a2.min.js.br:11
+(anonymous) @ vendor-core-0f06c244c7c593a2.min.js.br:11
+(anonymous) @ vendor-core-0f06c244c7c593a2.min.js.br:54
+S @ vendor-core-0f06c244c7c593a2.min.js.br:54
+N @ vendor-core-0f06c244c7c593a2.min.js.br:54
+code_components_preview_iframe-ab9bdbe29389ccb5.min.js.br:28 [DriverDetail] Server fetched 110 trips for driver 73e5b1dc-01b4-45ee-a34a-25a3256b9841 (searched 1 IDs)
+code_components_preview_iframe-ab9bdbe29389ccb5.min.js.br:28 [DriverDetail] Transactions loaded: 160 total | 6 payments | 0 tolls | 157 fuel | 0 floats
