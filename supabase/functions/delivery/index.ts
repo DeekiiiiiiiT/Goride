@@ -268,6 +268,53 @@ app.post("/merchants/:merchantId/categories", async (c) => {
   return c.json({ category: data }, 201);
 });
 
+// Update menu category
+app.put("/merchants/:merchantId/categories/:categoryId", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+  
+  const supabase = getSupabase(authHeader);
+  const { categoryId } = c.req.param();
+  const body = await c.req.json();
+  
+  const { data, error } = await supabase
+    .from("menu_categories")
+    .update({
+      name: body.name,
+      description: body.description,
+      sort_order: body.sortOrder,
+    })
+    .eq("id", categoryId)
+    .select()
+    .single();
+  
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ category: data });
+});
+
+// Delete menu category
+app.delete("/merchants/:merchantId/categories/:categoryId", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+  
+  const supabase = getSupabase(authHeader);
+  const { merchantId, categoryId } = c.req.param();
+  
+  // Move items in this category to uncategorized (null)
+  await supabase
+    .from("menu_items")
+    .update({ category_id: null })
+    .eq("category_id", categoryId);
+  
+  const { error } = await supabase
+    .from("menu_categories")
+    .delete()
+    .eq("id", categoryId);
+  
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ success: true });
+});
+
 // Add menu item
 app.post("/merchants/:merchantId/items", async (c) => {
   const authHeader = c.req.header("Authorization");
@@ -286,7 +333,10 @@ app.post("/merchants/:merchantId/items", async (c) => {
       description: body.description,
       price: body.price,
       image_url: body.imageUrl,
+      is_available: body.isAvailable !== false,
+      is_featured: body.isFeatured || false,
       prep_time_mins: body.prepTimeMins,
+      calories: body.calories,
       options: body.options || [],
     })
     .select()
