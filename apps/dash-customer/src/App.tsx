@@ -7,9 +7,10 @@ import CartPage from './pages/CartPage';
 import OrdersPage from './pages/OrdersPage';
 import OrderTrackingPage from './pages/OrderTrackingPage';
 import LoginPage from './pages/LoginPage';
+import PaymentCallbackPage from './pages/PaymentCallbackPage';
 import { CartProvider } from './hooks/useCart';
 
-type Page = 'home' | 'restaurant' | 'cart' | 'orders' | 'tracking' | 'login';
+type Page = 'home' | 'restaurant' | 'cart' | 'orders' | 'tracking' | 'login' | 'payment-callback-wipay' | 'payment-callback-paypal';
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -28,6 +29,15 @@ export default function App() {
     });
 
     return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const path = window.location.pathname;
+    if (path.includes('/payment/callback/wipay')) {
+      setCurrentPage('payment-callback-wipay');
+    } else if (path.includes('/payment/callback/paypal')) {
+      setCurrentPage('payment-callback-paypal');
+    }
   }, []);
 
   const navigate = (page: Page, data?: any) => {
@@ -59,6 +69,10 @@ export default function App() {
         return <OrderTrackingPage orderId={pageData?.orderId} onNavigate={navigate} />;
       case 'login':
         return <LoginPage onNavigate={navigate} />;
+      case 'payment-callback-wipay':
+        return <PaymentCallbackPage onNavigate={navigate} session={session} provider="wipay" />;
+      case 'payment-callback-paypal':
+        return <PaymentCallbackPage onNavigate={navigate} session={session} provider="paypal" />;
       default:
         return <HomePage onNavigate={navigate} />;
     }

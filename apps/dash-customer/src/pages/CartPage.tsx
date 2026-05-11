@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { API_ENDPOINTS } from '@roam/api-client';
-import { ArrowLeft, Minus, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Minus, Plus, Trash2, CreditCard, Banknote, DollarSign } from 'lucide-react';
 import { useCart } from '../hooks/useCart';
 import { toast } from 'sonner';
+
+type PaymentMethod = 'cash' | 'wipay' | 'paypal';
 
 interface CartPageProps {
   onNavigate: (page: string, data?: any) => void;
@@ -15,6 +17,7 @@ export default function CartPage({ onNavigate, session }: CartPageProps) {
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [deliveryInstructions, setDeliveryInstructions] = useState('');
   const [tip, setTip] = useState(0);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
 
   const deliveryFee = 200;
@@ -61,7 +64,7 @@ export default function CartPage({ onNavigate, session }: CartPageProps) {
           deliveryInstructions,
           deliveryFee,
           tip,
-          paymentMethod: 'cash',
+          paymentMethod,
         }),
       });
 
@@ -71,6 +74,31 @@ export default function CartPage({ onNavigate, session }: CartPageProps) {
       }
 
       const { order } = await res.json();
+
+      if (paymentMethod === 'wipay' || paymentMethod === 'paypal') {
+        const paymentRes = await fetch(`${API_ENDPOINTS.payments}/intents`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            orderId: order.id,
+            provider: paymentMethod,
+          }),
+        });
+
+        if (!paymentRes.ok) {
+          throw new Error('Failed to create payment');
+        }
+
+        const { clientSecret } = await paymentRes.json();
+        
+        clearCart();
+        window.location.href = clientSecret;
+        return;
+      }
+
       clearCart();
       toast.success('Order placed successfully!');
       onNavigate('tracking', { orderId: order.id });
@@ -191,6 +219,54 @@ export default function CartPage({ onNavigate, session }: CartPageProps) {
       </div>
 
       <div className="mt-6 bg-white rounded-xl shadow-sm p-4">
+        <h2 className="font-semibold text-gray-900 mb-4">Payment Method</h2>
+        <div className="space-y-2">
+          <button
+            onClick={() => setPaymentMethod('cash')}
+            className={`w-full p-4 rounded-lg border-2 flex items-center gap-3 transition-colors ${
+              paymentMethod === 'cash'
+                ? 'border-emerald-500 bg-emerald-50'
+                : 'border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            <Banknote className="w-6 h-6 text-green-600" />
+            <div className="text-left">
+              <p className="font-medium text-gray-900">Cash on Delivery</p>
+              <p className="text-sm text-gray-500">Pay when your order arrives</p>
+            </div>
+          </button>
+          <button
+            onClick={() => setPaymentMethod('wipay')}
+            className={`w-full p-4 rounded-lg border-2 flex items-center gap-3 transition-colors ${
+              paymentMethod === 'wipay'
+                ? 'border-emerald-500 bg-emerald-50'
+                : 'border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            <CreditCard className="w-6 h-6 text-blue-600" />
+            <div className="text-left">
+              <p className="font-medium text-gray-900">Card (WiPay)</p>
+              <p className="text-sm text-gray-500">Visa, Mastercard accepted</p>
+            </div>
+          </button>
+          <button
+            onClick={() => setPaymentMethod('paypal')}
+            className={`w-full p-4 rounded-lg border-2 flex items-center gap-3 transition-colors ${
+              paymentMethod === 'paypal'
+                ? 'border-emerald-500 bg-emerald-50'
+                : 'border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            <DollarSign className="w-6 h-6 text-blue-800" />
+            <div className="text-left">
+              <p className="font-medium text-gray-900">PayPal</p>
+              <p className="text-sm text-gray-500">Pay with PayPal account</p>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-6 bg-white rounded-xl shadow-sm p-4">
         <h2 className="font-semibold text-gray-900 mb-4">Order Summary</h2>
         <div className="space-y-2 text-sm">
           <div className="flex justify-between">
@@ -231,7 +307,9 @@ export default function CartPage({ onNavigate, session }: CartPageProps) {
       </button>
 
       <p className="text-center text-sm text-gray-500 mt-4">
-        Payment: Cash on Delivery
+        {paymentMethod === 'cash' && 'Payment: Cash on Delivery'}
+        {paymentMethod === 'wipay' && 'Payment: You will be redirected to WiPay'}
+        {paymentMethod === 'paypal' && 'Payment: You will be redirected to PayPal'}
       </p>
     </div>
   );
