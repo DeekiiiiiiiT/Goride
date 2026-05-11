@@ -151,6 +151,32 @@ app.put("/merchants/:id", async (c) => {
   return c.json({ merchant: data });
 });
 
+// Get current user's merchant profile
+app.get("/merchant/profile", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+  
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+  
+  const { data: merchant, error } = await supabase
+    .from("merchants")
+    .select("*")
+    .eq("owner_id", user.id)
+    .single();
+  
+  if (error && error.code !== "PGRST116") {
+    return c.json({ error: error.message }, 500);
+  }
+  
+  if (!merchant) {
+    return c.json({ error: "No merchant found" }, 404);
+  }
+  
+  return c.json({ merchant });
+});
+
 // ============================================================================
 // Menu Management
 // ============================================================================
