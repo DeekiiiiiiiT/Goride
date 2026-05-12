@@ -3,5 +3,8 @@
   "installCommand": "npm install -g pnpm@10 && pnpm install --no-frozen-lockfile",
   "buildCommand": "pnpm --filter @roam/fleet build",
   "outputDirectory": "apps/fleet/build",
-  "framework": null
+  "framework": null,
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/" }
+  ]
 }
