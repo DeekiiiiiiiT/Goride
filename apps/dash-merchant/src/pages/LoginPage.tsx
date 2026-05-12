@@ -36,7 +36,13 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
 
     try {
       if (isSignUp) {
-        const { error } = await supabase.auth.signUp({ email, password });
+        const { error } = await supabase.auth.signUp({ 
+          email, 
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/`,
+          },
+        });
         if (error) throw error;
         toast.success('Account created! Check your email to verify.');
       } else {

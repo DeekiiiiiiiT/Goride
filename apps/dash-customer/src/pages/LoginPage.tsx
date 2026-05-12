@@ -27,6 +27,7 @@ export default function LoginPage({ onNavigate }: LoginPageProps) {
           password,
           options: {
             data: { name, phone },
+            emailRedirectTo: `${window.location.origin}/`,
           },
         });
         if (error) throw error;
