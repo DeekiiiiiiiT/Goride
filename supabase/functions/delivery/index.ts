@@ -21,7 +21,7 @@ app.use("*", cors({
   allowHeaders: ["Content-Type", "Authorization"],
 }));
 
-// Helper to get Supabase client
+// Helper to get Supabase client (defaults to delivery schema for table queries)
 function getSupabase(authHeader: string | null) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -30,9 +30,12 @@ function getSupabase(authHeader: string | null) {
   if (authHeader) {
     return createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
+      db: { schema: "delivery" },
     });
   }
-  return createClient(supabaseUrl, supabaseServiceKey);
+  return createClient(supabaseUrl, supabaseServiceKey, {
+    db: { schema: "delivery" },
+  });
 }
 
 // ============================================================================
