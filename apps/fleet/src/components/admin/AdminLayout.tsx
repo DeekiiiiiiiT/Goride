@@ -35,14 +35,15 @@ import {
   ShieldAlert,
   Receipt,
   Activity,
+  Utensils,
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { resolveRole } from '../../utils/permissions';
 
 // Phase 11: Define which admin pages each platform role can access
 const PLATFORM_ROLE_PAGES: Record<string, string[]> = {
-  platform_owner:   ['dashboard', 'customers', 'platform-team', 'drivers', 'team-members', 'activity-log', 'fuel-stations', 'fuel-analytics', 'toll-stations', 'toll-info', 'motor-vehicles', 'pending-motor-vehicles', 'maintenance-templates', 'parts-sourcing', 'api-center', 'api-center-overview', 'api-center-usage', 'api-center-keys', 'api-center-budgets', 'api-center-logs', 'api-center-billing', 'settings', 'settings-general', 'settings-features', 'settings-registration', 'settings-security', 'settings-announcements', 'settings-danger', 'db-management', 'db-settings'],
-  platform_support: ['dashboard', 'customers', 'drivers', 'team-members', 'fuel-stations', 'fuel-analytics', 'toll-stations', 'toll-info', 'motor-vehicles', 'pending-motor-vehicles', 'maintenance-templates', 'parts-sourcing'],
+  platform_owner:   ['dashboard', 'customers', 'platform-team', 'drivers', 'team-members', 'activity-log', 'fuel-stations', 'fuel-analytics', 'toll-stations', 'toll-info', 'motor-vehicles', 'pending-motor-vehicles', 'maintenance-templates', 'parts-sourcing', 'roam-dash-merchants', 'api-center', 'api-center-overview', 'api-center-usage', 'api-center-keys', 'api-center-budgets', 'api-center-logs', 'api-center-billing', 'settings', 'settings-general', 'settings-features', 'settings-registration', 'settings-security', 'settings-announcements', 'settings-danger', 'db-management', 'db-settings'],
+  platform_support: ['dashboard', 'customers', 'drivers', 'team-members', 'fuel-stations', 'fuel-analytics', 'toll-stations', 'toll-info', 'motor-vehicles', 'pending-motor-vehicles', 'maintenance-templates', 'parts-sourcing', 'roam-dash-merchants'],
   platform_analyst: ['dashboard', 'api-center', 'api-center-overview', 'api-center-usage', 'api-center-logs'],
 };
 
@@ -85,6 +86,11 @@ const VEHICLE_DATABASE_CHILDREN = [
   { id: 'parts-sourcing', label: 'Parts sourcing', icon: ShoppingCart },
 ];
 
+// Collapsible section for Roam Dash (food delivery)
+const ROAM_DASH_CHILDREN = [
+  { id: 'roam-dash-merchants', label: 'Merchant Verification', icon: Inbox },
+];
+
 // Collapsible section for Platform Settings
 const SETTINGS_CHILDREN = [
   { id: 'settings-general', label: 'General', icon: Globe },
@@ -123,6 +129,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const visibleFuelChildren = FUEL_MANAGEMENT_CHILDREN.filter(c => canViewPage(c.id));
   const visibleTollChildren = TOLL_MANAGEMENT_CHILDREN.filter(c => canViewPage(c.id));
   const visibleVehicleDbChildren = VEHICLE_DATABASE_CHILDREN.filter(c => canViewPage(c.id));
+  const visibleRoamDashChildren = ROAM_DASH_CHILDREN.filter(c => canViewPage(c.id));
   const visibleSettingsChildren = SETTINGS_CHILDREN.filter(c => canViewPage(c.id));
   const visibleApiCenterChildren = API_CENTER_CHILDREN.filter(c => canViewPage(c.id));
   const canViewDbManagement = canViewPage('db-management');
@@ -135,6 +142,8 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const [tollOpen, setTollOpen] = useState(isTollChild);
   const isVehicleDbChild = visibleVehicleDbChildren.some(c => c.id === currentPage);
   const [vehicleDbOpen, setVehicleDbOpen] = useState(isVehicleDbChild);
+  const isRoamDashChild = visibleRoamDashChildren.some(c => c.id === currentPage);
+  const [roamDashOpen, setRoamDashOpen] = useState(isRoamDashChild);
   const isSettingsChild = visibleSettingsChildren.some(c => c.id === currentPage);
   const [settingsOpen, setSettingsOpen] = useState(isSettingsChild);
   const isApiCenterChild = visibleApiCenterChildren.some(c => c.id === currentPage);
@@ -154,6 +163,9 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
     }
     if (visibleVehicleDbChildren.some(c => c.id === currentPage)) {
       setVehicleDbOpen(true);
+    }
+    if (visibleRoamDashChildren.some(c => c.id === currentPage)) {
+      setRoamDashOpen(true);
     }
     if (visibleSettingsChildren.some(c => c.id === currentPage)) {
       setSettingsOpen(true);
@@ -435,6 +447,54 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
           </div>
           )}
 
+          {/* Roam Dash collapsible section */}
+          {visibleRoamDashChildren.length > 0 && (
+          <div>
+            <button
+              onClick={() => setRoamDashOpen(!roamDashOpen)}
+              className={`
+                w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+                ${isRoamDashChild
+                  ? 'bg-amber-500/15 text-amber-300'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                }
+              `}
+            >
+              <Utensils className="w-4.5 h-4.5 shrink-0" />
+              <span className="truncate">Roam Dash</span>
+              {roamDashOpen
+                ? <ChevronDown className="w-3.5 h-3.5 ml-auto text-slate-500" />
+                : <ChevronRight className="w-3.5 h-3.5 ml-auto text-slate-500" />
+              }
+            </button>
+            {roamDashOpen && (
+              <div className="ml-4 mt-1 space-y-0.5 border-l border-slate-800 pl-2">
+                {visibleRoamDashChildren.map(child => {
+                  const ChildIcon = child.icon;
+                  const active = currentPage === child.id;
+                  return (
+                    <button
+                      key={child.id}
+                      onClick={() => handleNav(child.id)}
+                      className={`
+                        w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                        ${active
+                          ? 'bg-amber-500/10 text-amber-300'
+                          : 'text-slate-500 hover:text-white hover:bg-slate-800'
+                        }
+                      `}
+                    >
+                      <ChildIcon className="w-4 h-4 shrink-0" />
+                      <span className="truncate">{child.label}</span>
+                      {active && <ChevronRight className="w-3 h-3 ml-auto text-amber-400/60" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          )}
+
           {/* API Command Center collapsible section */}
           {visibleApiCenterChildren.length > 0 && (
           <div>
@@ -599,6 +659,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
               || FUEL_MANAGEMENT_CHILDREN.find(c => c.id === currentPage)?.label
               || TOLL_MANAGEMENT_CHILDREN.find(c => c.id === currentPage)?.label
               || VEHICLE_DATABASE_CHILDREN.find(c => c.id === currentPage)?.label
+              || ROAM_DASH_CHILDREN.find(c => c.id === currentPage)?.label
               || (SETTINGS_CHILDREN.find(c => c.id === currentPage) ? `Platform Settings — ${SETTINGS_CHILDREN.find(c => c.id === currentPage)!.label}` : null)
               || (currentPage === 'db-management' ? 'Database Management' : null)
               || (currentPage === 'db-settings' ? 'Database Management — Settings' : null)

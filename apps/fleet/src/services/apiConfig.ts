@@ -8,4 +8,5 @@ export const API_ENDPOINTS = {
   fuel: `${BASE_URL}/make-server-37f42386`,
   ai: `${BASE_URL}/make-server-37f42386`,
   admin: `${BASE_URL}/make-server-37f42386`,
+  delivery: `${BASE_URL}/delivery`,
 };

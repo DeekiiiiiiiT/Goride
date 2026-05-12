@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '@roam/api-client';
 import { supabase } from '@roam/auth-client';
 import { Merchant } from '../hooks/useMerchant';
@@ -7,6 +7,7 @@ import {
   DollarSign, ShoppingBag, Clock, TrendingUp, AlertCircle, 
   Star, CheckCircle, XCircle, ArrowUp, ArrowDown
 } from 'lucide-react';
+import { VerificationStatusBanner } from '../components/VerificationStatusBanner';
 
 interface DashboardPageProps {
   merchant: Merchant;
@@ -30,6 +31,7 @@ interface Order {
 }
 
 export default function DashboardPage({ merchant, onNavigate }: DashboardPageProps) {
+  const queryClient = useQueryClient();
   const { data: ordersData } = useQuery({
     queryKey: ['merchant-orders-all'],
     queryFn: async () => {
@@ -137,17 +139,12 @@ export default function DashboardPage({ merchant, onNavigate }: DashboardPagePro
         <p className="text-gray-500">Welcome back, {merchant.name}</p>
       </div>
 
-      {!merchant.is_active && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
-          <div>
-            <p className="font-medium text-amber-800">Restaurant Pending Verification</p>
-            <p className="text-sm text-amber-700 mt-1">
-              Your restaurant is being reviewed. You'll be able to receive orders once verified.
-            </p>
-          </div>
-        </div>
-      )}
+      <VerificationStatusBanner
+        merchant={merchant}
+        onEdit={() => onNavigate('settings')}
+        onRefresh={() => queryClient.invalidateQueries({ queryKey: ['my-merchant'] })}
+        onResubmit={() => queryClient.invalidateQueries({ queryKey: ['my-merchant'] })}
+      />
 
       {!merchant.is_accepting_orders && merchant.is_active && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 flex items-start gap-3">

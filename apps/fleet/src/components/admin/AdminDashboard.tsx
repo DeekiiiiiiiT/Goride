@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Users, Fuel, MapPin, Settings, ArrowRight, Loader2, Activity, Car, UserCog, Shield } from 'lucide-react';
+import { Users, Fuel, MapPin, Settings, ArrowRight, Loader2, Activity, Car, UserCog, Shield, Utensils } from 'lucide-react';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { useAuth } from '../auth/AuthContext';
+import { getMerchantStats } from '../../services/dashMerchantVerificationService';
 
 interface DashboardCardProps {
   icon: React.ReactNode;
@@ -49,13 +50,31 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
     platformStaffCount: 0,
     loading: true,
   });
+  const [dashMerchantCounts, setDashMerchantCounts] = useState({
+    pending: 0,
+    in_review: 0,
+    docs_requested: 0,
+    approved: 0,
+    rejected: 0,
+  });
   const [platformName, setPlatformName] = useState('Roam Fleet');
   const [platformVersion, setPlatformVersion] = useState('1.0.0');
 
   useEffect(() => {
     loadStats();
     loadPlatformSettings();
-  }, []);
+    void loadMerchantStats();
+  }, [accessToken]);
+
+  const loadMerchantStats = async () => {
+    if (!accessToken) return;
+    try {
+      const res = await getMerchantStats(accessToken);
+      setDashMerchantCounts(res.counts);
+    } catch {
+      // Endpoint not deployed yet or no permission - leave zeros
+    }
+  };
 
   const loadStats = async () => {
     try {
@@ -173,6 +192,14 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
           onClick={() => onNavigate('toll-stations')}
         />
         <DashboardCard
+          icon={<Utensils className={`w-5 h-5 ${dashMerchantCounts.pending > 0 ? 'text-amber-300' : 'text-emerald-400'}`} />}
+          color={dashMerchantCounts.pending > 0 ? 'bg-amber-500/20' : 'bg-emerald-500/15'}
+          label="Pending Merchants"
+          value={dashMerchantCounts.pending}
+          subtitle={`${dashMerchantCounts.approved} approved · ${dashMerchantCounts.in_review} in review`}
+          onClick={() => onNavigate('roam-dash-merchants')}
+        />
+        <DashboardCard
           icon={<Activity className="w-5 h-5 text-slate-400" />}
           color="bg-slate-500/15"
           label="Platform Settings"
@@ -215,6 +242,11 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
             label="Motor vehicle catalog"
             description="Platform-wide make, model, and specification reference data"
             onClick={() => onNavigate('motor-vehicles')}
+          />
+          <QuickAction
+            label="Review Merchants"
+            description={`${dashMerchantCounts.pending} pending Roam Dash restaurant applications`}
+            onClick={() => onNavigate('roam-dash-merchants')}
           />
           <QuickAction
             label="Platform Settings"

@@ -6,6 +6,7 @@ import { Merchant } from '../hooks/useMerchant';
 import { toast } from 'sonner';
 import { Store, MapPin, Clock, DollarSign, Save, ImageIcon } from 'lucide-react';
 import ImageUpload from '../components/ImageUpload';
+import { VerificationStatusBanner } from '../components/VerificationStatusBanner';
 
 interface SettingsPageProps {
   merchant: Merchant;
@@ -170,6 +171,12 @@ export default function SettingsPage({ merchant }: SettingsPageProps) {
         <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
         <p className="text-gray-500">Manage your restaurant settings</p>
       </div>
+
+      <VerificationStatusBanner
+        merchant={merchant}
+        onRefresh={() => queryClient.invalidateQueries({ queryKey: ['my-merchant'] })}
+        onResubmit={() => queryClient.invalidateQueries({ queryKey: ['my-merchant'] })}
+      />
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="bg-white rounded-xl shadow-sm p-6">

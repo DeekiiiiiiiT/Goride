@@ -9,6 +9,7 @@ import LoginPage from './pages/LoginPage';
 import OnboardingPage from './pages/OnboardingPage';
 import { useMerchant } from './hooks/useMerchant';
 import { LayoutDashboard, ClipboardList, UtensilsCrossed, Settings, LogOut } from 'lucide-react';
+import { NotificationFeed } from './components/NotificationFeed';
 
 type Page = 'dashboard' | 'orders' | 'menu' | 'settings' | 'login' | 'onboarding';
 
@@ -138,6 +139,11 @@ export default function App() {
             </div>
             <span className="font-bold text-gray-900">{merchant.name}</span>
           </div>
+          <NotificationFeed merchantId={merchant.id} />
+        </header>
+
+        <header className="hidden md:flex bg-white border-b px-8 py-3 items-center justify-end gap-3">
+          <NotificationFeed merchantId={merchant.id} />
         </header>
 
         <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around py-2">

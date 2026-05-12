@@ -16,6 +16,7 @@ import {
   RefreshCw,
   ClipboardList,
   UserCog,
+  Store,
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { API_ENDPOINTS } from '../../services/apiConfig';
@@ -50,6 +51,12 @@ const ACTION_CONFIG: Record<string, { icon: React.ComponentType<any>; label: str
   unlink_driver:        { icon: Unlink,          label: 'Unlinked driver',          color: 'text-slate-400 bg-slate-500/15',     category: 'link' },
   change_team_role:     { icon: UserCog,         label: 'Changed team role for',    color: 'text-purple-400 bg-purple-500/15',   category: 'role' },
   remove_team_member:   { icon: UserMinus,       label: 'Removed team member',      color: 'text-red-400 bg-red-500/15',         category: 'remove' },
+  'roam_dash.merchant_status_changed': {
+    icon: Store,
+    label: 'Updated Roam Dash merchant',
+    color: 'text-emerald-400 bg-emerald-500/15',
+    category: 'roam_dash',
+  },
 };
 
 const CATEGORY_FILTERS = [
@@ -60,6 +67,7 @@ const CATEGORY_FILTERS = [
   { value: 'invite', label: 'Invites & Create' },
   { value: 'remove', label: 'Remove' },
   { value: 'link', label: 'Link / Unlink' },
+  { value: 'roam_dash', label: 'Roam Dash' },
 ];
 
 const DATE_FILTERS = [

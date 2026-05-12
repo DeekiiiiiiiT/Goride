@@ -2,6 +2,13 @@ import { useQuery } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '@roam/api-client';
 import { Session } from '@supabase/supabase-js';
 
+export type VerificationStatus =
+  | 'pending'
+  | 'in_review'
+  | 'docs_requested'
+  | 'approved'
+  | 'rejected';
+
 export interface Merchant {
   id: string;
   name: string;
@@ -23,6 +30,11 @@ export interface Merchant {
   commission_rate: number;
   rating: number;
   total_ratings: number;
+  verification_status: VerificationStatus;
+  verification_notes: string | null;
+  rejection_reason: string | null;
+  submitted_at: string | null;
+  verified_at: string | null;
 }
 
 export function useMerchant(session: Session | null) {

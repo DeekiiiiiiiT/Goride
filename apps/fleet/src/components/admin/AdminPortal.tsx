@@ -18,6 +18,7 @@ import { LedgerColumnSettings } from '../database/LedgerColumnSettings';
 import { BusinessType } from '../../types/data';
 import { VehicleCatalogManager } from './vehicle-catalog/VehicleCatalogManager';
 import { PendingVehicleCatalogManager } from './vehicle-catalog/PendingVehicleCatalogManager';
+import { MerchantVerificationManager } from './roam-dash/MerchantVerificationManager';
 import { MaintenanceTemplatesManager } from './maintenance-templates/MaintenanceTemplatesManager';
 import { PartsSourcingManager } from './parts-sourcing/PartsSourcingManager';
 import { StationDatabaseView } from '../fuel/stations/StationDatabaseView';
@@ -155,6 +156,11 @@ export function AdminPortal() {
       {currentPage === 'parts-sourcing' && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px]">
           <PartsSourcingManager />
+        </div>
+      )}
+      {currentPage === 'roam-dash-merchants' && (
+        <div className="bg-slate-900/30 rounded-xl border border-slate-800 overflow-hidden min-h-[600px]">
+          <MerchantVerificationManager />
         </div>
       )}
       {currentPage === 'settings' && (
