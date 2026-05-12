@@ -7,7 +7,7 @@ import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { cors } from "https://deno.land/x/hono@v4.3.11/middleware.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const app = new Hono();
+const app = new Hono().basePath("/payments");
 
 app.use("*", cors());
 

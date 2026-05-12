@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { Upload, X, Loader2 } from 'lucide-react';
 import { supabase } from '@roam/auth-client';
+import { toast } from 'sonner';
 
 interface ImageUploadProps {
   value?: string;
@@ -33,12 +34,12 @@ export default function ImageUpload({
 
   const handleFile = async (file: File) => {
     if (!file.type.startsWith('image/')) {
-      alert('Please select an image file');
+      toast.error('Please select an image file');
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      alert('Image must be less than 5MB');
+      toast.error('Image must be less than 5MB');
       return;
     }
 
@@ -55,16 +56,24 @@ export default function ImageUpload({
           upsert: false,
         });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        if (uploadError.message?.toLowerCase().includes('bucket not found')) {
+          throw new Error(
+            `Storage bucket "${bucket}" doesn't exist. Please contact support to set up image uploads.`
+          );
+        }
+        throw uploadError;
+      }
 
       const { data: { publicUrl } } = supabase.storage
         .from(bucket)
         .getPublicUrl(fileName);
 
       onChange(publicUrl);
+      toast.success('Image uploaded');
     } catch (error: any) {
       console.error('Upload error:', error);
-      alert(error.message || 'Failed to upload image');
+      toast.error(error.message || 'Failed to upload image');
     } finally {
       setIsUploading(false);
     }
