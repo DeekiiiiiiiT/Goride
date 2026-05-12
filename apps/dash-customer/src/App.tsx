@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
+import { LogOut } from 'lucide-react';
 import HomePage from './pages/HomePage';
 import RestaurantPage from './pages/RestaurantPage';
 import CartPage from './pages/CartPage';
@@ -121,12 +122,26 @@ export default function App() {
                 )}
               </button>
               {session ? (
-                <button
-                  onClick={() => navigate('orders')}
-                  className="text-sm font-medium text-gray-700 hover:text-emerald-600 px-3 py-2 rounded-lg hover:bg-gray-100"
-                >
-                  My Orders
-                </button>
+                <>
+                  <button
+                    onClick={() => navigate('orders')}
+                    className="text-sm font-medium text-gray-700 hover:text-emerald-600 px-3 py-2 rounded-lg hover:bg-gray-100"
+                  >
+                    My Orders
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await supabase.auth.signOut();
+                      navigate('home');
+                    }}
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 border border-gray-200"
+                    title="Sign out"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span className="hidden sm:inline">Sign out</span>
+                  </button>
+                </>
               ) : (
                 <button
                   onClick={() => navigate('login')}

@@ -1,2 +1,2 @@
 export { API_ENDPOINTS } from './config';
-export { projectId, publicAnonKey } from './supabaseInfo';
+export { projectId, publicAnonKey, supabaseAnonFunctionHeaders } from './supabaseInfo';

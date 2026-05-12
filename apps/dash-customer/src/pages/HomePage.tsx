@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { API_ENDPOINTS } from '@roam/api-client';
+import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
 import { 
   Search, MapPin, Clock, Star, ChevronRight, 
   X, Sparkles, Zap, Tag, TrendingUp
@@ -84,7 +84,9 @@ export default function HomePage({ onNavigate }: HomePageProps) {
   const { data, isLoading, error } = useQuery({
     queryKey: ['merchants'],
     queryFn: async () => {
-      const res = await fetch(`${API_ENDPOINTS.delivery}/merchants`);
+      const res = await fetch(`${API_ENDPOINTS.delivery}/merchants`, {
+        headers: supabaseAnonFunctionHeaders(),
+      });
       if (!res.ok) throw new Error('Failed to fetch restaurants');
       return res.json();
     },
