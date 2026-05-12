@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "npm install -g pnpm@10 && pnpm install --no-frozen-lockfile",
+  "installCommand": "npm install -g pnpm@9.15.4 && pnpm install --no-frozen-lockfile",
   "buildCommand": "pnpm --filter @roam/fleet build",
   "outputDirectory": "apps/fleet/build",
   "framework": null,
