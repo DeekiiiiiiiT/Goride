@@ -15,10 +15,19 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const app = new Hono().basePath("/delivery");
 
 // CORS for all routes
+// Fleet admin + dash apps send `apikey` (Supabase anon key) alongside Authorization.
+// If it is not listed here, browsers block the request with a CORS error after preflight.
 app.use("*", cors({
   origin: "*",
-  allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowHeaders: ["Content-Type", "Authorization"],
+  allowMethods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowHeaders: [
+    "Content-Type",
+    "Authorization",
+    "apikey",
+    "x-client-info",
+    "accept-profile",
+    "prefer",
+  ],
 }));
 
 // Helper to get Supabase client (defaults to delivery schema for table queries)
