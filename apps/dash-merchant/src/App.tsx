@@ -131,18 +131,15 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="flex-1">
-        <header className="md:hidden bg-white border-b px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-amber-500 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold">R</span>
+      <main className="flex-1 flex flex-col min-h-0">
+        {/* Single top bar: one NotificationFeed (one Realtime subscription) for all breakpoints */}
+        <header className="sticky top-0 z-30 flex shrink-0 items-center justify-between border-b bg-white px-4 py-3 md:justify-end md:px-8">
+          <div className="flex items-center gap-3 md:hidden">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500">
+              <span className="text-sm font-bold text-white">R</span>
             </div>
-            <span className="font-bold text-gray-900">{merchant.name}</span>
+            <span className="truncate font-bold text-gray-900">{merchant.name}</span>
           </div>
-          <NotificationFeed merchantId={merchant.id} />
-        </header>
-
-        <header className="hidden md:flex bg-white border-b px-8 py-3 items-center justify-end gap-3">
           <NotificationFeed merchantId={merchant.id} />
         </header>
 
