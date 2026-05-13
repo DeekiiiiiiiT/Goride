@@ -2,7 +2,7 @@ import * as React from "react";
 import { MapPin, Loader2, Navigation, Search, X } from "lucide-react";
 import { cn } from "./utils";
 import { getCurrentPosition, reverseGeocode, AddressResult, searchAddress, debounce, getPlaceDetails } from "../../utils/locationService";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 
 export interface LocationInputProps
   extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange'> {
