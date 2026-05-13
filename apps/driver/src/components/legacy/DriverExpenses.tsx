@@ -190,18 +190,32 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
       const driverName = driverRecord?.driverName || driverRecord?.name || '';
       const vehicleId = driverRecord?.assignedVehicleId || driverRecord?.vehicle || '';
       
-      console.log('[DriverExpenses] Fetching for driver:', { driverIds, driverName, vehicleId });
+      console.log('[DriverExpenses] Driver info:', { 
+        driverIds, 
+        driverName, 
+        vehicleId,
+        driverRecord: JSON.stringify(driverRecord, null, 2).substring(0, 500)
+      });
 
-      // Fetch both transactions and fuel entries in parallel
-      const [allTx, allFuel] = await Promise.all([
+      // Fetch transactions and fuel entries
+      // If we have a vehicle ID, fetch fuel entries for that vehicle specifically
+      const [allTx, allFuel, vehicleFuel] = await Promise.all([
         api.getTransactions(driverIds).catch(() => []),
-        api.getAllFuelEntries().catch(() => [])
+        api.getAllFuelEntries().catch(() => []),
+        vehicleId ? api.getFuelEntriesByVehicle(vehicleId).catch(() => []) : Promise.resolve([])
       ]);
       
-      console.log('[DriverExpenses] Fetched fuel entries:', allFuel?.length || 0);
+      console.log('[DriverExpenses] Fetched all fuel entries:', allFuel?.length || 0);
+      console.log('[DriverExpenses] Fetched vehicle fuel entries:', vehicleFuel?.length || 0);
+      
       if (allFuel?.length > 0) {
-        console.log('[DriverExpenses] Sample fuel entry fields:', Object.keys(allFuel[0]));
-        console.log('[DriverExpenses] Sample fuel entry:', JSON.stringify(allFuel[0], null, 2).substring(0, 500));
+        console.log('[DriverExpenses] Sample fuel entry:', {
+          id: allFuel[0].id,
+          driverId: allFuel[0].driverId,
+          vehicleId: allFuel[0].vehicleId,
+          date: allFuel[0].date,
+          station: allFuel[0].station || allFuel[0].location,
+        });
       }
       
       // Filter transactions for expenses
@@ -210,43 +224,44 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
       );
       setTransactions(myTx);
       
-      // Filter fuel entries for this driver and current period
-      const myFuel = (allFuel || []).filter((f: any) => {
-        // Match by driver ID, name, or vehicle
-        const driverIdMatch = 
-          driverIds.includes(f.driverId) || 
-          driverIds.includes(f.driver_id) ||
-          driverIds.includes(f.driver);
-          
-        const driverNameMatch = driverName && (
-          f.driverName === driverName || 
-          f.driver === driverName ||
-          f.driverName?.toLowerCase().includes(driverName.toLowerCase()) ||
-          driverName.toLowerCase().includes(f.driverName?.toLowerCase() || '')
-        );
-        
-        const vehicleMatch = vehicleId && (
-          f.vehicleId === vehicleId ||
-          f.vehicle_id === vehicleId ||
-          f.vehicle === vehicleId
-        );
-        
-        const isMyFuel = driverIdMatch || driverNameMatch || vehicleMatch;
-        
-        if (!isMyFuel) return false;
-        
-        // Filter by current period
+      // Combine fuel entries from both sources (deduplicate by ID)
+      const fuelMap = new Map<string, any>();
+      
+      // Add vehicle-specific fuel entries first (most reliable)
+      (vehicleFuel || []).forEach((f: any) => {
+        if (f.id) fuelMap.set(f.id, f);
+      });
+      
+      // Add entries matching by driver ID
+      (allFuel || []).forEach((f: any) => {
+        if (f.id && !fuelMap.has(f.id)) {
+          const driverIdMatch = 
+            driverIds.includes(f.driverId) || 
+            driverIds.includes(f.driver_id);
+          if (driverIdMatch) {
+            fuelMap.set(f.id, f);
+          }
+        }
+      });
+      
+      console.log('[DriverExpenses] Total unique fuel entries for driver:', fuelMap.size);
+      
+      // Filter by current period
+      const myFuel = Array.from(fuelMap.values()).filter((f: any) => {
         const entryDate = f.date ? parseISO(f.date) : (f.createdAt ? new Date(f.createdAt) : null);
-        if (!entryDate) return false;
+        if (!entryDate || isNaN(entryDate.getTime())) {
+          console.log('[DriverExpenses] Skipping entry with invalid date:', f.id, f.date);
+          return false;
+        }
         
         const inPeriod = isWithinInterval(entryDate, { start: periodStart, end: periodEnd });
         if (inPeriod) {
-          console.log('[DriverExpenses] Matched fuel entry:', f.id, f.date, f.station || f.stationName);
+          console.log('[DriverExpenses] Matched fuel entry for period:', f.id, f.date, f.station || f.location);
         }
         return inPeriod;
       });
       
-      console.log('[DriverExpenses] Matched fuel entries for period:', myFuel.length);
+      console.log('[DriverExpenses] Fuel entries for current period:', myFuel.length);
       setFuelEntries(myFuel);
       
       // Combine into unified expense items for display
