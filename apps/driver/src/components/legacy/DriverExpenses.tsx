@@ -188,12 +188,21 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
       ].filter(Boolean) as string[];
       
       const driverName = driverRecord?.driverName || driverRecord?.name || '';
+      const vehicleId = driverRecord?.assignedVehicleId || driverRecord?.vehicle || '';
+      
+      console.log('[DriverExpenses] Fetching for driver:', { driverIds, driverName, vehicleId });
 
       // Fetch both transactions and fuel entries in parallel
       const [allTx, allFuel] = await Promise.all([
         api.getTransactions(driverIds).catch(() => []),
         api.getAllFuelEntries().catch(() => [])
       ]);
+      
+      console.log('[DriverExpenses] Fetched fuel entries:', allFuel?.length || 0);
+      if (allFuel?.length > 0) {
+        console.log('[DriverExpenses] Sample fuel entry fields:', Object.keys(allFuel[0]));
+        console.log('[DriverExpenses] Sample fuel entry:', JSON.stringify(allFuel[0], null, 2).substring(0, 500));
+      }
       
       // Filter transactions for expenses
       const myTx = (allTx || []).filter((t: FinancialTransaction) => 
@@ -203,11 +212,26 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
       
       // Filter fuel entries for this driver and current period
       const myFuel = (allFuel || []).filter((f: any) => {
-        // Match by driver ID or name
-        const isMyFuel = 
+        // Match by driver ID, name, or vehicle
+        const driverIdMatch = 
           driverIds.includes(f.driverId) || 
           driverIds.includes(f.driver_id) ||
-          (driverName && (f.driverName === driverName || f.driver === driverName));
+          driverIds.includes(f.driver);
+          
+        const driverNameMatch = driverName && (
+          f.driverName === driverName || 
+          f.driver === driverName ||
+          f.driverName?.toLowerCase().includes(driverName.toLowerCase()) ||
+          driverName.toLowerCase().includes(f.driverName?.toLowerCase() || '')
+        );
+        
+        const vehicleMatch = vehicleId && (
+          f.vehicleId === vehicleId ||
+          f.vehicle_id === vehicleId ||
+          f.vehicle === vehicleId
+        );
+        
+        const isMyFuel = driverIdMatch || driverNameMatch || vehicleMatch;
         
         if (!isMyFuel) return false;
         
@@ -215,8 +239,14 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         const entryDate = f.date ? parseISO(f.date) : (f.createdAt ? new Date(f.createdAt) : null);
         if (!entryDate) return false;
         
-        return isWithinInterval(entryDate, { start: periodStart, end: periodEnd });
+        const inPeriod = isWithinInterval(entryDate, { start: periodStart, end: periodEnd });
+        if (inPeriod) {
+          console.log('[DriverExpenses] Matched fuel entry:', f.id, f.date, f.station || f.stationName);
+        }
+        return inPeriod;
       });
+      
+      console.log('[DriverExpenses] Matched fuel entries for period:', myFuel.length);
       setFuelEntries(myFuel);
       
       // Combine into unified expense items for display
