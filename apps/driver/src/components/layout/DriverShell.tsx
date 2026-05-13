@@ -3,14 +3,21 @@ import { useDriver } from '../../contexts/DriverContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { getBottomNavItems, getNavigationItems } from '../../config/navigation';
 import { Menu, X, ChevronRight, LogOut, Car, Building2 } from 'lucide-react';
+
+// Use placeholder dashboard/earnings/trips for now (simpler, fewer dependencies)
 import { DriverDashboard } from '../dashboard/DriverDashboard';
 import { DriverEarnings } from '../earnings/DriverEarnings';
 import { DriverTrips } from '../trips/DriverTrips';
 import { DriverProfile } from '../profile/DriverProfile';
-import { FleetEquipment } from '../fleet/FleetEquipment';
-import { FleetFuelCard } from '../fleet/FleetFuelCard';
-import { FleetReimbursements } from '../fleet/FleetReimbursements';
-import { FleetCheckin } from '../fleet/FleetCheckin';
+
+// Legacy components for critical features (toll scanning, expenses, equipment)
+import { DriverExpenses } from '../legacy/DriverExpenses';
+import { DriverEquipment } from '../legacy/DriverEquipment';
+import { DriverClaims } from '../legacy/DriverClaims';
+import { WeeklyCheckInModal } from '../legacy/WeeklyCheckInModal';
+import { DriverFuelStats } from '../legacy/DriverFuelStats';
+
+// Placeholder components for independent drivers (to be built later)
 import { MyVehicle } from '../independent/MyVehicle';
 import { IndependentExpenses } from '../independent/IndependentExpenses';
 import { TaxCenter } from '../independent/TaxCenter';
@@ -21,6 +28,8 @@ export function DriverShell() {
   const { user, signOut } = useAuth();
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [checkInOpen, setCheckInOpen] = useState(false);
+  const [checkInLoading, setCheckInLoading] = useState(false);
 
   const bottomNavItems = getBottomNavItems();
   const menuNavItems = getNavigationItems(mode);
@@ -40,8 +49,20 @@ export function DriverShell() {
     await signOut();
   };
 
+  const handleCheckInSubmit = async (data: { odometer: number; method: string; needsReview: boolean }) => {
+    setCheckInLoading(true);
+    try {
+      // TODO: Wire to useWeeklyCheckIn hook
+      console.log('Check-in submitted:', data);
+      setCheckInOpen(false);
+    } finally {
+      setCheckInLoading(false);
+    }
+  };
+
   const renderPage = () => {
     switch (currentPage) {
+      // Core pages - use placeholder for now (simpler, will upgrade later)
       case 'dashboard':
         return <DriverDashboard onNavigate={setCurrentPage} />;
       case 'earnings':
@@ -50,22 +71,36 @@ export function DriverShell() {
         return <DriverTrips />;
       case 'profile':
         return <DriverProfile onNavigate={setCurrentPage} onLogout={handleSignOut} />;
+      
+      // Fleet-specific pages
       case 'equipment':
-        return isFleetDriver ? <FleetEquipment /> : null;
-      case 'fuel':
-        return isFleetDriver ? <FleetFuelCard /> : null;
+        return isFleetDriver ? <DriverEquipment onBack={() => setCurrentPage('dashboard')} /> : null;
+      case 'expenses':
+        // For fleet drivers, show full expense hub with toll scanning
+        // For independent, show placeholder
+        return isFleetDriver 
+          ? <DriverExpenses onBack={() => setCurrentPage('dashboard')} />
+          : <IndependentExpenses />;
       case 'claims':
-        return isFleetDriver ? <FleetReimbursements /> : null;
+        return isFleetDriver ? <DriverClaims /> : null;
+      case 'fuel':
+      case 'fuel-stats':
+        return isFleetDriver ? <DriverFuelStats /> : null;
       case 'checkin':
-        return isFleetDriver ? <FleetCheckin /> : null;
+        if (isFleetDriver) {
+          setCheckInOpen(true);
+          setCurrentPage('dashboard');
+        }
+        return null;
+      
+      // Independent-specific pages
       case 'vehicle':
         return !isFleetDriver ? <MyVehicle /> : null;
-      case 'expenses':
-        return !isFleetDriver ? <IndependentExpenses /> : null;
       case 'tax':
         return !isFleetDriver ? <TaxCenter /> : null;
       case 'insurance':
         return !isFleetDriver ? <InsuranceCenter /> : null;
+      
       default:
         return (
           <div className="flex flex-col items-center justify-center h-64 text-center">
@@ -213,6 +248,16 @@ export function DriverShell() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Weekly Check-In Modal */}
+      {isFleetDriver && (
+        <WeeklyCheckInModal
+          isOpen={checkInOpen}
+          onClose={() => setCheckInOpen(false)}
+          onSubmit={handleCheckInSubmit}
+          isLoading={checkInLoading}
+        />
       )}
     </div>
   );

@@ -1,7 +1,7 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCcw, ShieldAlert } from 'lucide-react';
 import { Button } from './button';
-import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { projectId, publicAnonKey } from '@roam/api-client';
 
 interface Props {
   children: ReactNode;

@@ -1,7 +1,7 @@
 // cache-bust: force recompile — 2026-02-10
 import React from 'react';
-import { Button } from "../../ui/button";
-import { Card, CardContent } from "../../ui/card";
+import { Button } from '@roam/ui';
+import { Card, CardContent } from '@roam/ui';
 import { CheckCircle2, Clock, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 

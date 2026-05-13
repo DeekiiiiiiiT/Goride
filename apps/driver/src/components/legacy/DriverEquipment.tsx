@@ -1,23 +1,23 @@
 // cache-bust: force recompile — 2026-02-10
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
 import { equipmentService } from '../../services/equipmentService';
 import { EquipmentItem } from '../../types/equipment';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
-import { Button } from '../ui/button';
-import { Badge } from '../ui/badge';
-import { Textarea } from '../ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../ui/dialog';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@roam/ui';
+import { Button } from '@roam/ui';
+import { Badge } from '@roam/ui';
+import { Textarea } from '@roam/ui';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@roam/ui';
 import { 
     Loader2, Wrench, AlertTriangle, CheckCircle, HelpCircle, ArrowLeft, ChevronDown,
     Scissors, Minimize2, Grid, Zap, Target, SearchX, Eye, Info 
 } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
-import { Label } from '../ui/label';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
+import { toast } from 'sonner';
+import { Label } from '@roam/ui';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@roam/ui';
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@roam/ui';
 import { STANDARD_EXTERIOR_PARTS, EXTERIOR_SECTIONS, DAMAGE_TYPES, SEVERITY_LEVELS } from '../../utils/vehicle_parts';
 import { createDamageReport, appendDamageHistory } from '../../utils/equipment-helpers';
 

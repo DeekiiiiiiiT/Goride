@@ -1,18 +1,18 @@
 // cache-bust: force recompile — 2026-02-10
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
-import { Badge } from "../ui/badge";
-import { Button } from "../ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@roam/ui';
+import { Badge } from '@roam/ui';
+import { Button } from '@roam/ui';
 import { Loader2, Fuel, AlertCircle, Info, TrendingUp, TrendingDown } from "lucide-react";
 import { startOfWeek, endOfWeek, subWeeks, format } from "date-fns";
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { api } from '../../services/api';
 import { fuelService } from '../../services/fuelService';
 import { FuelCalculationService } from '../../services/fuelCalculationService';
 import { FuelDisputeService } from '../../services/fuelDisputeService';
 import { WeeklyFuelReport, FuelDispute } from '../../types/fuel';
-import { Separator } from "../ui/separator";
+import { Separator } from '@roam/ui';
 import { DisputeModal } from "../fuel/DisputeModal";
 
 export function DriverFuelStats() {

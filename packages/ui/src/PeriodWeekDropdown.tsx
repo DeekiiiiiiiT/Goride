@@ -7,7 +7,7 @@ import {
   findPeriodWeekOptionByRange,
   type PeriodWeekOption,
   ENTIRE_PERIOD_OPTION_ID,
-} from '../../utils/periodWeekOptions';
+} from './periodWeekOptions';
 
 function fmtYmd(ymd: string, fmt: string) {
   const [y, m, d] = ymd.split('-').map(Number);

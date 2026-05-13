@@ -1,8 +1,8 @@
 // cache-bust: force recompile — 2026-02-10
 import React from 'react';
-import { Button } from "../../ui/button";
+import { Button } from '@roam/ui';
 import { CreditCard, Banknote, Car } from "lucide-react";
-import { Label } from "../../ui/label";
+import { Label } from '@roam/ui';
 
 interface PaymentMethodSelectorProps {
   onSelect: (method: 'gas_card' | 'personal_cash' | 'rideshare_cash') => void;

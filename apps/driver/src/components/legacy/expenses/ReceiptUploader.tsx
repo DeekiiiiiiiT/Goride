@@ -1,7 +1,7 @@
 // cache-bust: force recompile — 2026-02-10
 import React, { useRef } from 'react';
-import { Button } from "../../ui/button";
-import { Label } from "../../ui/label";
+import { Button } from '@roam/ui';
+import { Label } from '@roam/ui';
 import { Camera, Upload, X, Loader2, FileText } from "lucide-react";
 
 interface ReceiptUploaderProps {

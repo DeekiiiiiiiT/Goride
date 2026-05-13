@@ -1,10 +1,10 @@
 // cache-bust: force recompile — 2026-02-10
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/dialog';
-import { Button } from '../ui/button';
-import { Input } from '../ui/input';
-import { Label } from '../ui/label';
-import { Textarea } from '../ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@roam/ui';
+import { Button } from '@roam/ui';
+import { Input } from '@roam/ui';
+import { Label } from '@roam/ui';
+import { Textarea } from '@roam/ui';
 import { Camera, Upload, RefreshCw, CheckCircle, AlertTriangle, XCircle, ChevronRight, ScanLine } from 'lucide-react';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { api } from '../../services/api';

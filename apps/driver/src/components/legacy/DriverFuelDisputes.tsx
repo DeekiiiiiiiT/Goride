@@ -1,11 +1,11 @@
 // cache-bust: force recompile — 2026-02-10
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
-import { Button } from "../ui/button";
-import { Badge } from "../ui/badge";
-import { Input } from "../ui/input";
-import { Label } from "../ui/label";
-import { Textarea } from "../ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@roam/ui';
+import { Button } from '@roam/ui';
+import { Badge } from '@roam/ui';
+import { Input } from '@roam/ui';
+import { Label } from '@roam/ui';
+import { Textarea } from '@roam/ui';
 import { 
     AlertTriangle, 
     CheckCircle2, 
@@ -23,9 +23,9 @@ import {
 } from "lucide-react";
 import { api } from "../../services/api";
 import { format } from "date-fns";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { motion, AnimatePresence } from "motion/react";
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { FuelEntry } from '../../types/fuel';
 
 export function DriverFuelDisputes() {

@@ -1,9 +1,9 @@
 // cache-bust: force recompile — 2026-02-10
 import React from 'react';
-import { Button } from "../../ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "../../ui/avatar";
+import { Button } from '@roam/ui';
+import { Avatar, AvatarFallback, AvatarImage } from '@roam/ui';
 import { ChevronLeft, Bell } from "lucide-react";
-import { useAuth } from "../../auth/AuthContext";
+import { useAuth } from "../../../contexts/AuthContext";
 import { useOffline } from "../../providers/OfflineProvider";
 import { OfflineStatusIndicator } from "../../offline/OfflineStatusIndicator";
 

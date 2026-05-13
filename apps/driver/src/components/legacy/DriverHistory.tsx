@@ -1,12 +1,12 @@
 import React from 'react';
 import { MonthlyPerformance } from '../../types/data';
-import { Card, CardContent } from "../ui/card";
-import { Badge } from "../ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
+import { Card, CardContent } from '@roam/ui';
+import { Badge } from '@roam/ui';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@roam/ui';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@roam/ui';
 import { TierCalculations } from '../../utils/tierCalculations';
 import { Calendar, Trophy, Car, TrendingUp, Loader2, ChevronDown } from "lucide-react";
-import { cn } from "../ui/utils";
+import { cn } from '@roam/ui';
 
 interface DriverHistoryProps {
   history: MonthlyPerformance[];

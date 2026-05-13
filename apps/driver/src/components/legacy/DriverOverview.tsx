@@ -1,15 +1,15 @@
 // cache-bust: force recompile — 2026-02-10
 import React from 'react';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { 
   Trophy, 
   Star, 
   ChevronRight, 
   ShieldAlert
 } from 'lucide-react';
-import { Card, CardContent } from "../ui/card";
-import { Drawer, DrawerTrigger, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter, DrawerClose } from "../ui/drawer";
-import { cn } from "../ui/utils";
+import { Card, CardContent } from '@roam/ui';
+import { Drawer, DrawerTrigger, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter, DrawerClose } from '@roam/ui';
+import { cn } from '@roam/ui';
 import { DriverMetrics, TierConfig, DriverGoals, Trip } from '../../types/data';
 
 export interface DriverOverviewProps {

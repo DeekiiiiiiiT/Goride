@@ -19,11 +19,11 @@ import {
   History,
   ChartBar
 } from "lucide-react";
-import { Button } from "../ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
-import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle, SheetDescription, SheetClose } from "../ui/sheet";
+import { Button } from '@roam/ui';
+import { Avatar, AvatarFallback, AvatarImage } from '@roam/ui';
+import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle, SheetDescription, SheetClose } from '@roam/ui';
 import { NotificationCenter } from "../notifications/NotificationCenter";
-import { useAuth } from "../auth/AuthContext";
+import { useAuth } from "../../contexts/AuthContext";
 import { OfflineStatusIndicator } from "../offline/OfflineStatusIndicator";
 import { useOffline } from "../providers/OfflineProvider";
 import { useCurrentDriver } from "../../hooks/useCurrentDriver";

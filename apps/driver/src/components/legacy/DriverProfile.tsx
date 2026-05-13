@@ -1,9 +1,9 @@
 // cache-bust: force recompile — 2026-02-10
 import React, { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
-import { Button } from "../ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
-import { Badge } from "../ui/badge";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@roam/ui';
+import { Button } from '@roam/ui';
+import { Avatar, AvatarFallback, AvatarImage } from '@roam/ui';
+import { Badge } from '@roam/ui';
 import { 
   User, 
   Car, 
@@ -34,23 +34,23 @@ import {
   DrawerTrigger,
   DrawerFooter,
   DrawerClose,
-} from "../ui/drawer";
-import { toast } from "sonner@2.0.3";
-import { useAuth } from "../auth/AuthContext";
+} from '@roam/ui';
+import { toast } from "sonner";
+import { useAuth } from "../../contexts/AuthContext";
 import { useCurrentDriver } from "../../hooks/useCurrentDriver";
 import { api } from "../../services/api";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "../ui/sheet";
-import { Label } from "../ui/label";
-import { Input } from "../ui/input";
-import { Switch } from "../ui/switch";
-import { Separator } from "../ui/separator";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@roam/ui';
+import { Label } from '@roam/ui';
+import { Input } from '@roam/ui';
+import { Switch } from '@roam/ui';
+import { Separator } from '@roam/ui';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "../ui/select";
+} from '@roam/ui';
 
 interface DriverProfileProps {
     onLogout: () => void;

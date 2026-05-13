@@ -1,8 +1,78 @@
 import * as React from "react";
 import { MapPin, Loader2, Navigation, Search, X } from "lucide-react";
 import { cn } from "./utils";
-import { getCurrentPosition, reverseGeocode, AddressResult, searchAddress, debounce, getPlaceDetails } from "../../utils/locationService";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
+
+// Stub types and functions for location services
+export interface AddressResult {
+  display_name: string;
+  lat: string;
+  lon: string;
+  place_id?: string;
+}
+
+function debounce<T extends (...args: Parameters<T>) => ReturnType<T>>(
+  fn: T,
+  delay: number
+): (...args: Parameters<T>) => void {
+  let timeoutId: ReturnType<typeof setTimeout>;
+  return (...args: Parameters<T>) => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => fn(...args), delay);
+  };
+}
+
+async function getCurrentPosition(): Promise<GeolocationPosition> {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('Geolocation not supported'));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0
+    });
+  });
+}
+
+async function reverseGeocode(lat: number, lon: number): Promise<AddressResult | null> {
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`
+    );
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+async function searchAddress(query: string): Promise<AddressResult[]> {
+  if (!query || query.length < 3) return [];
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`
+    );
+    if (!response.ok) return [];
+    return await response.json();
+  } catch {
+    return [];
+  }
+}
+
+async function getPlaceDetails(placeId: string): Promise<AddressResult | null> {
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/lookup?format=json&osm_ids=${placeId}`
+    );
+    if (!response.ok) return null;
+    const results = await response.json();
+    return results[0] || null;
+  } catch {
+    return null;
+  }
+}
 
 export interface LocationInputProps
   extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange'> {

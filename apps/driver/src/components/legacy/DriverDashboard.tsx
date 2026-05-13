@@ -13,13 +13,13 @@ import {
 } from "lucide-react";
 import { Trip, FuelLog, ServiceRequest, DriverMetrics, TierConfig, FinancialTransaction, QuotaConfig, DriverGoals } from '../../types/data';
 import { RoutePoint, TripStop } from '../../types/tripSession';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { FuelLogForm } from './FuelLogForm';
 import { ServiceRequestForm } from './ServiceRequestForm';
 import { ManualTripForm } from '../trips/ManualTripForm';
 import { TripTimer } from '../trips/TripTimer';
 import { createManualTrip, ManualTripInput } from '../../utils/tripFactory';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { API_ENDPOINTS } from '../../services/apiConfig';

@@ -1,5 +1,5 @@
 import React from 'react';
-import { cn } from "../../ui/utils";
+import { cn } from '@roam/ui';
 import { LucideIcon } from "lucide-react";
 
 interface DriverGradientCardProps {

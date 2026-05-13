@@ -1,7 +1,7 @@
 import React from 'react';
-import { Input } from "../../ui/input";
-import { Label } from "../../ui/label";
-import { Checkbox } from "../../ui/checkbox";
+import { Input } from '@roam/ui';
+import { Label } from '@roam/ui';
+import { Checkbox } from '@roam/ui';
 import { Fuel } from "lucide-react";
 
 interface FuelCashInputsProps {

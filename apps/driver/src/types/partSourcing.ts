@@ -1,0 +1,93 @@
+export interface PartCategoryRecord {
+  id: string;
+  parent_id: string | null;
+  slug: string;
+  label: string;
+  sort_order: number;
+  created_at?: string;
+  updated_at?: string;
+  part_count?: number;
+}
+
+export interface PartMasterRecord {
+  id: string;
+  category_id: string;
+  name: string;
+  oem_part_number: string | null;
+  description: string | null;
+  metadata: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+  part_category?: { id: string; slug: string; label: string };
+}
+
+export interface SupplierRecord {
+  id: string;
+  name: string;
+  contact_email: string | null;
+  contact_phone: string | null;
+  default_lead_time_days: number | null;
+  notes: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface SupplierPartOfferRecord {
+  id: string;
+  supplier_id: string;
+  part_id: string;
+  supplier_sku: string;
+  unit_price: number;
+  currency: string;
+  moq: number;
+  lead_time_days: number | null;
+  url: string | null;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+  supplier?: { id: string; name: string; default_lead_time_days?: number | null };
+  part_master?: { id: string; name: string };
+}
+
+export interface PartFitmentRecord {
+  id: string;
+  part_id: string;
+  vehicle_catalog_id: string;
+  chassis_code: string | null;
+  engine_code: string | null;
+  year_from: number | null;
+  year_to: number | null;
+  created_at?: string;
+  updated_at?: string;
+  part_master?: { id: string; name: string; oem_part_number?: string | null };
+}
+
+export interface CompatiblePartOffer {
+  id: string;
+  supplier_id: string;
+  part_id: string;
+  supplier_sku: string;
+  unit_price: number;
+  currency: string;
+  moq: number;
+  lead_time_days: number | null;
+  url: string | null;
+  is_active: boolean;
+  supplier?: { id: string; name: string; default_lead_time_days?: number | null };
+}
+
+export interface CompatiblePartsItem {
+  fitmentId: string;
+  part: PartMasterRecord & {
+    part_category?: { id: string; slug: string; label: string; parent_id?: string | null; sort_order?: number };
+  };
+  offers: CompatiblePartOffer[];
+}
+
+export interface CompatiblePartsResponse {
+  catalogMatched: boolean;
+  catalogId?: string;
+  items: CompatiblePartsItem[];
+  count?: number;
+  message?: string;
+}

@@ -2,14 +2,14 @@
 import React, { useState, useEffect } from 'react';
 import { useClaims } from '../../hooks/useClaims';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "../ui/card";
-import { Badge } from "../ui/badge";
-import { Button } from "../ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@roam/ui';
+import { Badge } from '@roam/ui';
+import { Button } from '@roam/ui';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@roam/ui';
 import { Copy, Check, Clock, AlertTriangle, Car, DollarSign, MapPin, Calendar, MoreVertical, XCircle, CheckCircle, Archive } from "lucide-react";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { Claim } from "../../types/data";
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,7 +17,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "../ui/dropdown-menu";
+} from '@roam/ui';
 
 interface DriverClaimsProps {
   defaultTab?: string;

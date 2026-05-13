@@ -1,9 +1,9 @@
 // cache-bust: force recompile — 2026-03-17 Phase1
 import React, { useState, useRef } from 'react';
-import { Button } from '../../ui/button';
-import { Input } from '../../ui/input';
-import { Label } from '../../ui/label';
-import { Textarea } from '../../ui/textarea';
+import { Button } from '@roam/ui';
+import { Input } from '@roam/ui';
+import { Label } from '@roam/ui';
+import { Textarea } from '@roam/ui';
 import { Camera, AlertTriangle, ScanLine, CheckCircle, RotateCcw, ShieldAlert } from 'lucide-react';
 import { api } from '../../../services/api';
 import { motion, AnimatePresence } from 'motion/react';

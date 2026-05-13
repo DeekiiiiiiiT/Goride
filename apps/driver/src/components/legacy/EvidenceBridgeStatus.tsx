@@ -1,6 +1,6 @@
 import React from 'react';
 import { ShieldCheck, ShieldAlert, Navigation, MapPin } from 'lucide-react';
-import { Badge } from '../ui/badge';
+import { Badge } from '@roam/ui';
 import { motion } from 'motion/react';
 
 interface EvidenceBridgeStatusProps {

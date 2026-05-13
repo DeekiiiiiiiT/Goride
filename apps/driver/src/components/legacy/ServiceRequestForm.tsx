@@ -1,6 +1,6 @@
 // cache-bust: force recompile — 2026-02-10
 import React, { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@roam/ui';
 import { 
   Drawer, 
   DrawerContent, 
@@ -9,15 +9,15 @@ import {
   DrawerDescription, 
   DrawerFooter,
   DrawerClose
-} from "../ui/drawer";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Label } from "../ui/label";
-import { Textarea } from "../ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+} from '@roam/ui';
+import { Button } from '@roam/ui';
+import { Input } from '@roam/ui';
+import { Label } from '@roam/ui';
+import { Textarea } from '@roam/ui';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@roam/ui';
 import { Wrench, Calendar, AlertTriangle, Info, Camera, MapPin } from "lucide-react";
 import { ServiceRequest } from '../../types/data';
-import { useIsMobile } from '../ui/use-mobile';
+import { useIsMobile } from '@roam/ui';
 
 interface ServiceRequestFormProps {
   open: boolean;

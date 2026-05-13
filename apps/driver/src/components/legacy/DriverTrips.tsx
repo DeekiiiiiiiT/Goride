@@ -1,8 +1,8 @@
 // cache-bust: force recompile — 2026-02-10
 import React, { useEffect, useState } from 'react';
-import { Card, CardContent } from "../ui/card";
-import { Badge } from "../ui/badge";
-import { Input } from "../ui/input";
+import { Card, CardContent } from '@roam/ui';
+import { Badge } from '@roam/ui';
+import { Input } from '@roam/ui';
 import { 
   MapPin, 
   Calendar as CalendarIcon, 
@@ -15,16 +15,16 @@ import {
   Car,
   Navigation
 } from "lucide-react";
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { api } from '../../services/api';
 import { Trip } from '../../types/data';
 import { getDriverPortalTripEarnings } from '../../utils/tripEarnings';
 import { normalizePlatform } from '../../utils/normalizePlatform';
-import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
-import { Calendar } from "../ui/calendar";
-import { Button } from "../ui/button";
-import { cn } from "../ui/utils";
+import { Popover, PopoverContent, PopoverTrigger } from '@roam/ui';
+import { Calendar } from '@roam/ui';
+import { Button } from '@roam/ui';
+import { cn } from '@roam/ui';
 import { DateRange } from "react-day-picker";
 import { startOfDay, endOfDay, format } from "date-fns";
 import { 
@@ -33,9 +33,9 @@ import {
   DrawerHeader, 
   DrawerTitle, 
   DrawerDescription 
-} from "../ui/drawer";
-import { ScrollArea } from "../ui/scroll-area";
-import { Separator } from "../ui/separator";
+} from '@roam/ui';
+import { ScrollArea } from '@roam/ui';
+import { Separator } from '@roam/ui';
 
 export function DriverTrips() {
   const { user } = useAuth();

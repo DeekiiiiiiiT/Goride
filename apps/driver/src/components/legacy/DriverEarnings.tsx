@@ -1,7 +1,7 @@
 // cache-bust: force recompile — 2026-02-10
 import React, { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
-import { Button } from "../ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@roam/ui';
+import { Button } from '@roam/ui';
 import { 
   DollarSign, 
   TrendingUp, 
@@ -14,14 +14,14 @@ import {
   Wallet,
   Info
 } from "lucide-react";
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { Trip, TierConfig, FinancialTransaction, DriverMetrics } from '../../types/data';
-import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
-import { Calendar } from "../ui/calendar";
-import { cn } from "../ui/utils";
+import { Popover, PopoverContent, PopoverTrigger } from '@roam/ui';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@roam/ui';
+import { Calendar } from '@roam/ui';
+import { cn } from '@roam/ui';
 import { DateRange } from "react-day-picker";
 import { startOfDay, endOfDay, format, subDays, differenceInDays } from "date-fns";
 import { tierService } from '../../services/tierService';
@@ -39,9 +39,9 @@ import {
   SheetHeader,
   SheetTitle,
   SheetTrigger,
-} from "../ui/sheet";
+} from '@roam/ui';
 import { DriverHistory } from './DriverHistory';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@roam/ui';
 import { MonthlyPerformance } from '../../types/data';
 import { LedgerDriverOverview } from '../../types/data';
 

@@ -9,6 +9,8 @@ import {
   CheckCircle,
   FileText,
   Shield,
+  Camera,
+  BarChart3,
   type LucideIcon,
 } from 'lucide-react';
 import { DriverMode } from '../contexts/DriverContext';
@@ -28,9 +30,10 @@ const commonNavItems: NavItem[] = [
 ];
 
 const fleetOnlyNavItems: NavItem[] = [
+  { id: 'expenses', label: 'Expenses', icon: Camera },  // Toll scanning, fuel, etc.
   { id: 'equipment', label: 'Equipment', icon: Wrench },
-  { id: 'fuel', label: 'Fuel Card', icon: Fuel },
-  { id: 'claims', label: 'Reimbursements', icon: Receipt },
+  { id: 'fuel-stats', label: 'Fuel Stats', icon: BarChart3 },
+  { id: 'claims', label: 'Claims', icon: Receipt },
   { id: 'checkin', label: 'Check-in', icon: CheckCircle },
 ];
 
