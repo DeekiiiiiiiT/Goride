@@ -1,7 +1,40 @@
 @custom-variant dark (&:is(.dark *));
 
+/* Light theme (default — html without .dark) */
 :root {
-  --font-size: 16px;
+  --font-size: 17px;
+  --background: #f1f5f9;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #059669;
+  --primary-foreground: #ffffff;
+  --secondary: #e2e8f0;
+  --secondary-foreground: #0f172a;
+  --muted: #e2e8f0;
+  --muted-foreground: #475569;
+  --accent: #e2e8f0;
+  --accent-foreground: #0f172a;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: #cbd5e1;
+  --input: #cbd5e1;
+  --input-background: #ffffff;
+  --switch-background: #94a3b8;
+  --font-weight-medium: 600;
+  --font-weight-normal: 450;
+  --ring: #059669;
+  --chart-1: #059669;
+  --chart-2: #0891b2;
+  --chart-3: #7c3aed;
+  --chart-4: #d97706;
+  --chart-5: #db2777;
+  --radius: 0.75rem;
+}
+
+.dark {
   --background: #0f172a;
   --foreground: #f8fafc;
   --card: #1e293b;
@@ -13,7 +46,7 @@
   --secondary: #334155;
   --secondary-foreground: #f8fafc;
   --muted: #334155;
-  --muted-foreground: #94a3b8;
+  --muted-foreground: #cbd5e1;
   --accent: #334155;
   --accent-foreground: #f8fafc;
   --destructive: #ef4444;
@@ -22,15 +55,14 @@
   --input: #334155;
   --input-background: #1e293b;
   --switch-background: #475569;
-  --font-weight-medium: 500;
-  --font-weight-normal: 400;
+  --font-weight-medium: 600;
+  --font-weight-normal: 450;
   --ring: #10b981;
   --chart-1: #10b981;
   --chart-2: #06b6d4;
   --chart-3: #8b5cf6;
   --chart-4: #f59e0b;
   --chart-5: #ec4899;
-  --radius: 0.75rem;
 }
 
 @theme inline {
@@ -72,9 +104,11 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-synthesis: none;
   }
 }
 
@@ -82,7 +116,12 @@ html {
   font-size: var(--font-size);
 }
 
-body {
+html:not(.dark) body {
+  background: var(--background);
+  min-height: 100vh;
+}
+
+html.dark body {
   background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
   min-height: 100vh;
 }
