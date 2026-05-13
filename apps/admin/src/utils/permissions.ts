@@ -347,6 +347,12 @@ export function resolveRole(raw: string | null | undefined): Role {
   return 'fleet_viewer';
 }
 
+/** True when `user_metadata.role` resolves to a platform-tier role (super admin). */
+export function isPlatformRole(raw: string | null | undefined): boolean {
+  const role = resolveRole(raw);
+  return ROLE_META[role].tier === 'platform';
+}
+
 /** Check whether a role has a specific permission. */
 export function hasPermission(role: Role, permission: Permission): boolean {
   const perms = ROLE_PERMISSIONS[role];
