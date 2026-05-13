@@ -1,4 +1,5 @@
 export * from './data';
+export * from './driver';
 export * from './fuel';
 export * from './toll';
 export * from './toll-ledger';

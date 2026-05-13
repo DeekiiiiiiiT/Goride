@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@roam/types": ["../../packages/types/src"],
+      "@roam/types/*": ["../../packages/types/src/*"],
+      "@roam/ui": ["../../packages/ui/src"],
+      "@roam/ui/*": ["../../packages/ui/src/*"],
+      "@roam/api-client": ["../../packages/api-client/src"],
+      "@roam/api-client/*": ["../../packages/api-client/src/*"],
+      "@roam/auth-client": ["../../packages/auth-client/src"],
+      "@roam/auth-client/*": ["../../packages/auth-client/src/*"],
+      "@roam/business-config": ["../../packages/business-config/src"],
+      "@roam/business-config/*": ["../../packages/business-config/src/*"]
+    }
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
+}

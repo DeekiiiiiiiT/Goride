@@ -4,7 +4,6 @@ import { AuthProvider, useAuth } from './components/auth/AuthContext';
 import { BusinessConfigProvider } from './components/auth/BusinessConfigContext';
 import { PlatformConfigProvider } from './components/auth/PlatformConfigContext';
 import { LoginPage } from './components/auth/LoginPage';
-import { DriverLoginPage } from './components/auth/DriverLoginPage';
 import { AppLayout } from './components/layout/AppLayout';
 import { Dashboard } from './components/dashboard/Dashboard';
 import { ImportsPage } from './components/imports/ImportsPage';
@@ -25,18 +24,7 @@ import { PerformanceDashboard } from './components/performance/PerformanceDashbo
 import { FuelManagement } from './pages/FuelManagement';
 import { TollLogsPage } from './pages/TollLogs';
 import { TollAnalytics } from './components/toll/TollAnalytics';
-import { LedgerBackfillPanel } from './components/admin/LedgerBackfillPanel';
 import { DriverLedgerPage } from './components/drivers/DriverLedgerPage';
-
-// Driver Portal Components
-import { DriverLayout } from './components/driver-portal/DriverLayout';
-import { DriverDashboard } from './components/driver-portal/DriverDashboard';
-import { DriverEarnings } from './components/driver-portal/DriverEarnings';
-import { DriverTrips } from './components/driver-portal/DriverTrips';
-import { DriverProfile } from './components/driver-portal/DriverProfile';
-import { DriverClaims } from './components/driver-portal/DriverClaims';
-import { DriverExpenses } from './components/driver-portal/DriverExpenses';
-import { DriverEquipment } from './components/driver-portal/DriverEquipment';
 
 import { useAlertPusher } from './hooks/useAlertPusher';
 import { OfflineProvider } from './components/providers/OfflineProvider';
@@ -45,10 +33,6 @@ import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { API_ENDPOINTS } from './services/apiConfig';
 import { publicAnonKey } from './utils/supabase/info';
 
-// Super Admin Portal Components
-import { AdminLoginPage } from './components/admin/AdminLoginPage';
-import { AdminUnauthorized } from './components/admin/AdminUnauthorized';
-import { AdminPortal } from './components/admin/AdminPortal';
 import { fuelService } from './services/fuelService';
 import { PermissionGate } from './components/auth/PermissionGate';
 import { PAGE_PERMISSION_MAP } from './utils/permissions';
@@ -72,12 +56,10 @@ function AppContent() {
   // useAlertPusher(); // DISABLED: Was causing infinite loop feedback with Dashboard alert sync
   
   const [currentPage, setCurrentPage] = useState('dashboard');
-  const [driverPage, setDriverPage] = useState('dashboard');
-  const [isDriverMenuOpen, setDriverMenuOpen] = useState(false);
   const [driverIdForDetail, setDriverIdForDetail] = useState<string | null>(null);
 
   // ── Maintenance Mode Check ────────────────────────────────────────────
-  // For non-admin paths, check if the platform is in maintenance mode.
+  // Check if the platform is in maintenance mode.
   // Platform-tier users see a warning banner; everyone else sees MaintenancePage.
   const [maintenanceStatus, setMaintenanceStatus] = useState<{
     active: boolean;
@@ -87,11 +69,6 @@ function AppContent() {
   }>({ active: false, message: '', platformName: 'Roam Fleet', checked: false });
 
   useEffect(() => {
-    const isAdminPath = window.location.pathname.startsWith('/admin');
-    if (isAdminPath) {
-      setMaintenanceStatus(prev => ({ ...prev, checked: true }));
-      return;
-    }
     fetch(`${API_ENDPOINTS.fleet}/platform-status`)
       .then(res => res.json())
       .then(data => {
@@ -184,31 +161,16 @@ function AppContent() {
   // ---------------------------------------------------------------------------
   // Session Isolation & Role Gating (Enterprise)
   // ---------------------------------------------------------------------------
-  // Super Admin Portal — /admin path detection
-  const isAdminPath = window.location.pathname.startsWith('/admin');
-  const isDriverPath = window.location.pathname.startsWith('/driver');
-
   // Handle role-based session isolation via useEffect to avoid render-phase state updates.
-  // Supabase shares one session across all paths, so we must manually kick users
-  // who are at the "wrong" portal for their role.
   useEffect(() => {
     if (!user || loading) return;
 
-    const platformRoles = ['platform_owner', 'platform_support', 'platform_analyst'];
-    const isPlatformUser = role === 'superadmin' || platformRoles.includes(resolvedRole || '');
-
-    if (isAdminPath && !isPlatformUser) {
-      console.warn('[AuthGate] Non-platform user on /admin path — signing out');
-      signOut();
-    } else if (isDriverPath && role !== 'driver') {
-      console.warn('[AuthGate] Non-driver user on /driver path — signing out');
-      signOut();
-    } else if (!isAdminPath && !isDriverPath && role !== 'admin') {
-      // Regular fleet portal at "/" — only 'admin' (fleet manager) allowed
+    if (role !== 'admin') {
+      // Fleet portal — only 'admin' (fleet manager) allowed
       console.warn('[AuthGate] Non-manager user on fleet path — signing out');
       signOut();
     }
-  }, [user, role, resolvedRole, isAdminPath, isDriverPath, loading, signOut]);
+  }, [user, role, loading, signOut]);
 
   // ---------------------------------------------------------------------------
   // Rendering Branches
@@ -218,41 +180,7 @@ function AppContent() {
       return <div className="flex items-center justify-center h-screen bg-slate-50 text-slate-500">Loading application...</div>;
   }
 
-  // Super Admin Portal
-  if (isAdminPath) {
-    const platformRoles = ['platform_owner', 'platform_support', 'platform_analyst'];
-    const isPlatformUser = role === 'superadmin' || platformRoles.includes(resolvedRole || '');
-    
-    if (!user || !isPlatformUser) return <AdminLoginPage />;
-    return <AdminPortal />;
-  }
-
-  // Driver Portal
-  if (isDriverPath) {
-    if (!user || role !== 'driver') return <DriverLoginPage />;
-    // Driver user on /driver path — render driver portal
-    return (
-      <ErrorBoundary name="DriverPortal" userId={user?.id}>
-        <DriverLayout 
-          currentPage={driverPage} 
-          onNavigate={setDriverPage} 
-          onLogout={signOut}
-          isMenuOpen={isDriverMenuOpen}
-          onMenuOpenChange={setDriverMenuOpen}
-        >
-          {driverPage === 'dashboard' && <DriverDashboard />}
-          {driverPage === 'earnings' && <DriverEarnings />}
-          {driverPage === 'expenses' && <DriverExpenses defaultOpen={true} onBack={() => { setDriverPage('dashboard'); setDriverMenuOpen(true); }} />}
-          {driverPage === 'trips' && <DriverTrips />}
-          {driverPage === 'claims' && <DriverClaims />}
-          {driverPage === 'equipment' && <DriverEquipment onBack={() => setDriverPage('profile')} />}
-          {driverPage === 'profile' && <DriverProfile onLogout={signOut} onNavigate={setDriverPage} />}
-        </DriverLayout>
-      </ErrorBoundary>
-    );
-  }
-
-  // Main Fleet Portal — Shared Gates
+  // Main Fleet Portal — Authentication Gate
   if (!user || role !== 'admin') {
     return <LoginPage />;
   }
@@ -419,11 +347,6 @@ function AppContent() {
         {currentPage === 'settings' && (
           <PermissionGate permission="nav.settings" onNavigate={setCurrentPage}>
             <SettingsPage />
-          </PermissionGate>
-        )}
-        {currentPage === 'ledger-backfill' && (
-          <PermissionGate permission="nav.ledger_backfill" onNavigate={setCurrentPage}>
-            <LedgerBackfillPanel />
           </PermissionGate>
         )}
       </ErrorBoundary>

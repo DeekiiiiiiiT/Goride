@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "cd ../.. && npm install -g pnpm@9.15.4 && pnpm install --no-frozen-lockfile --ignore-scripts && pnpm rebuild esbuild @tailwindcss/oxide",
+  "buildCommand": "cd ../.. && pnpm --filter @roam/fleet build",
+  "outputDirectory": "build",
+  "framework": null,
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/" }
+  ]
+}
