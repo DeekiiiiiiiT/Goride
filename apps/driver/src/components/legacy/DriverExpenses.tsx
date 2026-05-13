@@ -28,7 +28,7 @@ import {
   MapPin,
   ShieldCheck
 } from "lucide-react";
-import { format, isValid } from "date-fns";
+import { format, isValid, startOfWeek, endOfWeek, isWithinInterval, parseISO } from "date-fns";
 import { cn } from '@roam/ui';
 import { formatSafeDate, formatSafeTime } from '../../utils/timeUtils';
 import { toast } from "sonner";
@@ -86,14 +86,34 @@ interface FuelEntryState {
   parentCompany?: string;
 }
 
+// Combined expense item for display
+interface ExpenseItem {
+  id: string;
+  type: 'fuel' | 'toll' | 'maintenance' | 'other';
+  date: Date;
+  amount: number;
+  description: string;
+  status: string;
+  station?: string;
+  odometer?: number;
+  volume?: number;
+  receiptUrl?: string;
+}
+
 export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerProps) {
   const { user } = useAuth();
   const { driverRecord } = useCurrentDriver();
   const { getLocation, loading: locationLoading, lat, lng, accuracy } = useGeolocation();
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
+  const [fuelEntries, setFuelEntries] = useState<any[]>([]);
+  const [combinedExpenses, setCombinedExpenses] = useState<ExpenseItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  
+  // Current period (Monday to Sunday)
+  const periodStart = startOfWeek(new Date(), { weekStartsOn: 1 });
+  const periodEnd = endOfWeek(new Date(), { weekStartsOn: 1 });
   
   const [viewState, setViewState] = useState<ViewState>(defaultOpen ? 'category_select' : 'list');
   const [fuelEntry, setFuelEntry] = useState<FuelEntryState>({});
@@ -166,12 +186,85 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
           driverRecord?.id,
           driverRecord?.driverId
       ].filter(Boolean) as string[];
+      
+      const driverName = driverRecord?.driverName || driverRecord?.name || '';
 
-      const allTx = await api.getTransactions(driverIds);
-      const myTx = allTx.filter((t: FinancialTransaction) => 
+      // Fetch both transactions and fuel entries in parallel
+      const [allTx, allFuel] = await Promise.all([
+        api.getTransactions(driverIds).catch(() => []),
+        api.getAllFuelEntries().catch(() => [])
+      ]);
+      
+      // Filter transactions for expenses
+      const myTx = (allTx || []).filter((t: FinancialTransaction) => 
         t.type === 'Expense'
       );
       setTransactions(myTx);
+      
+      // Filter fuel entries for this driver and current period
+      const myFuel = (allFuel || []).filter((f: any) => {
+        // Match by driver ID or name
+        const isMyFuel = 
+          driverIds.includes(f.driverId) || 
+          driverIds.includes(f.driver_id) ||
+          (driverName && (f.driverName === driverName || f.driver === driverName));
+        
+        if (!isMyFuel) return false;
+        
+        // Filter by current period
+        const entryDate = f.date ? parseISO(f.date) : (f.createdAt ? new Date(f.createdAt) : null);
+        if (!entryDate) return false;
+        
+        return isWithinInterval(entryDate, { start: periodStart, end: periodEnd });
+      });
+      setFuelEntries(myFuel);
+      
+      // Combine into unified expense items for display
+      const combined: ExpenseItem[] = [];
+      
+      // Add fuel entries
+      myFuel.forEach((f: any) => {
+        combined.push({
+          id: f.id,
+          type: 'fuel',
+          date: f.date ? parseISO(f.date) : new Date(f.createdAt),
+          amount: f.cost || f.amount || 0,
+          description: f.station || f.stationName || 'Fuel Purchase',
+          status: f.auditStatus || f.status || 'pending',
+          station: f.station || f.stationName,
+          odometer: f.odometer || f.odometerReading,
+          volume: f.volume || f.liters,
+          receiptUrl: f.receiptUrl
+        });
+      });
+      
+      // Add expense transactions for current period
+      myTx.forEach((t: FinancialTransaction) => {
+        const txDate = t.date ? new Date(t.date) : (t.createdAt ? new Date(t.createdAt) : null);
+        if (!txDate) return;
+        
+        if (!isWithinInterval(txDate, { start: periodStart, end: periodEnd })) return;
+        
+        const isToll = t.category?.toLowerCase().includes('toll');
+        const isMaintenance = t.category?.toLowerCase().includes('maintenance') || 
+                             t.category?.toLowerCase().includes('service') ||
+                             t.category?.toLowerCase().includes('repair');
+        
+        combined.push({
+          id: t.id,
+          type: isToll ? 'toll' : (isMaintenance ? 'maintenance' : 'other'),
+          date: txDate,
+          amount: t.amount || 0,
+          description: t.merchant || t.description || t.category || 'Expense',
+          status: t.status || 'pending',
+          receiptUrl: t.receiptUrl
+        });
+      });
+      
+      // Sort by date descending
+      combined.sort((a, b) => b.date.getTime() - a.date.getTime());
+      setCombinedExpenses(combined);
+      
     } catch (e) {
       console.error("Failed to fetch transactions", e);
     } finally {
@@ -676,7 +769,43 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
     }
   };
 
+  // Get icon for expense type
+  const getExpenseIcon = (type: ExpenseItem['type']) => {
+    switch (type) {
+      case 'fuel': return <Fuel className="h-5 w-5 text-orange-500" />;
+      case 'toll': return <Ticket className="h-5 w-5 text-purple-500" />;
+      case 'maintenance': return <Wrench className="h-5 w-5 text-blue-500" />;
+      default: return <Receipt className="h-5 w-5 text-slate-500" />;
+    }
+  };
+
+  // Get background color for expense type
+  const getExpenseBgColor = (type: ExpenseItem['type']) => {
+    switch (type) {
+      case 'fuel': return 'bg-orange-100 dark:bg-orange-900/30';
+      case 'toll': return 'bg-purple-100 dark:bg-purple-900/30';
+      case 'maintenance': return 'bg-blue-100 dark:bg-blue-900/30';
+      default: return 'bg-slate-100 dark:bg-slate-800';
+    }
+  };
+
+  // Get label for expense type
+  const getExpenseLabel = (type: ExpenseItem['type']) => {
+    switch (type) {
+      case 'fuel': return 'Fuel';
+      case 'toll': return 'Toll';
+      case 'maintenance': return 'Maintenance';
+      default: return 'Expense';
+    }
+  };
+
   if (viewState === 'list') {
+    // Calculate period totals
+    const fuelTotal = combinedExpenses.filter(e => e.type === 'fuel').reduce((sum, e) => sum + e.amount, 0);
+    const tollTotal = combinedExpenses.filter(e => e.type === 'toll').reduce((sum, e) => sum + e.amount, 0);
+    const maintenanceTotal = combinedExpenses.filter(e => e.type === 'maintenance').reduce((sum, e) => sum + e.amount, 0);
+    const periodTotal = fuelTotal + tollTotal + maintenanceTotal;
+
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
@@ -689,20 +818,53 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
            </Button>
         </div>
 
+        {/* Current Period Header */}
+        <Card className="bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border-indigo-200/50 dark:border-indigo-800/50">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <CalendarIcon className="h-4 w-4 text-indigo-500" />
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Current Period</span>
+              </div>
+              <Badge variant="outline" className="bg-white/50 dark:bg-slate-900/50">
+                {format(periodStart, 'MMM d')} - {format(periodEnd, 'MMM d, yyyy')}
+              </Badge>
+            </div>
+            <div className="grid grid-cols-4 gap-3">
+              <div className="text-center p-2 bg-white/50 dark:bg-slate-900/30 rounded-lg">
+                <div className="text-xs text-slate-500 mb-1">Fuel</div>
+                <div className="font-bold text-orange-600">${fuelTotal.toFixed(2)}</div>
+              </div>
+              <div className="text-center p-2 bg-white/50 dark:bg-slate-900/30 rounded-lg">
+                <div className="text-xs text-slate-500 mb-1">Tolls</div>
+                <div className="font-bold text-purple-600">${tollTotal.toFixed(2)}</div>
+              </div>
+              <div className="text-center p-2 bg-white/50 dark:bg-slate-900/30 rounded-lg">
+                <div className="text-xs text-slate-500 mb-1">Maintenance</div>
+                <div className="font-bold text-blue-600">${maintenanceTotal.toFixed(2)}</div>
+              </div>
+              <div className="text-center p-2 bg-white/50 dark:bg-slate-900/30 rounded-lg">
+                <div className="text-xs text-slate-500 mb-1">Total</div>
+                <div className="font-bold text-slate-900 dark:text-slate-100">${periodTotal.toFixed(2)}</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="space-y-4">
            {loading ? (
               <div className="text-center py-10">
                  <Loader2 className="h-8 w-8 animate-spin mx-auto text-indigo-500" />
               </div>
-           ) : transactions.length === 0 ? (
-              <Card className="bg-slate-50 border-dashed">
+           ) : combinedExpenses.length === 0 ? (
+              <Card className="bg-slate-50 dark:bg-slate-800/50 border-dashed">
                  <CardContent className="flex flex-col items-center justify-center py-10 text-center">
-                     <div className="bg-white p-4 rounded-full shadow-sm mb-3">
-                         <Receipt className="h-8 w-8 text-slate-300" />
+                     <div className="bg-white dark:bg-slate-800 p-4 rounded-full shadow-sm mb-3">
+                         <Receipt className="h-8 w-8 text-slate-300 dark:text-slate-600" />
                      </div>
-                     <h3 className="font-semibold text-slate-900">No expenses logged</h3>
-                     <p className="text-slate-500 text-sm max-w-sm mt-1">
-                        Keep track of fuel, maintenance, and other costs here. Approved expenses are deducted from your fleet fees.
+                     <h3 className="font-semibold text-slate-900 dark:text-slate-100">No expenses this period</h3>
+                     <p className="text-slate-500 dark:text-slate-400 text-sm max-w-sm mt-1">
+                        Log fuel, tolls, and maintenance costs for {format(periodStart, 'MMM d')} - {format(periodEnd, 'MMM d')}.
                      </p>
                      <Button variant="outline" className="mt-4" onClick={() => setViewState('category_select')}>
                         Log First Expense
@@ -711,37 +873,40 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
               </Card>
            ) : (
               <div className="grid gap-3">
-                 {transactions.map(tx => (
-                    <Card key={tx.id} className="overflow-hidden">
+                 {combinedExpenses.map(expense => (
+                    <Card key={expense.id} className="overflow-hidden">
                        <CardContent className="p-0">
                           <div className="flex items-center p-4 gap-4">
                              <div className={cn(
                                  "h-10 w-10 rounded-full flex items-center justify-center shrink-0",
-                                 tx.category === 'Fuel' ? "bg-orange-100" : 
-                                 tx.category === 'Maintenance' ? "bg-blue-100" : 
-                                 tx.category === 'Tolls' ? "bg-purple-100" : "bg-slate-100"
+                                 getExpenseBgColor(expense.type)
                              )}>
-                                 {getCategoryIcon(tx.category)}
+                                 {getExpenseIcon(expense.type)}
                              </div>
                              <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between mb-1">
-                                   <h4 className="font-semibold text-slate-900 truncate pr-2">{tx.category}</h4>
-                                   <span className="font-bold text-slate-900 text-right shrink-0">
-                                      ${Math.abs(tx.amount).toFixed(2)}
+                                   <h4 className="font-semibold text-slate-900 dark:text-slate-100 truncate pr-2">
+                                     {expense.description || getExpenseLabel(expense.type)}
+                                   </h4>
+                                   <span className="font-bold text-slate-900 dark:text-slate-100 text-right shrink-0">
+                                      ${Math.abs(expense.amount).toFixed(2)}
                                    </span>
                                 </div>
-                                <div className="flex items-center justify-between text-xs text-slate-500">
+                                <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
                                    <div className="flex items-center gap-2">
-                                       <span>
-                                           {formatSafeDate(tx.date, tx.time)}
-                                       </span>
-                                       {tx.odometer && <span>• {tx.odometer} km</span>}
+                                       <span>{format(expense.date, 'MMM d, yyyy')}</span>
+                                       {expense.volume && <span>• {expense.volume}L</span>}
+                                       {expense.odometer && <span>• {expense.odometer.toLocaleString()} km</span>}
                                    </div>
-                                   {getStatusBadge(tx.status, tx.metadata)}
+                                   <Badge variant="outline" className={cn(
+                                     "text-xs",
+                                     expense.status === 'approved' ? "bg-green-100 text-green-700 border-green-200" :
+                                     expense.status === 'pending' ? "bg-amber-100 text-amber-700 border-amber-200" :
+                                     "bg-slate-100 text-slate-600"
+                                   )}>
+                                     {expense.type === 'fuel' ? getExpenseLabel(expense.type) : expense.status}
+                                   </Badge>
                                 </div>
-                                {tx.description && tx.description !== `${tx.category} Expense` && (
-                                    <p className="text-xs text-slate-400 mt-1 truncate">{tx.description}</p>
-                                )}
                              </div>
                           </div>
                        </CardContent>
