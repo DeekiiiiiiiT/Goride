@@ -120,24 +120,8 @@ export function DriverShell() {
   return (
     <div className="flex min-h-dvh min-h-screen flex-col overflow-x-hidden bg-gradient-to-br from-slate-100 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 pt-[env(safe-area-inset-top,0px)] backdrop-blur-lg dark:border-slate-800 dark:bg-slate-900/80">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-sm">
-              <Car className="w-4 h-4 text-white" />
-            </div>
-            <div>
-              <h1 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white">Roam Driver</h1>
-              {isFleetDriver && fleet && (
-                <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
-                  <Building2 className="w-3 h-3 shrink-0" />
-                  <span className="truncate max-w-[200px] sm:max-w-[280px] md:max-w-md">{fleet.name}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <ThemeToggleButton />
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
+          <div className="flex shrink-0 items-center gap-2">
             <button
               type="button"
               onClick={() => setMenuOpen(true)}
@@ -146,6 +130,22 @@ export function DriverShell() {
             >
               <Menu className="w-5 h-5" />
             </button>
+            <ThemeToggleButton />
+          </div>
+
+          <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
+            <div className="min-w-0 text-right">
+              <h1 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white">Roam Driver</h1>
+              {isFleetDriver && fleet && (
+                <div className="flex items-center justify-end gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+                  <Building2 className="w-3 h-3 shrink-0" />
+                  <span className="truncate max-w-[200px] sm:max-w-[280px] md:max-w-md">{fleet.name}</span>
+                </div>
+              )}
+            </div>
+            <div className="w-8 h-8 shrink-0 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-sm">
+              <Car className="w-4 h-4 text-white" />
+            </div>
           </div>
         </div>
       </header>
@@ -187,7 +187,7 @@ export function DriverShell() {
             onClick={() => setMenuOpen(false)}
             aria-hidden
           />
-          <div className="absolute right-0 top-0 bottom-0 flex w-[min(100vw-2rem,20rem)] flex-col border-l border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 sm:w-80">
+          <div className="absolute left-0 top-0 bottom-0 flex w-[min(100vw-2rem,20rem)] flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 sm:w-80">
             <div className="flex items-center justify-between border-b border-slate-200 p-4 pt-[max(1rem,env(safe-area-inset-top,0px))] dark:border-slate-800">
               <span className="font-semibold text-slate-900 dark:text-white">Menu</span>
               <button
