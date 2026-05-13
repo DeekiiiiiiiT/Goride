@@ -46,7 +46,7 @@ export function DriverDashboard({ onNavigate }: DriverDashboardProps) {
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard
           label="Today's Earnings"
           value="$0.00"

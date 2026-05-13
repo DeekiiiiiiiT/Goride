@@ -852,45 +852,69 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
     const periodTotal = fuelTotal + tollTotal + maintenanceTotal;
 
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-           <div>
+      <div className="space-y-6 w-full min-w-0 max-w-full">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 min-w-0">
+           <div className="min-w-0 flex-1">
               <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Expenses</h2>
-              <p className="text-sm text-slate-500">Log your operational costs for reimbursement.</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5 leading-snug">
+                Log your operational costs for reimbursement.
+              </p>
            </div>
-           <Button onClick={() => setViewState('category_select')}>
-              <Plus className="mr-2 h-4 w-4" /> Log Expense
+           <Button
+             className="w-full shrink-0 sm:w-auto"
+             onClick={() => setViewState('category_select')}
+           >
+              <Plus className="mr-2 h-4 w-4 shrink-0" /> Log Expense
            </Button>
         </div>
 
-        {/* Current Period Header */}
-        <Card className="bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border-indigo-200/50 dark:border-indigo-800/50">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <CalendarIcon className="h-4 w-4 text-indigo-500" />
+        {/* Current Period — 2×2 on phones, 4 columns from sm up so amounts never crush */}
+        <Card className="bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border-indigo-200/50 dark:border-indigo-800/50 overflow-hidden">
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-3 min-w-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <CalendarIcon className="h-4 w-4 shrink-0 text-indigo-500" />
                 <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Current Period</span>
               </div>
-              <Badge variant="outline" className="bg-white/50 dark:bg-slate-900/50">
-                {format(periodStart, 'MMM d')} - {format(periodEnd, 'MMM d, yyyy')}
+              <Badge
+                variant="outline"
+                className="w-fit max-w-full whitespace-normal text-left text-xs font-medium leading-snug bg-white/50 dark:bg-slate-900/50 sm:text-left"
+              >
+                {format(periodStart, 'MMM d')} – {format(periodEnd, 'MMM d, yyyy')}
               </Badge>
             </div>
-            <div className="grid grid-cols-4 gap-3">
-              <div className="text-center p-2 bg-white/50 dark:bg-slate-900/30 rounded-lg">
-                <div className="text-xs text-slate-500 mb-1">Fuel</div>
-                <div className="font-bold text-orange-600">${fuelTotal.toFixed(2)}</div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+              <div className="min-w-0 rounded-lg bg-white/50 p-2.5 text-center dark:bg-slate-900/30 sm:p-2">
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
+                  Fuel
+                </div>
+                <div className="break-words text-sm font-bold tabular-nums leading-tight text-orange-600 sm:text-base">
+                  ${fuelTotal.toFixed(2)}
+                </div>
               </div>
-              <div className="text-center p-2 bg-white/50 dark:bg-slate-900/30 rounded-lg">
-                <div className="text-xs text-slate-500 mb-1">Tolls</div>
-                <div className="font-bold text-purple-600">${tollTotal.toFixed(2)}</div>
+              <div className="min-w-0 rounded-lg bg-white/50 p-2.5 text-center dark:bg-slate-900/30 sm:p-2">
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
+                  Tolls
+                </div>
+                <div className="break-words text-sm font-bold tabular-nums leading-tight text-purple-600 sm:text-base">
+                  ${tollTotal.toFixed(2)}
+                </div>
               </div>
-              <div className="text-center p-2 bg-white/50 dark:bg-slate-900/30 rounded-lg">
-                <div className="text-xs text-slate-500 mb-1">Maintenance</div>
-                <div className="font-bold text-blue-600">${maintenanceTotal.toFixed(2)}</div>
+              <div className="min-w-0 rounded-lg bg-white/50 p-2.5 text-center dark:bg-slate-900/30 sm:p-2">
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
+                  Maint.
+                </div>
+                <div className="break-words text-sm font-bold tabular-nums leading-tight text-blue-600 sm:text-base">
+                  ${maintenanceTotal.toFixed(2)}
+                </div>
               </div>
-              <div className="text-center p-2 bg-white/50 dark:bg-slate-900/30 rounded-lg">
-                <div className="text-xs text-slate-500 mb-1">Total</div>
-                <div className="font-bold text-slate-900 dark:text-slate-100">${periodTotal.toFixed(2)}</div>
+              <div className="min-w-0 rounded-lg bg-white/50 p-2.5 text-center ring-1 ring-slate-200/80 dark:bg-slate-900/30 dark:ring-slate-700/80 sm:p-2">
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
+                  Total
+                </div>
+                <div className="break-words text-sm font-bold tabular-nums leading-tight text-slate-900 dark:text-slate-100 sm:text-base">
+                  ${periodTotal.toFixed(2)}
+                </div>
               </div>
             </div>
           </CardContent>
@@ -917,38 +941,45 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                  </CardContent>
               </Card>
            ) : (
-              <div className="grid gap-3">
+              <div className="grid w-full min-w-0 max-w-full gap-3">
                  {combinedExpenses.map(expense => (
-                    <Card key={expense.id} className="overflow-hidden">
+                    <Card key={expense.id} className="min-w-0 max-w-full overflow-hidden">
                        <CardContent className="p-0">
-                          <div className="flex items-center p-4 gap-4">
+                          <div className="flex min-w-0 items-start gap-3 p-3 sm:p-4 sm:gap-4">
                              <div className={cn(
-                                 "h-10 w-10 rounded-full flex items-center justify-center shrink-0",
+                                 "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
                                  getExpenseBgColor(expense.type)
                              )}>
                                  {getExpenseIcon(expense.type)}
                              </div>
-                             <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between mb-1">
-                                   <h4 className="font-semibold text-slate-900 dark:text-slate-100 truncate pr-2">
+                             <div className="min-w-0 flex-1 overflow-hidden">
+                                <div className="flex min-w-0 items-start justify-between gap-2">
+                                   <h4 className="min-w-0 flex-1 break-words line-clamp-3 font-semibold leading-snug text-slate-900 dark:text-slate-100">
                                      {expense.description || getExpenseLabel(expense.type)}
                                    </h4>
-                                   <span className="font-bold text-slate-900 dark:text-slate-100 text-right shrink-0">
+                                   <span className="shrink-0 text-right text-sm font-bold tabular-nums text-slate-900 dark:text-slate-100 sm:text-base">
                                       ${Math.abs(expense.amount).toFixed(2)}
                                    </span>
                                 </div>
-                                <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                                   <div className="flex items-center gap-2">
-                                       <span>{format(expense.date, 'MMM d, yyyy')}</span>
-                                       {expense.volume && <span>• {expense.volume}L</span>}
-                                       {expense.odometer && <span>• {expense.odometer.toLocaleString()} km</span>}
+                                <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 gap-y-1.5 text-xs font-medium text-slate-600 dark:text-slate-400">
+                                   <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                                     <span className="whitespace-nowrap">{format(expense.date, 'MMM d, yyyy')}</span>
+                                     {expense.volume != null && (
+                                       <span className="whitespace-nowrap">• {expense.volume}L</span>
+                                     )}
+                                     {expense.odometer != null && (
+                                       <span className="min-w-0 break-words">• {expense.odometer.toLocaleString()} km</span>
+                                     )}
                                    </div>
-                                   <Badge variant="outline" className={cn(
-                                     "text-xs",
-                                     expense.status === 'approved' ? "bg-green-100 text-green-700 border-green-200" :
-                                     expense.status === 'pending' ? "bg-amber-100 text-amber-700 border-amber-200" :
-                                     "bg-slate-100 text-slate-600"
-                                   )}>
+                                   <Badge
+                                     variant="outline"
+                                     className={cn(
+                                       'shrink-0 text-[11px] font-semibold',
+                                       expense.status === 'approved' ? "bg-green-100 text-green-800 border-green-200 dark:bg-green-950/40 dark:text-green-200 dark:border-green-800" :
+                                       expense.status === 'pending' ? "bg-amber-100 text-amber-900 border-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800" :
+                                       "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                                     )}
+                                   >
                                      {expense.type === 'fuel' ? getExpenseLabel(expense.type) : expense.status}
                                    </Badge>
                                 </div>

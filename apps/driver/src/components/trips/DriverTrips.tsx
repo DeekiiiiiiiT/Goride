@@ -25,18 +25,18 @@ export function DriverTrips() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-white/90 rounded-xl p-3 border border-slate-200 text-center shadow-sm dark:bg-slate-800/50 dark:border-slate-700/50">
-          <p className="text-xl font-bold text-slate-900 dark:text-white">0</p>
-          <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 mt-0.5">Today</p>
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <div className="min-w-0 rounded-xl border border-slate-200 bg-white/90 p-2.5 text-center shadow-sm sm:p-3 dark:border-slate-700/50 dark:bg-slate-800/50">
+          <p className="text-lg font-bold tabular-nums text-slate-900 dark:text-white sm:text-xl">0</p>
+          <p className="mt-0.5 text-[10px] font-semibold leading-tight text-slate-600 dark:text-slate-300 sm:text-[11px]">Today</p>
         </div>
-        <div className="bg-white/90 rounded-xl p-3 border border-slate-200 text-center shadow-sm dark:bg-slate-800/50 dark:border-slate-700/50">
-          <p className="text-xl font-bold text-slate-900 dark:text-white">0</p>
-          <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 mt-0.5">This Week</p>
+        <div className="min-w-0 rounded-xl border border-slate-200 bg-white/90 p-2.5 text-center shadow-sm sm:p-3 dark:border-slate-700/50 dark:bg-slate-800/50">
+          <p className="text-lg font-bold tabular-nums text-slate-900 dark:text-white sm:text-xl">0</p>
+          <p className="mt-0.5 text-[10px] font-semibold leading-tight text-slate-600 dark:text-slate-300 sm:text-[11px]">This Week</p>
         </div>
-        <div className="bg-white/90 rounded-xl p-3 border border-slate-200 text-center shadow-sm dark:bg-slate-800/50 dark:border-slate-700/50">
-          <p className="text-xl font-bold text-slate-900 dark:text-white">0</p>
-          <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 mt-0.5">This Month</p>
+        <div className="min-w-0 rounded-xl border border-slate-200 bg-white/90 p-2.5 text-center shadow-sm sm:p-3 dark:border-slate-700/50 dark:bg-slate-800/50">
+          <p className="text-lg font-bold tabular-nums text-slate-900 dark:text-white sm:text-xl">0</p>
+          <p className="mt-0.5 text-[10px] font-semibold leading-tight text-slate-600 dark:text-slate-300 sm:text-[11px]">This Month</p>
         </div>
       </div>
 

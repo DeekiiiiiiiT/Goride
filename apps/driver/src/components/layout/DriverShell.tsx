@@ -118,9 +118,9 @@ export function DriverShell() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex flex-col">
-      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-lg border-b border-slate-200 dark:bg-slate-900/80 dark:border-slate-800">
-        <div className="flex items-center justify-between px-4 h-14">
+    <div className="flex min-h-dvh min-h-screen flex-col overflow-x-hidden bg-gradient-to-br from-slate-100 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 pt-[env(safe-area-inset-top,0px)] backdrop-blur-lg dark:border-slate-800 dark:bg-slate-900/80">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-sm">
               <Car className="w-4 h-4 text-white" />
@@ -130,7 +130,7 @@ export function DriverShell() {
               {isFleetDriver && fleet && (
                 <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
                   <Building2 className="w-3 h-3 shrink-0" />
-                  <span className="truncate max-w-[140px]">{fleet.name}</span>
+                  <span className="truncate max-w-[200px] sm:max-w-[280px] md:max-w-md">{fleet.name}</span>
                 </div>
               )}
             </div>
@@ -150,14 +150,14 @@ export function DriverShell() {
         </div>
       </header>
 
-      <main className="flex-1 overflow-auto pb-20">
-        <div className="max-w-lg mx-auto px-4 py-4">
+      <main className="flex-1 overflow-x-hidden overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom,0px))]">
+        <div className="mx-auto w-full min-w-0 max-w-lg px-4 py-4 sm:max-w-2xl sm:px-6 md:max-w-3xl lg:max-w-4xl">
           {renderPage()}
         </div>
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-lg border-t border-slate-200 z-40 dark:bg-slate-900/95 dark:border-slate-800">
-        <div className="flex items-center justify-around h-16 max-w-lg mx-auto">
+      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur-lg dark:border-slate-800 dark:bg-slate-900/95">
+        <div className="mx-auto flex h-16 max-w-lg items-center justify-around sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
           {bottomNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentPage === item.id;
@@ -187,8 +187,8 @@ export function DriverShell() {
             onClick={() => setMenuOpen(false)}
             aria-hidden
           />
-          <div className="absolute right-0 top-0 bottom-0 w-72 bg-white border-l border-slate-200 flex flex-col dark:bg-slate-900 dark:border-slate-800">
-            <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800">
+          <div className="absolute right-0 top-0 bottom-0 flex w-[min(100vw-2rem,20rem)] flex-col border-l border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 sm:w-80">
+            <div className="flex items-center justify-between border-b border-slate-200 p-4 pt-[max(1rem,env(safe-area-inset-top,0px))] dark:border-slate-800">
               <span className="font-semibold text-slate-900 dark:text-white">Menu</span>
               <button
                 type="button"
