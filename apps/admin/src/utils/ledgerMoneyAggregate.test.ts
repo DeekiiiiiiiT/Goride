@@ -1,0 +1,197 @@
+import { describe, expect, it } from 'vitest';
+import {
+  aggregateCanonicalEventsToLedgerDriverOverview,
+  canonicalEventInSelectedWindow,
+} from './ledgerMoneyAggregate';
+
+const driver = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+
+describe('canonicalEventInSelectedWindow', () => {
+  it('includes legacy statement/payout rows in an extended band when period fields are missing', () => {
+    const range = ['2026-03-23', '2026-03-29'] as const;
+    expect(
+      canonicalEventInSelectedWindow({ eventType: 'statement_line', date: '2026-03-30' }, ...range),
+    ).toBe(true);
+    expect(
+      canonicalEventInSelectedWindow({ eventType: 'payout_bank', date: '2026-03-30' }, ...range),
+    ).toBe(true);
+    expect(
+      canonicalEventInSelectedWindow({ eventType: 'statement_line', date: '2026-03-28' }, ...range),
+    ).toBe(true);
+    // Pay/settlement date well after week end (endDate + 7 was too tight in production)
+    expect(
+      canonicalEventInSelectedWindow({ eventType: 'statement_line', date: '2026-04-10' }, ...range),
+    ).toBe(true);
+  });
+
+  it('does not include statement rows far outside the band', () => {
+    expect(
+      canonicalEventInSelectedWindow(
+        { eventType: 'statement_line', date: '2026-06-01' },
+        '2026-03-23',
+        '2026-03-29',
+      ),
+    ).toBe(false);
+  });
+});
+
+describe('aggregateCanonicalEventsToLedgerDriverOverview', () => {
+  it('rolls up Uber statement_line into period earnings without double-counting fare_earning', () => {
+    const period = [
+      {
+        eventType: 'statement_line',
+        driverId: driver,
+        netAmount: 50,
+        direction: 'inflow',
+        date: '2026-03-05',
+        platform: 'Uber',
+        metadata: { lineCode: 'NET_FARE' },
+      },
+      {
+        eventType: 'statement_line',
+        driverId: driver,
+        netAmount: 10,
+        direction: 'inflow',
+        date: '2026-03-05',
+        platform: 'Uber',
+        metadata: { lineCode: 'TIPS' },
+      },
+      {
+        eventType: 'fare_earning',
+        driverId: driver,
+        netAmount: 40,
+        grossAmount: 40,
+        direction: 'inflow',
+        date: '2026-03-05',
+        platform: 'Uber',
+        paymentMethod: 'Digital Wallet',
+      },
+    ];
+    const data = aggregateCanonicalEventsToLedgerDriverOverview(period, [], [], undefined) as any;
+    expect(data.period.earnings).toBe(60);
+    expect(data.period.tripCount).toBe(1);
+    expect(data.period.uber.fareComponents).toBe(50);
+    expect(data.period.uber.tips).toBe(10);
+    expect(data.readModelSource).toBe('canonical_events');
+  });
+
+  it('sums InDrive fare_earning when no Uber statement lines', () => {
+    const period = [
+      {
+        eventType: 'fare_earning',
+        driverId: driver,
+        netAmount: 25,
+        grossAmount: 30,
+        direction: 'inflow',
+        date: '2026-03-05',
+        platform: 'InDrive',
+      },
+    ];
+    const data = aggregateCanonicalEventsToLedgerDriverOverview(period, [], [], undefined) as any;
+    expect(data.period.earnings).toBe(25);
+    expect(data.platformStats.InDrive.earnings).toBe(25);
+  });
+
+  it('does not double-count cash when org statement payout_cash and trip fare_earning Cash both exist', () => {
+    const period = [
+      {
+        eventType: 'statement_line',
+        driverId: driver,
+        netAmount: 100,
+        direction: 'inflow',
+        date: '2026-03-10',
+        platform: 'Uber',
+        metadata: { lineCode: 'NET_FARE' },
+        periodStart: '2026-03-01',
+        periodEnd: '2026-03-10',
+      },
+      {
+        eventType: 'payout_cash',
+        driverId: driver,
+        netAmount: 5000,
+        direction: 'inflow',
+        date: '2026-03-10',
+        platform: 'Uber',
+        periodStart: '2026-03-01',
+        periodEnd: '2026-03-10',
+      },
+      {
+        eventType: 'fare_earning',
+        driverId: driver,
+        netAmount: 80,
+        grossAmount: 80,
+        direction: 'inflow',
+        date: '2026-03-05',
+        platform: 'Uber',
+        paymentMethod: 'Cash',
+        metadata: { cashCollected: 80 },
+      },
+    ];
+    const data = aggregateCanonicalEventsToLedgerDriverOverview(period, [], [], undefined) as any;
+    expect(data.period.cashCollected).toBe(5000);
+    expect(data.platformStats.Uber.cashCollected).toBe(5000);
+  });
+
+  it('uses Uber fare_earning when statement has only REFUNDS_EXPENSES (no fare lines)', () => {
+    const period = [
+      {
+        eventType: 'statement_line',
+        driverId: driver,
+        netAmount: 500,
+        direction: 'inflow',
+        date: '2026-03-25',
+        platform: 'Uber',
+        metadata: { lineCode: 'REFUNDS_EXPENSES' },
+      },
+      {
+        eventType: 'fare_earning',
+        driverId: driver,
+        netAmount: 1000,
+        grossAmount: 1100,
+        direction: 'inflow',
+        date: '2026-03-25',
+        platform: 'Uber',
+        paymentMethod: 'Digital Wallet',
+      },
+    ];
+    const data = aggregateCanonicalEventsToLedgerDriverOverview(period, [], [], undefined) as any;
+    expect(data.period.uber.fareComponents).toBe(1000);
+    expect(data.period.earnings).toBe(500);
+    expect(data.platformStats.Uber.earnings).toBe(500);
+  });
+
+  it('counts Roam cash collected when fare_earning has paymentMethod Cash', () => {
+    const period = [
+      {
+        eventType: 'fare_earning',
+        driverId: driver,
+        netAmount: 200,
+        grossAmount: 200,
+        direction: 'inflow',
+        date: '2026-03-25',
+        platform: 'Roam',
+        paymentMethod: 'Cash',
+        metadata: { tripId: 't1', cashCollected: 200 },
+      },
+    ];
+    const data = aggregateCanonicalEventsToLedgerDriverOverview(period, [], [], undefined) as any;
+    expect(data.period.cashCollected).toBe(200);
+    expect(data.platformStats.Roam.cashCollected).toBe(200);
+  });
+
+  it('includes toll_support_adjustment in earnings and disputeRefunds', () => {
+    const period = [
+      {
+        eventType: 'toll_support_adjustment',
+        driverId: driver,
+        netAmount: 12,
+        direction: 'inflow',
+        date: '2026-03-06',
+        platform: 'Uber',
+      },
+    ];
+    const data = aggregateCanonicalEventsToLedgerDriverOverview(period, [], [], undefined) as any;
+    expect(data.period.earnings).toBe(12);
+    expect(data.period.disputeRefunds).toBe(12);
+  });
+});
