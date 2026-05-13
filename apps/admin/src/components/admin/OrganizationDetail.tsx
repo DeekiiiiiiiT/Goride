@@ -22,7 +22,7 @@ import {
 import { useAuth } from '../auth/AuthContext';
 import { resolveRole } from '../../utils/permissions';
 import { API_ENDPOINTS } from '../../services/apiConfig';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { ConfirmationModal } from './ConfirmationModal';
 
 // -------------------------------------------------------------------

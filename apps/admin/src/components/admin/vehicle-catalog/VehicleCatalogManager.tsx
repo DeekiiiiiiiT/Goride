@@ -43,7 +43,7 @@ import { VEHICLE_CATALOG_CSV_COLUMNS } from "../../../types/csv-schemas";
 import { downloadBlob, jsonToCsv } from "../../../utils/csv-helper";
 import { parseVehicleCatalogCsvWithPapa, type ParsedCatalogImportRow } from "../../../utils/vehicleCatalogCsvImport";
 import { catalogCreateDriftFieldNames } from "../../../utils/vehicleCatalogWriteDrift";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { Button } from "../../ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../ui/collapsible";
 import {

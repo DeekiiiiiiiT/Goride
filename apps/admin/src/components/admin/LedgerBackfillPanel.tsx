@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { api } from '../../services/api';
 import { usePermissions } from '../../hooks/usePermissions';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { CheckCircle2, AlertTriangle, Play, Eye, Loader2, Clock, Database, ChevronDown, ChevronUp, Wrench, Search, Download, Info, Trash2, RefreshCw } from 'lucide-react';
 
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-37f42386`;

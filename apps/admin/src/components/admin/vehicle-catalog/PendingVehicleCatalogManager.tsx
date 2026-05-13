@@ -31,7 +31,7 @@ import {
   DialogDescription,
 } from "../../ui/dialog";
 import { Textarea } from "../../ui/textarea";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { Badge } from "../../ui/badge";
 import {
   Select,

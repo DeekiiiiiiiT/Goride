@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Loader2, Copy, Check, Shuffle, KeyRound } from 'lucide-react';
 import { API_ENDPOINTS } from '../../services/apiConfig';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 interface Props {
   isOpen: boolean;

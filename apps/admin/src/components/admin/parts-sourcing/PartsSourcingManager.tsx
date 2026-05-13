@@ -47,7 +47,7 @@ import {
   DialogDescription,
 } from "../../ui/dialog";
 import { Textarea } from "../../ui/textarea";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/tabs";
 import {
   Select,
