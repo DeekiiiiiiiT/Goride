@@ -16,6 +16,8 @@ export interface DriverProfile {
   businessLicenseNumber?: string;
   status: 'active' | 'pending' | 'suspended' | 'deactivated';
   onboardingComplete: boolean;
+  /** Google extended signup progress (`g_phone`, `g_archetype`) or null when complete / legacy. */
+  onboardingStep?: string | null;
   displayName?: string;
   firstName?: string;
   lastName?: string;
@@ -110,6 +112,7 @@ export const DriverProvider = ({ children }: { children: React.ReactNode }) => {
           businessLicenseNumber: data.business_license_number,
           status: data.status,
           onboardingComplete: data.onboarding_complete,
+          onboardingStep: data.onboarding_step ?? null,
           displayName: data.display_name,
           firstName: data.first_name ?? undefined,
           lastName: data.last_name ?? undefined,

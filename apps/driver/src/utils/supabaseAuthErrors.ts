@@ -48,5 +48,17 @@ export function formatPhoneAuthError(message: string): string {
     return 'SMS hook signing failed. Check that SEND_SMS_HOOK_SECRET on the send-sms function matches the Send SMS hook secret in the Supabase dashboard.';
   }
 
+  if (lower.includes('token has expired') || lower.includes('otp_expired')) {
+    return 'That code has expired. Request a new SMS code and try again.';
+  }
+
+  if (lower.includes('invalid otp') || lower.includes('invalid token')) {
+    return 'That code is not valid. Check the SMS and try again, or request a new code.';
+  }
+
+  if (lower.includes('phone number already registered') || lower.includes('already been registered')) {
+    return 'This phone number is already linked to another account. Use a different number or sign in with that account.';
+  }
+
   return t;
 }

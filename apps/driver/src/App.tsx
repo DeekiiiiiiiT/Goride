@@ -6,8 +6,11 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { OfflineProvider } from './components/providers/OfflineProvider';
 import { DriverLoginPage } from './components/auth/DriverLoginPage';
 import { DriverHybridOnboarding } from './components/onboarding/DriverHybridOnboarding';
+import { DriverGoogleSignupWizard } from './components/onboarding/DriverGoogleSignupWizard';
 import { DriverShell } from './components/layout/DriverShell';
 import { AppErrorBoundary } from './components/layout/AppErrorBoundary';
+import { useAuth } from './contexts/AuthContext';
+import { needsGoogleExtendedSignup } from './utils/googleDriverSignup';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -32,15 +35,19 @@ function AuthLoadingScreen() {
 }
 
 function AuthenticatedDriverRoute() {
+  const { user } = useAuth();
   const { profile, loading } = useDriver();
 
   if (loading) {
     return <AuthLoadingScreen />;
   }
 
-  // No Postgres row yet: keep legacy KV-only drivers on the shell (migration backfill can add a row later).
+  if (needsGoogleExtendedSignup(user, profile)) {
+    return <DriverGoogleSignupWizard />;
+  }
+
   if (profile === null) {
-    return <DriverShell />;
+    return <DriverHybridOnboarding />;
   }
 
   if (!profile.onboardingComplete) {
