@@ -827,7 +827,21 @@ export const api = {
       const st = response.status;
       const msg = await parseFinancialApiErrorBody(response);
       // #region agent log
-      fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03bcb5'},body:JSON.stringify({sessionId:'03bcb5',location:'api.ts:deleteTransaction:fail',message:'DELETE transaction non-OK',data:{httpStatus:st,txIdLen:trimmed.length,errMsg:(msg||'').slice(0,240)},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+      const payload = {
+        sessionId: '03bcb5',
+        flowTag: 'fuel-delete-flow-v3',
+        location: 'api.ts:deleteTransaction:fail',
+        message: 'DELETE transaction non-OK',
+        data: { httpStatus: st, txIdLen: trimmed.length, errMsg: (msg || '').slice(0, 240) },
+        timestamp: Date.now(),
+        hypothesisId: 'H2',
+      };
+      console.error('[ROAM_DEBUG_03bcb5]', JSON.stringify(payload));
+      fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '03bcb5' },
+        body: JSON.stringify(payload),
+      }).catch(() => {});
       // #endregion
       throw new Error(msg || 'Failed to delete transaction');
     }
