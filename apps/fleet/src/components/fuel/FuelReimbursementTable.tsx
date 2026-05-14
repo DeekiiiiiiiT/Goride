@@ -831,20 +831,29 @@ export function FuelReimbursementTable({
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <div className="flex justify-end flex-wrap gap-2">
-                                            <Button size="sm" variant="outline" onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); }} title="View Details">
-                                                <Eye className="h-4 w-4" />
-                                            </Button>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <Button size="sm" variant="outline" onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); }}>
+                                                        <Eye className="h-4 w-4" />
+                                                    </Button>
+                                                </TooltipTrigger>
+                                                <TooltipContent side="top" sideOffset={6}>View details</TooltipContent>
+                                            </Tooltip>
 
                                             {pendingQueueMode && showActions && allowFinalizePendingActions && isLogReviewEligible(tx) && onApproveLogReview && (
-                                                <Button
-                                                    size="sm"
-                                                    className="bg-amber-600 hover:bg-amber-700 text-white"
-                                                    onClick={() => openLogReview(tx)}
-                                                    title="Review odometer / log"
-                                                >
-                                                    <Eye className="h-4 w-4 mr-1" />
-                                                    Review
-                                                </Button>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <Button
+                                                            size="sm"
+                                                            className="bg-amber-600 hover:bg-amber-700 text-white"
+                                                            onClick={() => openLogReview(tx)}
+                                                        >
+                                                            <Eye className="h-4 w-4 mr-1" />
+                                                            Review
+                                                        </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent side="top" sideOffset={6}>Confirm odometer to approve</TooltipContent>
+                                                </Tooltip>
                                             )}
 
                                             {/* Edit — not on Awaiting station (station hold); fleet waits on master station verification */}
@@ -854,35 +863,54 @@ export function FuelReimbursementTable({
                                                 tx.metadata?.source === 'Manual Request' ||
                                                 !tx.metadata?.source
                                             ) && (
-                                                <Button 
-                                                    size="sm" 
-                                                    variant="outline" 
-                                                    onClick={() => onEdit(tx)} 
-                                                    title="Edit Transaction"
-                                                    className="hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200"
-                                                >
-                                                    <Pencil className="h-4 w-4" />
-                                                </Button>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <Button 
+                                                            size="sm" 
+                                                            variant="outline" 
+                                                            onClick={() => onEdit(tx)} 
+                                                            className="hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200"
+                                                        >
+                                                            <Pencil className="h-4 w-4" />
+                                                        </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent side="top" sideOffset={6}>Edit transaction</TooltipContent>
+                                                </Tooltip>
                                             )}
                                             
                                             {showActions && allowFinalizePendingActions && tx.status === 'Pending' && (tx.metadata?.source === 'Manual' || !tx.metadata?.source) && (
                                                 <>
                                                     {onDelete && (
-                                                        <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700" onClick={() => onDelete(tx.id)} title="Delete">
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700" onClick={() => onDelete(tx.id)}>
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent side="top" sideOffset={6}>Delete — removes from ledger</TooltipContent>
+                                                        </Tooltip>
                                                     )}
                                                 </>
                                             )}
 
                                             {showActions && allowFinalizePendingActions && (
                                                 <>
-                                                    <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); setAction('approve'); }} title="Approve">
-                                                        <Check className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button size="sm" variant="destructive" onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); setAction('reject'); }} title="Reject">
-                                                        <X className="h-4 w-4" />
-                                                    </Button>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); setAction('approve'); }}>
+                                                                <Check className="h-4 w-4" />
+                                                            </Button>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent side="top" sideOffset={6}>Approve reimbursement</TooltipContent>
+                                                    </Tooltip>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Button size="sm" variant="destructive" onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); setAction('reject'); }}>
+                                                                <X className="h-4 w-4" />
+                                                            </Button>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent side="top" sideOffset={6}>Reject — saved as denied</TooltipContent>
+                                                    </Tooltip>
                                                 </>
                                             )}
                                         </div>
@@ -975,14 +1003,19 @@ export function FuelReimbursementTable({
                                         </Badge>
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        <Button 
-                                            size="sm" 
-                                            className="bg-amber-600 hover:bg-amber-700 text-white"
-                                            onClick={() => openLogReview(tx)}
-                                        >
-                                            <Eye className="h-4 w-4 mr-1.5" />
-                                            Review
-                                        </Button>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button 
+                                                    size="sm" 
+                                                    className="bg-amber-600 hover:bg-amber-700 text-white"
+                                                    onClick={() => openLogReview(tx)}
+                                                >
+                                                    <Eye className="h-4 w-4 mr-1.5" />
+                                                    Review
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="top" sideOffset={6}>Confirm odometer to approve</TooltipContent>
+                                        </Tooltip>
                                     </TableCell>
                                 </TableRow>
                             );
