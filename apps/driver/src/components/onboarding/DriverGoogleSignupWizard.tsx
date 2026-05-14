@@ -629,6 +629,9 @@ export function DriverGoogleSignupWizard() {
                   <PopoverContent className="w-auto min-w-[288px] p-0" align="start">
                     <Calendar
                       mode="single"
+                      captionLayout="dropdown-buttons"
+                      fromYear={1920}
+                      toYear={new Date().getFullYear()}
                       selected={dob}
                       onSelect={d => {
                         setDob(d);
