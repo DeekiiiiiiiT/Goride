@@ -154,7 +154,8 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
               fuelService.getFuelEntries().catch(() => []),
               fuelService.getMileageAdjustments().catch(() => []),
               FuelDisputeService.getAllDisputes().catch(() => []),
-              api.getTransactions().catch(() => []),
+              // Unscoped GET defaults to limit 100 on server; driver uses driverIds (limit 5000). Request enough rows for Review Queue / fuel reconciliation.
+              api.getTransactions(undefined, { limit: 10000 }).catch(() => []),
               api.getFinalizedReports().catch(() => []),
           ]);
 

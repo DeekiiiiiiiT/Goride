@@ -69,6 +69,17 @@ function pickTransactionCoords(tx: FinancialTransaction): { lat: number; lng: nu
     };
 }
 
+/** Expense rows that belong in fuel/driver-merge context (strict enough to avoid random expenses). */
+function isLedgerFuelExpenseRow(t: FinancialTransaction): boolean {
+    const typ = String(t.type || "").toLowerCase();
+    if (typ !== "expense") return false;
+    const cat = String(t.category || "").toLowerCase();
+    if (cat.includes("fuel")) return true;
+    const desc = String(t.description || "").toLowerCase();
+    if (desc.includes("fuel expense") || desc.startsWith("fuel:") || desc.includes("fuel —")) return true;
+    return false;
+}
+
 function isGenericFuelVendor(vendor?: string): boolean {
     const v = (vendor || '').trim();
     if (!v) return true;
@@ -384,12 +395,11 @@ export function FuelReimbursementTable({
 
     const history = transactions.filter(t => (t.status === 'Approved' || t.status === 'Rejected') && isFuelReimbursement(t) && isWithinRange(t));
 
-    /** Financial `Expense` rows for fuel (KV `transaction:*`) — same class of records drivers can see alongside `fuel_entry`. Not gated by `isFuelReimbursement` automated filters. */
+    /** Financial `Expense` rows for fuel (KV `transaction:*`) — same class of records drivers merge with `fuel_entry`. */
     const approvedFuelExpenseLedger = transactions
         .filter((t) => {
-            if (t.type !== 'Expense') return false;
-            if (t.category !== 'Fuel' && t.category !== 'Fuel Reimbursement') return false;
-            if (t.status !== 'Approved' && t.status !== 'Rejected') return false;
+            if (!isLedgerFuelExpenseRow(t)) return false;
+            if (t.status !== "Approved" && t.status !== "Rejected") return false;
             return isWithinRange(t);
         })
         .sort((a, b) => {
@@ -1020,8 +1030,8 @@ export function FuelReimbursementTable({
                     <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-700">
                         <p className="font-medium text-slate-800">Financial fuel expenses (ledger)</p>
                         <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                            These are <span className="font-medium text-slate-600">Expense</span> transactions with fuel category that are already approved or rejected.
-                            They are stored separately from fuel log anchors and can appear on the driver expenses screen next to fuel log rows. Use the date range above to narrow the list; open a row for details, edit, or delete where your permissions allow.
+                            These are <span className="font-medium text-slate-600">Expense</span> transactions tied to fuel (by category or fuel-style description) that are already approved or rejected.
+                            They live in the same KV store as other reimbursements and can show on the driver app next to fuel log rows. Use the date range above; open a row for details, edit, or delete where allowed.
                         </p>
                     </div>
                     {approvedFuelExpenseLedger.length === 0 ? (
