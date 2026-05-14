@@ -284,14 +284,30 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
       });
 
       /** Approved/rejected fuel expenses duplicate `myFuel` rows when the API omits link fields on fuel_entry. */
-      const shouldHideFuelExpenseDuplicate = (t: FinancialTransaction): boolean => {
-        const st = String(t.status || 'pending').toLowerCase();
-        if (st === 'pending') return false;
+      const fuelExpenseMirror = (t: FinancialTransaction): boolean => {
         const c = (t.category || '').toLowerCase();
         if (c.includes('fuel') && !c.includes('credit')) return true;
-        const desc = `${t.merchant || ''} ${t.description || ''}`.toLowerCase();
-        if (desc.includes('fuel expense') || desc.includes('fuel:')) return true;
-        return false;
+        const d = `${t.merchant || ''} ${t.description || ''}`.toLowerCase();
+        return d.includes('fuel expense') || d.includes('fuel:') || d.includes('fuel —');
+      };
+
+      const txAmountAbs = (t: FinancialTransaction) => Math.abs(Number(t.amount) || 0);
+
+      const fuelLogOverlapsExpense = (t: FinancialTransaction, txDate: Date): boolean => {
+        const tDay = format(txDate, 'yyyy-MM-dd');
+        const a = txAmountAbs(t);
+        return myFuel.some((f: any) => {
+          let fd = '';
+          if (f.date) {
+            const raw = f.date as string | Date;
+            fd =
+              typeof raw === 'string'
+                ? raw.split('T')[0]
+                : format(raw instanceof Date ? raw : parseISO(String(raw)), 'yyyy-MM-dd');
+          }
+          const fa = Math.abs(Number(f.amount ?? f.cost ?? 0));
+          return fd === tDay && Math.abs(fa - a) < 0.02;
+        });
       };
       
       // Combine into unified expense items for display
@@ -313,16 +329,21 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         });
       });
       
-      // Add expense transactions for current period (skip fuel ledger duplicates — fuel log rows are the canonical UI)
+      // Add expense transactions for current period (fuel ledger mirrors: hide — fuel log rows are canonical)
       myTx.forEach((t: FinancialTransaction) => {
         if (linkedFuelTransactionIds.has(String(t.id))) return;
-        if (shouldHideFuelExpenseDuplicate(t)) return;
 
         const txDate = t.date ? new Date(t.date) : (t.createdAt ? new Date(t.createdAt) : null);
         if (!txDate) return;
-        
+
         if (!isWithinInterval(txDate, { start: periodStart, end: periodEnd })) return;
-        
+
+        if (fuelExpenseMirror(t)) {
+          const st = String(t.status || 'pending').toLowerCase().trim();
+          if (st !== 'pending') return;
+          if (fuelLogOverlapsExpense(t, txDate)) return;
+        }
+
         const isToll = t.category?.toLowerCase().includes('toll');
         const isMaintenance = t.category?.toLowerCase().includes('maintenance') || 
                              t.category?.toLowerCase().includes('service') ||
@@ -341,6 +362,29 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
       
       // Sort by date descending
       combined.sort((a, b) => b.date.getTime() - a.date.getTime());
+
+      // #region agent log
+      fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'c5edda' },
+        body: JSON.stringify({
+          sessionId: 'c5edda',
+          location: 'DriverExpenses.tsx:merge',
+          message: 'combined expense merge summary',
+          data: {
+            myFuelLen: myFuel.length,
+            myTxLen: myTx.length,
+            combinedLen: combined.length,
+            linkedIdCount: linkedFuelTransactionIds.size,
+            fuelRowCount: combined.filter((e) => e.type === 'fuel').length,
+            otherRowCount: combined.filter((e) => e.type !== 'fuel').length,
+          },
+          timestamp: Date.now(),
+          hypothesisId: 'H-merge',
+        }),
+      }).catch(() => {});
+      // #endregion
+
       setCombinedExpenses(combined);
       
     } catch (e) {
