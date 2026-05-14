@@ -4,20 +4,13 @@
  * New users must receive `role: 'driver'` in auth metadata — passed via `options.data` below.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@roam/ui';
+import { createPortal } from 'react-dom';
 import { Button } from '@roam/ui';
 import { Input } from '@roam/ui';
 import { Label } from '@roam/ui';
 import { Popover, PopoverContent, PopoverTrigger } from '@roam/ui';
 import { ScrollArea } from '@roam/ui';
-import { ChevronDown, Loader2, MessageCircle, Smartphone } from 'lucide-react';
+import { ChevronDown, Loader2, MessageCircle, Smartphone, X } from 'lucide-react';
 import { supabase } from '../../utils/supabase/client';
 import { toE164ForCountry } from '../../utils/phoneE164';
 import { DEFAULT_PHONE_COUNTRY, PHONE_COUNTRIES, flagEmoji, type PhoneCountry } from '../../utils/phoneCountries';
@@ -95,6 +88,15 @@ export function DriverPhoneAuthWizard({
     return () => ac.abort();
   }, [step, e164, channel]);
 
+  useEffect(() => {
+    if (!channelModalOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !loading) setChannelModalOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [channelModalOpen, loading]);
+
   const sendOtp = async (selected: OtpChannel) => {
     if (!e164) return;
     setLoading(true);
@@ -124,6 +126,7 @@ export function DriverPhoneAuthWizard({
 
   const openChannelModal = () => {
     setError(null);
+    setCountryMenuOpen(false);
     if (requireTerms && !termsAccepted) {
       setError('Please accept the Terms and Privacy Policy to continue.');
       return;
@@ -240,7 +243,7 @@ export function DriverPhoneAuthWizard({
 
   return (
     <div className="relative z-0 space-y-4">
-      {error && (
+      {error && !channelModalOpen && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
           {error}
         </div>
@@ -365,60 +368,92 @@ export function DriverPhoneAuthWizard({
         Back
       </button>
 
-      {/* Mount Dialog only when open so Radix never leaves hidden dismiss layers over the form */}
-      {channelModalOpen ? (
-        <Dialog open={channelModalOpen} onOpenChange={setChannelModalOpen}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Send OTP</DialogTitle>
-              <DialogDescription>How should we send the code?</DialogDescription>
-            </DialogHeader>
-            <div className="grid grid-cols-2 gap-3 py-2">
-              <button
-                type="button"
-                onClick={() => setChannel('whatsapp')}
-                className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-colors ${
-                  channel === 'whatsapp'
-                    ? 'border-emerald-600 bg-emerald-50 dark:border-emerald-500 dark:bg-emerald-950/40'
-                    : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900/40'
-                }`}
-              >
-                <MessageCircle className="h-8 w-8 text-emerald-600" />
-                <span className="text-sm font-semibold">WhatsApp</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setChannel('sms')}
-                className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-colors ${
-                  channel === 'sms'
-                    ? 'border-sky-600 bg-sky-50 dark:border-sky-500 dark:bg-sky-950/40'
-                    : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900/40'
-                }`}
-              >
-                <Smartphone className="h-8 w-8 text-sky-600" />
-                <span className="text-sm font-semibold">SMS</span>
-              </button>
+      {typeof document !== 'undefined' &&
+        channelModalOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <button
+              type="button"
+              className="absolute inset-0 bg-black/55 dark:bg-black/70"
+              aria-label="Close"
+              disabled={loading}
+              onClick={() => !loading && setChannelModalOpen(false)}
+            />
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="driver-otp-channel-title"
+              className="relative z-[201] w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+            >
+              {error && (
+                <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+                  {error}
+                </div>
+              )}
+              <div className="mb-4 flex items-start justify-between gap-2">
+                <div>
+                  <h2 id="driver-otp-channel-title" className="text-lg font-semibold text-slate-900 dark:text-white">
+                    Send OTP
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">How should we send the code?</p>
+                </div>
+                <button
+                  type="button"
+                  className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-40 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                  disabled={loading}
+                  onClick={() => setChannelModalOpen(false)}
+                  aria-label="Close"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-3 py-1">
+                <button
+                  type="button"
+                  onClick={() => setChannel('whatsapp')}
+                  className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-colors ${
+                    channel === 'whatsapp'
+                      ? 'border-emerald-600 bg-emerald-50 dark:border-emerald-500 dark:bg-emerald-950/40'
+                      : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/40'
+                  }`}
+                >
+                  <MessageCircle className="h-8 w-8 text-emerald-600" />
+                  <span className="text-sm font-semibold text-slate-900 dark:text-white">WhatsApp</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChannel('sms')}
+                  className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-colors ${
+                    channel === 'sms'
+                      ? 'border-sky-600 bg-sky-50 dark:border-sky-500 dark:bg-sky-950/40'
+                      : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/40'
+                  }`}
+                >
+                  <Smartphone className="h-8 w-8 text-sky-600" />
+                  <span className="text-sm font-semibold text-slate-900 dark:text-white">SMS</span>
+                </button>
+              </div>
+              <div className="mt-6">
+                <Button
+                  type="button"
+                  className="w-full bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+                  disabled={loading}
+                  onClick={() => void sendOtp(channel)}
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Sending…
+                    </>
+                  ) : (
+                    'Send OTP'
+                  )}
+                </Button>
+              </div>
             </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                className="w-full bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
-                disabled={loading}
-                onClick={() => void sendOtp(channel)}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Sending…
-                  </>
-                ) : (
-                  'Send OTP'
-                )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      ) : null}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
