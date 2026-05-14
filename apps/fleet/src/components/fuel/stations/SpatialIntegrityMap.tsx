@@ -83,40 +83,64 @@ export function SpatialIntegrityMap() {
 
   // Initialize Map
   useEffect(() => {
-    if (isMounted && mapContainerRef.current && !mapInstanceRef.current) {
-      const map = L.map(mapContainerRef.current, {
-        zoomControl: false,
-        attributionControl: true
-      }).setView([18.0179, -76.8099], 11); // Default to Jamaica center
+    if (!isMounted || !mapContainerRef.current || mapInstanceRef.current) {
+      return;
+    }
 
-      L.control.zoom({ position: 'bottomright' }).addTo(map);
+    const el = mapContainerRef.current;
+    const map = L.map(el, {
+      zoomControl: false,
+      attributionControl: true,
+    }).setView([18.0179, -76.8099], 11); // Default to Jamaica center
 
-      const tileUrl = theme === 'dark' ? MAP_TILES.DARK : MAP_TILES.LIGHT;
-      const tileLayer = L.tileLayer(tileUrl, {
-        attribution: MAP_TILES.ATTRIBUTION
-      }).addTo(map);
-      
-      tileLayerRef.current = tileLayer;
-      
-      const layerGroup = L.layerGroup().addTo(map);
-      layerGroupRef.current = layerGroup;
-      
-      mapInstanceRef.current = map;
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+    const tileUrl = theme === 'dark' ? MAP_TILES.DARK : MAP_TILES.LIGHT;
+    const tileLayer = L.tileLayer(tileUrl, {
+      attribution: MAP_TILES.ATTRIBUTION,
+    }).addTo(map);
+
+    tileLayerRef.current = tileLayer;
+
+    const layerGroup = L.layerGroup().addTo(map);
+    layerGroupRef.current = layerGroup;
+
+    mapInstanceRef.current = map;
+
+    const invalidate = () => {
+      try {
+        map.invalidateSize({ animate: false });
+      } catch {
+        /* ignore */
+      }
+    };
+
+    /** Leaflet reads container size at init; flex/tabs often report 0 until layout settles. */
+    requestAnimationFrame(() => {
+      invalidate();
+      requestAnimationFrame(invalidate);
+    });
+    const resizeTimer = window.setTimeout(invalidate, 150);
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => invalidate());
+      ro.observe(el);
     }
 
     return () => {
+      window.clearTimeout(resizeTimer);
+      ro?.disconnect();
       if (mapInstanceRef.current) {
-        const map = mapInstanceRef.current;
+        const m = mapInstanceRef.current;
         mapInstanceRef.current = null; // Null ref first to prevent callbacks during teardown
         try {
           // CRITICAL: Prevent _leaflet_pos crash from async transitionend events.
-          // Leaflet's _onZoomTransitionEnd checks this flag first and returns early if false,
-          // so setting it prevents the handler from accessing the already-destroyed _mapPane.
-          (map as any)._animatingZoom = false;
-          map.stop();
-          map.off();
-          map.remove();
-        } catch (e) {
+          (m as any)._animatingZoom = false;
+          m.stop();
+          m.off();
+          m.remove();
+        } catch {
           // Swallow errors from Leaflet teardown during zoom transitions
         }
       }
@@ -452,7 +476,7 @@ export function SpatialIntegrityMap() {
   };
 
   return (
-    <Card className="h-full flex flex-col overflow-hidden border-none shadow-none bg-transparent">
+    <Card className="h-full min-h-0 flex flex-col gap-0 overflow-hidden border-none shadow-none bg-transparent">
       <CardHeader className="p-4 border-b bg-white flex flex-row items-center justify-between shrink-0">
         <div>
           <CardTitle className="text-lg flex items-center gap-2">
@@ -524,8 +548,15 @@ export function SpatialIntegrityMap() {
           <ForensicExportButton features={features} />
         </div>
       </CardHeader>
-      <CardContent className="p-0 relative flex-1 min-h-0">
-        <div ref={mapContainerRef} className="absolute inset-0 z-0" />
+      <CardContent className="p-0 relative flex min-h-0 w-full flex-1 flex-col">
+        {/*
+          Explicit height for Leaflet: absolute inset-0 inside flex/tab layouts often yields ~0px
+          at map init. Viewport-based height + invalidateSize keeps tiles filling the panel.
+        */}
+        <div
+          ref={mapContainerRef}
+          className="relative z-0 w-full min-h-[min(560px,calc(100vh-260px))] h-[min(720px,calc(100vh-220px))] shrink-0"
+        />
         
         <ForensicSummaryPanel features={features} />
 

@@ -467,7 +467,7 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
 
           {/* --- Spatial Audit Tab --- */}
           <TabsContent value="spatial-audit" className="m-0 p-0 border-0">
-             <div className="h-[700px] bg-slate-50">
+             <div className="min-h-0 bg-slate-50">
                <SpatialIntegrityMap />
              </div>
           </TabsContent>
