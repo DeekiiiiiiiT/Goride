@@ -20,15 +20,16 @@ function Calendar({
       classNames={{
         months: "flex flex-col gap-4 sm:flex-row sm:gap-2",
         month: "flex w-full flex-col gap-4",
-        caption: "relative flex w-full items-center justify-center pt-1",
-        caption_label: "text-sm font-medium",
-        nav: "flex items-center gap-1",
+        caption: "flex w-full flex-wrap items-center justify-between gap-2 pt-1",
+        caption_label:
+          "relative z-[1] inline-flex items-center gap-1 whitespace-nowrap rounded-md border-2 border-transparent px-1.5 py-1 text-sm font-medium text-slate-900 dark:text-slate-100",
+        nav: "flex shrink-0 items-center gap-0.5",
         nav_button: cn(
           buttonVariants({ variant: "outline" }),
           "size-7 bg-transparent p-0 opacity-50 hover:opacity-100",
         ),
-        nav_button_previous: "absolute left-1",
-        nav_button_next: "absolute right-1",
+        nav_button_previous: "static",
+        nav_button_next: "static",
         table: "w-full border-collapse",
         head_row: "table-row",
         head_cell:
@@ -57,11 +58,21 @@ function Calendar({
         day_range_middle:
           "aria-selected:bg-accent aria-selected:text-accent-foreground",
         day_hidden: "invisible",
-        dropdown: "flex items-center justify-center gap-2",
+        /** Screen-reader-only; must not take layout space (replaces rdp-vhidden when style.css is not imported). */
+        vhidden: "sr-only",
+        /** Row containing month + year dropdown controls */
+        caption_dropdowns: "relative inline-flex flex-wrap items-center justify-center gap-3",
+        /**
+         * Native `<select>` for month/year: must cover the visible label with opacity 0
+         * (see react-day-picker Dropdown + dist/style.css `.rdp-dropdown`).
+         */
+        dropdown:
+          "absolute inset-0 z-[2] m-0 h-full w-full cursor-pointer appearance-none border-0 bg-transparent p-0 font-inherit text-inherit opacity-0 disabled:cursor-not-allowed disabled:opacity-100",
         dropdown_month:
-          "h-8 cursor-pointer rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-900 shadow-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100",
+          "relative inline-flex min-h-9 min-w-[5.5rem] items-center rounded-md border border-slate-200 bg-white px-1 shadow-sm focus-within:ring-2 focus-within:ring-emerald-500/35 dark:border-slate-600 dark:bg-slate-900",
         dropdown_year:
-          "h-8 cursor-pointer rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-900 shadow-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100",
+          "relative inline-flex min-h-9 min-w-[4.5rem] items-center rounded-md border border-slate-200 bg-white px-1 shadow-sm focus-within:ring-2 focus-within:ring-emerald-500/35 dark:border-slate-600 dark:bg-slate-900",
+        dropdown_icon: "ml-0.5 size-3 shrink-0 text-slate-500 dark:text-slate-400",
         ...classNames,
       }}
       components={{
