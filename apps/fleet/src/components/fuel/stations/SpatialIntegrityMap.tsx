@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { useSpatialAudit } from '../../../hooks/useSpatialAudit';
 import { MAP_TILES } from '../../../utils/spatialNormalization';
@@ -27,6 +27,7 @@ fixLeafletIcon();
 export function SpatialIntegrityMap() {
   const { features, loading, error, refresh, recentFueling } = useSpatialAudit();
   const mapContainerRef = useRef<HTMLDivElement>(null);
+  const cardContentRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const layerGroupRef = useRef<L.LayerGroup | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
@@ -81,9 +82,75 @@ export function SpatialIntegrityMap() {
     setIsMounted(true);
   }, []);
 
+  // #region agent log
+  useLayoutEffect(() => {
+    const el = mapContainerRef.current;
+    const pane = cardContentRef.current;
+    if (!el || !pane) {
+      fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'c5edda' },
+        body: JSON.stringify({
+          sessionId: 'c5edda',
+          runId: 'pre-fix',
+          hypothesisId: 'H-B',
+          location: 'SpatialIntegrityMap.tsx:useLayoutEffect',
+          message: 'layout measure refs missing',
+          data: { hasMapEl: !!el, hasPane: !!pane, isMounted, loading, featureCount: features.length },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      return;
+    }
+    const mr = el.getBoundingClientRect();
+    const pr = pane.getBoundingClientRect();
+    const pcs = window.getComputedStyle(pane);
+    fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'c5edda' },
+      body: JSON.stringify({
+        sessionId: 'c5edda',
+        runId: 'pre-fix',
+        hypothesisId: 'H-A',
+        location: 'SpatialIntegrityMap.tsx:useLayoutEffect',
+        message: 'spatial map layout rects',
+        data: {
+          mapRect: { w: mr.width, h: mr.height, top: mr.top },
+          paneRect: { w: pr.width, h: pr.height, top: pr.top },
+          paneComputedHeight: pcs.height,
+          paneOverflow: pcs.overflow,
+          loading,
+          featureCount: features.length,
+          hasLeafletClass: el.classList.contains('leaflet-container'),
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+  }, [isMounted, loading, features.length]);
+  // #endregion
+
   // Initialize Map
   useEffect(() => {
     if (!isMounted || !mapContainerRef.current || mapInstanceRef.current) {
+      // #region agent log
+      fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'c5edda' },
+        body: JSON.stringify({
+          sessionId: 'c5edda',
+          runId: 'pre-fix',
+          hypothesisId: 'H-D',
+          location: 'SpatialIntegrityMap.tsx:mapInit:skip',
+          message: 'map init skipped',
+          data: {
+            isMounted,
+            hasContainer: !!mapContainerRef.current,
+            hasMapInstance: !!mapInstanceRef.current,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       return;
     }
 
@@ -106,6 +173,26 @@ export function SpatialIntegrityMap() {
     layerGroupRef.current = layerGroup;
 
     mapInstanceRef.current = map;
+
+    // #region agent log
+    const br = el.getBoundingClientRect();
+    fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'c5edda' },
+      body: JSON.stringify({
+        sessionId: 'c5edda',
+        runId: 'pre-fix',
+        hypothesisId: 'H-D',
+        location: 'SpatialIntegrityMap.tsx:mapInit:created',
+        message: 'leaflet map created',
+        data: {
+          containerRect: { w: br.width, h: br.height },
+          leafletPxHeight: (el as HTMLElement).style?.height,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
 
     const invalidate = () => {
       try {
@@ -549,6 +636,7 @@ export function SpatialIntegrityMap() {
         </div>
       </CardHeader>
       <CardContent
+        ref={cardContentRef}
         className="relative w-full shrink-0 overflow-hidden bg-slate-200/50 p-0 dark:bg-slate-800/50"
         style={{ height: 'clamp(440px, calc(100vh - 260px), 920px)' }}
       >
