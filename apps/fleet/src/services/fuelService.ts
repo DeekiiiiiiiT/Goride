@@ -97,7 +97,8 @@ export const fuelService = {
   },
 
   async deleteFuelEntry(id: string): Promise<void> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries/${id}`, {
+    const enc = encodeURIComponent(id);
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries/${enc}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });

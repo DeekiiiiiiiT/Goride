@@ -1,5 +1,5 @@
 import { Hono } from "npm:hono";
-import type { Context } from "npm:hono";
+import type { Context, Next } from "npm:hono";
 import { streamText } from "npm:hono/streaming";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
@@ -3159,7 +3159,56 @@ app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
   }
 });
 
-app.delete("/make-server-37f42386/transactions/:id", requireAuth(), requirePermission('transactions.edit'), async (c) => {
+/** True when a KV `transaction:*` row may be deleted by users who have fuel.delete_entry but not transactions.edit. */
+function transactionDeletableWithFuelDeletePermission(tx: unknown): boolean {
+  if (tx == null) return true;
+  if (typeof tx !== "object") return false;
+  const rec = tx as Record<string, unknown>;
+  const id = typeof rec.id === "string" ? rec.id : "";
+  if (id.startsWith("fuel-credit-")) return true;
+  const cat = typeof rec.category === "string" ? rec.category.toLowerCase() : "";
+  if (cat.includes("fuel")) return true;
+  if (cat.includes("reimbursement")) return true;
+  return false;
+}
+
+async function requireDeleteTransactionPermission(c: Context, next: Next) {
+  const user = c.get("rbacUser") as RbacUser | undefined;
+  if (!user) {
+    return c.json({ error: "Unauthorized: No user context" }, 401);
+  }
+  if (hasPermission(user.resolvedRole, "transactions.edit")) {
+    return next();
+  }
+  if (!hasPermission(user.resolvedRole, "fuel.delete_entry")) {
+    return c.json(
+      {
+        error: "Forbidden",
+        message:
+          'Deleting transactions requires "transactions.edit", or "fuel.delete_entry" for fuel reimbursement rows.',
+        required: "transactions.edit",
+        currentRole: user.resolvedRole,
+      },
+      403,
+    );
+  }
+  const id = c.req.param("id");
+  const tx = await kv.get(`transaction:${id}`);
+  if (!transactionDeletableWithFuelDeletePermission(tx)) {
+    return c.json(
+      {
+        error: "Forbidden",
+        message:
+          "This transaction is not a fuel reimbursement class record; use a role with transactions.edit to delete it.",
+        currentRole: user.resolvedRole,
+      },
+      403,
+    );
+  }
+  return next();
+}
+
+app.delete("/make-server-37f42386/transactions/:id", requireAuth(), requireDeleteTransactionPermission, async (c) => {
   const id = c.req.param("id");
   try {
     // Phase 6: Check toll_ledger first (tolls are now stored there, not in transaction:*)

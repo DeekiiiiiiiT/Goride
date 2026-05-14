@@ -599,17 +599,14 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
           const cleanupMap = await fuelService.getCleanupMap(deleteLogConfirmationId);
           const transactionsToDelete = cleanupMap.relatedTransactions;
           
-          // 2. Perform Atomic Deletion Sequence (Step 2.2)
-          // Always delete the primary fuel log first
+          // 2. Delete ledger rows first, then the fuel log (avoids orphaned links if a txn delete fails)
+          if (cascadeDelete && transactionsToDelete.length > 0) {
+              await Promise.all(transactionsToDelete.map(tx => api.deleteTransaction(tx.id)));
+          }
+
           await fuelService.deleteFuelEntry(deleteLogConfirmationId);
           
-          let deletedTxCount = 0;
-          if (cascadeDelete && transactionsToDelete.length > 0) {
-              // Delete all discovered financial records (Debit + Credit/Settlement)
-              const deletePromises = transactionsToDelete.map(tx => api.deleteTransaction(tx.id));
-              await Promise.all(deletePromises);
-              deletedTxCount = transactionsToDelete.length;
-          }
+          let deletedTxCount = cascadeDelete ? transactionsToDelete.length : 0;
 
           // 3. Update Local State
           setLogs(prev => prev.filter(l => l.id !== deleteLogConfirmationId));

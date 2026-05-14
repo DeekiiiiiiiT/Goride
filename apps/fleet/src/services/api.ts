@@ -814,11 +814,13 @@ export const api = {
   async deleteTransaction(id: string) {
     const trimmed = typeof id === 'string' ? id.trim() : '';
     if (!trimmed) throw new Error('Missing transaction id');
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token || publicAnonKey;
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/transactions/${encodeURIComponent(trimmed)}`,
       {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: { 'Authorization': `Bearer ${token}` }
       }
     );
     if (!response.ok) {
