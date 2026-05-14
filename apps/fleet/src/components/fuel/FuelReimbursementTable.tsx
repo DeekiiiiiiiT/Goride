@@ -249,6 +249,94 @@ export function FuelReimbursementTable({
         setApprovalStationLocation('');
     }, [selectedTx?.id, isDetailsOpen, verifiedStations]);
 
+    // #region agent log
+    useEffect(() => {
+        const txs = transactions;
+        const total = txs.length;
+        const isLf = (t: FinancialTransaction) => {
+            const typ = String(t.type || "").toLowerCase();
+            if (typ !== "expense") return false;
+            const cat = String(t.category || "").toLowerCase();
+            if (cat.includes("fuel")) return true;
+            const desc = String(t.description || "").toLowerCase();
+            return desc.includes("fuel expense") || desc.startsWith("fuel:") || desc.includes("fuel —");
+        };
+        const inRange = (t: FinancialTransaction) => {
+            if (!dateRange?.from && !dateRange?.to) return true;
+            let txDate: Date;
+            const d = t.date || "";
+            if (d.includes("T")) {
+                const dateOnly = d.split("T")[0];
+                const [y, m, day] = dateOnly.split("-").map(Number);
+                txDate = new Date(y, m - 1, day);
+            } else if (d.includes("-") && d.length >= 10) {
+                const [y, m, day] = d.slice(0, 10).split("-").map(Number);
+                txDate = new Date(y, m - 1, day);
+            } else {
+                txDate = new Date(d);
+                txDate.setHours(0, 0, 0, 0);
+            }
+            if (dateRange?.from) {
+                const fromDate = new Date(dateRange.from);
+                fromDate.setHours(0, 0, 0, 0);
+                if (txDate < fromDate) return false;
+            }
+            if (dateRange?.to) {
+                const toDate = new Date(dateRange.to);
+                toDate.setHours(0, 0, 0, 0);
+                if (txDate > toDate) return false;
+            }
+            return true;
+        };
+        const ledgerMatch = txs.filter(isLf).length;
+        const apr = txs.filter(
+            (t) => isLf(t) && (t.status === "Approved" || t.status === "Rejected"),
+        ).length;
+        const inRangeCount = txs.filter(
+            (t) => isLf(t) && (t.status === "Approved" || t.status === "Rejected") && inRange(t),
+        ).length;
+        const pendingLedger = txs.filter((t) => isLf(t) && t.status === "Pending").length;
+        const nonExpenseFuelDesc = txs.filter(
+            (t) =>
+                String(t.type || "").toLowerCase() !== "expense" &&
+                String(t.description || "").toLowerCase().includes("fuel"),
+        ).length;
+        const expenseFuelButNotLedger = txs.filter(
+            (t) =>
+                String(t.type || "").toLowerCase() === "expense" &&
+                (String(t.description || "").toLowerCase().includes("fuel") ||
+                    String(t.category || "").toLowerCase().includes("fuel")) &&
+                !isLf(t),
+        ).length;
+        fetch("http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "c5edda" },
+            body: JSON.stringify({
+                sessionId: "c5edda",
+                location: "FuelReimbursementTable.tsx:debugEffect",
+                message: "Fuel expense tab diagnostics",
+                data: {
+                    total,
+                    ledgerMatch,
+                    ledgerAprRejected: apr,
+                    inDateRangeTabCount: inRangeCount,
+                    excludedByDateOnly: apr - inRangeCount,
+                    pendingLedger,
+                    nonExpenseFuelDesc,
+                    expenseFuelButNotLedgerRow: expenseFuelButNotLedger,
+                    rangeHasFrom: !!dateRange?.from,
+                    rangeHasTo: !!dateRange?.to,
+                    fromMs: dateRange?.from ? dateRange.from.getTime() : null,
+                    toMs: dateRange?.to ? dateRange.to.getTime() : null,
+                    tabLen: inRangeCount,
+                },
+                timestamp: Date.now(),
+                hypothesisId: "H2-H3-H4-H5",
+            }),
+        }).catch(() => {});
+    }, [transactions, dateRange]);
+    // #endregion
+
     const brandOptions = useMemo(() => {
         const set = new Set<string>();
         verifiedStations.forEach((s) => {

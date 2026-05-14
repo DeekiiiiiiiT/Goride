@@ -169,6 +169,34 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
           setTransactions(txData);
           setFinalizedCount(Array.isArray(finalizedData) ? finalizedData.length : 0);
 
+          // #region agent log
+          (() => {
+            const arr = Array.isArray(txData) ? txData : [];
+            const expenseN = arr.filter((t: { type?: string }) => String(t?.type || "").toLowerCase() === "expense").length;
+            const isLf = (t: { type?: string; category?: string; description?: string }) => {
+              const typ = String(t?.type || "").toLowerCase();
+              if (typ !== "expense") return false;
+              const cat = String(t?.category || "").toLowerCase();
+              if (cat.includes("fuel")) return true;
+              const desc = String(t?.description || "").toLowerCase();
+              return desc.includes("fuel expense") || desc.startsWith("fuel:") || desc.includes("fuel —");
+            };
+            const lfN = arr.filter(isLf).length;
+            fetch("http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "c5edda" },
+              body: JSON.stringify({
+                sessionId: "c5edda",
+                location: "FuelManagement.tsx:loadData",
+                message: "transactions loaded",
+                data: { total: arr.length, expenseCount: expenseN, ledgerFuelShapeCount: lfN, limitRequested: 10000 },
+                timestamp: Date.now(),
+                hypothesisId: "H1",
+              }),
+            }).catch(() => {});
+          })();
+          // #endregion
+
           if (!silent) toast.success("Data refreshed");
       } catch (e) {
           console.error("Failed to load fuel management data", e);
