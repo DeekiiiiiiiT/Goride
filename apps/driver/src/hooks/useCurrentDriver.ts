@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
+import { supabase } from '../utils/supabase/client';
 
 export function useCurrentDriver() {
   const { user } = useAuth();
@@ -16,7 +17,10 @@ export function useCurrentDriver() {
     const resolveDriver = async () => {
         try {
             setLoading(true);
-            const drivers = await api.getDrivers();
+            const [drivers, profileRes] = await Promise.all([
+                api.getDrivers(),
+                supabase.from('driver_profiles').select('fleet_id, mode').eq('user_id', user.id).maybeSingle(),
+            ]);
             
             // 1. Try to find match by ID (Auth ID = Driver ID)
             let match = drivers.find((d: any) => d.id === user.id);
@@ -74,7 +78,13 @@ export function useCurrentDriver() {
                 console.warn(`[DriverSync] Could not link '${user.email}' to any driver record.`);
             }
 
-            setDriverRecord(match || { id: user.id, email: user.email, name: user.user_metadata?.name });
+            let record = match || { id: user.id, email: user.email, name: user.user_metadata?.name };
+            const fleetId = profileRes.data?.fleet_id as string | undefined;
+            if (fleetId && !(record as any).organizationId) {
+                record = { ...record, organizationId: fleetId };
+            }
+
+            setDriverRecord(record);
         } catch (e) {
             console.error("Failed to resolve driver identity", e);
             // Fallback

@@ -13,7 +13,7 @@
 //   - staleTime 60s keeps rapid focus toggles cheap.
 
 import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "../components/auth/AuthContext";
+import { useAuth } from '../contexts/AuthContext';
 import { listMyPendingCatalogRequests } from "../services/pendingVehicleCatalogService";
 import type { VehicleCatalogPendingRequest } from "../types/vehicleCatalogPending";
 

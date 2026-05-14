@@ -215,6 +215,37 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 );
 
+/** Keeps Postgres `driver_profiles` aligned with KV + auth (service role bypasses RLS). */
+async function upsertDriverProfileFromServer(opts: {
+  userId: string;
+  mode: "fleet" | "independent";
+  fleetId?: string | null;
+  displayName?: string | null;
+  status?: string;
+  onboardingComplete?: boolean;
+  /** When true and `fleetId` is set, sets `fleet_joined_at` to now (claim / join / invite). */
+  markFleetJoined?: boolean;
+}) {
+  const now = new Date().toISOString();
+  const row: Record<string, unknown> = {
+    user_id: opts.userId,
+    mode: opts.mode,
+    display_name: opts.displayName ?? null,
+    status: opts.status ?? "active",
+    onboarding_complete: opts.onboardingComplete ?? false,
+    updated_at: now,
+  };
+  if (opts.mode === "fleet" && opts.fleetId) {
+    row.fleet_id = opts.fleetId;
+    if (opts.markFleetJoined) row.fleet_joined_at = now;
+  } else {
+    row.fleet_id = null;
+    row.fleet_joined_at = null;
+  }
+  const { error } = await supabase.from("driver_profiles").upsert(row, { onConflict: "user_id" });
+  if (error) console.warn("[driver_profiles] upsert failed:", error.message);
+}
+
 registerMaintenanceRoutes(app, supabase);
 registerPendingVehicleCatalogRoutes(app, supabase);
 registerPartSourcingRoutes(app, supabase);
@@ -2453,6 +2484,23 @@ app.post("/make-server-37f42386/drivers", requireAuth(), requirePermission('driv
 
     await kv.set(`driver:${finalId}`, stampOrg(newDriver, c));
     invalidateDriverCache();
+    {
+      const display =
+        (typeof newDriver.name === "string" && newDriver.name) ||
+        (typeof newDriver.driverName === "string" && newDriver.driverName) ||
+        (typeof driver.email === "string" && driver.email) ||
+        null;
+      const st = typeof newDriver.status === "string" ? newDriver.status : "active";
+      await upsertDriverProfileFromServer({
+        userId: finalId,
+        mode: orgId ? "fleet" : "independent",
+        fleetId: orgId ?? null,
+        displayName: display,
+        status: st,
+        onboardingComplete: false,
+        markFleetJoined: !!orgId,
+      });
+    }
     return c.json({ success: true, data: newDriver });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
@@ -10154,6 +10202,15 @@ app.post("/make-server-37f42386/signup", async (c) => {
       };
       await kv.set(`driver:${userId}`, driverProfile);
       console.log(`[Signup] Driver ${email}: created unlinked driver profile ${userId}`);
+      await upsertDriverProfileFromServer({
+        userId,
+        mode: "independent",
+        fleetId: null,
+        displayName: name || email.split("@")[0],
+        status: "active",
+        onboardingComplete: false,
+        markFleetJoined: false,
+      });
     }
 
     return c.json({ success: true, data });
@@ -10216,6 +10273,15 @@ app.post("/make-server-37f42386/invite-user", requireAuth(), requirePermission('
         };
         // stampOrg will set organizationId from the inviting user's context
         await kv.set(`driver:${driverId}`, stampOrg(driverProfile, c));
+        await upsertDriverProfileFromServer({
+          userId: driverId,
+          mode: "fleet",
+          fleetId: inviterOrgId ?? null,
+          displayName: name || email.split("@")[0],
+          status: "active",
+          onboardingComplete: false,
+          markFleetJoined: !!inviterOrgId,
+        });
     }
 
     return c.json({ success: true, data });
@@ -11252,10 +11318,94 @@ app.post("/make-server-37f42386/team/claim-driver", requireAuth(), requirePermis
       console.log(`[ClaimDriver] Created KV profile for driver ${targetUser.id} in org ${orgId}`);
     }
 
+    await upsertDriverProfileFromServer({
+      userId: targetUser.id,
+      mode: "fleet",
+      fleetId: orgId,
+      displayName: (meta.name as string) || driverEmail.split("@")[0],
+      status: "active",
+      onboardingComplete: false,
+      markFleetJoined: true,
+    });
+    invalidateDriverCache();
+
     console.log(`[ClaimDriver] Driver ${driverEmail} (${targetUser.id}) claimed by org ${orgId}`);
     return c.json({ success: true, driverId: targetUser.id, message: `Driver ${driverEmail} has been linked to your organization` });
   } catch (e: any) {
     console.error("[ClaimDriver] Error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// Driver app: self-serve link to a fleet by organization UUID (minimal hybrid onboarding).
+app.post("/make-server-37f42386/driver/join-fleet", requireAuth(), async (c) => {
+  try {
+    const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+    if (!rbacUser || rbacUser.userId === "_anon_passthrough") {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+    if (rbacUser.resolvedRole !== "driver") {
+      return c.json({ error: "Only driver accounts can join a fleet from this endpoint" }, 403);
+    }
+
+    const body = await c.req.json();
+    const fleetId = typeof body?.fleetId === "string" ? body.fleetId.trim() : "";
+    if (!fleetId) return c.json({ error: "fleetId is required" }, 400);
+
+    const { data: org, error: orgErr } = await supabase.from("organizations").select("id").eq("id", fleetId).maybeSingle();
+    if (orgErr || !org) return c.json({ error: "Fleet not found" }, 404);
+
+    const uid = rbacUser.userId;
+    const { data: authData, error: authErr } = await supabase.auth.admin.getUserById(uid);
+    if (authErr || !authData?.user) return c.json({ error: "User not found" }, 404);
+
+    const meta = (authData.user.user_metadata || {}) as Record<string, unknown>;
+    const { data: existingProf } = await supabase.from("driver_profiles").select("onboarding_complete").eq(
+      "user_id",
+      uid,
+    ).maybeSingle();
+
+    await supabase.auth.admin.updateUserById(uid, {
+      user_metadata: { ...meta, organizationId: fleetId },
+    });
+
+    const driverKv = await kv.get(`driver:${uid}`);
+    if (driverKv) {
+      await kv.set(`driver:${uid}`, { ...driverKv, organizationId: fleetId });
+    } else {
+      const email = authData.user.email || "";
+      const driverName =
+        (typeof meta.name === "string" && meta.name) || email.split("@")[0] || "Driver";
+      await kv.set(`driver:${uid}`, {
+        id: uid,
+        driverId: uid,
+        driverName,
+        email,
+        status: "active",
+        createdAt: new Date().toISOString(),
+        acceptanceRate: 0,
+        cancellationRate: 0,
+        completionRate: 0,
+        ratingLast500: 5.0,
+        totalEarnings: 0,
+        organizationId: fleetId,
+      });
+    }
+
+    await upsertDriverProfileFromServer({
+      userId: uid,
+      mode: "fleet",
+      fleetId,
+      displayName: typeof meta.name === "string" ? meta.name : null,
+      status: "active",
+      onboardingComplete: existingProf?.onboarding_complete === true,
+      markFleetJoined: true,
+    });
+    invalidateDriverCache();
+
+    return c.json({ success: true });
+  } catch (e: any) {
+    console.error("[JoinFleet] Error:", e);
     return c.json({ error: e.message }, 500);
   }
 });

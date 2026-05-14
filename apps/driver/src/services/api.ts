@@ -743,6 +743,26 @@ export const api = {
     return response.json();
   },
 
+  /** Links the signed-in driver account to a fleet organization by UUID (driver app hybrid onboarding). */
+  async joinFleetByFleetId(fleetId: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/driver/join-fleet`, {
+      method: 'POST',
+      headers: await getHeaders(),
+      body: JSON.stringify({ fleetId }),
+    });
+    if (!response.ok) {
+      let msg = 'Failed to join fleet';
+      try {
+        const j = await response.json();
+        if (j && typeof j.error === 'string') msg = j.error;
+      } catch {
+        /* ignore */
+      }
+      throw new Error(msg);
+    }
+    return response.json();
+  },
+
   async fetchPendingTollClaims(): Promise<FinancialTransaction[]> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/transactions`, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }

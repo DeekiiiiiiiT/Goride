@@ -4,36 +4,45 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getBottomNavItems, getNavigationItems } from '../../config/navigation';
 import { Menu, X, ChevronRight, LogOut, Car, Building2 } from 'lucide-react';
 import { ThemeToggleButton } from './ThemeToggleButton';
+import { AnnouncementBanner } from './AnnouncementBanner';
+import { OfflineStatusIndicator } from '../offline/OfflineStatusIndicator';
+import { NotificationCenter } from '../notifications/NotificationCenter';
 
-// Use placeholder dashboard/earnings/trips for now (simpler, fewer dependencies)
-import { DriverDashboard } from '../dashboard/DriverDashboard';
-import { DriverEarnings } from '../earnings/DriverEarnings';
-import { DriverTrips } from '../trips/DriverTrips';
-import { DriverProfile } from '../profile/DriverProfile';
-
-// Legacy components for critical features (toll scanning, expenses, equipment)
+import { DriverDashboard } from '../legacy/DriverDashboard';
+import { DriverEarnings } from '../legacy/DriverEarnings';
+import { DriverTrips } from '../legacy/DriverTrips';
+import { DriverProfile } from '../legacy/DriverProfile';
 import { DriverExpenses } from '../legacy/DriverExpenses';
 import { DriverEquipment } from '../legacy/DriverEquipment';
 import { DriverClaims } from '../legacy/DriverClaims';
 import { WeeklyCheckInModal } from '../legacy/WeeklyCheckInModal';
 import { DriverFuelStats } from '../legacy/DriverFuelStats';
+import { FleetFuelLogPage } from '../legacy/FleetFuelLogPage';
+import { DriverPerformancePage } from '../legacy/DriverPerformancePage';
+import { useCurrentDriver } from '../../hooks/useCurrentDriver';
+import { useWeeklyCheckIn } from '../../hooks/useWeeklyCheckIn';
 
-// Placeholder components for independent drivers (to be built later)
 import { MyVehicle } from '../independent/MyVehicle';
 import { IndependentExpenses } from '../independent/IndependentExpenses';
 import { TaxCenter } from '../independent/TaxCenter';
 import { InsuranceCenter } from '../independent/InsuranceCenter';
 
 export function DriverShell() {
-  const { mode, isFleetDriver, fleet, permissions, loading } = useDriver();
+  const { mode, isFleetDriver, fleet, loading } = useDriver();
   const { user, signOut } = useAuth();
+  const { driverRecord } = useCurrentDriver();
+  const { needsCheckIn, isLoading: checkInHookLoading, submitCheckIn } = useWeeklyCheckIn(driverRecord?.id);
+
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [menuOpen, setMenuOpen] = useState(false);
   const [checkInOpen, setCheckInOpen] = useState(false);
-  const [checkInLoading, setCheckInLoading] = useState(false);
+  const [checkInSubmitting, setCheckInSubmitting] = useState(false);
 
   const bottomNavItems = getBottomNavItems();
   const menuNavItems = getNavigationItems(mode);
+
+  const checkInModalOpen = isFleetDriver && (needsCheckIn || checkInOpen);
+  const checkInForced = isFleetDriver && needsCheckIn;
 
   if (loading) {
     return (
@@ -50,41 +59,50 @@ export function DriverShell() {
     await signOut();
   };
 
-  const handleCheckInSubmit = async (data: { odometer: number; method: string; needsReview: boolean }) => {
-    setCheckInLoading(true);
+  const handleWeeklyCheckInSubmit = async (
+    odometer: number,
+    photo: File | null,
+    method: 'ai_verified' | 'manual_override',
+    reviewStatus: 'auto_approved' | 'pending_review',
+    aiReading: number | null,
+    manualReadingReason?: string,
+  ) => {
+    setCheckInSubmitting(true);
     try {
-      // TODO: Wire to useWeeklyCheckIn hook
-      console.log('Check-in submitted:', data);
+      const vehicleId =
+        driverRecord?.assignedVehicleId || driverRecord?.vehicleId || driverRecord?.vehicle || 'unknown';
+      await submitCheckIn(odometer, photo, vehicleId, method, reviewStatus, aiReading, manualReadingReason);
       setCheckInOpen(false);
     } finally {
-      setCheckInLoading(false);
+      setCheckInSubmitting(false);
     }
   };
 
   const renderPage = () => {
     switch (currentPage) {
-      // Core pages - use placeholder for now (simpler, will upgrade later)
       case 'dashboard':
-        return <DriverDashboard onNavigate={setCurrentPage} />;
+        return <DriverDashboard />;
       case 'earnings':
         return <DriverEarnings />;
       case 'trips':
         return <DriverTrips />;
       case 'profile':
         return <DriverProfile onNavigate={setCurrentPage} onLogout={handleSignOut} />;
-      
-      // Fleet-specific pages
+
       case 'equipment':
         return isFleetDriver ? <DriverEquipment onBack={() => setCurrentPage('dashboard')} /> : null;
       case 'expenses':
-        // For fleet drivers, show full expense hub with toll scanning
-        // For independent, show placeholder
-        return isFleetDriver 
-          ? <DriverExpenses onBack={() => setCurrentPage('dashboard')} />
-          : <IndependentExpenses />;
+        return isFleetDriver ? (
+          <DriverExpenses onBack={() => setCurrentPage('dashboard')} />
+        ) : (
+          <IndependentExpenses />
+        );
       case 'claims':
         return isFleetDriver ? <DriverClaims /> : null;
       case 'fuel':
+        return isFleetDriver ? <FleetFuelLogPage onBack={() => setCurrentPage('dashboard')} /> : null;
+      case 'performance':
+        return isFleetDriver ? <DriverPerformancePage onBack={() => setCurrentPage('dashboard')} /> : null;
       case 'fuel-stats':
         return isFleetDriver ? <DriverFuelStats /> : null;
       case 'checkin':
@@ -93,15 +111,14 @@ export function DriverShell() {
           setCurrentPage('dashboard');
         }
         return null;
-      
-      // Independent-specific pages
+
       case 'vehicle':
         return !isFleetDriver ? <MyVehicle /> : null;
       case 'tax':
         return !isFleetDriver ? <TaxCenter /> : null;
       case 'insurance':
         return !isFleetDriver ? <InsuranceCenter /> : null;
-      
+
       default:
         return (
           <div className="flex flex-col items-center justify-center h-64 text-center">
@@ -119,6 +136,8 @@ export function DriverShell() {
 
   return (
     <div className="flex min-h-dvh min-h-screen flex-col overflow-x-hidden bg-gradient-to-br from-slate-100 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+      <AnnouncementBanner />
+
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 pt-[env(safe-area-inset-top,0px)] backdrop-blur-lg dark:border-slate-800 dark:bg-slate-900/80">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
           <div className="flex shrink-0 items-center gap-2">
@@ -133,13 +152,19 @@ export function DriverShell() {
             <ThemeToggleButton />
           </div>
 
-          <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
+          <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:gap-3">
+            {isFleetDriver && (
+              <>
+                <OfflineStatusIndicator />
+                <NotificationCenter />
+              </>
+            )}
             <div className="min-w-0 text-right">
               <h1 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white">Roam Driver</h1>
               {isFleetDriver && fleet && (
                 <div className="flex items-center justify-end gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
                   <Building2 className="w-3 h-3 shrink-0" />
-                  <span className="truncate max-w-[200px] sm:max-w-[280px] md:max-w-md">{fleet.name}</span>
+                  <span className="truncate max-w-[120px] sm:max-w-[200px] md:max-w-md">{fleet.name}</span>
                 </div>
               )}
             </div>
@@ -237,13 +262,15 @@ export function DriverShell() {
                   <p className="text-xs text-slate-600 truncate dark:text-slate-400">{user?.email}</p>
                 </div>
               </div>
-              
+
               <div className="flex items-center gap-2 mb-3">
-                <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded font-bold ${
-                  isFleetDriver
-                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-300'
-                    : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300'
-                }`}>
+                <span
+                  className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded font-bold ${
+                    isFleetDriver
+                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-300'
+                      : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300'
+                  }`}
+                >
                   {isFleetDriver ? 'Fleet Driver' : 'Independent'}
                 </span>
               </div>
@@ -261,13 +288,15 @@ export function DriverShell() {
         </div>
       )}
 
-      {/* Weekly Check-In Modal */}
       {isFleetDriver && (
         <WeeklyCheckInModal
-          isOpen={checkInOpen}
-          onClose={() => setCheckInOpen(false)}
-          onSubmit={handleCheckInSubmit}
-          isLoading={checkInLoading}
+          isOpen={checkInModalOpen}
+          onClose={() => {
+            if (!needsCheckIn) setCheckInOpen(false);
+          }}
+          onSubmit={handleWeeklyCheckInSubmit}
+          isLoading={checkInSubmitting || checkInHookLoading}
+          isForced={checkInForced}
         />
       )}
     </div>

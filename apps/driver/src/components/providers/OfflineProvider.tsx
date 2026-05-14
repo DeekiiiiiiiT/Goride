@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { offlineStorage } from '../../services/offlineStorage';
 import { OfflineAction } from '../../types/offline';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
 import { createManualTrip } from '../../utils/tripFactory';
 import { mapMatchService } from '../../services/mapMatchService';

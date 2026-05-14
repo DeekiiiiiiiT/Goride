@@ -11,6 +11,7 @@ import {
   Shield,
   Camera,
   BarChart3,
+  History,
   type LucideIcon,
 } from 'lucide-react';
 import { DriverMode } from '../contexts/DriverContext';
@@ -32,6 +33,8 @@ const commonNavItems: NavItem[] = [
 const fleetOnlyNavItems: NavItem[] = [
   { id: 'expenses', label: 'Expenses', icon: Camera },  // Toll scanning, fuel, etc.
   { id: 'equipment', label: 'Equipment', icon: Wrench },
+  { id: 'fuel', label: 'Log fuel', icon: Fuel },
+  { id: 'performance', label: 'Performance', icon: History },
   { id: 'fuel-stats', label: 'Fuel Stats', icon: BarChart3 },
   { id: 'claims', label: 'Claims', icon: Receipt },
   { id: 'checkin', label: 'Check-in', icon: CheckCircle },

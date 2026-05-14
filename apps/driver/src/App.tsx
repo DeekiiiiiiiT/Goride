@@ -3,9 +3,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { DriverProvider, useDriver } from './contexts/DriverContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { OfflineProvider } from './components/providers/OfflineProvider';
 import { DriverLoginPage } from './components/auth/DriverLoginPage';
-import { DriverOnboardingPage } from './components/auth/DriverOnboardingPage';
+import { DriverHybridOnboarding } from './components/onboarding/DriverHybridOnboarding';
 import { DriverShell } from './components/layout/DriverShell';
+import { AppErrorBoundary } from './components/layout/AppErrorBoundary';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,8 +38,13 @@ function AuthenticatedDriverRoute() {
     return <AuthLoadingScreen />;
   }
 
-  if (!profile?.onboardingComplete) {
-    return <DriverOnboardingPage />;
+  // No Postgres row yet: keep legacy KV-only drivers on the shell (migration backfill can add a row later).
+  if (profile === null) {
+    return <DriverShell />;
+  }
+
+  if (!profile.onboardingComplete) {
+    return <DriverHybridOnboarding />;
   }
 
   return <DriverShell />;
@@ -66,7 +73,11 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <AuthProvider>
-          <AppContent />
+          <OfflineProvider>
+            <AppErrorBoundary>
+              <AppContent />
+            </AppErrorBoundary>
+          </OfflineProvider>
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
