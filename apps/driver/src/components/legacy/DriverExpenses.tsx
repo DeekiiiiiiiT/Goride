@@ -271,10 +271,28 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
           f?.metadata && typeof f.metadata === 'object'
             ? (f.metadata as Record<string, unknown>)
             : {};
-        for (const v of [f?.transactionId, m.originalTransactionId, m.transactionId]) {
+        for (const v of [
+          f?.transactionId,
+          f?.transaction_id,
+          m.originalTransactionId,
+          m.original_transaction_id,
+          m.transactionId,
+          m.transaction_id,
+        ]) {
           if (v != null && String(v).trim()) linkedFuelTransactionIds.add(String(v).trim());
         }
       });
+
+      /** Approved/rejected fuel expenses duplicate `myFuel` rows when the API omits link fields on fuel_entry. */
+      const shouldHideFuelExpenseDuplicate = (t: FinancialTransaction): boolean => {
+        const st = String(t.status || 'pending').toLowerCase();
+        if (st === 'pending') return false;
+        const c = (t.category || '').toLowerCase();
+        if (c.includes('fuel') && !c.includes('credit')) return true;
+        const desc = `${t.merchant || ''} ${t.description || ''}`.toLowerCase();
+        if (desc.includes('fuel expense') || desc.includes('fuel:')) return true;
+        return false;
+      };
       
       // Combine into unified expense items for display
       const combined: ExpenseItem[] = [];
@@ -295,9 +313,10 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         });
       });
       
-      // Add expense transactions for current period (skip rows already represented by a fuel log anchor)
+      // Add expense transactions for current period (skip fuel ledger duplicates — fuel log rows are the canonical UI)
       myTx.forEach((t: FinancialTransaction) => {
         if (linkedFuelTransactionIds.has(String(t.id))) return;
+        if (shouldHideFuelExpenseDuplicate(t)) return;
 
         const txDate = t.date ? new Date(t.date) : (t.createdAt ? new Date(t.createdAt) : null);
         if (!txDate) return;
