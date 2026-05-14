@@ -15,9 +15,13 @@ import {
 import { Button } from '@roam/ui';
 import { Input } from '@roam/ui';
 import { Label } from '@roam/ui';
-import { Loader2, MessageCircle, Smartphone } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@roam/ui';
+import { ScrollArea } from '@roam/ui';
+import { ChevronDown, Loader2, MessageCircle, Smartphone } from 'lucide-react';
 import { supabase } from '../../utils/supabase/client';
-import { toE164 } from '../../utils/phoneE164';
+import { toE164ForCountry } from '../../utils/phoneE164';
+import { DEFAULT_PHONE_COUNTRY, PHONE_COUNTRIES, flagEmoji, type PhoneCountry } from '../../utils/phoneCountries';
+import { useIpDefaultCountry } from '../../hooks/useIpDefaultCountry';
 import { listenForSmsOtp } from '../../utils/webOtp';
 
 export type OtpChannel = 'sms' | 'whatsapp';
@@ -39,6 +43,13 @@ export function DriverPhoneAuthWizard({
   onVerified,
   onCancel,
 }: DriverPhoneAuthWizardProps) {
+  const { country: ipCountry, geoReady } = useIpDefaultCountry();
+  const [selectedCountry, setSelectedCountry] = useState<PhoneCountry>(DEFAULT_PHONE_COUNTRY);
+  const geoAppliedRef = useRef(false);
+  const [hasManualCountry, setHasManualCountry] = useState(false);
+  const [countryMenuOpen, setCountryMenuOpen] = useState(false);
+  const [countryFilter, setCountryFilter] = useState('');
+
   const [nationalDigits, setNationalDigits] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [channelModalOpen, setChannelModalOpen] = useState(false);
@@ -50,6 +61,16 @@ export function DriverPhoneAuthWizard({
   const [loading, setLoading] = useState(false);
   const [resendIn, setResendIn] = useState(0);
   const webOtpAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (!geoReady || geoAppliedRef.current) return;
+    geoAppliedRef.current = true;
+    if (!hasManualCountry) setSelectedCountry(ipCountry);
+  }, [geoReady, ipCountry, hasManualCountry]);
+
+  useEffect(() => {
+    setNationalDigits(d => d.replace(/\D/g, '').slice(0, selectedCountry.nationalMaxLen));
+  }, [selectedCountry]);
 
   useEffect(() => {
     if (resendIn <= 0) return;
@@ -108,7 +129,7 @@ export function DriverPhoneAuthWizard({
       return;
     }
     try {
-      const formatted = toE164('1', nationalDigits);
+      const formatted = toE164ForCountry(selectedCountry, nationalDigits);
       setE164(formatted);
       setChannelModalOpen(true);
     } catch (err: unknown) {
@@ -218,7 +239,7 @@ export function DriverPhoneAuthWizard({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="relative z-0 space-y-4">
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
           {error}
@@ -228,104 +249,176 @@ export function DriverPhoneAuthWizard({
       <div>
         <Label className="text-slate-800 dark:text-slate-200">Mobile number</Label>
         <div className="mt-2 flex gap-2">
-          <div className="flex shrink-0 items-center rounded-lg border border-slate-300 bg-slate-50 px-3 text-sm font-semibold text-slate-700 dark:border-slate-600 dark:bg-slate-900/50 dark:text-slate-200">
-            +1
-          </div>
+          <Popover open={countryMenuOpen} onOpenChange={setCountryMenuOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-900/50 dark:text-slate-100 dark:hover:bg-slate-800/80"
+                aria-label="Select country code"
+              >
+                <span className="text-lg leading-none" aria-hidden>
+                  {flagEmoji(selectedCountry.iso2)}
+                </span>
+                <span>+{selectedCountry.dial}</span>
+                <ChevronDown className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[min(100vw-2rem,20rem)] p-0" align="start">
+              <div className="border-b border-slate-200 p-2 dark:border-slate-700">
+                <Input
+                  placeholder="Search country…"
+                  value={countryFilter}
+                  onChange={e => setCountryFilter(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+              <ScrollArea className="h-72">
+                <ul className="p-1">
+                  {PHONE_COUNTRIES.filter(c => {
+                    const q = countryFilter.trim().toLowerCase();
+                    if (!q) return true;
+                    return (
+                      c.name.toLowerCase().includes(q) ||
+                      c.iso2.toLowerCase().includes(q) ||
+                      `+${c.dial}`.includes(q) ||
+                      c.dial.includes(q.replace(/\D/g, ''))
+                    );
+                  }).map(c => (
+                    <li key={c.iso2}>
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
+                        onClick={() => {
+                          setHasManualCountry(true);
+                          setSelectedCountry(c);
+                          setCountryMenuOpen(false);
+                          setCountryFilter('');
+                        }}
+                      >
+                        <span className="text-lg leading-none">{flagEmoji(c.iso2)}</span>
+                        <span className="flex-1 truncate font-medium text-slate-800 dark:text-slate-100">{c.name}</span>
+                        <span className="shrink-0 text-slate-500 dark:text-slate-400">+{c.dial}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </ScrollArea>
+            </PopoverContent>
+          </Popover>
           <Input
             inputMode="numeric"
             autoComplete="tel-national"
             value={nationalDigits}
-            onChange={e => setNationalDigits(e.target.value.replace(/\D/g, '').slice(0, 10))}
-            placeholder="8765551234"
-            className="flex-1"
+            onChange={e =>
+              setNationalDigits(e.target.value.replace(/\D/g, '').slice(0, selectedCountry.nationalMaxLen))
+            }
+            placeholder={selectedCountry.placeholder}
+            className="min-w-0 flex-1"
+            maxLength={selectedCountry.nationalMaxLen}
           />
         </div>
-        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Country code +1 (Jamaica / NANP)</p>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          {selectedCountry.name} · +{selectedCountry.dial} · {selectedCountry.nationalMinLen === selectedCountry.nationalMaxLen
+            ? `${selectedCountry.nationalMinLen} digits`
+            : `${selectedCountry.nationalMinLen}–${selectedCountry.nationalMaxLen} digits`}
+        </p>
       </div>
 
       {requireTerms && (
-        <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
+        <div className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
           <input
+            id="driver-signup-terms"
             type="checkbox"
             checked={termsAccepted}
             onChange={e => setTermsAccepted(e.target.checked)}
-            className="mt-1 rounded border-slate-300"
+            className="mt-1 size-4 shrink-0 cursor-pointer rounded border-slate-300"
           />
-          <span>
+          <label htmlFor="driver-signup-terms" className="cursor-pointer leading-snug">
             I have read and accept the{' '}
             <span className="font-semibold text-emerald-700 dark:text-emerald-400">Privacy Policy</span> and{' '}
             <span className="font-semibold text-emerald-700 dark:text-emerald-400">Terms &amp; Conditions</span>.
-          </span>
-        </label>
+          </label>
+        </div>
       )}
 
-      <Button
-        type="button"
-        className="w-full bg-gradient-to-r from-emerald-600 to-teal-600"
-        disabled={loading}
-        onClick={() => openChannelModal()}
-      >
-        Continue
-      </Button>
+      {/* Native button avoids Radix/shadcn layering quirks; keep above any stray overlays */}
       <button
         type="button"
-        className="w-full text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400"
+        disabled={loading}
+        onClick={() => openChannelModal()}
+        className="relative z-10 flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 transition-all hover:from-emerald-500 hover:to-teal-500 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {loading ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Please wait…
+          </>
+        ) : (
+          'Continue'
+        )}
+      </button>
+      <button
+        type="button"
+        className="relative z-10 w-full cursor-pointer text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
         onClick={onCancel}
       >
         Back
       </button>
 
-      <Dialog open={channelModalOpen} onOpenChange={setChannelModalOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Send OTP</DialogTitle>
-            <DialogDescription>How should we send the code?</DialogDescription>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-3 py-2">
-            <button
-              type="button"
-              onClick={() => setChannel('whatsapp')}
-              className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-colors ${
-                channel === 'whatsapp'
-                  ? 'border-emerald-600 bg-emerald-50 dark:border-emerald-500 dark:bg-emerald-950/40'
-                  : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900/40'
-              }`}
-            >
-              <MessageCircle className="h-8 w-8 text-emerald-600" />
-              <span className="text-sm font-semibold">WhatsApp</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setChannel('sms')}
-              className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-colors ${
-                channel === 'sms'
-                  ? 'border-sky-600 bg-sky-50 dark:border-sky-500 dark:bg-sky-950/40'
-                  : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900/40'
-              }`}
-            >
-              <Smartphone className="h-8 w-8 text-sky-600" />
-              <span className="text-sm font-semibold">SMS</span>
-            </button>
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              className="w-full bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
-              disabled={loading}
-              onClick={() => void sendOtp(channel)}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Sending…
-                </>
-              ) : (
-                'Send OTP'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Mount Dialog only when open so Radix never leaves hidden dismiss layers over the form */}
+      {channelModalOpen ? (
+        <Dialog open={channelModalOpen} onOpenChange={setChannelModalOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Send OTP</DialogTitle>
+              <DialogDescription>How should we send the code?</DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-2 gap-3 py-2">
+              <button
+                type="button"
+                onClick={() => setChannel('whatsapp')}
+                className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-colors ${
+                  channel === 'whatsapp'
+                    ? 'border-emerald-600 bg-emerald-50 dark:border-emerald-500 dark:bg-emerald-950/40'
+                    : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900/40'
+                }`}
+              >
+                <MessageCircle className="h-8 w-8 text-emerald-600" />
+                <span className="text-sm font-semibold">WhatsApp</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setChannel('sms')}
+                className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-colors ${
+                  channel === 'sms'
+                    ? 'border-sky-600 bg-sky-50 dark:border-sky-500 dark:bg-sky-950/40'
+                    : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900/40'
+                }`}
+              >
+                <Smartphone className="h-8 w-8 text-sky-600" />
+                <span className="text-sm font-semibold">SMS</span>
+              </button>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                className="w-full bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+                disabled={loading}
+                onClick={() => void sendOtp(channel)}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Sending…
+                  </>
+                ) : (
+                  'Send OTP'
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </div>
   );
 }
