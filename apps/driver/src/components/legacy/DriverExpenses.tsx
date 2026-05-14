@@ -263,6 +263,18 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
       
       console.log('[DriverExpenses] Fuel entries for current period:', myFuel.length);
       setFuelEntries(myFuel);
+
+      /** KV fuel anchors point back at the financial `Expense` row; listing both duplicates the same fill-up. */
+      const linkedFuelTransactionIds = new Set<string>();
+      myFuel.forEach((f: any) => {
+        const m =
+          f?.metadata && typeof f.metadata === 'object'
+            ? (f.metadata as Record<string, unknown>)
+            : {};
+        for (const v of [f?.transactionId, m.originalTransactionId, m.transactionId]) {
+          if (v != null && String(v).trim()) linkedFuelTransactionIds.add(String(v).trim());
+        }
+      });
       
       // Combine into unified expense items for display
       const combined: ExpenseItem[] = [];
@@ -283,8 +295,10 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         });
       });
       
-      // Add expense transactions for current period
+      // Add expense transactions for current period (skip rows already represented by a fuel log anchor)
       myTx.forEach((t: FinancialTransaction) => {
+        if (linkedFuelTransactionIds.has(String(t.id))) return;
+
         const txDate = t.date ? new Date(t.date) : (t.createdAt ? new Date(t.createdAt) : null);
         if (!txDate) return;
         
