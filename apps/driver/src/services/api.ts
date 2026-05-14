@@ -832,12 +832,26 @@ export const api = {
   },
 
   async deleteTransaction(id: string) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/transactions/${id}`, {
+    const trimmed = typeof id === 'string' ? id.trim() : '';
+    if (!trimmed) throw new Error('Missing transaction id');
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/transactions/${encodeURIComponent(trimmed)}`,
+      {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
-    });
-    if (!response.ok) throw new Error("Failed to delete transaction");
-    return response.json();
+      }
+    );
+    if (!response.ok) {
+      const msg = await parseFinancialApiErrorBody(response);
+      throw new Error(msg || 'Failed to delete transaction');
+    }
+    const text = await response.text();
+    if (!text) return { success: true } as const;
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { success: true } as const;
+    }
   },
 
   async uploadFile(file: File) {

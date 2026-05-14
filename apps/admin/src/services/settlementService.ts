@@ -6,6 +6,12 @@ import { format } from 'date-fns';
 import { API_ENDPOINTS } from './apiConfig';
 import { publicAnonKey } from '../utils/supabase/info';
 
+/** Calendar day YYYY-MM-DD from stored date/datetime strings. */
+function toYmd(d: string | undefined | null): string {
+  if (!d || typeof d !== 'string') return '';
+  return d.split('T')[0]?.split(' ')[0] || '';
+}
+
 /**
  * Service to handle automated financial settlements for fuel and other expenses.
  * Specifically handles the logic of crediting drivers for out-of-pocket expenses
@@ -179,8 +185,10 @@ export const settlementService = {
    * to catch orphans that lost their explicit links.
    */
   async getRelatedTransactions(fuelEntry: FuelEntry): Promise<FinancialTransaction[]> {
-    const allTransactions = await api.getTransactions();
-    
+    const driverId = fuelEntry.driverId?.trim();
+    const txPage = await api.getTransactions(driverId || undefined, { limit: 5000 });
+    const allTransactions: FinancialTransaction[] = Array.isArray(txPage) ? txPage : [];
+
     // 1. Primary Match: Explicit Metadata Links
     const explicitMatches = allTransactions.filter(t => 
       t.metadata?.sourceId === fuelEntry.id || 
@@ -190,13 +198,13 @@ export const settlementService = {
 
     // 2. Secondary Match: Signature/Fingerprint Matching
     // Matches transactions by Vehicle, Date, and Amount (handling both Debit and Credit variants)
-    const entryDate = fuelEntry.date.split('T')[0];
+    const entryDate = toYmd(fuelEntry.date);
     const signatureMatches = allTransactions.filter(t => {
       // Skip if already found in explicit matches
       if (explicitMatches.some(em => em.id === t.id)) return false;
 
       const sameVehicle = t.vehicleId === fuelEntry.vehicleId;
-      const sameDate = t.date === entryDate;
+      const sameDate = toYmd(t.date) === entryDate;
       
       // Look for amount matches (Expense - amount, or Settlement - coverage amount)
       const absTxAmount = Math.abs(t.amount);
@@ -218,6 +226,7 @@ export const settlementService = {
    * Finds the parent FuelEntry for a given financial transaction.
    */
   async getParentFuelEntry(transaction: FinancialTransaction): Promise<FuelEntry | null> {
+    const { fuelService } = await import('./fuelService');
     const fuelEntries = await fuelService.getFuelEntries();
     
     // 1. Explicit Link
@@ -228,12 +237,12 @@ export const settlementService = {
     }
 
     // 2. Fingerprint Match
-    const txDate = transaction.date;
+    const txDay = toYmd(transaction.date);
     const absTxAmount = Math.abs(transaction.amount);
     
     return fuelEntries.find(e => {
       const sameVehicle = e.vehicleId === transaction.vehicleId;
-      const sameDate = e.date.split('T')[0] === txDate;
+      const sameDate = toYmd(e.date) === txDay;
       const sameAmount = Math.abs(e.amount) === absTxAmount || 
                          (transaction.metadata?.totalCost && Math.abs(e.amount) === Math.abs(transaction.metadata.totalCost));
       

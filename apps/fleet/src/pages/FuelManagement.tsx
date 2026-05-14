@@ -669,27 +669,28 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
               const relatedTxs = await settlementService.getRelatedTransactions(parentEntry);
               recordsToPurge = {
                   entryId: parentEntry.id,
-                  transactionIds: Array.from(new Set([...relatedTxs.map(t => t.id), deleteConfirmationId]))
+                  transactionIds: Array.from(new Set([...relatedTxs.map(t => t.id).filter(Boolean), deleteConfirmationId]))
               };
           }
 
-          // 2. Atomic Purge Sequence (Step 3.2)
+          const txIds = recordsToPurge.transactionIds.filter((x): x is string => typeof x === 'string' && x.trim().length > 0);
+
+          // Delete ledger rows first; if this fails we do not remove the fuel log (avoids dangling links).
+          await Promise.all(txIds.map((tid) => api.deleteTransaction(tid)));
+
           if (recordsToPurge.entryId) {
               await fuelService.deleteFuelEntry(recordsToPurge.entryId);
           }
-          
-          const deletePromises = recordsToPurge.transactionIds.map(id => api.deleteTransaction(id));
-          await Promise.all(deletePromises);
 
           // 3. Sync State
           if (recordsToPurge.entryId) {
               setLogs(prev => prev.filter(l => l.id !== recordsToPurge.entryId));
           }
-          setTransactions(prev => prev.filter(t => !recordsToPurge.transactionIds.includes(t.id)));
+          setTransactions(prev => prev.filter(t => !txIds.includes(t.id)));
 
           // 4. Recovery Context Feedback
           const detailsText = ` ($${Math.abs(txToDelete.amount).toFixed(2)})`;
-          const count = recordsToPurge.transactionIds.length;
+          const count = txIds.length;
           
           toast.success(
             recordsToPurge.entryId && cascadeDelete 
@@ -704,7 +705,11 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
           );
       } catch (e) {
           console.error("[FuelManagement] Expense purge failure:", e);
-          toast.error("Critical failure during ledger cleanup.");
+          const detail = e instanceof Error ? e.message : String(e);
+          toast.error("Delete failed", {
+              description: detail,
+              duration: 8000,
+          });
       } finally {
           setIsSyncing(false);
           setDeleteConfirmationId(null);
