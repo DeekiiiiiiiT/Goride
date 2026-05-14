@@ -466,10 +466,10 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
           </div>
 
           {/* --- Spatial Audit Tab --- */}
-          <TabsContent value="spatial-audit" className="m-0 p-0 border-0">
-             <div className="min-h-0 bg-slate-50">
-               <SpatialIntegrityMap />
-             </div>
+          <TabsContent value="spatial-audit" className="m-0 border-0 p-0">
+            <div className="w-full bg-slate-50">
+              <SpatialIntegrityMap />
+            </div>
           </TabsContent>
 
           {/* --- Verified Gas Station Tab --- */}

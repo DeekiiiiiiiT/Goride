@@ -476,8 +476,8 @@ export function SpatialIntegrityMap() {
   };
 
   return (
-    <Card className="h-full min-h-0 flex flex-col gap-0 overflow-hidden border-none shadow-none bg-transparent">
-      <CardHeader className="p-4 border-b bg-white flex flex-row items-center justify-between shrink-0">
+    <Card className="flex w-full flex-col gap-0 overflow-hidden border-none bg-transparent shadow-none">
+      <CardHeader className="flex shrink-0 flex-row items-center justify-between border-b bg-white p-4">
         <div>
           <CardTitle className="text-lg flex items-center gap-2">
             <MapIcon className="h-5 w-5 text-indigo-600" />
@@ -548,15 +548,11 @@ export function SpatialIntegrityMap() {
           <ForensicExportButton features={features} />
         </div>
       </CardHeader>
-      <CardContent className="p-0 relative flex min-h-0 w-full flex-1 flex-col">
-        {/*
-          Explicit height for Leaflet: absolute inset-0 inside flex/tab layouts often yields ~0px
-          at map init. Viewport-based height + invalidateSize keeps tiles filling the panel.
-        */}
-        <div
-          ref={mapContainerRef}
-          className="relative z-0 w-full min-h-[min(560px,calc(100vh-260px))] h-[min(720px,calc(100vh-220px))] shrink-0"
-        />
+      <CardContent
+        className="relative w-full shrink-0 overflow-hidden bg-slate-200/50 p-0 dark:bg-slate-800/50"
+        style={{ height: 'clamp(440px, calc(100vh - 260px), 920px)' }}
+      >
+        <div ref={mapContainerRef} className="absolute inset-0 z-0 h-full w-full" />
         
         <ForensicSummaryPanel features={features} />
 
