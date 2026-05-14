@@ -656,9 +656,17 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
 
       setIsSyncing(true);
       try {
+          // #region agent log
+          fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03bcb5'},body:JSON.stringify({sessionId:'03bcb5',location:'FuelManagement.tsx:confirmDeleteExpense:entry',message:'delete expense start',data:{txId:deleteConfirmationId,cascadeDelete,category:txToDelete.category,status:txToDelete.status},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+          // #endregion
+
           // 1. Bi-Directional Discovery (Step 3.1)
           // Find the parent fuel entry that likely spawned this transaction
           const parentEntry = await settlementService.getParentFuelEntry(txToDelete);
+
+          // #region agent log
+          fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03bcb5'},body:JSON.stringify({sessionId:'03bcb5',location:'FuelManagement.tsx:confirmDeleteExpense:afterParent',message:'getParentFuelEntry done',data:{parentId:parentEntry?.id??null,parentHasDriverId:!!parentEntry?.driverId},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+          // #endregion
           
           let recordsToPurge: { entryId?: string, transactionIds: string[] } = {
               transactionIds: [deleteConfirmationId]
@@ -671,15 +679,29 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
                   entryId: parentEntry.id,
                   transactionIds: Array.from(new Set([...relatedTxs.map(t => t.id).filter(Boolean), deleteConfirmationId]))
               };
+              // #region agent log
+              fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03bcb5'},body:JSON.stringify({sessionId:'03bcb5',location:'FuelManagement.tsx:confirmDeleteExpense:afterRelated',message:'getRelatedTransactions done',data:{relatedCount:relatedTxs.length,entryId:recordsToPurge.entryId,txIdCount:recordsToPurge.transactionIds.length},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+              // #endregion
           }
 
           const txIds = recordsToPurge.transactionIds.filter((x): x is string => typeof x === 'string' && x.trim().length > 0);
 
+          // #region agent log
+          fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03bcb5'},body:JSON.stringify({sessionId:'03bcb5',location:'FuelManagement.tsx:confirmDeleteExpense:beforeTxDeletes',message:'about to delete transactions',data:{txIds,willDeleteFuelEntry:!!recordsToPurge.entryId,fuelEntryId:recordsToPurge.entryId??null},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+          // #endregion
+
           // Delete ledger rows first; if this fails we do not remove the fuel log (avoids dangling links).
           await Promise.all(txIds.map((tid) => api.deleteTransaction(tid)));
 
+          // #region agent log
+          fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03bcb5'},body:JSON.stringify({sessionId:'03bcb5',location:'FuelManagement.tsx:confirmDeleteExpense:afterTxDeletes',message:'all deleteTransaction OK',data:{deletedCount:txIds.length},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+          // #endregion
+
           if (recordsToPurge.entryId) {
               await fuelService.deleteFuelEntry(recordsToPurge.entryId);
+              // #region agent log
+              fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03bcb5'},body:JSON.stringify({sessionId:'03bcb5',location:'FuelManagement.tsx:confirmDeleteExpense:afterFuelDelete',message:'deleteFuelEntry OK',data:{entryId:recordsToPurge.entryId},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+              // #endregion
           }
 
           // 3. Sync State
@@ -703,9 +725,15 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
               duration: 5000
             }
           );
+          // #region agent log
+          fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03bcb5'},body:JSON.stringify({sessionId:'03bcb5',location:'FuelManagement.tsx:confirmDeleteExpense:success',message:'delete expense completed',data:{count},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+          // #endregion
       } catch (e) {
           console.error("[FuelManagement] Expense purge failure:", e);
           const detail = e instanceof Error ? e.message : String(e);
+          // #region agent log
+          fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'03bcb5'},body:JSON.stringify({sessionId:'03bcb5',location:'FuelManagement.tsx:confirmDeleteExpense:catch',message:'delete expense failed',data:{error:detail,name:e instanceof Error?e.name:'unknown'},timestamp:Date.now(),hypothesisId:'H1-H4'})}).catch(()=>{});
+          // #endregion
           toast.error("Delete failed", {
               description: detail,
               duration: 8000,
