@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { format, parseISO, isValid } from 'date-fns';
-import { ArrowLeft, CalendarIcon, Car, Loader2 } from 'lucide-react';
+import { ArrowLeft, CalendarIcon, Car, Loader2, Mars, Venus } from 'lucide-react';
 import { Button } from '@roam/ui';
 import { Input } from '@roam/ui';
 import { Label } from '@roam/ui';
@@ -13,7 +13,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useDriver } from '../../contexts/DriverContext';
 import { ThemeToggleButton } from '../layout/ThemeToggleButton';
 
-type Gender = 'male' | 'female' | 'other';
+type Gender = 'male' | 'female';
 
 export function DriverOnboardingPage() {
   const { user, signOut } = useAuth();
@@ -36,8 +36,10 @@ export function DriverOnboardingPage() {
       const d = parseISO(profile.dateOfBirth);
       if (isValid(d)) setDob(d);
     }
-    if (profile.gender === 'male' || profile.gender === 'female' || profile.gender === 'other') {
+    if (profile.gender === 'male' || profile.gender === 'female') {
       setGender(profile.gender);
+    } else {
+      setGender(null);
     }
   }, [profile]);
 
@@ -217,7 +219,7 @@ export function DriverOnboardingPage() {
                       {dob ? format(dob, 'PPP') : 'Select date'}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
+                  <PopoverContent className="w-auto min-w-[288px] p-0" align="start">
                     <Calendar
                       mode="single"
                       selected={dob}
@@ -234,22 +236,33 @@ export function DriverOnboardingPage() {
 
               <div>
                 <p className="text-sm font-medium text-slate-800 dark:text-slate-200">Gender</p>
-                <div className="mt-2 grid grid-cols-3 gap-2">
-                  {(['male', 'female', 'other'] as const).map(g => (
-                    <button
-                      key={g}
-                      type="button"
-                      onClick={() => setGender(g)}
-                      className={cn(
-                        'rounded-full border-2 py-2.5 text-xs font-semibold transition-colors sm:text-sm',
-                        gender === g
-                          ? 'border-emerald-600 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-100'
-                          : 'border-slate-200 bg-white text-slate-700 dark:border-slate-600 dark:bg-slate-900/50 dark:text-slate-200'
-                      )}
-                    >
-                      {g === 'male' ? 'Male' : g === 'female' ? 'Female' : 'Other'}
-                    </button>
-                  ))}
+                <div className="mt-2 grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setGender('male')}
+                    className={cn(
+                      'flex flex-col items-center gap-1.5 rounded-2xl border-2 py-3 text-xs font-semibold transition-colors sm:text-sm',
+                      gender === 'male'
+                        ? 'border-emerald-600 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-100'
+                        : 'border-slate-200 bg-white text-slate-700 dark:border-slate-600 dark:bg-slate-900/50 dark:text-slate-200'
+                    )}
+                  >
+                    <Mars className="h-5 w-5 text-sky-600 dark:text-sky-400" aria-hidden />
+                    Male
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGender('female')}
+                    className={cn(
+                      'flex flex-col items-center gap-1.5 rounded-2xl border-2 py-3 text-xs font-semibold transition-colors sm:text-sm',
+                      gender === 'female'
+                        ? 'border-emerald-600 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-100'
+                        : 'border-slate-200 bg-white text-slate-700 dark:border-slate-600 dark:bg-slate-900/50 dark:text-slate-200'
+                    )}
+                  >
+                    <Venus className="h-5 w-5 text-pink-600 dark:text-pink-400" aria-hidden />
+                    Female
+                  </button>
                 </div>
               </div>
 
