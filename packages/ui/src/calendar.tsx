@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import "react-day-picker/dist/style.css";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { DayPicker } from "react-day-picker";
 
@@ -18,30 +19,38 @@ function Calendar({
       showOutsideDays={showOutsideDays}
       className={cn("block p-3", className)}
       classNames={{
-        months: "flex flex-col gap-4 sm:flex-row sm:gap-2",
-        month: "flex w-full flex-col gap-4",
-        caption: "flex w-full flex-wrap items-center justify-between gap-2 pt-1",
-        caption_label:
-          "relative z-[1] inline-flex items-center gap-1 whitespace-nowrap rounded-md border-2 border-transparent px-1.5 py-1 text-sm font-medium text-slate-900 dark:text-slate-100",
-        nav: "flex shrink-0 items-center gap-0.5",
+        root: cn("rdp", "!m-0"),
+        months: cn("rdp-months", "flex flex-col gap-4 sm:flex-row sm:gap-2"),
+        month: cn("rdp-month", "flex w-full flex-col gap-4"),
+        caption: cn("rdp-caption", "w-full flex-wrap gap-2 pt-1"),
+        caption_label: cn(
+          "rdp-caption_label",
+          "text-sm font-medium text-slate-900 dark:text-slate-100",
+        ),
+        nav: cn("rdp-nav", "flex shrink-0 items-center gap-0.5"),
         nav_button: cn(
+          "rdp-nav_button",
           buttonVariants({ variant: "outline" }),
           "size-7 bg-transparent p-0 opacity-50 hover:opacity-100",
         ),
-        nav_button_previous: "static",
-        nav_button_next: "static",
-        table: "w-full border-collapse",
-        head_row: "table-row",
-        head_cell:
+        nav_button_previous: "rdp-nav_button_previous static",
+        nav_button_next: "rdp-nav_button_next static",
+        table: cn("rdp-table", "w-full border-collapse"),
+        head_row: cn("rdp-head_row", "table-row"),
+        head_cell: cn(
+          "rdp-head_cell",
           "text-muted-foreground h-10 w-10 pb-2 text-center align-middle text-[0.8rem] font-normal",
-        row: "mt-2 table-row border-collapse",
+        ),
+        row: cn("rdp-row", "mt-2 table-row border-collapse"),
         cell: cn(
+          "rdp-cell",
           "relative table-cell h-10 w-10 p-0 text-center align-middle text-sm focus-within:relative focus-within:z-20 [&:has([aria-selected])]:bg-accent [&:has([aria-selected].day-range-end)]:rounded-r-md",
           props.mode === "range"
             ? "[&:has(>.day-range-end)]:rounded-r-md [&:has(>.day-range-start)]:rounded-l-md first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md"
             : "[&:has([aria-selected])]:rounded-md",
         ),
         day: cn(
+          "rdp-day",
           buttonVariants({ variant: "ghost" }),
           "mx-auto flex size-9 items-center justify-center p-0 font-normal aria-selected:opacity-100",
         ),
@@ -57,22 +66,26 @@ function Calendar({
         day_disabled: "text-muted-foreground opacity-50",
         day_range_middle:
           "aria-selected:bg-accent aria-selected:text-accent-foreground",
-        day_hidden: "invisible",
-        /** Screen-reader-only; must not take layout space (replaces rdp-vhidden when style.css is not imported). */
-        vhidden: "sr-only",
-        /** Row containing month + year dropdown controls */
-        caption_dropdowns: "relative inline-flex flex-wrap items-center justify-center gap-3",
-        /**
-         * Native `<select>` for month/year: must cover the visible label with opacity 0
-         * (see react-day-picker Dropdown + dist/style.css `.rdp-dropdown`).
-         */
-        dropdown:
-          "absolute inset-0 z-[2] m-0 h-full w-full cursor-pointer appearance-none border-0 bg-transparent p-0 font-inherit text-inherit opacity-0 disabled:cursor-not-allowed disabled:opacity-100",
-        dropdown_month:
-          "relative inline-flex min-h-9 min-w-[5.5rem] items-center rounded-md border border-slate-200 bg-white px-1 shadow-sm focus-within:ring-2 focus-within:ring-emerald-500/35 dark:border-slate-600 dark:bg-slate-900",
-        dropdown_year:
-          "relative inline-flex min-h-9 min-w-[4.5rem] items-center rounded-md border border-slate-200 bg-white px-1 shadow-sm focus-within:ring-2 focus-within:ring-emerald-500/35 dark:border-slate-600 dark:bg-slate-900",
-        dropdown_icon: "ml-0.5 size-3 shrink-0 text-slate-500 dark:text-slate-400",
+        day_hidden: "rdp-day_hidden invisible",
+        vhidden: "rdp-vhidden",
+        caption_dropdowns: cn(
+          "rdp-caption_dropdowns",
+          "flex flex-wrap items-center justify-center gap-3",
+        ),
+        /** Keep `rdp-dropdown` so react-day-picker/dist/style.css hit-target + stacking match upstream. */
+        dropdown: "rdp-dropdown",
+        dropdown_month: cn(
+          "rdp-dropdown_month",
+          "min-h-9 min-w-[5.5rem] rounded-md border border-slate-200 bg-white px-1 shadow-sm focus-within:ring-2 focus-within:ring-emerald-500/35 dark:border-slate-600 dark:bg-slate-900",
+        ),
+        dropdown_year: cn(
+          "rdp-dropdown_year",
+          "min-h-9 min-w-[4.5rem] rounded-md border border-slate-200 bg-white px-1 shadow-sm focus-within:ring-2 focus-within:ring-emerald-500/35 dark:border-slate-600 dark:bg-slate-900",
+        ),
+        dropdown_icon: cn(
+          "rdp-dropdown_icon",
+          "size-3 shrink-0 text-slate-500 dark:text-slate-400",
+        ),
         ...classNames,
       }}
       components={{

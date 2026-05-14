@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { format, parseISO, isValid } from 'date-fns';
+import { format, parseISO, isValid, startOfDay, subYears } from 'date-fns';
 import { ArrowLeft, CalendarIcon, Car, Loader2, Mars, Venus } from 'lucide-react';
 import { Button } from '@roam/ui';
 import { Input } from '@roam/ui';
@@ -14,6 +14,8 @@ import { useDriver } from '../../contexts/DriverContext';
 import { ThemeToggleButton } from '../layout/ThemeToggleButton';
 
 type Gender = 'male' | 'female';
+
+const MIN_DRIVER_AGE = 18;
 
 export function DriverOnboardingPage() {
   const { user, signOut } = useAuth();
@@ -224,13 +226,16 @@ export function DriverOnboardingPage() {
                       mode="single"
                       captionLayout="dropdown-buttons"
                       fromYear={1920}
-                      toYear={new Date().getFullYear()}
+                      toYear={new Date().getFullYear() - MIN_DRIVER_AGE}
                       selected={dob}
                       onSelect={d => {
                         setDob(d);
                         setDobOpen(false);
                       }}
-                      disabled={date => date > new Date() || date < new Date('1920-01-01')}
+                      disabled={date =>
+                        date > startOfDay(subYears(new Date(), MIN_DRIVER_AGE)) ||
+                        date < new Date('1920-01-01')
+                      }
                       initialFocus
                     />
                   </PopoverContent>
