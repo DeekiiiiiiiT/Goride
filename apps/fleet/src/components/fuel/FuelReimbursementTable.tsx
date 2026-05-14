@@ -384,6 +384,20 @@ export function FuelReimbursementTable({
 
     const history = transactions.filter(t => (t.status === 'Approved' || t.status === 'Rejected') && isFuelReimbursement(t) && isWithinRange(t));
 
+    /** Financial `Expense` rows for fuel (KV `transaction:*`) — same class of records drivers can see alongside `fuel_entry`. Not gated by `isFuelReimbursement` automated filters. */
+    const approvedFuelExpenseLedger = transactions
+        .filter((t) => {
+            if (t.type !== 'Expense') return false;
+            if (t.category !== 'Fuel' && t.category !== 'Fuel Reimbursement') return false;
+            if (t.status !== 'Approved' && t.status !== 'Rejected') return false;
+            return isWithinRange(t);
+        })
+        .sort((a, b) => {
+            const da = (a.date || '').split('T')[0];
+            const db = (b.date || '').split('T')[0];
+            return db.localeCompare(da);
+        });
+
     const handleAction = (type: 'approve' | 'reject') => {
         setAction(type);
         setNotes('');
@@ -902,6 +916,14 @@ export function FuelReimbursementTable({
                                 </Badge>
                             )}
                         </TabsTrigger>
+                        <TabsTrigger value="fuel-expense-ledger">
+                            Fuel expenses
+                            {approvedFuelExpenseLedger.length > 0 && (
+                                <Badge variant="secondary" className="ml-2 bg-slate-100 text-slate-700 hover:bg-slate-200 font-normal">
+                                    {approvedFuelExpenseLedger.length}
+                                </Badge>
+                            )}
+                        </TabsTrigger>
                         <TabsTrigger value="history">History</TabsTrigger>
                     </TabsList>
 
@@ -992,6 +1014,26 @@ export function FuelReimbursementTable({
                             )}
                         </TabsContent>
                     </Tabs>
+                </TabsContent>
+
+                <TabsContent value="fuel-expense-ledger" className="space-y-4">
+                    <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-700">
+                        <p className="font-medium text-slate-800">Financial fuel expenses (ledger)</p>
+                        <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                            These are <span className="font-medium text-slate-600">Expense</span> transactions with fuel category that are already approved or rejected.
+                            They are stored separately from fuel log anchors and can appear on the driver expenses screen next to fuel log rows. Use the date range above to narrow the list; open a row for details, edit, or delete where your permissions allow.
+                        </p>
+                    </div>
+                    {approvedFuelExpenseLedger.length === 0 ? (
+                        <div className="rounded-md border border-slate-200 bg-white p-8 text-center space-y-2">
+                            <p className="text-sm text-slate-600">No approved or rejected fuel expense lines in this date range.</p>
+                            <p className="text-xs text-slate-400 max-w-md mx-auto">
+                                Widen the date range if you expect rows here. Pending items stay on the <span className="font-medium text-slate-600">Pending</span> tab.
+                            </p>
+                        </div>
+                    ) : (
+                        renderTable(approvedFuelExpenseLedger, false)
+                    )}
                 </TabsContent>
 
                 <TabsContent value="history" className="space-y-4">
