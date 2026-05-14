@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../utils/supabase/client';
+import { DRIVER_OAUTH_INTENT_KEY, DRIVER_OAUTH_INTENT_VALUE } from '../utils/driverAuthSignup';
 
 interface AuthContextType {
   session: Session | null;
@@ -59,6 +60,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       subscription.unsubscribe();
     };
   }, []);
+
+  /** Google OAuth does not send `options.data`; attach driver role when user started signup from this app. */
+  useEffect(() => {
+    if (!user) return;
+    void (async () => {
+      try {
+        if (sessionStorage.getItem(DRIVER_OAUTH_INTENT_KEY) !== DRIVER_OAUTH_INTENT_VALUE) return;
+        if (user.user_metadata?.role) {
+          sessionStorage.removeItem(DRIVER_OAUTH_INTENT_KEY);
+          return;
+        }
+        await supabase.auth.updateUser({ data: { role: 'driver' } });
+      } catch (e) {
+        console.warn('driver oauth role patch:', e);
+      } finally {
+        sessionStorage.removeItem(DRIVER_OAUTH_INTENT_KEY);
+      }
+    })();
+  }, [user]);
 
   const signOut = async () => {
     setSession(null);

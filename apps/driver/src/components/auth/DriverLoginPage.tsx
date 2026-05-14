@@ -3,9 +3,11 @@ import { Car, Loader2, AlertCircle, Mail, Lock, Eye, EyeOff, HelpCircle } from '
 import { supabase } from '../../utils/supabase/client';
 import { ThemeToggleButton } from '../layout/ThemeToggleButton';
 import { DriverPhoneAuthWizard } from './DriverPhoneAuthWizard';
+import { DriverEmailSignupForm, GoogleSignupButton } from './DriverEmailSignupForm';
 
 export function DriverLoginPage() {
   const [mainView, setMainView] = useState<'login' | 'signup'>('login');
+  const [signupSubView, setSignupSubView] = useState<'main' | 'email'>('main');
   const [loginMethod, setLoginMethod] = useState<'email' | 'phone'>('email');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -65,18 +67,53 @@ export function DriverLoginPage() {
               </div>
             )}
 
-            {mainView === 'signup' && (
-              <DriverPhoneAuthWizard
-                shouldCreateUser
-                requireTerms
-                onVerified={() => {
-                  setError(null);
-                }}
-                onCancel={() => {
-                  setMainView('login');
+            {mainView === 'signup' && signupSubView === 'email' && (
+              <DriverEmailSignupForm
+                onBack={() => {
+                  setSignupSubView('main');
                   setError(null);
                 }}
               />
+            )}
+
+            {mainView === 'signup' && signupSubView === 'main' && (
+              <div className="space-y-4">
+                <GoogleSignupButton onError={msg => setError(msg || null)} />
+                <p className="text-center text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                  By continuing with Google, you agree to our Terms of Service and Privacy Policy.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError(null);
+                    setSignupSubView('email');
+                  }}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-slate-50 py-3 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-900/50 dark:text-slate-100 dark:hover:bg-slate-800/80"
+                >
+                  <Mail className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  Continue with email
+                </button>
+                <div className="relative py-1">
+                  <div className="absolute inset-0 flex items-center" aria-hidden>
+                    <span className="w-full border-t border-slate-200 dark:border-slate-600" />
+                  </div>
+                  <div className="relative flex justify-center text-xs font-medium uppercase tracking-wide text-slate-400">
+                    <span className="bg-white/90 px-2 dark:bg-slate-800/60">or phone</span>
+                  </div>
+                </div>
+                <DriverPhoneAuthWizard
+                  shouldCreateUser
+                  requireTerms
+                  onVerified={() => {
+                    setError(null);
+                  }}
+                  onCancel={() => {
+                    setMainView('login');
+                    setSignupSubView('main');
+                    setError(null);
+                  }}
+                />
+              </div>
             )}
 
             {mainView === 'login' && loginMethod === 'email' && (
@@ -169,6 +206,7 @@ export function DriverLoginPage() {
                 type="button"
                 onClick={() => {
                   setMainView('signup');
+                  setSignupSubView('main');
                   setError(null);
                 }}
                 className="text-sm font-semibold text-slate-700 transition-colors hover:text-emerald-700 dark:text-slate-300 dark:hover:text-emerald-400"
@@ -180,6 +218,7 @@ export function DriverLoginPage() {
                 type="button"
                 onClick={() => {
                   setMainView('login');
+                  setSignupSubView('main');
                   setError(null);
                 }}
                 className="text-sm font-semibold text-slate-700 transition-colors hover:text-emerald-700 dark:text-slate-300 dark:hover:text-emerald-400"
