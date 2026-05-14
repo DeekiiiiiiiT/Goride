@@ -60,3 +60,4 @@ jobs:
           deploy_with_retry make-server-37f42386
           deploy_with_retry delivery
           deploy_with_retry payments
+          deploy_with_retry send-sms

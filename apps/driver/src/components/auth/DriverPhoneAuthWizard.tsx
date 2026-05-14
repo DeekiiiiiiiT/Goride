@@ -16,6 +16,7 @@ import { toE164ForCountry } from '../../utils/phoneE164';
 import { DEFAULT_PHONE_COUNTRY, PHONE_COUNTRIES, flagEmoji, type PhoneCountry } from '../../utils/phoneCountries';
 import { useIpDefaultCountry } from '../../hooks/useIpDefaultCountry';
 import { listenForSmsOtp } from '../../utils/webOtp';
+import { formatPhoneAuthError, getAuthErrorMessage } from '../../utils/supabaseAuthErrors';
 
 export type OtpChannel = 'sms' | 'whatsapp';
 
@@ -117,8 +118,8 @@ export function DriverPhoneAuthWizard({
       setResendIn(RESEND_SECONDS);
       setOtp('');
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Could not send verification code.';
-      setError(msg);
+      const msg = getAuthErrorMessage(err, 'Could not send verification code.');
+      setError(formatPhoneAuthError(msg));
     } finally {
       setLoading(false);
     }
@@ -158,8 +159,8 @@ export function DriverPhoneAuthWizard({
       if (vError) throw vError;
       onVerified();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Verification failed.';
-      setError(msg);
+      const msg = getAuthErrorMessage(err, 'Verification failed.');
+      setError(formatPhoneAuthError(msg));
     } finally {
       setLoading(false);
     }
@@ -174,7 +175,7 @@ export function DriverPhoneAuthWizard({
     return (
       <div className="space-y-4">
         {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+          <div className="whitespace-pre-line rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
             {error}
           </div>
         )}
@@ -244,7 +245,7 @@ export function DriverPhoneAuthWizard({
   return (
     <div className="relative z-0 space-y-4">
       {error && !channelModalOpen && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+        <div className="whitespace-pre-line rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
           {error}
         </div>
       )}
@@ -386,7 +387,7 @@ export function DriverPhoneAuthWizard({
               className="relative z-[201] w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-slate-900"
             >
               {error && (
-                <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+                <div className="mb-4 whitespace-pre-line rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
                   {error}
                 </div>
               )}
