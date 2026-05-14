@@ -17,6 +17,10 @@ export interface DriverProfile {
   status: 'active' | 'pending' | 'suspended' | 'deactivated';
   onboardingComplete: boolean;
   displayName?: string;
+  firstName?: string;
+  lastName?: string;
+  dateOfBirth?: string;
+  gender?: 'male' | 'female' | 'other' | null;
   phone?: string;
   profilePhotoUrl?: string;
 }
@@ -107,6 +111,10 @@ export const DriverProvider = ({ children }: { children: React.ReactNode }) => {
           status: data.status,
           onboardingComplete: data.onboarding_complete,
           displayName: data.display_name,
+          firstName: data.first_name ?? undefined,
+          lastName: data.last_name ?? undefined,
+          dateOfBirth: data.date_of_birth ?? undefined,
+          gender: (data.gender as DriverProfile['gender']) ?? undefined,
           phone: data.phone,
           profilePhotoUrl: data.profile_photo_url,
         });
@@ -123,7 +131,11 @@ export const DriverProvider = ({ children }: { children: React.ReactNode }) => {
               id: fleetData.id,
               name: fleetData.name,
             });
+          } else {
+            setFleet(null);
           }
+        } else {
+          setFleet(null);
         }
       } else {
         setProfile(null);

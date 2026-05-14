@@ -1,9 +1,10 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { DriverProvider } from './contexts/DriverContext';
+import { DriverProvider, useDriver } from './contexts/DriverContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { DriverLoginPage } from './components/auth/DriverLoginPage';
+import { DriverOnboardingPage } from './components/auth/DriverOnboardingPage';
 import { DriverShell } from './components/layout/DriverShell';
 
 const queryClient = new QueryClient({
@@ -17,18 +18,36 @@ const queryClient = new QueryClient({
   },
 });
 
+function AuthLoadingScreen() {
+  return (
+    <div className="flex h-screen items-center justify-center bg-slate-100 text-slate-900 dark:bg-slate-900 dark:text-slate-100">
+      <div className="flex flex-col items-center gap-4">
+        <div className="h-12 w-12 animate-spin rounded-full border-4 border-emerald-600 border-t-transparent dark:border-emerald-500" />
+        <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Loading...</p>
+      </div>
+    </div>
+  );
+}
+
+function AuthenticatedDriverRoute() {
+  const { profile, loading } = useDriver();
+
+  if (loading) {
+    return <AuthLoadingScreen />;
+  }
+
+  if (!profile?.onboardingComplete) {
+    return <DriverOnboardingPage />;
+  }
+
+  return <DriverShell />;
+}
+
 function AppContent() {
   const { user, isDriver, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-slate-100 text-slate-900 dark:bg-slate-900 dark:text-slate-100">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-emerald-600 border-t-transparent dark:border-emerald-500 rounded-full animate-spin" />
-          <p className="text-slate-600 dark:text-slate-300 text-sm font-medium">Loading...</p>
-        </div>
-      </div>
-    );
+    return <AuthLoadingScreen />;
   }
 
   if (!user || !isDriver) {
@@ -37,7 +56,7 @@ function AppContent() {
 
   return (
     <DriverProvider>
-      <DriverShell />
+      <AuthenticatedDriverRoute />
     </DriverProvider>
   );
 }

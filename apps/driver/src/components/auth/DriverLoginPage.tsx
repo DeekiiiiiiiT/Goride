@@ -1,144 +1,195 @@
 import React, { useState } from 'react';
-import { Car, Loader2, AlertCircle, Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { Car, Loader2, AlertCircle, Mail, Lock, Eye, EyeOff, HelpCircle } from 'lucide-react';
 import { supabase } from '../../utils/supabase/client';
 import { ThemeToggleButton } from '../layout/ThemeToggleButton';
+import { DriverPhoneAuthWizard } from './DriverPhoneAuthWizard';
 
 export function DriverLoginPage() {
+  const [mainView, setMainView] = useState<'login' | 'signup'>('login');
+  const [loginMethod, setLoginMethod] = useState<'email' | 'phone'>('email');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
-
     try {
-      if (mode === 'login') {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              role: 'driver',
-            },
-          },
-        });
-        if (error) throw error;
-      }
-    } catch (err: any) {
+      const { error: signErr } = await supabase.auth.signInWithPassword({ email, password });
+      if (signErr) throw signErr;
+    } catch (err: unknown) {
       console.error('Auth error:', err);
-      setError(err.message || 'Authentication failed');
+      setError(err instanceof Error ? err.message : 'Authentication failed');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-100 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
-      <div className="flex justify-end px-4 pt-4">
+    <div className="flex min-h-screen flex-col bg-gradient-to-br from-slate-100 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+      <div className="flex items-start justify-between px-4 pt-4">
+        <a
+          href="mailto:support@roam.app"
+          className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200/80 bg-emerald-50/90 px-3 py-1.5 text-xs font-semibold text-emerald-800 shadow-sm dark:border-emerald-500/30 dark:bg-emerald-950/40 dark:text-emerald-200"
+        >
+          <HelpCircle className="h-3.5 w-3.5" />
+          Contact support
+        </a>
         <ThemeToggleButton />
       </div>
-      <div className="flex-1 flex flex-col items-center justify-center px-4 pb-12 -mt-8">
+
+      <div className="-mt-4 flex flex-1 flex-col items-center justify-center px-4 pb-12">
         <div className="w-full max-w-sm">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 mb-4 shadow-lg shadow-emerald-500/25">
-              <Car className="w-8 h-8 text-white" />
+          <div className="mb-8 text-center">
+            <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/25">
+              <Car className="h-8 w-8 text-white" />
             </div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Roam Driver</h1>
-            <p className="text-slate-600 dark:text-slate-300 text-sm mt-2 font-medium">
-              {mode === 'login' ? 'Sign in to your account' : 'Create your driver account'}
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Roam Driver</h1>
+            <p className="mt-2 text-sm font-medium text-slate-600 dark:text-slate-300">
+              {mainView === 'login'
+                ? loginMethod === 'email'
+                  ? 'Sign in to your account'
+                  : 'Sign in with your phone'
+                : 'Create your driver account'}
             </p>
           </div>
 
-          <div className="bg-white/90 backdrop-blur-sm border border-slate-200 rounded-2xl p-6 shadow-xl dark:bg-slate-800/60 dark:border-slate-700/60">
+          <div className="rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-xl backdrop-blur-sm dark:border-slate-700/60 dark:bg-slate-800/60">
             {error && (
-              <div className="mb-4 flex items-start gap-2 bg-red-50 border border-red-200 text-red-800 rounded-lg px-3 py-2.5 text-sm font-medium dark:bg-red-500/10 dark:border-red-500/30 dark:text-red-200">
-                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+              <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-medium text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>{error}</span>
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1.5">Email</label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 dark:text-slate-400" />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    placeholder="driver@email.com"
-                    required
-                    className="w-full pl-10 pr-3 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-600 text-sm font-medium dark:bg-slate-900/70 dark:border-slate-600 dark:text-white dark:placeholder-slate-400"
-                  />
-                </div>
-              </div>
+            {mainView === 'signup' && (
+              <DriverPhoneAuthWizard
+                shouldCreateUser
+                requireTerms
+                onVerified={() => {
+                  setError(null);
+                }}
+                onCancel={() => {
+                  setMainView('login');
+                  setError(null);
+                }}
+              />
+            )}
 
-              <div>
-                <label className="block text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1.5">Password</label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 dark:text-slate-400" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    placeholder="Enter your password"
-                    required
-                    className="w-full pl-10 pr-10 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-600 text-sm font-medium dark:bg-slate-900/70 dark:border-slate-600 dark:text-white dark:placeholder-slate-400"
-                  />
+            {mainView === 'login' && loginMethod === 'email' && (
+              <>
+                <form onSubmit={e => void handleEmailLogin(e)} className="space-y-4">
+                  <div>
+                    <label className="mb-1.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">Email</label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500 dark:text-slate-400" />
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
+                        placeholder="driver@email.com"
+                        required
+                        className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-10 pr-3 text-sm font-medium text-slate-900 placeholder-slate-500 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-slate-600 dark:bg-slate-900/70 dark:text-white dark:placeholder-slate-400"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">Password</label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500 dark:text-slate-400" />
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                        placeholder="Enter your password"
+                        required
+                        className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-10 pr-10 text-sm font-medium text-slate-900 placeholder-slate-500 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-slate-600 dark:bg-slate-900/70 dark:text-white dark:placeholder-slate-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100"
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 transition-all hover:from-emerald-500 hover:to-teal-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Signing in…
+                      </>
+                    ) : (
+                      'Sign In'
+                    )}
+                  </button>
+                </form>
+
+                <div className="mt-4 text-center">
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100"
+                    className="text-sm font-semibold text-emerald-700 hover:underline dark:text-emerald-400"
+                    onClick={() => {
+                      setLoginMethod('phone');
+                      setError(null);
+                    }}
                   >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    Sign in with phone instead
                   </button>
                 </div>
-              </div>
+              </>
+            )}
 
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm shadow-lg shadow-emerald-600/20"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    {mode === 'login' ? 'Signing in...' : 'Creating account...'}
-                  </>
-                ) : (
-                  mode === 'login' ? 'Sign In' : 'Create Account'
-                )}
-              </button>
-            </form>
+            {mainView === 'login' && loginMethod === 'phone' && (
+              <DriverPhoneAuthWizard
+                shouldCreateUser={false}
+                requireTerms={false}
+                onVerified={() => setError(null)}
+                onCancel={() => {
+                  setLoginMethod('email');
+                  setError(null);
+                }}
+              />
+            )}
+          </div>
 
-            <div className="mt-6 pt-4 border-t border-slate-200 text-center dark:border-slate-700/60">
+          <div className="mt-6 border-t border-slate-200 pt-4 text-center dark:border-slate-700/60">
+            {mainView === 'login' ? (
               <button
                 type="button"
                 onClick={() => {
-                  setMode(mode === 'login' ? 'signup' : 'login');
+                  setMainView('signup');
                   setError(null);
                 }}
-                className="text-slate-700 hover:text-emerald-700 text-sm font-semibold transition-colors dark:text-slate-300 dark:hover:text-emerald-400"
+                className="text-sm font-semibold text-slate-700 transition-colors hover:text-emerald-700 dark:text-slate-300 dark:hover:text-emerald-400"
               >
-                {mode === 'login'
-                  ? "Don't have an account? Sign up"
-                  : 'Already have an account? Sign in'}
+                Don&apos;t have an account? Sign up
               </button>
-            </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setMainView('login');
+                  setError(null);
+                }}
+                className="text-sm font-semibold text-slate-700 transition-colors hover:text-emerald-700 dark:text-slate-300 dark:hover:text-emerald-400"
+              >
+                Already have an account? Sign in
+              </button>
+            )}
           </div>
 
-          <p className="text-center text-slate-600 dark:text-slate-400 text-xs mt-6 font-medium leading-relaxed">
+          <p className="mt-6 text-center text-xs font-medium leading-relaxed text-slate-600 dark:text-slate-400">
             By continuing, you agree to our Terms of Service and Privacy Policy
           </p>
         </div>
