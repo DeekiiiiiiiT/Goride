@@ -563,8 +563,8 @@ export function SpatialIntegrityMap() {
   };
 
   return (
-    <Card className="flex w-full flex-col gap-0 overflow-hidden border-none bg-transparent shadow-none">
-      <CardHeader className="flex shrink-0 flex-row items-center justify-between border-b bg-white p-4">
+    <Card className="flex w-full flex-col gap-0 overflow-visible border-none bg-transparent shadow-none">
+      <CardHeader className="relative z-10 flex shrink-0 flex-row items-center justify-between border-b bg-white p-4 dark:border-border dark:bg-card">
         <div>
           <CardTitle className="text-lg flex items-center gap-2">
             <MapIcon className="h-5 w-5 text-indigo-600" />
@@ -637,8 +637,11 @@ export function SpatialIntegrityMap() {
       </CardHeader>
       <CardContent
         ref={cardContentRef}
-        className="relative w-full shrink-0 overflow-hidden bg-slate-200/50 p-0 dark:bg-slate-800/50"
-        style={{ height: 'clamp(440px, calc(100vh - 260px), 920px)' }}
+        className="relative z-0 mt-1 box-border w-full shrink-0 overflow-hidden rounded-b-xl bg-slate-200/40 p-0 dark:bg-slate-950/40"
+        style={{
+          height: 'clamp(480px, calc(100dvh - 19rem), 900px)',
+          minHeight: 'min(520px, calc(100dvh - 18rem))',
+        }}
       >
         <div ref={mapContainerRef} className="absolute inset-0 z-0 h-full w-full" />
         

@@ -426,7 +426,7 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="overflow-x-auto overflow-y-visible rounded-xl border border-slate-200 bg-white shadow-sm dark:border-border dark:bg-card">
         <Tabs defaultValue="spatial-audit" className="w-full">
           <div className="border-b border-slate-200 px-4 py-3 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-4">
@@ -467,7 +467,7 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
 
           {/* --- Spatial Audit Tab --- */}
           <TabsContent value="spatial-audit" className="m-0 border-0 p-0">
-            <div className="w-full bg-slate-50">
+            <div className="w-full bg-slate-50 pt-2 dark:bg-transparent">
               <SpatialIntegrityMap />
             </div>
           </TabsContent>

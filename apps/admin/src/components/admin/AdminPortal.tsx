@@ -119,7 +119,7 @@ export function AdminPortal() {
         <ActivityLog />
       )}
       {currentPage === 'fuel-stations' && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px]">
+        <div className="min-h-[600px] rounded-xl bg-white shadow-sm overflow-x-auto overflow-y-visible dark:bg-card dark:shadow-none dark:ring-1 dark:ring-border">
           <StationDatabaseView logs={fuelLogs} loading={fuelLoading} />
         </div>
       )}
