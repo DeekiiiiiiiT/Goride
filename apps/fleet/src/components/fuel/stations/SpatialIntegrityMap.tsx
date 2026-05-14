@@ -27,7 +27,6 @@ fixLeafletIcon();
 export function SpatialIntegrityMap() {
   const { features, loading, error, refresh, recentFueling } = useSpatialAudit();
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const cardContentRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const layerGroupRef = useRef<L.LayerGroup | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
@@ -44,6 +43,21 @@ export function SpatialIntegrityMap() {
   const [showClearSnapshots, setShowClearSnapshots] = useState(true);
   const [showFlaggedSnapshots, setShowFlaggedSnapshots] = useState(true);
   const [showTransactionConfirmed, setShowTransactionConfirmed] = useState(true);
+  /** Pixel height for the map pane — derived from viewport so Leaflet never mounts into a 0px flex box. */
+  const [mapPaneHeightPx, setMapPaneHeightPx] = useState(600);
+
+  useLayoutEffect(() => {
+    const compute = () => {
+      if (typeof window === 'undefined') return;
+      const h = window.innerHeight;
+      // Reserve: app header, main padding, Station Database tabs, spatial toolbar (~340px)
+      const reserved = 340;
+      setMapPaneHeightPx(Math.max(500, Math.min(860, Math.round(h - reserved))));
+    };
+    compute();
+    window.addEventListener('resize', compute);
+    return () => window.removeEventListener('resize', compute);
+  }, []);
 
   useEffect(() => {
     // Inject Leaflet CSS
@@ -82,75 +96,9 @@ export function SpatialIntegrityMap() {
     setIsMounted(true);
   }, []);
 
-  // #region agent log
-  useLayoutEffect(() => {
-    const el = mapContainerRef.current;
-    const pane = cardContentRef.current;
-    if (!el || !pane) {
-      fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'c5edda' },
-        body: JSON.stringify({
-          sessionId: 'c5edda',
-          runId: 'pre-fix',
-          hypothesisId: 'H-B',
-          location: 'SpatialIntegrityMap.tsx:useLayoutEffect',
-          message: 'layout measure refs missing',
-          data: { hasMapEl: !!el, hasPane: !!pane, isMounted, loading, featureCount: features.length },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      return;
-    }
-    const mr = el.getBoundingClientRect();
-    const pr = pane.getBoundingClientRect();
-    const pcs = window.getComputedStyle(pane);
-    fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'c5edda' },
-      body: JSON.stringify({
-        sessionId: 'c5edda',
-        runId: 'pre-fix',
-        hypothesisId: 'H-A',
-        location: 'SpatialIntegrityMap.tsx:useLayoutEffect',
-        message: 'spatial map layout rects',
-        data: {
-          mapRect: { w: mr.width, h: mr.height, top: mr.top },
-          paneRect: { w: pr.width, h: pr.height, top: pr.top },
-          paneComputedHeight: pcs.height,
-          paneOverflow: pcs.overflow,
-          loading,
-          featureCount: features.length,
-          hasLeafletClass: el.classList.contains('leaflet-container'),
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-  }, [isMounted, loading, features.length]);
-  // #endregion
-
   // Initialize Map
   useEffect(() => {
     if (!isMounted || !mapContainerRef.current || mapInstanceRef.current) {
-      // #region agent log
-      fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'c5edda' },
-        body: JSON.stringify({
-          sessionId: 'c5edda',
-          runId: 'pre-fix',
-          hypothesisId: 'H-D',
-          location: 'SpatialIntegrityMap.tsx:mapInit:skip',
-          message: 'map init skipped',
-          data: {
-            isMounted,
-            hasContainer: !!mapContainerRef.current,
-            hasMapInstance: !!mapInstanceRef.current,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       return;
     }
 
@@ -173,26 +121,6 @@ export function SpatialIntegrityMap() {
     layerGroupRef.current = layerGroup;
 
     mapInstanceRef.current = map;
-
-    // #region agent log
-    const br = el.getBoundingClientRect();
-    fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'c5edda' },
-      body: JSON.stringify({
-        sessionId: 'c5edda',
-        runId: 'pre-fix',
-        hypothesisId: 'H-D',
-        location: 'SpatialIntegrityMap.tsx:mapInit:created',
-        message: 'leaflet map created',
-        data: {
-          containerRect: { w: br.width, h: br.height },
-          leafletPxHeight: (el as HTMLElement).style?.height,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
 
     const invalidate = () => {
       try {
@@ -233,6 +161,16 @@ export function SpatialIntegrityMap() {
       }
     };
   }, [isMounted]);
+
+  useEffect(() => {
+    const m = mapInstanceRef.current;
+    if (!m) return;
+    try {
+      m.invalidateSize({ animate: false });
+    } catch {
+      /* ignore */
+    }
+  }, [mapPaneHeightPx]);
 
   // Handle Theme Change
   useEffect(() => {
@@ -636,15 +574,14 @@ export function SpatialIntegrityMap() {
         </div>
       </CardHeader>
       <CardContent
-        ref={cardContentRef}
-        className="relative z-0 mt-1 box-border w-full shrink-0 overflow-hidden rounded-b-xl bg-slate-200/40 p-0 dark:bg-slate-950/40"
-        style={{
-          height: 'clamp(480px, calc(100dvh - 19rem), 900px)',
-          minHeight: 'min(520px, calc(100dvh - 18rem))',
-        }}
+        className="relative isolate mt-2 box-border w-full overflow-hidden rounded-b-xl border border-slate-300 bg-[#d4d4d4] p-0 shadow-inner dark:border-slate-600 dark:bg-neutral-950"
+        style={{ height: mapPaneHeightPx, minHeight: 500 }}
       >
-        <div ref={mapContainerRef} className="absolute inset-0 z-0 h-full w-full" />
-        
+        <div
+          ref={mapContainerRef}
+          className="relative z-[1] box-border h-full min-h-[500px] w-full bg-[#ddd] dark:bg-neutral-900"
+        />
+
         <ForensicSummaryPanel features={features} />
 
         {/* Loading Overlay */}
