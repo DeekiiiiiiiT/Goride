@@ -61,3 +61,4 @@ jobs:
           deploy_with_retry delivery
           deploy_with_retry payments
           deploy_with_retry send-sms
+          deploy_with_retry rides
