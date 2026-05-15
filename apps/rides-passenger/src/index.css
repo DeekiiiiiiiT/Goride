@@ -1,18 +1,56 @@
 @import "tailwindcss";
 
 :root {
-  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: system-ui, -apple-system, "Segoe UI", "Inter", sans-serif;
+  --roam-accent: #059669;
+  --roam-accent-muted: rgba(5, 150, 105, 0.12);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
-  background-color: #fafafa;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #f4f4f5;
   color: #18181b;
+  min-height: 100dvh;
+}
+
+#root {
+  min-height: 100dvh;
 }
 
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+}
+
+/* Safe areas: notched phones & tablets */
+.safe-x {
+  padding-left: max(1rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1rem, env(safe-area-inset-right, 0px));
+}
+
+.safe-t {
+  padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
+}
+
+.safe-b {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+}
+
+/* Inputs: 16px+ avoids iOS zoom on focus */
+.input-touch {
+  font-size: 1rem;
+  line-height: 1.5;
+  min-height: 3rem;
+}
+
+.btn-touch {
+  min-height: 3rem;
+  touch-action: manipulation;
 }

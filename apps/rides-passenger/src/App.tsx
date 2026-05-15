@@ -21,8 +21,11 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-50">
-        <div className="h-10 w-10 rounded-full border-2 border-zinc-300 border-t-zinc-900 animate-spin" />
+      <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-zinc-100 safe-x safe-t safe-b gap-4">
+        <div className="h-12 w-12 rounded-2xl bg-emerald-600 shadow-lg shadow-emerald-600/25 flex items-center justify-center">
+          <div className="h-6 w-6 rounded-full border-2 border-white border-t-transparent animate-spin" />
+        </div>
+        <p className="text-sm font-medium text-zinc-600">Loading Roam Rides…</p>
       </div>
     );
   }

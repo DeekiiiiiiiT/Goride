@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@roam/auth-client';
 import { toast } from 'sonner';
-import { MapPin, LogOut } from 'lucide-react';
+import { CircleDot, LogOut, MapPin, Navigation } from 'lucide-react';
 import { ridesCreateRequest, ridesQuote } from '@/services/ridesEdge';
 
 /** Demo coordinates — replace with map picker / places autocomplete in production. */
@@ -69,84 +69,108 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-900">
-      <header className="border-b border-zinc-200 bg-white/80 backdrop-blur sticky top-0 z-10">
-        <div className="max-w-lg mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <MapPin className="w-5 h-5 text-zinc-700" />
-            <span className="font-semibold tracking-tight">Roam Rides</span>
+    <div className="min-h-[100dvh] flex flex-col bg-zinc-100 text-zinc-900">
+      <header className="sticky top-0 z-20 border-b border-zinc-200/90 bg-white/90 backdrop-blur-md safe-t">
+        <div className="max-w-lg mx-auto safe-x px-4 py-3.5 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-md shadow-emerald-600/20">
+              <Navigation className="w-5 h-5" aria-hidden />
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold tracking-tight truncate">Roam Rides</p>
+              <p className="text-xs text-zinc-500 truncate">Book in seconds</p>
+            </div>
           </div>
           <button
             type="button"
             onClick={signOut}
-            className="inline-flex items-center gap-1 text-sm text-zinc-600 hover:text-zinc-900"
+            className="btn-touch shrink-0 inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 touch-manipulation active:scale-[0.98]"
           >
-            <LogOut className="w-4 h-4" /> Out
+            <LogOut className="w-4 h-4" aria-hidden />
+            <span className="hidden sm:inline">Sign out</span>
           </button>
         </div>
       </header>
 
-      <main className="max-w-lg mx-auto px-4 py-8 space-y-6">
-        <div className="space-y-1">
-          <h1 className="text-xl font-semibold tracking-tight">Where to?</h1>
-          <p className="text-sm text-zinc-500">Uber-style matching runs on Roam’s rides service.</p>
+      <main className="flex-1 max-w-lg mx-auto w-full safe-x safe-b px-4 py-6 space-y-6">
+        <div className="space-y-2">
+          <h1 className="text-2xl sm:text-[1.65rem] font-semibold tracking-tight leading-tight">
+            Where to?
+          </h1>
+          <p className="text-zinc-600 text-base leading-relaxed">
+            Enter pickup and drop-off. We’ll match you with a nearby driver.
+          </p>
         </div>
 
-        <div className="bg-white border border-zinc-200 rounded-2xl p-5 shadow-sm space-y-4">
-          <div>
-            <label className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Pickup</label>
+        <div className="rounded-3xl bg-white p-5 sm:p-6 shadow-xl shadow-zinc-900/6 ring-1 ring-zinc-200/90 space-y-5">
+          <label className="block space-y-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-emerald-600" aria-hidden />
+              Pickup
+            </span>
             <input
-              className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
+              className="input-touch w-full rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 outline-none focus:border-emerald-500/55 focus:bg-white focus:ring-4 focus:ring-emerald-500/12"
               value={pickupAddress}
               onChange={(e) => setPickupAddress(e.target.value)}
+              placeholder="Pickup address"
             />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Drop-off</label>
+          </label>
+
+          <label className="block space-y-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 flex items-center gap-2">
+              <CircleDot className="w-4 h-4 text-emerald-600" aria-hidden />
+              Drop-off
+            </span>
             <input
-              className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
+              className="input-touch w-full rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 outline-none focus:border-emerald-500/55 focus:bg-white focus:ring-4 focus:ring-emerald-500/12"
               value={dropoffAddress}
               onChange={(e) => setDropoffAddress(e.target.value)}
+              placeholder="Where are you going?"
             />
-          </div>
+          </label>
 
           {fareLabel && (
-            <div className="rounded-xl bg-zinc-50 border border-zinc-100 px-3 py-2 text-sm flex justify-between">
-              <span className="text-zinc-600">Estimated fare</span>
-              <span className="font-medium tabular-nums">{fareLabel}</span>
+            <div className="rounded-2xl bg-emerald-50/80 border border-emerald-100 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm text-emerald-900 font-medium">Estimated fare</span>
+              <span className="text-lg font-semibold tabular-nums text-emerald-950">{fareLabel}</span>
             </div>
           )}
           {surge != null && surge > 1 && (
-            <p className="text-xs text-amber-700">Surge x{surge.toFixed(2)} in this grid cell.</p>
+            <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-2xl px-4 py-2">
+              Demand is high — surge <strong className="tabular-nums">×{surge.toFixed(2)}</strong> in your area.
+            </p>
           )}
 
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-3 pt-1">
             <button
               type="button"
               onClick={handleQuote}
               disabled={quoteLoading}
-              className="flex-1 rounded-xl border border-zinc-300 py-2.5 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
+              className="btn-touch flex-1 rounded-2xl border border-zinc-300 bg-white text-base font-semibold text-zinc-800 hover:bg-zinc-50 disabled:opacity-50 touch-manipulation active:scale-[0.99]"
             >
-              {quoteLoading ? 'Pricing…' : 'Fare estimate'}
+              {quoteLoading ? 'Getting price…' : 'Fare estimate'}
             </button>
             <button
               type="button"
               onClick={handleBook}
               disabled={bookLoading}
-              className="flex-1 rounded-xl bg-zinc-900 text-white py-2.5 text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
+              className="btn-touch flex-1 rounded-2xl bg-emerald-600 text-white text-base font-semibold shadow-lg shadow-emerald-600/25 hover:bg-emerald-700 disabled:opacity-50 touch-manipulation active:scale-[0.99]"
             >
               {bookLoading ? 'Requesting…' : 'Request ride'}
             </button>
           </div>
         </div>
 
-        <p className="text-xs text-zinc-400 text-center">
-          Demo pickup/drop coordinates are fixed in code — swap for map UX next.
+        <p className="text-center text-xs text-zinc-500 leading-relaxed px-2">
+          Demo routes use fixed map coordinates — full map picker coming next.
         </p>
 
-        <div className="text-center">
-          <Link to="/login" className="text-xs text-zinc-400 hover:text-zinc-600">
-            Switch account
+        <div className="text-center pb-2">
+          <Link
+            to="/login"
+            className="text-sm font-medium text-emerald-700 hover:text-emerald-800 underline-offset-4 hover:underline"
+          >
+            Use a different account
           </Link>
         </div>
       </main>
