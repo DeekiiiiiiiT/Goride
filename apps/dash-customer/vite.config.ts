@@ -13,6 +13,8 @@ export default defineConfig({
   server: {
     port: 5174,
     host: 'localhost',
+    /** Fail fast instead of stealing 5175/5176 (merchant & rides-passenger) when 5174 is busy. */
+    strictPort: true,
   },
   build: {
     outDir: 'dist',

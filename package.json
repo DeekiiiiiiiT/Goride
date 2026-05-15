@@ -7,6 +7,8 @@
     "dev:customer": "pnpm --filter @roam/dash-customer dev",
     "dev:merchant": "pnpm --filter @roam/dash-merchant dev",
     "dev:all": "pnpm --parallel -r dev",
+    "dev:local-stack:free-ports": "npx --yes kill-port 3000 3001 3002 5174 5175 5180",
+    "dev:local-stack": "pnpm --parallel --filter @roam/fleet --filter @roam/admin --filter @roam/driver --filter @roam/dash-customer --filter @roam/dash-merchant --filter @roam/rides-passenger run dev",
     "build": "pnpm -r build",
     "build:fleet": "pnpm --filter @roam/fleet build",
     "build:customer": "pnpm --filter @roam/dash-customer build",

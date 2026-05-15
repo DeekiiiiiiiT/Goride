@@ -9,7 +9,6 @@ import { DriverHybridOnboarding } from './components/onboarding/DriverHybridOnbo
 import { DriverGoogleSignupWizard } from './components/onboarding/DriverGoogleSignupWizard';
 import { DriverShell } from './components/layout/DriverShell';
 import { AppErrorBoundary } from './components/layout/AppErrorBoundary';
-import { useAuth } from './contexts/AuthContext';
 import { needsGoogleExtendedSignup } from './utils/googleDriverSignup';
 
 const queryClient = new QueryClient({

@@ -16,7 +16,8 @@ export default defineConfig({
     outDir: 'dist',
   },
   server: {
-    port: 5176,
+    /** Dedicated slot so dash-customer/merchant can use 5174–5175 without bumping into rides. */
+    port: 5180,
     host: 'localhost',
     strictPort: true,
   },
