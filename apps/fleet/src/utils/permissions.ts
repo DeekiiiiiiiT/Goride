@@ -146,7 +146,6 @@ export type Permission =
   | 'nav.tier_config'
   | 'nav.user_management'
   | 'nav.settings'
-  | 'nav.ledger_backfill'
   | 'nav.database_management'
   // Drivers
   | 'drivers.create'
@@ -226,7 +225,6 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
   'nav.tier_config',
   'nav.user_management',
   'nav.settings',
-  'nav.ledger_backfill',
   'nav.database_management',
   // Actions
   'drivers.create', 'drivers.edit', 'drivers.delete', 'drivers.view',
@@ -244,10 +242,9 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
 
 const FLEET_MANAGER_PERMISSIONS: Permission[] = ALL_CUSTOMER_PERMISSIONS.filter(
   (p) =>
-    // Remove settings, user management, ledger backfill, database management
+    // Remove settings, user management, database management
     p !== 'nav.settings' &&
     p !== 'nav.user_management' &&
-    p !== 'nav.ledger_backfill' &&
     p !== 'nav.database_management' &&
     p !== 'settings.edit' &&
     p !== 'users.invite' &&
@@ -427,7 +424,6 @@ export const PAGE_PERMISSION_MAP: Record<string, Permission> = {
   // System
   'user-management':    'nav.user_management',
   'settings':           'nav.settings',
-  'ledger-backfill':    'nav.ledger_backfill',
   'db-main-ledger':     'nav.database_management',
   'db-trip-ledger':     'nav.database_management',
   'db-fuel-ledger':     'nav.database_management',

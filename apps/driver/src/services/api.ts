@@ -2931,27 +2931,6 @@ export const api = {
     return response.json();
   },
 
-  async runLedgerBackfill(): Promise<{ success: boolean; stats: { tripsProcessed: number; tripsSkipped: number; txProcessed: number; txSkipped: number; ledgerCreated: number; errors: number } }> {
-    console.log('[Ledger] Starting backfill...');
-    const response = await fetch(
-      `${API_ENDPOINTS.financial}/ledger/backfill`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`,
-        },
-      }
-    );
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`Ledger backfill failed: ${errText}`);
-    }
-    const result = await response.json();
-    console.log('[Ledger] Backfill complete:', result);
-    return result;
-  },
-
   // Phase 6.3: Targeted per-driver ledger repair
   async repairDriverLedger(driverId: string, tripIds?: string[], force?: boolean): Promise<{ success: boolean; driverId: string; stats: any; durationMs: number }> {
     console.log(`[Ledger] Starting ${force ? 'FORCE ' : ''}repair for driver ${driverId}${tripIds ? ` with ${tripIds.length} client-supplied tripIds` : ''}...`);

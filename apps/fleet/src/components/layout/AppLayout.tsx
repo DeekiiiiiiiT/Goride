@@ -43,7 +43,6 @@ import {
   FileSpreadsheet,
   TrendingUp,
   Award,
-  Wrench,
   CarFront
 } from "lucide-react";
 
@@ -431,7 +430,7 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
           )}
         </SidebarMenu>
         
-        {(canView('user-management') || canView('settings') || canView('ledger-backfill')) && (
+        {(canView('user-management') || canView('settings')) && (
         <div className="mt-8 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
           System
         </div>
@@ -451,14 +450,6 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
             label="Settings" 
             active={currentPage === 'settings'} 
             onClick={() => onNavigate?.('settings')}
-          />
-          )}
-          {canView('ledger-backfill') && (
-          <NavItem 
-            icon={<Wrench className="h-4 w-4" />} 
-            label="Ledger Backfill" 
-            active={currentPage === 'ledger-backfill'} 
-            onClick={() => onNavigate?.('ledger-backfill')}
           />
           )}
         </SidebarMenu>

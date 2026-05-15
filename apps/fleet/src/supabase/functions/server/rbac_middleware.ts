@@ -38,7 +38,7 @@ export type Permission =
   | 'nav.toll_tag_inventory' | 'nav.toll_claimable_loss' | 'nav.toll_analytics'
   | 'nav.trips' | 'nav.reports' | 'nav.financial_analytics'
   | 'nav.transaction_list' | 'nav.performance' | 'nav.tier_config'
-  | 'nav.user_management' | 'nav.settings' | 'nav.ledger_backfill'
+  | 'nav.user_management' | 'nav.settings'
   | 'nav.database_management'
   | 'drivers.create' | 'drivers.edit' | 'drivers.delete' | 'drivers.view'
   | 'vehicles.create' | 'vehicles.edit' | 'vehicles.delete' | 'vehicles.view'
@@ -112,7 +112,7 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
   'nav.toll_claimable_loss', 'nav.toll_analytics',
   'nav.trips', 'nav.reports', 'nav.financial_analytics',
   'nav.transaction_list', 'nav.performance', 'nav.tier_config',
-  'nav.user_management', 'nav.settings', 'nav.ledger_backfill',
+  'nav.user_management', 'nav.settings',
   'nav.database_management',
   'drivers.create', 'drivers.edit', 'drivers.delete', 'drivers.view',
   'vehicles.create', 'vehicles.edit', 'vehicles.delete', 'vehicles.view',
@@ -132,7 +132,6 @@ const FLEET_MANAGER_PERMISSIONS: Permission[] = ALL_CUSTOMER_PERMISSIONS.filter(
   (p) =>
     p !== 'nav.settings' &&
     p !== 'nav.user_management' &&
-    p !== 'nav.ledger_backfill' &&
     p !== 'nav.database_management' &&
     p !== 'settings.edit' &&
     p !== 'users.invite' &&
