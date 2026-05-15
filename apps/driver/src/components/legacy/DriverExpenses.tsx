@@ -741,8 +741,10 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
 
   const handleOdometerScanComplete = async (result: any) => {
     let locationData: FuelEntryState['locationMetadata'] = undefined;
+    let lastLocError: string | null = null;
     try {
       const loc = await getLocation();
+      lastLocError = loc.error;
       if (loc.lat != null && loc.lng != null) {
         locationData = {
           lat: loc.lat,
@@ -772,9 +774,12 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
     } else {
       setFuelGpsManualRetriesLeft(MAX_MANUAL_FUEL_GPS_RETRIES);
       setFuelProceedingWithoutGps(false);
+      const reason = lastLocError?.trim() || null;
       toast.message(
-        "We couldn't lock your location. Turn on Location, move to an open area if needed, then tap Retry.",
-        { duration: 5000 },
+        reason
+          ? `We couldn't lock your location (${reason}). Turn on Location for this site, then tap Retry.`
+          : "We couldn't lock your location. Turn on Location, move to an open area if needed, then tap Retry.",
+        { duration: 6000 },
       );
       setViewState('fuel_gps_retry');
     }

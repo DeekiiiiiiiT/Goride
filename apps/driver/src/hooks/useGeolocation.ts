@@ -68,9 +68,11 @@ export const useGeolocation = () => {
           resolve(errorState);
         },
         {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0,
+          /** High accuracy forces GNSS cold fixes and often times out indoors / in parking structures. */
+          enableHighAccuracy: false,
+          timeout: 25000,
+          /** A recent cached fix is fine for matching a fill-up to a station. */
+          maximumAge: 120000,
           ...options,
         }
       );
