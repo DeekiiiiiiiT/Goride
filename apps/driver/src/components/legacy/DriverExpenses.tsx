@@ -363,28 +363,6 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
       // Sort by date descending
       combined.sort((a, b) => b.date.getTime() - a.date.getTime());
 
-      // #region agent log
-      fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'c5edda' },
-        body: JSON.stringify({
-          sessionId: 'c5edda',
-          location: 'DriverExpenses.tsx:merge',
-          message: 'combined expense merge summary',
-          data: {
-            myFuelLen: myFuel.length,
-            myTxLen: myTx.length,
-            combinedLen: combined.length,
-            linkedIdCount: linkedFuelTransactionIds.size,
-            fuelRowCount: combined.filter((e) => e.type === 'fuel').length,
-            otherRowCount: combined.filter((e) => e.type !== 'fuel').length,
-          },
-          timestamp: Date.now(),
-          hypothesisId: 'H-merge',
-        }),
-      }).catch(() => {});
-      // #endregion
-
       setCombinedExpenses(combined);
       
     } catch (e) {

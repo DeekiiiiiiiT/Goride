@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { FuelLayout } from '../components/fuel/FuelLayout';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { Fuel, Plus, CreditCard, Banknote, Upload, RefreshCw, History, Loader2, Link2, ShieldCheck, AlertTriangle } from 'lucide-react'; // cache-bust: AlertTriangle import fix v2
+import { Fuel, Plus, CreditCard, Banknote, Upload, RefreshCw, History, Loader2, Link2, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { FuelCardList } from '../components/fuel/FuelCardList';
 import { FuelCardModal } from '../components/fuel/FuelCardModal';
 import { FuelLogModal } from '../components/fuel/FuelLogModal';
@@ -52,34 +52,6 @@ import type { FuelCard, FuelEntry, FuelScenario, MileageAdjustment, FuelDispute,
 import type { FinancialTransaction } from '../types/data';
 import type { Trip } from '../types/data';
 import type { Vehicle } from '../types/vehicle';
-
-/** Bumps when delete / review-queue expense purge logic changes — visible in toasts & debug logs to detect stale bundles. */
-const FUEL_DELETE_FLOW_TAG = 'fuel-delete-flow-v3';
-
-// #region agent log
-function agentFuelDeleteDebugLog(
-  location: string,
-  hypothesisId: string,
-  message: string,
-  data: Record<string, unknown>,
-) {
-  const payload = {
-    sessionId: '03bcb5',
-    flowTag: FUEL_DELETE_FLOW_TAG,
-    location,
-    message,
-    hypothesisId,
-    data,
-    timestamp: Date.now(),
-  };
-  console.error('[ROAM_DEBUG_03bcb5]', JSON.stringify(payload));
-  fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '03bcb5' },
-    body: JSON.stringify(payload),
-  }).catch(() => {});
-}
-// #endregion
 
 export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, onTabChange }: { 
     defaultTab?: string, 
@@ -196,34 +168,6 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
           setDisputes(disputesData);
           setTransactions(txData);
           setFinalizedCount(Array.isArray(finalizedData) ? finalizedData.length : 0);
-
-          // #region agent log
-          (() => {
-            const arr = Array.isArray(txData) ? txData : [];
-            const expenseN = arr.filter((t: { type?: string }) => String(t?.type || "").toLowerCase() === "expense").length;
-            const isLf = (t: { type?: string; category?: string; description?: string }) => {
-              const typ = String(t?.type || "").toLowerCase();
-              if (typ !== "expense") return false;
-              const cat = String(t?.category || "").toLowerCase();
-              if (cat.includes("fuel")) return true;
-              const desc = String(t?.description || "").toLowerCase();
-              return desc.includes("fuel expense") || desc.startsWith("fuel:") || desc.includes("fuel —");
-            };
-            const lfN = arr.filter(isLf).length;
-            fetch("http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "c5edda" },
-              body: JSON.stringify({
-                sessionId: "c5edda",
-                location: "FuelManagement.tsx:loadData",
-                message: "transactions loaded",
-                data: { total: arr.length, expenseCount: expenseN, ledgerFuelShapeCount: lfN, limitRequested: 10000 },
-                timestamp: Date.now(),
-                hypothesisId: "H1",
-              }),
-            }).catch(() => {});
-          })();
-          // #endregion
 
           if (!silent) toast.success("Data refreshed");
       } catch (e) {
@@ -681,25 +625,9 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
 
       setIsSyncing(true);
       try {
-          // #region agent log
-          agentFuelDeleteDebugLog('FuelManagement.tsx:confirmDeleteExpense:entry', 'H1', 'delete expense start', {
-            txId: deleteConfirmationId,
-            cascadeDelete,
-            category: txToDelete.category,
-            status: txToDelete.status,
-          });
-          // #endregion
-
           // 1. Bi-Directional Discovery (Step 3.1)
           // Find the parent fuel entry that likely spawned this transaction
           const parentEntry = await settlementService.getParentFuelEntry(txToDelete);
-
-          // #region agent log
-          agentFuelDeleteDebugLog('FuelManagement.tsx:confirmDeleteExpense:afterParent', 'H1', 'getParentFuelEntry done', {
-            parentId: parentEntry?.id ?? null,
-            parentHasDriverId: !!parentEntry?.driverId,
-          });
-          // #endregion
           
           let recordsToPurge: { entryId?: string, transactionIds: string[] } = {
               transactionIds: [deleteConfirmationId]
@@ -712,41 +640,15 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
                   entryId: parentEntry.id,
                   transactionIds: Array.from(new Set([...relatedTxs.map(t => t.id).filter(Boolean), deleteConfirmationId]))
               };
-              // #region agent log
-              agentFuelDeleteDebugLog('FuelManagement.tsx:confirmDeleteExpense:afterRelated', 'H1', 'getRelatedTransactions done', {
-                relatedCount: relatedTxs.length,
-                entryId: recordsToPurge.entryId,
-                txIdCount: recordsToPurge.transactionIds.length,
-              });
-              // #endregion
           }
 
           const txIds = recordsToPurge.transactionIds.filter((x): x is string => typeof x === 'string' && x.trim().length > 0);
 
-          // #region agent log
-          agentFuelDeleteDebugLog('FuelManagement.tsx:confirmDeleteExpense:beforeTxDeletes', 'H2', 'about to delete transactions', {
-            txIds,
-            willDeleteFuelEntry: !!recordsToPurge.entryId,
-            fuelEntryId: recordsToPurge.entryId ?? null,
-          });
-          // #endregion
-
           // Delete ledger rows first; if this fails we do not remove the fuel log (avoids dangling links).
           await Promise.all(txIds.map((tid) => api.deleteTransaction(tid)));
 
-          // #region agent log
-          agentFuelDeleteDebugLog('FuelManagement.tsx:confirmDeleteExpense:afterTxDeletes', 'H2', 'all deleteTransaction OK', {
-            deletedCount: txIds.length,
-          });
-          // #endregion
-
           if (recordsToPurge.entryId) {
               await fuelService.deleteFuelEntry(recordsToPurge.entryId);
-              // #region agent log
-              agentFuelDeleteDebugLog('FuelManagement.tsx:confirmDeleteExpense:afterFuelDelete', 'H3', 'deleteFuelEntry OK', {
-                entryId: recordsToPurge.entryId,
-              });
-              // #endregion
           }
 
           // 3. Sync State
@@ -770,19 +672,10 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
               duration: 5000
             }
           );
-          // #region agent log
-          agentFuelDeleteDebugLog('FuelManagement.tsx:confirmDeleteExpense:success', 'H4', 'delete expense completed', { count });
-          // #endregion
       } catch (e) {
           console.error("[FuelManagement] Expense purge failure:", e);
           const detail = e instanceof Error ? e.message : String(e);
-          // #region agent log
-          agentFuelDeleteDebugLog('FuelManagement.tsx:confirmDeleteExpense:catch', 'H1-H4', 'delete expense failed', {
-            error: detail,
-            name: e instanceof Error ? e.name : 'unknown',
-          });
-          // #endregion
-          toast.error(`Delete failed (${FUEL_DELETE_FLOW_TAG})`, {
+          toast.error("Delete failed", {
               description: detail,
               duration: 8000,
           });
