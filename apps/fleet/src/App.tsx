@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './components/auth/AuthContext';
 import { BusinessConfigProvider } from './components/auth/BusinessConfigContext';
 import { PlatformConfigProvider } from './components/auth/PlatformConfigContext';
 import { LoginPage } from './components/auth/LoginPage';
+import { PassengerFleetSurfaceGate } from './components/auth/PassengerFleetSurfaceGate';
 import { AppLayout } from './components/layout/AppLayout';
 import { Dashboard } from './components/dashboard/Dashboard';
 import { ImportsPage } from './components/imports/ImportsPage';
@@ -37,6 +38,7 @@ import { fuelService } from './services/fuelService';
 import { PermissionGate } from './components/auth/PermissionGate';
 import { PAGE_PERMISSION_MAP } from './utils/permissions';
 
+import { isPassengerOnlyMetadataRole } from '@roam/auth-client';
 import { MaintenancePage } from './components/MaintenancePage';
 import { FeatureFlagProvider } from './components/auth/FeatureFlagContext';
 
@@ -159,25 +161,15 @@ function AppContent() {
   }
 
   // ---------------------------------------------------------------------------
-  // Session Isolation & Role Gating (Enterprise)
-  // ---------------------------------------------------------------------------
-  // Handle role-based session isolation via useEffect to avoid render-phase state updates.
-  useEffect(() => {
-    if (!user || loading) return;
-
-    if (role !== 'admin') {
-      // Fleet portal — only 'admin' (fleet manager) allowed
-      console.warn('[AuthGate] Non-manager user on fleet path — signing out');
-      signOut();
-    }
-  }, [user, role, loading, signOut]);
-
-  // ---------------------------------------------------------------------------
   // Rendering Branches
   // ---------------------------------------------------------------------------
 
   if (loading) {
       return <div className="flex items-center justify-center h-screen bg-slate-50 text-slate-500">Loading application...</div>;
+  }
+
+  if (user && isPassengerOnlyMetadataRole(user.user_metadata?.role as string | undefined)) {
+    return <PassengerFleetSurfaceGate onSignOut={signOut} />;
   }
 
   // Main Fleet Portal — Authentication Gate

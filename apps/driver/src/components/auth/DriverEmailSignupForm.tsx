@@ -35,7 +35,7 @@ export function DriverEmailSignupForm({ onBack }: DriverEmailSignupFormProps) {
     }
     setLoading(true);
     try {
-      const redirect = `${window.location.origin}${window.location.pathname}`;
+      const redirect = `${window.location.origin}/`;
       const { data, error: signErr } = await supabase.auth.signUp({
         email: email.trim(),
         password,
@@ -211,7 +211,7 @@ export function GoogleSignupButton({
     setLoading(true);
     try {
       sessionStorage.setItem(DRIVER_OAUTH_INTENT_KEY, DRIVER_OAUTH_INTENT_VALUE);
-      const redirectTo = `${window.location.origin}${window.location.pathname}`;
+      const redirectTo = `${window.location.origin}/`;
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {

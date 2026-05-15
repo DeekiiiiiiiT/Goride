@@ -9,6 +9,7 @@
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { cors } from "https://deno.land/x/hono@v4.3.11/middleware.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { jsonEdgeForbidden, ridesUserSurfaceRole } from "../_shared/authEdge.ts";
 
 const app = new Hono();
 
@@ -119,11 +120,6 @@ function estimateFareMinor(params: {
   const adjusted = Math.round(raw * params.surgeMultiplier);
   const fareMinor = BigInt(Math.max(params.minFareMinor, adjusted));
   return { fareMinor, etaMinutes };
-}
-
-function roleOf(user: { user_metadata?: Record<string, unknown> }): string | undefined {
-  const r = user.user_metadata?.role;
-  return typeof r === "string" ? r : undefined;
 }
 
 async function requireUser(authHeader: string | undefined) {
@@ -345,9 +341,9 @@ app.post("/v1/requests", async (c) => {
   }
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-  const r = roleOf(auth.user);
+  const r = ridesUserSurfaceRole(auth.user);
   if (r && r !== "passenger") {
-    return c.json({ error: "forbidden_role" }, 403);
+    return jsonEdgeForbidden(c, "forbidden_role");
   }
 
   const body = await c.req.json().catch(() => ({}));
@@ -433,7 +429,7 @@ app.get("/v1/requests/:id", async (c) => {
   const { data: ride } = await db.from("ride_requests").select("*").eq("id", id).single();
   if (!ride) return c.json({ error: "not_found" }, 404);
   if (ride.rider_user_id !== auth.user.id && ride.assigned_driver_user_id !== auth.user.id) {
-    return c.json({ error: "forbidden" }, 403);
+    return jsonEdgeForbidden(c, "forbidden");
   }
   const reqId = crypto.randomUUID();
   await reconcileMatching(id, reqId);
@@ -454,7 +450,7 @@ app.post("/v1/requests/:id/cancel", async (c) => {
   const db = svc();
   const { data: ride } = await db.from("ride_requests").select("*").eq("id", id).single();
   if (!ride) return c.json({ error: "not_found" }, 404);
-  if (ride.rider_user_id !== auth.user.id) return c.json({ error: "forbidden" }, 403);
+  if (ride.rider_user_id !== auth.user.id) return jsonEdgeForbidden(c, "forbidden");
 
   const terminal = ["completed", "cancelled"];
   if (terminal.includes(ride.status)) return c.json({ ride });
@@ -484,8 +480,8 @@ app.post("/v1/requests/:id/cancel", async (c) => {
 app.post("/v1/drivers/presence", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-  const r = roleOf(auth.user);
-  if (r !== "driver") return c.json({ error: "forbidden_role" }, 403);
+  const r = ridesUserSurfaceRole(auth.user);
+  if (r !== "driver") return jsonEdgeForbidden(c, "forbidden_role");
 
   const body = await c.req.json().catch(() => ({}));
   const lat = Number(body.lat);
@@ -511,7 +507,7 @@ app.post("/v1/drivers/presence", async (c) => {
 app.get("/v1/drivers/offers", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-  if (roleOf(auth.user) !== "driver") return c.json({ error: "forbidden_role" }, 403);
+  if (ridesUserSurfaceRole(auth.user) !== "driver") return jsonEdgeForbidden(c, "forbidden_role");
 
   const db = svc();
   const nowIso = new Date().toISOString();
@@ -531,7 +527,7 @@ app.get("/v1/drivers/offers", async (c) => {
 app.post("/v1/drivers/offers/:offerId/accept", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-  if (roleOf(auth.user) !== "driver") return c.json({ error: "forbidden_role" }, 403);
+  if (ridesUserSurfaceRole(auth.user) !== "driver") return jsonEdgeForbidden(c, "forbidden_role");
 
   const offerId = c.req.param("offerId");
   const db = svc();
@@ -577,7 +573,7 @@ app.post("/v1/drivers/offers/:offerId/accept", async (c) => {
 app.post("/v1/drivers/offers/:offerId/decline", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-  if (roleOf(auth.user) !== "driver") return c.json({ error: "forbidden_role" }, 403);
+  if (ridesUserSurfaceRole(auth.user) !== "driver") return jsonEdgeForbidden(c, "forbidden_role");
 
   const offerId = c.req.param("offerId");
   const db = svc();
@@ -605,7 +601,7 @@ const DRIVER_TRANSITIONS: Record<RideStatus, RideStatus[]> = {
 app.patch("/v1/requests/:id/driver-transition", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-  if (roleOf(auth.user) !== "driver") return c.json({ error: "forbidden_role" }, 403);
+  if (ridesUserSurfaceRole(auth.user) !== "driver") return jsonEdgeForbidden(c, "forbidden_role");
 
   const id = c.req.param("id");
   const body = await c.req.json().catch(() => ({}));
@@ -613,7 +609,7 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
   const db = svc();
   const { data: ride } = await db.from("ride_requests").select("*").eq("id", id).single();
   if (!ride) return c.json({ error: "not_found" }, 404);
-  if (ride.assigned_driver_user_id !== auth.user.id) return c.json({ error: "forbidden" }, 403);
+  if (ride.assigned_driver_user_id !== auth.user.id) return jsonEdgeForbidden(c, "forbidden");
 
   const current = ride.status as RideStatus;
   const allowed = DRIVER_TRANSITIONS[current];

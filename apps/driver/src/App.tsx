@@ -64,7 +64,7 @@ function AppContent() {
   }
 
   if (!user || !isDriver) {
-    return <DriverLoginPage />;
+    return <DriverLoginPage signedInNonDriver={user && !isDriver ? user : null} />;
   }
 
   return (

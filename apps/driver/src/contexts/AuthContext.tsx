@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
+import { shouldSkipOauthSurfaceRolePatch } from '@roam/auth-client';
 import { supabase } from '../utils/supabase/client';
 import { DRIVER_OAUTH_INTENT_KEY, DRIVER_OAUTH_INTENT_VALUE } from '../utils/driverAuthSignup';
 
@@ -67,7 +68,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     void (async () => {
       try {
         if (sessionStorage.getItem(DRIVER_OAUTH_INTENT_KEY) !== DRIVER_OAUTH_INTENT_VALUE) return;
-        if (user.user_metadata?.role) {
+        const current = user.user_metadata?.role as string | undefined;
+        if (shouldSkipOauthSurfaceRolePatch(current, 'driver')) {
           sessionStorage.removeItem(DRIVER_OAUTH_INTENT_KEY);
           return;
         }

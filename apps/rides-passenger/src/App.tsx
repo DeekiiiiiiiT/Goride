@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
-import { supabase } from '@roam/auth-client';
+import { supabase, shouldSkipOauthSurfaceRolePatch, isRidesPassengerUiBlockedRole } from '@roam/auth-client';
+import { PASSENGER_OAUTH_INTENT_KEY, PASSENGER_OAUTH_INTENT_VALUE } from './utils/passengerAuthSignup';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import RidePage from './pages/RidePage';
+import { WrongRidesSurfaceGate } from './components/auth/WrongRidesSurfaceGate';
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -19,6 +21,27 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  /** Google OAuth does not send `options.data`; attach passenger role when signup started from this app. */
+  useEffect(() => {
+    const user = session?.user;
+    if (!user) return;
+    void (async () => {
+      try {
+        if (sessionStorage.getItem(PASSENGER_OAUTH_INTENT_KEY) !== PASSENGER_OAUTH_INTENT_VALUE) return;
+        const current = user.user_metadata?.role as string | undefined;
+        if (shouldSkipOauthSurfaceRolePatch(current, 'passenger')) {
+          sessionStorage.removeItem(PASSENGER_OAUTH_INTENT_KEY);
+          return;
+        }
+        await supabase.auth.updateUser({ data: { role: 'passenger' } });
+      } catch (e) {
+        console.warn('passenger oauth role patch:', e);
+      } finally {
+        sessionStorage.removeItem(PASSENGER_OAUTH_INTENT_KEY);
+      }
+    })();
+  }, [session?.user?.id]);
+
   if (loading) {
     return (
       <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-zinc-100 safe-x safe-t safe-b gap-4">
@@ -27,6 +50,17 @@ export default function App() {
         </div>
         <p className="text-sm font-medium text-zinc-600">Loading Roam Rides…</p>
       </div>
+    );
+  }
+
+  if (session?.user && isRidesPassengerUiBlockedRole(session.user.user_metadata?.role as string | undefined)) {
+    return (
+      <WrongRidesSurfaceGate
+        onSignOut={async () => {
+          await supabase.auth.signOut();
+          setSession(null);
+        }}
+      />
     );
   }
 

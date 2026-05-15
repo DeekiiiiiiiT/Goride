@@ -11,6 +11,7 @@
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { cors } from "https://deno.land/x/hono@v4.3.11/middleware.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { jwtPrimaryRole } from "../_shared/authEdge.ts";
 
 const app = new Hono().basePath("/delivery");
 
@@ -93,12 +94,7 @@ async function requireAdmin(c: any): Promise<AdminUser | Response> {
   if (error || !user) {
     return c.json({ error: "Unauthorized: invalid token" }, 401);
   }
-  const appMeta = (user.app_metadata || {}) as Record<string, unknown>;
-  const userMeta = (user.user_metadata || {}) as Record<string, unknown>;
-  const rawRole =
-    (typeof appMeta.role === "string" && appMeta.role) ||
-    (typeof userMeta.role === "string" && userMeta.role) ||
-    "";
+  const rawRole = jwtPrimaryRole(user);
   if (!ADMIN_ROLES.has(rawRole)) {
     return c.json({
       error: "Forbidden",
