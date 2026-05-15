@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '@roam/auth-client';
 import { toast } from 'sonner';
-import { Car, Lock, Mail, Sparkles, User } from 'lucide-react';
+import { Car, Lock, Mail, User } from 'lucide-react';
 
 export default function LoginPage({ session }: { session: Session | null }) {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -41,126 +41,133 @@ export default function LoginPage({ session }: { session: Session | null }) {
     }
   };
 
+  const year = new Date().getFullYear();
+
   return (
-    <div className="min-h-[100dvh] flex flex-col bg-zinc-100 relative overflow-hidden">
-      {/* Soft brand wash */}
+    <div className="min-h-[100dvh] flex flex-col bg-[#f2f3f5] relative overflow-hidden">
+      {/* Ambient layers */}
       <div
-        className="pointer-events-none absolute inset-0 opacity-90"
+        className="pointer-events-none absolute inset-0"
         style={{
           background:
-            'radial-gradient(120% 80% at 50% -20%, rgba(5, 150, 105, 0.14), transparent 52%), radial-gradient(80% 60% at 100% 100%, rgba(24, 24, 27, 0.06), transparent 45%)',
+            'radial-gradient(ellipse 140% 90% at 50% -30%, rgba(16, 185, 129, 0.18), transparent 55%), radial-gradient(ellipse 80% 70% at 100% 80%, rgba(24, 24, 27, 0.045), transparent 50%), linear-gradient(180deg, #fafafa 0%, #f2f3f5 40%, #eef0f2 100%)',
         }}
       />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/35 to-transparent" />
 
-      <div className="relative flex flex-col flex-1 safe-x safe-t safe-b justify-between py-6 sm:py-10 max-w-md mx-auto w-full">
-        {/* Hero */}
-        <header className="text-center px-1 pt-2 sm:pt-6 space-y-4">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-600/25 mx-auto">
-            <Car className="w-7 h-7" strokeWidth={2} aria-hidden />
+      <div className="relative flex flex-col flex-1 safe-x safe-t safe-b max-w-[420px] mx-auto w-full px-4 sm:px-6">
+        {/* Brand */}
+        <header className="text-center pt-6 pb-8 sm:pt-10 sm:pb-10">
+          <div className="relative mx-auto mb-7 h-[72px] w-[72px]">
+            <div
+              className="absolute inset-0 rounded-[22px] bg-emerald-500 opacity-35 blur-xl scale-110"
+              aria-hidden
+            />
+            <div className="relative flex h-full w-full items-center justify-center rounded-[22px] bg-gradient-to-br from-emerald-400 via-emerald-600 to-emerald-700 text-white shadow-[0_18px_40px_-12px_rgba(5,150,105,0.55),inset_0_1px_0_rgba(255,255,255,0.22)] ring-1 ring-white/25">
+              <Car className="w-[34px] h-[34px]" strokeWidth={1.75} aria-hidden />
+            </div>
           </div>
-          <div className="space-y-2">
-            <h1 className="text-[1.65rem] sm:text-3xl font-semibold tracking-tight text-zinc-900 leading-tight">
-              Roam Rides
-            </h1>
-            <p className="text-zinc-600 text-base max-w-[22rem] mx-auto leading-relaxed">
-              Tap below to book a licensed driver. Built for your phone—quick sign-in, live matching.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-zinc-500">
-            <span className="inline-flex items-center gap-1 rounded-full bg-white/80 px-3 py-1 ring-1 ring-zinc-200/80 shadow-sm">
-              <Sparkles className="w-3.5 h-3.5 text-emerald-600" aria-hidden />
-              Secure checkout-ready backend
-            </span>
-          </div>
+
+          <h1 className="text-[2rem] sm:text-[2.125rem] font-semibold tracking-[-0.035em] text-zinc-950 leading-[1.1]">
+            Roam Rides
+          </h1>
+          <p className="mt-4 max-w-[17.5rem] mx-auto text-[15px] leading-[1.55] text-zinc-500">
+            Request a car when you need one—simple sign-in, live updates on your trip.
+          </p>
         </header>
 
-        {/* Form card */}
-        <main className="flex-1 flex flex-col justify-center py-8">
+        {/* Form */}
+        <main className="flex-1 flex flex-col justify-center pb-8">
           <form
             onSubmit={onSubmit}
-            className="rounded-3xl bg-white p-5 sm:p-7 shadow-xl shadow-zinc-900/8 ring-1 ring-zinc-200/90 space-y-5"
+            className="rounded-[1.75rem] bg-white/92 backdrop-blur-sm px-5 pt-7 pb-6 sm:px-7 sm:pt-8 sm:pb-7 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_24px_48px_-24px_rgba(24,24,27,0.25),0_12px_24px_-16px_rgba(24,24,27,0.08)] ring-1 ring-zinc-900/[0.06]"
           >
-            <div className="flex items-baseline justify-between gap-3">
-              <h2 className="text-lg font-semibold text-zinc-900">
-                {isSignUp ? 'Create account' : 'Welcome back'}
+            <div className="mb-6">
+              <h2 className="text-xl font-semibold tracking-[-0.02em] text-zinc-950">
+                {isSignUp ? 'Create your account' : 'Welcome back'}
               </h2>
-              <span className="text-xs font-medium text-zinc-400 uppercase tracking-wide">
-                Passenger
-              </span>
+              <p className="mt-1.5 text-sm leading-relaxed text-zinc-500">
+                {isSignUp
+                  ? 'We’ll use this email for receipts and ride updates.'
+                  : 'Sign in with the email you use for rides.'}
+              </p>
             </div>
 
-            {isSignUp && (
+            <div className="space-y-4">
+              {isSignUp && (
+                <label className="block space-y-2">
+                  <span className="text-[13px] font-medium text-zinc-700 flex items-center gap-2">
+                    <User className="w-[15px] h-[15px] text-zinc-400 shrink-0" aria-hidden />
+                    Full name
+                  </span>
+                  <input
+                    className="input-touch w-full rounded-[14px] border border-zinc-200/95 bg-zinc-50/40 px-4 text-zinc-900 placeholder:text-zinc-400 outline-none transition shadow-[0_1px_2px_rgba(24,24,27,0.04)] focus:border-emerald-500/70 focus:bg-white focus:shadow-[0_0_0_4px_rgba(16,185,129,0.12)]"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Jordan Lee"
+                    autoComplete="name"
+                    required={isSignUp}
+                  />
+                </label>
+              )}
+
               <label className="block space-y-2">
-                <span className="text-sm font-medium text-zinc-700 flex items-center gap-2">
-                  <User className="w-4 h-4 text-zinc-400 shrink-0" aria-hidden />
-                  Name
+                <span className="text-[13px] font-medium text-zinc-700 flex items-center gap-2">
+                  <Mail className="w-[15px] h-[15px] text-zinc-400 shrink-0" aria-hidden />
+                  Email
                 </span>
                 <input
-                  className="input-touch w-full rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 outline-none transition placeholder:text-zinc-400 focus:border-emerald-500/60 focus:bg-white focus:ring-4 focus:ring-emerald-500/15"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Your name"
-                  autoComplete="name"
-                  required={isSignUp}
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  className="input-touch w-full rounded-[14px] border border-zinc-200/95 bg-zinc-50/40 px-4 text-zinc-900 placeholder:text-zinc-400 outline-none transition shadow-[0_1px_2px_rgba(24,24,27,0.04)] focus:border-emerald-500/70 focus:bg-white focus:shadow-[0_0_0_4px_rgba(16,185,129,0.12)]"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  required
                 />
               </label>
-            )}
 
-            <label className="block space-y-2">
-              <span className="text-sm font-medium text-zinc-700 flex items-center gap-2">
-                <Mail className="w-4 h-4 text-zinc-400 shrink-0" aria-hidden />
-                Email
-              </span>
-              <input
-                type="email"
-                inputMode="email"
-                autoComplete="email"
-                className="input-touch w-full rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 outline-none transition placeholder:text-zinc-400 focus:border-emerald-500/60 focus:bg-white focus:ring-4 focus:ring-emerald-500/15"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                required
-              />
-            </label>
-
-            <label className="block space-y-2">
-              <span className="text-sm font-medium text-zinc-700 flex items-center gap-2">
-                <Lock className="w-4 h-4 text-zinc-400 shrink-0" aria-hidden />
-                Password
-              </span>
-              <input
-                type="password"
-                autoComplete={isSignUp ? 'new-password' : 'current-password'}
-                className="input-touch w-full rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 outline-none transition placeholder:text-zinc-400 focus:border-emerald-500/60 focus:bg-white focus:ring-4 focus:ring-emerald-500/15"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                minLength={6}
-              />
-              <span className="text-xs text-zinc-500">At least 6 characters.</span>
-            </label>
+              <label className="block space-y-2">
+                <span className="text-[13px] font-medium text-zinc-700 flex items-center gap-2">
+                  <Lock className="w-[15px] h-[15px] text-zinc-400 shrink-0" aria-hidden />
+                  Password
+                </span>
+                <input
+                  type="password"
+                  autoComplete={isSignUp ? 'new-password' : 'current-password'}
+                  className="input-touch w-full rounded-[14px] border border-zinc-200/95 bg-zinc-50/40 px-4 text-zinc-900 placeholder:text-zinc-400 outline-none transition shadow-[0_1px_2px_rgba(24,24,27,0.04)] focus:border-emerald-500/70 focus:bg-white focus:shadow-[0_0_0_4px_rgba(16,185,129,0.12)]"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Minimum 6 characters"
+                  required
+                  minLength={6}
+                />
+              </label>
+            </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="btn-touch w-full rounded-2xl bg-emerald-600 text-white text-base font-semibold shadow-md shadow-emerald-600/25 hover:bg-emerald-700 active:scale-[0.99] transition disabled:opacity-55 disabled:active:scale-100"
+              className="btn-touch mt-6 w-full rounded-[14px] bg-gradient-to-b from-emerald-500 to-emerald-600 text-[15px] font-semibold text-white shadow-[0_10px_24px_-8px_rgba(5,150,105,0.65),inset_0_1px_0_rgba(255,255,255,0.2)] hover:from-emerald-500 hover:to-emerald-700 active:translate-y-[0.5px] transition disabled:opacity-50 disabled:active:translate-y-0"
             >
-              {loading ? 'Please wait…' : isSignUp ? 'Create account' : 'Sign in'}
+              {loading ? 'Please wait…' : isSignUp ? 'Continue' : 'Sign in'}
             </button>
 
             <button
               type="button"
-              className="btn-touch w-full rounded-2xl border border-zinc-200 bg-white text-zinc-800 text-base font-medium hover:bg-zinc-50 active:scale-[0.99] transition touch-manipulation"
+              className="btn-touch mt-3 w-full rounded-[14px] border border-zinc-200/90 bg-white text-[15px] font-semibold text-zinc-800 shadow-[0_1px_2px_rgba(24,24,27,0.05)] hover:bg-zinc-50 active:translate-y-[0.5px] transition touch-manipulation"
               onClick={() => setIsSignUp(!isSignUp)}
             >
-              {isSignUp ? 'Have an account? Sign in' : 'New here? Create account'}
+              {isSignUp ? 'Already have an account? Sign in' : 'New here? Create account'}
             </button>
           </form>
         </main>
 
-        <footer className="text-center text-xs text-zinc-500 pb-1 px-4">
-          Secure session • Same trusted backend as Roam Driver
+        <footer className="mt-auto text-center pb-4">
+          <p className="text-[11px] font-medium tracking-wide text-zinc-400">
+            © {year} Roam
+          </p>
         </footer>
       </div>
     </div>
