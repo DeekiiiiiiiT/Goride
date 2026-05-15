@@ -26,6 +26,7 @@ import { MyVehicle } from '../independent/MyVehicle';
 import { IndependentExpenses } from '../independent/IndependentExpenses';
 import { TaxCenter } from '../independent/TaxCenter';
 import { InsuranceCenter } from '../independent/InsuranceCenter';
+import { RideDispatchPage } from '../rides/RideDispatchPage';
 
 export function DriverShell() {
   const { mode, isFleetDriver, fleet, loading } = useDriver();
@@ -82,6 +83,8 @@ export function DriverShell() {
     switch (currentPage) {
       case 'dashboard':
         return <DriverDashboard />;
+      case 'passenger-rides':
+        return <RideDispatchPage />;
       case 'earnings':
         return <DriverEarnings />;
       case 'trips':

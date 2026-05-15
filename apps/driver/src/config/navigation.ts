@@ -12,6 +12,7 @@ import {
   Camera,
   BarChart3,
   History,
+  Navigation,
   type LucideIcon,
 } from 'lucide-react';
 import { DriverMode } from '../contexts/DriverContext';
@@ -25,6 +26,7 @@ export interface NavItem {
 
 const commonNavItems: NavItem[] = [
   { id: 'dashboard', label: 'Home', icon: Home },
+  { id: 'passenger-rides', label: 'Ride offers', icon: Navigation },
   { id: 'earnings', label: 'Earnings', icon: DollarSign },
   { id: 'trips', label: 'Trips', icon: Car },
   { id: 'profile', label: 'Profile', icon: User },

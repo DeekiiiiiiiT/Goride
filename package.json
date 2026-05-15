@@ -15,7 +15,10 @@
     "lint": "pnpm -r lint",
     "deploy:edge": "npx supabase functions deploy make-server-37f42386 --use-api --project-ref csfllzzastacofsvcdsc",
     "deploy:delivery": "npx supabase functions deploy delivery --use-api --project-ref csfllzzastacofsvcdsc",
-    "deploy:payments": "npx supabase functions deploy payments --use-api --project-ref csfllzzastacofsvcdsc"
+    "deploy:payments": "npx supabase functions deploy payments --use-api --project-ref csfllzzastacofsvcdsc",
+    "dev:rides-passenger": "pnpm --filter @roam/rides-passenger dev",
+    "build:rides-passenger": "pnpm --filter @roam/rides-passenger build",
+    "deploy:rides": "npx supabase functions deploy rides --use-api --project-ref csfllzzastacofsvcdsc"
   },
   "devDependencies": {
     "typescript": "^5.4.0"

@@ -26,4 +26,5 @@ export const API_ENDPOINTS = {
   delivery: `${BASE_URL}/delivery`,
   payments: `${BASE_URL}/payments`,
   notifications: `${BASE_URL}/notifications`,
+  rides: `${BASE_URL}/rides`,
 };
