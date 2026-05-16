@@ -1,0 +1,117 @@
+/* Portal shell — complements Tailwind; ensures dark admin chrome when embedded in customer app */
+
+body:has(.dash-admin-portal),
+body:has(.dash-admin-login) {
+  background-color: #020617;
+  color: #f8fafc;
+}
+
+.dash-admin-portal {
+  font-family: var(--font-sans, 'Inter', system-ui, -apple-system, sans-serif);
+  -webkit-font-smoothing: antialiased;
+}
+
+.dash-admin-portal input,
+.dash-admin-portal textarea,
+.dash-admin-portal select {
+  color: #f8fafc !important;
+  -webkit-text-fill-color: #f8fafc;
+}
+
+.dash-admin-portal input::placeholder,
+.dash-admin-portal textarea::placeholder {
+  color: #64748b;
+}
+
+.dash-admin-portal input:-webkit-autofill,
+.dash-admin-portal input:-webkit-autofill:hover,
+.dash-admin-portal input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px #1e293b inset !important;
+  -webkit-text-fill-color: #f8fafc !important;
+}
+
+@keyframes dash-admin-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.dash-admin-portal .animate-spin,
+.dash-admin-login .animate-spin {
+  animation: dash-admin-spin 1s linear infinite;
+}
+
+/* Stat cards on merchant page */
+.dash-admin-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .dash-admin-stat-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .dash-admin-stat-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+.dash-admin-stat-card {
+  border-radius: 0.75rem;
+  padding: 1rem 1.125rem;
+  border: 1px solid transparent;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dash-admin-stat-card:hover {
+  transform: translateY(-1px);
+}
+
+.dash-admin-stat-card__label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.85;
+  margin-bottom: 0.375rem;
+}
+
+.dash-admin-stat-card__value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.dash-admin-stat-card--pending {
+  background: linear-gradient(145deg, rgba(245, 158, 11, 0.18), rgba(180, 83, 9, 0.08));
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #fcd34d;
+}
+
+.dash-admin-stat-card--review {
+  background: linear-gradient(145deg, rgba(59, 130, 246, 0.18), rgba(37, 99, 235, 0.08));
+  border-color: rgba(59, 130, 246, 0.35);
+  color: #93c5fd;
+}
+
+.dash-admin-stat-card--docs {
+  background: linear-gradient(145deg, rgba(249, 115, 22, 0.18), rgba(234, 88, 12, 0.08));
+  border-color: rgba(249, 115, 22, 0.35);
+  color: #fdba74;
+}
+
+.dash-admin-stat-card--approved {
+  background: linear-gradient(145deg, rgba(16, 185, 129, 0.18), rgba(5, 150, 105, 0.08));
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #6ee7b7;
+}
+
+.dash-admin-stat-card--rejected {
+  background: linear-gradient(145deg, rgba(244, 63, 94, 0.18), rgba(225, 29, 72, 0.08));
+  border-color: rgba(244, 63, 94, 0.35);
+  color: #fda4af;
+}

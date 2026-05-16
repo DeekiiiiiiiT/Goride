@@ -100,7 +100,7 @@ function SectionItem({
             : 'text-slate-400 hover:text-white hover:bg-slate-800'
         )}
       >
-        <Icon className="w-4.5 h-4.5 shrink-0" />
+        <Icon className="w-4 h-4 shrink-0" />
         <span className="truncate">{section.label}</span>
         {open ? (
           <ChevronDown className="w-3.5 h-3.5 ml-auto text-slate-500" />

@@ -9,6 +9,7 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@dash-admin': path.resolve(__dirname, '../dash-merchant/src/admin'),
+      '@roam/admin-core': path.resolve(__dirname, '../../packages/admin-core/src'),
     },
   },
   server: {

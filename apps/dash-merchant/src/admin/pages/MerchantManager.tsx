@@ -146,30 +146,58 @@ export function MerchantManager({ accessToken }: MerchantManagerProps) {
   );
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-white flex items-center gap-2">
-            <Utensils className="w-5 h-5 text-emerald-400" />
-            Merchant Verification
+          <p className="text-xs font-medium uppercase tracking-wider text-amber-400/90 mb-1">
+            Merchants · Verification
+          </p>
+          <h1 className="text-2xl font-semibold text-white flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/15 ring-1 ring-emerald-500/30">
+              <Utensils className="w-5 h-5 text-emerald-400" />
+            </span>
+            Restaurant applications
           </h1>
-          <p className="text-sm text-slate-400 mt-1">
-            Review and approve restaurant applications.
+          <p className="text-sm text-slate-400 mt-2 max-w-xl">
+            Review and approve merchant onboarding. Queue refreshes every minute.
           </p>
         </div>
         <button
           onClick={() => void load()}
           disabled={loading}
-          className="flex items-center gap-2 px-3 py-2 text-sm font-medium border border-slate-700 rounded-lg text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+          className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg text-slate-950 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 shadow-lg shadow-amber-500/20 disabled:opacity-50 transition-all"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex flex-wrap gap-1 p-1 bg-slate-800/40 rounded-lg">
+      <div className="dash-admin-stat-grid">
+        {(
+          [
+            ['pending', 'Pending', 'pending'],
+            ['in_review', 'In Review', 'review'],
+            ['docs_requested', 'Docs Requested', 'docs'],
+            ['approved', 'Approved', 'approved'],
+            ['rejected', 'Rejected', 'rejected'],
+          ] as const
+        ).map(([key, label, variant]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setTab(key)}
+            className={`dash-admin-stat-card dash-admin-stat-card--${variant} text-left ${
+              tab === key ? 'ring-2 ring-white/25 shadow-lg' : ''
+            }`}
+          >
+            <div className="dash-admin-stat-card__label">{label}</div>
+            <div className="dash-admin-stat-card__value">{counts[key]}</div>
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap gap-1 p-1 bg-slate-800/60 rounded-xl border border-slate-700/50">
         {TABS.map((t) => {
           const count =
             t.id === 'all' ? totalAcrossTabs : counts[t.id as MerchantVerificationStatus] ?? 0;
@@ -211,7 +239,7 @@ export function MerchantManager({ accessToken }: MerchantManagerProps) {
       </div>
 
       {/* Table */}
-      <div className="border rounded-lg overflow-hidden bg-slate-900/30 border-slate-800">
+      <div className="border rounded-xl overflow-hidden bg-slate-900/50 border-slate-800 shadow-xl shadow-black/20">
         <table className="w-full">
           <thead>
             <tr className="border-b border-slate-800 bg-slate-800/30">
