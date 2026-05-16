@@ -14,7 +14,8 @@ import { buildFareQuote, gridCellKey } from "./fare/buildQuote.ts";
 import { haversineKm } from "./fare/routing.ts";
 import { quoteTokenHash, verifyQuoteToken } from "./fare/quoteToken.ts";
 
-const app = new Hono();
+/** Match Supabase path prefix: .../functions/v1/rides/<route> → /rides/<route> */
+const app = new Hono().basePath("/rides");
 
 const MAX_MATCH_WAVES = 3;
 const WAVE_RADIUS_KM = [5, 15, 35];
