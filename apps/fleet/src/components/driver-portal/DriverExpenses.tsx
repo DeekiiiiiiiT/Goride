@@ -895,7 +895,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
           )}
 
           {viewState === 'method_select' && (
-            <PaymentMethodSelector onSelect={handleMethodSelect} />
+            <PaymentMethodSelector onSelect={handleMethodSelect} onCancel={goBack} />
           )}
 
           {viewState === 'entry_details' && (

@@ -1,15 +1,14 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@roam/auth-client';
 import { toast } from 'sonner';
 import { CircleDot, LogOut, MapPin, Navigation } from 'lucide-react';
+import type { FareQuoteResponse } from '@roam/types';
+import { formatMoneyMinor } from '@roam/types';
 import { RoamPlaceField } from '@/components/RoamPlaceField';
 import { ridesCreateRequest, ridesQuote } from '@/services/ridesEdge';
 
-function fmtUsdMinor(minor: bigint | number | string): string {
-  const n = typeof minor === 'bigint' ? Number(minor) : Number(minor);
-  return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(n / 100);
-}
+const VEHICLE_OPTIONS = [{ id: 'standard', label: 'Standard' }] as const;
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -17,10 +16,11 @@ export default function HomePage() {
   const [dropoffAddress, setDropoffAddress] = useState('');
   const [pickup, setPickup] = useState<{ lat: number; lng: number } | null>(null);
   const [dropoff, setDropoff] = useState<{ lat: number; lng: number } | null>(null);
+  const [vehicleOption, setVehicleOption] = useState<string>('standard');
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [bookLoading, setBookLoading] = useState(false);
-  const [fareLabel, setFareLabel] = useState<string | null>(null);
-  const [surge, setSurge] = useState<number | null>(null);
+  const [quote, setQuote] = useState<FareQuoteResponse | null>(null);
+  const quoteDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const coordsReady = pickup && dropoff;
 
@@ -30,11 +30,8 @@ export default function HomePage() {
     navigate('/login');
   };
 
-  const handleQuote = async () => {
-    if (!pickup || !dropoff) {
-      toast.error('Choose pickup and drop-off from the search suggestions.');
-      return;
-    }
+  const fetchQuote = useCallback(async () => {
+    if (!pickup || !dropoff) return;
     setQuoteLoading(true);
     try {
       const q = await ridesQuote({
@@ -42,19 +39,38 @@ export default function HomePage() {
         pickup_lng: pickup.lng,
         dropoff_lat: dropoff.lat,
         dropoff_lng: dropoff.lng,
+        vehicle_option: vehicleOption,
       });
-      setFareLabel(fmtUsdMinor(q.fare_estimate_minor));
-      setSurge(q.surge_multiplier);
+      setQuote(q);
     } catch (e: unknown) {
+      setQuote(null);
       toast.error(e instanceof Error ? e.message : 'Quote failed');
     } finally {
       setQuoteLoading(false);
     }
-  };
+  }, [pickup, dropoff, vehicleOption]);
+
+  useEffect(() => {
+    if (!coordsReady) {
+      setQuote(null);
+      return;
+    }
+    if (quoteDebounceRef.current) clearTimeout(quoteDebounceRef.current);
+    quoteDebounceRef.current = setTimeout(() => {
+      void fetchQuote();
+    }, 400);
+    return () => {
+      if (quoteDebounceRef.current) clearTimeout(quoteDebounceRef.current);
+    };
+  }, [coordsReady, fetchQuote]);
 
   const handleBook = async () => {
     if (!pickup || !dropoff) {
       toast.error('Choose pickup and drop-off from the search suggestions.');
+      return;
+    }
+    if (!quote?.quote_token) {
+      toast.error('Wait for the fare estimate, or tap Refresh price.');
       return;
     }
     setBookLoading(true);
@@ -66,16 +82,29 @@ export default function HomePage() {
         dropoff_lng: dropoff.lng,
         pickup_address: pickupAddress,
         dropoff_address: dropoffAddress,
+        vehicle_option: vehicleOption,
+        quote_token: quote.quote_token,
         idempotency_key: crypto.randomUUID(),
       });
       toast.success('Searching for a driver…');
       navigate(`/ride/${ride.id}`);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Could not request ride');
+      if (e instanceof Error && e.message.includes('expired')) {
+        void fetchQuote();
+      }
     } finally {
       setBookLoading(false);
     }
   };
+
+  const clearQuote = () => setQuote(null);
+
+  const fareLabel = quote
+    ? formatMoneyMinor(quote.fare_estimate_minor, quote.currency)
+    : null;
+  const surge = quote?.surge_multiplier ?? null;
+  const canBook = coordsReady && Boolean(quote?.quote_token) && !quoteLoading;
 
   return (
     <div className="min-h-[100dvh] flex flex-col bg-zinc-100 text-zinc-900">
@@ -112,6 +141,29 @@ export default function HomePage() {
         </div>
 
         <div className="rounded-3xl bg-white p-5 sm:p-6 shadow-xl shadow-zinc-900/6 ring-1 ring-zinc-200/90 space-y-5">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 mb-2">Vehicle</p>
+            <div className="flex gap-2">
+              {VEHICLE_OPTIONS.map((v) => (
+                <button
+                  key={v.id}
+                  type="button"
+                  onClick={() => {
+                    setVehicleOption(v.id);
+                    clearQuote();
+                  }}
+                  className={`rounded-xl px-4 py-2 text-sm font-medium touch-manipulation ${
+                    vehicleOption === v.id
+                      ? 'bg-emerald-600 text-white'
+                      : 'border border-zinc-200 bg-zinc-50 text-zinc-700'
+                  }`}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <RoamPlaceField
             label={
               <>
@@ -124,8 +176,7 @@ export default function HomePage() {
             onChangeText={(text) => {
               setPickupAddress(text);
               setPickup(null);
-              setFareLabel(null);
-              setSurge(null);
+              clearQuote();
             }}
             onResolved={({ address, lat, lng }) => {
               setPickupAddress(address);
@@ -145,8 +196,7 @@ export default function HomePage() {
             onChangeText={(text) => {
               setDropoffAddress(text);
               setDropoff(null);
-              setFareLabel(null);
-              setSurge(null);
+              clearQuote();
             }}
             onResolved={({ address, lat, lng }) => {
               setDropoffAddress(address);
@@ -154,12 +204,25 @@ export default function HomePage() {
             }}
           />
 
-          {fareLabel && (
-            <div className="rounded-2xl bg-emerald-50/80 border border-emerald-100 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
-              <span className="text-sm text-emerald-900 font-medium">Estimated fare</span>
-              <span className="text-lg font-semibold tabular-nums text-emerald-950">{fareLabel}</span>
+          {quoteLoading && coordsReady && (
+            <p className="text-sm text-zinc-500 px-1">Calculating fare…</p>
+          )}
+
+          {fareLabel && !quoteLoading && (
+            <div className="rounded-2xl bg-emerald-50/80 border border-emerald-100 px-4 py-3 space-y-1">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm text-emerald-900 font-medium">Estimated fare</span>
+                <span className="text-lg font-semibold tabular-nums text-emerald-950">{fareLabel}</span>
+              </div>
+              {quote && (
+                <p className="text-xs text-emerald-800/80">
+                  {quote.distance_estimate_km.toFixed(1)} km · ~{Math.round(quote.eta_trip_minutes_estimate)} min
+                  {quote.route_source === 'haversine_fallback' ? ' (estimate)' : ''}
+                </p>
+              )}
             </div>
           )}
+
           {surge != null && surge > 1 && (
             <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-2xl px-4 py-2">
               Demand is high — surge <strong className="tabular-nums">×{surge.toFixed(2)}</strong> in your area.
@@ -169,28 +232,22 @@ export default function HomePage() {
           <div className="flex flex-col sm:flex-row gap-3 pt-1">
             <button
               type="button"
-              onClick={handleQuote}
+              onClick={() => void fetchQuote()}
               disabled={quoteLoading || !coordsReady}
               className="btn-touch flex-1 rounded-2xl border border-zinc-300 bg-white text-base font-semibold text-zinc-800 hover:bg-zinc-50 disabled:opacity-50 touch-manipulation active:scale-[0.99]"
             >
-              {quoteLoading ? 'Getting price…' : 'Fare estimate'}
+              {quoteLoading ? 'Getting price…' : 'Refresh price'}
             </button>
             <button
               type="button"
               onClick={handleBook}
-              disabled={bookLoading || !coordsReady}
+              disabled={bookLoading || !canBook}
               className="btn-touch flex-1 rounded-2xl bg-emerald-600 text-white text-base font-semibold shadow-lg shadow-emerald-600/25 hover:bg-emerald-700 disabled:opacity-50 touch-manipulation active:scale-[0.99]"
             >
               {bookLoading ? 'Requesting…' : 'Request ride'}
             </button>
           </div>
         </div>
-
-        <p className="text-center text-xs text-zinc-500 leading-relaxed px-2">
-          Places search uses Google Maps (suggestions biased to Jamaica). The app loads a{' '}
-          <strong className="text-zinc-600">Roam Rides–only</strong> key from your backend. Type at least three
-          characters, then tap a result.
-        </p>
 
         <div className="text-center pb-2">
           <Link
@@ -204,3 +261,4 @@ export default function HomePage() {
     </div>
   );
 }
+

@@ -5,7 +5,7 @@ import type {
   DriverOfferRow,
   FareQuoteResponse,
   RideRequestRow,
-} from '@roam/types/rides';
+} from '@roam/types';
 
 async function ridesHeaders(): Promise<HeadersInit> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -24,6 +24,7 @@ export async function ridesQuote(body: {
   pickup_lng: number;
   dropoff_lat: number;
   dropoff_lng: number;
+  vehicle_option?: string;
 }): Promise<FareQuoteResponse> {
   const res = await fetch(`${base}/v1/quote`, {
     method: 'POST',
@@ -40,7 +41,18 @@ export async function ridesCreateRequest(body: CreateRideBody): Promise<{ ride: 
     headers: await ridesHeaders(),
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) {
+    const text = await res.text();
+    try {
+      const parsed = JSON.parse(text) as { error?: string };
+      if (parsed.error === 'quote_stale') {
+        throw new Error('Price expired — tap Fare estimate to refresh.');
+      }
+    } catch (e) {
+      if (e instanceof Error && e.message.includes('Price expired')) throw e;
+    }
+    throw new Error(text);
+  }
   return res.json();
 }
 

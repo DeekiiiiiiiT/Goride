@@ -10,6 +10,9 @@ import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { cors } from "https://deno.land/x/hono@v4.3.11/middleware.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { jsonEdgeForbidden, ridesUserSurfaceRole } from "../_shared/authEdge.ts";
+import { buildFareQuote, gridCellKey } from "./fare/buildQuote.ts";
+import { haversineKm } from "./fare/routing.ts";
+import { quoteTokenHash, verifyQuoteToken } from "./fare/quoteToken.ts";
 
 const app = new Hono();
 
@@ -17,10 +20,6 @@ const MAX_MATCH_WAVES = 3;
 const WAVE_RADIUS_KM = [5, 15, 35];
 const MAX_OFFERS_PER_WAVE = 8;
 const DRIVER_LOCATION_MAX_AGE_MS = 10 * 60 * 1000;
-const BASE_MINOR_DEFAULT = 250;
-const PER_KM_MINOR_DEFAULT = 150;
-const PER_MIN_MINOR_DEFAULT = 35;
-const MIN_FARE_MINOR_DEFAULT = 500;
 const AVG_SPEED_KMH = 25;
 
 type RideStatus =
@@ -86,40 +85,6 @@ function rateLimit(key: string, limit: number, windowMs: number): boolean {
   fresh.push(now);
   rlBuckets.set(key, fresh);
   return true;
-}
-
-function gridCellKey(lat: number, lng: number): string {
-  return `grid:${Math.floor(lat * 50)}:${Math.floor(lng * 50)}`;
-}
-
-function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
-  const R = 6371;
-  const dLat = (bLat - aLat) * Math.PI / 180;
-  const dLng = (bLng - aLng) * Math.PI / 180;
-  const lat1 = aLat * Math.PI / 180;
-  const lat2 = bLat * Math.PI / 180;
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
-}
-
-function estimateFareMinor(params: {
-  distanceKm: number;
-  surgeMultiplier: number;
-  baseMinor: number;
-  perKmMinor: number;
-  perMinMinor: number;
-  minFareMinor: number;
-}): { fareMinor: bigint; etaMinutes: number } {
-  const etaMinutes = Math.max(1, Math.round((params.distanceKm / AVG_SPEED_KMH) * 60));
-  const raw =
-    params.baseMinor +
-    params.perKmMinor * params.distanceKm +
-    params.perMinMinor * etaMinutes;
-  const adjusted = Math.round(raw * params.surgeMultiplier);
-  const fareMinor = BigInt(Math.max(params.minFareMinor, adjusted));
-  return { fareMinor, etaMinutes };
 }
 
 async function requireUser(authHeader: string | undefined) {
@@ -302,35 +267,46 @@ app.post("/v1/quote", async (c) => {
   if ([pickup_lat, pickup_lng, dropoff_lat, dropoff_lng].some((x) => Number.isNaN(x))) {
     return c.json({ error: "invalid_coordinates" }, 400);
   }
-  const distanceKm = haversineKm(pickup_lat, pickup_lng, dropoff_lat, dropoff_lng);
-  const cellKey = gridCellKey(pickup_lat, pickup_lng);
-  const surge = await readSurgeMultiplier(cellKey);
-  const baseMinor = Number(Deno.env.get("ROAM_RIDES_BASE_MINOR") ?? BASE_MINOR_DEFAULT);
-  const perKmMinor = Number(Deno.env.get("ROAM_RIDES_PER_KM_MINOR") ?? PER_KM_MINOR_DEFAULT);
-  const perMinMinor = Number(Deno.env.get("ROAM_RIDES_PER_MIN_MINOR") ?? PER_MIN_MINOR_DEFAULT);
-  const minFareMinor = Number(Deno.env.get("ROAM_RIDES_MIN_FARE_MINOR") ?? MIN_FARE_MINOR_DEFAULT);
+  const vehicleType = typeof body.vehicle_option === "string" ? body.vehicle_option : "standard";
+  const db = svc();
 
-  const { fareMinor, etaMinutes } = estimateFareMinor({
-    distanceKm,
-    surgeMultiplier: surge,
-    baseMinor,
-    perKmMinor,
-    perMinMinor,
-    minFareMinor,
+  const quote = await buildFareQuote(db, {
+    pickupLat: pickup_lat,
+    pickupLng: pickup_lng,
+    dropoffLat: dropoff_lat,
+    dropoffLng: dropoff_lng,
+    vehicleType,
+    readSurge: readSurgeMultiplier,
   });
 
-  const etaPickupSeconds = Math.round((distanceKm / AVG_SPEED_KMH) * 3600);
+  await audit(null, auth.user.id, "fare_quoted", {
+    distance_km: quote.distanceKm,
+    surge: quote.surgeMultiplier,
+    route_source: quote.routeSource,
+    breakdown: quote.breakdown,
+  });
 
-  logLine({ event: "quote", user_id: auth.user.id, distanceKm, surge });
+  logLine({
+    event: "quote",
+    user_id: auth.user.id,
+    distanceKm: quote.distanceKm,
+    surge: quote.surgeMultiplier,
+    route_source: quote.routeSource,
+  });
 
   return c.json({
-    distance_estimate_km: distanceKm,
-    eta_trip_minutes_estimate: etaMinutes,
-    eta_pickup_seconds_estimate: etaPickupSeconds,
-    surge_multiplier: surge,
-    fare_estimate_minor: fareMinor.toString(),
-    currency: "USD",
-    grid_cell_key: cellKey,
+    distance_estimate_km: quote.distanceKm,
+    duration_estimate_minutes: quote.durationMinutes,
+    eta_trip_minutes_estimate: quote.etaTripMinutes,
+    eta_pickup_seconds_estimate: quote.etaPickupSeconds,
+    surge_multiplier: quote.surgeMultiplier,
+    fare_estimate_minor: quote.fareEstimateMinor.toString(),
+    currency: quote.currency,
+    grid_cell_key: quote.gridCellKey,
+    vehicle_option: quote.vehicleType,
+    route_source: quote.routeSource,
+    fare_breakdown: quote.breakdown,
+    quote_token: quote.quoteToken,
   });
 });
 
@@ -368,21 +344,26 @@ app.post("/v1/requests", async (c) => {
     }
   }
 
-  const distanceKm = haversineKm(pickup_lat, pickup_lng, dropoff_lat, dropoff_lng);
-  const cellKey = gridCellKey(pickup_lat, pickup_lng);
-  const surge = await readSurgeMultiplier(cellKey);
-  const baseMinor = Number(Deno.env.get("ROAM_RIDES_BASE_MINOR") ?? BASE_MINOR_DEFAULT);
-  const perKmMinor = Number(Deno.env.get("ROAM_RIDES_PER_KM_MINOR") ?? PER_KM_MINOR_DEFAULT);
-  const perMinMinor = Number(Deno.env.get("ROAM_RIDES_PER_MIN_MINOR") ?? PER_MIN_MINOR_DEFAULT);
-  const minFareMinor = Number(Deno.env.get("ROAM_RIDES_MIN_FARE_MINOR") ?? MIN_FARE_MINOR_DEFAULT);
-  const { fareMinor, etaMinutes } = estimateFareMinor({
-    distanceKm,
-    surgeMultiplier: surge,
-    baseMinor,
-    perKmMinor,
-    perMinMinor,
-    minFareMinor,
+  const vehicle_option = typeof body.vehicle_option === "string" ? body.vehicle_option : "standard";
+  const quote_token = typeof body.quote_token === "string" ? body.quote_token : null;
+  if (!quote_token) {
+    return c.json({ error: "quote_token_required" }, 400);
+  }
+
+  const verified = await verifyQuoteToken(quote_token, {
+    pickup_lat,
+    pickup_lng,
+    dropoff_lat,
+    dropoff_lng,
+    vehicle_type: vehicle_option,
   });
+
+  if (!verified.ok) {
+    return c.json({ error: "quote_stale", reason: verified.reason }, 409);
+  }
+
+  const locked = verified.payload;
+  const cellKey = gridCellKey(pickup_lat, pickup_lng);
 
   await bumpSurgeDemand(cellKey, 1);
 
@@ -395,12 +376,15 @@ app.post("/v1/requests", async (c) => {
     dropoff_lat,
     dropoff_lng,
     dropoff_address: body.dropoff_address ?? null,
-    vehicle_option: typeof body.vehicle_option === "string" ? body.vehicle_option : "standard",
-    fare_estimate_minor: Number(fareMinor),
-    surge_multiplier: surge,
-    currency: "USD",
-    distance_estimate_km: distanceKm,
-    eta_pickup_seconds_estimate: Math.round((distanceKm / AVG_SPEED_KMH) * 3600),
+    vehicle_option,
+    fare_estimate_minor: locked.fare_estimate_minor,
+    surge_multiplier: locked.surge_multiplier,
+    currency: locked.currency,
+    distance_estimate_km: locked.distance_km,
+    duration_estimate_minutes: locked.duration_minutes,
+    eta_pickup_seconds_estimate: Math.round((locked.distance_km / AVG_SPEED_KMH) * 3600),
+    quote_token_hash: quoteTokenHash(quote_token),
+    fare_breakdown: locked.fare_breakdown ?? null,
     idempotency_key,
     driver_offer_timeout_seconds: Number(body.driver_offer_timeout_seconds ?? 15),
     matching_wave: 0,
@@ -413,7 +397,15 @@ app.post("/v1/requests", async (c) => {
   }
 
   const reqId = crypto.randomUUID();
-  await audit(ride.id, auth.user.id, "ride_created", { request_id: reqId, cell_key: cellKey });
+  await audit(ride.id, auth.user.id, "ride_created", {
+    request_id: reqId,
+    cell_key: cellKey,
+    fare_locked: locked.fare_estimate_minor,
+  });
+  await audit(ride.id, auth.user.id, "fare_locked", {
+    fare_estimate_minor: locked.fare_estimate_minor,
+    surge_multiplier: locked.surge_multiplier,
+  });
 
   await runMatchingWave(ride.id, ride, 1, reqId);
 
@@ -521,7 +513,21 @@ app.get("/v1/drivers/offers", async (c) => {
     auth.user.id,
   ).eq("status", "pending").gt("expires_at", nowIso);
 
-  return c.json({ offers: offers ?? [] });
+  const rideIds = [...new Set((offers ?? []).map((o: { ride_request_id: string }) => o.ride_request_id))];
+  let ridesById: Record<string, Record<string, unknown>> = {};
+  if (rideIds.length > 0) {
+    const { data: rides } = await db.from("ride_requests").select(
+      "id, pickup_address, dropoff_address, fare_estimate_minor, currency, distance_estimate_km, duration_estimate_minutes, vehicle_option, surge_multiplier",
+    ).in("id", rideIds);
+    ridesById = Object.fromEntries((rides ?? []).map((r: { id: string }) => [r.id, r]));
+  }
+
+  const enriched = (offers ?? []).map((o: { ride_request_id: string }) => ({
+    ...o,
+    ride: ridesById[o.ride_request_id] ?? null,
+  }));
+
+  return c.json({ offers: enriched });
 });
 
 app.post("/v1/drivers/offers/:offerId/accept", async (c) => {

@@ -3,13 +3,9 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ArrowLeft, Loader2 } from 'lucide-react';
-import type { RideRequestStatus } from '@roam/types/rides';
+import type { RideRequestStatus } from '@roam/types';
+import { formatMoneyMinor } from '@roam/types';
 import { ridesCancelRequest, ridesGetRequest } from '@/services/ridesEdge';
-
-function fmtUsdMinor(minor: number | null | undefined): string {
-  if (minor == null) return '—';
-  return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(minor / 100);
-}
 
 function statusLabel(s: RideRequestStatus): string {
   switch (s) {
@@ -145,7 +141,10 @@ export default function RidePage() {
                 <div className="flex justify-between items-baseline gap-4">
                   <span className="text-base text-zinc-600">Total</span>
                   <span className="text-2xl font-bold tabular-nums text-zinc-900">
-                    {fmtUsdMinor(ride.fare_final_minor ?? ride.fare_estimate_minor)}
+                    {formatMoneyMinor(
+                      ride.fare_final_minor ?? ride.fare_estimate_minor,
+                      ride.currency ?? 'JMD',
+                    )}
                   </span>
                 </div>
                 <Link

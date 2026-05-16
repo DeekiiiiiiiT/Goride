@@ -50,21 +50,38 @@ Canonical statuses (`rides.ride_requests.status`):
 
 ## 4. Fare quote & surge
 
+### Pricing rules (`rides.fare_rules`)
+
+- One active row per **`(city, vehicle_type)`** (MVP city: **`jamaica`**, vehicle: **`standard`**).
+- Amounts in **minor units** (JMD cents). Columns: `base_fare_minor`, `price_per_km_minor`, `price_per_min_minor`, `booking_fee_minor`, `min_fare_minor`, `currency`.
+- Ops can edit via Supabase Table Editor — see [`FARE_OPS.md`](./FARE_OPS.md).
+
+### Route distance & time
+
+- Edge calls **Google Directions API** (driving, `region=jm`) using `GOOGLE_MAPS_API_KEY_RIDES` (or `GOOGLE_MAPS_SERVER_KEY_RIDES`).
+- On API failure: **Haversine** distance + 25 km/h speed fallback (`route_source: haversine_fallback`).
+
 ### Quote (`POST /v1/quote`)
 
-- Inputs: pickup/dropoff coordinates (+ optional `vehicle_option`).
-- **Haversine** distance \(d\) km; estimated duration \(t = (d / 25) * 60\) minutes (placeholder until routing engine).
-- **Fare (minor units, cents)**:
+- Inputs: pickup/dropoff coordinates, optional **`vehicle_option`** (default `standard`).
+- Returns: `fare_estimate_minor`, `currency`, `surge_multiplier`, `distance_estimate_km`, `duration_estimate_minutes`, `fare_breakdown`, **`quote_token`** (signed, ~10 min TTL).
+
+**Formula:**
 
 ```
-fare_minor = round(
-  base_minor
-  + per_km_minor * d
-  + per_min_minor * t
-) * surge_multiplier
+subtotal = base + booking_fee + (km × per_km) + (min × per_min)
+fare_minor = max(min_fare, round(subtotal × surge_multiplier))
 ```
 
-Defaults (env-tunable in Edge): `base_minor=250`, `per_km_minor=150`, `per_min_minor=35`, min fare clamp **500**.
+Env fallbacks if no DB row: `ROAM_RIDES_*_MINOR` (see `supabase/functions/rides/fare/rules.ts`).
+
+### Book (`POST /v1/requests`)
+
+- Requires **`quote_token`** from a recent quote matching coords + vehicle.
+- Persists locked **`fare_estimate_minor`** / **`surge_multiplier`** (no re-surge at book).
+- Errors: `quote_stale` (409) if token missing, expired, or coords changed.
+
+**Secrets:** `ROAM_RIDES_QUOTE_SECRET` (HMAC; dev may use `unsigned.*` tokens if unset).
 
 ### Surge v1
 
@@ -76,7 +93,7 @@ Defaults (env-tunable in Edge): `base_minor=250`, `per_km_minor=150`, `per_min_m
 
 ## 5. Payments model
 
-**MVP**: persist **`fare_estimate_minor`** / **`fare_final_minor`** on **`ride_requests`**; **`currency`** default **`USD`**.
+**MVP**: persist **`fare_estimate_minor`** / **`fare_final_minor`** on **`ride_requests`**; **`currency`** default **`JMD`**.
 
 **Production**: integrate [`payments`](../../supabase/functions/payments/index.ts) service:
 

@@ -268,7 +268,11 @@ export function EvidenceInboxTab({ onPromoted, onVerifyLocation }: EvidenceInbox
     if (!selectedEvidenceRow) return;
     try {
       setActionRowId(selectedEvidenceRow.id);
-      const { learntId } = await api.ensureLearntForGateHeldTransaction(selectedEvidenceRow.id);
+      let learntId = selectedEvidenceRow.learntLocationId;
+      if (!learntId) {
+        const ensured = await api.ensureLearntForGateHeldTransaction(selectedEvidenceRow.id);
+        learntId = ensured.learntId;
+      }
       await api.rejectLearntLocation(learntId, rejectReason);
       toast.success('Location flagged as anomaly');
       setIsRejectDialogOpen(false);
@@ -284,16 +288,16 @@ export function EvidenceInboxTab({ onPromoted, onVerifyLocation }: EvidenceInbox
     if (!selectedEvidenceRow) return;
     try {
       setActionRowId(selectedEvidenceRow.id);
-      const { learntId } = await api.ensureLearntForGateHeldTransaction(selectedEvidenceRow.id);
-      const result = await api.deleteLearntLocation(learntId);
-      const msg = result.transactionDeleted
-        ? 'Location and linked transaction permanently deleted'
-        : 'Location permanently deleted (no linked transaction found)';
+      const result = await api.deleteGateHeldEvidence(selectedEvidenceRow.id);
+      const msg = result.learntDeleted
+        ? 'Gate-held transaction and learnt staging permanently deleted'
+        : 'Gate-held transaction permanently deleted';
       toast.success(msg);
       setIsDeleteDialogOpen(false);
+      setSelectedEvidenceRow(null);
       await fetchEvidence();
     } catch (error: any) {
-      toast.error(error?.message || 'Failed to delete location');
+      toast.error(error?.message || 'Failed to delete gate-held transaction');
     } finally {
       setActionRowId(null);
     }
@@ -534,6 +538,7 @@ export function EvidenceInboxTab({ onPromoted, onVerifyLocation }: EvidenceInbox
                               className="gap-2.5 text-blue-700 focus:text-blue-800 focus:bg-blue-50 font-medium items-start py-2"
                               onClick={() => handlePromote(row)}
                               disabled={!row.hasGps}
+                              title={!row.hasGps ? 'Requires GPS coordinates on this transaction' : undefined}
                             >
                               <ShieldCheck className="h-4 w-4 mt-0.5 shrink-0" />
                               <div>
@@ -550,6 +555,7 @@ export function EvidenceInboxTab({ onPromoted, onVerifyLocation }: EvidenceInbox
                                 className="gap-2.5 text-violet-700 focus:text-violet-800 focus:bg-violet-50 items-start py-2"
                                 onClick={() => openVerifyFlow(row)}
                                 disabled={!row.hasGps}
+                                title={!row.hasGps ? 'Requires GPS coordinates on this transaction' : undefined}
                               >
                                 <Navigation className="h-4 w-4 mt-0.5 shrink-0" />
                                 <div>
@@ -571,6 +577,7 @@ export function EvidenceInboxTab({ onPromoted, onVerifyLocation }: EvidenceInbox
                                 setIsLinkDialogOpen(true);
                               }}
                               disabled={!row.hasGps}
+                              title={!row.hasGps ? 'Requires GPS coordinates on this transaction' : undefined}
                             >
                               <Link2 className="h-4 w-4 mt-0.5 shrink-0" />
                               <div>
@@ -590,6 +597,7 @@ export function EvidenceInboxTab({ onPromoted, onVerifyLocation }: EvidenceInbox
                                 setIsMergeDialogOpen(true);
                               }}
                               disabled={!row.hasGps}
+                              title={!row.hasGps ? 'Requires GPS coordinates on this transaction' : undefined}
                             >
                               <Merge className="h-4 w-4 mt-0.5 shrink-0" />
                               <div>
@@ -647,7 +655,7 @@ export function EvidenceInboxTab({ onPromoted, onVerifyLocation }: EvidenceInbox
                               <div>
                                 <div className="text-sm font-medium">Delete Permanently</div>
                                 <div className="text-[10px] font-normal text-slate-500 leading-snug mt-0.5">
-                                  Deletes learnt staging and may delete the linked pending transaction (same as Learnt tab).
+                                  Removes this gate-held transaction from the inbox (works with or without GPS).
                                 </div>
                               </div>
                             </DropdownMenuItem>

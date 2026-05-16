@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import type { DriverOfferRow, RideRequestRow } from '@roam/types/rides';
+import type { DriverOfferWithRide, RideRequestRow } from '@roam/types/rides';
+import { formatMoneyMinor } from '@roam/types/rides';
 import {
   ridesDriverAcceptOffer,
   ridesDriverDeclineOffer,
@@ -34,7 +35,7 @@ function statusTitle(r: RideRequestRow | null): string {
 
 export function RideDispatchPage() {
   const [online, setOnline] = useState(false);
-  const [offers, setOffers] = useState<DriverOfferRow[]>([]);
+  const [offers, setOffers] = useState<DriverOfferWithRide[]>([]);
   const [activeRide, setActiveRide] = useState<RideRequestRow | null>(null);
   const watchId = useRef<number | null>(null);
 
@@ -102,7 +103,7 @@ export function RideDispatchPage() {
     setOffers([]);
   };
 
-  const accept = async (offer: DriverOfferRow) => {
+  const accept = async (offer: DriverOfferWithRide) => {
     try {
       const { ride } = await ridesDriverAcceptOffer(offer.id);
       setActiveRide(ride);
@@ -113,7 +114,7 @@ export function RideDispatchPage() {
     }
   };
 
-  const decline = async (offer: DriverOfferRow) => {
+  const decline = async (offer: DriverOfferWithRide) => {
     try {
       await ridesDriverDeclineOffer(offer.id);
       toast.message('Offer declined');
@@ -169,8 +170,25 @@ export function RideDispatchPage() {
                 key={o.id}
                 className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 flex flex-col gap-2"
               >
-                <div className="text-xs text-slate-500">
-                  Wave {o.wave} · {o.distance_km != null ? `${o.distance_km.toFixed(2)} km` : 'distance —'}
+                <div className="text-xs text-slate-500 space-y-1">
+                  <p>
+                    Wave {o.wave} · {o.distance_km != null ? `${o.distance_km.toFixed(2)} km to pickup` : '—'}
+                  </p>
+                  {o.ride && (
+                    <>
+                      <p className="text-slate-700 dark:text-slate-200 font-medium truncate">
+                        {o.ride.pickup_address ?? 'Pickup'} → {o.ride.dropoff_address ?? 'Drop-off'}
+                      </p>
+                      <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 tabular-nums">
+                        {formatMoneyMinor(o.ride.fare_estimate_minor, o.ride.currency ?? 'JMD')}
+                        {o.ride.surge_multiplier > 1 ? (
+                          <span className="text-amber-700 dark:text-amber-400 font-normal ml-1">
+                            · surge ×{o.ride.surge_multiplier.toFixed(2)}
+                          </span>
+                        ) : null}
+                      </p>
+                    </>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -200,6 +218,9 @@ export function RideDispatchPage() {
           <p className="text-sm font-medium">{statusTitle(activeRide)}</p>
           <p className="text-xs text-slate-600 dark:text-slate-300">{activeRide.pickup_address ?? 'Pickup'}</p>
           <p className="text-xs text-slate-600 dark:text-slate-300">{activeRide.dropoff_address ?? 'Drop-off'}</p>
+          <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 tabular-nums">
+            Fare: {formatMoneyMinor(activeRide.fare_estimate_minor, activeRide.currency ?? 'JMD')}
+          </p>
 
           <div className="flex flex-wrap gap-2 pt-2">
             {activeRide.status === 'driver_assigned' && (

@@ -1,16 +1,17 @@
 // cache-bust: force recompile — 2026-02-10
 import React from 'react';
 import { Button } from '@roam/ui';
-import { CreditCard, Banknote, Car } from "lucide-react";
+import { CreditCard, Car } from "lucide-react";
 import { Label } from '@roam/ui';
 
 interface PaymentMethodSelectorProps {
   onSelect: (method: 'gas_card' | 'personal_cash' | 'rideshare_cash') => void;
+  onCancel: () => void;
 }
 
-export function PaymentMethodSelector({ onSelect }: PaymentMethodSelectorProps) {
+export function PaymentMethodSelector({ onSelect, onCancel }: PaymentMethodSelectorProps) {
   return (
-    <div className="p-6 space-y-4">
+    <div className="flex flex-col p-6 pb-8">
       <Label className="text-base font-semibold text-center block mb-4">How did you pay for fuel?</Label>
       <div className="grid grid-cols-1 gap-4">
         <Button 
@@ -38,9 +39,14 @@ export function PaymentMethodSelector({ onSelect }: PaymentMethodSelectorProps) 
         </Button>
       </div>
 
-      <p className="text-[11px] text-slate-400 text-center italic mt-2">
-        If you paid with personal cash, select RideShare Cash above. Fleet admin will review and reclassify if needed.
-      </p>
+      <Button
+        type="button"
+        variant="ghost"
+        className="mt-8 w-full text-slate-500 hover:text-slate-900"
+        onClick={onCancel}
+      >
+        Cancel
+      </Button>
     </div>
   );
 }

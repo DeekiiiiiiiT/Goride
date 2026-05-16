@@ -1058,6 +1058,24 @@ export const api = {
     return response.json() as Promise<{ success: boolean; learntId: string }>;
   },
 
+  /** Evidence Inbox — permanently delete a gate-held transaction (and linked learnt / fuel_entry if any). */
+  async deleteGateHeldEvidence(transactionId: string) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/admin/evidence-inbox/gate-held/${encodeURIComponent(transactionId)}`,
+      {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${publicAnonKey}`,
+        },
+      },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || 'Failed to delete gate-held transaction');
+    }
+    return response.json() as Promise<{ success: boolean; transactionDeleted: boolean; learntDeleted: boolean }>;
+  },
+
   /** Evidence Inbox — merge gate-held fuel reimbursement into a station (same as Learnt merge). */
   async mergeGateHeldTransactionToStation(transactionId: string, targetStationId: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/evidence-inbox/merge-to-station`, {

@@ -14,6 +14,18 @@ export type RideRequestStatus =
 
 export type DriverOfferStatus = 'pending' | 'accepted' | 'declined' | 'expired' | 'superseded';
 
+export interface FareBreakdown {
+  base_minor: number;
+  booking_fee_minor: number;
+  distance_component_minor: number;
+  time_component_minor: number;
+  subtotal_before_surge_minor: number;
+  surge_multiplier: number;
+  after_surge_minor: number;
+  min_fare_applied: boolean;
+  fare_estimate_minor: number;
+}
+
 export interface RideRequestRow {
   id: string;
   rider_user_id: string;
@@ -30,7 +42,9 @@ export interface RideRequestRow {
   surge_multiplier: number;
   currency: string;
   distance_estimate_km: number | null;
+  duration_estimate_minutes?: number | null;
   eta_pickup_seconds_estimate: number | null;
+  fare_breakdown?: FareBreakdown | null;
   assigned_driver_user_id: string | null;
   idempotency_key: string | null;
   cancel_reason: string | null;
@@ -53,14 +67,36 @@ export interface DriverOfferRow {
   created_at: string;
 }
 
+/** Ride summary attached to driver pending offers. */
+export interface DriverOfferRideSummary {
+  id: string;
+  pickup_address: string | null;
+  dropoff_address: string | null;
+  fare_estimate_minor: number;
+  currency: string;
+  distance_estimate_km: number | null;
+  duration_estimate_minutes?: number | null;
+  vehicle_option: string;
+  surge_multiplier: number;
+}
+
+export interface DriverOfferWithRide extends DriverOfferRow {
+  ride: DriverOfferRideSummary | null;
+}
+
 export interface FareQuoteResponse {
   distance_estimate_km: number;
+  duration_estimate_minutes: number;
   eta_trip_minutes_estimate: number;
   eta_pickup_seconds_estimate: number;
   surge_multiplier: number;
   fare_estimate_minor: string;
   currency: string;
   grid_cell_key: string;
+  vehicle_option: string;
+  route_source: 'google_directions' | 'haversine_fallback';
+  fare_breakdown: FareBreakdown;
+  quote_token: string;
 }
 
 export interface CreateRideBody {
@@ -71,6 +107,7 @@ export interface CreateRideBody {
   pickup_address?: string;
   dropoff_address?: string;
   vehicle_option?: string;
+  quote_token: string;
   idempotency_key?: string;
   driver_offer_timeout_seconds?: number;
 }
@@ -85,4 +122,15 @@ export interface DriverPresenceBody {
 export interface DriverTransitionBody {
   status: RideRequestStatus;
   reason?: string;
+}
+
+/** Format minor currency units (JMD cents) for display. */
+export function formatMoneyMinor(
+  minor: bigint | number | string | null | undefined,
+  currency = 'JMD',
+): string {
+  if (minor == null) return '—';
+  const n = typeof minor === 'bigint' ? Number(minor) : Number(minor);
+  if (Number.isNaN(n)) return '—';
+  return new Intl.NumberFormat('en-JM', { style: 'currency', currency }).format(n / 100);
 }

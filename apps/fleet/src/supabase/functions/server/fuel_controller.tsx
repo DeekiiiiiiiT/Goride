@@ -614,6 +614,40 @@ async function releaseHeldTransaction(learnt: any, resolvedStationId: string, st
     return 1;
 }
 
+/** Match Evidence inbox DTO coord extraction (locationMetadata, geofenceMetadata, top-level lat/lng). */
+function evidenceReadMetaNum(v: unknown): number | undefined {
+    const n = typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) : NaN;
+    return Number.isFinite(n) ? n : undefined;
+}
+
+function extractTxCoordsFromMetadata(metadata: Record<string, unknown> | undefined): {
+    lat: number;
+    lng: number;
+    accuracy?: number;
+} | null {
+    if (!metadata || typeof metadata !== "object") return null;
+    const lm = (metadata.locationMetadata || metadata.location) as Record<string, unknown> | undefined;
+    const gf = metadata.geofenceMetadata as Record<string, unknown> | undefined;
+    const lat =
+        evidenceReadMetaNum(lm?.lat) ??
+        evidenceReadMetaNum(gf?.lat) ??
+        evidenceReadMetaNum(metadata.lat);
+    const lng =
+        evidenceReadMetaNum(lm?.lng) ??
+        evidenceReadMetaNum(gf?.lng) ??
+        evidenceReadMetaNum(metadata.lng);
+    if (lat == null || lng == null) return null;
+    const accuracy =
+        evidenceReadMetaNum(lm?.accuracy) ??
+        evidenceReadMetaNum(gf?.accuracy) ??
+        evidenceReadMetaNum(metadata.accuracy);
+    return {
+        lat,
+        lng,
+        ...(accuracy != null ? { accuracy } : {}),
+    };
+}
+
 /**
  * Ensure a learnt_location exists for a gate-held transaction so Evidence Inbox can reuse
  * the same promote / merge flows as Learnt (STAGING). Creates staging from GPS when missing.
@@ -626,25 +660,33 @@ async function ensureLearntForGateHeldTx(
 
     const meta = tx.metadata || {};
     let learntId = meta.learntLocationId as string | undefined;
+    const coords = extractTxCoordsFromMetadata(meta);
 
     if (learntId) {
         const existing = await kv.get(`learnt_location:${learntId}`);
         if (existing) return { learnt: existing, learntId };
 
-        const lat = meta.locationMetadata?.lat;
-        const lng = meta.locationMetadata?.lng;
-        if (lat == null || lng == null) {
-            return {
-                error: "Learnt staging ID is missing from KV and this transaction has no GPS to recreate it.",
+        if (!coords) {
+            // No-GPS gate holds: recreate learnt staging without coordinates
+            const learnt = {
+                id: learntId,
+                name: tx.vendor || meta.originalVendor || "Unknown Vendor",
+                location: { lat: null, lng: null },
+                timestamp: new Date().toISOString(),
+                transactionId: tx.id,
+                status: "learnt",
+                gateReason: meta.gateReason || "No GPS coordinates — station gate held",
             };
+            await kv.set(`learnt_location:${learntId}`, learnt);
+            return { learnt, learntId };
         }
         const learnt = {
             id: learntId,
             name: tx.vendor || meta.originalVendor || "Unknown Vendor",
             location: {
-                lat,
-                lng,
-                accuracy: meta.locationMetadata?.accuracy,
+                lat: coords.lat,
+                lng: coords.lng,
+                accuracy: coords.accuracy,
             },
             timestamp: new Date().toISOString(),
             transactionId: tx.id,
@@ -654,11 +696,9 @@ async function ensureLearntForGateHeldTx(
         return { learnt, learntId };
     }
 
-    const lat = meta.locationMetadata?.lat;
-    const lng = meta.locationMetadata?.lng;
-    if (lat == null || lng == null) {
+    if (!coords) {
         return {
-            error: "No learnt staging row and no GPS on this transaction — resolve from Learnt (STAGING) or link manually elsewhere.",
+            error: "No learnt staging row and no GPS on this transaction — use Delete Permanently or resolve from Learnt (STAGING).",
         };
     }
 
@@ -667,9 +707,9 @@ async function ensureLearntForGateHeldTx(
         id: learntId,
         name: tx.vendor || meta.originalVendor || "Unknown Vendor",
         location: {
-            lat,
-            lng,
-            accuracy: meta.locationMetadata?.accuracy,
+            lat: coords.lat,
+            lng: coords.lng,
+            accuracy: coords.accuracy,
         },
         timestamp: new Date().toISOString(),
         transactionId: tx.id,
@@ -679,6 +719,42 @@ async function ensureLearntForGateHeldTx(
     tx.metadata = { ...tx.metadata, learntLocationId: learntId };
     await kv.set(`transaction:${transactionId}`, tx);
     return { learnt, learntId };
+}
+
+/** Permanently remove a gate-held fuel transaction and any linked learnt / fuel_entry rows. */
+async function deleteGateHeldEvidenceTransaction(
+    transactionId: string,
+): Promise<{ success: true; transactionDeleted: boolean; learntDeleted: boolean } | { error: string }> {
+    const tx = await kv.get(`transaction:${transactionId}`);
+    if (!tx) return { error: "Transaction not found" };
+
+    const isFuel = tx.category === "Fuel" || tx.category === "Fuel Reimbursement";
+    if (!isFuel) return { error: "Not a fuel transaction" };
+
+    const held = tx.metadata?.stationGateHold === true || tx.metadata?.stationGateHold === "true";
+    if (!held) return { error: "Transaction is not on station gate hold" };
+
+    let learntDeleted = false;
+    const learntId = tx.metadata?.learntLocationId as string | undefined;
+    if (learntId) {
+        const learnt = await kv.get(`learnt_location:${learntId}`);
+        if (learnt) {
+            await kv.del(`learnt_location:${learntId}`);
+            learntDeleted = true;
+        }
+    }
+
+    if (tx.metadata?.fuelEntryId) {
+        await kv.del(`fuel_entry:${tx.metadata.fuelEntryId}`);
+    }
+
+    await kv.del(`transaction:${transactionId}`);
+    console.log(
+        `[EvidenceInbox] Permanently deleted gate-held transaction ${transactionId}` +
+            (learntDeleted ? ` and learnt ${learntId}` : ""),
+    );
+
+    return { success: true, transactionDeleted: true, learntDeleted };
 }
 
 /**
@@ -1398,6 +1474,25 @@ app.post(`${BASE_PATH}/admin/evidence-inbox/ensure-learnt`, async (c) => {
         return c.json({ success: true, learntId: ensured.learntId });
     } catch (e: any) {
         return c.json({ error: e.message }, 500);
+    }
+});
+
+/** Evidence Inbox — delete gate-held transaction directly (works with or without GPS / learnt staging). */
+app.delete(`${BASE_PATH}/admin/evidence-inbox/gate-held/:transactionId`, async (c) => {
+    try {
+        const transactionId = c.req.param("transactionId");
+        if (!transactionId) return c.json({ error: "transactionId is required" }, 400);
+
+        const result = await deleteGateHeldEvidenceTransaction(transactionId);
+        if ("error" in result) {
+            const status = result.error === "Transaction not found" ? 404 : 400;
+            return c.json({ error: result.error }, status);
+        }
+
+        return c.json(result);
+    } catch (e: any) {
+        console.error("[EvidenceInbox] delete gate-held failed:", e);
+        return c.json({ error: e.message || "Delete failed" }, 500);
     }
 });
 

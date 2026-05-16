@@ -1,6 +1,11 @@
 import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
 import { supabase } from '../utils/supabase/client';
-import type { DriverOfferRow, DriverPresenceBody, DriverTransitionBody, RideRequestRow } from '@roam/types/rides';
+import type {
+  DriverOfferWithRide,
+  DriverPresenceBody,
+  DriverTransitionBody,
+  RideRequestRow,
+} from '@roam/types/rides';
 
 async function ridesHeaders(): Promise<HeadersInit> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -23,7 +28,7 @@ export async function ridesDriverPresence(body: DriverPresenceBody): Promise<voi
   if (!res.ok) throw new Error(await res.text());
 }
 
-export async function ridesDriverPendingOffers(): Promise<{ offers: DriverOfferRow[] }> {
+export async function ridesDriverPendingOffers(): Promise<{ offers: DriverOfferWithRide[] }> {
   const res = await fetch(`${base}/v1/drivers/offers`, { headers: await ridesHeaders() });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
@@ -46,7 +51,10 @@ export async function ridesDriverDeclineOffer(offerId: string): Promise<void> {
   if (!res.ok) throw new Error(await res.text());
 }
 
-export async function ridesDriverGetRequest(id: string): Promise<{ ride: RideRequestRow; offers: DriverOfferRow[] }> {
+export async function ridesDriverGetRequest(id: string): Promise<{
+  ride: RideRequestRow;
+  offers: DriverOfferWithRide[];
+}> {
   const res = await fetch(`${base}/v1/requests/${id}`, { headers: await ridesHeaders() });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
