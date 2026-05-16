@@ -18,10 +18,10 @@ import { LedgerColumnSettings } from '../database/LedgerColumnSettings';
 import { BusinessType } from '../../types/data';
 import { VehicleCatalogManager } from './vehicle-catalog/VehicleCatalogManager';
 import { PendingVehicleCatalogManager } from './vehicle-catalog/PendingVehicleCatalogManager';
-import { MerchantVerificationManager } from './roam-dash/MerchantVerificationManager';
-import { FareRulesManager } from './roam-rides/FareRulesManager';
-import { SurgeCellsManager } from './roam-rides/SurgeCellsManager';
 import { MaintenanceTemplatesManager } from './maintenance-templates/MaintenanceTemplatesManager';
+import { DashOverviewCard } from './product-overviews/DashOverviewCard';
+import { RidesOverviewCard } from './product-overviews/RidesOverviewCard';
+import { DriverOverviewCard } from './product-overviews/DriverOverviewCard';
 import { PartsSourcingManager } from './parts-sourcing/PartsSourcingManager';
 import { StationDatabaseView } from '../fuel/stations/StationDatabaseView';
 import { GasStationAnalytics } from '../fuel/stations/GasStationAnalytics';
@@ -160,19 +160,19 @@ export function AdminPortal() {
           <PartsSourcingManager />
         </div>
       )}
-      {currentPage === 'roam-dash-merchants' && (
+      {currentPage === 'roam-dash-overview' && (
         <div className="bg-slate-900/30 rounded-xl border border-slate-800 overflow-hidden min-h-[600px]">
-          <MerchantVerificationManager />
+          <DashOverviewCard />
         </div>
       )}
-      {currentPage === 'roam-rides-fare-rules' && (
+      {currentPage === 'roam-rides-overview' && (
         <div className="bg-slate-900/30 rounded-xl border border-slate-800 overflow-hidden min-h-[600px]">
-          <FareRulesManager />
+          <RidesOverviewCard />
         </div>
       )}
-      {currentPage === 'roam-rides-surge' && (
+      {currentPage === 'roam-driver-overview' && (
         <div className="bg-slate-900/30 rounded-xl border border-slate-800 overflow-hidden min-h-[600px]">
-          <SurgeCellsManager />
+          <DriverOverviewCard />
         </div>
       )}
       {currentPage === 'settings' && (

@@ -1,0 +1,24 @@
+{
+  "name": "@roam/admin-core",
+  "version": "0.1.0",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "dependencies": {
+    "@roam/types": "workspace:*",
+    "@roam/ui": "workspace:*",
+    "@roam/auth-client": "workspace:*",
+    "@supabase/supabase-js": "^2",
+    "lucide-react": "^0.487.0",
+    "sonner": "^2.0.3",
+    "clsx": "*",
+    "tailwind-merge": "*"
+  }
+}

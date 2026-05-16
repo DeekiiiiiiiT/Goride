@@ -38,13 +38,14 @@ import {
   Utensils,
   Navigation,
   TrendingUp,
+  ExternalLink,
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 
 // Phase 11: Define which admin pages each platform role can access
 const PLATFORM_ROLE_PAGES: Record<string, string[]> = {
-  platform_owner:   ['dashboard', 'customers', 'platform-team', 'drivers', 'team-members', 'activity-log', 'fuel-stations', 'fuel-analytics', 'toll-stations', 'toll-info', 'motor-vehicles', 'pending-motor-vehicles', 'maintenance-templates', 'parts-sourcing', 'roam-dash-merchants', 'roam-rides-fare-rules', 'roam-rides-surge', 'api-center', 'api-center-overview', 'api-center-usage', 'api-center-keys', 'api-center-budgets', 'api-center-logs', 'api-center-billing', 'settings', 'settings-general', 'settings-features', 'settings-registration', 'settings-security', 'settings-announcements', 'settings-danger', 'db-management', 'db-settings'],
-  platform_support: ['dashboard', 'customers', 'drivers', 'team-members', 'fuel-stations', 'fuel-analytics', 'toll-stations', 'toll-info', 'motor-vehicles', 'pending-motor-vehicles', 'maintenance-templates', 'parts-sourcing', 'roam-dash-merchants', 'roam-rides-fare-rules', 'roam-rides-surge'],
+  platform_owner:   ['dashboard', 'customers', 'platform-team', 'drivers', 'team-members', 'activity-log', 'fuel-stations', 'fuel-analytics', 'toll-stations', 'toll-info', 'motor-vehicles', 'pending-motor-vehicles', 'maintenance-templates', 'parts-sourcing', 'roam-dash-overview', 'roam-rides-overview', 'roam-driver-overview', 'api-center', 'api-center-overview', 'api-center-usage', 'api-center-keys', 'api-center-budgets', 'api-center-logs', 'api-center-billing', 'settings', 'settings-general', 'settings-features', 'settings-registration', 'settings-security', 'settings-announcements', 'settings-danger', 'db-management', 'db-settings'],
+  platform_support: ['dashboard', 'customers', 'drivers', 'team-members', 'fuel-stations', 'fuel-analytics', 'toll-stations', 'toll-info', 'motor-vehicles', 'pending-motor-vehicles', 'maintenance-templates', 'parts-sourcing', 'roam-dash-overview', 'roam-rides-overview', 'roam-driver-overview'],
   platform_analyst: ['dashboard', 'api-center', 'api-center-overview', 'api-center-usage', 'api-center-logs'],
 };
 
@@ -87,15 +88,22 @@ const VEHICLE_DATABASE_CHILDREN = [
   { id: 'parts-sourcing', label: 'Parts sourcing', icon: ShoppingCart },
 ];
 
-// Collapsible section for Roam Dash (food delivery)
-const ROAM_DASH_CHILDREN = [
-  { id: 'roam-dash-merchants', label: 'Merchant Verification', icon: Inbox },
+// Collapsible section for Roam Dash (food delivery) - now overview + link
+const ROAM_DASH_CHILDREN: { id: string; label: string; icon: typeof BarChart3; href?: string }[] = [
+  { id: 'roam-dash-overview', label: 'Overview', icon: BarChart3 },
+  { id: 'roam-dash-admin-link', label: 'Open Dash Admin →', icon: ExternalLink, href: 'https://roamdash.co/admin' },
 ];
 
-// Collapsible section for Roam Rides (passenger rides pricing)
-const ROAM_RIDES_CHILDREN = [
-  { id: 'roam-rides-fare-rules', label: 'Fare rules', icon: CircleDollarSign },
-  { id: 'roam-rides-surge', label: 'Surge pricing', icon: TrendingUp },
+// Collapsible section for Roam Rides (passenger rides) - now overview + link
+const ROAM_RIDES_CHILDREN: { id: string; label: string; icon: typeof BarChart3; href?: string }[] = [
+  { id: 'roam-rides-overview', label: 'Overview', icon: BarChart3 },
+  { id: 'roam-rides-admin-link', label: 'Open Rides Admin →', icon: ExternalLink, href: 'https://roam-s.co/admin' },
+];
+
+// Collapsible section for Roam Driver - new overview + link
+const ROAM_DRIVER_CHILDREN: { id: string; label: string; icon: typeof BarChart3; href?: string }[] = [
+  { id: 'roam-driver-overview', label: 'Overview', icon: BarChart3 },
+  { id: 'roam-driver-admin-link', label: 'Open Driver Admin →', icon: ExternalLink, href: 'https://roamdriver.co/admin' },
 ];
 
 // Collapsible section for Platform Settings
@@ -131,13 +139,14 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const allowedPages = PLATFORM_ROLE_PAGES[resolved] || PLATFORM_ROLE_PAGES.platform_owner || [];
   const canViewPage = (pageId: string) => allowedPages.includes(pageId);
 
-  // Filter sections by allowed pages
+  // Filter sections by allowed pages (external links always visible if parent is)
   const visibleUserMgmtChildren = USER_MANAGEMENT_CHILDREN.filter(c => canViewPage(c.id));
   const visibleFuelChildren = FUEL_MANAGEMENT_CHILDREN.filter(c => canViewPage(c.id));
   const visibleTollChildren = TOLL_MANAGEMENT_CHILDREN.filter(c => canViewPage(c.id));
   const visibleVehicleDbChildren = VEHICLE_DATABASE_CHILDREN.filter(c => canViewPage(c.id));
-  const visibleRoamDashChildren = ROAM_DASH_CHILDREN.filter(c => canViewPage(c.id));
-  const visibleRoamRidesChildren = ROAM_RIDES_CHILDREN.filter(c => canViewPage(c.id));
+  const visibleRoamDashChildren = ROAM_DASH_CHILDREN.filter(c => canViewPage(c.id) || c.href);
+  const visibleRoamRidesChildren = ROAM_RIDES_CHILDREN.filter(c => canViewPage(c.id) || c.href);
+  const visibleRoamDriverChildren = ROAM_DRIVER_CHILDREN.filter(c => canViewPage(c.id) || c.href);
   const visibleSettingsChildren = SETTINGS_CHILDREN.filter(c => canViewPage(c.id));
   const visibleApiCenterChildren = API_CENTER_CHILDREN.filter(c => canViewPage(c.id));
   const canViewDbManagement = canViewPage('db-management');
@@ -150,10 +159,12 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const [tollOpen, setTollOpen] = useState(isTollChild);
   const isVehicleDbChild = visibleVehicleDbChildren.some(c => c.id === currentPage);
   const [vehicleDbOpen, setVehicleDbOpen] = useState(isVehicleDbChild);
-  const isRoamDashChild = visibleRoamDashChildren.some(c => c.id === currentPage);
+  const isRoamDashChild = visibleRoamDashChildren.some(c => c.id === currentPage && !c.href);
   const [roamDashOpen, setRoamDashOpen] = useState(isRoamDashChild);
-  const isRoamRidesChild = visibleRoamRidesChildren.some(c => c.id === currentPage);
+  const isRoamRidesChild = visibleRoamRidesChildren.some(c => c.id === currentPage && !c.href);
   const [roamRidesOpen, setRoamRidesOpen] = useState(isRoamRidesChild);
+  const isRoamDriverChild = visibleRoamDriverChildren.some(c => c.id === currentPage && !c.href);
+  const [roamDriverOpen, setRoamDriverOpen] = useState(isRoamDriverChild);
   const isSettingsChild = visibleSettingsChildren.some(c => c.id === currentPage);
   const [settingsOpen, setSettingsOpen] = useState(isSettingsChild);
   const isApiCenterChild = visibleApiCenterChildren.some(c => c.id === currentPage);
@@ -174,11 +185,14 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
     if (visibleVehicleDbChildren.some(c => c.id === currentPage)) {
       setVehicleDbOpen(true);
     }
-    if (visibleRoamDashChildren.some(c => c.id === currentPage)) {
+    if (visibleRoamDashChildren.some(c => c.id === currentPage && !c.href)) {
       setRoamDashOpen(true);
     }
-    if (visibleRoamRidesChildren.some(c => c.id === currentPage)) {
+    if (visibleRoamRidesChildren.some(c => c.id === currentPage && !c.href)) {
       setRoamRidesOpen(true);
+    }
+    if (visibleRoamDriverChildren.some(c => c.id === currentPage && !c.href)) {
+      setRoamDriverOpen(true);
     }
     if (visibleSettingsChildren.some(c => c.id === currentPage)) {
       setSettingsOpen(true);
@@ -484,7 +498,21 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
               <div className="ml-4 mt-1 space-y-0.5 border-l border-slate-800 pl-2">
                 {visibleRoamDashChildren.map(child => {
                   const ChildIcon = child.icon;
-                  const active = currentPage === child.id;
+                  const active = currentPage === child.id && !child.href;
+                  if (child.href) {
+                    return (
+                      <a
+                        key={child.id}
+                        href={child.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-slate-500 hover:text-white hover:bg-slate-800"
+                      >
+                        <ChildIcon className="w-4 h-4 shrink-0" />
+                        <span className="truncate">{child.label}</span>
+                      </a>
+                    );
+                  }
                   return (
                     <button
                       key={child.id}
@@ -532,7 +560,83 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
               <div className="ml-4 mt-1 space-y-0.5 border-l border-slate-800 pl-2">
                 {visibleRoamRidesChildren.map(child => {
                   const ChildIcon = child.icon;
-                  const active = currentPage === child.id;
+                  const active = currentPage === child.id && !child.href;
+                  if (child.href) {
+                    return (
+                      <a
+                        key={child.id}
+                        href={child.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-slate-500 hover:text-white hover:bg-slate-800"
+                      >
+                        <ChildIcon className="w-4 h-4 shrink-0" />
+                        <span className="truncate">{child.label}</span>
+                      </a>
+                    );
+                  }
+                  return (
+                    <button
+                      key={child.id}
+                      onClick={() => handleNav(child.id)}
+                      className={`
+                        w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                        ${active
+                          ? 'bg-amber-500/10 text-amber-300'
+                          : 'text-slate-500 hover:text-white hover:bg-slate-800'
+                        }
+                      `}
+                    >
+                      <ChildIcon className="w-4 h-4 shrink-0" />
+                      <span className="truncate">{child.label}</span>
+                      {active && <ChevronRight className="w-3 h-3 ml-auto text-amber-400/60" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          )}
+
+          {/* Roam Driver collapsible section */}
+          {visibleRoamDriverChildren.length > 0 && (
+          <div>
+            <button
+              onClick={() => setRoamDriverOpen(!roamDriverOpen)}
+              className={`
+                w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+                ${isRoamDriverChild
+                  ? 'bg-amber-500/15 text-amber-300'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                }
+              `}
+            >
+              <Car className="w-4.5 h-4.5 shrink-0" />
+              <span className="truncate">Roam Driver</span>
+              {roamDriverOpen
+                ? <ChevronDown className="w-3.5 h-3.5 ml-auto text-slate-500" />
+                : <ChevronRight className="w-3.5 h-3.5 ml-auto text-slate-500" />
+              }
+            </button>
+            {roamDriverOpen && (
+              <div className="ml-4 mt-1 space-y-0.5 border-l border-slate-800 pl-2">
+                {visibleRoamDriverChildren.map(child => {
+                  const ChildIcon = child.icon;
+                  const active = currentPage === child.id && !child.href;
+                  if (child.href) {
+                    return (
+                      <a
+                        key={child.id}
+                        href={child.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-slate-500 hover:text-white hover:bg-slate-800"
+                      >
+                        <ChildIcon className="w-4 h-4 shrink-0" />
+                        <span className="truncate">{child.label}</span>
+                      </a>
+                    );
+                  }
                   return (
                     <button
                       key={child.id}

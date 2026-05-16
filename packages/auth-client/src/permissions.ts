@@ -24,6 +24,13 @@ export type Role =
   | 'platform_owner'
   | 'platform_support'
   | 'platform_analyst'
+  // Product admin roles (product-specific admin access)
+  | 'dash_admin'
+  | 'dash_ops'
+  | 'rides_admin'
+  | 'rides_ops'
+  | 'driver_admin'
+  | 'driver_ops'
   // Customer-level (Fleet Manager side)
   | 'fleet_owner'
   | 'fleet_manager'
@@ -68,6 +75,44 @@ export const ROLE_META: Record<Role, RoleMeta> = {
     level: 500,
     label: 'Platform Analyst',
     description: 'Read-only analytics across all customers.',
+    tier: 'platform',
+  },
+
+  // Product Admin roles
+  dash_admin: {
+    level: 800,
+    label: 'Dash Admin',
+    description: 'Full access to Roam Dash admin — merchants, orders, payouts.',
+    tier: 'platform',
+  },
+  dash_ops: {
+    level: 600,
+    label: 'Dash Operations',
+    description: 'Manage merchants and orders in Roam Dash.',
+    tier: 'platform',
+  },
+  rides_admin: {
+    level: 800,
+    label: 'Rides Admin',
+    description: 'Full access to Roam Rides admin — fares, surge, ride ops.',
+    tier: 'platform',
+  },
+  rides_ops: {
+    level: 600,
+    label: 'Rides Operations',
+    description: 'Manage fare rules and surge pricing.',
+    tier: 'platform',
+  },
+  driver_admin: {
+    level: 800,
+    label: 'Driver Admin',
+    description: 'Full access to Driver admin — compliance, support.',
+    tier: 'platform',
+  },
+  driver_ops: {
+    level: 600,
+    label: 'Driver Operations',
+    description: 'Manage driver compliance and support tools.',
     tier: 'platform',
   },
 
@@ -297,6 +342,14 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   platform_owner: [...ALL_CUSTOMER_PERMISSIONS, 'vehicles.bypass_catalog_gate'],
   platform_support: [],
   platform_analyst: [],
+
+  // Product Admin roles — operate in their own admin portals, not Fleet UI
+  dash_admin: [],
+  dash_ops: [],
+  rides_admin: [],
+  rides_ops: [],
+  driver_admin: [],
+  driver_ops: [],
 
   // Customer
   fleet_owner: ALL_CUSTOMER_PERMISSIONS,

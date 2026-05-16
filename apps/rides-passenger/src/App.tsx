@@ -7,6 +7,11 @@ import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import RidePage from './pages/RidePage';
 import { WrongRidesSurfaceGate } from './components/auth/WrongRidesSurfaceGate';
+import { RidesAdminLayout } from './admin/RidesAdminLayout';
+import { RidesAdminDashboard } from './admin/pages/RidesAdminDashboard';
+import { FareRulesPage } from './admin/pages/FareRulesPage';
+import { SurgePage } from './admin/pages/SurgePage';
+import { RideOperationsPage } from './admin/pages/RideOperationsPage';
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -66,6 +71,15 @@ export default function App() {
 
   return (
     <Routes>
+      {/* Admin routes */}
+      <Route path="/admin" element={<RidesAdminLayout />}>
+        <Route index element={<RidesAdminDashboard />} />
+        <Route path="fare-rules" element={<FareRulesPage />} />
+        <Route path="surge" element={<SurgePage />} />
+        <Route path="rides" element={<RideOperationsPage />} />
+      </Route>
+
+      {/* Passenger app routes */}
       <Route path="/login" element={<LoginPage session={session} />} />
       <Route
         path="/"

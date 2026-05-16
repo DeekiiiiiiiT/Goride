@@ -10,6 +10,7 @@ import { DriverGoogleSignupWizard } from './components/onboarding/DriverGoogleSi
 import { DriverShell } from './components/layout/DriverShell';
 import { AppErrorBoundary } from './components/layout/AppErrorBoundary';
 import { needsGoogleExtendedSignup } from './utils/googleDriverSignup';
+import { DriverAdminPortal } from './admin/DriverAdminPortal';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -75,6 +76,11 @@ function AppContent() {
 }
 
 export default function App() {
+  // Check if we're on the admin path
+  if (window.location.pathname.startsWith('/admin')) {
+    return <DriverAdminPortal />;
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>

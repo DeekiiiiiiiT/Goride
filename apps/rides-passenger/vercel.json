@@ -4,5 +4,8 @@
   "buildCommand": "cd ../.. && pnpm --filter @roam/rides-passenger build",
   "outputDirectory": "dist",
   "framework": null,
-  "rewrites": [{ "source": "/(.*)", "destination": "/" }]
+  "rewrites": [
+    { "source": "/admin/(.*)", "destination": "/" },
+    { "source": "/(.*)", "destination": "/" }
+  ]
 }
