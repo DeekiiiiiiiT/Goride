@@ -3,8 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ArrowLeft, Loader2 } from 'lucide-react';
-import type { RideRequestStatus } from '@roam/types';
-import { formatMoneyMinor } from '@roam/types';
+import type { RideRequestStatus } from '@roam/types/rides';
+import { formatMoneyMinor } from '@roam/types/rides';
 import { ridesCancelRequest, ridesGetRequest } from '@/services/ridesEdge';
 
 function statusLabel(s: RideRequestStatus): string {

@@ -5,7 +5,7 @@ import type {
   DriverOfferRow,
   FareQuoteResponse,
   RideRequestRow,
-} from '@roam/types';
+} from '@roam/types/rides';
 
 async function ridesHeaders(): Promise<HeadersInit> {
   const { data: { session } } = await supabase.auth.getSession();

@@ -9,6 +9,7 @@ export default defineConfig({
     extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@roam/types/rides': path.resolve(__dirname, '../../packages/types/src/rides.ts'),
     },
   },
   build: {

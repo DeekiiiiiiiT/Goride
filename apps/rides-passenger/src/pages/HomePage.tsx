@@ -3,8 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@roam/auth-client';
 import { toast } from 'sonner';
 import { CircleDot, LogOut, MapPin, Navigation } from 'lucide-react';
-import type { FareQuoteResponse } from '@roam/types';
-import { formatMoneyMinor } from '@roam/types';
+import type { FareQuoteResponse } from '@roam/types/rides';
+import { formatMoneyMinor } from '@roam/types/rides';
 import { RoamPlaceField } from '@/components/RoamPlaceField';
 import { ridesCreateRequest, ridesQuote } from '@/services/ridesEdge';
 
