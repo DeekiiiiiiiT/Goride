@@ -1,0 +1,299 @@
+/* Roam Rides admin login — blue/violet theme (distinct from Dash amber) */
+
+body:has(.rides-admin-login) {
+  background-color: #0c1222;
+}
+
+@keyframes rides-admin-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.rides-admin-login .animate-spin {
+  animation: rides-admin-spin 1s linear infinite;
+}
+
+.rides-admin-login {
+  min-height: 100vh;
+  display: flex;
+  font-family: var(--font-sans, 'Inter', system-ui, -apple-system, sans-serif);
+  background: #0c1222;
+  color: #f8fafc;
+}
+
+.rides-admin-login__brand {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  background: linear-gradient(145deg, #2563eb 0%, #4f46e5 32%, #1e1b4b 68%, #0c1222 100%);
+  border-right: 1px solid #312e81;
+  position: relative;
+  overflow: hidden;
+}
+
+.rides-admin-login__brand::before {
+  content: '';
+  position: absolute;
+  top: -20%;
+  right: -10%;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: rgba(56, 189, 248, 0.2);
+  filter: blur(60px);
+}
+
+.rides-admin-login__brand::after {
+  content: '';
+  position: absolute;
+  bottom: -15%;
+  left: -5%;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  background: rgba(129, 140, 248, 0.18);
+  filter: blur(50px);
+}
+
+.rides-admin-login__brand-inner {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  max-width: 22rem;
+}
+
+.rides-admin-login__logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 4rem;
+  height: 4rem;
+  margin-bottom: 1.5rem;
+  border-radius: 1rem;
+  background: rgba(56, 189, 248, 0.2);
+  border: 1px solid rgba(125, 211, 252, 0.35);
+  color: #7dd3fc;
+}
+
+.rides-admin-login__title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #fff;
+  margin: 0 0 0.25rem;
+}
+
+.rides-admin-login__subtitle {
+  font-size: 0.875rem;
+  color: #a5b4fc;
+  margin: 0 0 1.25rem;
+  font-weight: 500;
+}
+
+.rides-admin-login__tagline {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: #cbd5e1;
+  margin: 0;
+}
+
+.rides-admin-login__main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background: linear-gradient(180deg, #0c1222 0%, #1e1b4b 100%);
+}
+
+.rides-admin-login__mobile-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  justify-content: center;
+  margin-bottom: 2rem;
+}
+
+.rides-admin-login__mobile-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.75rem;
+  background: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+}
+
+.rides-admin-login__card {
+  width: 100%;
+  max-width: 26rem;
+  padding: 2rem;
+  border-radius: 1rem;
+  background: #1e1b4b;
+  border: 1px solid #3730a3;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+.rides-admin-login__card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.rides-admin-login__card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.5rem;
+  background: rgba(99, 102, 241, 0.25);
+  color: #a5b4fc;
+}
+
+.rides-admin-login__card-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #fff;
+  margin: 0;
+}
+
+.rides-admin-login__card-desc {
+  font-size: 0.875rem;
+  color: #94a3b8;
+  margin: 0.125rem 0 0;
+}
+
+.rides-admin-login__error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.rides-admin-login__field {
+  margin-bottom: 1rem;
+}
+
+.rides-admin-login__label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #c7d2fe;
+  margin-bottom: 0.375rem;
+}
+
+.rides-admin-login__input {
+  display: block;
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: #f8fafc !important;
+  background-color: #0f172a !important;
+  border: 1px solid #4338ca;
+  border-radius: 0.5rem;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  -webkit-text-fill-color: #f8fafc;
+}
+
+.rides-admin-login__input::placeholder {
+  color: #64748b;
+}
+
+.rides-admin-login__input:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.3);
+}
+
+.rides-admin-login__input:-webkit-autofill,
+.rides-admin-login__input:-webkit-autofill:hover,
+.rides-admin-login__input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px #0f172a inset !important;
+  -webkit-text-fill-color: #f8fafc !important;
+  caret-color: #f8fafc;
+}
+
+.rides-admin-login__submit {
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.625rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #38bdf8 0%, #6366f1 100%);
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: filter 0.15s, transform 0.1s;
+}
+
+.rides-admin-login__submit:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.rides-admin-login__submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.rides-admin-login__footer {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #3730a3;
+  text-align: center;
+}
+
+.rides-admin-login__footer p {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin: 0 0 0.5rem;
+}
+
+.rides-admin-login__footer a {
+  color: #7dd3fc;
+  text-decoration: none;
+}
+
+.rides-admin-login__footer a:hover {
+  color: #bae6fd;
+  text-decoration: underline;
+}
+
+.rides-admin-login__back {
+  display: inline-block;
+  font-size: 0.875rem;
+  color: #94a3b8;
+  text-decoration: none;
+}
+
+.rides-admin-login__back:hover {
+  color: #e2e8f0;
+}
+
+@media (min-width: 1024px) {
+  .rides-admin-login__brand {
+    display: flex;
+  }
+
+  .rides-admin-login__mobile-brand {
+    display: none;
+  }
+}

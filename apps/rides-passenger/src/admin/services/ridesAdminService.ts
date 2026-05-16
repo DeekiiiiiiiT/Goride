@@ -2,10 +2,9 @@
  * Rides Admin Service - API client for fare rules and surge pricing
  */
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
 
-const RIDES_BASE = `${SUPABASE_URL}/functions/v1/rides`;
+const RIDES_BASE = API_ENDPOINTS.rides;
 
 export interface FareRuleAdminDto {
   id: string;
@@ -50,15 +49,24 @@ export interface SurgeCellAdminRow {
 function headers(accessToken: string, contentType?: string): HeadersInit {
   const h: Record<string, string> = {
     Authorization: `Bearer ${accessToken}`,
-    apikey: SUPABASE_ANON_KEY,
+    apikey: publicAnonKey,
   };
   if (contentType) h['Content-Type'] = contentType;
   return h;
 }
 
 async function parseError(res: Response): Promise<string> {
-  const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
-  return body.message || body.error || `HTTP ${res.status}`;
+  const text = await res.text();
+  const trimmed = text.trim();
+  if (trimmed.startsWith('<')) {
+    return 'Server returned HTML instead of JSON. Check that the rides Edge function is deployed.';
+  }
+  try {
+    const body = trimmed ? (JSON.parse(trimmed) as { error?: string; message?: string }) : {};
+    return body.message || body.error || `HTTP ${res.status}`;
+  } catch {
+    return `HTTP ${res.status}`;
+  }
 }
 
 export async function listFareRules(

@@ -55,7 +55,7 @@ export function DashAdminPortal() {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    window.location.href = '/';
+    window.location.href = '/admin';
   };
 
   if (loading) {

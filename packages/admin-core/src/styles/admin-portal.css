@@ -1,7 +1,9 @@
 /* Portal shell — complements Tailwind; ensures dark admin chrome when embedded in customer app */
 
 body:has(.dash-admin-portal),
-body:has(.dash-admin-login) {
+body:has(.dash-admin-login),
+body:has(.rides-admin-login),
+body:has(.rides-admin-portal) {
   background-color: #020617;
   color: #f8fafc;
 }

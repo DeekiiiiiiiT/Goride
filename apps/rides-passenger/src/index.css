@@ -2,6 +2,8 @@
 
 @source './**/*.{js,ts,jsx,tsx}';
 @source '../../../packages/ui/src/**/*.{js,ts,jsx,tsx}';
+@import "../../../packages/admin-core/src/styles/rides-admin-login.css";
+@import "../../../packages/admin-core/src/styles/admin-portal.css";
 
 :root {
   --font-sans: system-ui, -apple-system, "Segoe UI", "Inter", sans-serif;
@@ -26,10 +28,10 @@ body {
   min-height: 100dvh;
 }
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
-  margin: 0;
-  padding: 0;
 }
 
 /* Safe areas: notched phones & tablets */
