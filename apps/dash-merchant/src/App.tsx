@@ -15,11 +15,14 @@ import { DashAdminPortal } from './admin/DashAdminPortal';
 type Page = 'dashboard' | 'orders' | 'menu' | 'settings' | 'login' | 'onboarding';
 
 export default function App() {
-  // Check if we're on the admin path
   if (window.location.pathname.startsWith('/admin')) {
     return <DashAdminPortal />;
   }
 
+  return <DashMerchantApp />;
+}
+
+function DashMerchantApp() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');

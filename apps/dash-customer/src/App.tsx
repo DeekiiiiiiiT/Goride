@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
 import { LogOut } from 'lucide-react';
+import { DashAdminPortal } from '@dash-admin/DashAdminPortal';
 import HomePage from './pages/HomePage';
 import RestaurantPage from './pages/RestaurantPage';
 import CartPage from './pages/CartPage';
@@ -13,7 +14,16 @@ import { CartProvider } from './hooks/useCart';
 
 type Page = 'home' | 'restaurant' | 'cart' | 'orders' | 'tracking' | 'login' | 'payment-callback-wipay' | 'payment-callback-paypal';
 
+/** Customer ordering app (roamdash.co). Admin lives at /admin on the same domain. */
 export default function App() {
+  if (window.location.pathname.startsWith('/admin')) {
+    return <DashAdminPortal />;
+  }
+
+  return <DashCustomerApp />;
+}
+
+function DashCustomerApp() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState<Page>('home');

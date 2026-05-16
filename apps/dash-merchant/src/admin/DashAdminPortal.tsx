@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Toaster } from 'sonner';
 import { MerchantManager } from './pages/MerchantManager';
+import { AdminLoginForm } from './components/AdminLoginForm';
 
 type AdminPage = 'dashboard' | 'merchants' | 'orders';
 
@@ -68,20 +69,9 @@ export function DashAdminPortal() {
 
   if (!session) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-slate-200 p-8">
-        <div className="w-16 h-16 rounded-full bg-amber-500/15 flex items-center justify-center mb-4">
-          <ShieldAlert className="w-8 h-8 text-amber-400" />
-        </div>
-        <h1 className="text-xl font-semibold mb-2">Admin Login Required</h1>
-        <p className="text-slate-400 text-center max-w-md mb-6">
-          Please sign in with an admin account to access the Dash Admin Portal.
-        </p>
-        <a
-          href="/"
-          className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-medium"
-        >
-          Go to Login
-        </a>
+      <div className="dark min-h-screen flex items-center justify-center bg-slate-950 p-8">
+        <Toaster position="top-right" theme="dark" />
+        <AdminLoginForm />
       </div>
     );
   }
