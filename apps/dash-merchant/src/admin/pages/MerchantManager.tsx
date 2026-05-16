@@ -15,15 +15,6 @@ import {
 
 type TabId = 'all' | MerchantVerificationStatus;
 
-const TABS: { id: TabId; label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: 'pending', label: 'Pending' },
-  { id: 'in_review', label: 'In Review' },
-  { id: 'docs_requested', label: 'Docs Requested' },
-  { id: 'approved', label: 'Approved' },
-  { id: 'rejected', label: 'Rejected' },
-];
-
 function fmtRelative(iso: string | null | undefined): string {
   if (!iso) return '—';
   const diff = Date.now() - new Date(iso).getTime();
@@ -146,9 +137,8 @@ export function MerchantManager({ accessToken }: MerchantManagerProps) {
   );
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div className="dash-admin-page space-y-6">
+      <div className="dash-admin-page__header">
         <div>
           <p className="text-xs font-medium uppercase tracking-wider text-amber-400/90 mb-1">
             Merchants · Verification
@@ -174,6 +164,16 @@ export function MerchantManager({ accessToken }: MerchantManagerProps) {
       </div>
 
       <div className="dash-admin-stat-grid">
+        <button
+          type="button"
+          onClick={() => setTab('all')}
+          className={`dash-admin-stat-card text-left bg-slate-800/50 text-slate-200 border border-slate-600/50 ${
+            tab === 'all' ? 'ring-2 ring-white/25 shadow-lg' : ''
+          }`}
+        >
+          <div className="dash-admin-stat-card__label">All</div>
+          <div className="dash-admin-stat-card__value">{totalAcrossTabs}</div>
+        </button>
         {(
           [
             ['pending', 'Pending', 'pending'],
@@ -197,44 +197,13 @@ export function MerchantManager({ accessToken }: MerchantManagerProps) {
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-1 p-1 bg-slate-800/60 rounded-xl border border-slate-700/50">
-        {TABS.map((t) => {
-          const count =
-            t.id === 'all' ? totalAcrossTabs : counts[t.id as MerchantVerificationStatus] ?? 0;
-          const highlightPending = t.id === 'pending' && count > 0;
-          return (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                tab === t.id
-                  ? 'bg-amber-500/15 text-amber-300'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              {t.label}
-              <span
-                className={`text-[10px] px-1.5 py-0 h-4 flex items-center rounded-full ${
-                  highlightPending
-                    ? 'bg-amber-500 text-amber-950'
-                    : 'bg-slate-700 text-slate-300'
-                }`}
-              >
-                {count}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Search */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+      <div className="dash-admin-search">
+        <Search size={16} />
         <input
           placeholder="Search name, email, phone, address..."
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
-          className="w-full pl-9 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+          aria-label="Search merchants"
         />
       </div>
 

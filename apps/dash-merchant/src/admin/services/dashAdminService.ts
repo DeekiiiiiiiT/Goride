@@ -2,10 +2,9 @@
  * Dash Admin Service - API client for merchant verification and management
  */
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
 
-const DELIVERY_BASE = `${SUPABASE_URL}/functions/v1/delivery`;
+const DELIVERY_BASE = API_ENDPOINTS.delivery;
 
 export type MerchantVerificationStatus =
   | 'pending'
@@ -96,10 +95,35 @@ export interface MerchantDetailResponse {
 function headers(accessToken: string, contentType?: string): HeadersInit {
   const h: Record<string, string> = {
     Authorization: `Bearer ${accessToken}`,
-    apikey: SUPABASE_ANON_KEY,
+    apikey: publicAnonKey,
   };
   if (contentType) h['Content-Type'] = contentType;
   return h;
+}
+
+async function parseJsonResponse<T>(res: Response): Promise<T> {
+  const text = await res.text();
+  const trimmed = text.trim();
+
+  if (trimmed.startsWith('<')) {
+    throw new Error(
+      'Server returned HTML instead of JSON. Check that the delivery Edge function is deployed and API env vars are set.'
+    );
+  }
+
+  let body: unknown;
+  try {
+    body = trimmed ? JSON.parse(trimmed) : {};
+  } catch {
+    throw new Error('Invalid JSON response from server');
+  }
+
+  if (!res.ok) {
+    const err = body as { error?: string; message?: string };
+    throw new Error(err.error || err.message || `HTTP ${res.status}`);
+  }
+
+  return body as T;
 }
 
 export async function listMerchants(
@@ -121,11 +145,7 @@ export async function listMerchants(
     headers: headers(accessToken),
   });
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `HTTP ${res.status}`);
-  }
-  return res.json();
+  return parseJsonResponse<ListMerchantsResponse>(res);
 }
 
 export async function getMerchantDetail(
@@ -136,11 +156,7 @@ export async function getMerchantDetail(
     headers: headers(accessToken),
   });
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `HTTP ${res.status}`);
-  }
-  return res.json();
+  return parseJsonResponse<MerchantDetailResponse>(res);
 }
 
 export async function changeMerchantStatus(
@@ -158,11 +174,7 @@ export async function changeMerchantStatus(
     body: JSON.stringify(payload),
   });
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `HTTP ${res.status}`);
-  }
-  return res.json();
+  return parseJsonResponse<{ merchant: DashMerchant }>(res);
 }
 
 export async function getMerchantStats(
@@ -172,9 +184,5 @@ export async function getMerchantStats(
     headers: headers(accessToken),
   });
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `HTTP ${res.status}`);
-  }
-  return res.json();
+  return parseJsonResponse<{ counts: MerchantStatusCounts; total: number }>(res);
 }

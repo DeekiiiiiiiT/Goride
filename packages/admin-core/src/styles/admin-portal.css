@@ -56,7 +56,7 @@ body:has(.dash-admin-login) {
 
 @media (min-width: 1024px) {
   .dash-admin-stat-grid {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 }
 
@@ -114,4 +114,115 @@ body:has(.dash-admin-login) {
   background: linear-gradient(145deg, rgba(244, 63, 94, 0.18), rgba(225, 29, 72, 0.08));
   border-color: rgba(244, 63, 94, 0.35);
   color: #fda4af;
+}
+
+/* Page layout — explicit spacing (survives if Tailwind utilities are missing) */
+.dash-admin-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.dash-admin-page__header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .dash-admin-page__header {
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: space-between;
+  }
+}
+
+.dash-admin-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  padding: 0.375rem;
+  border-radius: 0.75rem;
+  background: rgba(30, 41, 59, 0.65);
+  border: 1px solid #334155;
+}
+
+.dash-admin-filters button {
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.dash-admin-search {
+  position: relative;
+  width: 100%;
+  max-width: 28rem;
+}
+
+.dash-admin-search svg {
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: #94a3b8;
+}
+
+.dash-admin-search input {
+  width: 100%;
+  padding: 0.625rem 1rem 0.625rem 2.25rem;
+  border-radius: 0.5rem;
+  border: 1px solid #475569;
+  background: #1e293b;
+  font-size: 0.875rem;
+}
+
+/* Shell header — prevent title/back link overlap */
+.dash-admin-portal .dash-admin-shell-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 4rem;
+  padding: 0 1rem;
+  flex-shrink: 0;
+  border-bottom: 1px solid #1e293b;
+  background: rgba(15, 23, 42, 0.9);
+}
+
+@media (min-width: 1024px) {
+  .dash-admin-portal .dash-admin-shell-header {
+    padding: 0 1.5rem;
+  }
+}
+
+.dash-admin-portal .dash-admin-shell-header h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.dash-admin-portal .dash-admin-shell-header a {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.dash-admin-portal .dash-admin-shell-header a:hover {
+  color: #e2e8f0;
+}
+
+.dash-admin-portal .dash-admin-shell-main {
+  flex: 1;
+  overflow: auto;
+  padding: 1rem;
+}
+
+@media (min-width: 1024px) {
+  .dash-admin-portal .dash-admin-shell-main {
+    padding: 2rem;
+  }
 }

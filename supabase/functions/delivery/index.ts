@@ -12,6 +12,7 @@ import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { cors } from "https://deno.land/x/hono@v4.3.11/middleware.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { jwtPrimaryRole } from "../_shared/authEdge.ts";
+import { requireProductAdmin } from "../_shared/productAdmin.ts";
 
 const app = new Hono().basePath("/delivery");
 
@@ -981,7 +982,7 @@ app.post("/orders/:id/accept-delivery", async (c) => {
 
 // Counts of merchants grouped by verification_status
 app.get("/admin/merchants/stats", async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireProductAdmin(c, "dash");
   if (admin instanceof Response) return admin;
   const sb = getServiceSupabase();
   const { data, error } = await sb
@@ -1005,7 +1006,7 @@ app.get("/admin/merchants/stats", async (c) => {
 
 // List merchants with filter, search, pagination
 app.get("/admin/merchants", async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireProductAdmin(c, "dash");
   if (admin instanceof Response) return admin;
 
   const sb = getServiceSupabase();
@@ -1060,7 +1061,7 @@ app.get("/admin/merchants", async (c) => {
 
 // Get single merchant with hours, owner email, and audit history
 app.get("/admin/merchants/:id", async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireProductAdmin(c, "dash");
   if (admin instanceof Response) return admin;
   const { id } = c.req.param();
 
@@ -1112,7 +1113,7 @@ app.get("/admin/merchants/:id", async (c) => {
 
 // Change verification status (the main admin action)
 app.post("/admin/merchants/:id/status", async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireProductAdmin(c, "dash");
   if (admin instanceof Response) return admin;
   const { id } = c.req.param();
   const body = await c.req.json().catch(() => ({}));

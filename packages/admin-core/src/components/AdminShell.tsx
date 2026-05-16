@@ -71,7 +71,7 @@ export function AdminShell({
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top header bar */}
-        <header className="h-16 bg-slate-900/50 border-b border-slate-800 flex items-center px-4 lg:px-6 shrink-0 backdrop-blur-sm">
+        <header className="dash-admin-shell-header h-16 bg-slate-900/50 border-b border-slate-800 flex items-center px-4 lg:px-6 shrink-0 backdrop-blur-sm">
           {/* Mobile hamburger */}
           <button
             onClick={() => setMobileOpen(true)}
@@ -95,7 +95,7 @@ export function AdminShell({
         </header>
 
         {/* Content area */}
-        <main className="flex-1 overflow-auto p-4 lg:p-8">
+        <main className="dash-admin-shell-main flex-1 overflow-auto p-4 lg:p-8">
           <div className="mx-auto max-w-7xl">{children}</div>
         </main>
       </div>
