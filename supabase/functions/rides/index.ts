@@ -646,6 +646,6 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
   return c.json({ ride: fresh });
 });
 
-registerAdminRoutes(app, { svc, logLine });
+registerAdminRoutes(app, { logLine });
 
 Deno.serve(app.fetch);
