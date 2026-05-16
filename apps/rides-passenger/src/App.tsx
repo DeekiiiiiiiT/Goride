@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
 import { supabase, shouldSkipOauthSurfaceRolePatch, isRidesPassengerUiBlockedRole } from '@roam/auth-client';
 import { PASSENGER_OAUTH_INTENT_KEY, PASSENGER_OAUTH_INTENT_VALUE } from './utils/passengerAuthSignup';
@@ -14,6 +14,8 @@ import { SurgePage } from './admin/pages/SurgePage';
 import { RideOperationsPage } from './admin/pages/RideOperationsPage';
 
 export default function App() {
+  const location = useLocation();
+  const isAdminPath = location.pathname.startsWith('/admin');
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -58,7 +60,12 @@ export default function App() {
     );
   }
 
-  if (session?.user && isRidesPassengerUiBlockedRole(session.user.user_metadata?.role as string | undefined)) {
+  const role = session?.user?.user_metadata?.role as string | undefined;
+  if (
+    session?.user &&
+    !isAdminPath &&
+    isRidesPassengerUiBlockedRole(role)
+  ) {
     return (
       <WrongRidesSurfaceGate
         onSignOut={async () => {
