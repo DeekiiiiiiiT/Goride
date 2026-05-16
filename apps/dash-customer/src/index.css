@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@source "../dash-merchant/src/admin";
 
 :root {
   --color-primary: #10b981;

@@ -69,10 +69,10 @@ export function DashAdminPortal() {
 
   if (!session) {
     return (
-      <div className="dark min-h-screen flex items-center justify-center bg-slate-950 p-8">
+      <>
         <Toaster position="top-right" theme="dark" />
         <AdminLoginForm />
-      </div>
+      </>
     );
   }
 
