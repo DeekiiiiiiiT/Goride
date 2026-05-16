@@ -5,6 +5,7 @@
   "types": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./styles/admin-login.css": "./src/styles/admin-login.css",
     "./*": "./src/*"
   },
   "peerDependencies": {

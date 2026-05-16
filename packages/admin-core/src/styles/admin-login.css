@@ -1,0 +1,299 @@
+/* Shared admin login — plain CSS so it works in apps that don't scan admin Tailwind classes */
+
+body:has(.dash-admin-login) {
+  background-color: #0f172a;
+}
+
+@keyframes dash-admin-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.dash-admin-login .animate-spin {
+  animation: dash-admin-spin 1s linear infinite;
+}
+
+.dash-admin-login {
+  min-height: 100vh;
+  display: flex;
+  font-family: var(--font-sans, 'Inter', system-ui, -apple-system, sans-serif);
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+.dash-admin-login__brand {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  background: linear-gradient(145deg, #d97706 0%, #b45309 28%, #1e293b 72%, #0f172a 100%);
+  border-right: 1px solid #334155;
+  position: relative;
+  overflow: hidden;
+}
+
+.dash-admin-login__brand::before {
+  content: '';
+  position: absolute;
+  top: -20%;
+  right: -10%;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: rgba(251, 191, 36, 0.15);
+  filter: blur(60px);
+}
+
+.dash-admin-login__brand::after {
+  content: '';
+  position: absolute;
+  bottom: -15%;
+  left: -5%;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  background: rgba(16, 185, 129, 0.12);
+  filter: blur(50px);
+}
+
+.dash-admin-login__brand-inner {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  max-width: 22rem;
+}
+
+.dash-admin-login__logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 4rem;
+  height: 4rem;
+  margin-bottom: 1.5rem;
+  border-radius: 1rem;
+  background: rgba(251, 191, 36, 0.25);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  color: #fcd34d;
+}
+
+.dash-admin-login__title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #fff;
+  margin: 0 0 0.25rem;
+}
+
+.dash-admin-login__subtitle {
+  font-size: 0.875rem;
+  color: #fcd34d;
+  margin: 0 0 1.25rem;
+  font-weight: 500;
+}
+
+.dash-admin-login__tagline {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: #cbd5e1;
+  margin: 0;
+}
+
+.dash-admin-login__main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+}
+
+.dash-admin-login__mobile-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  justify-content: center;
+  margin-bottom: 2rem;
+}
+
+.dash-admin-login__mobile-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.75rem;
+  background: rgba(251, 191, 36, 0.2);
+  color: #fbbf24;
+}
+
+.dash-admin-login__card {
+  width: 100%;
+  max-width: 26rem;
+  padding: 2rem;
+  border-radius: 1rem;
+  background: #1e293b;
+  border: 1px solid #334155;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.45);
+}
+
+.dash-admin-login__card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.dash-admin-login__card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.5rem;
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+}
+
+.dash-admin-login__card-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #fff;
+  margin: 0;
+}
+
+.dash-admin-login__card-desc {
+  font-size: 0.875rem;
+  color: #94a3b8;
+  margin: 0.125rem 0 0;
+}
+
+.dash-admin-login__error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.dash-admin-login__field {
+  margin-bottom: 1rem;
+}
+
+.dash-admin-login__label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #cbd5e1;
+  margin-bottom: 0.375rem;
+}
+
+.dash-admin-login__input {
+  display: block;
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: #f8fafc !important;
+  background-color: #0f172a !important;
+  border: 1px solid #475569;
+  border-radius: 0.5rem;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  -webkit-text-fill-color: #f8fafc;
+}
+
+.dash-admin-login__input::placeholder {
+  color: #64748b;
+}
+
+.dash-admin-login__input:focus {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25);
+}
+
+.dash-admin-login__input:-webkit-autofill,
+.dash-admin-login__input:-webkit-autofill:hover,
+.dash-admin-login__input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px #0f172a inset !important;
+  -webkit-text-fill-color: #f8fafc !important;
+  caret-color: #f8fafc;
+}
+
+.dash-admin-login__submit {
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.625rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #0f172a;
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: filter 0.15s, transform 0.1s;
+}
+
+.dash-admin-login__submit:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.dash-admin-login__submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.dash-admin-login__footer {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #334155;
+  text-align: center;
+}
+
+.dash-admin-login__footer p {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin: 0 0 0.5rem;
+}
+
+.dash-admin-login__footer a {
+  color: #fbbf24;
+  text-decoration: none;
+}
+
+.dash-admin-login__footer a:hover {
+  color: #fcd34d;
+  text-decoration: underline;
+}
+
+.dash-admin-login__back {
+  display: inline-block;
+  font-size: 0.875rem;
+  color: #94a3b8;
+  text-decoration: none;
+}
+
+.dash-admin-login__back:hover {
+  color: #e2e8f0;
+}
+
+@media (min-width: 1024px) {
+  .dash-admin-login__brand {
+    display: flex;
+  }
+
+  .dash-admin-login__mobile-brand {
+    display: none;
+  }
+}
