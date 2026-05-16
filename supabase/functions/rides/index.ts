@@ -13,6 +13,7 @@ import { jsonEdgeForbidden, ridesUserSurfaceRole } from "../_shared/authEdge.ts"
 import { buildFareQuote, gridCellKey } from "./fare/buildQuote.ts";
 import { haversineKm } from "./fare/routing.ts";
 import { quoteTokenHash, verifyQuoteToken } from "./fare/quoteToken.ts";
+import { registerAdminRoutes } from "./admin.ts";
 
 /** Match Supabase path prefix: .../functions/v1/rides/<route> → /rides/<route> */
 const app = new Hono().basePath("/rides");
@@ -644,5 +645,7 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
   const { data: fresh } = await db.from("ride_requests").select("*").eq("id", id).single();
   return c.json({ ride: fresh });
 });
+
+registerAdminRoutes(app, { svc, logLine });
 
 Deno.serve(app.fetch);

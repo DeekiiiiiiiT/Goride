@@ -9,4 +9,5 @@ export const API_ENDPOINTS = {
   ai: `${BASE_URL}/make-server-37f42386`,
   admin: `${BASE_URL}/make-server-37f42386`,
   delivery: `${BASE_URL}/delivery`,
+  rides: `${BASE_URL}/rides`,
 };

@@ -54,7 +54,7 @@ Canonical statuses (`rides.ride_requests.status`):
 
 - One active row per **`(city, vehicle_type)`** (MVP city: **`jamaica`**, vehicle: **`standard`**).
 - Amounts in **minor units** (JMD cents). Columns: `base_fare_minor`, `price_per_km_minor`, `price_per_min_minor`, `booking_fee_minor`, `min_fare_minor`, `currency`.
-- Ops can edit via Supabase Table Editor — see [`FARE_OPS.md`](./FARE_OPS.md).
+- Ops can edit via **Super Admin → Roam Rides → Fare rules** (preferred) or Table Editor — see [`FARE_OPS.md`](./FARE_OPS.md).
 
 ### Route distance & time
 
@@ -119,7 +119,26 @@ Base URL: `https://<project-ref>.supabase.co/functions/v1/rides`
 
 Headers (browser): `Authorization: Bearer <JWT>`, `apikey: <anon>`, `Content-Type: application/json`
 
-### Rider
+### 7.1 Platform admin (Super Admin)
+
+Requires platform role (`platform_owner`, `platform_support`, `superadmin`, or `admin` in JWT metadata). Money fields in JSON use **major units** (dollars); DB stores minor (cents). Audit: `rides.audit_events` (`admin_fare_rule_*`, `admin_surge_cell_*`).
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/admin/fare-rules` | List all fare rules |
+| GET | `/admin/fare-rules/:id` | Single rule |
+| POST | `/admin/fare-rules` | Create rule |
+| PATCH | `/admin/fare-rules/:id` | Update rule |
+| POST | `/admin/fare-rules/:id/duplicate` | Clone rule |
+| GET | `/admin/surge-cells` | Paginated list (`search`, `page`, `limit`) |
+| GET | `/admin/surge-cells/:cellKey` | Single cell |
+| PATCH | `/admin/surge-cells/:cellKey` | Set multiplier (1.0–3.0) |
+| POST | `/admin/surge-cells/:cellKey/reset` | Clear `open_requests`; optional reset multiplier |
+| POST | `/admin/surge-cells/reset-all` | Bulk reset (platform owner / superadmin) |
+
+### 7.2 Rider & driver (`/v1/*`)
+
+#### Rider
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -128,7 +147,7 @@ Headers (browser): `Authorization: Bearer <JWT>`, `apikey: <anon>`, `Content-Typ
 | GET | `/v1/requests/:id` | Ride detail + reconcile matching waves / expire offers. |
 | POST | `/v1/requests/:id/cancel` | Rider cancel (`reason` optional). |
 
-### Driver
+#### Driver
 
 | Method | Path | Description |
 |--------|------|-------------|

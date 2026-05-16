@@ -124,6 +124,48 @@ export interface DriverTransitionBody {
   reason?: string;
 }
 
+/** DB row + major-unit fields for Super Admin API responses. */
+export interface FareRuleAdminDto {
+  id: string;
+  city: string;
+  vehicle_type: string;
+  currency: string;
+  is_active: boolean;
+  effective_from: string;
+  created_at: string;
+  updated_at: string;
+  base_fare_minor: number;
+  price_per_km_minor: number;
+  price_per_min_minor: number;
+  booking_fee_minor: number;
+  min_fare_minor: number;
+  base_fare: number;
+  price_per_km: number;
+  price_per_min: number;
+  booking_fee: number;
+  min_fare: number;
+}
+
+export interface FareRuleAdminInput {
+  city: string;
+  vehicle_type: string;
+  currency?: string;
+  is_active?: boolean;
+  base_fare: number;
+  price_per_km: number;
+  price_per_min: number;
+  booking_fee: number;
+  min_fare: number;
+}
+
+export interface SurgeCellAdminRow {
+  cell_key: string;
+  surge_multiplier: number;
+  open_requests: number;
+  available_drivers: number;
+  updated_at: string;
+}
+
 /** Format minor currency units (JMD cents) for display. */
 export function formatMoneyMinor(
   minor: bigint | number | string | null | undefined,

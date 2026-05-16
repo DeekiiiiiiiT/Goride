@@ -19,6 +19,8 @@ import { BusinessType } from '../../types/data';
 import { VehicleCatalogManager } from './vehicle-catalog/VehicleCatalogManager';
 import { PendingVehicleCatalogManager } from './vehicle-catalog/PendingVehicleCatalogManager';
 import { MerchantVerificationManager } from './roam-dash/MerchantVerificationManager';
+import { FareRulesManager } from './roam-rides/FareRulesManager';
+import { SurgeCellsManager } from './roam-rides/SurgeCellsManager';
 import { MaintenanceTemplatesManager } from './maintenance-templates/MaintenanceTemplatesManager';
 import { PartsSourcingManager } from './parts-sourcing/PartsSourcingManager';
 import { StationDatabaseView } from '../fuel/stations/StationDatabaseView';
@@ -161,6 +163,16 @@ export function AdminPortal() {
       {currentPage === 'roam-dash-merchants' && (
         <div className="bg-slate-900/30 rounded-xl border border-slate-800 overflow-hidden min-h-[600px]">
           <MerchantVerificationManager />
+        </div>
+      )}
+      {currentPage === 'roam-rides-fare-rules' && (
+        <div className="bg-slate-900/30 rounded-xl border border-slate-800 overflow-hidden min-h-[600px]">
+          <FareRulesManager />
+        </div>
+      )}
+      {currentPage === 'roam-rides-surge' && (
+        <div className="bg-slate-900/30 rounded-xl border border-slate-800 overflow-hidden min-h-[600px]">
+          <SurgeCellsManager />
         </div>
       )}
       {currentPage === 'settings' && (

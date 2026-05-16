@@ -2,7 +2,24 @@
 
 How to change prices and surge without deploying code.
 
-## `rides.fare_rules` (base pricing)
+## Preferred: Super Admin → Roam Rides
+
+**Roam Fleet Super Admin** (`apps/admin`) → sidebar **Roam Rides**:
+
+| Page | What you can do |
+|------|-----------------|
+| **Fare rules** | List, create, edit, activate/deactivate per `city` + `vehicle_type` (amounts in JMD dollars in the form; stored as cents). |
+| **Surge pricing** | Search cells, edit `surge_multiplier` (1.0–3.0), reset open-request counters per cell; platform owners can reset all multipliers to 1.0. |
+
+Requires a platform JWT (`platform_owner` or `platform_support`). Writes go through the **`rides`** Edge function (`/rides/admin/*`), not Table Editor.
+
+Quotes pick up fare-rule changes within about **60 seconds** (Edge cache). Surge applies on the next quote for that grid cell.
+
+---
+
+## Table Editor (fallback)
+
+### `rides.fare_rules` (base pricing)
 
 **Supabase → Table Editor → `rides` schema → `fare_rules`**
 
@@ -24,7 +41,7 @@ How to change prices and surge without deploying code.
 - Edge caches rules ~60 seconds per deploy instance; new quotes pick up edits quickly.
 - To add **Premium**, insert a second row with `vehicle_type = premium` and tune rates.
 
-## `rides.surge_cells` (demand multiplier)
+### `rides.surge_cells` (demand multiplier)
 
 **Supabase → Table Editor → `rides` schema → `surge_cells`**
 
