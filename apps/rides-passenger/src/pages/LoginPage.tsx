@@ -66,7 +66,7 @@ export default function LoginPage({ session }: { session: Session | null }) {
           <p className="mt-3 max-w-[19rem] mx-auto text-[15px] leading-relaxed text-white/85">
             {mainView === 'login'
               ? loginMethod === 'email'
-                ? 'Sign in with email — use your phone.'
+                ? 'Sign in with Google, email, or phone.'
                 : 'Enter your phone—we’ll send a verification code.'
               : 'Create your rider account.'}
           </p>
@@ -133,6 +133,20 @@ export default function LoginPage({ session }: { session: Session | null }) {
 
             {mainView === 'login' && loginMethod === 'email' && (
               <>
+                <PassengerGoogleSignupButton
+                  variant="login"
+                  onError={msg => setError(msg || null)}
+                />
+                <div className="relative py-4">
+                  <div className="absolute inset-0 flex items-center" aria-hidden>
+                    <span className="w-full border-t border-white/25" />
+                  </div>
+                  <div className="relative flex justify-center text-[11px] font-semibold uppercase tracking-[0.12em] text-white/55">
+                    <span className="rounded-full border border-white/20 bg-emerald-950/30 px-3 py-0.5">
+                      or email
+                    </span>
+                  </div>
+                </div>
                 <form
                   onSubmit={e => void handleEmailLogin(e)}
                   className="flex w-full flex-col gap-6"

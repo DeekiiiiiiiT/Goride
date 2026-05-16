@@ -202,11 +202,15 @@ function GoogleMark({ className }: { className?: string }) {
 export function PassengerGoogleSignupButton({
   disabled,
   onError,
+  variant = 'signup',
 }: {
   disabled?: boolean;
   onError: (msg: string) => void;
+  /** Same OAuth flow for new and returning users; label only. */
+  variant?: 'signup' | 'login';
 }) {
   const [loading, setLoading] = useState(false);
+  const label = variant === 'login' ? 'Sign in with Google' : 'Continue with Google';
 
   const onClick = async () => {
     onError('');
@@ -224,7 +228,13 @@ export function PassengerGoogleSignupButton({
       if (error) throw error;
     } catch (err: unknown) {
       sessionStorage.removeItem(PASSENGER_OAUTH_INTENT_KEY);
-      onError(err instanceof Error ? err.message : 'Google sign-up failed.');
+      onError(
+        err instanceof Error
+          ? err.message
+          : variant === 'login'
+            ? 'Google sign-in failed.'
+            : 'Google sign-up failed.',
+      );
     } finally {
       setLoading(false);
     }
@@ -242,7 +252,7 @@ export function PassengerGoogleSignupButton({
       ) : (
         <GoogleMark className="h-5 w-5" />
       )}
-      Continue with Google
+      {label}
     </button>
   );
 }

@@ -1410,6 +1410,20 @@ app.get("/make-server-37f42386/maps-config", async (c) => {
   return c.json({ apiKey: apiKey || "", timestamp: Date.now() });
 });
 
+/** Roam Rides passenger — separate browser key (`GOOGLE_MAPS_API_KEY_RIDES` secret). */
+app.get("/make-server-37f42386/maps-config-rides", async (c) => {
+  const apiKey = Deno.env.get("GOOGLE_MAPS_API_KEY_RIDES");
+  logProviderCall({
+    provider: "google_maps",
+    service: "maps_js_load_rides",
+    route: "/make-server-37f42386/maps-config-rides",
+    status: "success",
+    httpStatus: 200,
+    requests: 1,
+  }).catch(() => { /* never break the primary call */ });
+  return c.json({ apiKey: apiKey || "", timestamp: Date.now() });
+});
+
 // Audit Config Endpoints (configurable frequency threshold)
 app.get("/make-server-37f42386/audit-config", async (c) => {
   try {

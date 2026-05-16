@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Dialog, 
   DialogContent, 
@@ -23,7 +23,7 @@ import { format } from "date-fns";
 import { ManualTripInput } from '../../utils/tripFactory';
 import { RoutePoint, TripStop } from '../../types/tripSession';
 import { LocationInput } from '../ui/LocationInput';
-import { calculateRouteDistance, calculatePathDistance } from '../../utils/locationService';
+import { calculateMultiLegRouteDistance, calculatePathDistance } from '../../utils/locationService';
 import { LeafletMap } from '../maps/LeafletMap';
 import { StopList } from './StopList';
 import { toast } from 'sonner@2.0.3';
@@ -102,6 +102,7 @@ export function ManualTripForm({
   const [pickupCoords, setPickupCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [dropoffCoords, setDropoffCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [isCalculatingDistance, setIsCalculatingDistance] = useState(false);
+  const lastNotifiedDistanceRef = useRef<number | undefined>(undefined);
 
   // Intermediate stops for multi-stop trips (e.g. InDrive)
   const [intermediateStops, setIntermediateStops] = useState<{ id: string; address: string; coords?: { lat: number; lon: number } }[]>([]);
@@ -121,6 +122,7 @@ export function ManualTripForm({
   // Reset form when opened
   useEffect(() => {
     if (open) {
+      lastNotifiedDistanceRef.current = undefined;
       if (initialData) {
         // Calculate distance from route points if available (more accurate for multi-stop)
         let routeDistance = 0;
@@ -204,19 +206,26 @@ export function ManualTripForm({
     }
   }, [open, currentDriverId, defaultVehicleId, initialData]);
 
-  // Auto-calculate distance when both coords are set
+  // Auto-calculate distance: pickup → each intermediate stop (with coords) → dropoff
   useEffect(() => {
-    const calculateDistance = async () => {
+    const calculateDistance = () => {
       // Skip if we have a live route (distance already calculated from track)
       if (initialData?.route && initialData.route.length > 1) return;
 
       if (pickupCoords && dropoffCoords) {
         setIsCalculatingDistance(true);
         try {
-          const dist = await calculateRouteDistance(pickupCoords, dropoffCoords);
+          const stopsWithCoords = intermediateStops
+            .filter((s) => s.coords)
+            .map((s) => s.coords as { lat: number; lon: number });
+          const waypoints = [pickupCoords, ...stopsWithCoords, dropoffCoords];
+          const dist = calculateMultiLegRouteDistance(waypoints);
           if (dist !== null) {
-            setFormData(prev => ({ ...prev, distance: parseFloat(dist.toFixed(2)) }));
-            toast.success(`Distance calculated: ${dist.toFixed(2)} km`);
+            setFormData((prev) => ({ ...prev, distance: dist }));
+            if (lastNotifiedDistanceRef.current !== dist) {
+              lastNotifiedDistanceRef.current = dist;
+              toast.success(`Distance calculated: ${dist.toFixed(2)} km`);
+            }
           }
         } catch (error) {
           console.error("Failed to calculate distance", error);
@@ -227,7 +236,7 @@ export function ManualTripForm({
     };
 
     calculateDistance();
-  }, [pickupCoords, dropoffCoords]);
+  }, [pickupCoords, dropoffCoords, intermediateStops, initialData?.route]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

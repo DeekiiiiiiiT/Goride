@@ -3,11 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@roam/auth-client';
 import { toast } from 'sonner';
 import { CircleDot, LogOut, MapPin, Navigation } from 'lucide-react';
+import { RoamPlaceField } from '@/components/RoamPlaceField';
 import { ridesCreateRequest, ridesQuote } from '@/services/ridesEdge';
-
-/** Demo coordinates — replace with map picker / places autocomplete in production. */
-const DEFAULT_PICKUP = { lat: 18.0179, lng: -76.8099 };
-const DEFAULT_DROPOFF = { lat: 18.0281, lng: -76.7436 };
 
 function fmtUsdMinor(minor: bigint | number | string): string {
   const n = typeof minor === 'bigint' ? Number(minor) : Number(minor);
@@ -16,12 +13,16 @@ function fmtUsdMinor(minor: bigint | number | string): string {
 
 export default function HomePage() {
   const navigate = useNavigate();
-  const [pickupAddress, setPickupAddress] = useState('Kingston — pickup');
-  const [dropoffAddress, setDropoffAddress] = useState('Kingston — drop-off');
+  const [pickupAddress, setPickupAddress] = useState('');
+  const [dropoffAddress, setDropoffAddress] = useState('');
+  const [pickup, setPickup] = useState<{ lat: number; lng: number } | null>(null);
+  const [dropoff, setDropoff] = useState<{ lat: number; lng: number } | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [bookLoading, setBookLoading] = useState(false);
   const [fareLabel, setFareLabel] = useState<string | null>(null);
   const [surge, setSurge] = useState<number | null>(null);
+
+  const coordsReady = pickup && dropoff;
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -30,13 +31,17 @@ export default function HomePage() {
   };
 
   const handleQuote = async () => {
+    if (!pickup || !dropoff) {
+      toast.error('Choose pickup and drop-off from the search suggestions.');
+      return;
+    }
     setQuoteLoading(true);
     try {
       const q = await ridesQuote({
-        pickup_lat: DEFAULT_PICKUP.lat,
-        pickup_lng: DEFAULT_PICKUP.lng,
-        dropoff_lat: DEFAULT_DROPOFF.lat,
-        dropoff_lng: DEFAULT_DROPOFF.lng,
+        pickup_lat: pickup.lat,
+        pickup_lng: pickup.lng,
+        dropoff_lat: dropoff.lat,
+        dropoff_lng: dropoff.lng,
       });
       setFareLabel(fmtUsdMinor(q.fare_estimate_minor));
       setSurge(q.surge_multiplier);
@@ -48,13 +53,17 @@ export default function HomePage() {
   };
 
   const handleBook = async () => {
+    if (!pickup || !dropoff) {
+      toast.error('Choose pickup and drop-off from the search suggestions.');
+      return;
+    }
     setBookLoading(true);
     try {
       const { ride } = await ridesCreateRequest({
-        pickup_lat: DEFAULT_PICKUP.lat,
-        pickup_lng: DEFAULT_PICKUP.lng,
-        dropoff_lat: DEFAULT_DROPOFF.lat,
-        dropoff_lng: DEFAULT_DROPOFF.lng,
+        pickup_lat: pickup.lat,
+        pickup_lng: pickup.lng,
+        dropoff_lat: dropoff.lat,
+        dropoff_lng: dropoff.lng,
         pickup_address: pickupAddress,
         dropoff_address: dropoffAddress,
         idempotency_key: crypto.randomUUID(),
@@ -98,36 +107,52 @@ export default function HomePage() {
             Where to?
           </h1>
           <p className="text-zinc-600 text-base leading-relaxed">
-            Enter pickup and drop-off. We’ll match you with a nearby driver.
+            Search addresses (Jamaica). Pick a suggestion so we have exact coordinates for your driver.
           </p>
         </div>
 
         <div className="rounded-3xl bg-white p-5 sm:p-6 shadow-xl shadow-zinc-900/6 ring-1 ring-zinc-200/90 space-y-5">
-          <label className="block space-y-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-emerald-600" aria-hidden />
-              Pickup
-            </span>
-            <input
-              className="input-touch w-full rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 outline-none focus:border-emerald-500/55 focus:bg-white focus:ring-4 focus:ring-emerald-500/12"
-              value={pickupAddress}
-              onChange={(e) => setPickupAddress(e.target.value)}
-              placeholder="Pickup address"
-            />
-          </label>
+          <RoamPlaceField
+            label={
+              <>
+                <MapPin className="w-4 h-4 text-emerald-600" aria-hidden />
+                Pickup
+              </>
+            }
+            value={pickupAddress}
+            placeholder="Search pickup (e.g. Half Way Tree)"
+            onChangeText={(text) => {
+              setPickupAddress(text);
+              setPickup(null);
+              setFareLabel(null);
+              setSurge(null);
+            }}
+            onResolved={({ address, lat, lng }) => {
+              setPickupAddress(address);
+              setPickup({ lat, lng });
+            }}
+          />
 
-          <label className="block space-y-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 flex items-center gap-2">
-              <CircleDot className="w-4 h-4 text-emerald-600" aria-hidden />
-              Drop-off
-            </span>
-            <input
-              className="input-touch w-full rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 outline-none focus:border-emerald-500/55 focus:bg-white focus:ring-4 focus:ring-emerald-500/12"
-              value={dropoffAddress}
-              onChange={(e) => setDropoffAddress(e.target.value)}
-              placeholder="Where are you going?"
-            />
-          </label>
+          <RoamPlaceField
+            label={
+              <>
+                <CircleDot className="w-4 h-4 text-emerald-600" aria-hidden />
+                Drop-off
+              </>
+            }
+            value={dropoffAddress}
+            placeholder="Search destination"
+            onChangeText={(text) => {
+              setDropoffAddress(text);
+              setDropoff(null);
+              setFareLabel(null);
+              setSurge(null);
+            }}
+            onResolved={({ address, lat, lng }) => {
+              setDropoffAddress(address);
+              setDropoff({ lat, lng });
+            }}
+          />
 
           {fareLabel && (
             <div className="rounded-2xl bg-emerald-50/80 border border-emerald-100 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
@@ -145,7 +170,7 @@ export default function HomePage() {
             <button
               type="button"
               onClick={handleQuote}
-              disabled={quoteLoading}
+              disabled={quoteLoading || !coordsReady}
               className="btn-touch flex-1 rounded-2xl border border-zinc-300 bg-white text-base font-semibold text-zinc-800 hover:bg-zinc-50 disabled:opacity-50 touch-manipulation active:scale-[0.99]"
             >
               {quoteLoading ? 'Getting price…' : 'Fare estimate'}
@@ -153,7 +178,7 @@ export default function HomePage() {
             <button
               type="button"
               onClick={handleBook}
-              disabled={bookLoading}
+              disabled={bookLoading || !coordsReady}
               className="btn-touch flex-1 rounded-2xl bg-emerald-600 text-white text-base font-semibold shadow-lg shadow-emerald-600/25 hover:bg-emerald-700 disabled:opacity-50 touch-manipulation active:scale-[0.99]"
             >
               {bookLoading ? 'Requesting…' : 'Request ride'}
@@ -162,7 +187,9 @@ export default function HomePage() {
         </div>
 
         <p className="text-center text-xs text-zinc-500 leading-relaxed px-2">
-          Demo routes use fixed map coordinates — full map picker coming next.
+          Places search uses Google Maps (suggestions biased to Jamaica). The app loads a{' '}
+          <strong className="text-zinc-600">Roam Rides–only</strong> key from your backend. Type at least three
+          characters, then tap a result.
         </p>
 
         <div className="text-center pb-2">

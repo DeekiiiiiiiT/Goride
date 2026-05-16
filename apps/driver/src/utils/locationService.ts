@@ -337,6 +337,21 @@ export const calculateRouteDistance = async (
 };
 
 /**
+ * Sum route estimates for each leg: waypoint[0]→[1]→…→[n].
+ * Use for manual trips with intermediate stops (pickup → stops → dropoff).
+ */
+export const calculateMultiLegRouteDistance = (
+  waypoints: { lat: number; lon: number }[]
+): number | null => {
+  if (waypoints.length < 2) return null;
+  let total = 0;
+  for (let i = 0; i < waypoints.length - 1; i++) {
+    total += calculateHaversineDistance(waypoints[i], waypoints[i + 1]);
+  }
+  return parseFloat(total.toFixed(2));
+};
+
+/**
  * Calculate straight-line distance (Haversine formula)
  * Returns distance in kilometers
  */
