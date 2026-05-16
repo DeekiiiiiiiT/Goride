@@ -1,0 +1,96 @@
+/**
+ * DB access for rides admin Edge routes.
+ * Hosted projects may use either:
+ * - `rides` schema (add "rides" under API → Exposed schemas), or
+ * - `public.rides_*` views (migration 20260517210000_rides_public_admin_views.sql).
+ */
+import { createClient, type PostgrestError, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+export type RidesAdminTables = {
+  fare_rules: string;
+  surge_cells: string;
+  audit_events: string;
+};
+
+type Resolved = {
+  db: SupabaseClient;
+  tables: RidesAdminTables;
+};
+
+const RIDES_NATIVE: RidesAdminTables = {
+  fare_rules: "fare_rules",
+  surge_cells: "surge_cells",
+  audit_events: "audit_events",
+};
+
+const PUBLIC_VIEWS: RidesAdminTables = {
+  fare_rules: "rides_fare_rules",
+  surge_cells: "rides_surge_cells",
+  audit_events: "rides_audit_events",
+};
+
+let resolved: Resolved | null = null;
+
+function serviceClient(schema: string): SupabaseClient {
+  return createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    { db: { schema } },
+  );
+}
+
+export function isMissingRidesAdminTableError(error: PostgrestError | null): boolean {
+  if (!error) return false;
+  if (error.code === "PGRST205") return true;
+  const msg = (error.message ?? "").toLowerCase();
+  return (
+    msg.includes("schema cache") ||
+    msg.includes("could not find the table") ||
+    msg.includes("schema must be one of")
+  );
+}
+
+async function probe(schema: string, table: string): Promise<PostgrestError | null> {
+  const db = serviceClient(schema);
+  const { error } = await db.from(table).select("id").limit(1);
+  return error;
+}
+
+async function resolveFromEnv(): Promise<Resolved | null> {
+  const mode = Deno.env.get("RIDES_ADMIN_DB_SCHEMA")?.trim().toLowerCase();
+  if (mode === "rides") {
+    return { db: serviceClient("rides"), tables: RIDES_NATIVE };
+  }
+  if (mode === "public") {
+    return { db: serviceClient("public"), tables: PUBLIC_VIEWS };
+  }
+  return null;
+}
+
+/** Resolve once per isolate; tries rides schema then public views. */
+export async function getRidesAdminDb(): Promise<Resolved> {
+  if (resolved) return resolved;
+
+  const fromEnv = await resolveFromEnv();
+  if (fromEnv) {
+    resolved = fromEnv;
+    return resolved;
+  }
+
+  const ridesErr = await probe("rides", RIDES_NATIVE.fare_rules);
+  if (!isMissingRidesAdminTableError(ridesErr)) {
+    resolved = { db: serviceClient("rides"), tables: RIDES_NATIVE };
+    return resolved;
+  }
+
+  const publicErr = await probe("public", PUBLIC_VIEWS.fare_rules);
+  if (!isMissingRidesAdminTableError(publicErr)) {
+    resolved = { db: serviceClient("public"), tables: PUBLIC_VIEWS };
+    return resolved;
+  }
+
+  throw new Error(
+    "Rides admin tables are not available. Expose the `rides` schema in Supabase API settings, " +
+      "or run migration 20260517210000_rides_public_admin_views.sql and reload the API schema cache.",
+  );
+}

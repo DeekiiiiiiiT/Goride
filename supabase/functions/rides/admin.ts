@@ -3,23 +3,8 @@
  */
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireProductAdmin } from "../_shared/productAdmin.ts";
-
-/** PostgREST views in `public` (see migration rides_public_admin_views). */
-const T = {
-  fare_rules: "rides_fare_rules",
-  surge_cells: "rides_surge_cells",
-  audit_events: "rides_audit_events",
-} as const;
-
-function adminDb(): SupabaseClient {
-  return createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-    { db: { schema: "public" } },
-  );
-}
+import { getRidesAdminDb, type RidesAdminTables } from "../_shared/ridesAdminDb.ts";
 
 type FareRuleRow = {
   id: string;
@@ -89,11 +74,12 @@ function parseMoneyFields(body: Record<string, unknown>) {
 
 async function adminAudit(
   db: SupabaseClient,
+  tables: RidesAdminTables,
   actorId: string,
   eventType: string,
   payload: Record<string, unknown>,
 ) {
-  await db.from(T.audit_events).insert({
+  await db.from(tables.audit_events).insert({
     ride_request_id: null,
     actor_user_id: actorId,
     event_type: eventType,
@@ -103,11 +89,12 @@ async function adminAudit(
 
 async function deactivateOtherActiveRules(
   db: SupabaseClient,
+  tables: RidesAdminTables,
   city: string,
   vehicleType: string,
   exceptId?: string,
 ) {
-  let q = db.from(T.fare_rules).update({
+  let q = db.from(tables.fare_rules).update({
     is_active: false,
     updated_at: new Date().toISOString(),
   }).eq("city", city).eq("vehicle_type", vehicleType).eq("is_active", true);
@@ -126,8 +113,8 @@ export function registerAdminRoutes(
   admin.get("/fare-rules", async (c) => {
     const adminUser = await requireProductAdmin(c, "rides");
     if (adminUser instanceof Response) return adminUser;
-    const db = adminDb();
-    const { data, error } = await db.from(T.fare_rules).select("*").order("city").order("vehicle_type");
+    const { db, tables } = await getRidesAdminDb();
+    const { data, error } = await db.from(tables.fare_rules).select("*").order("city").order("vehicle_type");
     if (error) return c.json({ error: "list_failed", message: error.message }, 500);
     return c.json({ rules: (data ?? []).map((r) => fareRuleDto(r as FareRuleRow)) });
   });
@@ -135,8 +122,8 @@ export function registerAdminRoutes(
   admin.get("/fare-rules/:id", async (c) => {
     const adminUser = await requireProductAdmin(c, "rides");
     if (adminUser instanceof Response) return adminUser;
-    const db = adminDb();
-    const { data, error } = await db.from(T.fare_rules).select("*").eq("id", c.req.param("id")).maybeSingle();
+    const { db, tables } = await getRidesAdminDb();
+    const { data, error } = await db.from(tables.fare_rules).select("*").eq("id", c.req.param("id")).maybeSingle();
     if (error) return c.json({ error: "fetch_failed" }, 500);
     if (!data) return c.json({ error: "not_found" }, 404);
     return c.json({ rule: fareRuleDto(data as FareRuleRow) });
@@ -158,12 +145,12 @@ export function registerAdminRoutes(
       ? body.currency.trim().toUpperCase()
       : "JMD";
 
-    const db = adminDb();
+    const { db, tables } = await getRidesAdminDb();
     if (isActive) {
-      await deactivateOtherActiveRules(db, city, vehicleType);
+      await deactivateOtherActiveRules(db, tables, city, vehicleType);
     }
 
-    const { data, error } = await db.from(T.fare_rules).insert({
+    const { data, error } = await db.from(tables.fare_rules).insert({
       city,
       vehicle_type: vehicleType,
       base_fare_minor: money.base,
@@ -180,7 +167,7 @@ export function registerAdminRoutes(
       return c.json({ error: "insert_failed", message: error.message }, 500);
     }
 
-    await adminAudit(db, adminUser.id, "admin_fare_rule_created", {
+    await adminAudit(db, tables, adminUser.id, "admin_fare_rule_created", {
       rule_id: data.id,
       city,
       vehicle_type: vehicleType,
@@ -193,8 +180,8 @@ export function registerAdminRoutes(
     const adminUser = await requireProductAdmin(c, "rides");
     if (adminUser instanceof Response) return adminUser;
     const id = c.req.param("id");
-    const db = adminDb();
-    const { data: existing } = await db.from(T.fare_rules).select("*").eq("id", id).maybeSingle();
+    const { db, tables } = await getRidesAdminDb();
+    const { data: existing } = await db.from(tables.fare_rules).select("*").eq("id", id).maybeSingle();
     if (!existing) return c.json({ error: "not_found" }, 404);
 
     const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
@@ -229,13 +216,13 @@ export function registerAdminRoutes(
     const nextActive = patch.is_active !== undefined ? patch.is_active : existing.is_active;
 
     if (nextActive) {
-      await deactivateOtherActiveRules(db, nextCity, nextVehicle, id);
+      await deactivateOtherActiveRules(db, tables, nextCity, nextVehicle, id);
     }
 
-    const { data, error } = await db.from(T.fare_rules).update(patch).eq("id", id).select("*").single();
+    const { data, error } = await db.from(tables.fare_rules).update(patch).eq("id", id).select("*").single();
     if (error) return c.json({ error: "update_failed", message: error.message }, 500);
 
-    await adminAudit(db, adminUser.id, "admin_fare_rule_updated", {
+    await adminAudit(db, tables, adminUser.id, "admin_fare_rule_updated", {
       rule_id: id,
       before: fareRuleDto(existing as FareRuleRow),
       after: fareRuleDto(data as FareRuleRow),
@@ -249,8 +236,8 @@ export function registerAdminRoutes(
     if (adminUser instanceof Response) return adminUser;
     const id = c.req.param("id");
     const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-    const db = adminDb();
-    const { data: existing } = await db.from(T.fare_rules).select("*").eq("id", id).maybeSingle();
+    const { db, tables } = await getRidesAdminDb();
+    const { data: existing } = await db.from(tables.fare_rules).select("*").eq("id", id).maybeSingle();
     if (!existing) return c.json({ error: "not_found" }, 404);
 
     const city = typeof body.city === "string" && body.city.trim()
@@ -261,9 +248,9 @@ export function registerAdminRoutes(
       : `${existing.vehicle_type}_copy`;
 
     const isActive = body.is_active === true;
-    if (isActive) await deactivateOtherActiveRules(db, city, vehicleType);
+    if (isActive) await deactivateOtherActiveRules(db, tables, city, vehicleType);
 
-    const { data, error } = await db.from(T.fare_rules).insert({
+    const { data, error } = await db.from(tables.fare_rules).insert({
       city,
       vehicle_type: vehicleType,
       base_fare_minor: existing.base_fare_minor,
@@ -280,7 +267,7 @@ export function registerAdminRoutes(
       return c.json({ error: "duplicate_failed", message: error.message }, 500);
     }
 
-    await adminAudit(db, adminUser.id, "admin_fare_rule_duplicated", {
+    await adminAudit(db, tables, adminUser.id, "admin_fare_rule_duplicated", {
       source_id: id,
       rule_id: data.id,
     });
@@ -296,8 +283,8 @@ export function registerAdminRoutes(
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
-    const db = adminDb();
-    let q = db.from(T.surge_cells).select("*", { count: "exact" }).order("updated_at", { ascending: false });
+    const { db, tables } = await getRidesAdminDb();
+    let q = db.from(tables.surge_cells).select("*", { count: "exact" }).order("updated_at", { ascending: false });
     if (search) q = q.ilike("cell_key", `%${search}%`);
 
     const { data, error, count } = await q.range(from, to);
@@ -321,7 +308,7 @@ export function registerAdminRoutes(
     const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
     const resetMultiplier = body.reset_multiplier !== false;
 
-    const db = adminDb();
+    const { db, tables } = await getRidesAdminDb();
     const patch: Record<string, unknown> = {
       open_requests: 0,
       available_drivers: 0,
@@ -329,10 +316,10 @@ export function registerAdminRoutes(
     };
     if (resetMultiplier) patch.surge_multiplier = 1;
 
-    const { error, count } = await db.from(T.surge_cells).update(patch, { count: "exact" }).neq("cell_key", "");
+    const { error, count } = await db.from(tables.surge_cells).update(patch, { count: "exact" }).neq("cell_key", "");
     if (error) return c.json({ error: "reset_all_failed" }, 500);
 
-    await adminAudit(db, adminUser.id, "admin_surge_cells_reset_all", {
+    await adminAudit(db, tables, adminUser.id, "admin_surge_cells_reset_all", {
       reset_multiplier: resetMultiplier,
       rows: count,
     });
@@ -343,8 +330,8 @@ export function registerAdminRoutes(
     const adminUser = await requireProductAdmin(c, "rides");
     if (adminUser instanceof Response) return adminUser;
     const cellKey = decodeURIComponent(c.req.param("cellKey"));
-    const db = adminDb();
-    const { data, error } = await db.from(T.surge_cells).select("*").eq("cell_key", cellKey).maybeSingle();
+    const { db, tables } = await getRidesAdminDb();
+    const { data, error } = await db.from(tables.surge_cells).select("*").eq("cell_key", cellKey).maybeSingle();
     if (error) return c.json({ error: "fetch_failed" }, 500);
     if (!data) return c.json({ error: "not_found" }, 404);
     return c.json({ cell: data });
@@ -359,10 +346,10 @@ export function registerAdminRoutes(
     if (Number.isNaN(mult)) return c.json({ error: "invalid_multiplier" }, 400);
     const clamped = Math.min(3, Math.max(1, mult));
 
-    const db = adminDb();
-    const { data: before } = await db.from(T.surge_cells).select("*").eq("cell_key", cellKey).maybeSingle();
+    const { db, tables } = await getRidesAdminDb();
+    const { data: before } = await db.from(tables.surge_cells).select("*").eq("cell_key", cellKey).maybeSingle();
 
-    const { data, error } = await db.from(T.surge_cells).upsert({
+    const { data, error } = await db.from(tables.surge_cells).upsert({
       cell_key: cellKey,
       surge_multiplier: clamped,
       open_requests: before?.open_requests ?? 0,
@@ -372,7 +359,7 @@ export function registerAdminRoutes(
 
     if (error) return c.json({ error: "update_failed", message: error.message }, 500);
 
-    await adminAudit(db, adminUser.id, "admin_surge_cell_updated", {
+    await adminAudit(db, tables, adminUser.id, "admin_surge_cell_updated", {
       cell_key: cellKey,
       before,
       after: data,
@@ -388,7 +375,7 @@ export function registerAdminRoutes(
     const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
     const resetMultiplier = body.reset_multiplier === true;
 
-    const db = adminDb();
+    const { db, tables } = await getRidesAdminDb();
     const patch: Record<string, unknown> = {
       open_requests: 0,
       available_drivers: 0,
@@ -396,13 +383,13 @@ export function registerAdminRoutes(
     };
     if (resetMultiplier) patch.surge_multiplier = 1;
 
-    const { data: before } = await db.from(T.surge_cells).select("*").eq("cell_key", cellKey).maybeSingle();
+    const { data: before } = await db.from(tables.surge_cells).select("*").eq("cell_key", cellKey).maybeSingle();
     if (!before) return c.json({ error: "not_found" }, 404);
 
-    const { data, error } = await db.from(T.surge_cells).update(patch).eq("cell_key", cellKey).select("*").single();
+    const { data, error } = await db.from(tables.surge_cells).update(patch).eq("cell_key", cellKey).select("*").single();
     if (error) return c.json({ error: "reset_failed" }, 500);
 
-    await adminAudit(db, adminUser.id, "admin_surge_cell_reset", { cell_key: cellKey, reset_multiplier: resetMultiplier });
+    await adminAudit(db, tables, adminUser.id, "admin_surge_cell_reset", { cell_key: cellKey, reset_multiplier: resetMultiplier });
     return c.json({ cell: data });
   });
 
