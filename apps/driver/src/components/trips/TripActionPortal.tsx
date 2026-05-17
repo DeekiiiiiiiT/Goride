@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
-const BOTTOM_OFFSET = 'bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))]';
+/** Nav is h-16 (4rem) + safe area; add 1rem gap above the bar. */
+const BOTTOM_OFFSET = 'bottom-[calc(4rem+env(safe-area-inset-bottom,0px)+1rem)]';
 
 /**
  * Renders trip controls on document.body so they are not trapped inside

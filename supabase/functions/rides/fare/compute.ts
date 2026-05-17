@@ -5,6 +5,7 @@ export interface FareRulesInput {
   pricePerKmMinor: number;
   pricePerMinMinor: number;
   bookingFeeMinor: number;
+  estimatedTollsMinor: number;
   minFareMinor: number;
   currency: string;
 }
@@ -12,6 +13,7 @@ export interface FareRulesInput {
 export interface FareBreakdown {
   base_minor: number;
   booking_fee_minor: number;
+  estimated_tolls_minor: number;
   distance_component_minor: number;
   time_component_minor: number;
   subtotal_before_surge_minor: number;
@@ -36,6 +38,7 @@ export function computeFareMinor(params: {
   const subtotal =
     params.rules.baseFareMinor +
     params.rules.bookingFeeMinor +
+    params.rules.estimatedTollsMinor +
     distanceComponent +
     timeComponent;
   const afterSurge = Math.round(subtotal * surge);
@@ -49,6 +52,7 @@ export function computeFareMinor(params: {
     breakdown: {
       base_minor: params.rules.baseFareMinor,
       booking_fee_minor: params.rules.bookingFeeMinor,
+      estimated_tolls_minor: params.rules.estimatedTollsMinor,
       distance_component_minor: distanceComponent,
       time_component_minor: timeComponent,
       subtotal_before_surge_minor: subtotal,

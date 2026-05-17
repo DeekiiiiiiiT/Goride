@@ -476,9 +476,15 @@ export function DriverDashboard() {
         </div>
       )}
 
-      <div className={loading && !hasLoadedDashboardRef.current ? 'hidden' : 'flex min-h-0 flex-col gap-6'}>
-            <DriverOverview 
-              className="flex-1"
+      <div
+        className={
+          loading && !hasLoadedDashboardRef.current
+            ? 'hidden'
+            : 'flex min-h-[calc(100dvh-10.5rem-env(safe-area-inset-bottom,0px))] flex-col gap-6'
+        }
+      >
+            <DriverOverview
+              className="shrink-0"
               tierState={tierState}
               metrics={metrics}
               todayEarnings={todayEarnings}

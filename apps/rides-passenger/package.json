@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@roam/api-client": "workspace:*",
+    "@roam/business-config": "workspace:*",
     "@roam/auth-client": "workspace:*",
     "@roam/types": "workspace:*",
     "@roam/ui": "workspace:*",

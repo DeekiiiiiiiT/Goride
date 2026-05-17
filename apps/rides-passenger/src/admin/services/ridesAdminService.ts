@@ -9,6 +9,11 @@ const RIDES_BASE = API_ENDPOINTS.rides;
 export interface FareRuleAdminDto {
   id: string;
   city: string;
+  location_key: string;
+  location_label: string;
+  county: string | null;
+  parish: string | null;
+  locality: string | null;
   vehicle_type: string;
   currency: string;
   is_active: boolean;
@@ -20,6 +25,8 @@ export interface FareRuleAdminDto {
   price_per_min_minor: number;
   booking_fee: number;
   booking_fee_minor: number;
+  estimated_tolls: number;
+  estimated_tolls_minor: number;
   min_fare: number;
   min_fare_minor: number;
   created_at: string;
@@ -27,7 +34,13 @@ export interface FareRuleAdminDto {
 }
 
 export interface FareRuleAdminInput {
-  city: string;
+  /** @deprecated Use location_scope + county/parish/locality; kept for older API builds */
+  city?: string;
+  location_key?: string;
+  location_scope?: 'country' | 'county' | 'parish' | 'locality';
+  county?: string;
+  parish?: string;
+  locality?: string;
   vehicle_type: string;
   currency?: string;
   is_active?: boolean;
@@ -35,6 +48,7 @@ export interface FareRuleAdminInput {
   price_per_km: number;
   price_per_min: number;
   booking_fee: number;
+  estimated_tolls: number;
   min_fare: number;
 }
 
@@ -62,10 +76,20 @@ async function parseError(res: Response): Promise<string> {
     return 'Server returned HTML instead of JSON. Check that the rides Edge function is deployed.';
   }
   try {
-    const body = trimmed ? (JSON.parse(trimmed) as { error?: string; message?: string }) : {};
-    return body.message || body.error || `HTTP ${res.status}`;
+    const body = trimmed
+      ? (JSON.parse(trimmed) as { error?: string; message?: string })
+      : {};
+    if (body.message) return body.message;
+    if (body.error === 'rides_admin_db_unavailable') {
+      return 'Rides admin tables are missing. Apply Supabase migrations (rides_public_admin_views) or expose the rides schema in API settings.';
+    }
+    if (body.error === 'city_and_vehicle_required') {
+      return 'Location and vehicle type are required. Redeploy the rides Edge function, then hard-refresh this page.';
+    }
+    if (body.error) return `${body.error} (HTTP ${res.status})`;
+    return trimmed || `HTTP ${res.status}`;
   } catch {
-    return `HTTP ${res.status}`;
+    return trimmed ? `${trimmed.slice(0, 200)} (HTTP ${res.status})` : `HTTP ${res.status}`;
   }
 }
 

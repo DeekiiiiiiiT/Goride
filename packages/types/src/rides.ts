@@ -17,6 +17,7 @@ export type DriverOfferStatus = 'pending' | 'accepted' | 'declined' | 'expired' 
 export interface FareBreakdown {
   base_minor: number;
   booking_fee_minor: number;
+  estimated_tolls_minor?: number;
   distance_component_minor: number;
   time_component_minor: number;
   subtotal_before_surge_minor: number;

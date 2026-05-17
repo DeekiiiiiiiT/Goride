@@ -269,7 +269,7 @@ app.post("/v1/quote", async (c) => {
   if ([pickup_lat, pickup_lng, dropoff_lat, dropoff_lng].some((x) => Number.isNaN(x))) {
     return c.json({ error: "invalid_coordinates" }, 400);
   }
-  const vehicleType = typeof body.vehicle_option === "string" ? body.vehicle_option : "standard";
+  const vehicleType = typeof body.vehicle_option === "string" ? body.vehicle_option : "uberx";
   const db = svc();
 
   const quote = await buildFareQuote(db, {
@@ -346,7 +346,7 @@ app.post("/v1/requests", async (c) => {
     }
   }
 
-  const vehicle_option = typeof body.vehicle_option === "string" ? body.vehicle_option : "standard";
+  const vehicle_option = typeof body.vehicle_option === "string" ? body.vehicle_option : "uberx";
   const quote_token = typeof body.quote_token === "string" ? body.quote_token : null;
   if (!quote_token) {
     return c.json({ error: "quote_token_required" }, 400);
@@ -647,5 +647,10 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
 });
 
 registerAdminRoutes(app, { logLine });
+
+app.onError((err, c) => {
+  logLine({ event: "unhandled_error", message: err.message, path: c.req.path });
+  return c.json({ error: "internal_error", message: err.message }, 500);
+});
 
 Deno.serve(app.fetch);

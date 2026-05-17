@@ -448,7 +448,7 @@ export function TripTimer({ onComplete }: TripTimerProps) {
 
   if (!isActive) {
     return (
-      <TripActionPortal>
+      <div className="mt-auto w-full shrink-0 pb-1">
         <Button
           type="button"
           onClick={() => void startTrip()}
@@ -466,7 +466,7 @@ export function TripTimer({ onComplete }: TripTimerProps) {
             </div>
           )}
         </Button>
-      </TripActionPortal>
+      </div>
     );
   }
 

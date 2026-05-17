@@ -7,8 +7,7 @@ import type { FareQuoteResponse } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
 import { RoamPlaceField } from '@/components/RoamPlaceField';
 import { ridesCreateRequest, ridesQuote } from '@/services/ridesEdge';
-
-const VEHICLE_OPTIONS = [{ id: 'standard', label: 'Standard' }] as const;
+import { DEFAULT_RIDES_VEHICLE_TYPE, RIDES_VEHICLE_TYPES } from '@roam/business-config';
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -16,7 +15,7 @@ export default function HomePage() {
   const [dropoffAddress, setDropoffAddress] = useState('');
   const [pickup, setPickup] = useState<{ lat: number; lng: number } | null>(null);
   const [dropoff, setDropoff] = useState<{ lat: number; lng: number } | null>(null);
-  const [vehicleOption, setVehicleOption] = useState<string>('standard');
+  const [vehicleOption, setVehicleOption] = useState<string>(DEFAULT_RIDES_VEHICLE_TYPE);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [bookLoading, setBookLoading] = useState(false);
   const [quote, setQuote] = useState<FareQuoteResponse | null>(null);
@@ -143,22 +142,26 @@ export default function HomePage() {
         <div className="rounded-3xl bg-white p-5 sm:p-6 shadow-xl shadow-zinc-900/6 ring-1 ring-zinc-200/90 space-y-5">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 mb-2">Vehicle</p>
-            <div className="flex gap-2">
-              {VEHICLE_OPTIONS.map((v) => (
+            <div className="space-y-2">
+              {RIDES_VEHICLE_TYPES.map((v) => (
                 <button
-                  key={v.id}
+                  key={v.slug}
                   type="button"
                   onClick={() => {
-                    setVehicleOption(v.id);
+                    setVehicleOption(v.slug);
                     clearQuote();
                   }}
-                  className={`rounded-xl px-4 py-2 text-sm font-medium touch-manipulation ${
-                    vehicleOption === v.id
-                      ? 'bg-emerald-600 text-white'
-                      : 'border border-zinc-200 bg-zinc-50 text-zinc-700'
+                  className={`w-full rounded-2xl border px-4 py-3 text-left touch-manipulation transition-colors ${
+                    vehicleOption === v.slug
+                      ? 'border-emerald-600 bg-emerald-50 ring-1 ring-emerald-600/30'
+                      : 'border-zinc-200 bg-zinc-50 hover:bg-white'
                   }`}
                 >
-                  {v.label}
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="font-semibold text-sm text-zinc-900">{v.label}</span>
+                    <span className="text-xs text-zinc-500">{v.seats} seats</span>
+                  </div>
+                  <p className="text-xs text-zinc-600 mt-0.5 leading-snug">{v.description}</p>
                 </button>
               ))}
             </div>

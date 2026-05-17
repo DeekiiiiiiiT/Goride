@@ -4,15 +4,12 @@ import { DollarSign, Loader2 } from 'lucide-react';
 import { Button } from '@roam/ui';
 import { Input } from '@roam/ui';
 import { Label } from '@roam/ui';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@roam/ui';
 import type { ManualTripInput } from '../../utils/tripFactory';
 import type { RoutePoint, TripStop } from '../../types/tripSession';
+
+const LIVE_TRIP_PLATFORM = 'Roam' as const;
+const LIVE_TRIP_PAYMENT = 'Cash' as const;
+
 export type TripFareInitialData = {
   date: string;
   time: string;
@@ -48,15 +45,11 @@ export function TripFareDialog({
   onSubmit,
 }: TripFareDialogProps) {
   const [amount, setAmount] = useState('');
-  const [platform, setPlatform] = useState<string>('Roam');
-  const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Card'>('Cash');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setAmount('');
-    setPlatform('Roam');
-    setPaymentMethod('Cash');
     setLoading(false);
   }, [open, initialData]);
 
@@ -71,8 +64,8 @@ export function TripFareDialog({
       endTime: initialData.endTime,
       duration: initialData.duration,
       amount: fare,
-      platform: platform as ManualTripInput['platform'] & string,
-      paymentMethod,
+      platform: LIVE_TRIP_PLATFORM,
+      paymentMethod: LIVE_TRIP_PAYMENT,
       pickupLocation: initialData.pickupLocation,
       dropoffLocation: initialData.endLocation,
       pickupCoords: initialData.pickupCoords,
@@ -131,7 +124,7 @@ export function TripFareDialog({
           </p>
         </div>
 
-        <div className="space-y-4 px-5 py-4">
+        <div className="px-5 py-4">
           <div className="space-y-2">
             <Label htmlFor="trip-fare-amount">Fare amount</Label>
             <div className="relative">
@@ -148,39 +141,6 @@ export function TripFareDialog({
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
               />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label>Platform</Label>
-              <Select value={platform} onValueChange={setPlatform}>
-                <SelectTrigger className="btn-touch h-11">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="z-[110]">
-                  <SelectItem value="Roam">Roam</SelectItem>
-                  <SelectItem value="InDrive">InDrive</SelectItem>
-                  <SelectItem value="Uber">Uber</SelectItem>
-                  <SelectItem value="Bolt">Bolt</SelectItem>
-                  <SelectItem value="Lyft">Lyft</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Payment</Label>
-              <Select
-                value={paymentMethod}
-                onValueChange={(v) => setPaymentMethod(v as 'Cash' | 'Card')}
-              >
-                <SelectTrigger className="btn-touch h-11">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="z-[110]">
-                  <SelectItem value="Cash">Cash</SelectItem>
-                  <SelectItem value="Card">Card</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </div>
         </div>

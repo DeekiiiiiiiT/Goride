@@ -7,7 +7,7 @@ export interface ManualTripInput {
   endTime?: string; // HH:mm
   duration?: number; // minutes
   amount: number;
-  platform: 'Uber' | 'Lyft' | 'Bolt' | 'InDrive';
+  platform: 'Uber' | 'Lyft' | 'Bolt' | 'InDrive' | 'Roam';
   paymentMethod: 'Cash' | 'Card';
   pickupLocation?: string;
   dropoffLocation?: string;

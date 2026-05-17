@@ -700,6 +700,9 @@ importers:
       '@roam/auth-client':
         specifier: workspace:*
         version: link:../../packages/auth-client
+      '@roam/business-config':
+        specifier: workspace:*
+        version: link:../../packages/business-config
       '@roam/types':
         specifier: workspace:*
         version: link:../../packages/types

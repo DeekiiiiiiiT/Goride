@@ -8,16 +8,26 @@ import {
   updateFareRule,
   formatMoneyMinor,
 } from '../services/ridesAdminService';
+import {
+  JamaicaLocationPicker,
+  locationValueFromRule,
+  type JamaicaLocationValue,
+} from '../components/JamaicaLocationPicker';
+import { VehicleTypeSelect, vehicleTypeTableLabel } from '../components/VehicleTypeSelect';
+import { buildLocationKey, DEFAULT_RIDES_VEHICLE_TYPE } from '@roam/business-config';
+
+const DEFAULT_LOCATION: JamaicaLocationValue = { scope: 'country' };
 
 const EMPTY_FORM: FareRuleAdminInput = {
-  city: 'jamaica',
-  vehicle_type: 'standard',
+  location_scope: 'country',
+  vehicle_type: DEFAULT_RIDES_VEHICLE_TYPE,
   currency: 'JMD',
   is_active: true,
   base_fare: 300,
   price_per_km: 120,
   price_per_min: 50,
   booking_fee: 50,
+  estimated_tolls: 0,
   min_fare: 500,
 };
 
@@ -31,6 +41,7 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<FareRuleAdminDto | null>(null);
   const [form, setForm] = useState<FareRuleAdminInput>(EMPTY_FORM);
+  const [location, setLocation] = useState<JamaicaLocationValue>(DEFAULT_LOCATION);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -53,13 +64,18 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
   const openCreate = () => {
     setEditing(null);
     setForm({ ...EMPTY_FORM });
+    setLocation(DEFAULT_LOCATION);
     setDialogOpen(true);
   };
 
   const openEdit = (rule: FareRuleAdminDto) => {
     setEditing(rule);
+    setLocation(locationValueFromRule(rule));
     setForm({
-      city: rule.city,
+      location_scope: locationValueFromRule(rule).scope,
+      county: rule.county ?? undefined,
+      parish: rule.parish ?? undefined,
+      locality: rule.locality ?? undefined,
       vehicle_type: rule.vehicle_type,
       currency: rule.currency,
       is_active: rule.is_active,
@@ -67,6 +83,7 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
       price_per_km: rule.price_per_km,
       price_per_min: rule.price_per_min,
       booking_fee: rule.booking_fee,
+      estimated_tolls: rule.estimated_tolls ?? 0,
       min_fare: rule.min_fare,
     });
     setDialogOpen(true);
@@ -75,12 +92,23 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
   const save = async () => {
     if (!accessToken) return;
     setSaving(true);
+    const locationKey = buildLocationKey(location);
+    const payload: FareRuleAdminInput = {
+      ...form,
+      location_scope: location.scope,
+      county: location.county,
+      parish: location.parish,
+      locality: location.locality,
+      location_key: locationKey,
+      // Older deployed rides functions still require `city` (same slug as location_key).
+      city: locationKey,
+    };
     try {
       if (editing) {
-        await updateFareRule(accessToken, editing.id, form);
+        await updateFareRule(accessToken, editing.id, payload);
         toast.success('Fare rule updated');
       } else {
-        await createFareRule(accessToken, form);
+        await createFareRule(accessToken, payload);
         toast.success('Fare rule created');
       }
       setDialogOpen(false);
@@ -89,7 +117,7 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
       const msg = e instanceof Error ? e.message : 'Save failed';
       toast.error(
         msg.includes('duplicate')
-          ? 'An active rule already exists for this city and vehicle'
+          ? 'An active rule already exists for this location and vehicle'
           : msg
       );
     } finally {
@@ -127,7 +155,7 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
             <thead>
               <tr className="border-b border-slate-800 bg-slate-800/30">
                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-400 uppercase">
-                  City
+                  Location
                 </th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-400 uppercase">
                   Vehicle
@@ -163,8 +191,12 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
               ) : (
                 rules.map((r) => (
                   <tr key={r.id} className="border-t border-slate-800 hover:bg-slate-800/30">
-                    <td className="px-4 py-3 font-medium text-white">{r.city}</td>
-                    <td className="px-4 py-3 text-slate-300">{r.vehicle_type}</td>
+                    <td className="px-4 py-3 font-medium text-white text-sm">
+                      {r.location_label ?? r.location_key ?? r.city}
+                    </td>
+                    <td className="px-4 py-3 text-slate-300">
+                      {vehicleTypeTableLabel(r.vehicle_type)}
+                    </td>
                     <td className="px-4 py-3 tabular-nums text-slate-300 hidden sm:table-cell">
                       {fmt(r.base_fare_minor, r.currency)}
                     </td>
@@ -213,7 +245,7 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
       {dialogOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60" onClick={() => setDialogOpen(false)} />
-          <div className="relative bg-slate-900 border border-slate-700 rounded-lg shadow-xl w-full max-w-md">
+          <div className="relative bg-slate-900 border border-slate-700 rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-slate-800">
               <h3 className="text-lg font-semibold text-white">
                 {editing ? 'Edit fare rule' : 'New fare rule'}
@@ -227,24 +259,12 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
             </div>
 
             <div className="p-4 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-slate-300">City</label>
-                  <input
-                    value={form.city}
-                    onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-slate-300">Vehicle type</label>
-                  <input
-                    value={form.vehicle_type}
-                    onChange={(e) => setForm((f) => ({ ...f, vehicle_type: e.target.value }))}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-                  />
-                </div>
-              </div>
+              <JamaicaLocationPicker value={location} onChange={setLocation} />
+
+              <VehicleTypeSelect
+                value={form.vehicle_type}
+                onChange={(vehicle_type) => setForm((f) => ({ ...f, vehicle_type }))}
+              />
 
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-300">Currency</label>
@@ -262,6 +282,7 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
                     ['price_per_km', 'Price per km'],
                     ['price_per_min', 'Price per min'],
                     ['booking_fee', 'Booking fee'],
+                    ['estimated_tolls', 'Estimated tolls'],
                     ['min_fare', 'Min fare'],
                   ] as const
                 ).map(([key, label]) => (
@@ -288,7 +309,7 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
                   className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-emerald-500 focus:ring-emerald-500/50"
                 />
                 <label htmlFor="is_active" className="text-sm text-slate-300 cursor-pointer">
-                  Active (only one active rule per city + vehicle)
+                  Active (only one active rule per location + vehicle)
                 </label>
               </div>
             </div>

@@ -15,7 +15,6 @@ import {
   ShieldAlert,
   ExternalLink,
 } from 'lucide-react';
-import { Toaster } from 'sonner';
 import { RidesAdminLoginForm } from './components/RidesAdminLoginForm';
 
 const ALLOWED_ROLES = [
@@ -69,12 +68,7 @@ export function RidesAdminLayout() {
   }
 
   if (!session) {
-    return (
-      <>
-        <Toaster position="top-right" theme="dark" />
-        <RidesAdminLoginForm />
-      </>
-    );
+    return <RidesAdminLoginForm />;
   }
 
   const userRole = session.user.user_metadata?.role || session.user.app_metadata?.role;
@@ -111,8 +105,6 @@ export function RidesAdminLayout() {
 
   return (
     <div className="rides-admin-portal dark flex h-screen bg-slate-950">
-      <Toaster position="top-right" theme="dark" />
-
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
