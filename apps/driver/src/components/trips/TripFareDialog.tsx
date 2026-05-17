@@ -13,8 +13,6 @@ import {
 } from '@roam/ui';
 import type { ManualTripInput } from '../../utils/tripFactory';
 import type { RoutePoint, TripStop } from '../../types/tripSession';
-import { debugLog } from '../../utils/debugLog';
-
 export type TripFareInitialData = {
   date: string;
   time: string;
@@ -56,12 +54,6 @@ export function TripFareDialog({
 
   useEffect(() => {
     if (!open) return;
-    // #region agent log
-    debugLog('TripFareDialog.tsx:open', 'fare dialog opened', {
-      hasInitialData: !!initialData,
-      duration: initialData?.duration,
-    }, 'H4');
-    // #endregion
     setAmount('');
     setPlatform('Roam');
     setPaymentMethod('Cash');
@@ -98,9 +90,6 @@ export function TripFareDialog({
 
     try {
       setLoading(true);
-      // #region agent log
-      debugLog('TripFareDialog.tsx:save', 'fare submit', { amount: fare, platform }, 'H5');
-      // #endregion
       await onSubmit(payload);
       onClose();
     } catch {

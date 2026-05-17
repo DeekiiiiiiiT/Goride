@@ -11,8 +11,6 @@ import { toast } from 'sonner';
 import { useOffline } from '../providers/OfflineProvider';
 import { TripActionPortal } from './TripActionPortal';
 import { CancelTripDialog } from './CancelTripDialog';
-import { debugLog } from '../../utils/debugLog';
-
 interface TripTimerProps {
   onComplete: (data: {
     startTime: string; // HH:mm
@@ -308,9 +306,6 @@ export function TripTimer({ onComplete }: TripTimerProps) {
   };
 
   const cancelTrip = () => {
-    // #region agent log
-    debugLog('TripTimer.tsx:cancelTrip', 'cancel clicked', { cancelDialogOpen }, 'H1');
-    // #endregion
     stopTracking();
     setCancelDialogOpen(true);
   };
@@ -323,9 +318,6 @@ export function TripTimer({ onComplete }: TripTimerProps) {
   }, [tripStatus, startTime, startTracking]);
 
   const confirmCancelTrip = useCallback(() => {
-    // #region agent log
-    debugLog('TripTimer.tsx:confirmCancelTrip', 'confirm cancel', {}, 'H1');
-    // #endregion
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
@@ -350,13 +342,6 @@ export function TripTimer({ onComplete }: TripTimerProps) {
   const stopTrip = async () => {
     if (!startTime || isStopping) return;
 
-    // #region agent log
-    debugLog('TripTimer.tsx:stopTrip', 'stopTrip start (fast path)', {
-      startTime,
-      routePoints: route.length,
-      hasCurrentLocation: !!currentLocation,
-    }, 'H3');
-    // #endregion
     setIsStopping(true);
     try {
       let finalStops = [...stops];
@@ -437,12 +422,6 @@ export function TripTimer({ onComplete }: TripTimerProps) {
         geocodeError,
       };
 
-      // #region agent log
-      debugLog('TripTimer.tsx:stopTrip', 'calling onComplete (fast path)', {
-        duration: tripData.duration,
-        hasRoute: route.length > 0,
-      }, 'H3');
-      // #endregion
       localStorage.removeItem(STORAGE_KEY);
       stopTracking();
       resetRoute();
@@ -461,11 +440,6 @@ export function TripTimer({ onComplete }: TripTimerProps) {
         toast.info('Enter the fare you received to save this trip.');
       });
     } catch (error) {
-      // #region agent log
-      debugLog('TripTimer.tsx:stopTrip', 'stopTrip error', {
-        error: error instanceof Error ? error.message : String(error),
-      }, 'H3');
-      // #endregion
       console.error('Failed to complete trip', error);
       toast.error('Could not complete trip. Please try again.');
       setIsStopping(false);
