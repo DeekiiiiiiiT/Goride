@@ -103,6 +103,16 @@ export function RidesAdminLayout() {
 
   const currentPath = location.pathname;
 
+  const pageTitle = (() => {
+    if (currentPath.startsWith('/admin/fare-rules/calculator')) return 'Trip calculator';
+    const item = NAV_ITEMS.find(
+      (i) =>
+        currentPath === i.path ||
+        (i.path !== '/admin' && currentPath.startsWith(i.path)),
+    );
+    return item?.label ?? 'Dashboard';
+  })();
+
   return (
     <div className="rides-admin-portal dark flex h-screen bg-slate-950">
       {/* Mobile overlay */}
@@ -207,11 +217,7 @@ export function RidesAdminLayout() {
             <Menu className="w-5 h-5" />
           </button>
 
-          <h2 className="text-base font-semibold text-white">
-            {NAV_ITEMS.find((i) => 
-              currentPath === i.path || (i.path !== '/admin' && currentPath.startsWith(i.path))
-            )?.label || 'Dashboard'}
-          </h2>
+          <h2 className="text-base font-semibold text-white">{pageTitle}</h2>
 
           <a
             href="/"

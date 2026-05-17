@@ -7,7 +7,11 @@ import type { FareQuoteResponse } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
 import { RoamPlaceField } from '@/components/RoamPlaceField';
 import { ridesCreateRequest, ridesQuote } from '@/services/ridesEdge';
-import { DEFAULT_RIDES_VEHICLE_TYPE, RIDES_VEHICLE_TYPES } from '@roam/business-config';
+import {
+  DEFAULT_RIDES_VEHICLE_TYPE,
+  RIDES_VEHICLE_TYPES,
+  vehicleCapacityDisplay,
+} from '@roam/business-config';
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -159,9 +163,12 @@ export default function HomePage() {
                 >
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="font-semibold text-sm text-zinc-900">{v.label}</span>
-                    <span className="text-xs text-zinc-500">{v.seats} seats</span>
+                    <span className="text-xs text-zinc-500">{vehicleCapacityDisplay(v)}</span>
                   </div>
                   <p className="text-xs text-zinc-600 mt-0.5 leading-snug">{v.description}</p>
+                  {v.slug === 'courier' && (
+                    <p className="text-[11px] text-zinc-500 mt-1">Send a package</p>
+                  )}
                 </button>
               ))}
             </div>

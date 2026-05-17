@@ -14,7 +14,9 @@ import RidePage from './pages/RidePage';
 import { WrongRidesSurfaceGate } from './components/auth/WrongRidesSurfaceGate';
 import { RidesAdminLayout } from './admin/RidesAdminLayout';
 import { RidesAdminDashboard } from './admin/pages/RidesAdminDashboard';
+import { FareRulesLayout } from './admin/pages/FareRulesLayout';
 import { FareRulesPage } from './admin/pages/FareRulesPage';
+import { TripCalculatorPage } from './admin/pages/TripCalculatorPage';
 import { SurgePage } from './admin/pages/SurgePage';
 import { RideOperationsPage } from './admin/pages/RideOperationsPage';
 
@@ -118,7 +120,10 @@ export default function App() {
       {/* Admin routes */}
       <Route path="/admin" element={<RidesAdminLayout />}>
         <Route index element={<RidesAdminDashboard />} />
-        <Route path="fare-rules" element={<FareRulesPage />} />
+        <Route path="fare-rules" element={<FareRulesLayout />}>
+          <Route index element={<FareRulesPage />} />
+          <Route path="calculator" element={<TripCalculatorPage />} />
+        </Route>
         <Route path="surge" element={<SurgePage />} />
         <Route path="rides" element={<RideOperationsPage />} />
       </Route>

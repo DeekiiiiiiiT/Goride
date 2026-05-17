@@ -17,7 +17,11 @@ import {
   type JamaicaLocationSelection,
   type LocationScope,
 } from "./fare/jamaicaLocations.ts";
-import { isKnownVehicleType, normalizeVehicleType } from "./fare/ridesVehicleTypes.ts";
+import {
+  isKnownVehicleType,
+  normalizeVehicleType,
+  RIDES_VEHICLE_TYPE_ALLOWED_SLUGS,
+} from "./fare/ridesVehicleTypes.ts";
 
 type RidesAdminDb = Awaited<ReturnType<typeof getRidesAdminDb>>;
 
@@ -269,7 +273,7 @@ export function registerAdminRoutes(
     const vehicleTypeRaw = typeof body.vehicle_type === "string" ? body.vehicle_type.trim().toLowerCase() : "";
     if (!vehicleTypeRaw) return c.json({ error: "vehicle_type_required" }, 400);
     if (!isKnownVehicleType(vehicleTypeRaw)) {
-      return c.json({ error: "unknown_vehicle_type", allowed: ["uberx", "comfort", "uberxl", "standard"] }, 400);
+      return c.json({ error: "unknown_vehicle_type", allowed: [...RIDES_VEHICLE_TYPE_ALLOWED_SLUGS] }, 400);
     }
     const vehicleType = normalizeVehicleType(vehicleTypeRaw);
 
@@ -360,7 +364,7 @@ export function registerAdminRoutes(
     if (typeof body.vehicle_type === "string" && body.vehicle_type.trim()) {
       const raw = body.vehicle_type.trim().toLowerCase();
       if (!isKnownVehicleType(raw)) {
-        return c.json({ error: "unknown_vehicle_type", allowed: ["uberx", "comfort", "uberxl", "standard"] }, 400);
+        return c.json({ error: "unknown_vehicle_type", allowed: [...RIDES_VEHICLE_TYPE_ALLOWED_SLUGS] }, 400);
       }
       patch.vehicle_type = normalizeVehicleType(raw);
     }

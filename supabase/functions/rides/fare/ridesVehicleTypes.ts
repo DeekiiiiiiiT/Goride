@@ -1,44 +1,57 @@
 /**
  * Roam Rides vehicle / product tiers (stored as `vehicle_type` / `vehicle_option` slugs).
- * Keep in sync with supabase/functions/rides/fare/ridesVehicleTypes.ts
+ * Keep in sync with packages/business-config/src/ridesVehicleTypes.ts
  */
 
-export type RidesVehicleTypeSlug = 'uberx' | 'comfort' | 'uberxl';
+export type RidesVehicleTypeSlug = "uberx" | "comfort" | "uberxl" | "courier";
 
 export type RidesVehicleType = {
   slug: RidesVehicleTypeSlug;
   label: string;
   description: string;
   seats: number;
+  capacityLabel?: string;
 };
 
 export const RIDES_VEHICLE_TYPES: readonly RidesVehicleType[] = [
   {
-    slug: 'uberx',
-    label: 'UberX',
-    description: 'Sedan — standard 4-door compact or mid-size car',
+    slug: "uberx",
+    label: "UberX",
+    description: "Sedan — standard 4-door compact or mid-size car",
     seats: 4,
   },
   {
-    slug: 'comfort',
-    label: 'Comfort',
-    description: 'Sedan — newer, more spacious 4-door mid-size car',
+    slug: "comfort",
+    label: "Comfort",
+    description: "Sedan — newer, more spacious 4-door mid-size car",
     seats: 4,
   },
   {
-    slug: 'uberxl',
-    label: 'UberXL',
-    description: 'SUV or minivan — larger 6-passenger utility vehicle',
+    slug: "uberxl",
+    label: "UberXL",
+    description: "SUV or minivan — larger 6-passenger utility vehicle",
     seats: 6,
+  },
+  {
+    slug: "courier",
+    label: "Courier",
+    description:
+      "Variable — car, motorcycle, bicycle, or scooter depending on your market",
+    seats: 0,
+    capacityLabel: "Variable",
   },
 ] as const;
 
-/** Legacy DB / API values mapped to a current tier. */
 export const RIDES_VEHICLE_LEGACY_ALIASES: Record<string, RidesVehicleTypeSlug> = {
-  standard: 'uberx',
+  standard: "uberx",
 };
 
-export const DEFAULT_RIDES_VEHICLE_TYPE: RidesVehicleTypeSlug = 'uberx';
+export const DEFAULT_RIDES_VEHICLE_TYPE: RidesVehicleTypeSlug = "uberx";
+
+export const RIDES_VEHICLE_TYPE_ALLOWED_SLUGS: readonly string[] = [
+  ...RIDES_VEHICLE_TYPES.map((v) => v.slug),
+  ...Object.keys(RIDES_VEHICLE_LEGACY_ALIASES),
+];
 
 export function normalizeVehicleType(raw: string): string {
   const slug = raw.trim().toLowerCase();
@@ -46,13 +59,12 @@ export function normalizeVehicleType(raw: string): string {
   return RIDES_VEHICLE_LEGACY_ALIASES[slug] ?? slug;
 }
 
-/** Slugs to try when loading fare rules (canonical + legacy rows). */
 export function vehicleTypesForFareLookup(vehicleType: string): string[] {
   const raw = vehicleType.trim().toLowerCase();
   const canonical = normalizeVehicleType(raw);
   const keys = new Set<string>([canonical, raw]);
-  if (canonical === 'uberx') keys.add('standard');
-  if (raw === 'standard') keys.add('uberx');
+  if (canonical === "uberx") keys.add("standard");
+  if (raw === "standard") keys.add("uberx");
   return [...keys];
 }
 
