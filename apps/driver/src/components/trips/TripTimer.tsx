@@ -20,6 +20,7 @@ import { StopList } from './StopList';
 import { toast } from 'sonner';
 import { mapMatchService } from '../../services/mapMatchService';
 import { useOffline } from '../providers/OfflineProvider';
+import { TripActionPortal } from './TripActionPortal';
 
 interface TripTimerProps {
   onComplete: (data: {
@@ -67,7 +68,8 @@ export function TripTimer({ onComplete }: TripTimerProps) {
   const [currentStop, setCurrentStop] = useState<TripStop | null>(null);
   
   const [isStarting, setIsStarting] = useState(false);
-  const [isStopping, setIsStopping] = useState(false); // New state for stopping loader
+  const [isStopping, setIsStopping] = useState(false);
+  const [isArriving, setIsArriving] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [startTime, setStartTime] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -136,22 +138,31 @@ export function TripTimer({ onComplete }: TripTimerProps) {
     }
   }, []);
 
-  // Update storage when route changes
+  // Debounce session writes — route GPS updates were blocking the main thread on mobile
   useEffect(() => {
-    if (isActive && startTime) {
-      const session: TripSession = {
-        isActive,
-        status: tripStatus,
-        startTime,
-        startLocation,
-        startCoords,
-        vehicleId: null,
-        route, // Save current route
-        stops,
-        currentStop
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-    }
+    if (!isActive || !startTime) return;
+
+    const session: TripSession = {
+      isActive,
+      status: tripStatus,
+      startTime,
+      startLocation,
+      startCoords,
+      vehicleId: null,
+      route,
+      stops,
+      currentStop,
+    };
+
+    const timer = window.setTimeout(() => {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+      } catch (e) {
+        console.warn('Failed to persist trip session', e);
+      }
+    }, 400);
+
+    return () => window.clearTimeout(timer);
   }, [route, isActive, tripStatus, startTime, startLocation, startCoords, stops, currentStop]);
 
   // Timer interval
@@ -183,6 +194,8 @@ export function TripTimer({ onComplete }: TripTimerProps) {
 
   // Phase 3: Stop Handlers
   const handleArriveAtStop = async () => {
+    if (isArriving) return;
+    setIsArriving(true);
     try {
       const position = await getCurrentPosition();
       const address = await reverseGeocode(position.latitude, position.longitude);
@@ -209,6 +222,8 @@ export function TripTimer({ onComplete }: TripTimerProps) {
       setCurrentStop(fallbackStop);
       setTripStatus('WAITING');
       toast.warning("GPS check failed, using approximate location.");
+    } finally {
+      setIsArriving(false);
     }
   };
 
@@ -309,9 +324,10 @@ export function TripTimer({ onComplete }: TripTimerProps) {
   };
 
   const stopTrip = async () => {
-    if (!startTime) return;
+    if (!startTime || isStopping) return;
 
     setIsStopping(true);
+    try {
     // Stop tracking first
     stopTracking();
 
@@ -487,16 +503,21 @@ export function TripTimer({ onComplete }: TripTimerProps) {
     setIsStopping(false);
 
     onComplete(tripData);
+    } catch (error) {
+      console.error('Failed to complete trip', error);
+      toast.error('Could not complete trip. Please try again.');
+      setIsStopping(false);
+    }
   };
 
   if (!isActive) {
     return (
-      <div className="fixed left-0 right-0 z-50 safe-x px-4 bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))]">
+      <TripActionPortal>
         <Button
           type="button"
-          onClick={startTrip}
+          onClick={() => void startTrip()}
           disabled={isStarting}
-          className="btn-touch w-full h-14 sm:h-16 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white shadow-xl shadow-indigo-500/20 rounded-2xl border-0 transition-all active:scale-[0.99]"
+          className="btn-touch w-full h-14 sm:h-16 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white shadow-xl shadow-indigo-500/20 rounded-2xl border-0 transition-all active:scale-[0.99] touch-manipulation"
         >
           {isStarting ? (
             <div className="flex items-center gap-2 text-lg font-bold">
@@ -509,7 +530,7 @@ export function TripTimer({ onComplete }: TripTimerProps) {
             </div>
           )}
         </Button>
-      </div>
+      </TripActionPortal>
     );
   }
 
@@ -555,28 +576,38 @@ export function TripTimer({ onComplete }: TripTimerProps) {
       </CardContent>
     </Card>
 
-    <div
-      className="fixed left-0 right-0 z-50 safe-x px-4 bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))]"
-      role="toolbar"
-      aria-label="Trip controls"
-    >
-      <div className="mx-auto w-full max-w-lg sm:max-w-2xl flex flex-col gap-2 rounded-2xl border border-blue-200 bg-white/95 p-3 shadow-xl backdrop-blur-md dark:border-blue-800 dark:bg-slate-900/95">
+    <TripActionPortal>
+      <div
+        className="flex flex-col gap-2 rounded-2xl border border-blue-200 bg-white/95 p-3 shadow-xl backdrop-blur-md dark:border-blue-800 dark:bg-slate-900/95"
+        role="toolbar"
+        aria-label="Trip controls"
+      >
         {tripStatus === 'DRIVING' && (
           <Button
             type="button"
-            onClick={handleArriveAtStop}
-            className="btn-touch h-12 w-full bg-amber-500 hover:bg-amber-600 text-white gap-2 shadow-sm font-bold"
+            onClick={() => void handleArriveAtStop()}
+            disabled={isArriving}
+            className="btn-touch h-12 w-full bg-amber-500 hover:bg-amber-600 text-white gap-2 shadow-sm font-bold touch-manipulation"
           >
-            <MapPin className="h-5 w-5 shrink-0" />
-            <span>{getOrdinal(stops.length + 1)} Stop</span>
+            {isArriving ? (
+              <>
+                <Loader2 className="h-5 w-5 shrink-0 animate-spin" />
+                <span>Getting location…</span>
+              </>
+            ) : (
+              <>
+                <MapPin className="h-5 w-5 shrink-0" />
+                <span>{getOrdinal(stops.length + 1)} Stop</span>
+              </>
+            )}
           </Button>
         )}
 
         {tripStatus === 'WAITING' && (
           <Button
             type="button"
-            onClick={handleResumeTrip}
-            className="btn-touch h-12 w-full bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shadow-sm font-bold"
+            onClick={() => void handleResumeTrip()}
+            className="btn-touch h-12 w-full bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shadow-sm font-bold touch-manipulation"
           >
             <Play className="h-5 w-5 shrink-0" />
             <span>Resume Trip</span>
@@ -588,7 +619,7 @@ export function TripTimer({ onComplete }: TripTimerProps) {
             type="button"
             onClick={cancelTrip}
             variant="outline"
-            className="btn-touch h-12 w-full border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-300 dark:border-red-900 dark:hover:bg-red-950/50 gap-2 font-semibold"
+            className="btn-touch h-12 w-full border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-300 dark:border-red-900 dark:hover:bg-red-950/50 gap-2 font-semibold touch-manipulation"
             title="Cancel Trip"
           >
             <X className="h-5 w-5 shrink-0" />
@@ -597,9 +628,9 @@ export function TripTimer({ onComplete }: TripTimerProps) {
 
           <Button
             type="button"
-            onClick={stopTrip}
+            onClick={() => void stopTrip()}
             variant="destructive"
-            className="btn-touch h-12 w-full gap-2 shadow-sm font-bold"
+            className="btn-touch h-12 w-full gap-2 shadow-sm font-bold touch-manipulation"
             disabled={isStopping}
           >
             {isStopping ? (
@@ -616,12 +647,13 @@ export function TripTimer({ onComplete }: TripTimerProps) {
           </Button>
         </div>
       </div>
-    </div>
+    </TripActionPortal>
 
     <div className="h-44 shrink-0" aria-hidden />
 
-    <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
-      <AlertDialogContent className="safe-x max-w-[calc(100vw-2rem)] sm:max-w-lg">
+    {cancelDialogOpen && (
+    <AlertDialog open onOpenChange={setCancelDialogOpen}>
+      <AlertDialogContent className="safe-x z-[110] max-w-[calc(100vw-2rem)] sm:max-w-lg">
         <AlertDialogHeader>
           <AlertDialogTitle>Cancel Current Trip?</AlertDialogTitle>
           <AlertDialogDescription>
@@ -640,6 +672,7 @@ export function TripTimer({ onComplete }: TripTimerProps) {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+    )}
     </>
   );
 }

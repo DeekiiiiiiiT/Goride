@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
 import {
@@ -23,6 +23,7 @@ export default function App() {
   const isAdminPath = location.pathname.startsWith('/admin');
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const passengerSurfacePatchRef = useRef<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
@@ -54,21 +55,36 @@ export default function App() {
     })();
   }, [session?.user?.id]);
 
-  /** Same Supabase session as Roam Driver — switch metadata to passenger when using this app. */
+  /** Same Supabase session as Roam Driver — switch metadata to passenger once per login (avoid re-render loops). */
   useEffect(() => {
     const user = session?.user;
-    if (!user || isAdminPath) return;
-    const current = user.user_metadata?.role as string | undefined;
-    if (!needsRidesSurfaceRolePatch(current, 'passenger')) return;
+    if (!user || isAdminPath) {
+      if (!user) passengerSurfacePatchRef.current = null;
+      return;
+    }
+    if (passengerSurfacePatchRef.current === user.id) return;
 
+    const current = user.user_metadata?.role as string | undefined;
+    if (!needsRidesSurfaceRolePatch(current, 'passenger')) {
+      passengerSurfacePatchRef.current = user.id;
+      return;
+    }
+
+    let cancelled = false;
     void (async () => {
       try {
         await supabase.auth.updateUser({ data: { role: 'passenger' } });
       } catch (e) {
         console.warn('passenger surface role patch:', e);
+      } finally {
+        if (!cancelled) passengerSurfacePatchRef.current = user.id;
       }
     })();
-  }, [session?.user?.id, session?.user?.user_metadata?.role, isAdminPath]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.id, isAdminPath]);
 
   if (loading) {
     return (

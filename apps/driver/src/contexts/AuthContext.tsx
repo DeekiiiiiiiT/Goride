@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { needsRidesSurfaceRolePatch, shouldSkipOauthSurfaceRolePatch } from '@roam/auth-client';
 import { supabase } from '../utils/supabase/client';
@@ -24,6 +24,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const driverSurfacePatchRef = useRef<string | null>(null);
 
   useEffect(() => {
     const initSession = async () => {
@@ -82,20 +83,35 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     })();
   }, [user]);
 
-  /** Same Supabase session as Roam Rides — switch metadata to driver when using this app. */
+  /** Same Supabase session as Roam Rides — switch metadata to driver once per login (avoid re-render loops). */
   useEffect(() => {
-    if (!user) return;
-    const current = user.user_metadata?.role as string | undefined;
-    if (!needsRidesSurfaceRolePatch(current, 'driver')) return;
+    if (!user) {
+      driverSurfacePatchRef.current = null;
+      return;
+    }
+    if (driverSurfacePatchRef.current === user.id) return;
 
+    const current = user.user_metadata?.role as string | undefined;
+    if (!needsRidesSurfaceRolePatch(current, 'driver')) {
+      driverSurfacePatchRef.current = user.id;
+      return;
+    }
+
+    let cancelled = false;
     void (async () => {
       try {
         await supabase.auth.updateUser({ data: { role: 'driver' } });
       } catch (e) {
         console.warn('driver surface role patch:', e);
+      } finally {
+        if (!cancelled) driverSurfacePatchRef.current = user.id;
       }
     })();
-  }, [user?.id, user?.user_metadata?.role]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const signOut = async () => {
     setSession(null);
