@@ -43,6 +43,20 @@ export function isPassengerOnlyMetadataRole(raw: string | null | undefined): boo
   return (raw ?? '').trim() === 'passenger';
 }
 
+export type RidesSurfaceRole = 'passenger' | 'driver';
+
+/** True when the client should set `user_metadata.role` for this Roam surface. */
+export function needsRidesSurfaceRolePatch(
+  current: string | null | undefined,
+  intended: RidesSurfaceRole,
+): boolean {
+  const r = (current ?? '').trim();
+  if (!r) return true;
+  if (r === intended) return false;
+  if (shouldSkipOauthSurfaceRolePatch(current, intended)) return false;
+  return true;
+}
+
 /** True when this metadata role must not use Roam Rides passenger shell (only passenger/driver allowed). */
 export function isRidesPassengerUiBlockedRole(raw: string | null | undefined): boolean {
   const r = (raw ?? '').trim();

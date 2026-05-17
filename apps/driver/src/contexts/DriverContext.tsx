@@ -76,13 +76,13 @@ const DriverContext = createContext<DriverContextType>({
 });
 
 export const DriverProvider = ({ children }: { children: React.ReactNode }) => {
-  const { user, isDriver } = useAuth();
+  const { user } = useAuth();
   const [profile, setProfile] = useState<DriverProfile | null>(null);
   const [fleet, setFleet] = useState<FleetInfo | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = async () => {
-    if (!user || !isDriver) {
+    if (!user) {
       setProfile(null);
       setFleet(null);
       setLoading(false);
@@ -152,7 +152,7 @@ export const DriverProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     fetchProfile();
-  }, [user, isDriver]);
+  }, [user?.id]);
 
   const mode: DriverMode = profile?.mode || 'independent';
   const isFleetDriver = mode === 'fleet';

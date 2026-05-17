@@ -1,7 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
-import { supabase, shouldSkipOauthSurfaceRolePatch, isRidesPassengerUiBlockedRole } from '@roam/auth-client';
+import {
+  supabase,
+  shouldSkipOauthSurfaceRolePatch,
+  isRidesPassengerUiBlockedRole,
+  needsRidesSurfaceRolePatch,
+} from '@roam/auth-client';
 import { PASSENGER_OAUTH_INTENT_KEY, PASSENGER_OAUTH_INTENT_VALUE } from './utils/passengerAuthSignup';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
@@ -48,6 +53,22 @@ export default function App() {
       }
     })();
   }, [session?.user?.id]);
+
+  /** Same Supabase session as Roam Driver — switch metadata to passenger when using this app. */
+  useEffect(() => {
+    const user = session?.user;
+    if (!user || isAdminPath) return;
+    const current = user.user_metadata?.role as string | undefined;
+    if (!needsRidesSurfaceRolePatch(current, 'passenger')) return;
+
+    void (async () => {
+      try {
+        await supabase.auth.updateUser({ data: { role: 'passenger' } });
+      } catch (e) {
+        console.warn('passenger surface role patch:', e);
+      }
+    })();
+  }, [session?.user?.id, session?.user?.user_metadata?.role, isAdminPath]);
 
   if (loading) {
     return (

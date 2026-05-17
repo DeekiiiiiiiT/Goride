@@ -58,14 +58,14 @@ function AuthenticatedDriverRoute() {
 }
 
 function AppContent() {
-  const { user, isDriver, loading } = useAuth();
+  const { user, loading } = useAuth();
 
   if (loading) {
     return <AuthLoadingScreen />;
   }
 
-  if (!user || !isDriver) {
-    return <DriverLoginPage signedInNonDriver={user && !isDriver ? user : null} />;
+  if (!user) {
+    return <DriverLoginPage />;
   }
 
   return (

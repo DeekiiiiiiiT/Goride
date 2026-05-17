@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { shouldSkipOauthSurfaceRolePatch } from '@roam/auth-client';
+import { needsRidesSurfaceRolePatch, shouldSkipOauthSurfaceRolePatch } from '@roam/auth-client';
 import { supabase } from '../utils/supabase/client';
 import { DRIVER_OAUTH_INTENT_KEY, DRIVER_OAUTH_INTENT_VALUE } from '../utils/driverAuthSignup';
 
@@ -81,6 +81,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
     })();
   }, [user]);
+
+  /** Same Supabase session as Roam Rides — switch metadata to driver when using this app. */
+  useEffect(() => {
+    if (!user) return;
+    const current = user.user_metadata?.role as string | undefined;
+    if (!needsRidesSurfaceRolePatch(current, 'driver')) return;
+
+    void (async () => {
+      try {
+        await supabase.auth.updateUser({ data: { role: 'driver' } });
+      } catch (e) {
+        console.warn('driver surface role patch:', e);
+      }
+    })();
+  }, [user?.id, user?.user_metadata?.role]);
 
   const signOut = async () => {
     setSession(null);

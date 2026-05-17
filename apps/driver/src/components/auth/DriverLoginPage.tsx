@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
-import { User } from '@supabase/supabase-js';
 import { Car, Loader2, AlertCircle, Mail, Lock, Eye, EyeOff, HelpCircle } from 'lucide-react';
-import { isPassengerOnlyMetadataRole } from '@roam/auth-client';
 import { supabase } from '../../utils/supabase/client';
 import { ThemeToggleButton } from '../layout/ThemeToggleButton';
 import { DriverPhoneAuthWizard } from './DriverPhoneAuthWizard';
 import { DriverEmailSignupForm, GoogleSignupButton } from './DriverEmailSignupForm';
 
-export function DriverLoginPage({ signedInNonDriver }: { signedInNonDriver?: User | null }) {
+export function DriverLoginPage() {
   const [mainView, setMainView] = useState<'login' | 'signup'>('login');
   const [signupSubView, setSignupSubView] = useState<'main' | 'email'>('main');
   const [loginMethod, setLoginMethod] = useState<'email' | 'phone'>('email');
@@ -32,60 +30,8 @@ export function DriverLoginPage({ signedInNonDriver }: { signedInNonDriver?: Use
     }
   };
 
-  const rawRole = (signedInNonDriver?.user_metadata?.role as string | undefined)?.trim();
-
   return (
-    <div className="flex min-h-dvh flex-col bg-gradient-to-br from-slate-100 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 safe-x safe-b">
-      {signedInNonDriver && (
-        <div className="mx-auto w-full max-w-lg px-4 pt-4">
-          {isPassengerOnlyMetadataRole(rawRole) ? (
-            <div className="rounded-xl border border-amber-200/90 bg-amber-50/95 px-4 py-3 text-sm text-amber-950 shadow-sm dark:border-amber-500/35 dark:bg-amber-950/35 dark:text-amber-50">
-              <p>
-                You are signed in as a <span className="font-semibold">rider</span>. Book trips on{' '}
-                <a
-                  href="https://roam-s.co/login"
-                  className="font-semibold text-emerald-800 underline underline-offset-2 dark:text-emerald-300"
-                >
-                  Roam Rides
-                </a>
-                . Sign out if you need a driver account on this device.
-              </p>
-              <button
-                type="button"
-                className="mt-3 text-xs font-semibold text-amber-900/80 hover:text-amber-950 dark:text-amber-200/90"
-                onClick={() => void supabase.auth.signOut()}
-              >
-                Sign out
-              </button>
-            </div>
-          ) : rawRole ? (
-            <div className="rounded-xl border border-slate-200 bg-white/90 px-4 py-3 text-sm text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100">
-              <p>
-                This account is not set up as a driver here (role: <span className="font-mono">{rawRole}</span>).
-                Use the correct Roam product for your role, or sign out.
-              </p>
-              <button
-                type="button"
-                className="mt-3 text-xs font-semibold text-emerald-700 dark:text-emerald-400"
-                onClick={() => void supabase.auth.signOut()}
-              >
-                Sign out
-              </button>
-            </div>
-          ) : (
-            <div className="rounded-xl border border-slate-200 bg-white/90 px-4 py-3 text-sm text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100">
-              <p>You are signed in without a driver role yet. Finish onboarding or sign out to switch accounts.</p>
-              <button
-                type="button"
-                className="mt-3 text-xs font-semibold text-emerald-700 dark:text-emerald-400"
-                onClick={() => void supabase.auth.signOut()}
-              >
-                Sign out
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+    <div className="flex min-h-screen flex-col bg-gradient-to-br from-slate-100 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
       <div className="flex items-start justify-between px-4 pt-4">
         <a
           href="mailto:support@roam.app"
