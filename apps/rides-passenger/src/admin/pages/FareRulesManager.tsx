@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Loader2, Pencil, Plus, X } from 'lucide-react';
+import { Loader2, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { FareRuleAdminDto, FareRuleAdminInput } from '../services/ridesAdminService';
 import {
   createFareRule,
+  deleteFareRule,
   listFareRules,
   updateFareRule,
   formatMoneyMinor,
@@ -14,6 +15,8 @@ import {
   type JamaicaLocationValue,
 } from '../components/JamaicaLocationPicker';
 import { VehicleTypeSelect, vehicleTypeTableLabel } from '../components/VehicleTypeSelect';
+import { FareRuleActionsMenu } from '../components/FareRuleActionsMenu';
+import { FareRuleDetailOverlay } from '../components/FareRuleDetailOverlay';
 import { buildLocationKey, DEFAULT_RIDES_VEHICLE_TYPE } from '@roam/business-config';
 
 const DEFAULT_LOCATION: JamaicaLocationValue = { scope: 'country' };
@@ -43,6 +46,8 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
   const [form, setForm] = useState<FareRuleAdminInput>(EMPTY_FORM);
   const [location, setLocation] = useState<JamaicaLocationValue>(DEFAULT_LOCATION);
   const [saving, setSaving] = useState(false);
+  const [detailRule, setDetailRule] = useState<FareRuleAdminDto | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     if (!accessToken) return;
@@ -62,6 +67,7 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
   }, [load]);
 
   const openCreate = () => {
+    setDetailRule(null);
     setEditing(null);
     setForm({ ...EMPTY_FORM });
     setLocation(DEFAULT_LOCATION);
@@ -69,6 +75,7 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
   };
 
   const openEdit = (rule: FareRuleAdminDto) => {
+    setDetailRule(null);
     setEditing(rule);
     setLocation(locationValueFromRule(rule));
     setForm({
@@ -89,6 +96,30 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
     setDialogOpen(true);
   };
 
+  const confirmDelete = async (rule: FareRuleAdminDto) => {
+    if (!accessToken) return;
+    const label = rule.location_label ?? rule.location_key ?? rule.city;
+    const vehicle = vehicleTypeTableLabel(rule.vehicle_type);
+    if (
+      !window.confirm(
+        `Delete fare rule for ${label} (${vehicle})? This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    setDeleting(true);
+    try {
+      await deleteFareRule(accessToken, rule.id);
+      toast.success('Fare rule deleted');
+      if (detailRule?.id === rule.id) setDetailRule(null);
+      await load();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Delete failed');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const save = async () => {
     if (!accessToken) return;
     setSaving(true);
@@ -100,7 +131,6 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
       parish: location.parish,
       locality: location.locality,
       location_key: locationKey,
-      // Older deployed rides functions still require `city` (same slug as location_key).
       city: locationKey,
     };
     try {
@@ -150,7 +180,7 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
           <Loader2 className="w-8 h-8 animate-spin text-amber-400" />
         </div>
       ) : (
-        <div className="rounded-xl border border-slate-800 overflow-hidden">
+        <div className="rounded-xl border border-slate-800 overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-800 bg-slate-800/30">
@@ -185,12 +215,16 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
               {rules.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="text-center text-slate-500 py-12">
-                    No fare rules yet. Add Jamaica / standard to get started.
+                    No fare rules yet. Add a rule to get started.
                   </td>
                 </tr>
               ) : (
                 rules.map((r) => (
-                  <tr key={r.id} className="border-t border-slate-800 hover:bg-slate-800/30">
+                  <tr
+                    key={r.id}
+                    onClick={() => setDetailRule(r)}
+                    className="border-t border-slate-800 hover:bg-slate-800/40 cursor-pointer transition-colors"
+                  >
                     <td className="px-4 py-3 font-medium text-white text-sm">
                       {r.location_label ?? r.location_key ?? r.city}
                     </td>
@@ -224,14 +258,11 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={() => openEdit(r)}
-                        className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800"
-                        aria-label="Edit"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
+                      <FareRuleActionsMenu
+                        rule={r}
+                        onEdit={openEdit}
+                        onDelete={(rule) => void confirmDelete(rule)}
+                      />
                     </td>
                   </tr>
                 ))
@@ -241,9 +272,15 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
         </div>
       )}
 
-      {/* Dialog */}
+      <FareRuleDetailOverlay
+        rule={detailRule}
+        onClose={() => setDetailRule(null)}
+        onEdit={openEdit}
+        onDelete={(rule) => void confirmDelete(rule)}
+      />
+
       {dialogOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60" onClick={() => setDialogOpen(false)} />
           <div className="relative bg-slate-900 border border-slate-700 rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-slate-800">
@@ -323,7 +360,7 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
               </button>
               <button
                 onClick={() => void save()}
-                disabled={saving}
+                disabled={saving || deleting}
                 className="px-4 py-2 text-sm font-medium rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50"
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}

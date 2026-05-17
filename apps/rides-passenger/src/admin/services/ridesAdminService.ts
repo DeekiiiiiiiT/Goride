@@ -17,6 +17,7 @@ export interface FareRuleAdminDto {
   vehicle_type: string;
   currency: string;
   is_active: boolean;
+  effective_from?: string;
   base_fare: number;
   base_fare_minor: number;
   price_per_km: number;
@@ -126,6 +127,28 @@ export async function updateFareRule(
     headers: headers(accessToken, 'application/json'),
     body: JSON.stringify(input),
   });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function deleteFareRule(
+  accessToken: string,
+  id: string
+): Promise<{ ok: boolean; id: string }> {
+  const url = `${RIDES_BASE}/admin/fare-rules/${id}/delete`;
+  let res: Response;
+  try {
+    // POST avoids browser/CORS issues with DELETE on some deployed rides functions.
+    res = await fetch(url, {
+      method: 'POST',
+      headers: headers(accessToken, 'application/json'),
+      body: '{}',
+    });
+  } catch {
+    throw new Error(
+      'Could not reach the rides API. Run: supabase functions deploy rides — then hard-refresh this page.'
+    );
+  }
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
 }

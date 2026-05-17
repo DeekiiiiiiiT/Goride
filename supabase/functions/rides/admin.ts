@@ -2,7 +2,7 @@
  * Super Admin routes for Roam Rides pricing (fare_rules + surge_cells).
  */
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
-import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireProductAdmin } from "../_shared/productAdmin.ts";
 import { getRidesAdminDb, type RidesAdminTables } from "../_shared/ridesAdminDb.ts";
 import {
@@ -165,6 +165,27 @@ function parseLocationFromBody(body: Record<string, unknown>):
     locality: parsed.locality ?? null,
     city,
   };
+}
+
+function ridesNativeDb(): SupabaseClient {
+  return createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    { db: { schema: "rides" } },
+  );
+}
+
+async function deleteFareRuleById(
+  db: SupabaseClient,
+  tables: RidesAdminTables,
+  id: string,
+): Promise<{ existing: FareRuleRow | null; error: { message: string } | null }> {
+  const { data: existing } = await db.from(tables.fare_rules).select("*").eq("id", id).maybeSingle();
+  if (!existing) return { existing: null, error: null };
+
+  // Delete on native table — public views may not support DELETE through PostgREST.
+  const { error } = await ridesNativeDb().from("fare_rules").delete().eq("id", id);
+  return { existing: existing as FareRuleRow, error: error ? { message: error.message } : null };
 }
 
 async function adminAudit(
@@ -372,6 +393,32 @@ export function registerAdminRoutes(
     deps.logLine({ event: "admin_fare_rule_updated", rule_id: id, admin_id: adminUser.id });
     return c.json({ rule: fareRuleDto(data as FareRuleRow) });
   });
+
+  const handleFareRuleDelete = async (c: {
+    req: { param: (k: string) => string };
+    json: (body: unknown, status?: number) => Response;
+  }) => {
+    const adminUser = await requireProductAdmin(c, "rides");
+    if (adminUser instanceof Response) return adminUser;
+    const id = c.req.param("id");
+    const resolved = await ridesDbOrResponse(c);
+    if (resolved instanceof Response) return resolved;
+    const { db, tables } = resolved;
+
+    const { existing, error } = await deleteFareRuleById(db, tables, id);
+    if (!existing) return c.json({ error: "not_found" }, 404);
+    if (error) return c.json({ error: "delete_failed", message: error.message }, 500);
+
+    await adminAudit(db, tables, adminUser.id, "admin_fare_rule_deleted", {
+      rule_id: id,
+      deleted: fareRuleDto(existing),
+    });
+    deps.logLine({ event: "admin_fare_rule_deleted", rule_id: id, admin_id: adminUser.id });
+    return c.json({ ok: true, id });
+  };
+
+  admin.delete("/fare-rules/:id", (c) => handleFareRuleDelete(c));
+  admin.post("/fare-rules/:id/delete", (c) => handleFareRuleDelete(c));
 
   admin.post("/fare-rules/:id/duplicate", async (c) => {
     const adminUser = await requireProductAdmin(c, "rides");
