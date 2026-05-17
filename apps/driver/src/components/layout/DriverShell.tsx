@@ -138,11 +138,11 @@ export function DriverShell() {
   };
 
   return (
-    <div className="flex min-h-dvh min-h-screen flex-col overflow-x-hidden bg-gradient-to-br from-slate-100 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+    <div className="flex min-h-dvh flex-col overflow-x-hidden bg-gradient-to-br from-slate-100 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
       <AnnouncementBanner />
 
-      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 pt-[env(safe-area-inset-top,0px)] backdrop-blur-lg dark:border-slate-800 dark:bg-slate-900/80">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
+      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 safe-t backdrop-blur-lg dark:border-slate-800 dark:bg-slate-900/80">
+        <div className="mx-auto flex h-14 max-w-lg items-center justify-between gap-3 safe-x sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
           <div className="flex shrink-0 items-center gap-2">
             <button
               type="button"
@@ -179,13 +179,13 @@ export function DriverShell() {
       </header>
 
       <main className="flex-1 overflow-x-hidden overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom,0px))]">
-        <div className="mx-auto w-full min-w-0 max-w-lg px-4 py-4 sm:max-w-2xl sm:px-6 md:max-w-3xl lg:max-w-4xl">
+        <div className="mx-auto w-full min-w-0 max-w-lg safe-x py-4 sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
           {renderPage()}
         </div>
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur-lg dark:border-slate-800 dark:bg-slate-900/95">
-        <div className="mx-auto flex h-16 max-w-lg items-center justify-around sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
+      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 safe-b backdrop-blur-lg dark:border-slate-800 dark:bg-slate-900/95">
+        <div className="mx-auto flex h-16 max-w-lg items-center justify-around safe-x sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
           {bottomNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentPage === item.id;

@@ -491,11 +491,12 @@ export function TripTimer({ onComplete }: TripTimerProps) {
 
   if (!isActive) {
     return (
-      <div className="fixed bottom-24 left-4 right-4 z-50">
-        <Button 
-          onClick={startTrip} 
+      <div className="fixed left-0 right-0 z-50 safe-x px-4 bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))]">
+        <Button
+          type="button"
+          onClick={startTrip}
           disabled={isStarting}
-          className="w-full h-16 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white shadow-xl shadow-indigo-500/20 rounded-2xl border-0 transition-all hover:scale-[1.01] active:scale-[0.99]"
+          className="btn-touch w-full h-14 sm:h-16 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white shadow-xl shadow-indigo-500/20 rounded-2xl border-0 transition-all active:scale-[0.99]"
         >
           {isStarting ? (
             <div className="flex items-center gap-2 text-lg font-bold">
@@ -513,14 +514,14 @@ export function TripTimer({ onComplete }: TripTimerProps) {
   }
 
   return (
-    <Card className="bg-blue-50 border-blue-200">
+    <>
+    <Card className="bg-blue-50 border-blue-200 dark:bg-blue-950/40 dark:border-blue-800">
       <CardContent className="p-4 flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className={`h-12 w-12 rounded-full bg-white flex items-center justify-center animate-pulse shadow-sm ${tripStatus === 'WAITING' ? (waitSeconds > 120 ? 'text-red-600' : 'text-emerald-600') : 'text-blue-600'}`}>
+        <div className="flex items-start gap-3 min-w-0">
+            <div className={`h-12 w-12 shrink-0 rounded-full bg-white dark:bg-slate-900 flex items-center justify-center animate-pulse shadow-sm ${tripStatus === 'WAITING' ? (waitSeconds > 120 ? 'text-red-600' : 'text-emerald-600') : 'text-blue-600'}`}>
               <Clock className="h-6 w-6" />
             </div>
-            <div>
+            <div className="min-w-0 flex-1">
               <div className={`text-xs font-semibold uppercase tracking-wider mb-0.5 ${tripStatus === 'WAITING' ? (waitSeconds > 120 ? 'text-red-600' : 'text-emerald-600') : 'text-blue-600'}`}>
                   {tripStatus === 'WAITING' ? (waitSeconds > 120 ? 'Wait Limit Exceeded' : 'Waiting at Stop') : 'Trip in Progress'}
               </div>
@@ -542,86 +543,103 @@ export function TripTimer({ onComplete }: TripTimerProps) {
               )}
 
               {tripStatus !== 'WAITING' && startLocation && (
-                <div className="flex items-center gap-1 text-xs text-blue-800 max-w-[200px] truncate">
+                <div className="flex items-center gap-1 text-xs text-blue-800 dark:text-blue-300 min-w-0 mt-1">
                   <MapPin className="h-3 w-3 shrink-0" />
                   <span className="truncate" title={startLocation}>{startLocation.split(',')[0]}</span>
                 </div>
               )}
             </div>
           </div>
-          
-          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-            {tripStatus === 'DRIVING' && (
-              <Button 
-                onClick={handleArriveAtStop}
-                className="h-12 bg-amber-500 hover:bg-amber-600 text-white gap-2 shadow-sm font-bold"
-              >
-                <MapPin className="h-5 w-5" />
-                <span>{getOrdinal(stops.length + 1)} Stop</span>
-              </Button>
-            )}
-            
-            {tripStatus === 'WAITING' && (
-              <Button 
-                onClick={handleResumeTrip}
-                className="h-12 bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shadow-sm font-bold"
-              >
-                <Play className="h-5 w-5" />
-                <span>Resume Trip</span>
-              </Button>
-            )}
-            
-            <div className="flex gap-2">
-                <Button
-                  onClick={cancelTrip}
-                  variant="outline"
-                  className="h-12 border-red-200 text-red-600 hover:bg-red-100 hover:text-red-700 hover:border-red-300 gap-2 px-4 flex-1"
-                  title="Cancel Trip"
-                >
-                    <X className="h-5 w-5" />
-                    <span className="sm:hidden">Cancel</span>
-                </Button>
-
-                <Button 
-                  onClick={stopTrip} 
-                  variant="destructive"
-                  className="h-12 gap-2 shadow-sm font-bold flex-[2]"
-                  disabled={isStopping}
-                >
-                  {isStopping ? (
-                      <>
-                        <Loader2 className="h-5 w-5 animate-spin" /> <span>Finalizing...</span>
-                      </>
-                  ) : (
-                      <>
-                        <Square className="h-5 w-5 fill-current" /> <span>Complete</span>
-                      </>
-                  )}
-                </Button>
-            </div>
-          </div>
-        </div>
-        
 
         <StopList stops={stops} />
-        
-        <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Cancel Current Trip?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This will discard all trip data including route and duration. This action cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Go Back</AlertDialogCancel>
-              <AlertDialogAction onClick={confirmCancelTrip} className="bg-red-600 hover:bg-red-700">
-                Yes, Cancel Trip
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
       </CardContent>
     </Card>
+
+    <div
+      className="fixed left-0 right-0 z-50 safe-x px-4 bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))]"
+      role="toolbar"
+      aria-label="Trip controls"
+    >
+      <div className="mx-auto w-full max-w-lg sm:max-w-2xl flex flex-col gap-2 rounded-2xl border border-blue-200 bg-white/95 p-3 shadow-xl backdrop-blur-md dark:border-blue-800 dark:bg-slate-900/95">
+        {tripStatus === 'DRIVING' && (
+          <Button
+            type="button"
+            onClick={handleArriveAtStop}
+            className="btn-touch h-12 w-full bg-amber-500 hover:bg-amber-600 text-white gap-2 shadow-sm font-bold"
+          >
+            <MapPin className="h-5 w-5 shrink-0" />
+            <span>{getOrdinal(stops.length + 1)} Stop</span>
+          </Button>
+        )}
+
+        {tripStatus === 'WAITING' && (
+          <Button
+            type="button"
+            onClick={handleResumeTrip}
+            className="btn-touch h-12 w-full bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shadow-sm font-bold"
+          >
+            <Play className="h-5 w-5 shrink-0" />
+            <span>Resume Trip</span>
+          </Button>
+        )}
+
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            type="button"
+            onClick={cancelTrip}
+            variant="outline"
+            className="btn-touch h-12 w-full border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-300 dark:border-red-900 dark:hover:bg-red-950/50 gap-2 font-semibold"
+            title="Cancel Trip"
+          >
+            <X className="h-5 w-5 shrink-0" />
+            <span>Cancel</span>
+          </Button>
+
+          <Button
+            type="button"
+            onClick={stopTrip}
+            variant="destructive"
+            className="btn-touch h-12 w-full gap-2 shadow-sm font-bold"
+            disabled={isStopping}
+          >
+            {isStopping ? (
+              <>
+                <Loader2 className="h-5 w-5 shrink-0 animate-spin" />
+                <span>Finalizing...</span>
+              </>
+            ) : (
+              <>
+                <Square className="h-5 w-5 shrink-0 fill-current" />
+                <span>Complete</span>
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+    </div>
+
+    <div className="h-44 shrink-0" aria-hidden />
+
+    <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+      <AlertDialogContent className="safe-x max-w-[calc(100vw-2rem)] sm:max-w-lg">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Cancel Current Trip?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This will discard all trip data including route and duration. This action cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter className="flex-col-reverse gap-2 sm:flex-row">
+          <AlertDialogCancel className="btn-touch mt-0">Go Back</AlertDialogCancel>
+          <AlertDialogAction
+            type="button"
+            onClick={confirmCancelTrip}
+            className="btn-touch bg-red-600 hover:bg-red-700"
+          >
+            Yes, Cancel Trip
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }

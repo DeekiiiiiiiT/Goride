@@ -147,19 +147,19 @@ export function DriverOverview({
       </Card>
 
       {/* Earnings Stats Row */}
-      <div className="flex-1 flex flex-col justify-center">
-        <div className="grid grid-cols-3 gap-3 w-full">
-            <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 flex flex-col items-center justify-center text-center">
+      <div className="flex-1 flex flex-col justify-center min-w-0">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 w-full min-w-0">
+            <div className="min-w-0 bg-indigo-50/50 border border-indigo-100 rounded-2xl p-3 sm:p-4 flex flex-col items-center justify-center text-center">
                 <span className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider mb-1">Roam</span>
-                <span className="text-lg font-bold text-indigo-900">${(todayEarnings?.breakdown?.roam || todayEarnings?.breakdown?.goride || 0).toFixed(2)}</span>
+                <span className="text-sm sm:text-lg font-bold text-indigo-900 tabular-nums truncate max-w-full">${(todayEarnings?.breakdown?.roam || todayEarnings?.breakdown?.goride || 0).toFixed(2)}</span>
             </div>
-            <div className="bg-white border border-slate-100 rounded-2xl p-4 flex flex-col items-center justify-center text-center shadow-sm">
+            <div className="min-w-0 bg-white border border-slate-100 rounded-2xl p-3 sm:p-4 flex flex-col items-center justify-center text-center shadow-sm dark:bg-slate-800 dark:border-slate-700">
                 <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Uber</span>
-                <span className="text-lg font-bold text-slate-900">${(todayEarnings?.breakdown?.uber || 0).toFixed(2)}</span>
+                <span className="text-sm sm:text-lg font-bold text-slate-900 dark:text-white tabular-nums truncate max-w-full">${(todayEarnings?.breakdown?.uber || 0).toFixed(2)}</span>
             </div>
-            <div className="bg-white border border-slate-100 rounded-2xl p-4 flex flex-col items-center justify-center text-center shadow-sm">
+            <div className="min-w-0 bg-white border border-slate-100 rounded-2xl p-3 sm:p-4 flex flex-col items-center justify-center text-center shadow-sm dark:bg-slate-800 dark:border-slate-700">
                 <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">InDrive</span>
-                <span className="text-lg font-bold text-slate-900">${(todayEarnings?.breakdown?.indrive || 0).toFixed(2)}</span>
+                <span className="text-sm sm:text-lg font-bold text-slate-900 dark:text-white tabular-nums truncate max-w-full">${(todayEarnings?.breakdown?.indrive || 0).toFixed(2)}</span>
             </div>
         </div>
       </div>

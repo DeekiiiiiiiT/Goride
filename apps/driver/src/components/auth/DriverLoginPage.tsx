@@ -35,7 +35,7 @@ export function DriverLoginPage({ signedInNonDriver }: { signedInNonDriver?: Use
   const rawRole = (signedInNonDriver?.user_metadata?.role as string | undefined)?.trim();
 
   return (
-    <div className="flex min-h-screen flex-col bg-gradient-to-br from-slate-100 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+    <div className="flex min-h-dvh flex-col bg-gradient-to-br from-slate-100 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 safe-x safe-b">
       {signedInNonDriver && (
         <div className="mx-auto w-full max-w-lg px-4 pt-4">
           {isPassengerOnlyMetadataRole(rawRole) ? (

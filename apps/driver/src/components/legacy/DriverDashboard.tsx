@@ -479,7 +479,7 @@ export function DriverDashboard() {
   }
 
   return (
-    <div className="flex flex-col min-h-[75vh] gap-6 pb-6">
+    <div className="flex flex-col min-h-0 gap-6 pb-2">
             <DriverOverview 
               className="flex-1"
               tierState={tierState}

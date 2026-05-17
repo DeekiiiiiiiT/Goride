@@ -124,10 +124,40 @@ html {
 
 html:not(.dark) body {
   background: var(--background);
-  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 html.dark body {
   background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+#root {
+  min-height: 100dvh;
+}
+
+/* Safe areas: notched phones & tablets */
+.safe-x {
+  padding-left: max(1rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1rem, env(safe-area-inset-right, 0px));
+}
+
+.safe-t {
+  padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
+}
+
+.safe-b {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+}
+
+/* Inputs: 16px+ avoids iOS zoom on focus */
+.input-touch {
+  font-size: 1rem;
+  line-height: 1.5;
+  min-height: 3rem;
+}
+
+.btn-touch {
+  min-height: 3rem;
+  touch-action: manipulation;
 }
