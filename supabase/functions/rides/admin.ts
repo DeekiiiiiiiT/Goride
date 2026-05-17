@@ -4,7 +4,11 @@
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireProductAdmin } from "../_shared/productAdmin.ts";
-import { getRidesAdminDb, type RidesAdminTables } from "../_shared/ridesAdminDb.ts";
+import {
+  getRidesAdminDb,
+  isMissingRidesAdminTableError,
+  type RidesAdminTables,
+} from "../_shared/ridesAdminDb.ts";
 import {
   buildLocationKey,
   formatLocationLabel,
@@ -183,8 +187,17 @@ async function deleteFareRuleById(
   const { data: existing } = await db.from(tables.fare_rules).select("*").eq("id", id).maybeSingle();
   if (!existing) return { existing: null, error: null };
 
-  // Delete on native table — public views may not support DELETE through PostgREST.
-  const { error } = await ridesNativeDb().from("fare_rules").delete().eq("id", id);
+  // Use the same schema as list/create (public views on hosted Supabase).
+  let { error } = await db.from(tables.fare_rules).delete().eq("id", id);
+
+  // Fallback only when `rides` schema is exposed (local / custom API settings).
+  if (error && tables.fare_rules !== "fare_rules") {
+    const native = ridesNativeDb();
+    const retry = await native.from("fare_rules").delete().eq("id", id);
+    if (!retry.error) error = null;
+    else if (!isMissingRidesAdminTableError(retry.error)) error = retry.error;
+  }
+
   return { existing: existing as FareRuleRow, error: error ? { message: error.message } : null };
 }
 
