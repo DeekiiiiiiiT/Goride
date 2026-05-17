@@ -28,6 +28,7 @@ import { LeafletMap } from '../maps/LeafletMap';
 import { StopList } from './StopList';
 import { toast } from 'sonner';
 import { useOffline } from '../providers/OfflineProvider';
+import { debugLog } from '../../utils/debugLog';
 
 interface ManualTripFormProps {
   open: boolean;
@@ -122,6 +123,12 @@ export function ManualTripForm({
   // Reset form when opened
   useEffect(() => {
     if (open) {
+      // #region agent log
+      debugLog('ManualTripForm.tsx:open', 'form opened', {
+        hasInitialData: !!initialData,
+        isLiveRecorded: initialData?.isLiveRecorded,
+      }, 'H4');
+      // #endregion
       lastNotifiedDistanceRef.current = undefined;
       if (initialData) {
         // Calculate distance from route points if available (more accurate for multi-stop)

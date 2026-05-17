@@ -37,6 +37,7 @@ import { DriverOverview } from './DriverOverview';
 import { formatSafeDate, formatSafeTime } from '../../utils/timeUtils';
 import { resolveMissingTripAddresses } from '../../utils/addressResolver';
 import { getDriverPortalTripEarnings } from '../../utils/tripEarnings';
+import { debugLog } from '../../utils/debugLog';
 
 export function DriverDashboard() {
   const { user } = useAuth();
@@ -44,6 +45,12 @@ export function DriverDashboard() {
   const [fuelFormOpen, setFuelFormOpen] = useState(false);
   const [serviceFormOpen, setServiceFormOpen] = useState(false);
   const [manualTripFormOpen, setManualTripFormOpen] = useState(false);
+
+  useEffect(() => {
+    // #region agent log
+    debugLog('DriverDashboard.tsx:manualTripFormOpen', 'state changed', { manualTripFormOpen }, 'H4');
+    // #endregion
+  }, [manualTripFormOpen]);
   // Drawer used by the catalog-gate toast action so a driver can see exactly
   // which vehicle is parked and why. Read-only - drivers can't approve.
   const [pendingDrawerOpen, setPendingDrawerOpen] = useState(false);
@@ -308,6 +315,12 @@ export function DriverDashboard() {
     distance?: number;
     isOffline?: boolean;
   }) => {
+    // #region agent log
+    debugLog('DriverDashboard.tsx:handleTripComplete', 'opening fare form', {
+      duration: data.duration,
+      startDate: data.startDate,
+    }, 'H4');
+    // #endregion
     setTripInitialData({
       startTime: data.startTime,
       endTime: data.endTime,
@@ -329,14 +342,28 @@ export function DriverDashboard() {
       geocodeError: (data as { geocodeError?: string }).geocodeError,
     } as any);
     setManualTripFormOpen(true);
+    // #region agent log
+    debugLog('DriverDashboard.tsx:handleTripComplete', 'manualTripFormOpen set true', {}, 'H4');
+    // #endregion
   };
 
   const handleManualTripSubmit = async (data: ManualTripInput) => {
     if (!user?.id) return;
+
+    // #region agent log
+    debugLog('DriverDashboard.tsx:handleManualTripSubmit', 'submit start', {
+      amount: data.amount,
+      platform: data.platform,
+    }, 'H5');
+    // #endregion
     
     try {
       const trip = createManualTrip(data, user.id, driverRecord?.name || user.email);
       await api.saveTrips([trip]);
+
+      // #region agent log
+      debugLog('DriverDashboard.tsx:handleManualTripSubmit', 'save success', { tripId: trip.id }, 'H5');
+      // #endregion
       
       toast.success("Trip Logged Successfully", {
         description: `$${data.amount} on ${data.date}`

@@ -1,18 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Play, Square, Timer, Clock, MapPin, Loader2, Navigation, X } from 'lucide-react';
 import { Button } from '@roam/ui';
 import { Card, CardContent } from '@roam/ui';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@roam/ui';
 import { TripSession, RoutePoint, TripStatus, TripStop } from '../../types/tripSession';
 import { getCurrentPosition, reverseGeocode, createStop, calculatePathDistance } from '../../utils/locationService';
 import { useTripTracker } from '../../hooks/useTripTracker';
@@ -22,6 +11,8 @@ import { toast } from 'sonner';
 import { mapMatchService } from '../../services/mapMatchService';
 import { useOffline } from '../providers/OfflineProvider';
 import { TripActionPortal } from './TripActionPortal';
+import { CancelTripDialog } from './CancelTripDialog';
+import { debugLog } from '../../utils/debugLog';
 
 interface TripTimerProps {
   onComplete: (data: {
@@ -78,7 +69,9 @@ export function TripTimer({ onComplete }: TripTimerProps) {
   const [startLocation, setStartLocation] = useState<string | null>(null);
   const [startCoords, setStartCoords] = useState<{ lat: number; lon: number } | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  
+  const renderCountRef = useRef(0);
+  renderCountRef.current += 1;
+
   const isActive = tripStatus !== 'IDLE';
 
   // Tracking Hook
@@ -193,6 +186,20 @@ export function TripTimer({ onComplete }: TripTimerProps) {
     };
   }, [isActive, startTime, tripStatus, currentStop]);
 
+  useEffect(() => {
+    if (!isActive) return;
+    if (renderCountRef.current % 15 === 0 || cancelDialogOpen) {
+      // #region agent log
+      debugLog('TripTimer.tsx:render', 'active trip render tick', {
+        renderCount: renderCountRef.current,
+        cancelDialogOpen,
+        tripStatus,
+        isStopping,
+      }, cancelDialogOpen ? 'H1' : 'H2');
+      // #endregion
+    }
+  });
+
   // Phase 3: Stop Handlers
   const handleArriveAtStop = async () => {
     if (isArriving) return;
@@ -303,10 +310,23 @@ export function TripTimer({ onComplete }: TripTimerProps) {
   };
 
   const cancelTrip = () => {
+    // #region agent log
+    debugLog('TripTimer.tsx:cancelTrip', 'cancel clicked', { renderCount: renderCountRef.current, cancelDialogOpen }, 'H1');
+    // #endregion
     setCancelDialogOpen(true);
   };
 
-  const confirmCancelTrip = () => {
+  const handleCancelDialogOpenChange = useCallback((open: boolean) => {
+    // #region agent log
+    debugLog('TripTimer.tsx:cancelDialog', 'onOpenChange', { open }, 'H1');
+    // #endregion
+    setCancelDialogOpen(open);
+  }, []);
+
+  const confirmCancelTrip = useCallback(() => {
+    // #region agent log
+    debugLog('TripTimer.tsx:confirmCancelTrip', 'confirm cancel', { renderCount: renderCountRef.current }, 'H1');
+    // #endregion
     stopTracking();
     setTripStatus('IDLE');
     setStartTime(null);
@@ -322,11 +342,14 @@ export function TripTimer({ onComplete }: TripTimerProps) {
     setIsStopping(false);
     toast.info("Trip cancelled");
     setCancelDialogOpen(false);
-  };
+  }, [stopTracking, setRoute]);
 
   const stopTrip = async () => {
     if (!startTime || isStopping) return;
 
+    // #region agent log
+    debugLog('TripTimer.tsx:stopTrip', 'stopTrip start', { startTime, isStopping, renderCount: renderCountRef.current }, 'H3');
+    // #endregion
     setIsStopping(true);
     try {
     // Stop tracking first
@@ -432,7 +455,7 @@ export function TripTimer({ onComplete }: TripTimerProps) {
         if (route.length > 0) {
             const lastPoint = route[route.length - 1];
             endCoordsObj = { lat: lastPoint.lat, lon: lastPoint.lon };
-            endLocationStr = `Lat: ${lastPoint.lat.toFixed(5)}, Lon: ${lastPoint.lng.toFixed(5)}`;
+            endLocationStr = `Lat: ${lastPoint.lat.toFixed(5)}, Lon: ${lastPoint.lon.toFixed(5)}`;
         }
     }
 
@@ -490,7 +513,12 @@ export function TripTimer({ onComplete }: TripTimerProps) {
       geocodeError: geocodeError
     };
 
-    // Open fare-entry form before tearing down trip UI (dialog must sit above trip action bar)
+    // #region agent log
+    debugLog('TripTimer.tsx:stopTrip', 'calling onComplete', {
+      duration: tripData.duration,
+      hasRoute: (tripData.route?.length ?? 0) > 0,
+    }, 'H3');
+    // #endregion
     onComplete(tripData);
     toast.info('Enter the fare you received to save this trip.');
 
@@ -506,6 +534,11 @@ export function TripTimer({ onComplete }: TripTimerProps) {
     localStorage.removeItem(STORAGE_KEY);
     setIsStopping(false);
     } catch (error) {
+      // #region agent log
+      debugLog('TripTimer.tsx:stopTrip', 'stopTrip error', {
+        error: error instanceof Error ? error.message : String(error),
+      }, 'H3');
+      // #endregion
       console.error('Failed to complete trip', error);
       toast.error('Could not complete trip. Please try again.');
       setIsStopping(false);
@@ -653,35 +686,11 @@ export function TripTimer({ onComplete }: TripTimerProps) {
 
     <div className="h-44 shrink-0" aria-hidden />
 
-    {typeof document !== 'undefined' &&
-      createPortal(
-        <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
-          <AlertDialogContent
-            overlayClassName="z-[60]"
-            className="safe-x z-[60] max-w-[calc(100vw-2rem)] sm:max-w-lg"
-          >
-            <AlertDialogHeader>
-              <AlertDialogTitle>Cancel Current Trip?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This will discard all trip data including route and duration. This action cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter className="flex-col-reverse gap-2 sm:flex-row">
-              <AlertDialogCancel className="btn-touch mt-0">Go Back</AlertDialogCancel>
-              <AlertDialogAction
-                className="btn-touch bg-red-600 hover:bg-red-700"
-                onClick={(e) => {
-                  e.preventDefault();
-                  confirmCancelTrip();
-                }}
-              >
-                Yes, Cancel Trip
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>,
-        document.body,
-      )}
+    <CancelTripDialog
+      open={cancelDialogOpen}
+      onOpenChange={handleCancelDialogOpenChange}
+      onConfirm={confirmCancelTrip}
+    />
     </>
   );
 }
