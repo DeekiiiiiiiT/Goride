@@ -11,7 +11,7 @@ export function TripActionPortal({ children }: { children: ReactNode }) {
   if (typeof document === 'undefined') return null;
 
   return createPortal(
-    <div className={`fixed inset-x-0 z-[100] safe-x px-4 ${BOTTOM_OFFSET}`} role="presentation">
+    <div className={`fixed inset-x-0 z-[45] safe-x px-4 ${BOTTOM_OFFSET}`} role="presentation">
       <div className="pointer-events-auto mx-auto w-full max-w-lg sm:max-w-2xl">{children}</div>
     </div>,
     document.body,

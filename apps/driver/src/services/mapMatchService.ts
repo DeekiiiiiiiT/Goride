@@ -21,6 +21,7 @@ export const mapMatchService = {
           Authorization: `Bearer ${publicAnonKey}`,
         },
         body: JSON.stringify({ points }),
+        signal: AbortSignal.timeout(20_000),
       });
 
       if (!response.ok) {

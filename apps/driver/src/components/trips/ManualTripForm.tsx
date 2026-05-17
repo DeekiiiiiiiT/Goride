@@ -314,7 +314,10 @@ export function ManualTripForm({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-[500px]">
+      <DialogContent
+        overlayClassName="z-[60]"
+        className="z-[60] flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-[500px]"
+      >
         <div className="shrink-0 border-b border-slate-200 px-6 pb-4 pt-6 dark:border-slate-700">
           <DialogHeader>
             <DialogTitle>{editingTrip ? 'Edit Trip' : initialData ? 'Confirm Trip Details' : 'Log Manual Trip'}</DialogTitle>

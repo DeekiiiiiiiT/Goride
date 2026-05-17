@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Play, Square, Timer, Clock, MapPin, Loader2, Navigation, X } from 'lucide-react';
 import { Button } from '@roam/ui';
 import { Card, CardContent } from '@roam/ui';
@@ -430,7 +431,7 @@ export function TripTimer({ onComplete }: TripTimerProps) {
         // Fallback: use last point from route if available
         if (route.length > 0) {
             const lastPoint = route[route.length - 1];
-            endCoordsObj = { lat: lastPoint.lat, lon: lastPoint.lng };
+            endCoordsObj = { lat: lastPoint.lat, lon: lastPoint.lon };
             endLocationStr = `Lat: ${lastPoint.lat.toFixed(5)}, Lon: ${lastPoint.lng.toFixed(5)}`;
         }
     }
@@ -489,20 +490,21 @@ export function TripTimer({ onComplete }: TripTimerProps) {
       geocodeError: geocodeError
     };
 
-    // Clean up
+    // Open fare-entry form before tearing down trip UI (dialog must sit above trip action bar)
+    onComplete(tripData);
+    toast.info('Enter the fare you received to save this trip.');
+
     setTripStatus('IDLE');
     setStartTime(null);
     setElapsedSeconds(0);
     setWaitSeconds(0);
     setStartLocation(null);
     setStartCoords(null);
-    setRoute([]); // Clear route state
+    setRoute([]);
     setStops([]);
     setCurrentStop(null);
     localStorage.removeItem(STORAGE_KEY);
     setIsStopping(false);
-
-    onComplete(tripData);
     } catch (error) {
       console.error('Failed to complete trip', error);
       toast.error('Could not complete trip. Please try again.');
@@ -651,28 +653,35 @@ export function TripTimer({ onComplete }: TripTimerProps) {
 
     <div className="h-44 shrink-0" aria-hidden />
 
-    {cancelDialogOpen && (
-    <AlertDialog open onOpenChange={setCancelDialogOpen}>
-      <AlertDialogContent className="safe-x z-[110] max-w-[calc(100vw-2rem)] sm:max-w-lg">
-        <AlertDialogHeader>
-          <AlertDialogTitle>Cancel Current Trip?</AlertDialogTitle>
-          <AlertDialogDescription>
-            This will discard all trip data including route and duration. This action cannot be undone.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter className="flex-col-reverse gap-2 sm:flex-row">
-          <AlertDialogCancel className="btn-touch mt-0">Go Back</AlertDialogCancel>
-          <AlertDialogAction
-            type="button"
-            onClick={confirmCancelTrip}
-            className="btn-touch bg-red-600 hover:bg-red-700"
+    {typeof document !== 'undefined' &&
+      createPortal(
+        <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+          <AlertDialogContent
+            overlayClassName="z-[60]"
+            className="safe-x z-[60] max-w-[calc(100vw-2rem)] sm:max-w-lg"
           >
-            Yes, Cancel Trip
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-    )}
+            <AlertDialogHeader>
+              <AlertDialogTitle>Cancel Current Trip?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will discard all trip data including route and duration. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="flex-col-reverse gap-2 sm:flex-row">
+              <AlertDialogCancel className="btn-touch mt-0">Go Back</AlertDialogCancel>
+              <AlertDialogAction
+                className="btn-touch bg-red-600 hover:bg-red-700"
+                onClick={(e) => {
+                  e.preventDefault();
+                  confirmCancelTrip();
+                }}
+              >
+                Yes, Cancel Trip
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>,
+        document.body,
+      )}
     </>
   );
 }

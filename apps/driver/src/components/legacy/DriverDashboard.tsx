@@ -324,7 +324,9 @@ export function DriverDashboard() {
       totalWaitTime: data.totalWaitTime,
       distance: data.distance,
       isOffline: data.isOffline,
-      isLiveRecorded: true
+      isLiveRecorded: true,
+      resolutionMethod: (data as { resolutionMethod?: string }).resolutionMethod,
+      geocodeError: (data as { geocodeError?: string }).geocodeError,
     } as any);
     setManualTripFormOpen(true);
   };
