@@ -8,7 +8,6 @@ import { useTripTracker } from '../../hooks/useTripTracker';
 import { LeafletMap } from '../maps/LeafletMap';
 import { StopList } from './StopList';
 import { toast } from 'sonner';
-import { mapMatchService } from '../../services/mapMatchService';
 import { useOffline } from '../providers/OfflineProvider';
 import { TripActionPortal } from './TripActionPortal';
 import { CancelTripDialog } from './CancelTripDialog';
@@ -69,18 +68,17 @@ export function TripTimer({ onComplete }: TripTimerProps) {
   const [startLocation, setStartLocation] = useState<string | null>(null);
   const [startCoords, setStartCoords] = useState<{ lat: number; lon: number } | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const renderCountRef = useRef(0);
-  renderCountRef.current += 1;
 
   const isActive = tripStatus !== 'IDLE';
 
   // Tracking Hook
-  const { 
-    startTracking, 
-    stopTracking, 
-    route, 
-    setRoute, 
-    currentLocation 
+  const {
+    startTracking,
+    stopTracking,
+    resetRoute,
+    route,
+    setRoute,
+    currentLocation,
   } = useTripTracker();
 
   // Load session from storage on mount
@@ -132,9 +130,12 @@ export function TripTimer({ onComplete }: TripTimerProps) {
     }
   }, []);
 
-  // Debounce session writes — route GPS updates were blocking the main thread on mobile
+  // Debounce session writes — skip while cancel confirm is open; cap route size for mobile
   useEffect(() => {
-    if (!isActive || !startTime) return;
+    if (!isActive || !startTime || cancelDialogOpen) return;
+
+    const routeForStorage =
+      route.length > 300 ? route.slice(-300) : route;
 
     const session: TripSession = {
       isActive,
@@ -143,7 +144,7 @@ export function TripTimer({ onComplete }: TripTimerProps) {
       startLocation,
       startCoords,
       vehicleId: null,
-      route,
+      route: routeForStorage,
       stops,
       currentStop,
     };
@@ -157,11 +158,11 @@ export function TripTimer({ onComplete }: TripTimerProps) {
     }, 400);
 
     return () => window.clearTimeout(timer);
-  }, [route, isActive, tripStatus, startTime, startLocation, startCoords, stops, currentStop]);
+  }, [route, isActive, tripStatus, startTime, startLocation, startCoords, stops, currentStop, cancelDialogOpen]);
 
-  // Timer interval
+  // Timer interval — paused while cancel confirm is open (stops re-render storm)
   useEffect(() => {
-    if (isActive && startTime) {
+    if (isActive && startTime && !cancelDialogOpen) {
       intervalRef.current = setInterval(() => {
         const now = Date.now();
         const seconds = Math.floor((now - startTime) / 1000);
@@ -184,21 +185,7 @@ export function TripTimer({ onComplete }: TripTimerProps) {
         clearInterval(intervalRef.current);
       }
     };
-  }, [isActive, startTime, tripStatus, currentStop]);
-
-  useEffect(() => {
-    if (!isActive) return;
-    if (renderCountRef.current % 15 === 0 || cancelDialogOpen) {
-      // #region agent log
-      debugLog('TripTimer.tsx:render', 'active trip render tick', {
-        renderCount: renderCountRef.current,
-        cancelDialogOpen,
-        tripStatus,
-        isStopping,
-      }, cancelDialogOpen ? 'H1' : 'H2');
-      // #endregion
-    }
-  });
+  }, [isActive, startTime, tripStatus, currentStop, cancelDialogOpen]);
 
   // Phase 3: Stop Handlers
   const handleArriveAtStop = async () => {
@@ -222,7 +209,7 @@ export function TripTimer({ onComplete }: TripTimerProps) {
       
       if (currentLocation) {
           fallbackLat = currentLocation.lat;
-          fallbackLon = currentLocation.lng;
+          fallbackLon = currentLocation.lon;
       }
       
       const fallbackStop = createStop("Location Unknown", { lat: fallbackLat, lon: fallbackLon });
@@ -311,228 +298,154 @@ export function TripTimer({ onComplete }: TripTimerProps) {
 
   const cancelTrip = () => {
     // #region agent log
-    debugLog('TripTimer.tsx:cancelTrip', 'cancel clicked', { renderCount: renderCountRef.current, cancelDialogOpen }, 'H1');
+    debugLog('TripTimer.tsx:cancelTrip', 'cancel clicked', { cancelDialogOpen }, 'H1');
     // #endregion
+    stopTracking();
     setCancelDialogOpen(true);
   };
 
-  const handleCancelDialogOpenChange = useCallback((open: boolean) => {
-    // #region agent log
-    debugLog('TripTimer.tsx:cancelDialog', 'onOpenChange', { open }, 'H1');
-    // #endregion
-    setCancelDialogOpen(open);
-  }, []);
+  const dismissCancelDialog = useCallback(() => {
+    setCancelDialogOpen(false);
+    if (tripStatus !== 'IDLE' && startTime) {
+      startTracking();
+    }
+  }, [tripStatus, startTime, startTracking]);
 
   const confirmCancelTrip = useCallback(() => {
     // #region agent log
-    debugLog('TripTimer.tsx:confirmCancelTrip', 'confirm cancel', { renderCount: renderCountRef.current }, 'H1');
+    debugLog('TripTimer.tsx:confirmCancelTrip', 'confirm cancel', {}, 'H1');
     // #endregion
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    setCancelDialogOpen(false);
     stopTracking();
+    localStorage.removeItem(STORAGE_KEY);
+    resetRoute();
     setTripStatus('IDLE');
     setStartTime(null);
     setElapsedSeconds(0);
     setWaitSeconds(0);
     setStartLocation(null);
     setStartCoords(null);
-    setRoute([]);
     setStops([]);
     setCurrentStop(null);
-    localStorage.removeItem(STORAGE_KEY);
     setIsStarting(false);
     setIsStopping(false);
-    toast.info("Trip cancelled");
-    setCancelDialogOpen(false);
-  }, [stopTracking, setRoute]);
+    toast.info('Trip cancelled');
+  }, [stopTracking, resetRoute]);
 
   const stopTrip = async () => {
     if (!startTime || isStopping) return;
 
     // #region agent log
-    debugLog('TripTimer.tsx:stopTrip', 'stopTrip start', { startTime, isStopping, renderCount: renderCountRef.current }, 'H3');
+    debugLog('TripTimer.tsx:stopTrip', 'stopTrip start (fast path)', {
+      startTime,
+      routePoints: route.length,
+      hasCurrentLocation: !!currentLocation,
+    }, 'H3');
     // #endregion
     setIsStopping(true);
     try {
-    // Stop tracking first
-    stopTracking();
+      stopTracking();
 
-    // Close active stop if waiting
-    let finalStops = [...stops];
-    if (tripStatus === 'WAITING' && currentStop) {
+      let finalStops = [...stops];
+      if (tripStatus === 'WAITING' && currentStop) {
         const now = Date.now();
         const durationSeconds = Math.floor((now - currentStop.arrivalTime) / 1000);
-        const finalizedStop: TripStop = {
-            ...currentStop,
-            departureTime: now,
-            durationSeconds: durationSeconds,
-            isOverThreshold: durationSeconds > 120
-        };
-        finalStops.push(finalizedStop);
-    }
+        finalStops.push({
+          ...currentStop,
+          departureTime: now,
+          durationSeconds,
+          isOverThreshold: durationSeconds > 120,
+        });
+      }
 
-    const endTimeMs = Date.now();
-    const durationMinutes = Math.ceil(elapsedSeconds / 60); // Round up to nearest minute
-    
-    // Format times for the form
-    const startObj = new Date(startTime);
-    const endObj = new Date(endTimeMs);
+      const endTimeMs = Date.now();
+      const durationMinutes = Math.max(1, Math.ceil(elapsedSeconds / 60));
 
-    const formatTime = (date: Date) => {
-      return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
-    };
+      const startObj = new Date(startTime);
+      const endObj = new Date(endTimeMs);
+      const formatTime = (date: Date) =>
+        date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+      const formatDate = (date: Date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
 
-    const formatDate = (date: Date) => {
-      // Use local date components to match formatTime's local time — avoid UTC shift
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    };
+      const finalStartCoords =
+        startCoords ??
+        (route[0] ? { lat: route[0].lat, lon: route[0].lon } : undefined);
+      const finalStartLocation =
+        startLocation ??
+        (finalStartCoords
+          ? `Lat: ${finalStartCoords.lat.toFixed(5)}, Lon: ${finalStartCoords.lon.toFixed(5)}`
+          : undefined);
 
-    // Capture End Location
-    let endLocationStr: string | undefined = undefined;
-    let endCoordsObj: { lat: number; lon: number } | undefined = undefined;
-    let geocodeError: string | undefined = undefined;
-    let resolutionMethod: 'instant' | 'pending' = 'instant';
+      let endCoordsObj: { lat: number; lon: number } | undefined = currentLocation
+        ? { lat: currentLocation.lat, lon: currentLocation.lon }
+        : undefined;
+      if (!endCoordsObj && route.length > 0) {
+        const lastPoint = route[route.length - 1];
+        endCoordsObj = { lat: lastPoint.lat, lon: lastPoint.lon };
+      }
 
-    // Robust Start Location Recovery
-    // If startLocation is missing (e.g. GPS failed at start), try to recover from startCoords or route
-    let finalStartLocation = startLocation;
-    let finalStartCoords = startCoords;
-    let startGeocodeFailed = false;
+      const endLocationStr = endCoordsObj
+        ? `Lat: ${endCoordsObj.lat.toFixed(5)}, Lon: ${endCoordsObj.lon.toFixed(5)}`
+        : undefined;
 
-    if (!finalStartLocation) {
-        startGeocodeFailed = true;
-        // Try startCoords first
-        if (finalStartCoords) {
-             try {
-                 finalStartLocation = await reverseGeocode(finalStartCoords.lat, finalStartCoords.lon);
-                 startGeocodeFailed = false;
-             } catch (e: any) {
-                 console.error("Failed to recover start location from coords", e);
-                 geocodeError = `Pickup: ${e.message}`;
-             }
-        } 
-        // Fallback to first route point
-        else if (route.length > 0) {
-            const firstPoint = route[0];
-            finalStartCoords = { lat: firstPoint.lat, lon: firstPoint.lon };
-            try {
-                finalStartLocation = await reverseGeocode(firstPoint.lat, firstPoint.lon);
-                startGeocodeFailed = false;
-            } catch (e: any) {
-                console.error("Failed to recover start location from route", e);
-                geocodeError = `Pickup: ${e.message}`;
-            }
-        }
-    }
+      const processedDistanceKm =
+        route.length >= 2 ? calculatePathDistance(route) : undefined;
 
-    try {
-        const position = await getCurrentPosition();
-        endCoordsObj = { lat: position.latitude, lon: position.longitude };
-        
-        if (isOnline) {
-          try {
-            const address = await reverseGeocode(position.latitude, position.longitude);
-            endLocationStr = address;
-            toast.success("Dropoff location detected: " + address.split(',')[0]);
-          } catch (e: any) {
-            console.error("Failed to geocode dropoff", e);
-            resolutionMethod = 'pending';
-            geocodeError = geocodeError ? `${geocodeError} | Dropoff: ${e.message}` : `Dropoff: ${e.message}`;
-            endLocationStr = `Lat: ${position.latitude.toFixed(5)}, Lon: ${position.longitude.toFixed(5)}`;
-          }
-        } else {
-          endLocationStr = `Lat: ${position.latitude.toFixed(5)}, Lon: ${position.longitude.toFixed(5)}`;
-          resolutionMethod = 'pending';
-          geocodeError = "Offline: Geocode pending";
-          toast.info("Offline: Dropoff location recorded");
-        }
-    } catch (e: any) {
-        console.error("Failed to get dropoff location", e);
-        resolutionMethod = 'pending';
-        geocodeError = geocodeError ? `${geocodeError} | Dropoff: GPS Failed` : "Dropoff: GPS Failed";
-        // Fallback: use last point from route if available
-        if (route.length > 0) {
-            const lastPoint = route[route.length - 1];
-            endCoordsObj = { lat: lastPoint.lat, lon: lastPoint.lon };
-            endLocationStr = `Lat: ${lastPoint.lat.toFixed(5)}, Lon: ${lastPoint.lon.toFixed(5)}`;
-        }
-    }
+      const geocodeParts: string[] = [];
+      if (!startLocation && finalStartCoords) geocodeParts.push('Pickup: pending geocode');
+      if (endCoordsObj && !endLocationStr?.includes(',')) {
+        geocodeParts.push('Dropoff: pending geocode');
+      }
+      const geocodeError = geocodeParts.length > 0 ? geocodeParts.join(' | ') : undefined;
 
-    // If start geocode failed, overall resolution is pending
-    if (startGeocodeFailed) {
-        resolutionMethod = 'pending';
-    }
+      const tripData = {
+        startTime: formatTime(startObj),
+        endTime: formatTime(endObj),
+        duration: durationMinutes,
+        startDate: formatDate(startObj),
+        startLocation: finalStartLocation,
+        pickupCoords: finalStartCoords,
+        endLocation: endLocationStr,
+        dropoffCoords: endCoordsObj,
+        route,
+        stops: finalStops,
+        totalWaitTime: finalStops.reduce((acc, stop) => acc + stop.durationSeconds, 0),
+        distance: processedDistanceKm,
+        isOffline: !isOnline,
+        resolutionMethod: 'pending' as const,
+        resolutionTimestamp: undefined,
+        geocodeError,
+      };
 
-    // Phase 3: Snap to Road
-    let processedRoute = route;
-    let processedDistanceKm: number | undefined = undefined;
+      // #region agent log
+      debugLog('TripTimer.tsx:stopTrip', 'calling onComplete (fast path)', {
+        duration: tripData.duration,
+        hasRoute: route.length > 0,
+      }, 'H3');
+      // #endregion
+      onComplete(tripData);
+      toast.info('Enter the fare you received to save this trip.');
 
-    if (route.length >= 2) {
-        if (isOnline) {
-          try {
-              const result = await mapMatchService.snapToRoad(route);
-              if (result) {
-                  processedRoute = result.snappedRoute.map((pt: any, idx: number) => ({
-                      lat: pt.lat,
-                      lon: pt.lon,
-                      timestamp: route[0]?.timestamp ? route[0].timestamp + (idx * 1000) : Date.now(),
-                      speed: 0,
-                      heading: 0,
-                      accuracy: 0
-                  }));
-                  processedDistanceKm = result.totalDistance / 1000;
-              }
-          } catch (err) {
-              console.error("Snap failed", err);
-              // Fallback
-              processedDistanceKm = calculatePathDistance(route);
-          }
-        } else {
-          // Offline Mode: Use local calculation
-          processedDistanceKm = calculatePathDistance(route);
-        }
-    }
-
-    const tripData = {
-      startTime: formatTime(startObj),
-      endTime: formatTime(endObj),
-      duration: durationMinutes,
-      startDate: formatDate(startObj),
-      startLocation: finalStartLocation || undefined,
-      pickupCoords: finalStartCoords || undefined,
-      endLocation: endLocationStr,
-      dropoffCoords: endCoordsObj,
-      route: processedRoute, // Pass processed route
-      stops: finalStops,
-      totalWaitTime: finalStops.reduce((acc, stop) => acc + stop.durationSeconds, 0),
-      distance: processedDistanceKm,
-      isOffline: !isOnline,
-      resolutionMethod: resolutionMethod,
-      resolutionTimestamp: resolutionMethod === 'instant' ? new Date().toISOString() : undefined,
-      geocodeError: geocodeError
-    };
-
-    // #region agent log
-    debugLog('TripTimer.tsx:stopTrip', 'calling onComplete', {
-      duration: tripData.duration,
-      hasRoute: (tripData.route?.length ?? 0) > 0,
-    }, 'H3');
-    // #endregion
-    onComplete(tripData);
-    toast.info('Enter the fare you received to save this trip.');
-
-    setTripStatus('IDLE');
-    setStartTime(null);
-    setElapsedSeconds(0);
-    setWaitSeconds(0);
-    setStartLocation(null);
-    setStartCoords(null);
-    setRoute([]);
-    setStops([]);
-    setCurrentStop(null);
-    localStorage.removeItem(STORAGE_KEY);
-    setIsStopping(false);
+      setTripStatus('IDLE');
+      setStartTime(null);
+      setElapsedSeconds(0);
+      setWaitSeconds(0);
+      setStartLocation(null);
+      setStartCoords(null);
+      setRoute([]);
+      setStops([]);
+      setCurrentStop(null);
+      localStorage.removeItem(STORAGE_KEY);
+      setIsStopping(false);
     } catch (error) {
       // #region agent log
       debugLog('TripTimer.tsx:stopTrip', 'stopTrip error', {
@@ -611,7 +524,7 @@ export function TripTimer({ onComplete }: TripTimerProps) {
       </CardContent>
     </Card>
 
-    <TripActionPortal>
+    <TripActionPortal inert={cancelDialogOpen}>
       <div
         className="flex flex-col gap-2 rounded-2xl border border-blue-200 bg-white/95 p-3 shadow-xl backdrop-blur-md dark:border-blue-800 dark:bg-slate-900/95"
         role="toolbar"
@@ -653,6 +566,7 @@ export function TripTimer({ onComplete }: TripTimerProps) {
           <Button
             type="button"
             onClick={cancelTrip}
+            disabled={cancelDialogOpen}
             variant="outline"
             className="btn-touch h-12 w-full border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-300 dark:border-red-900 dark:hover:bg-red-950/50 gap-2 font-semibold touch-manipulation"
             title="Cancel Trip"
@@ -666,7 +580,7 @@ export function TripTimer({ onComplete }: TripTimerProps) {
             onClick={() => void stopTrip()}
             variant="destructive"
             className="btn-touch h-12 w-full gap-2 shadow-sm font-bold touch-manipulation"
-            disabled={isStopping}
+            disabled={isStopping || cancelDialogOpen}
           >
             {isStopping ? (
               <>
@@ -688,7 +602,7 @@ export function TripTimer({ onComplete }: TripTimerProps) {
 
     <CancelTripDialog
       open={cancelDialogOpen}
-      onOpenChange={handleCancelDialogOpenChange}
+      onGoBack={dismissCancelDialog}
       onConfirm={confirmCancelTrip}
     />
     </>

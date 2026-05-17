@@ -1,5 +1,5 @@
 // cache-bust: force recompile — 2026-02-10
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   DollarSign, 
   Clock, 
@@ -70,6 +70,7 @@ export function DriverDashboard() {
   const [goals, setGoals] = useState<DriverGoals | null>(null);
   const [recentTrip, setRecentTrip] = useState<Trip | null>(null);
   const [loading, setLoading] = useState(true);
+  const hasLoadedDashboardRef = useRef(false);
   const [debugDrivers, setDebugDrivers] = useState<any[]>([]);
   const [unclaimedTripIds, setUnclaimedTripIds] = useState<string[]>([]);
   const [isFixing, setIsFixing] = useState<string | null>(null);
@@ -132,7 +133,9 @@ export function DriverDashboard() {
       }, 5000);
 
       try {
-        setLoading(true);
+        if (!hasLoadedDashboardRef.current) {
+          setLoading(true);
+        }
         
         // Helper to fetch trips specifically for this driver (User ID + Legacy ID)
         const fetchDriverTrips = async () => {
@@ -276,7 +279,10 @@ export function DriverDashboard() {
         console.error("Error fetching driver data:", error);
       } finally {
         clearTimeout(timeoutId);
-        if (mounted) setLoading(false);
+        if (mounted) {
+          setLoading(false);
+          hasLoadedDashboardRef.current = true;
+        }
       }
     };
 
@@ -345,6 +351,7 @@ export function DriverDashboard() {
     // #region agent log
     debugLog('DriverDashboard.tsx:handleTripComplete', 'manualTripFormOpen set true', {}, 'H4');
     // #endregion
+    toast.info('Enter your fare to save this trip', { duration: 6000 });
   };
 
   const handleManualTripSubmit = async (data: ManualTripInput) => {
@@ -503,12 +510,15 @@ export function DriverDashboard() {
       }
   };
 
-  if (loading) {
-      return <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-indigo-600" /></div>;
-  }
-
   return (
-    <div className="flex flex-col min-h-0 gap-6 pb-2">
+    <div className="relative flex min-h-0 flex-col gap-6 pb-2">
+      {loading && !hasLoadedDashboardRef.current && (
+        <div className="flex justify-center p-8">
+          <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+        </div>
+      )}
+
+      <div className={loading && !hasLoadedDashboardRef.current ? 'hidden' : 'flex min-h-0 flex-col gap-6'}>
             <DriverOverview 
               className="flex-1"
               tierState={tierState}
@@ -527,6 +537,7 @@ export function DriverDashboard() {
             />
             
             <TripTimer onComplete={handleTripComplete} />
+      </div>
 
       <FuelLogForm 
         open={fuelFormOpen} 
@@ -542,7 +553,12 @@ export function DriverDashboard() {
 
       <ManualTripForm
         open={manualTripFormOpen}
-        onOpenChange={setManualTripFormOpen}
+        onOpenChange={(open) => {
+          // #region agent log
+          debugLog('DriverDashboard.tsx:ManualTripForm', 'onOpenChange', { open }, 'H4');
+          // #endregion
+          setManualTripFormOpen(open);
+        }}
         onSubmit={handleManualTripSubmit}
         isAdmin={false}
         defaultVehicleId={driverRecord?.assignedVehicleId || driverRecord?.vehicleId || driverRecord?.vehicle}

@@ -1,56 +1,50 @@
-import { memo } from 'react';
 import { createPortal } from 'react-dom';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@roam/ui';
+import { Button } from '@roam/ui';
 
 type CancelTripDialogProps = {
   open: boolean;
-  onOpenChange: (open: boolean) => void;
+  onGoBack: () => void;
   onConfirm: () => void;
 };
 
-/** Portaled cancel confirm — isolated from TripTimer's 1s timer re-renders. */
-export const CancelTripDialog = memo(function CancelTripDialog({
-  open,
-  onOpenChange,
-  onConfirm,
-}: CancelTripDialogProps) {
+/** Lightweight cancel confirm — no Radix (avoids focus-trap freeze with live GPS/timer). */
+export function CancelTripDialog({ open, onGoBack, onConfirm }: CancelTripDialogProps) {
   if (!open || typeof document === 'undefined') return null;
 
   return createPortal(
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent
-        overlayClassName="z-[60]"
-        className="safe-x z-[60] max-w-[calc(100vw-2rem)] sm:max-w-lg"
+    <div className="fixed inset-0 z-[100] flex items-center justify-center safe-x p-4" role="presentation">
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/50 touch-manipulation"
+        aria-label="Go back"
+        onClick={onGoBack}
+      />
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="cancel-trip-title"
+        className="relative z-[101] w-full max-w-sm rounded-xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-slate-900"
       >
-        <AlertDialogHeader>
-          <AlertDialogTitle>Cancel Current Trip?</AlertDialogTitle>
-          <AlertDialogDescription>
-            This will discard all trip data including route and duration. This action cannot be undone.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter className="flex-col-reverse gap-2 sm:flex-row">
-          <AlertDialogCancel className="btn-touch mt-0">Go Back</AlertDialogCancel>
-          <AlertDialogAction
-            className="btn-touch bg-red-600 hover:bg-red-700"
-            onClick={(e) => {
-              e.preventDefault();
-              onConfirm();
-            }}
+        <h2 id="cancel-trip-title" className="text-lg font-semibold text-slate-900 dark:text-white">
+          Cancel current trip?
+        </h2>
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+          This discards route, duration, and stops. It cannot be undone.
+        </p>
+        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button type="button" variant="outline" className="btn-touch" onClick={onGoBack}>
+            Go back
+          </Button>
+          <Button
+            type="button"
+            className="btn-touch bg-red-600 hover:bg-red-700 text-white"
+            onClick={onConfirm}
           >
-            Yes, Cancel Trip
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>,
+            Yes, cancel trip
+          </Button>
+        </div>
+      </div>
+    </div>,
     document.body,
   );
-});
+}
