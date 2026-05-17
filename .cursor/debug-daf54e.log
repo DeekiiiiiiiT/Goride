@@ -518,3 +518,22 @@
 {"sessionId":"daf54e","location":"DriverDashboard.tsx:handleTripComplete","message":"manualTripFormOpen set true","data":{},"hypothesisId":"H4","timestamp":1779029161883}
 {"sessionId":"daf54e","location":"ManualTripForm.tsx:open","message":"form opened","data":{"hasInitialData":true,"isLiveRecorded":true},"hypothesisId":"H4","timestamp":1779029161885}
 {"sessionId":"daf54e","location":"DriverDashboard.tsx:manualTripFormOpen","message":"state changed","data":{"manualTripFormOpen":true},"hypothesisId":"H4","timestamp":1779029161885}
+{"sessionId":"daf54e","location":"DriverDashboard.tsx:manualTripFormOpen","message":"state changed","data":{"manualTripFormOpen":true},"hypothesisId":"H4","timestamp":1779029772049}
+{"sessionId":"daf54e","location":"DriverDashboard.tsx:manualTripFormOpen","message":"state changed","data":{"manualTripFormOpen":false},"hypothesisId":"H4","timestamp":1779029772461}
+{"sessionId":"daf54e","location":"DriverDashboard.tsx:manualTripFormOpen","message":"state changed","data":{"manualTripFormOpen":false},"hypothesisId":"H4","timestamp":1779029777344}
+{"sessionId":"daf54e","location":"DriverDashboard.tsx:manualTripFormOpen","message":"state changed","data":{"manualTripFormOpen":false},"hypothesisId":"H4","timestamp":1779029781317}
+{"sessionId":"daf54e","location":"DriverDashboard.tsx:manualTripFormOpen","message":"state changed","data":{"manualTripFormOpen":false},"hypothesisId":"H4","timestamp":1779029786666}
+{"sessionId":"daf54e","location":"TripTimer.tsx:stopTrip","message":"stopTrip start (fast path)","data":{"startTime":1779029852649,"routePoints":0,"hasCurrentLocation":false},"hypothesisId":"H3","timestamp":1779029857661}
+{"sessionId":"daf54e","location":"TripTimer.tsx:stopTrip","message":"calling onComplete (fast path)","data":{"duration":1,"hasRoute":false},"hypothesisId":"H3","timestamp":1779029857662}
+{"sessionId":"daf54e","location":"DriverDashboard.tsx:handleTripComplete","message":"opening fare form","data":{"duration":1,"startDate":"2026-05-17"},"hypothesisId":"H4","timestamp":1779029857663}
+{"sessionId":"daf54e","location":"DriverDashboard.tsx:handleTripComplete","message":"fareDialogOpen set true","data":{},"hypothesisId":"H4","timestamp":1779029857664}
+{"sessionId":"daf54e","location":"TripFareDialog.tsx:open","message":"fare dialog opened","data":{"hasInitialData":true,"duration":1},"hypothesisId":"H4","timestamp":1779029857670}
+{"sessionId":"daf54e","location":"TripTimer.tsx:stopTrip","message":"stopTrip start (fast path)","data":{"startTime":1779029863588,"routePoints":0,"hasCurrentLocation":false},"hypothesisId":"H3","timestamp":1779029929471}
+{"sessionId":"daf54e","location":"TripTimer.tsx:stopTrip","message":"calling onComplete (fast path)","data":{"duration":2,"hasRoute":false},"hypothesisId":"H3","timestamp":1779029929472}
+{"sessionId":"daf54e","location":"DriverDashboard.tsx:handleTripComplete","message":"opening fare form","data":{"duration":2,"startDate":"2026-05-17"},"hypothesisId":"H4","timestamp":1779029929476}
+{"sessionId":"daf54e","location":"DriverDashboard.tsx:handleTripComplete","message":"fareDialogOpen set true","data":{},"hypothesisId":"H4","timestamp":1779029929476}
+{"sessionId":"daf54e","location":"TripFareDialog.tsx:open","message":"fare dialog opened","data":{"hasInitialData":true,"duration":2},"hypothesisId":"H4","timestamp":1779029929481}
+{"sessionId":"daf54e","location":"TripFareDialog.tsx:save","message":"fare submit","data":{"amount":1000,"platform":"Roam"},"hypothesisId":"H5","timestamp":1779029974713}
+{"sessionId":"daf54e","location":"DriverDashboard.tsx:handleManualTripSubmit","message":"submit start","data":{"amount":1000,"platform":"Roam"},"hypothesisId":"H5","timestamp":1779029974713}
+{"sessionId":"daf54e","location":"DriverDashboard.tsx:handleManualTripSubmit","message":"save success","data":{"tripId":"manual_9bb5e900"},"hypothesisId":"H5","timestamp":1779029976386}
+{"sessionId":"daf54e","location":"DriverDashboard.tsx:manualTripFormOpen","message":"state changed","data":{"manualTripFormOpen":false},"hypothesisId":"H4","timestamp":1779029977801}

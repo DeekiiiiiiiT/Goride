@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { FuelLogForm } from './FuelLogForm';
 import { ServiceRequestForm } from './ServiceRequestForm';
 import { ManualTripForm } from '../trips/ManualTripForm';
+import { TripFareDialog, type TripFareInitialData } from '../trips/TripFareDialog';
 import { TripTimer } from '../trips/TripTimer';
 import { createManualTrip, ManualTripInput } from '../../utils/tripFactory';
 import { useAuth } from '../../contexts/AuthContext';
@@ -45,6 +46,7 @@ export function DriverDashboard() {
   const [fuelFormOpen, setFuelFormOpen] = useState(false);
   const [serviceFormOpen, setServiceFormOpen] = useState(false);
   const [manualTripFormOpen, setManualTripFormOpen] = useState(false);
+  const [fareDialogOpen, setFareDialogOpen] = useState(false);
 
   useEffect(() => {
     // #region agent log
@@ -77,21 +79,7 @@ export function DriverDashboard() {
   const [flaggedCount, setFlaggedCount] = useState(0);
 
   // Trip Timer State
-  const [tripInitialData, setTripInitialData] = useState<{
-    startTime: string;
-    endTime: string;
-    duration: number;
-    startDate: string;
-    startLocation?: string;
-    pickupCoords?: { lat: number; lon: number };
-    endLocation?: string;
-    dropoffCoords?: { lat: number; lon: number };
-    route?: RoutePoint[];
-    stops?: TripStop[];
-    totalWaitTime?: number;
-    distance?: number;
-    isLiveRecorded?: boolean;
-  } | undefined>(undefined);
+  const [tripInitialData, setTripInitialData] = useState<TripFareInitialData | undefined>(undefined);
 
   // Phase 2: Tier State
   const [tierState, setTierState] = useState<{
@@ -328,30 +316,27 @@ export function DriverDashboard() {
     }, 'H4');
     // #endregion
     setTripInitialData({
-      startTime: data.startTime,
+      date: data.startDate,
+      time: data.startTime,
       endTime: data.endTime,
       duration: data.duration,
-      startDate: data.startDate, // Rename for form mapping
-      date: data.startDate, // Add date field for ManualTripForm mapping
-      time: data.startTime, // Add time field for ManualTripForm mapping
       pickupLocation: data.startLocation,
+      endLocation: data.endLocation,
       pickupCoords: data.pickupCoords,
-      endLocation: data.endLocation, // Pass through
-      dropoffCoords: data.dropoffCoords, // Pass through
+      dropoffCoords: data.dropoffCoords,
       route: data.route,
       stops: data.stops,
       totalWaitTime: data.totalWaitTime,
       distance: data.distance,
       isOffline: data.isOffline,
-      isLiveRecorded: true,
-      resolutionMethod: (data as { resolutionMethod?: string }).resolutionMethod,
+      resolutionMethod: (data as { resolutionMethod?: TripFareInitialData['resolutionMethod'] })
+        .resolutionMethod,
       geocodeError: (data as { geocodeError?: string }).geocodeError,
-    } as any);
-    setManualTripFormOpen(true);
+    });
+    setFareDialogOpen(true);
     // #region agent log
-    debugLog('DriverDashboard.tsx:handleTripComplete', 'manualTripFormOpen set true', {}, 'H4');
+    debugLog('DriverDashboard.tsx:handleTripComplete', 'fareDialogOpen set true', {}, 'H4');
     // #endregion
-    toast.info('Enter your fare to save this trip', { duration: 6000 });
   };
 
   const handleManualTripSubmit = async (data: ManualTripInput) => {
@@ -551,6 +536,14 @@ export function DriverDashboard() {
         onSubmit={handleServiceSubmit} 
       />
 
+      <TripFareDialog
+        open={fareDialogOpen}
+        onClose={() => setFareDialogOpen(false)}
+        initialData={tripInitialData}
+        defaultVehicleId={driverRecord?.assignedVehicleId || driverRecord?.vehicleId || driverRecord?.vehicle}
+        onSubmit={handleManualTripSubmit}
+      />
+
       <ManualTripForm
         open={manualTripFormOpen}
         onOpenChange={(open) => {
@@ -562,7 +555,24 @@ export function DriverDashboard() {
         onSubmit={handleManualTripSubmit}
         isAdmin={false}
         defaultVehicleId={driverRecord?.assignedVehicleId || driverRecord?.vehicleId || driverRecord?.vehicle}
-        initialData={tripInitialData}
+        initialData={
+          tripInitialData
+            ? {
+                date: tripInitialData.date,
+                time: tripInitialData.time,
+                endTime: tripInitialData.endTime,
+                duration: tripInitialData.duration,
+                pickupLocation: tripInitialData.pickupLocation,
+                endLocation: tripInitialData.endLocation,
+                pickupCoords: tripInitialData.pickupCoords,
+                dropoffCoords: tripInitialData.dropoffCoords,
+                route: tripInitialData.route,
+                stops: tripInitialData.stops,
+                totalWaitTime: tripInitialData.totalWaitTime,
+                distance: tripInitialData.distance,
+              }
+            : undefined
+        }
       />
 
       <PendingCatalogRequestsDrawer

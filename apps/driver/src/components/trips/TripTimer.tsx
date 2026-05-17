@@ -33,6 +33,17 @@ interface TripTimerProps {
 
 const STORAGE_KEY = 'current_trip_session';
 
+/** Downsample GPS route so Complete / save does not block the main thread. */
+function sampleRoute(points: RoutePoint[], maxPoints = 80): RoutePoint[] {
+  if (points.length <= maxPoints) return points;
+  const step = Math.ceil(points.length / maxPoints);
+  const sampled: RoutePoint[] = [];
+  for (let i = 0; i < points.length; i += step) sampled.push(points[i]);
+  const last = points[points.length - 1];
+  if (sampled[sampled.length - 1] !== last) sampled.push(last);
+  return sampled;
+}
+
 const formatElapsedTime = (totalSeconds: number) => {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -348,8 +359,6 @@ export function TripTimer({ onComplete }: TripTimerProps) {
     // #endregion
     setIsStopping(true);
     try {
-      stopTracking();
-
       let finalStops = [...stops];
       if (tripStatus === 'WAITING' && currentStop) {
         const now = Date.now();
@@ -397,8 +406,10 @@ export function TripTimer({ onComplete }: TripTimerProps) {
         ? `Lat: ${endCoordsObj.lat.toFixed(5)}, Lon: ${endCoordsObj.lon.toFixed(5)}`
         : undefined;
 
+      const routeSample = sampleRoute(route, 150);
       const processedDistanceKm =
-        route.length >= 2 ? calculatePathDistance(route) : undefined;
+        routeSample.length >= 2 ? calculatePathDistance(routeSample) : undefined;
+      const routeForSave = sampleRoute(route, 80);
 
       const geocodeParts: string[] = [];
       if (!startLocation && finalStartCoords) geocodeParts.push('Pickup: pending geocode');
@@ -416,7 +427,7 @@ export function TripTimer({ onComplete }: TripTimerProps) {
         pickupCoords: finalStartCoords,
         endLocation: endLocationStr,
         dropoffCoords: endCoordsObj,
-        route,
+        route: routeForSave,
         stops: finalStops,
         totalWaitTime: finalStops.reduce((acc, stop) => acc + stop.durationSeconds, 0),
         distance: processedDistanceKm,
@@ -432,20 +443,23 @@ export function TripTimer({ onComplete }: TripTimerProps) {
         hasRoute: route.length > 0,
       }, 'H3');
       // #endregion
-      onComplete(tripData);
-      toast.info('Enter the fare you received to save this trip.');
-
+      localStorage.removeItem(STORAGE_KEY);
+      stopTracking();
+      resetRoute();
       setTripStatus('IDLE');
       setStartTime(null);
       setElapsedSeconds(0);
       setWaitSeconds(0);
       setStartLocation(null);
       setStartCoords(null);
-      setRoute([]);
       setStops([]);
       setCurrentStop(null);
-      localStorage.removeItem(STORAGE_KEY);
       setIsStopping(false);
+
+      requestAnimationFrame(() => {
+        onComplete(tripData);
+        toast.info('Enter the fare you received to save this trip.');
+      });
     } catch (error) {
       // #region agent log
       debugLog('TripTimer.tsx:stopTrip', 'stopTrip error', {
