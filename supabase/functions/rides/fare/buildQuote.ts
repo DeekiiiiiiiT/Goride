@@ -17,6 +17,8 @@ export interface BuiltFareQuote {
   city: string;
   breakdown: FareBreakdown;
   routeSource: RouteEstimate["source"];
+  durationTrafficAware: boolean;
+  routePolylineEncoded?: string;
   quoteToken: string;
 }
 
@@ -87,6 +89,8 @@ export async function buildFareQuote(
     city,
     breakdown,
     routeSource: route.source,
+    durationTrafficAware: route.trafficAware === true,
+    routePolylineEncoded: route.encodedPolyline,
     quoteToken,
   };
 }

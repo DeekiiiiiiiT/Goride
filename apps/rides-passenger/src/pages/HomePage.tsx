@@ -6,6 +6,7 @@ import { CircleDot, LogOut, MapPin, Navigation } from 'lucide-react';
 import type { FareQuoteResponse } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
 import { RoamPlaceField } from '@/components/RoamPlaceField';
+import { TripRouteMap } from '@/components/TripRouteMap';
 import { ridesCreateRequest, ridesQuote } from '@/services/ridesEdge';
 import {
   DEFAULT_RIDES_VEHICLE_TYPE,
@@ -214,6 +215,14 @@ export default function HomePage() {
             }}
           />
 
+          {coordsReady && quote && !quoteLoading && (
+            <TripRouteMap
+              pickup={pickup}
+              dropoff={dropoff}
+              encodedPolyline={quote.route_polyline_encoded}
+            />
+          )}
+
           {quoteLoading && coordsReady && (
             <p className="text-sm text-zinc-500 px-1">Calculating fare…</p>
           )}
@@ -227,6 +236,7 @@ export default function HomePage() {
               {quote && (
                 <p className="text-xs text-emerald-800/80">
                   {quote.distance_estimate_km.toFixed(1)} km · ~{Math.round(quote.eta_trip_minutes_estimate)} min
+                  {quote.duration_traffic_aware ? ' · includes traffic' : ''}
                   {quote.route_source === 'haversine_fallback' ? ' (estimate)' : ''}
                 </p>
               )}

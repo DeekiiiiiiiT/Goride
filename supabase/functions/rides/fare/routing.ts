@@ -5,7 +5,15 @@ export type RouteEstimate = {
   distanceKm: number;
   durationMinutes: number;
   source: "google_directions" | "haversine_fallback";
+  trafficAware?: boolean;
+  encodedPolyline?: string;
 };
+
+export function googleMapsRidesApiKey(): string | null {
+  return Deno.env.get("GOOGLE_MAPS_API_KEY_RIDES") ??
+    Deno.env.get("GOOGLE_MAPS_SERVER_KEY_RIDES") ??
+    null;
+}
 
 type CacheEntry = { value: RouteEstimate; at: number };
 const routeCache = new Map<string, CacheEntry>();
@@ -43,43 +51,68 @@ function haversineFallback(
   return { distanceKm, durationMinutes, source: "haversine_fallback" };
 }
 
+type DirectionsLeg = {
+  distance?: { value: number };
+  duration?: { value: number };
+  duration_in_traffic?: { value: number };
+};
+
+/** Exported for unit tests with mocked fetch. */
+export async function fetchGoogleDirectionsRoute(
+  pickupLat: number,
+  pickupLng: number,
+  dropoffLat: number,
+  dropoffLng: number,
+  fetchFn: typeof fetch = fetch,
+): Promise<RouteEstimate | null> {
+  const apiKey = googleMapsRidesApiKey();
+  if (!apiKey) return null;
+
+  const origin = `${pickupLat},${pickupLng}`;
+  const destination = `${dropoffLat},${dropoffLng}`;
+  const departureTime = Math.floor(Date.now() / 1000);
+  const url =
+    `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&mode=driving&region=jm&departure_time=${departureTime}&key=${encodeURIComponent(apiKey)}`;
+
+  const res = await fetchFn(url, { signal: AbortSignal.timeout(8000) });
+  if (!res.ok) return null;
+
+  const json = await res.json() as {
+    status?: string;
+    routes?: Array<{
+      overview_polyline?: { points?: string };
+      legs?: DirectionsLeg[];
+    }>;
+  };
+
+  if (json.status !== "OK" || !json.routes?.[0]?.legs?.[0]) return null;
+
+  const route = json.routes[0];
+  const leg = route.legs![0];
+  const meters = leg.distance?.value;
+  const trafficSeconds = leg.duration_in_traffic?.value;
+  const baseSeconds = leg.duration?.value;
+  const seconds = trafficSeconds ?? baseSeconds;
+  if (meters == null || seconds == null) return null;
+
+  const encodedPolyline = route.overview_polyline?.points;
+
+  return {
+    distanceKm: meters / 1000,
+    durationMinutes: Math.max(1, seconds / 60),
+    source: "google_directions",
+    trafficAware: trafficSeconds != null,
+    ...(encodedPolyline ? { encodedPolyline } : {}),
+  };
+}
+
 async function googleDirectionsRoute(
   pickupLat: number,
   pickupLng: number,
   dropoffLat: number,
   dropoffLng: number,
 ): Promise<RouteEstimate | null> {
-  const apiKey = Deno.env.get("GOOGLE_MAPS_API_KEY_RIDES") ??
-    Deno.env.get("GOOGLE_MAPS_SERVER_KEY_RIDES");
-  if (!apiKey) return null;
-
-  const origin = `${pickupLat},${pickupLng}`;
-  const destination = `${dropoffLat},${dropoffLng}`;
-  const url =
-    `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&mode=driving&region=jm&key=${encodeURIComponent(apiKey)}`;
-
-  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-  if (!res.ok) return null;
-
-  const json = await res.json() as {
-    status?: string;
-    routes?: Array<{
-      legs?: Array<{ distance?: { value: number }; duration?: { value: number } }>;
-    }>;
-  };
-
-  if (json.status !== "OK" || !json.routes?.[0]?.legs?.[0]) return null;
-
-  const leg = json.routes[0].legs[0];
-  const meters = leg.distance?.value;
-  const seconds = leg.duration?.value;
-  if (meters == null || seconds == null) return null;
-
-  return {
-    distanceKm: meters / 1000,
-    durationMinutes: Math.max(1, seconds / 60),
-    source: "google_directions",
-  };
+  return fetchGoogleDirectionsRoute(pickupLat, pickupLng, dropoffLat, dropoffLng);
 }
 
 export async function getRouteEstimate(

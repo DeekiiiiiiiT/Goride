@@ -58,11 +58,18 @@ Quotes pick up fare-rule changes within about **60 seconds** (Edge cache). Surge
 
 | Secret | Purpose |
 |--------|---------|
-| `GOOGLE_MAPS_API_KEY_RIDES` | Directions API for route distance/time |
+| `GOOGLE_MAPS_API_KEY_RIDES` | Server: Directions + Distance Matrix (fare quotes, driver matching) |
+| `GOOGLE_MAPS_SERVER_KEY_RIDES` | Alternate server key (same APIs) |
 | `ROAM_RIDES_QUOTE_SECRET` | Sign `quote_token` (required in production) |
 | `ROAM_RIDES_*_MINOR` | Optional env fallback if DB row missing |
 
-Enable **Directions API** on the Google Cloud project tied to the rides key.
+Enable on the Google Cloud project tied to the rides key:
+
+- **Directions API** — trip distance, traffic-aware duration, route polyline for the passenger map
+- **Distance Matrix API** — drive-time ranking when dispatching driver offers
+- **Maps JavaScript API** + **Places API** — browser map and address search (restrict the browser key; do not enable Directions/Matrix on the client-restricted key)
+
+Set a billing budget alert; Distance Matrix is invoked per matching wave.
 
 ## Audit
 

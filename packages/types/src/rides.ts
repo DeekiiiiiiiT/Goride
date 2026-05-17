@@ -96,6 +96,8 @@ export interface FareQuoteResponse {
   grid_cell_key: string;
   vehicle_option: string;
   route_source: 'google_directions' | 'haversine_fallback';
+  duration_traffic_aware?: boolean;
+  route_polyline_encoded?: string;
   fare_breakdown: FareBreakdown;
   quote_token: string;
 }

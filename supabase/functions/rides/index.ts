@@ -11,6 +11,7 @@ import { cors } from "https://deno.land/x/hono@v4.3.11/middleware.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { jsonEdgeForbidden, ridesUserSurfaceRole } from "../_shared/authEdge.ts";
 import { buildFareQuote, gridCellKey } from "./fare/buildQuote.ts";
+import { rankDriversByDriveTime } from "./fare/distanceMatrix.ts";
 import { haversineKm } from "./fare/routing.ts";
 import { quoteTokenHash, verifyQuoteToken } from "./fare/quoteToken.ts";
 import { registerAdminRoutes } from "./admin.ts";
@@ -213,8 +214,25 @@ async function runMatchingWave(
   }
   candidates.sort((a, b) => a.d - b.d || a.user_id.localeCompare(b.user_id));
 
-  const rotate = wave % Math.max(candidates.length, 1);
-  const rotated = [...candidates.slice(rotate), ...candidates.slice(0, rotate)];
+  const { ranked, source: matchingRouteSource } = await rankDriversByDriveTime(
+    { lat: pickupLat, lng: pickupLng },
+    candidates.map((c) => ({
+      user_id: c.user_id,
+      lat: c.lat,
+      lng: c.lng,
+      haversineKm: c.d,
+    })),
+  );
+
+  const rankedCandidates: Cand[] = ranked.map((r) => ({
+    user_id: r.user_id,
+    lat: r.lat,
+    lng: r.lng,
+    d: r.haversineKm,
+  }));
+
+  const rotate = wave % Math.max(rankedCandidates.length, 1);
+  const rotated = [...rankedCandidates.slice(rotate), ...rankedCandidates.slice(0, rotate)];
   const picked = rotated.slice(0, MAX_OFFERS_PER_WAVE);
 
   const expiresAt = new Date(Date.now() + timeoutSec * 1000).toISOString();
@@ -241,6 +259,7 @@ async function runMatchingWave(
     wave,
     radius_km: radiusKm,
     offers: picked.length,
+    matching_route_source: matchingRouteSource,
   });
   logLine({
     event: "matching_wave",
@@ -307,6 +326,10 @@ app.post("/v1/quote", async (c) => {
     grid_cell_key: quote.gridCellKey,
     vehicle_option: quote.vehicleType,
     route_source: quote.routeSource,
+    duration_traffic_aware: quote.durationTrafficAware,
+    ...(quote.routePolylineEncoded
+      ? { route_polyline_encoded: quote.routePolylineEncoded }
+      : {}),
     fare_breakdown: quote.breakdown,
     quote_token: quote.quoteToken,
   });

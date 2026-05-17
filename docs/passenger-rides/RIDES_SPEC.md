@@ -40,7 +40,7 @@ Canonical statuses (`rides.ride_requests.status`):
 
 1. On **`matching`**, select candidates from **`rides.driver_locations`** where `available_for_rides`, freshness (**≤ 10 minutes**), and Haversine distance ≤ **`radius_km`** (wave 1: **5 km**, wave 2: **15 km**, wave 3: **35 km**).
 2. Exclude drivers already **`declined`/`expired`** for this ride in earlier waves.
-3. Rank by distance ascending (tie-break: stable UUID sort for fairness).
+3. Rank by **drive time** when **Distance Matrix API** is available (`matching_route_source: google_distance_matrix` in audit); otherwise Haversine + 25 km/h fallback. Up to **25** nearest Haversine candidates are sent to Matrix per wave. Tie-break: stable UUID sort.
 4. Emit up to **`max_offers = 8`** **`pending`** rows in **`rides.driver_offers`** per wave with **`expires_at = now + driver_offer_timeout_seconds`** (default **15**).
 5. **Fairness (future hardening)**: rotate ranking seeds per wave / penalize chronic declines — tracked via **`wave`** and audit payloads.
 
@@ -58,13 +58,15 @@ Canonical statuses (`rides.ride_requests.status`):
 
 ### Route distance & time
 
-- Edge calls **Google Directions API** (driving, `region=jm`) using `GOOGLE_MAPS_API_KEY_RIDES` (or `GOOGLE_MAPS_SERVER_KEY_RIDES`).
+- Edge calls **Google Directions API** (driving, `region=jm`, `departure_time=now`) using `GOOGLE_MAPS_API_KEY_RIDES` (or `GOOGLE_MAPS_SERVER_KEY_RIDES`).
+- Prefers **`duration_in_traffic`** when returned (`duration_traffic_aware: true` on quote); otherwise baseline duration.
+- Returns **`route_polyline_encoded`** (overview polyline) for the passenger booking map when Directions succeeds.
 - On API failure: **Haversine** distance + 25 km/h speed fallback (`route_source: haversine_fallback`).
 
 ### Quote (`POST /v1/quote`)
 
 - Inputs: pickup/dropoff coordinates, optional **`vehicle_option`** (default `standard`).
-- Returns: `fare_estimate_minor`, `currency`, `surge_multiplier`, `distance_estimate_km`, `duration_estimate_minutes`, `fare_breakdown`, **`quote_token`** (signed, ~10 min TTL).
+- Returns: `fare_estimate_minor`, `currency`, `surge_multiplier`, `distance_estimate_km`, `duration_estimate_minutes`, `duration_traffic_aware`, optional `route_polyline_encoded`, `fare_breakdown`, **`quote_token`** (signed, ~10 min TTL).
 
 **Formula:**
 
