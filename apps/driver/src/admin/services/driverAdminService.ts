@@ -2,6 +2,7 @@
  * Driver Admin Service - API client for driver operations
  */
 
+import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
 import type {
   DriverDetailDto,
   DriverDirectoryRow,
@@ -9,10 +10,7 @@ import type {
 } from '@roam/types/driver';
 import type { RideRequestRow } from '@roam/types/rides';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-const DRIVER_BASE = `${SUPABASE_URL}/functions/v1/driver`;
+const DRIVER_BASE = API_ENDPOINTS.driver;
 
 export interface DriverPresenceRow {
   driver_id: string;
@@ -56,20 +54,45 @@ export interface DriverStats {
 function headers(accessToken: string, contentType?: string): HeadersInit {
   const h: Record<string, string> = {
     Authorization: `Bearer ${accessToken}`,
-    apikey: SUPABASE_ANON_KEY,
+    apikey: publicAnonKey,
   };
   if (contentType) h['Content-Type'] = contentType;
   return h;
 }
 
 async function parseError(res: Response): Promise<string> {
-  const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
-  if (body.message) return body.message;
-  if (body.error === 'driver_admin_db_unavailable') {
-    return body.message ?? 'Driver admin tables are missing. Run migration 20260519120000_driver_admin_directory.sql.';
+  const text = await res.text();
+  const trimmed = text.trim();
+  if (trimmed.startsWith('<')) {
+    return 'Server returned HTML instead of JSON. Deploy the driver Edge function and check API_ENDPOINTS.driver.';
   }
-  if (body.error) return `${body.error} (HTTP ${res.status})`;
-  return `HTTP ${res.status}`;
+  try {
+    const body = trimmed
+      ? (JSON.parse(trimmed) as { error?: string; message?: string })
+      : {};
+    if (body.message) return body.message;
+    if (body.error === 'driver_admin_db_unavailable') {
+      return body.message ?? 'Driver admin tables are missing. Run migration 20260519120000_driver_admin_directory.sql.';
+    }
+    if (body.error) return `${body.error} (HTTP ${res.status})`;
+    return trimmed || `HTTP ${res.status}`;
+  } catch {
+    return trimmed ? `${trimmed.slice(0, 200)} (HTTP ${res.status})` : `HTTP ${res.status}`;
+  }
+}
+
+async function parseJson<T>(res: Response): Promise<T> {
+  const text = await res.text();
+  const trimmed = text.trim();
+  if (trimmed.startsWith('<')) {
+    throw new Error(
+      'Server returned HTML instead of JSON. Deploy the driver Edge function and check API_ENDPOINTS.driver.',
+    );
+  }
+  if (!trimmed) {
+    throw new Error(`Empty response (HTTP ${res.status})`);
+  }
+  return JSON.parse(trimmed) as T;
 }
 
 export async function getDriverStats(accessToken: string): Promise<DriverStats> {
@@ -77,7 +100,7 @@ export async function getDriverStats(accessToken: string): Promise<DriverStats> 
     headers: headers(accessToken),
   });
   if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
+  return parseJson<DriverStats>(res);
 }
 
 export async function listDrivers(
@@ -107,7 +130,7 @@ export async function listDrivers(
     headers: headers(accessToken),
   });
   if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
+  return parseJson(res);
 }
 
 export async function getDriverDetail(
@@ -118,7 +141,7 @@ export async function getDriverDetail(
     headers: headers(accessToken),
   });
   if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
+  return parseJson(res);
 }
 
 export async function listDriverTrips(
@@ -134,7 +157,7 @@ export async function listDriverTrips(
     { headers: headers(accessToken) },
   );
   if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
+  return parseJson(res);
 }
 
 export async function listDriverPresence(
@@ -149,7 +172,7 @@ export async function listDriverPresence(
     headers: headers(accessToken),
   });
   if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
+  return parseJson(res);
 }
 
 export async function listDriverOffers(
@@ -164,7 +187,7 @@ export async function listDriverOffers(
     headers: headers(accessToken),
   });
   if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
+  return parseJson(res);
 }
 
 export async function cancelOffer(
@@ -178,7 +201,7 @@ export async function cancelOffer(
     body: JSON.stringify({ reason }),
   });
   if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
+  return parseJson(res);
 }
 
 export async function listComplianceQueue(
@@ -193,7 +216,7 @@ export async function listComplianceQueue(
     headers: headers(accessToken),
   });
   if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
+  return parseJson(res);
 }
 
 export async function updateComplianceStatus(
@@ -209,5 +232,5 @@ export async function updateComplianceStatus(
     body: JSON.stringify(updates),
   });
   if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
+  return parseJson(res);
 }

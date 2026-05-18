@@ -27,4 +27,5 @@ export const API_ENDPOINTS = {
   payments: `${BASE_URL}/payments`,
   notifications: `${BASE_URL}/notifications`,
   rides: `${BASE_URL}/rides`,
+  driver: `${BASE_URL}/driver`,
 };
