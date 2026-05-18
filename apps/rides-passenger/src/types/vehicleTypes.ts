@@ -1,8 +1,9 @@
 import {
   DEFAULT_RIDES_VEHICLE_TYPE,
   RIDES_VEHICLE_TYPES,
-  type RidesVehicleType,
 } from '@roam/business-config';
+
+export type TransportSolutionKind = 'vehicle' | 'service';
 
 export type RidesVehicleTypeDto = {
   slug: string;
@@ -13,6 +14,7 @@ export type RidesVehicleTypeDto = {
   tagline: string | null;
   sort_order: number;
   is_active: boolean;
+  solution_kind: TransportSolutionKind;
 };
 
 export type RidesVehicleTypeInput = {
@@ -24,7 +26,16 @@ export type RidesVehicleTypeInput = {
   tagline?: string | null;
   sort_order?: number;
   is_active?: boolean;
+  solution_kind: TransportSolutionKind;
 };
+
+export function inferSolutionKind(
+  slug: string,
+  kind?: string | null,
+): TransportSolutionKind {
+  if (kind === 'service' || kind === 'vehicle') return kind;
+  return slug === 'courier' ? 'service' : 'vehicle';
+}
 
 export function fallbackVehicleTypes(): RidesVehicleTypeDto[] {
   return RIDES_VEHICLE_TYPES.map((v, i) => ({
@@ -36,6 +47,7 @@ export function fallbackVehicleTypes(): RidesVehicleTypeDto[] {
     tagline: v.slug === 'courier' ? 'Send a package' : null,
     sort_order: (i + 1) * 10,
     is_active: true,
+    solution_kind: inferSolutionKind(v.slug),
   }));
 }
 
@@ -54,8 +66,30 @@ export function vehicleTypeLabelFromList(slug: string, types: RidesVehicleTypeDt
   return fb?.label ?? slug;
 }
 
+function sortTypes(types: RidesVehicleTypeDto[]): RidesVehicleTypeDto[] {
+  return [...types].sort(
+    (a, b) => a.sort_order - b.sort_order || a.slug.localeCompare(b.slug),
+  );
+}
+
 export function activeVehicleTypes(types: RidesVehicleTypeDto[]): RidesVehicleTypeDto[] {
-  return types.filter((t) => t.is_active).sort((a, b) => a.sort_order - b.sort_order || a.slug.localeCompare(b.slug));
+  return sortTypes(types.filter((t) => t.is_active));
+}
+
+export function splitTransportSolutions(types: RidesVehicleTypeDto[]) {
+  const active = activeVehicleTypes(types);
+  return {
+    vehicles: active.filter((t) => t.solution_kind === 'vehicle'),
+    services: active.filter((t) => t.solution_kind === 'service'),
+  };
+}
+
+export function splitTransportSolutionsAll(types: RidesVehicleTypeDto[]) {
+  const sorted = sortTypes(types);
+  return {
+    vehicles: sorted.filter((t) => t.solution_kind === 'vehicle'),
+    services: sorted.filter((t) => t.solution_kind === 'service'),
+  };
 }
 
 export const DEFAULT_VEHICLE_OPTION = DEFAULT_RIDES_VEHICLE_TYPE;

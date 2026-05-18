@@ -4,7 +4,7 @@ import { VehicleTypesProvider } from '../context/VehicleTypesContext';
 
 const TABS = [
   { to: '/admin/fare-rules', label: 'Rules', end: true },
-  { to: '/admin/fare-rules/vehicle-types', label: 'Vehicle types', end: false },
+  { to: '/admin/fare-rules/transport-solutions/vehicles', label: 'Transport Solutions', end: false },
   { to: '/admin/fare-rules/calculator', label: 'Trip calculator', end: false },
 ] as const;
 

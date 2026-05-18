@@ -107,7 +107,12 @@ export function RidesAdminLayout() {
 
   const pageTitle = (() => {
     if (currentPath.startsWith('/admin/fare-rules/calculator')) return 'Trip calculator';
-    if (currentPath.startsWith('/admin/fare-rules/vehicle-types')) return 'Vehicle types';
+    if (
+      currentPath.startsWith('/admin/fare-rules/transport-solutions') ||
+      currentPath.startsWith('/admin/fare-rules/vehicle-types')
+    ) {
+      return 'Transport Solutions';
+    }
     if (currentPath.startsWith('/admin/users/') && currentPath !== '/admin/users') {
       return 'Rider detail';
     }

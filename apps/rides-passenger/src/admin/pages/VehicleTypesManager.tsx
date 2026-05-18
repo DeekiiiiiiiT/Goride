@@ -13,32 +13,161 @@ import {
   vehicleCapacityDisplay,
   type RidesVehicleTypeDto,
   type RidesVehicleTypeInput,
+  type TransportSolutionKind,
 } from '@/types/vehicleTypes';
 
 type OutletContext = { session: Session };
 
-const EMPTY: RidesVehicleTypeInput & { slug: string } = {
-  slug: '',
-  label: '',
-  description: '',
-  seats: 4,
-  capacity_label: '',
-  tagline: '',
-  sort_order: 50,
-  is_active: true,
+function emptyForm(kind: TransportSolutionKind): RidesVehicleTypeInput & { slug: string } {
+  return {
+    slug: '',
+    label: '',
+    description: '',
+    seats: kind === 'service' ? 0 : 4,
+    capacity_label: kind === 'service' ? 'Variable' : '',
+    tagline: '',
+    sort_order: 50,
+    is_active: true,
+    solution_kind: kind,
+  };
+}
+
+function TypeCard({
+  row,
+  onEdit,
+  onDelete,
+}: {
+  row: RidesVehicleTypeDto;
+  onEdit: (row: RidesVehicleTypeDto) => void;
+  onDelete: (row: RidesVehicleTypeDto) => void;
+}) {
+  return (
+    <div
+      className={`rounded-lg border px-4 py-3 ${
+        row.is_active
+          ? 'border-slate-700 bg-slate-800/40'
+          : 'border-slate-800 bg-slate-900/50 opacity-60'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="font-medium text-white">{row.label}</span>
+            <span className="text-[11px] text-slate-500 shrink-0">
+              {vehicleCapacityDisplay(row)}
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 font-mono mt-0.5">{row.slug}</p>
+          <p className="text-xs text-slate-400 mt-1">{row.description}</p>
+          {row.tagline && <p className="text-[11px] text-slate-500 mt-1">{row.tagline}</p>}
+          {!row.is_active && (
+            <span className="inline-block mt-2 text-[10px] uppercase tracking-wide text-amber-400/90">
+              Inactive
+            </span>
+          )}
+        </div>
+        <div className="flex shrink-0 gap-1">
+          <button
+            type="button"
+            onClick={() => onEdit(row)}
+            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700"
+            title="Edit"
+          >
+            <Pencil className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onDelete(row)}
+            className="p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-700"
+            title="Delete"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Section({
+  title,
+  description,
+  items,
+  addLabel,
+  onAdd,
+  onEdit,
+  onDelete,
+}: {
+  title: string;
+  description: string;
+  items: RidesVehicleTypeDto[];
+  addLabel: string;
+  onAdd: () => void;
+  onEdit: (row: RidesVehicleTypeDto) => void;
+  onDelete: (row: RidesVehicleTypeDto) => void;
+}) {
+  return (
+    <section className="space-y-3 max-w-xl">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-semibold text-white">{title}</h3>
+          <p className="text-sm text-slate-400 mt-0.5">{description}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onAdd}
+          className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-4 py-2"
+        >
+          <Plus className="w-4 h-4" />
+          {addLabel}
+        </button>
+      </div>
+      {items.length === 0 ? (
+        <p className="text-sm text-slate-500">None yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {items.map((row) => (
+            <TypeCard key={row.slug} row={row} onEdit={onEdit} onDelete={onDelete} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+const KIND_META: Record<
+  TransportSolutionKind,
+  { title: string; description: string; addLabel: string }
+> = {
+  vehicle: {
+    title: 'Vehicle types',
+    description: 'Passenger rides — sedans, SUVs, and similar.',
+    addLabel: 'Add vehicle type',
+  },
+  service: {
+    title: 'Services',
+    description: 'Non-passenger offerings such as package delivery.',
+    addLabel: 'Add service',
+  },
 };
 
-export function VehicleTypesManager() {
+type VehicleTypesManagerProps = {
+  kind: TransportSolutionKind;
+};
+
+export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
   const { session } = useOutletContext<OutletContext>();
-  const { types, loading, reload } = useVehicleTypesContext();
+  const { allVehicles, allServices, loading, reload } = useVehicleTypesContext();
+  const items = kind === 'vehicle' ? allVehicles : allServices;
+  const meta = KIND_META[kind];
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<RidesVehicleTypeDto | null>(null);
-  const [form, setForm] = useState(EMPTY);
+  const [form, setForm] = useState(() => emptyForm(kind));
   const [saving, setSaving] = useState(false);
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ ...EMPTY, sort_order: (types.length + 1) * 10 });
+    setForm({ ...emptyForm(kind), sort_order: (items.length + 1) * 10 });
     setDialogOpen(true);
   };
 
@@ -53,21 +182,19 @@ export function VehicleTypesManager() {
       tagline: row.tagline ?? '',
       sort_order: row.sort_order,
       is_active: row.is_active,
+      solution_kind: row.solution_kind,
     });
     setDialogOpen(true);
   };
 
   const handleDelete = async (row: RidesVehicleTypeDto) => {
-    if (
-      !window.confirm(
-        `Delete vehicle type "${row.label}" (${row.slug})? This cannot be undone.`,
-      )
-    ) {
+    const kindLabel = row.solution_kind === 'service' ? 'service' : 'vehicle type';
+    if (!window.confirm(`Delete ${kindLabel} "${row.label}" (${row.slug})? This cannot be undone.`)) {
       return;
     }
     try {
       await deleteVehicleType(session.access_token, row.slug);
-      toast.success('Vehicle type deleted');
+      toast.success('Deleted');
       await reload();
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Delete failed');
@@ -84,11 +211,12 @@ export function VehicleTypesManager() {
       tagline: form.tagline?.trim() || null,
       sort_order: form.sort_order ?? 0,
       is_active: form.is_active !== false,
+      solution_kind: form.solution_kind,
     };
     try {
       if (editing) {
         await updateVehicleType(session.access_token, editing.slug, payload);
-        toast.success('Vehicle type updated');
+        toast.success('Updated');
       } else {
         const slug = form.slug.trim().toLowerCase();
         if (!slug) {
@@ -96,7 +224,7 @@ export function VehicleTypesManager() {
           return;
         }
         await createVehicleType(session.access_token, { ...payload, slug });
-        toast.success('Vehicle type created');
+        toast.success('Created');
       }
       setDialogOpen(false);
       await reload();
@@ -107,83 +235,25 @@ export function VehicleTypesManager() {
     }
   };
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-semibold text-white">Vehicle & service types</h2>
-          <p className="text-sm text-slate-400 mt-1 max-w-2xl">
-            Names and descriptions shown when riders book and when you create fare rules. The ID
-            (slug) is fixed after creation.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-4 py-2"
-        >
-          <Plus className="w-4 h-4" />
-          Add type
-        </button>
-      </div>
+  const kindLabel = form.solution_kind === 'service' ? 'service' : 'vehicle type';
 
+  return (
+    <div className="space-y-4">
       {loading ? (
         <p className="text-slate-400 flex items-center gap-2 text-sm">
           <Loader2 className="w-4 h-4 animate-spin" />
           Loading…
         </p>
       ) : (
-        <div className="space-y-2 max-w-xl">
-          {types.map((v) => (
-            <div
-              key={v.slug}
-              className={`rounded-lg border px-4 py-3 ${
-                v.is_active
-                  ? 'border-slate-700 bg-slate-800/40'
-                  : 'border-slate-800 bg-slate-900/50 opacity-60'
-              }`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="font-medium text-white">{v.label}</span>
-                    <span className="text-[11px] text-slate-500 shrink-0">
-                      {vehicleCapacityDisplay(v)}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 font-mono mt-0.5">{v.slug}</p>
-                  <p className="text-xs text-slate-400 mt-1">{v.description}</p>
-                  {v.tagline && (
-                    <p className="text-[11px] text-slate-500 mt-1">{v.tagline}</p>
-                  )}
-                  {!v.is_active && (
-                    <span className="inline-block mt-2 text-[10px] uppercase tracking-wide text-amber-400/90">
-                      Inactive
-                    </span>
-                  )}
-                </div>
-                <div className="flex shrink-0 gap-1">
-                  <button
-                    type="button"
-                    onClick={() => openEdit(v)}
-                    className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700"
-                    title="Edit"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleDelete(v)}
-                    className="p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-700"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+        <Section
+          title={meta.title}
+          description={meta.description}
+          items={items}
+          addLabel={meta.addLabel}
+          onAdd={openCreate}
+          onEdit={openEdit}
+          onDelete={(row) => void handleDelete(row)}
+        />
       )}
 
       {dialogOpen && (
@@ -195,7 +265,7 @@ export function VehicleTypesManager() {
           >
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
               <h3 className="font-semibold text-white">
-                {editing ? 'Edit vehicle type' : 'New vehicle type'}
+                {editing ? `Edit ${kindLabel}` : `New ${kindLabel}`}
               </h3>
               <button
                 type="button"
@@ -207,20 +277,22 @@ export function VehicleTypesManager() {
             </div>
             <div className="p-5 space-y-4">
               {!editing && (
-                <label className="block">
-                  <span className="text-sm text-slate-300">ID (slug)</span>
-                  <input
-                    className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white"
-                    value={form.slug}
-                    placeholder="e.g. courier"
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, slug: e.target.value.toLowerCase() }))
-                    }
-                  />
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    Lowercase letters, numbers, underscore. Cannot be changed later.
+                <>
+                  <p className="text-xs text-slate-500 uppercase tracking-wide">
+                    {form.solution_kind === 'service' ? 'Service' : 'Vehicle type'}
                   </p>
-                </label>
+                  <label className="block">
+                    <span className="text-sm text-slate-300">ID (slug)</span>
+                    <input
+                      className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white"
+                      value={form.slug}
+                      placeholder={form.solution_kind === 'service' ? 'e.g. courier' : 'e.g. uberx'}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, slug: e.target.value.toLowerCase() }))
+                      }
+                    />
+                  </label>
+                </>
               )}
               {editing && (
                 <p className="text-sm text-slate-400">

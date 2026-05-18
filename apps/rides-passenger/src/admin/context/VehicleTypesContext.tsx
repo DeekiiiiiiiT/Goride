@@ -3,12 +3,17 @@ import { useOutletContext } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import { useRidesVehicleTypes } from '@/hooks/useRidesVehicleTypes';
 import type { RidesVehicleTypeDto } from '@/types/vehicleTypes';
+import { splitTransportSolutions, splitTransportSolutionsAll } from '@/types/vehicleTypes';
 
 type OutletContext = { session: Session; role: string | undefined };
 
 type VehicleTypesContextValue = {
   types: RidesVehicleTypeDto[];
   active: RidesVehicleTypeDto[];
+  vehicles: RidesVehicleTypeDto[];
+  services: RidesVehicleTypeDto[];
+  allVehicles: RidesVehicleTypeDto[];
+  allServices: RidesVehicleTypeDto[];
   loading: boolean;
   error: string | null;
   reload: () => Promise<void>;
@@ -31,9 +36,23 @@ export function VehicleTypesProvider({ children }: { children: React.ReactNode }
     return slug;
   };
 
+  const { vehicles: allVehicles, services: allServices } = splitTransportSolutionsAll(types);
+  const activeSplit = splitTransportSolutions(types);
+
   return (
     <VehicleTypesContext.Provider
-      value={{ types, active, loading, error, reload, vehicleTypeTableLabel }}
+      value={{
+        types,
+        active,
+        vehicles: activeSplit.vehicles,
+        services: activeSplit.services,
+        allVehicles,
+        allServices,
+        loading,
+        error,
+        reload,
+        vehicleTypeTableLabel,
+      }}
     >
       {children}
     </VehicleTypesContext.Provider>

@@ -8,6 +8,8 @@ import {
   RIDES_VEHICLE_LEGACY_ALIASES,
 } from "./ridesVehicleTypes.ts";
 
+export type TransportSolutionKind = "vehicle" | "service";
+
 export type VehicleTypeRow = {
   slug: string;
   label: string;
@@ -17,6 +19,7 @@ export type VehicleTypeRow = {
   tagline: string | null;
   sort_order: number;
   is_active: boolean;
+  solution_kind?: TransportSolutionKind | string | null;
 };
 
 export type VehicleTypeDto = {
@@ -28,7 +31,13 @@ export type VehicleTypeDto = {
   tagline: string | null;
   sort_order: number;
   is_active: boolean;
+  solution_kind: TransportSolutionKind;
 };
+
+function inferSolutionKind(slug: string, kind?: string | null): TransportSolutionKind {
+  if (kind === "service" || kind === "vehicle") return kind;
+  return slug === "courier" ? "service" : "vehicle";
+}
 
 const CACHE_TTL_MS = 30_000;
 let cache: { rows: VehicleTypeRow[]; at: number } | null = null;
@@ -43,6 +52,7 @@ function rowToDto(r: VehicleTypeRow): VehicleTypeDto {
     tagline: r.tagline,
     sort_order: r.sort_order ?? 0,
     is_active: r.is_active !== false,
+    solution_kind: inferSolutionKind(r.slug, r.solution_kind),
   };
 }
 
@@ -56,6 +66,7 @@ function fallbackRows(): VehicleTypeRow[] {
     tagline: v.slug === "courier" ? "Send a package" : null,
     sort_order: (i + 1) * 10,
     is_active: true,
+    solution_kind: inferSolutionKind(v.slug),
   }));
 }
 

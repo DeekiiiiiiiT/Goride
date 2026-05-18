@@ -6,7 +6,8 @@ import { formatMoneyMinor } from '@roam/types/rides';
 import { RoamPlaceField } from '@/components/RoamPlaceField';
 import { TripRouteMap } from '@/components/TripRouteMap';
 import { ridesQuote } from '@/services/ridesEdge';
-import { DEFAULT_VEHICLE_OPTION, vehicleCapacityDisplay } from '@/types/vehicleTypes';
+import { DEFAULT_VEHICLE_OPTION } from '@/types/vehicleTypes';
+import { TransportOptionPicker } from '@/components/TransportOptionPicker';
 import { useVehicleTypesContext } from '../context/VehicleTypesContext';
 import { formatVehicleEtaLine } from '@/utils/formatRideEta';
 
@@ -19,7 +20,7 @@ export function TripCalculator() {
   const [dropoffAddress, setDropoffAddress] = useState('');
   const [pickup, setPickup] = useState<{ lat: number; lng: number } | null>(null);
   const [dropoff, setDropoff] = useState<{ lat: number; lng: number } | null>(null);
-  const { active: vehicleTypes } = useVehicleTypesContext();
+  const { vehicles, services } = useVehicleTypesContext();
   const [vehicleOption, setVehicleOption] = useState<string>(DEFAULT_VEHICLE_OPTION);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quote, setQuote] = useState<FareQuoteResponse | null>(null);
@@ -83,40 +84,17 @@ export function TripCalculator() {
 
       <div className="max-w-lg">
         <div className="rounded-3xl bg-white p-5 sm:p-6 shadow-xl shadow-black/20 ring-1 ring-zinc-200/90 space-y-5 text-zinc-900">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 mb-2">
-              Vehicle
-            </p>
-            <div className="space-y-2">
-              {vehicleTypes.map((v) => (
-                <button
-                  key={v.slug}
-                  type="button"
-                  onClick={() => {
-                    setVehicleOption(v.slug);
-                    clearQuote();
-                  }}
-                  className={`w-full rounded-2xl border px-4 py-3 text-left transition-colors ${
-                    vehicleOption === v.slug
-                      ? 'border-emerald-600 bg-emerald-50 ring-1 ring-emerald-600/30'
-                      : 'border-zinc-200 bg-zinc-50 hover:bg-white'
-                  }`}
-                >
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="font-semibold text-sm">{v.label}</span>
-                    <span className="text-xs text-zinc-500">{vehicleCapacityDisplay(v)}</span>
-                  </div>
-                  {vehicleEtaLine && (
-                    <p className="text-xs text-zinc-500 mt-0.5 tabular-nums">{vehicleEtaLine}</p>
-                  )}
-                  <p className="text-xs text-zinc-600 mt-0.5 leading-snug">{v.description}</p>
-                  {v.tagline && (
-                    <p className="text-[11px] text-zinc-500 mt-1">{v.tagline}</p>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
+          <TransportOptionPicker
+            vehicles={vehicles}
+            services={services}
+            selected={vehicleOption}
+            onSelect={(slug) => {
+              setVehicleOption(slug);
+              clearQuote();
+            }}
+            selectedEtaLine={vehicleEtaLine}
+            variant="rider"
+          />
 
           <RoamPlaceField
             label={

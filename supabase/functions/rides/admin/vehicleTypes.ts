@@ -12,6 +12,11 @@ import {
 
 const SLUG_RE = /^[a-z][a-z0-9_-]{0,30}$/;
 
+function inferSolutionKind(slug: string, kind?: string | null): "vehicle" | "service" {
+  if (kind === "service" || kind === "vehicle") return kind;
+  return slug === "courier" ? "service" : "vehicle";
+}
+
 function dto(row: VehicleTypeRow): VehicleTypeDto {
   return {
     slug: row.slug,
@@ -22,6 +27,7 @@ function dto(row: VehicleTypeRow): VehicleTypeDto {
     tagline: row.tagline,
     sort_order: row.sort_order ?? 0,
     is_active: row.is_active !== false,
+    solution_kind: inferSolutionKind(row.slug, row.solution_kind),
   };
 }
 
@@ -64,6 +70,15 @@ function parseBody(body: Record<string, unknown>, forCreate: boolean) {
 
   const is_active = body.is_active !== false;
 
+  let solution_kind: "vehicle" | "service" = "vehicle";
+  if (body.solution_kind === "service" || body.solution_kind === "vehicle") {
+    solution_kind = body.solution_kind;
+  } else if (typeof body.solution_kind === "string") {
+    const k = body.solution_kind.trim().toLowerCase();
+    if (k === "service" || k === "vehicle") solution_kind = k;
+    else errors.push("invalid_solution_kind");
+  }
+
   if (errors.length) return { error: errors[0] } as const;
 
   return {
@@ -72,6 +87,7 @@ function parseBody(body: Record<string, unknown>, forCreate: boolean) {
       label,
       description,
       seats,
+      solution_kind,
       ...(capacity_label !== undefined ? { capacity_label } : {}),
       ...(tagline !== undefined ? { tagline } : {}),
       sort_order: Number.isFinite(sort_order) ? sort_order : 0,
@@ -124,7 +140,7 @@ export function registerVehicleTypeAdminRoutes(
     const { data, error } = await db.from(tables.vehicle_types).insert({
       slug: parsed.slug,
       ...parsed.patch,
-    }).select("*").single();
+    } as Record<string, unknown>).select("*").single();
 
     if (error) {
       if (error.code === "23505") return c.json({ error: "slug_exists" }, 409);

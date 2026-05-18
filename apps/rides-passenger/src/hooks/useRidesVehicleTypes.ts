@@ -2,8 +2,16 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   activeVehicleTypes,
   fallbackVehicleTypes,
+  inferSolutionKind,
   type RidesVehicleTypeDto,
 } from '@/types/vehicleTypes';
+
+function normalizeList(rows: RidesVehicleTypeDto[]): RidesVehicleTypeDto[] {
+  return rows.map((t) => ({
+    ...t,
+    solution_kind: inferSolutionKind(t.slug, t.solution_kind),
+  }));
+}
 import { listVehicleTypes } from '@/admin/services/ridesAdminService';
 import { ridesListVehicleTypes } from '@/services/ridesEdge';
 
@@ -24,10 +32,10 @@ export function useRidesVehicleTypes({ accessToken, admin = false }: Options = {
     try {
       if (admin && accessToken) {
         const { vehicle_types } = await listVehicleTypes(accessToken);
-        setTypes(vehicle_types);
+        setTypes(normalizeList(vehicle_types));
       } else {
         const { vehicle_types } = await ridesListVehicleTypes();
-        setTypes(vehicle_types);
+        setTypes(normalizeList(vehicle_types));
       }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load vehicle types');
