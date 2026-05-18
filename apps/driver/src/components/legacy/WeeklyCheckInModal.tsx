@@ -373,11 +373,11 @@ export function WeeklyCheckInModal({
                     )}
                 </motion.div>
 
-                <div className="max-h-[min(70dvh,32rem)] overflow-y-auto px-5 py-2">
+                <motion.div className="max-h-[min(70dvh,32rem)] overflow-y-auto px-5 py-2">
                     {renderContent()}
                 </motion.div>
 
-                <div className="flex flex-col gap-2 border-t border-slate-200 px-5 py-4 dark:border-slate-700 sm:flex-row sm:justify-end">
+                <motion.div className="flex flex-col gap-2 border-t border-slate-200 px-5 py-4 dark:border-slate-700 sm:flex-row sm:justify-end">
                     {step === 'CAPTURE' && (
                         <>
                             {isForced && onDismissLater && (
@@ -424,7 +424,7 @@ export function WeeklyCheckInModal({
                             </Button>
                         </>
                     )}
-                </div>
+                </motion.div>
             </motion.div>
         </motion.div>,
         document.body,
