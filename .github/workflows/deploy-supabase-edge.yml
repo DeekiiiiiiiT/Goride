@@ -21,11 +21,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Pin CLI version — `latest` on setup-cli@v1 often 404s when GitHub release assets lag.
+      # setup-cli@v1/v2 download URLs no longer match Supabase release asset names
+      # (expects supabase_linux_amd64.tar.gz; releases ship supabase_<version>_linux_amd64.tar.gz).
       - name: Install Supabase CLI
-        uses: supabase/setup-cli@v2
-        with:
-          version: 2.99.0
+        env:
+          SUPABASE_CLI_VERSION: "2.99.0"
+        run: |
+          set -euo pipefail
+          url="https://github.com/supabase/cli/releases/download/v${SUPABASE_CLI_VERSION}/supabase_${SUPABASE_CLI_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL "$url" -o /tmp/supabase.tar.gz
+          sudo tar -xzf /tmp/supabase.tar.gz -C /usr/local/bin
+          supabase --version
 
       - name: Deploy Edge Functions (retry on 5xx / network flakes)
         env:
