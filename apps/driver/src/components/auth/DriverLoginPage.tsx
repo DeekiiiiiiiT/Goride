@@ -4,10 +4,12 @@ import { supabase } from '../../utils/supabase/client';
 import { ThemeToggleButton } from '../layout/ThemeToggleButton';
 import { DriverPhoneAuthWizard } from './DriverPhoneAuthWizard';
 import { DriverEmailSignupForm, GoogleSignupButton } from './DriverEmailSignupForm';
+import { DriverEmailConfirmScreen } from './DriverEmailConfirmScreen';
 
 export function DriverLoginPage() {
   const [mainView, setMainView] = useState<'login' | 'signup'>('login');
-  const [signupSubView, setSignupSubView] = useState<'main' | 'email'>('main');
+  const [signupSubView, setSignupSubView] = useState<'main' | 'email' | 'confirm-email'>('main');
+  const [pendingConfirmEmail, setPendingConfirmEmail] = useState('');
   const [loginMethod, setLoginMethod] = useState<'email' | 'phone'>('email');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -55,7 +57,9 @@ export function DriverLoginPage() {
                 ? loginMethod === 'email'
                   ? 'Sign in to your account'
                   : 'Sign in with your phone'
-                : 'Create your driver account'}
+                : signupSubView === 'confirm-email'
+                  ? 'Confirm your email'
+                  : 'Create your driver account'}
             </p>
           </div>
 
@@ -67,10 +71,31 @@ export function DriverLoginPage() {
               </div>
             )}
 
+            {mainView === 'signup' && signupSubView === 'confirm-email' && (
+              <DriverEmailConfirmScreen
+                email={pendingConfirmEmail}
+                onBack={() => {
+                  setSignupSubView('email');
+                  setError(null);
+                }}
+                onSignIn={() => {
+                  setMainView('login');
+                  setSignupSubView('main');
+                  setPendingConfirmEmail('');
+                  setError(null);
+                }}
+              />
+            )}
+
             {mainView === 'signup' && signupSubView === 'email' && (
               <DriverEmailSignupForm
                 onBack={() => {
                   setSignupSubView('main');
+                  setError(null);
+                }}
+                onConfirmationRequired={confirmedEmail => {
+                  setPendingConfirmEmail(confirmedEmail);
+                  setSignupSubView('confirm-email');
                   setError(null);
                 }}
               />

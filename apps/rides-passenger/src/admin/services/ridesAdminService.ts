@@ -3,6 +3,13 @@
  */
 
 import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
+import type {
+  RiderDetailDto,
+  RiderDirectoryRow,
+  RiderAdminNote,
+  RiderAdminPermissions,
+} from '@roam/types/rides';
+import type { RideRequestRow } from '@roam/types/rides';
 
 const RIDES_BASE = API_ENDPOINTS.rides;
 
@@ -210,6 +217,152 @@ export async function resetAllSurgeCells(
   });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
+}
+
+export async function listRiders(
+  accessToken: string,
+  opts: { q?: string; status?: string; sort?: string; page?: number; limit?: number } = {},
+): Promise<{ riders: RiderDirectoryRow[]; total: number; page: number; limit: number }> {
+  const sp = new URLSearchParams();
+  if (opts.q) sp.set('q', opts.q);
+  if (opts.status) sp.set('status', opts.status);
+  if (opts.sort) sp.set('sort', opts.sort);
+  if (opts.page != null) sp.set('page', String(opts.page));
+  if (opts.limit != null) sp.set('limit', String(opts.limit));
+  const res = await fetch(`${RIDES_BASE}/admin/riders?${sp.toString()}`, {
+    headers: headers(accessToken),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function getRiderDetail(
+  accessToken: string,
+  userId: string,
+): Promise<{ rider: RiderDetailDto; permissions: RiderAdminPermissions }> {
+  const res = await fetch(`${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}`, {
+    headers: headers(accessToken),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function listRiderTrips(
+  accessToken: string,
+  userId: string,
+  opts: { page?: number; limit?: number } = {},
+): Promise<{ trips: RideRequestRow[]; total: number; page: number; limit: number }> {
+  const sp = new URLSearchParams();
+  if (opts.page != null) sp.set('page', String(opts.page));
+  if (opts.limit != null) sp.set('limit', String(opts.limit));
+  const res = await fetch(
+    `${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}/trips?${sp.toString()}`,
+    { headers: headers(accessToken) },
+  );
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function listRiderNotes(
+  accessToken: string,
+  userId: string,
+): Promise<{ notes: RiderAdminNote[] }> {
+  const res = await fetch(`${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}/notes`, {
+    headers: headers(accessToken),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function addRiderNote(
+  accessToken: string,
+  userId: string,
+  body: string,
+): Promise<{ note: RiderAdminNote }> {
+  const res = await fetch(`${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}/notes`, {
+    method: 'POST',
+    headers: headers(accessToken, 'application/json'),
+    body: JSON.stringify({ body }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function patchRiderProfile(
+  accessToken: string,
+  userId: string,
+  patch: { display_name?: string; phone?: string },
+): Promise<unknown> {
+  const res = await fetch(`${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}`, {
+    method: 'PATCH',
+    headers: headers(accessToken, 'application/json'),
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function suspendRider(
+  accessToken: string,
+  userId: string,
+  reason: string,
+): Promise<void> {
+  const res = await fetch(`${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}/suspend`, {
+    method: 'POST',
+    headers: headers(accessToken, 'application/json'),
+    body: JSON.stringify({ reason }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+}
+
+export async function unsuspendRider(accessToken: string, userId: string): Promise<void> {
+  const res = await fetch(`${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}/unsuspend`, {
+    method: 'POST',
+    headers: headers(accessToken, 'application/json'),
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+}
+
+export async function banRider(
+  accessToken: string,
+  userId: string,
+  reason: string,
+): Promise<void> {
+  const res = await fetch(`${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}/ban`, {
+    method: 'POST',
+    headers: headers(accessToken, 'application/json'),
+    body: JSON.stringify({ reason }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+}
+
+export async function resetRiderPassword(
+  accessToken: string,
+  userId: string,
+): Promise<{ ok: boolean; message: string; email?: string; recovery_link?: string }> {
+  const res = await fetch(
+    `${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}/reset-password`,
+    {
+      method: 'POST',
+      headers: headers(accessToken, 'application/json'),
+      body: JSON.stringify({}),
+    },
+  );
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function signOutRiderAllDevices(
+  accessToken: string,
+  userId: string,
+): Promise<void> {
+  const res = await fetch(`${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}/sign-out`, {
+    method: 'POST',
+    headers: headers(accessToken, 'application/json'),
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
 }
 
 export function formatMoneyMinor(minorUnits: number, currency = 'JMD'): string {

@@ -19,6 +19,8 @@ import { FareRulesPage } from './admin/pages/FareRulesPage';
 import { TripCalculatorPage } from './admin/pages/TripCalculatorPage';
 import { SurgePage } from './admin/pages/SurgePage';
 import { RideOperationsPage } from './admin/pages/RideOperationsPage';
+import { RidersListPage } from './admin/pages/users/RidersListPage';
+import { RiderDetailPage } from './admin/pages/users/RiderDetailPage';
 
 export default function App() {
   const location = useLocation();
@@ -120,6 +122,8 @@ export default function App() {
       {/* Admin routes */}
       <Route path="/admin" element={<RidesAdminLayout />}>
         <Route index element={<RidesAdminDashboard />} />
+        <Route path="users" element={<RidersListPage />} />
+        <Route path="users/:userId" element={<RiderDetailPage />} />
         <Route path="fare-rules" element={<FareRulesLayout />}>
           <Route index element={<FareRulesPage />} />
           <Route path="calculator" element={<TripCalculatorPage />} />

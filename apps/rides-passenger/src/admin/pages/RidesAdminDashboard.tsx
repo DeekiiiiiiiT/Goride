@@ -30,6 +30,11 @@ export function RidesAdminDashboard() {
         <h3 className="text-lg font-medium text-white mb-4">Quick Links</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <QuickLink
+            title="User Management"
+            description="Search riders, trip history, suspend or support actions"
+            href="/admin/users"
+          />
+          <QuickLink
             title="Fare Rules"
             description="Configure base fares, per-km, per-min pricing"
             href="/admin/fare-rules"

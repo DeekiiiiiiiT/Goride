@@ -148,6 +148,26 @@ Requires platform role (`platform_owner`, `platform_support`, `superadmin`, or `
 | POST | `/admin/surge-cells/:cellKey/reset` | Clear `open_requests`; optional reset multiplier |
 | POST | `/admin/surge-cells/reset-all` | Bulk reset (platform owner / superadmin) |
 
+#### Rider user management
+
+Requires `rides_ops`, `rides_admin`, or platform role. See [`RIDER_ADMIN.md`](./RIDER_ADMIN.md).
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/admin/riders` | Directory (`q`, `status`, `sort`, `page`, `limit`) |
+| GET | `/admin/riders/:userId` | Profile, stats, recent notes/activity |
+| GET | `/admin/riders/:userId/trips` | Paginated trip history |
+| GET | `/admin/riders/:userId/notes` | Internal notes |
+| POST | `/admin/riders/:userId/notes` | Add note (`rides_admin`+) |
+| PATCH | `/admin/riders/:userId` | Update display name / phone |
+| POST | `/admin/riders/:userId/suspend` | Suspend + auth ban (`rides_admin`+) |
+| POST | `/admin/riders/:userId/unsuspend` | Reinstate |
+| POST | `/admin/riders/:userId/ban` | Permanent ban (platform_owner / superadmin) |
+| POST | `/admin/riders/:userId/reset-password` | Send recovery email |
+| POST | `/admin/riders/:userId/sign-out` | Global sign-out |
+
+Suspended/banned riders: `403` `rider_account_restricted` on `POST /v1/quote` and `POST /v1/requests`.
+
 ### 7.2 Rider & driver (`/v1/*`)
 
 #### Rider

@@ -173,6 +173,65 @@ export interface SurgeCellAdminRow {
   updated_at: string;
 }
 
+export type RiderAccountStatus = 'active' | 'suspended' | 'banned';
+
+export interface RiderDirectoryRow {
+  user_id: string;
+  display_name: string | null;
+  phone: string | null;
+  email: string | null;
+  account_status: RiderAccountStatus;
+  total_trips: number;
+  completed_trips: number;
+  cancelled_trips: number;
+  last_ride_at: string | null;
+  lifetime_spend_minor: number;
+  created_at: string | null;
+  last_sign_in_at: string | null;
+}
+
+export interface RiderAdminNote {
+  id: string;
+  rider_user_id: string;
+  author_user_id: string;
+  body: string;
+  created_at: string;
+}
+
+export interface RiderAdminPermissions {
+  can_write: boolean;
+  can_ban: boolean;
+  can_see_reset_link: boolean;
+}
+
+export interface RiderDetailDto {
+  user_id: string;
+  email: string | null;
+  phone: string | null;
+  display_name: string | null;
+  account_status: RiderAccountStatus;
+  suspended_at: string | null;
+  suspended_reason: string | null;
+  suspended_by: string | null;
+  created_at: string | null;
+  last_sign_in_at: string | null;
+  stats: {
+    total_trips: number;
+    completed_trips: number;
+    cancelled_trips: number;
+    last_ride_at: string | null;
+    lifetime_spend_minor: number;
+  };
+  recent_notes: RiderAdminNote[];
+  recent_activity: Array<{
+    id: number;
+    event_type: string;
+    payload: Record<string, unknown>;
+    actor_user_id: string | null;
+    created_at: string;
+  }>;
+}
+
 /** Format minor currency units (JMD cents) for display. */
 export function formatMoneyMinor(
   minor: bigint | number | string | null | undefined,

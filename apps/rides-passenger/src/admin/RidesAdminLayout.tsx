@@ -7,6 +7,7 @@ import {
   CircleDollarSign,
   TrendingUp,
   Car,
+  Users,
   LogOut,
   Menu,
   X,
@@ -27,6 +28,7 @@ const ALLOWED_ROLES = [
 
 const NAV_ITEMS = [
   { id: 'dashboard', path: '/admin', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'users', path: '/admin/users', label: 'User Management', icon: Users },
   { id: 'fare-rules', path: '/admin/fare-rules', label: 'Fare Rules', icon: CircleDollarSign },
   { id: 'surge', path: '/admin/surge', label: 'Surge Pricing', icon: TrendingUp },
   { id: 'rides', path: '/admin/rides', label: 'Ride Operations', icon: Car },
@@ -105,6 +107,9 @@ export function RidesAdminLayout() {
 
   const pageTitle = (() => {
     if (currentPath.startsWith('/admin/fare-rules/calculator')) return 'Trip calculator';
+    if (currentPath.startsWith('/admin/users/') && currentPath !== '/admin/users') {
+      return 'Rider detail';
+    }
     const item = NAV_ITEMS.find(
       (i) =>
         currentPath === i.path ||

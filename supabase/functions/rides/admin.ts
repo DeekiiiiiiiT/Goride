@@ -22,6 +22,7 @@ import {
   normalizeVehicleType,
   RIDES_VEHICLE_TYPE_ALLOWED_SLUGS,
 } from "./fare/ridesVehicleTypes.ts";
+import { registerRiderAdminRoutes } from "./admin/riders.ts";
 
 type RidesAdminDb = Awaited<ReturnType<typeof getRidesAdminDb>>;
 
@@ -622,6 +623,8 @@ export function registerAdminRoutes(
     await adminAudit(db, tables, adminUser.id, "admin_surge_cell_reset", { cell_key: cellKey, reset_multiplier: resetMultiplier });
     return c.json({ cell: data });
   });
+
+  registerRiderAdminRoutes(admin);
 
   app.route("/admin", admin);
 }

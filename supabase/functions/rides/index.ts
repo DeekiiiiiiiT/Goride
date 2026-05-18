@@ -15,6 +15,7 @@ import { rankDriversByDriveTime } from "./fare/distanceMatrix.ts";
 import { haversineKm } from "./fare/routing.ts";
 import { quoteTokenHash, verifyQuoteToken } from "./fare/quoteToken.ts";
 import { registerAdminRoutes } from "./admin.ts";
+import { assertRiderCanBook } from "./fare/riderAccount.ts";
 
 /** Match Supabase path prefix: .../functions/v1/rides/<route> → /rides/<route> */
 const app = new Hono().basePath("/rides");
@@ -280,6 +281,12 @@ app.post("/v1/quote", async (c) => {
   }
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
+
+  const bookingCheck = await assertRiderCanBook(svc(), auth.user.id);
+  if (!bookingCheck.ok) {
+    return c.json({ error: "rider_account_restricted", status: bookingCheck.status }, 403);
+  }
+
   const body = await c.req.json().catch(() => ({}));
   const pickup_lat = Number(body.pickup_lat);
   const pickup_lng = Number(body.pickup_lng);
@@ -354,6 +361,11 @@ app.post("/v1/requests", async (c) => {
   const r = ridesUserSurfaceRole(auth.user);
   if (r && r !== "passenger") {
     return jsonEdgeForbidden(c, "forbidden_role");
+  }
+
+  const bookingCheck = await assertRiderCanBook(svc(), auth.user.id);
+  if (!bookingCheck.ok) {
+    return c.json({ error: "rider_account_restricted", status: bookingCheck.status }, 403);
   }
 
   const body = await c.req.json().catch(() => ({}));

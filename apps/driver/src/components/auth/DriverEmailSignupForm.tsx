@@ -5,9 +5,11 @@ import { DRIVER_OAUTH_INTENT_KEY, DRIVER_OAUTH_INTENT_VALUE } from '../../utils/
 
 interface DriverEmailSignupFormProps {
   onBack: () => void;
+  /** Called when Supabase requires email confirmation (no session yet). */
+  onConfirmationRequired: (email: string) => void;
 }
 
-export function DriverEmailSignupForm({ onBack }: DriverEmailSignupFormProps) {
+export function DriverEmailSignupForm({ onBack, onConfirmationRequired }: DriverEmailSignupFormProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -48,7 +50,8 @@ export function DriverEmailSignupForm({ onBack }: DriverEmailSignupFormProps) {
       if (data.session) {
         setInfo('Account created. You are signed in.');
       } else {
-        setInfo('Check your email for a confirmation link to finish signing up.');
+        onConfirmationRequired(email.trim());
+        return;
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Could not create account.');

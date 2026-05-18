@@ -10,6 +10,10 @@ export type RidesAdminTables = {
   fare_rules: string;
   surge_cells: string;
   audit_events: string;
+  rider_profiles: string;
+  rider_admin_notes: string;
+  rider_directory_stats: string;
+  ride_requests: string;
 };
 
 type Resolved = {
@@ -21,12 +25,20 @@ const RIDES_NATIVE: RidesAdminTables = {
   fare_rules: "fare_rules",
   surge_cells: "surge_cells",
   audit_events: "audit_events",
+  rider_profiles: "rider_profiles",
+  rider_admin_notes: "rider_admin_notes",
+  rider_directory_stats: "rider_directory_stats",
+  ride_requests: "ride_requests",
 };
 
 const PUBLIC_VIEWS: RidesAdminTables = {
   fare_rules: "rides_fare_rules",
   surge_cells: "rides_surge_cells",
   audit_events: "rides_audit_events",
+  rider_profiles: "rides_rider_profiles",
+  rider_admin_notes: "rides_rider_admin_notes",
+  rider_directory_stats: "rides_rider_directory_stats",
+  ride_requests: "rides_ride_requests",
 };
 
 let resolved: Resolved | null = null;
