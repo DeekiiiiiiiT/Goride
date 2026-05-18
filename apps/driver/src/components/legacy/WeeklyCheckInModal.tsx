@@ -25,8 +25,6 @@ interface WeeklyCheckInModalProps {
     ) => Promise<void>;
     isLoading: boolean;
     isForced?: boolean;
-    /** Dismiss without completing — app stays usable (fleet drivers). */
-    onDismissLater?: () => void;
 }
 
 /** Plain portal (no Radix Dialog) — Radix overlay caused grey-screen freeze on mobile Safari. */
@@ -36,7 +34,6 @@ export function WeeklyCheckInModal({
     onSubmit,
     isLoading,
     isForced = false,
-    onDismissLater,
 }: WeeklyCheckInModalProps) {
     const [step, setStep] = useState<CheckInStep>('CAPTURE');
     const [odometer, setOdometer] = useState<string>('');
@@ -378,24 +375,10 @@ export function WeeklyCheckInModal({
                 </motion.div>
 
                 <motion.div className="flex flex-col gap-2 border-t border-slate-200 px-5 py-4 dark:border-slate-700 sm:flex-row sm:justify-end">
-                    {step === 'CAPTURE' && (
-                        <>
-                            {isForced && onDismissLater && (
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    className="btn-touch w-full sm:w-auto"
-                                    onClick={onDismissLater}
-                                >
-                                    Remind me later
-                                </Button>
-                            )}
-                            {canDismiss && (
-                                <Button type="button" variant="ghost" className="btn-touch" onClick={onClose}>
-                                    Cancel
-                                </Button>
-                            )}
-                        </>
+                    {step === 'CAPTURE' && canDismiss && (
+                        <Button type="button" variant="ghost" className="btn-touch" onClick={onClose}>
+                            Cancel
+                        </Button>
                     )}
 
                     {step === 'CONFIRM_AI' && (

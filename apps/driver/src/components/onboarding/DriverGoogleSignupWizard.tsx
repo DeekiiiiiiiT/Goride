@@ -18,6 +18,7 @@ import { DEFAULT_PHONE_COUNTRY, type PhoneCountry } from '../../utils/phoneCount
 import { useIpDefaultCountry } from '../../hooks/useIpDefaultCountry';
 import { listenForSmsOtp } from '../../utils/webOtp';
 import { formatPhoneAuthError, getAuthErrorMessage } from '../../utils/supabaseAuthErrors';
+import { saveDriverOnboardingProfile } from '../../utils/saveDriverProfile';
 import { api } from '../../services/api';
 import {
   GOOGLE_ONBOARDING_ARCHETYPE,
@@ -167,7 +168,8 @@ export function DriverGoogleSignupWizard() {
     try {
       const displayName = `${firstName.trim()} ${lastName.trim()}`;
       const dobStr = format(dob, 'yyyy-MM-dd');
-      const row = {
+
+      await saveDriverOnboardingProfile(user, profile, {
         display_name: displayName,
         first_name: firstName.trim(),
         last_name: lastName.trim(),
@@ -175,30 +177,12 @@ export function DriverGoogleSignupWizard() {
         gender,
         onboarding_complete: false,
         onboarding_step: GOOGLE_ONBOARDING_PHONE,
-      };
-
-      const { error: metaErr } = await supabase.auth.updateUser({
-        data: { first_name: firstName.trim(), last_name: lastName.trim(), gender },
       });
-      if (metaErr) throw metaErr;
-
-      if (profile?.id) {
-        const { error: upErr } = await supabase.from('driver_profiles').update(row).eq('id', profile.id);
-        if (upErr) throw upErr;
-      } else {
-        const { error: insErr } = await supabase.from('driver_profiles').insert({
-          user_id: user.id,
-          mode: 'independent',
-          status: 'pending',
-          ...row,
-        });
-        if (insErr) throw insErr;
-      }
 
       await refreshProfile();
       setUi('phone');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not save your profile.');
+      setError(getAuthErrorMessage(err, 'Could not save your profile.'));
     } finally {
       setLoading(false);
     }

@@ -8,10 +8,11 @@ import { Checkbox } from '@roam/ui';
 import { Calendar } from '@roam/ui';
 import { Popover, PopoverContent, PopoverTrigger } from '@roam/ui';
 import { cn } from '@roam/ui';
-import { supabase } from '../../utils/supabase/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useDriver } from '../../contexts/DriverContext';
 import { ThemeToggleButton } from '../layout/ThemeToggleButton';
+import { saveDriverOnboardingProfile } from '../../utils/saveDriverProfile';
+import { getAuthErrorMessage } from '../../utils/supabaseAuthErrors';
 
 type Gender = 'male' | 'female';
 
@@ -76,47 +77,28 @@ export function DriverOnboardingPage() {
 
     setLoading(true);
     try {
-      const { error: authErr } = await supabase.auth.updateUser({
-        email: email.trim(),
-        data: {
-          first_name: firstName.trim(),
-          last_name: lastName.trim(),
-          gender,
-        },
-      });
-      if (authErr) throw authErr;
-
       const displayName = `${firstName.trim()} ${lastName.trim()}`;
       const dobStr = format(dob, 'yyyy-MM-dd');
       const phone = user.phone ?? profile?.phone ?? null;
 
-      const row = {
-        display_name: displayName,
-        first_name: firstName.trim(),
-        last_name: lastName.trim(),
-        date_of_birth: dobStr,
-        gender,
-        phone,
-        onboarding_complete: true,
-      };
-
-      if (profile?.id) {
-        const { error: upErr } = await supabase.from('driver_profiles').update(row).eq('id', profile.id);
-        if (upErr) throw upErr;
-      } else {
-        const { error: insErr } = await supabase.from('driver_profiles').insert({
-          user_id: user.id,
-          mode: 'independent',
-          status: 'pending',
-          ...row,
-        });
-        if (insErr) throw insErr;
-      }
+      await saveDriverOnboardingProfile(
+        user,
+        profile,
+        {
+          display_name: displayName,
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          date_of_birth: dobStr,
+          gender,
+          phone,
+          onboarding_complete: true,
+        },
+        { email: email.trim() },
+      );
 
       await refreshProfile();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Could not save your profile.';
-      setError(msg);
+      setError(getAuthErrorMessage(err, 'Could not save your profile.'));
     } finally {
       setLoading(false);
     }
