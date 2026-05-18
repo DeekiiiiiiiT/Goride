@@ -63,10 +63,20 @@ Canonical statuses (`rides.ride_requests.status`):
 - Returns **`route_polyline_encoded`** (overview polyline) for the passenger booking map when Directions succeeds.
 - On API failure: **Haversine** distance + 25 km/h speed fallback (`route_source: haversine_fallback`).
 
+### Pickup ETA (nearest driver)
+
+- On quote, loads **`rides.driver_locations`** (`available_for_rides`, updated within **10 min**, within **15 km** haversine of pickup).
+- **Distance Matrix** (drivers → pickup) yields **`eta_pickup_seconds_estimate`** / **`pickup_eta_minutes_estimate`** when supply exists (`pickup_eta_source: google_distance_matrix` or `haversine_fallback`).
+- **`eta_arrival_at`** (ISO) = now + pickup ETA + trip duration (traffic-aware trip time from Directions).
+- **`drivers_available: false`** when no qualifying drivers — passenger UI shows **"No drivers nearby"** on vehicle cards (no fabricated pickup ETA).
+- Vehicle cards show the same pickup/arrival line for all tiers (MVP; no per-vehicle driver pool).
+
 ### Quote (`POST /v1/quote`)
 
 - Inputs: pickup/dropoff coordinates, optional **`vehicle_option`** (default `standard`).
-- Returns: `fare_estimate_minor`, `currency`, `surge_multiplier`, `distance_estimate_km`, `duration_estimate_minutes`, `duration_traffic_aware`, optional `route_polyline_encoded`, `fare_breakdown`, **`quote_token`** (signed, ~10 min TTL).
+- Returns: `fare_estimate_minor`, `currency`, `surge_multiplier`, `distance_estimate_km`, `duration_estimate_minutes`, `duration_traffic_aware`, optional `route_polyline_encoded`, `drivers_available`, `pickup_eta_minutes_estimate`, `eta_arrival_at`, `pickup_eta_source`, `fare_breakdown`, **`quote_token`** (signed, ~10 min TTL).
+
+**Manual test (pickup ETA on vehicle cards):** deploy `rides` with Maps secrets → driver app dispatch **online** near pickup → passenger app quote with pickup/drop-off → each vehicle row shows `N mins away · H:MM`; driver offline → **No drivers nearby**.
 
 **Formula:**
 

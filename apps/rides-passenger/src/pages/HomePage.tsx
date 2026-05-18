@@ -13,6 +13,7 @@ import {
   RIDES_VEHICLE_TYPES,
   vehicleCapacityDisplay,
 } from '@roam/business-config';
+import { formatVehicleEtaLine } from '@/utils/formatRideEta';
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -109,6 +110,9 @@ export default function HomePage() {
     : null;
   const surge = quote?.surge_multiplier ?? null;
   const canBook = coordsReady && Boolean(quote?.quote_token) && !quoteLoading;
+  const vehicleEtaLine = coordsReady && quote && !quoteLoading
+    ? formatVehicleEtaLine(quote)
+    : null;
 
   return (
     <div className="min-h-[100dvh] flex flex-col bg-zinc-100 text-zinc-900">
@@ -166,6 +170,9 @@ export default function HomePage() {
                     <span className="font-semibold text-sm text-zinc-900">{v.label}</span>
                     <span className="text-xs text-zinc-500">{vehicleCapacityDisplay(v)}</span>
                   </div>
+                  {vehicleEtaLine && (
+                    <p className="text-xs text-zinc-500 mt-0.5 tabular-nums">{vehicleEtaLine}</p>
+                  )}
                   <p className="text-xs text-zinc-600 mt-0.5 leading-snug">{v.description}</p>
                   {v.slug === 'courier' && (
                     <p className="text-[11px] text-zinc-500 mt-1">Send a package</p>

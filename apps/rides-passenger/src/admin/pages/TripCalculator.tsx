@@ -11,6 +11,7 @@ import {
   RIDES_VEHICLE_TYPES,
   vehicleCapacityDisplay,
 } from '@roam/business-config';
+import { formatVehicleEtaLine } from '@/utils/formatRideEta';
 
 function formatBreakdownMinor(minor: number, currency: string) {
   return formatMoneyMinor(minor, currency);
@@ -70,6 +71,9 @@ export function TripCalculator() {
     ? formatMoneyMinor(quote.fare_estimate_minor, quote.currency)
     : null;
   const surge = quote?.surge_multiplier ?? null;
+  const vehicleEtaLine = coordsReady && quote && !quoteLoading
+    ? formatVehicleEtaLine(quote)
+    : null;
   const b = quote?.fare_breakdown;
 
   return (
@@ -104,6 +108,9 @@ export function TripCalculator() {
                     <span className="font-semibold text-sm">{v.label}</span>
                     <span className="text-xs text-zinc-500">{vehicleCapacityDisplay(v)}</span>
                   </div>
+                  {vehicleEtaLine && (
+                    <p className="text-xs text-zinc-500 mt-0.5 tabular-nums">{vehicleEtaLine}</p>
+                  )}
                   <p className="text-xs text-zinc-600 mt-0.5 leading-snug">{v.description}</p>
                   {v.slug === 'courier' && (
                     <p className="text-[11px] text-zinc-500 mt-1">Send a package</p>

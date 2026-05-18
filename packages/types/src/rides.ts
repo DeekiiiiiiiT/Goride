@@ -98,6 +98,10 @@ export interface FareQuoteResponse {
   route_source: 'google_directions' | 'haversine_fallback';
   duration_traffic_aware?: boolean;
   route_polyline_encoded?: string;
+  drivers_available?: boolean;
+  pickup_eta_minutes_estimate?: number;
+  eta_arrival_at?: string;
+  pickup_eta_source?: 'google_distance_matrix' | 'haversine_fallback' | 'no_drivers';
   fare_breakdown: FareBreakdown;
   quote_token: string;
 }

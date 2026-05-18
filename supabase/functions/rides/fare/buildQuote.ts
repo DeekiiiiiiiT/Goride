@@ -3,6 +3,7 @@ import { computeFareMinor, type FareBreakdown } from "./compute.ts";
 import { loadFareRules, resolvePickupLocation } from "./rules.ts";
 import { getRouteEstimate, type RouteEstimate } from "./routing.ts";
 import { mintQuoteToken } from "./quoteToken.ts";
+import { resolvePickupEta, type PickupEtaSource } from "./pickupEta.ts";
 
 export interface BuiltFareQuote {
   distanceKm: number;
@@ -19,6 +20,9 @@ export interface BuiltFareQuote {
   routeSource: RouteEstimate["source"];
   durationTrafficAware: boolean;
   routePolylineEncoded?: string;
+  driversAvailable: boolean;
+  pickupEtaSource: PickupEtaSource;
+  etaArrivalAt?: string;
   quoteToken: string;
 }
 
@@ -73,8 +77,15 @@ export async function buildFareQuote(
     fare_breakdown: breakdown,
   });
 
-  const avgSpeedKmh = 25;
-  const etaPickupSeconds = Math.round((route.distanceKm / avgSpeedKmh) * 3600);
+  const pickupEta = await resolvePickupEta(db, params.pickupLat, params.pickupLng);
+  const etaPickupSeconds = pickupEta.pickupSeconds ?? 0;
+  const etaArrivalAt = pickupEta.driversAvailable && pickupEta.pickupSeconds != null
+    ? new Date(
+      Date.now() +
+        pickupEta.pickupSeconds * 1000 +
+        durationMinutes * 60 * 1000,
+    ).toISOString()
+    : undefined;
 
   return {
     distanceKm: route.distanceKm,
@@ -91,6 +102,9 @@ export async function buildFareQuote(
     routeSource: route.source,
     durationTrafficAware: route.trafficAware === true,
     routePolylineEncoded: route.encodedPolyline,
+    driversAvailable: pickupEta.driversAvailable,
+    pickupEtaSource: pickupEta.pickupEtaSource,
+    etaArrivalAt,
     quoteToken,
   };
 }

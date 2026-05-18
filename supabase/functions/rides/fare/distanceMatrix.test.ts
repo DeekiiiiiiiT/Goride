@@ -1,5 +1,10 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { fetchDistanceMatrixDriveTimes, rankDriversByDriveTime } from "./distanceMatrix.ts";
+import {
+  estimateNearestPickupEta,
+  fetchDistanceMatrixDriveTimes,
+  fetchDriverToPickupTimes,
+  rankDriversByDriveTime,
+} from "./distanceMatrix.ts";
 
 const KEY = "GOOGLE_MAPS_API_KEY_RIDES";
 
@@ -67,6 +72,62 @@ Deno.test("rankDriversByDriveTime sorts by drive time when matrix succeeds", asy
       assertEquals(source, "google_distance_matrix");
       assertEquals(ranked[0].user_id, "near");
       assertEquals(ranked[1].user_id, "far");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+Deno.test("fetchDriverToPickupTimes maps driver rows to pickup", async () => {
+  await withTestKey(async () => {
+    const mockFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          status: "OK",
+          rows: [
+            { elements: [{ status: "OK", duration_in_traffic: { value: 480 } }] },
+            { elements: [{ status: "OK", duration_in_traffic: { value: 180 } }] },
+          ],
+        }),
+        { status: 200 },
+      );
+
+    const drivers = [
+      { user_id: "far", lat: 18.1, lng: -77.1 },
+      { user_id: "near", lat: 18.001, lng: -77.001 },
+    ];
+    const times = await fetchDriverToPickupTimes({ lat: 18, lng: -77 }, drivers, mockFetch);
+    assertEquals(times?.get("far"), 480);
+    assertEquals(times?.get("near"), 180);
+  });
+});
+
+Deno.test("estimateNearestPickupEta picks minimum drive time", async () => {
+  await withTestKey(async () => {
+    const mockFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          status: "OK",
+          rows: [
+            { elements: [{ status: "OK", duration_in_traffic: { value: 900 } }] },
+            { elements: [{ status: "OK", duration_in_traffic: { value: 240 } }] },
+          ],
+        }),
+        { status: 200 },
+      );
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = mockFetch;
+    try {
+      const { pickupSeconds, source } = await estimateNearestPickupEta(
+        { lat: 18, lng: -77 },
+        [
+          { user_id: "far", lat: 18.1, lng: -77.1, haversineKm: 1 },
+          { user_id: "near", lat: 18.001, lng: -77.001, haversineKm: 2 },
+        ],
+      );
+      assertEquals(source, "google_distance_matrix");
+      assertEquals(pickupSeconds, 240);
     } finally {
       globalThis.fetch = originalFetch;
     }

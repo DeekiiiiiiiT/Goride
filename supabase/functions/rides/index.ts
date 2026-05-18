@@ -330,6 +330,15 @@ app.post("/v1/quote", async (c) => {
     ...(quote.routePolylineEncoded
       ? { route_polyline_encoded: quote.routePolylineEncoded }
       : {}),
+    drivers_available: quote.driversAvailable,
+    pickup_eta_source: quote.pickupEtaSource,
+    ...(quote.driversAvailable && quote.etaPickupSeconds > 0
+      ? {
+        pickup_eta_minutes_estimate: Math.ceil(quote.etaPickupSeconds / 60),
+        eta_pickup_seconds_estimate: quote.etaPickupSeconds,
+      }
+      : { eta_pickup_seconds_estimate: 0 }),
+    ...(quote.etaArrivalAt ? { eta_arrival_at: quote.etaArrivalAt } : {}),
     fare_breakdown: quote.breakdown,
     quote_token: quote.quoteToken,
   });
