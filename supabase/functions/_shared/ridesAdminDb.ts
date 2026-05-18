@@ -42,6 +42,7 @@ const PUBLIC_VIEWS: RidesAdminTables = {
 };
 
 let resolved: Resolved | null = null;
+let riderResolved: Resolved | null = null;
 
 function serviceClient(schema: string): SupabaseClient {
   return createClient(
@@ -62,9 +63,13 @@ export function isMissingRidesAdminTableError(error: PostgrestError | null): boo
   );
 }
 
-async function probe(schema: string, table: string): Promise<PostgrestError | null> {
+async function probe(
+  schema: string,
+  table: string,
+  selectColumn = "id",
+): Promise<PostgrestError | null> {
   const db = serviceClient(schema);
-  const { error } = await db.from(table).select("id").limit(1);
+  const { error } = await db.from(table).select(selectColumn).limit(1);
   return error;
 }
 
@@ -104,5 +109,40 @@ export async function getRidesAdminDb(): Promise<Resolved> {
   throw new Error(
     "Rides admin tables are not available. Expose the `rides` schema in Supabase API settings, " +
       "or run migration 20260517210000_rides_public_admin_views.sql and reload the API schema cache.",
+  );
+}
+
+/**
+ * Rider user-management tables — resolved independently from fare/surge cache.
+ * Prefers `rides` schema when exposed (works without public rider views).
+ */
+export async function getRiderAdminDb(): Promise<Resolved> {
+  if (riderResolved) return riderResolved;
+
+  const fromEnv = await resolveFromEnv();
+  if (fromEnv) {
+    riderResolved = fromEnv;
+    return riderResolved;
+  }
+
+  const ridesProfileErr = await probe("rides", RIDES_NATIVE.rider_profiles, "user_id");
+  if (!isMissingRidesAdminTableError(ridesProfileErr)) {
+    riderResolved = { db: serviceClient("rides"), tables: RIDES_NATIVE };
+    return riderResolved;
+  }
+
+  const publicProfileErr = await probe(
+    "public",
+    PUBLIC_VIEWS.rider_profiles,
+    "user_id",
+  );
+  if (!isMissingRidesAdminTableError(publicProfileErr)) {
+    riderResolved = { db: serviceClient("public"), tables: PUBLIC_VIEWS };
+    return riderResolved;
+  }
+
+  throw new Error(
+    "Rider admin tables are not available. Run migration 20260518140000_rider_admin.sql, " +
+      "expose the `rides` schema in API settings, or reload the PostgREST schema cache.",
   );
 }

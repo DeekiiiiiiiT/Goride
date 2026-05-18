@@ -8,7 +8,7 @@ import {
   requireProductAdmin,
   type ProductAdminUser,
 } from "../../_shared/productAdmin.ts";
-import { getRidesAdminDb, type RidesAdminTables } from "../../_shared/ridesAdminDb.ts";
+import { getRiderAdminDb, type RidesAdminTables } from "../../_shared/ridesAdminDb.ts";
 
 const RIDER_WRITE_ROLES = new Set([
   "rides_admin",
@@ -257,7 +257,7 @@ export function registerRiderAdminRoutes(admin: Hono) {
     const adminUser = await requireProductAdmin(c, "rides");
     if (adminUser instanceof Response) return adminUser;
 
-    const resolved = await getRidesAdminDb();
+    const resolved = await getRiderAdminDb();
     const page = Math.max(1, Number(c.req.query("page") ?? 1));
     const limit = Math.min(100, Math.max(1, Number(c.req.query("limit") ?? 50)));
     const q = c.req.query("q") ?? undefined;
@@ -286,7 +286,7 @@ export function registerRiderAdminRoutes(admin: Hono) {
     if (adminUser instanceof Response) return adminUser;
 
     const userId = c.req.param("userId");
-    const resolved = await getRidesAdminDb();
+    const resolved = await getRiderAdminDb();
     const { db, tables } = resolved;
 
     const auth = serviceAuth();
@@ -353,7 +353,7 @@ export function registerRiderAdminRoutes(admin: Hono) {
     if (adminUser instanceof Response) return adminUser;
 
     const userId = c.req.param("userId");
-    const resolved = await getRidesAdminDb();
+    const resolved = await getRiderAdminDb();
     const page = Math.max(1, Number(c.req.query("page") ?? 1));
     const limit = Math.min(100, Math.max(1, Number(c.req.query("limit") ?? 25)));
     const offset = (page - 1) * limit;
@@ -373,7 +373,7 @@ export function registerRiderAdminRoutes(admin: Hono) {
     if (adminUser instanceof Response) return adminUser;
 
     const userId = c.req.param("userId");
-    const resolved = await getRidesAdminDb();
+    const resolved = await getRiderAdminDb();
     const { data, error } = await resolved.db.from(resolved.tables.rider_admin_notes)
       .select("*")
       .eq("rider_user_id", userId)
@@ -394,7 +394,7 @@ export function registerRiderAdminRoutes(admin: Hono) {
     const text = typeof body.body === "string" ? body.body.trim() : "";
     if (!text) return c.json({ error: "body_required" }, 400);
 
-    const resolved = await getRidesAdminDb();
+    const resolved = await getRiderAdminDb();
     const { db, tables } = resolved;
     await ensureProfile(db, tables, userId);
 
@@ -431,7 +431,7 @@ export function registerRiderAdminRoutes(admin: Hono) {
     if (typeof body.display_name === "string") patch.display_name = body.display_name.trim() || null;
     if (typeof body.phone === "string") patch.phone = body.phone.trim() || null;
 
-    const resolved = await getRidesAdminDb();
+    const resolved = await getRiderAdminDb();
     const { db, tables } = resolved;
     await ensureProfile(db, tables, userId);
 
@@ -458,7 +458,7 @@ export function registerRiderAdminRoutes(admin: Hono) {
     const reason = typeof body.reason === "string" ? body.reason.trim() : "";
     if (!reason) return c.json({ error: "reason_required" }, 400);
 
-    const resolved = await getRidesAdminDb();
+    const resolved = await getRiderAdminDb();
     const { db, tables } = resolved;
     await ensureProfile(db, tables, userId);
 
@@ -489,7 +489,7 @@ export function registerRiderAdminRoutes(admin: Hono) {
     if (denied) return denied;
 
     const userId = c.req.param("userId");
-    const resolved = await getRidesAdminDb();
+    const resolved = await getRiderAdminDb();
     const { db, tables } = resolved;
 
     await db.from(tables.rider_profiles).update({
@@ -520,7 +520,7 @@ export function registerRiderAdminRoutes(admin: Hono) {
     const body = await c.req.json().catch(() => ({})) as { reason?: string };
     const reason = typeof body.reason === "string" ? body.reason.trim() : "Banned by admin";
 
-    const resolved = await getRidesAdminDb();
+    const resolved = await getRiderAdminDb();
     const { db, tables } = resolved;
     const now = new Date().toISOString();
 
@@ -562,7 +562,7 @@ export function registerRiderAdminRoutes(admin: Hono) {
 
     if (linkErr) return c.json({ error: "reset_failed", message: linkErr.message }, 500);
 
-    const resolved = await getRidesAdminDb();
+    const resolved = await getRiderAdminDb();
     await riderAudit(resolved.db, resolved.tables, adminUser.id, "admin_rider_reset_password", {
       rider_user_id: userId,
     });
@@ -590,7 +590,7 @@ export function registerRiderAdminRoutes(admin: Hono) {
     const { error } = await auth.auth.admin.signOut(userId, "global");
     if (error) return c.json({ error: "sign_out_failed", message: error.message }, 500);
 
-    const resolved = await getRidesAdminDb();
+    const resolved = await getRiderAdminDb();
     await riderAudit(resolved.db, resolved.tables, adminUser.id, "admin_rider_sign_out", {
       rider_user_id: userId,
     });
