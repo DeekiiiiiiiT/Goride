@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { VEHICLE_BODY_TYPE_OPTIONS } from '@roam/business-config';
 import { Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useOutletContext } from 'react-router-dom';
@@ -6,10 +7,13 @@ import type { Session } from '@supabase/supabase-js';
 import {
   createVehicleType,
   deleteVehicleType,
+  listCommandoBodyTypes,
   updateVehicleType,
 } from '../services/ridesAdminService';
 import { useVehicleTypesContext } from '../context/VehicleTypesContext';
 import {
+  normalizeTransportSolutionSlug,
+  validateTransportSolutionSlug,
   vehicleCapacityDisplay,
   type RidesVehicleTypeDto,
   type RidesVehicleTypeInput,
@@ -141,7 +145,8 @@ const KIND_META: Record<
 > = {
   vehicle: {
     title: 'Vehicle types',
-    description: 'Passenger rides — sedans, SUVs, and similar.',
+    description:
+      'Passenger ride tiers linked to body types in Commando (motor vehicle database).',
     addLabel: 'Add vehicle type',
   },
   service: {
@@ -164,11 +169,62 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
   const [editing, setEditing] = useState<RidesVehicleTypeDto | null>(null);
   const [form, setForm] = useState(() => emptyForm(kind));
   const [saving, setSaving] = useState(false);
+  const [commandoBodyTypes, setCommandoBodyTypes] = useState<string[]>([]);
+  const [commandoLoading, setCommandoLoading] = useState(false);
+  const [selectedCommandoBody, setSelectedCommandoBody] = useState('');
+
+  const usedVehicleSlugs = useMemo(() => new Set(items.map((row) => row.slug)), [items]);
+
+  const availableCommandoBodies = useMemo(() => {
+    return commandoBodyTypes.filter((body) => {
+      const slug = normalizeTransportSolutionSlug(body);
+      return slug.length > 0 && !usedVehicleSlugs.has(slug);
+    });
+  }, [commandoBodyTypes, usedVehicleSlugs]);
+
+  useEffect(() => {
+    if (!dialogOpen || editing || kind !== 'vehicle') return;
+
+    let cancelled = false;
+    setCommandoLoading(true);
+    void listCommandoBodyTypes(session.access_token)
+      .then((res) => {
+        if (!cancelled) setCommandoBodyTypes(res.body_types);
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setCommandoBodyTypes([...VEHICLE_BODY_TYPE_OPTIONS]);
+          toast.error(
+            e instanceof Error
+              ? e.message
+              : 'Could not load Commando body types; using default list.',
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCommandoLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dialogOpen, editing, kind, session.access_token]);
 
   const openCreate = () => {
     setEditing(null);
+    setSelectedCommandoBody('');
     setForm({ ...emptyForm(kind), sort_order: (items.length + 1) * 10 });
     setDialogOpen(true);
+  };
+
+  const pickCommandoBodyType = (bodyType: string) => {
+    setSelectedCommandoBody(bodyType);
+    const slug = normalizeTransportSolutionSlug(bodyType);
+    setForm((f) => ({
+      ...f,
+      slug,
+      label: bodyType,
+    }));
   };
 
   const openEdit = (row: RidesVehicleTypeDto) => {
@@ -218,9 +274,14 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
         await updateVehicleType(session.access_token, editing.slug, payload);
         toast.success('Updated');
       } else {
-        const slug = form.slug.trim().toLowerCase();
-        if (!slug) {
-          toast.error('ID is required');
+        if (kind === 'vehicle' && !selectedCommandoBody) {
+          toast.error('Select a body type from Commando.');
+          return;
+        }
+        const slug = normalizeTransportSolutionSlug(form.slug);
+        const slugError = validateTransportSolutionSlug(slug);
+        if (slugError) {
+          toast.error(slugError);
           return;
         }
         await createVehicleType(session.access_token, { ...payload, slug });
@@ -276,21 +337,61 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
               </button>
             </div>
             <div className="p-5 space-y-4">
-              {!editing && (
+              {!editing && form.solution_kind === 'vehicle' && (
                 <>
-                  <p className="text-xs text-slate-500 uppercase tracking-wide">
-                    {form.solution_kind === 'service' ? 'Service' : 'Vehicle type'}
-                  </p>
+                  <p className="text-xs text-slate-500 uppercase tracking-wide">Commando body type</p>
+                  <label className="block">
+                    <span className="text-sm text-slate-300">Body type (motor vehicle database)</span>
+                    {commandoLoading ? (
+                      <p className="mt-2 text-sm text-slate-400 flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Loading from Commando…
+                      </p>
+                    ) : (
+                      <select
+                        className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white"
+                        value={selectedCommandoBody}
+                        onChange={(e) => pickCommandoBodyType(e.target.value)}
+                      >
+                        <option value="">Select a body type…</option>
+                        {availableCommandoBodies.map((body) => (
+                          <option key={body} value={body}>
+                            {body}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <p className="mt-1 text-xs text-slate-500">
+                      Options come from Commando (roamdominion.co) motor vehicle catalog body types.
+                      Already-added types are hidden.
+                    </p>
+                    {form.slug ? (
+                      <p className="mt-2 text-xs text-slate-400">
+                        Ride ID: <span className="font-mono text-slate-300">{form.slug}</span>
+                      </p>
+                    ) : null}
+                  </label>
+                </>
+              )}
+              {!editing && form.solution_kind === 'service' && (
+                <>
+                  <p className="text-xs text-slate-500 uppercase tracking-wide">Service</p>
                   <label className="block">
                     <span className="text-sm text-slate-300">ID (slug)</span>
                     <input
-                      className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white"
+                      className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white font-mono"
                       value={form.slug}
-                      placeholder={form.solution_kind === 'service' ? 'e.g. courier' : 'e.g. uberx'}
+                      placeholder="e.g. roam-standard"
                       onChange={(e) =>
-                        setForm((f) => ({ ...f, slug: e.target.value.toLowerCase() }))
+                        setForm((f) => ({
+                          ...f,
+                          slug: normalizeTransportSolutionSlug(e.target.value),
+                        }))
                       }
                     />
+                    <p className="mt-1 text-xs text-slate-500">
+                      Lowercase letters, numbers, hyphens. Spaces become hyphens.
+                    </p>
                   </label>
                 </>
               )}

@@ -4,6 +4,7 @@
 import type { Context, Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { requireProductAdmin } from "../../_shared/productAdmin.ts";
 import type { RidesAdminTables } from "../../_shared/ridesAdminDb.ts";
+import { registerCommandoBodyTypeRoutes } from "./commandoBodyTypes.ts";
 import {
   invalidateVehicleTypesCache,
   type VehicleTypeDto,
@@ -33,7 +34,9 @@ function dto(row: VehicleTypeRow): VehicleTypeDto {
 
 function parseBody(body: Record<string, unknown>, forCreate: boolean) {
   const errors: string[] = [];
-  let slug = typeof body.slug === "string" ? body.slug.trim().toLowerCase() : "";
+  let slug = typeof body.slug === "string"
+    ? body.slug.trim().toLowerCase().replace(/\s+/g, "-")
+    : "";
   if (forCreate) {
     if (!slug) errors.push("slug_required");
     else if (!SLUG_RE.test(slug)) errors.push("invalid_slug");
@@ -176,6 +179,8 @@ export function registerVehicleTypeAdminRoutes(
 
   admin.delete("/vehicle-types/:slug", (c) => handleDelete(c, ridesDbOrResponse, adminAudit));
   admin.post("/vehicle-types/:slug/delete", (c) => handleDelete(c, ridesDbOrResponse, adminAudit));
+
+  registerCommandoBodyTypeRoutes(admin);
 }
 
 async function handleDelete(

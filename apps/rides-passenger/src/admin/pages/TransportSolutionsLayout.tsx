@@ -14,8 +14,8 @@ export function TransportSolutionsLayout() {
       <div>
         <h2 className="text-xl font-semibold text-white">Transport Solutions</h2>
         <p className="text-sm text-slate-400 mt-1 max-w-2xl">
-          Manage rider-facing vehicle types and services. Names appear in booking and fare rules.
-          The ID (slug) is fixed after creation.
+          Vehicle types are chosen from body types in Commando (motor vehicle database). Services are
+          configured separately. Names appear in booking and fare rules; the ID is fixed after creation.
         </p>
       </div>
 

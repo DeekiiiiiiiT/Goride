@@ -104,11 +104,34 @@ async function parseError(res: Response): Promise<string> {
     if (body.error === 'slug_exists') {
       return 'A vehicle type with this ID already exists.';
     }
+    if (body.error === 'invalid_slug') {
+      return 'Invalid ID: use lowercase letters, numbers, hyphens, or underscores, starting with a letter (e.g. roam-standard).';
+    }
+    if (body.error === 'slug_required') {
+      return 'ID is required.';
+    }
     if (body.error) return `${body.error} (HTTP ${res.status})`;
     return trimmed || `HTTP ${res.status}`;
   } catch {
     return trimmed ? `${trimmed.slice(0, 200)} (HTTP ${res.status})` : `HTTP ${res.status}`;
   }
+}
+
+export type CommandoBodyTypesResponse = {
+  body_types: string[];
+  source: 'catalog' | 'fallback';
+  catalog_count?: number;
+  catalog_warning?: string;
+};
+
+export async function listCommandoBodyTypes(
+  accessToken: string,
+): Promise<CommandoBodyTypesResponse> {
+  const res = await fetch(`${RIDES_BASE}/admin/commando/body-types`, {
+    headers: headers(accessToken),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
 }
 
 export async function listVehicleTypes(
