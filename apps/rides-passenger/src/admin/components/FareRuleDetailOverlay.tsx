@@ -2,7 +2,7 @@ import React from 'react';
 import { Pencil, Trash2, X } from 'lucide-react';
 import type { FareRuleAdminDto } from '../services/ridesAdminService';
 import { formatMoneyMinor } from '../services/ridesAdminService';
-import { vehicleTypeTableLabel } from './VehicleTypeSelect';
+import { useVehicleTypesContext } from '../context/VehicleTypesContext';
 
 type Props = {
   rule: FareRuleAdminDto | null;
@@ -33,6 +33,7 @@ function formatWhen(iso: string | null | undefined): string {
 }
 
 export function FareRuleDetailOverlay({ rule, onClose, onEdit, onDelete }: Props) {
+  const { vehicleTypeTableLabel } = useVehicleTypesContext();
   if (!rule) return null;
 
   const fmt = (minor: number) => formatMoneyMinor(minor, rule.currency);

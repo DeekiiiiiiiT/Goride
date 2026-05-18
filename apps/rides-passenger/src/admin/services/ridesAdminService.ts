@@ -10,6 +10,7 @@ import type {
   RiderAdminPermissions,
 } from '@roam/types/rides';
 import type { RideRequestRow } from '@roam/types/rides';
+import type { RidesVehicleTypeDto, RidesVehicleTypeInput } from '@/types/vehicleTypes';
 
 const RIDES_BASE = API_ENDPOINTS.rides;
 
@@ -97,11 +98,70 @@ async function parseError(res: Response): Promise<string> {
     if (body.error === 'city_and_vehicle_required') {
       return 'Location and vehicle type are required. Redeploy the rides Edge function, then hard-refresh this page.';
     }
+    if (body.error === 'vehicle_type_in_use') {
+      return 'Cannot delete: fare rules still use this vehicle type.';
+    }
+    if (body.error === 'slug_exists') {
+      return 'A vehicle type with this ID already exists.';
+    }
     if (body.error) return `${body.error} (HTTP ${res.status})`;
     return trimmed || `HTTP ${res.status}`;
   } catch {
     return trimmed ? `${trimmed.slice(0, 200)} (HTTP ${res.status})` : `HTTP ${res.status}`;
   }
+}
+
+export async function listVehicleTypes(
+  accessToken: string,
+): Promise<{ vehicle_types: RidesVehicleTypeDto[] }> {
+  const res = await fetch(`${RIDES_BASE}/admin/vehicle-types`, {
+    headers: headers(accessToken),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function createVehicleType(
+  accessToken: string,
+  input: RidesVehicleTypeInput & { slug: string },
+): Promise<{ vehicle_type: RidesVehicleTypeDto }> {
+  const res = await fetch(`${RIDES_BASE}/admin/vehicle-types`, {
+    method: 'POST',
+    headers: headers(accessToken, 'application/json'),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function updateVehicleType(
+  accessToken: string,
+  slug: string,
+  input: RidesVehicleTypeInput,
+): Promise<{ vehicle_type: RidesVehicleTypeDto }> {
+  const res = await fetch(`${RIDES_BASE}/admin/vehicle-types/${encodeURIComponent(slug)}`, {
+    method: 'PATCH',
+    headers: headers(accessToken, 'application/json'),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function deleteVehicleType(
+  accessToken: string,
+  slug: string,
+): Promise<{ ok: boolean }> {
+  const res = await fetch(
+    `${RIDES_BASE}/admin/vehicle-types/${encodeURIComponent(slug)}/delete`,
+    {
+      method: 'POST',
+      headers: headers(accessToken, 'application/json'),
+      body: '{}',
+    },
+  );
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
 }
 
 export async function listFareRules(

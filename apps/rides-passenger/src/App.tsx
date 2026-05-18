@@ -17,6 +17,7 @@ import { RidesAdminDashboard } from './admin/pages/RidesAdminDashboard';
 import { FareRulesLayout } from './admin/pages/FareRulesLayout';
 import { FareRulesPage } from './admin/pages/FareRulesPage';
 import { TripCalculatorPage } from './admin/pages/TripCalculatorPage';
+import { VehicleTypesPage } from './admin/pages/VehicleTypesPage';
 import { SurgePage } from './admin/pages/SurgePage';
 import { RideOperationsPage } from './admin/pages/RideOperationsPage';
 import { RidersListPage } from './admin/pages/users/RidersListPage';
@@ -126,6 +127,7 @@ export default function App() {
         <Route path="users/:userId" element={<RiderDetailPage />} />
         <Route path="fare-rules" element={<FareRulesLayout />}>
           <Route index element={<FareRulesPage />} />
+          <Route path="vehicle-types" element={<VehicleTypesPage />} />
           <Route path="calculator" element={<TripCalculatorPage />} />
         </Route>
         <Route path="surge" element={<SurgePage />} />

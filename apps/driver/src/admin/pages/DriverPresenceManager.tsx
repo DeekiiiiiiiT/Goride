@@ -1,11 +1,11 @@
 import React from 'react';
+import { useOutletContext } from 'react-router-dom';
+import { Session } from '@supabase/supabase-js';
 import { MapPin, RefreshCw } from 'lucide-react';
 
-interface DriverPresenceManagerProps {
-  accessToken: string | undefined;
-}
-
-export function DriverPresenceManager({ accessToken }: DriverPresenceManagerProps) {
+export function DriverPresenceManager() {
+  const { session } = useOutletContext<{ session: Session }>();
+  void session;
   return (
     <div className="space-y-6 text-slate-200">
       <div className="flex flex-wrap items-start justify-between gap-4">

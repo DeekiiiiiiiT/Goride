@@ -16,6 +16,8 @@ import { haversineKm } from "./fare/routing.ts";
 import { quoteTokenHash, verifyQuoteToken } from "./fare/quoteToken.ts";
 import { registerAdminRoutes } from "./admin.ts";
 import { assertRiderCanBook } from "./fare/riderAccount.ts";
+import { getRidesAdminDb } from "../_shared/ridesAdminDb.ts";
+import { loadVehicleTypesFromDb } from "./fare/vehicleTypesDb.ts";
 
 /** Match Supabase path prefix: .../functions/v1/rides/<route> → /rides/<route> */
 const app = new Hono().basePath("/rides");
@@ -272,6 +274,17 @@ async function runMatchingWave(
 }
 
 app.get("/health", (c) => c.json({ service: "rides", status: "ok" }));
+
+app.get("/v1/vehicle-types", async (c) => {
+  try {
+    const { db, tables } = await getRidesAdminDb();
+    const vehicle_types = await loadVehicleTypesFromDb(db, tables.vehicle_types, { activeOnly: true });
+    return c.json({ vehicle_types });
+  } catch {
+    const vehicle_types = await loadVehicleTypesFromDb(svc(), "vehicle_types", { activeOnly: true });
+    return c.json({ vehicle_types });
+  }
+});
 
 // --- Rider ---
 app.post("/v1/quote", async (c) => {

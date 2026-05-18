@@ -1,8 +1,10 @@
 import React from 'react';
 import { NavLink, Outlet, useOutletContext } from 'react-router-dom';
+import { VehicleTypesProvider } from '../context/VehicleTypesContext';
 
 const TABS = [
   { to: '/admin/fare-rules', label: 'Rules', end: true },
+  { to: '/admin/fare-rules/vehicle-types', label: 'Vehicle types', end: false },
   { to: '/admin/fare-rules/calculator', label: 'Trip calculator', end: false },
 ] as const;
 
@@ -29,7 +31,9 @@ export function FareRulesLayout() {
           </NavLink>
         ))}
       </nav>
-      <Outlet context={outletContext} />
+      <VehicleTypesProvider>
+        <Outlet context={outletContext} />
+      </VehicleTypesProvider>
     </div>
   );
 }

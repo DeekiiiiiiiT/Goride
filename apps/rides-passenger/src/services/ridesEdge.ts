@@ -6,6 +6,7 @@ import type {
   FareQuoteResponse,
   RideRequestRow,
 } from '@roam/types/rides';
+import type { RidesVehicleTypeDto } from '@/types/vehicleTypes';
 
 async function ridesHeaders(): Promise<HeadersInit> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -18,6 +19,12 @@ async function ridesHeaders(): Promise<HeadersInit> {
 }
 
 const base = API_ENDPOINTS.rides;
+
+export async function ridesListVehicleTypes(): Promise<{ vehicle_types: RidesVehicleTypeDto[] }> {
+  const res = await fetch(`${base}/v1/vehicle-types`, { headers: await ridesHeaders() });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
 
 export async function ridesQuote(body: {
   pickup_lat: number;

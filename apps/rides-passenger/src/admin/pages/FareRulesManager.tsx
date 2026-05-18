@@ -14,7 +14,8 @@ import {
   locationValueFromRule,
   type JamaicaLocationValue,
 } from '../components/JamaicaLocationPicker';
-import { VehicleTypeSelect, vehicleTypeTableLabel } from '../components/VehicleTypeSelect';
+import { VehicleTypeSelect } from '../components/VehicleTypeSelect';
+import { useVehicleTypesContext } from '../context/VehicleTypesContext';
 import { FareRuleActionsMenu } from '../components/FareRuleActionsMenu';
 import { FareRuleDetailOverlay } from '../components/FareRuleDetailOverlay';
 import { buildLocationKey, DEFAULT_RIDES_VEHICLE_TYPE } from '@roam/business-config';
@@ -39,6 +40,7 @@ interface FareRulesManagerProps {
 }
 
 export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
+  const { vehicleTypeTableLabel } = useVehicleTypesContext();
   const [rules, setRules] = useState<FareRuleAdminDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);

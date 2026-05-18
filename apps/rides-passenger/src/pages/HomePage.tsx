@@ -8,11 +8,8 @@ import { formatMoneyMinor } from '@roam/types/rides';
 import { RoamPlaceField } from '@/components/RoamPlaceField';
 import { TripRouteMap } from '@/components/TripRouteMap';
 import { ridesCreateRequest, ridesQuote } from '@/services/ridesEdge';
-import {
-  DEFAULT_RIDES_VEHICLE_TYPE,
-  RIDES_VEHICLE_TYPES,
-  vehicleCapacityDisplay,
-} from '@roam/business-config';
+import { DEFAULT_VEHICLE_OPTION, vehicleCapacityDisplay } from '@/types/vehicleTypes';
+import { useRidesVehicleTypes } from '@/hooks/useRidesVehicleTypes';
 import { formatVehicleEtaLine } from '@/utils/formatRideEta';
 
 export default function HomePage() {
@@ -21,7 +18,8 @@ export default function HomePage() {
   const [dropoffAddress, setDropoffAddress] = useState('');
   const [pickup, setPickup] = useState<{ lat: number; lng: number } | null>(null);
   const [dropoff, setDropoff] = useState<{ lat: number; lng: number } | null>(null);
-  const [vehicleOption, setVehicleOption] = useState<string>(DEFAULT_RIDES_VEHICLE_TYPE);
+  const { active: vehicleTypes } = useRidesVehicleTypes();
+  const [vehicleOption, setVehicleOption] = useState<string>(DEFAULT_VEHICLE_OPTION);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [bookLoading, setBookLoading] = useState(false);
   const [quote, setQuote] = useState<FareQuoteResponse | null>(null);
@@ -152,7 +150,7 @@ export default function HomePage() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 mb-2">Vehicle</p>
             <div className="space-y-2">
-              {RIDES_VEHICLE_TYPES.map((v) => (
+              {vehicleTypes.map((v) => (
                 <button
                   key={v.slug}
                   type="button"
@@ -174,8 +172,8 @@ export default function HomePage() {
                     <p className="text-xs text-zinc-500 mt-0.5 tabular-nums">{vehicleEtaLine}</p>
                   )}
                   <p className="text-xs text-zinc-600 mt-0.5 leading-snug">{v.description}</p>
-                  {v.slug === 'courier' && (
-                    <p className="text-[11px] text-zinc-500 mt-1">Send a package</p>
+                  {v.tagline && (
+                    <p className="text-[11px] text-zinc-500 mt-1">{v.tagline}</p>
                   )}
                 </button>
               ))}
