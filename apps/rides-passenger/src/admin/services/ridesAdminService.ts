@@ -91,6 +91,9 @@ async function parseError(res: Response): Promise<string> {
     if (body.error === 'rides_admin_db_unavailable') {
       return 'Rides admin tables are missing. Apply Supabase migrations (rides_public_admin_views) or expose the rides schema in API settings.';
     }
+    if (body.error === 'rider_admin_db_unavailable') {
+      return body.message ?? 'Rider admin tables are missing. Run supabase db push or apply migration 20260518150000_ensure_rider_public_views.sql in the SQL Editor.';
+    }
     if (body.error === 'city_and_vehicle_required') {
       return 'Location and vehicle type are required. Redeploy the rides Edge function, then hard-refresh this page.';
     }

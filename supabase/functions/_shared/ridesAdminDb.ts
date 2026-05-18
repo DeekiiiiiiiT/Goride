@@ -142,7 +142,8 @@ export async function getRiderAdminDb(): Promise<Resolved> {
   }
 
   throw new Error(
-    "Rider admin tables are not available. Run migration 20260518140000_rider_admin.sql, " +
-      "expose the `rides` schema in API settings, or reload the PostgREST schema cache.",
+    "Rider admin is not set up on this database. Run `supabase db push` (migration " +
+      "20260518150000_ensure_rider_public_views.sql) or paste that file in the Supabase SQL Editor, " +
+      "then reload the API schema cache.",
   );
 }

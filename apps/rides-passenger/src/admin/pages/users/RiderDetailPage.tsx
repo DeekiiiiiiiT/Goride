@@ -48,6 +48,7 @@ export function RiderDetailPage() {
   const token = session.access_token;
 
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [rider, setRider] = useState<RiderDetailDto | null>(null);
   const [permissions, setPermissions] = useState<RiderAdminPermissions | null>(null);
   const [tab, setTab] = useState<Tab>('overview');
@@ -64,6 +65,7 @@ export function RiderDetailPage() {
   const load = useCallback(async () => {
     if (!token || !userId) return;
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await getRiderDetail(token, userId);
       setRider(res.rider);
@@ -71,7 +73,10 @@ export function RiderDetailPage() {
       setDisplayName(res.rider.display_name ?? '');
       setPhone(res.rider.phone ?? '');
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Failed to load rider');
+      const message = e instanceof Error ? e.message : 'Failed to load rider';
+      setLoadError(message);
+      setRider(null);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -187,10 +192,33 @@ export function RiderDetailPage() {
     }
   };
 
-  if (loading || !rider) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center py-24 text-slate-400">
         <Loader2 className="w-6 h-6 animate-spin" />
+      </div>
+    );
+  }
+
+  if (loadError || !rider) {
+    return (
+      <div className="space-y-4 py-12 text-center">
+        <p className="text-sm text-red-300 max-w-lg mx-auto">{loadError ?? 'Rider not found'}</p>
+        <div className="flex items-center justify-center gap-3">
+          <Link
+            to="/admin/users"
+            className="text-sm text-slate-400 hover:text-white"
+          >
+            Back to riders
+          </Link>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="text-sm text-emerald-400 hover:text-emerald-300"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
