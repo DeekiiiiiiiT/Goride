@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { WeeklyCheckIn } from '../types/check-in';
 import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { supabase } from '../utils/supabase/client';
 
 export function useWeeklyCheckIn(driverId: string | undefined) {
     const [needsCheckIn, setNeedsCheckIn] = useState(false);
@@ -24,11 +25,12 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
         setIsLoading(true);
         try {
             const weekStart = getWeekStart();
-            
-            // Fetch check-ins
+            const { data: { session } } = await supabase.auth.getSession();
+            const authToken = session?.access_token ?? publicAnonKey;
+
             const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/check-ins?driverId=${driverId}&weekStart=${weekStart}`, {
                 headers: {
-                    'Authorization': `Bearer ${publicAnonKey}`
+                    'Authorization': `Bearer ${authToken}`
                 }
             });
             const data = await response.json();
@@ -41,6 +43,8 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
             }
         } catch (e) {
             console.error("Error checking weekly status:", e);
+            // Don't trap fleet drivers behind check-in when the API is down
+            setNeedsCheckIn(false);
         } finally {
             setIsLoading(false);
         }
@@ -60,6 +64,9 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
         manualReadingReason?: string
     ) => {
         if (!driverId) return;
+
+        const { data: { session } } = await supabase.auth.getSession();
+        const authToken = session?.access_token ?? publicAnonKey;
         
         // upload photo if exists
         let photoUrl = '';
@@ -68,7 +75,7 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
              formData.append('file', photo);
              const uploadRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/upload`, {
                  method: 'POST',
-                 headers: { 'Authorization': `Bearer ${publicAnonKey}` },
+                 headers: { 'Authorization': `Bearer ${authToken}` },
                  body: formData
              });
              const uploadData = await uploadRes.json();
@@ -98,7 +105,7 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
         await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/check-ins`, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${publicAnonKey}`,
+                'Authorization': `Bearer ${authToken}`,
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify(payload)

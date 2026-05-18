@@ -88,22 +88,6 @@ export function DriverDashboard() {
   });
 
   useEffect(() => {
-    // Debug fetch if no data found
-    if (!loading && !metrics && !recentTrip) {
-        // Fetch drivers
-        api.getDrivers().then(drivers => {
-            setDebugDrivers(drivers);
-        }).catch(e => console.error("Debug fetch failed", e));
-
-        // Scan for existing trip IDs to help user find their legacy ID
-        api.getTrips().then(trips => {
-            const ids = Array.from(new Set(trips.map(t => t.driverId).filter(Boolean)));
-            setUnclaimedTripIds(ids);
-        }).catch(console.error);
-    }
-  }, [loading, metrics, recentTrip]);
-
-  useEffect(() => {
     let mounted = true;
     if (!user || driverLoading) return;
 
@@ -120,7 +104,7 @@ export function DriverDashboard() {
         
         // Helper to fetch trips specifically for this driver (User ID + Legacy ID)
         const fetchDriverTrips = async () => {
-             const limit = 1000; // Increase limit to ensure full month coverage for Tier Calculation
+             const limit = 300;
              const p1 = api.getTripsFiltered({ driverId: user.id, limit }).then(r => r.data).catch(() => []);
              const promises = [p1];
              
@@ -152,6 +136,8 @@ export function DriverDashboard() {
             tierService.getQuotaSettings().catch(() => null)
         ]);
 
+        if (!mounted) return;
+
         const myMetrics = allMetrics.find(m => 
             m.driverId === user.id || 
             (driverRecord?.id && m.driverId === driverRecord.id) ||
@@ -160,107 +146,104 @@ export function DriverDashboard() {
         if (myMetrics) setMetrics(myMetrics);
         setDebugDrivers(drivers);
 
-        // Calculate Flagged Count for this driver
         const myFlagged = flaggedTx.filter((tx: any) => 
             tx.driverId === user.id || 
             (driverRecord?.id && tx.driverId === driverRecord.id)
         );
         setFlaggedCount(myFlagged.length);
 
-        // 2. Process Trips for Earnings
-        // myTrips is already filtered and fetched for this driver
-            
-            // Calculate Today's Earnings (for Goals)
+        clearTimeout(timeoutId);
+        setLoading(false);
+        hasLoadedDashboardRef.current = true;
+
+        // Defer heavy trip math so login UI stays responsive (fleet drivers with large histories)
+        const processTrips = () => {
+            if (!mounted) return;
+
             const today = new Date().toISOString().split('T')[0];
             const now = new Date();
-            
+
             const todayTrips = myTrips.filter(t => t.date.startsWith(today));
             const todaySum = todayTrips.reduce((sum, t) => sum + getDriverPortalTripEarnings(t), 0);
 
-            // Calculate Weekly Earnings Breakdown (for Display Cards)
             const weeklyTrips = myTrips.filter(t => isSameWeek(new Date(t.date), now, { weekStartsOn: 1 }));
             const weeklyBreakdown = { uber: 0, indrive: 0, roam: 0 };
             const weeklySumForBreakdown = weeklyTrips.reduce((sum, t) => sum + getDriverPortalTripEarnings(t), 0);
 
             weeklyTrips.forEach(t => {
                 const amount = getDriverPortalTripEarnings(t);
-                
                 const platform = (t.platform || '').toLowerCase();
                 if (platform === 'uber') {
                     weeklyBreakdown.uber += amount;
                 } else if (platform === 'indrive') {
                     weeklyBreakdown.indrive += amount;
                 } else {
-                    // Roam includes Private, Cash, Other, and implicit app trips
                     weeklyBreakdown.roam += amount;
                 }
             });
 
             setTodayEarnings({ total: weeklySumForBreakdown, breakdown: weeklyBreakdown });
 
-            // Calculate Weekly Earnings (for Goals)
             const weeklySum = weeklySumForBreakdown;
-
-            // Phase 2: Tier Calculation (Monthly Reset Logic)
             const monthlyEarnings = TierCalculations.calculateMonthlyEarnings(myTrips);
-            // tiers already fetched
             const currentTier = TierCalculations.getTierForEarnings(monthlyEarnings, tiers);
             const nextTier = TierCalculations.getNextTier(currentTier, tiers);
             const progress = TierCalculations.calculateProgress(monthlyEarnings, currentTier);
-            
-            // Calculate Quota Goals
+
             try {
-                // quotaConfig already fetched
-                if (quotaConfig && quotaConfig.weekly && quotaConfig.weekly.enabled) {
+                if (quotaConfig?.weekly?.enabled) {
                     const weeklyAmount = quotaConfig.weekly.amount || 0;
                     const workingDaysCount = quotaConfig.weekly.workingDays?.length || 5;
-                    
                     const dailyTarget = workingDaysCount > 0 ? weeklyAmount / workingDaysCount : 0;
-                    
-                    // Monthly Target (Specific to current month)
                     const monthlyProjections = generateMonthlyProjection(weeklyAmount, workingDaysCount);
                     const currentMonthName = format(now, 'MMMM');
-                    const monthlyTarget = monthlyProjections.find(m => m.monthName === currentMonthName)?.target || 0;
+                    const monthlyTarget =
+                        monthlyProjections.find(m => m.monthName === currentMonthName)?.target || 0;
 
                     setGoals({
                         daily: { current: todaySum, target: dailyTarget },
                         weekly: { current: weeklySum, target: weeklyAmount },
-                        monthly: { current: monthlyEarnings, target: monthlyTarget }
+                        monthly: { current: monthlyEarnings, target: monthlyTarget },
                     });
                 }
             } catch (e) {
-                console.error("Failed to calculate quota goals", e);
+                console.error('Failed to calculate quota goals', e);
             }
 
             setTierState({
                 current: currentTier,
                 next: nextTier,
-                progress: progress,
-                cumulativeEarnings: monthlyEarnings
+                progress,
+                cumulativeEarnings: monthlyEarnings,
             });
 
             if (myTrips.length > 0) {
-                // Sort desc
-                myTrips.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                setRecentTrip(myTrips[0]);
+                const sorted = [...myTrips].sort(
+                    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+                );
+                setRecentTrip(sorted[0]);
 
-                // Phase 1 Fix: Background Address Resolution
-                // If we found trips for this driver, check if any need address resolution
-                resolveMissingTripAddresses(myTrips).then(resolved => {
-                    if (resolved.length > 0) {
-                        console.log(`[Dashboard] Resolved ${resolved.length} trip addresses in background.`);
-                        // Optionally refresh specific local state if needed, 
-                        // but since it's background and saved to API, 
-                        // next refresh or specific UI updates will pick it up.
-                    }
-                }).catch(err => console.error("Background address resolution failed:", err));
+                resolveMissingTripAddresses(myTrips)
+                    .then(resolved => {
+                        if (resolved.length > 0) {
+                            console.log(`[Dashboard] Resolved ${resolved.length} trip addresses in background.`);
+                        }
+                    })
+                    .catch(err => console.error('Background address resolution failed:', err));
             }
+        };
+
+        if (typeof requestIdleCallback !== 'undefined') {
+            requestIdleCallback(processTrips, { timeout: 2000 });
+        } else {
+            setTimeout(processTrips, 0);
+        }
 
       } catch (error) {
         console.error("Error fetching driver data:", error);
       } finally {
         clearTimeout(timeoutId);
-        if (mounted) {
+        if (mounted && !hasLoadedDashboardRef.current) {
           setLoading(false);
           hasLoadedDashboardRef.current = true;
         }

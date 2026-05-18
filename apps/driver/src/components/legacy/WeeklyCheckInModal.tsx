@@ -1,6 +1,6 @@
 // cache-bust: force recompile — 2026-02-10
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@roam/ui';
+import { createPortal } from 'react-dom';
 import { Button } from '@roam/ui';
 import { Input } from '@roam/ui';
 import { Label } from '@roam/ui';
@@ -25,9 +25,19 @@ interface WeeklyCheckInModalProps {
     ) => Promise<void>;
     isLoading: boolean;
     isForced?: boolean;
+    /** Dismiss without completing — app stays usable (fleet drivers). */
+    onDismissLater?: () => void;
 }
 
-export function WeeklyCheckInModal({ isOpen, onClose, onSubmit, isLoading, isForced = false }: WeeklyCheckInModalProps) {
+/** Plain portal (no Radix Dialog) — Radix overlay caused grey-screen freeze on mobile Safari. */
+export function WeeklyCheckInModal({
+    isOpen,
+    onClose,
+    onSubmit,
+    isLoading,
+    isForced = false,
+    onDismissLater,
+}: WeeklyCheckInModalProps) {
     const [step, setStep] = useState<CheckInStep>('CAPTURE');
     const [odometer, setOdometer] = useState<string>('');
     const [photo, setPhoto] = useState<File | null>(null);
@@ -310,32 +320,90 @@ export function WeeklyCheckInModal({ isOpen, onClose, onSubmit, isLoading, isFor
         );
     };
 
-    return (
-        <Dialog open={isOpen} onOpenChange={(open) => !isForced && !open && onClose()}>
-            <DialogContent className="sm:max-w-md" hideCloseButton={isForced} onPointerDownOutside={(e) => (isForced || step === 'ANALYZING' || step === 'SUBMITTING') && e.preventDefault()} onEscapeKeyDown={(e) => isForced && e.preventDefault()}>
-                <DialogHeader>
-                    <DialogTitle>Weekly Odometer Check-In</DialogTitle>
-                    <DialogDescription>
-                        {step === 'CAPTURE' && "Step 1: Photo Verification"}
-                        {step === 'ANALYZING' && "Step 2: Processing"}
-                        {step === 'CONFIRM_AI' && "Step 3: Confirm Reading"}
-                        {step === 'MANUAL_ENTRY' && "Manual Override"}
-                    </DialogDescription>
-                </DialogHeader>
+    if (!isOpen || typeof document === 'undefined') return null;
 
-                {renderContent()}
+    const stepLabel =
+        step === 'CAPTURE'
+            ? 'Step 1: Photo Verification'
+            : step === 'ANALYZING'
+              ? 'Step 2: Processing'
+              : step === 'CONFIRM_AI'
+                ? 'Step 3: Confirm Reading'
+                : step === 'MANUAL_ENTRY'
+                  ? 'Manual Override'
+                  : '';
 
-                <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:justify-end">
-                    {step === 'CAPTURE' && !isForced && (
-                        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+    const canDismiss =
+        !isForced &&
+        step !== 'ANALYZING' &&
+        step !== 'SUBMITTING' &&
+        !isLoading;
+
+    return createPortal(
+        <motion.div
+            className="fixed inset-0 z-[100] flex items-end justify-center safe-x p-4 sm:items-center"
+            role="presentation"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+        >
+            {canDismiss && (
+                <button
+                    type="button"
+                    className="absolute inset-0 bg-black/50 touch-manipulation"
+                    aria-label="Close"
+                    onClick={onClose}
+                />
+            )}
+            {!canDismiss && <motion.div className="absolute inset-0 bg-black/50" aria-hidden />}
+            <motion.div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="weekly-checkin-title"
+                className="relative z-[101] flex w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900 sm:rounded-2xl"
+                initial={{ y: 24, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+            >
+                <motion.div className="border-b border-slate-200 px-5 py-4 dark:border-slate-700">
+                    <h2 id="weekly-checkin-title" className="text-lg font-semibold text-slate-900 dark:text-white">
+                        Weekly Odometer Check-In
+                    </h2>
+                    {stepLabel && (
+                        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{stepLabel}</p>
                     )}
-                    
+                </motion.div>
+
+                <div className="max-h-[min(70dvh,32rem)] overflow-y-auto px-5 py-2">
+                    {renderContent()}
+                </motion.div>
+
+                <div className="flex flex-col gap-2 border-t border-slate-200 px-5 py-4 dark:border-slate-700 sm:flex-row sm:justify-end">
+                    {step === 'CAPTURE' && (
+                        <>
+                            {isForced && onDismissLater && (
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    className="btn-touch w-full sm:w-auto"
+                                    onClick={onDismissLater}
+                                >
+                                    Remind me later
+                                </Button>
+                            )}
+                            {canDismiss && (
+                                <Button type="button" variant="ghost" className="btn-touch" onClick={onClose}>
+                                    Cancel
+                                </Button>
+                            )}
+                        </>
+                    )}
+
                     {step === 'CONFIRM_AI' && (
                         <>
-                            <Button variant="outline" onClick={() => setStep('MANUAL_ENTRY')}>
-                                No, it's wrong
+                            <Button type="button" variant="outline" className="btn-touch" onClick={() => setStep('MANUAL_ENTRY')}>
+                                No, it&apos;s wrong
                             </Button>
-                            <Button onClick={handleConfirmAI}>
+                            <Button type="button" className="btn-touch" onClick={() => void handleConfirmAI()}>
                                 Yes, Confirm
                             </Button>
                         </>
@@ -343,14 +411,22 @@ export function WeeklyCheckInModal({ isOpen, onClose, onSubmit, isLoading, isFor
 
                     {step === 'MANUAL_ENTRY' && (
                         <>
-                            <Button variant="ghost" onClick={() => setStep('CAPTURE')}>Retake Photo</Button>
-                            <Button onClick={handleManualSubmit} disabled={!odometer}>
+                            <Button type="button" variant="ghost" className="btn-touch" onClick={() => setStep('CAPTURE')}>
+                                Retake Photo
+                            </Button>
+                            <Button
+                                type="button"
+                                className="btn-touch"
+                                onClick={() => void handleManualSubmit()}
+                                disabled={!odometer}
+                            >
                                 Submit for Review
                             </Button>
                         </>
                     )}
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+                </div>
+            </motion.div>
+        </motion.div>,
+        document.body,
     );
 }

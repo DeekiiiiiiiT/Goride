@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useDriver } from '../../contexts/DriverContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { getBottomNavItems, getNavigationItems } from '../../config/navigation';
@@ -28,6 +28,17 @@ import { TaxCenter } from '../independent/TaxCenter';
 import { InsuranceCenter } from '../independent/InsuranceCenter';
 import { RideDispatchPage } from '../rides/RideDispatchPage';
 
+const CHECKIN_DISMISS_PREFIX = 'roam_weekly_checkin_dismissed';
+
+function getWeekStartKey() {
+  const now = new Date();
+  const day = now.getDay();
+  const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+  const monday = new Date(now.setDate(diff));
+  monday.setHours(0, 0, 0, 0);
+  return monday.toISOString().split('T')[0];
+}
+
 export function DriverShell() {
   const { mode, isFleetDriver, fleet, loading } = useDriver();
   const { user, signOut } = useAuth();
@@ -38,12 +49,28 @@ export function DriverShell() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [checkInOpen, setCheckInOpen] = useState(false);
   const [checkInSubmitting, setCheckInSubmitting] = useState(false);
+  const [checkInDismissed, setCheckInDismissed] = useState(
+    () => sessionStorage.getItem(`${CHECKIN_DISMISS_PREFIX}_${getWeekStartKey()}`) === '1',
+  );
 
   const bottomNavItems = getBottomNavItems();
   const menuNavItems = getNavigationItems(mode);
 
-  const checkInModalOpen = isFleetDriver && (needsCheckIn || checkInOpen);
-  const checkInForced = isFleetDriver && needsCheckIn;
+  const checkInBlocked = isFleetDriver && needsCheckIn && !checkInDismissed;
+  const checkInModalOpen = isFleetDriver && (checkInBlocked || checkInOpen);
+  const checkInForced = checkInBlocked;
+
+  useEffect(() => {
+    if (currentPage !== 'checkin' || !isFleetDriver) return;
+    setCheckInOpen(true);
+    setCurrentPage('dashboard');
+  }, [currentPage, isFleetDriver]);
+
+  const handleDismissCheckInLater = () => {
+    sessionStorage.setItem(`${CHECKIN_DISMISS_PREFIX}_${getWeekStartKey()}`, '1');
+    setCheckInDismissed(true);
+    setCheckInOpen(false);
+  };
 
   if (loading) {
     return (
@@ -109,10 +136,6 @@ export function DriverShell() {
       case 'fuel-stats':
         return isFleetDriver ? <DriverFuelStats /> : null;
       case 'checkin':
-        if (isFleetDriver) {
-          setCheckInOpen(true);
-          setCurrentPage('dashboard');
-        }
         return null;
 
       case 'vehicle':
@@ -295,8 +318,9 @@ export function DriverShell() {
         <WeeklyCheckInModal
           isOpen={checkInModalOpen}
           onClose={() => {
-            if (!needsCheckIn) setCheckInOpen(false);
+            if (!checkInBlocked) setCheckInOpen(false);
           }}
+          onDismissLater={handleDismissCheckInLater}
           onSubmit={handleWeeklyCheckInSubmit}
           isLoading={checkInSubmitting || checkInHookLoading}
           isForced={checkInForced}

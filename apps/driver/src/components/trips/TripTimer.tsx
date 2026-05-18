@@ -90,12 +90,16 @@ export function TripTimer({ onComplete }: TripTimerProps) {
     currentLocation,
   } = useTripTracker();
 
-  // Load session from storage on mount
+  // Defer restore so login paint and taps are not blocked by large route JSON.parse
   useEffect(() => {
+    let cancelled = false;
+
+    const restoreSession = () => {
     const storedSession = localStorage.getItem(STORAGE_KEY);
     if (storedSession) {
       try {
         const session: TripSession = JSON.parse(storedSession);
+        if (cancelled) return;
         
         // Check for stale session (> 12 hours)
         const now = Date.now();
@@ -137,6 +141,13 @@ export function TripTimer({ onComplete }: TripTimerProps) {
         localStorage.removeItem(STORAGE_KEY);
       }
     }
+    };
+
+    const frame = requestAnimationFrame(restoreSession);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frame);
+    };
   }, []);
 
   // Debounce session writes — skip while cancel confirm is open; cap route size for mobile
