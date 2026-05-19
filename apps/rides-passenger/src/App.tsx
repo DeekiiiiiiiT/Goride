@@ -20,6 +20,7 @@ import { TripCalculatorPage } from './admin/pages/TripCalculatorPage';
 import { TransportSolutionsLayout } from './admin/pages/TransportSolutionsLayout';
 import { TransportSolutionKindPage } from './admin/pages/TransportSolutionKindPage';
 import { SurgePage } from './admin/pages/SurgePage';
+import { ControlPanelPage } from './admin/pages/ControlPanelPage';
 import { RideOperationsPage } from './admin/pages/RideOperationsPage';
 import { RidersListPage } from './admin/pages/users/RidersListPage';
 import { RiderDetailPage } from './admin/pages/users/RiderDetailPage';
@@ -140,6 +141,7 @@ export default function App() {
           <Route path="calculator" element={<TripCalculatorPage />} />
         </Route>
         <Route path="surge" element={<SurgePage />} />
+        <Route path="control-panel" element={<ControlPanelPage />} />
         <Route path="rides" element={<RideOperationsPage />} />
       </Route>
 

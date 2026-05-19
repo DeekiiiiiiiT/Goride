@@ -1,12 +1,18 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { estimateNearestPickupEta } from "./distanceMatrix.ts";
+import {
+  DEFAULT_DISPATCH_SETTINGS,
+  driverLocationMaxAgeMs,
+  type DispatchSettings,
+} from "./dispatchSettings.ts";
 import { haversineKm } from "./routing.ts";
 
-/** Max age for driver location rows (same as matching). */
-export const DRIVER_LOCATION_MAX_AGE_MS = 10 * 60 * 1000;
+/** Fallback when settings are not loaded. */
+export const DRIVER_LOCATION_MAX_AGE_MS =
+  DEFAULT_DISPATCH_SETTINGS.driver_location_max_age_minutes * 60 * 1000;
 
-/** Haversine radius for quote-time driver search (tighter than matching wave 3). */
-export const QUOTE_DRIVER_RADIUS_KM = 15;
+/** Fallback when settings are not loaded. */
+export const QUOTE_DRIVER_RADIUS_KM = DEFAULT_DISPATCH_SETTINGS.quote_driver_radius_km;
 
 export type PickupEtaSource =
   | "google_distance_matrix"
@@ -23,9 +29,15 @@ export async function resolvePickupEta(
   db: SupabaseClient,
   pickupLat: number,
   pickupLng: number,
-  opts?: { allowedBodyTypeSlugs?: Set<string> },
+  opts?: {
+    allowedBodyTypeSlugs?: Set<string>;
+    dispatchSettings?: DispatchSettings;
+  },
 ): Promise<ResolvedPickupEta> {
-  const freshSince = new Date(Date.now() - DRIVER_LOCATION_MAX_AGE_MS).toISOString();
+  const settings = opts?.dispatchSettings ?? DEFAULT_DISPATCH_SETTINGS;
+  const maxAgeMs = driverLocationMaxAgeMs(settings);
+  const quoteRadiusKm = settings.quote_driver_radius_km;
+  const freshSince = new Date(Date.now() - maxAgeMs).toISOString();
   const { data: locs } = await db
     .from("driver_locations")
     .select("user_id, lat, lng, updated_at, body_type_slug")
@@ -42,7 +54,7 @@ export async function resolvePickupEta(
     const lat = Number(row.lat);
     const lng = Number(row.lng);
     const km = haversineKm(pickupLat, pickupLng, lat, lng);
-    if (km <= QUOTE_DRIVER_RADIUS_KM) {
+    if (km <= quoteRadiusKm) {
       nearby.push({
         user_id: row.user_id as string,
         lat,

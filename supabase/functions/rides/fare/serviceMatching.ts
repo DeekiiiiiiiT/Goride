@@ -75,11 +75,29 @@ export async function loadServiceBodyTypeTiers(
   return tiers;
 }
 
-/** Cumulative body-type slugs eligible for a given matching wave (1-based). */
-export function allowedBodySlugsForWave(tiers: BodyTypeTier[], wave: number): Set<string> {
+export type BodyTypeTierMode = "expand" | "strict";
+
+/** Body-type slugs eligible for a matching wave (1-based). */
+export function allowedBodySlugsForWave(
+  tiers: BodyTypeTier[],
+  wave: number,
+  mode: BodyTypeTierMode = "expand",
+): Set<string> {
   if (!tiers.length) return new Set();
-  const sorted = [...tiers].sort((a, b) => a.priority - b.priority || a.body_type_slug.localeCompare(b.body_type_slug));
+  const sorted = [...tiers].sort(
+    (a, b) => a.priority - b.priority || a.body_type_slug.localeCompare(b.body_type_slug),
+  );
   const distinctPriorities = [...new Set(sorted.map((t) => t.priority))].sort((a, b) => a - b);
+
+  if (mode === "strict") {
+    const minPriority = distinctPriorities[0];
+    const allowed = new Set<string>();
+    for (const t of sorted) {
+      if (t.priority === minPriority) allowed.add(t.body_type_slug);
+    }
+    return allowed;
+  }
+
   const maxTierIndex = Math.min(Math.max(wave, 1), distinctPriorities.length) - 1;
   const allowedPriorities = new Set(distinctPriorities.slice(0, maxTierIndex + 1));
   const allowed = new Set<string>();

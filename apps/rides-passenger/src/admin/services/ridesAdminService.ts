@@ -484,6 +484,49 @@ export async function signOutRiderAllDevices(
   if (!res.ok) throw new Error(await parseError(res));
 }
 
+export type BodyTypeTierMode = 'expand' | 'strict';
+
+export interface DispatchSettingsDto {
+  max_match_waves: number;
+  wave_radius_km: number[];
+  max_offers_per_wave: number;
+  default_driver_offer_timeout_seconds: number;
+  driver_location_max_age_minutes: number;
+  quote_driver_radius_km: number;
+  body_type_filtering_enabled: boolean;
+  body_type_tier_mode: BodyTypeTierMode;
+  require_body_type_for_offers: boolean;
+  updated_at?: string;
+  updated_by?: string | null;
+}
+
+export type DispatchSettingsPatch = Partial<
+  Omit<DispatchSettingsDto, 'updated_at' | 'updated_by'>
+>;
+
+export async function getDispatchSettings(
+  accessToken: string,
+): Promise<{ settings: DispatchSettingsDto }> {
+  const res = await fetch(`${RIDES_BASE}/admin/dispatch-settings`, {
+    headers: headers(accessToken),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function updateDispatchSettings(
+  accessToken: string,
+  patch: DispatchSettingsPatch,
+): Promise<{ settings: DispatchSettingsDto }> {
+  const res = await fetch(`${RIDES_BASE}/admin/dispatch-settings`, {
+    method: 'PATCH',
+    headers: headers(accessToken, 'application/json'),
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
 export function formatMoneyMinor(minorUnits: number, currency = 'JMD'): string {
   const major = minorUnits / 100;
   return new Intl.NumberFormat('en-JM', {

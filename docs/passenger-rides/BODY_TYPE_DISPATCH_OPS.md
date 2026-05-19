@@ -29,3 +29,7 @@ Redeploy the **rides** Edge function after code changes.
 ## Clean slate (legacy UberX tiers)
 
 Delete old `uberx` / `comfort` vehicle rows if unused, remove fare rules that reference them, then recreate services and body-type links as above.
+
+## Global dispatch knobs
+
+Wave count, radii, offer timeouts, and body-type policy toggles are in **Admin → Control Panel**. See [DISPATCH_CONTROL_PANEL.md](./DISPATCH_CONTROL_PANEL.md).

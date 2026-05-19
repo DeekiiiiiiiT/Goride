@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   CircleDollarSign,
   TrendingUp,
+  SlidersHorizontal,
   Car,
   Users,
   LogOut,
@@ -31,6 +32,7 @@ const NAV_ITEMS = [
   { id: 'users', path: '/admin/users', label: 'User Management', icon: Users },
   { id: 'fare-rules', path: '/admin/fare-rules', label: 'Fare Rules', icon: CircleDollarSign },
   { id: 'surge', path: '/admin/surge', label: 'Surge Pricing', icon: TrendingUp },
+  { id: 'control-panel', path: '/admin/control-panel', label: 'Control Panel', icon: SlidersHorizontal },
   { id: 'rides', path: '/admin/rides', label: 'Ride Operations', icon: Car },
 ];
 

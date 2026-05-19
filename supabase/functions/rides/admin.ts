@@ -21,6 +21,7 @@ import { normalizeVehicleType } from "./fare/ridesVehicleTypes.ts";
 import { isKnownServiceSlug } from "./fare/vehicleTypesDb.ts";
 import { registerVehicleTypeAdminRoutes } from "./admin/vehicleTypes.ts";
 import { registerRiderAdminRoutes } from "./admin/riders.ts";
+import { registerDispatchSettingsAdminRoutes } from "./admin/dispatchSettings.ts";
 
 type RidesAdminDb = Awaited<ReturnType<typeof getRidesAdminDb>>;
 
@@ -635,6 +636,8 @@ export function registerAdminRoutes(
   registerVehicleTypeAdminRoutes(admin, ridesDbOrResponse, adminAudit);
 
   registerRiderAdminRoutes(admin);
+
+  registerDispatchSettingsAdminRoutes(admin, ridesDbOrResponse, adminAudit);
 
   app.route("/admin", admin);
 }

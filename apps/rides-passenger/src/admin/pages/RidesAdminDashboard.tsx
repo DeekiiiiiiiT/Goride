@@ -44,6 +44,11 @@ export function RidesAdminDashboard() {
             description="Monitor and adjust surge multipliers"
             href="/admin/surge"
           />
+          <QuickLink
+            title="Control Panel"
+            description="Dispatch waves, offer timeouts, and body-type matching policy"
+            href="/admin/control-panel"
+          />
         </div>
       </div>
 

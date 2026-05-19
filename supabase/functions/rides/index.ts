@@ -23,14 +23,16 @@ import {
   loadServiceBodyTypeTiers,
 } from "./fare/serviceMatching.ts";
 import { isActiveBodyTypeSlug, resolveDriverBodyTypeSlug } from "./fare/driverBodyType.ts";
+import {
+  DEFAULT_DISPATCH_SETTINGS,
+  driverLocationMaxAgeMs,
+  getWaveRadiusKm,
+  loadDispatchSettings,
+} from "./fare/dispatchSettings.ts";
 
 /** Match Supabase path prefix: .../functions/v1/rides/<route> → /rides/<route> */
 const app = new Hono().basePath("/rides");
 
-const MAX_MATCH_WAVES = 3;
-const WAVE_RADIUS_KM = [5, 15, 35];
-const MAX_OFFERS_PER_WAVE = 8;
-const DRIVER_LOCATION_MAX_AGE_MS = 10 * 60 * 1000;
 const AVG_SPEED_KMH = 25;
 
 type RideStatus =
@@ -169,8 +171,16 @@ async function reconcileMatching(rideId: string, requestId?: string) {
 
   if (pendingRows && pendingRows.length > 0) return;
 
+  let dispatchSettings = DEFAULT_DISPATCH_SETTINGS;
+  try {
+    const { db: adminDb, tables } = await getRidesAdminDb();
+    dispatchSettings = await loadDispatchSettings(adminDb, tables);
+  } catch {
+    /* use defaults */
+  }
+
   const wave = Number(ride.matching_wave ?? 0);
-  if (wave >= MAX_MATCH_WAVES) {
+  if (wave >= dispatchSettings.max_match_waves) {
     await db.from("ride_requests").update({
       status: "cancelled",
       cancelled_by: "system",
@@ -194,12 +204,22 @@ async function runMatchingWave(
   requestId?: string,
 ) {
   const db = svc();
-  const radiusKm = WAVE_RADIUS_KM[Math.min(wave - 1, WAVE_RADIUS_KM.length - 1)];
+  let dispatchSettings = DEFAULT_DISPATCH_SETTINGS;
+  try {
+    const { db: adminDb, tables } = await getRidesAdminDb();
+    dispatchSettings = await loadDispatchSettings(adminDb, tables);
+  } catch {
+    /* use defaults */
+  }
+
+  const radiusKm = getWaveRadiusKm(dispatchSettings, wave);
   const pickupLat = Number(ride.pickup_lat);
   const pickupLng = Number(ride.pickup_lng);
-  const timeoutSec = Number(ride.driver_offer_timeout_seconds ?? 15);
+  const timeoutSec = Number(
+    ride.driver_offer_timeout_seconds ?? dispatchSettings.default_driver_offer_timeout_seconds,
+  );
 
-  const freshSince = new Date(Date.now() - DRIVER_LOCATION_MAX_AGE_MS).toISOString();
+  const freshSince = new Date(Date.now() - driverLocationMaxAgeMs(dispatchSettings)).toISOString();
   const { data: locs } = await db.from("driver_locations").select(
     "user_id, lat, lng, updated_at, body_type_slug",
   ).gte(
@@ -212,12 +232,18 @@ async function runMatchingWave(
     : "";
   let allowedBodySlugs = new Set<string>();
   let tiersCount = 0;
-  if (serviceSlug) {
+  if (serviceSlug && dispatchSettings.body_type_filtering_enabled) {
     try {
       const { db: adminDb, tables } = await getRidesAdminDb();
       const tiers = await loadServiceBodyTypeTiers(adminDb, tables, serviceSlug);
       tiersCount = tiers.length;
-      allowedBodySlugs = allowedBodySlugsForWave(tiers, wave);
+      if (tiersCount > 0) {
+        allowedBodySlugs = allowedBodySlugsForWave(
+          tiers,
+          wave,
+          dispatchSettings.body_type_tier_mode,
+        );
+      }
     } catch {
       allowedBodySlugs = new Set();
     }
@@ -238,7 +264,12 @@ async function runMatchingWave(
     if (excluded.has(uid)) continue;
     const bodySlug = (row as { body_type_slug?: string | null }).body_type_slug ?? null;
     if (tiersCount > 0) {
-      if (!bodySlug || !allowedBodySlugs.has(bodySlug)) {
+      if (!bodySlug) {
+        if (dispatchSettings.require_body_type_for_offers) {
+          filteredOutBodyType++;
+          continue;
+        }
+      } else if (!allowedBodySlugs.has(bodySlug)) {
         filteredOutBodyType++;
         continue;
       }
@@ -275,7 +306,7 @@ async function runMatchingWave(
 
   const rotate = wave % Math.max(rankedCandidates.length, 1);
   const rotated = [...rankedCandidates.slice(rotate), ...rankedCandidates.slice(0, rotate)];
-  const picked = rotated.slice(0, MAX_OFFERS_PER_WAVE);
+  const picked = rotated.slice(0, dispatchSettings.max_offers_per_wave);
 
   const expiresAt = new Date(Date.now() + timeoutSec * 1000).toISOString();
 
@@ -355,11 +386,21 @@ app.post("/v1/quote", async (c) => {
   const vehicleType = typeof body.vehicle_option === "string" ? body.vehicle_option : "uberx";
   const db = svc();
 
+  let dispatchSettings = DEFAULT_DISPATCH_SETTINGS;
   let allowedBodyTypeSlugs: Set<string> | undefined;
   try {
     const { db: adminDb, tables } = await getRidesAdminDb();
-    const tiers = await loadServiceBodyTypeTiers(adminDb, tables, vehicleType);
-    if (tiers.length) allowedBodyTypeSlugs = allowedBodySlugsForWave(tiers, 1);
+    dispatchSettings = await loadDispatchSettings(adminDb, tables);
+    if (dispatchSettings.body_type_filtering_enabled) {
+      const tiers = await loadServiceBodyTypeTiers(adminDb, tables, vehicleType);
+      if (tiers.length) {
+        allowedBodyTypeSlugs = allowedBodySlugsForWave(
+          tiers,
+          1,
+          dispatchSettings.body_type_tier_mode,
+        );
+      }
+    }
   } catch {
     allowedBodyTypeSlugs = undefined;
   }
@@ -372,6 +413,7 @@ app.post("/v1/quote", async (c) => {
     vehicleType,
     readSurge: readSurgeMultiplier,
     allowedBodyTypeSlugs,
+    dispatchSettings,
   });
 
   await audit(null, auth.user.id, "fare_quoted", {
@@ -480,6 +522,14 @@ app.post("/v1/requests", async (c) => {
 
   await bumpSurgeDemand(cellKey, 1);
 
+  let bookDispatchSettings = DEFAULT_DISPATCH_SETTINGS;
+  try {
+    const { db: adminDb, tables } = await getRidesAdminDb();
+    bookDispatchSettings = await loadDispatchSettings(adminDb, tables);
+  } catch {
+    /* use defaults */
+  }
+
   const insertRow = {
     rider_user_id: auth.user.id,
     status: "matching" as RideStatus,
@@ -499,7 +549,9 @@ app.post("/v1/requests", async (c) => {
     quote_token_hash: quoteTokenHash(quote_token),
     fare_breakdown: locked.fare_breakdown ?? null,
     idempotency_key,
-    driver_offer_timeout_seconds: Number(body.driver_offer_timeout_seconds ?? 15),
+    driver_offer_timeout_seconds: Number(
+      body.driver_offer_timeout_seconds ?? bookDispatchSettings.default_driver_offer_timeout_seconds,
+    ),
     matching_wave: 0,
   };
 

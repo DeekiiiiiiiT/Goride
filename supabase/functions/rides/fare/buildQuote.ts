@@ -3,6 +3,7 @@ import { computeFareMinor, type FareBreakdown } from "./compute.ts";
 import { loadFareRules, resolvePickupLocation } from "./rules.ts";
 import { getRouteEstimate, type RouteEstimate } from "./routing.ts";
 import { mintQuoteToken } from "./quoteToken.ts";
+import type { DispatchSettings } from "./dispatchSettings.ts";
 import { resolvePickupEta, type PickupEtaSource } from "./pickupEta.ts";
 
 export interface BuiltFareQuote {
@@ -40,6 +41,7 @@ export async function buildFareQuote(
     vehicleType: string;
     readSurge: (cellKey: string) => Promise<number>;
     allowedBodyTypeSlugs?: Set<string>;
+    dispatchSettings?: DispatchSettings;
   },
 ): Promise<BuiltFareQuote> {
   const vehicleType = params.vehicleType || "uberx";
@@ -80,6 +82,7 @@ export async function buildFareQuote(
 
   const pickupEta = await resolvePickupEta(db, params.pickupLat, params.pickupLng, {
     allowedBodyTypeSlugs: params.allowedBodyTypeSlugs,
+    dispatchSettings: params.dispatchSettings,
   });
   const etaPickupSeconds = pickupEta.pickupSeconds ?? 0;
   const etaArrivalAt = pickupEta.driversAvailable && pickupEta.pickupSeconds != null
