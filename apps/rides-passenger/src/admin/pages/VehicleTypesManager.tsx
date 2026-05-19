@@ -196,6 +196,7 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
   const [form, setForm] = useState(() => emptyForm(kind));
   const [saving, setSaving] = useState(false);
   const [commandoBodyTypes, setCommandoBodyTypes] = useState<string[]>([]);
+  const [commandoSeatsByBody, setCommandoSeatsByBody] = useState<Record<string, number>>({});
   const [commandoLoading, setCommandoLoading] = useState(false);
   const [selectedCommandoBody, setSelectedCommandoBody] = useState('');
   const [serviceBodyLabels, setServiceBodyLabels] = useState<Record<string, string[]>>({});
@@ -217,7 +218,15 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
     setCommandoLoading(true);
     void listCommandoBodyTypes(session.access_token)
       .then((res) => {
-        if (!cancelled) setCommandoBodyTypes(res.body_types);
+        if (cancelled) return;
+        setCommandoBodyTypes(res.body_types);
+        const seatsMap: Record<string, number> = {};
+        for (const f of res.facets ?? []) {
+          if (f.seating_capacity != null && f.seating_capacity > 0) {
+            seatsMap[f.body_type] = f.seating_capacity;
+          }
+        }
+        setCommandoSeatsByBody(seatsMap);
       })
       .catch((e: unknown) => {
         if (!cancelled) {
@@ -274,10 +283,12 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
   const pickCommandoBodyType = (bodyType: string) => {
     setSelectedCommandoBody(bodyType);
     const slug = normalizeTransportSolutionSlug(bodyType);
+    const seatsFromCatalog = commandoSeatsByBody[bodyType];
     setForm((f) => ({
       ...f,
       slug,
       label: bodyType,
+      seats: seatsFromCatalog ?? f.seats ?? 4,
     }));
   };
 
@@ -486,7 +497,7 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
                       </select>
                     )}
                     <p className="mt-1 text-xs text-slate-500">
-                      Options come from Commando (roamdominion.co) motor vehicle catalog body types.
+                      Body type and seating capacity come from the Commando motor vehicle catalog.
                       Already-added types are hidden.
                     </p>
                     {form.slug ? (
@@ -545,7 +556,12 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
                 </>
               )}
               <label className="block">
-                <span className="text-sm text-slate-300">Seats</span>
+                <span className="text-sm text-slate-300">
+                  Seating capacity
+                  {form.solution_kind === 'vehicle' && selectedCommandoBody ? (
+                    <span className="text-slate-500 font-normal"> (from Commando)</span>
+                  ) : null}
+                </span>
                 <input
                   type="number"
                   min={0}
@@ -556,6 +572,13 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
                     setForm((f) => ({ ...f, seats: parseInt(e.target.value, 10) || 0 }))
                   }
                 />
+                {form.solution_kind === 'vehicle' && selectedCommandoBody ? (
+                  <p className="mt-1 text-xs text-slate-500">
+                    {commandoSeatsByBody[selectedCommandoBody] != null
+                      ? `Catalog max for ${selectedCommandoBody}: ${commandoSeatsByBody[selectedCommandoBody]} passengers. You can override.`
+                      : 'No seating data in catalog for this body type — enter a value.'}
+                  </p>
+                ) : null}
               </label>
               {form.solution_kind === 'service' && (
                 <>

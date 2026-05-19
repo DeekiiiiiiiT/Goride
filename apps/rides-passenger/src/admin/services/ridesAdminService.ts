@@ -111,6 +111,13 @@ async function parseError(res: Response): Promise<string> {
     if (body.error === 'invalid_slug') {
       return 'Invalid ID: use lowercase letters, numbers, hyphens, or underscores, starting with a letter (e.g. roam-standard).';
     }
+    if (
+      typeof body.message === 'string' &&
+      body.message.includes('commando_body_type') &&
+      body.message.includes('schema cache')
+    ) {
+      return 'Database is missing commando_body_type on rides vehicle types. Run migration 20260521110000_ensure_commando_body_type_column.sql (or 20260520100000_rides_body_type_dispatch.sql), then reload the API schema cache in Supabase.';
+    }
     if (body.error === 'slug_required') {
       return 'ID is required.';
     }
@@ -121,8 +128,14 @@ async function parseError(res: Response): Promise<string> {
   }
 }
 
+export type CommandoBodyTypeFacet = {
+  body_type: string;
+  seating_capacity: number | null;
+};
+
 export type CommandoBodyTypesResponse = {
   body_types: string[];
+  facets: CommandoBodyTypeFacet[];
   source: 'catalog' | 'fallback';
   catalog_count?: number;
   catalog_warning?: string;

@@ -2,7 +2,12 @@
 
 ## Database
 
-Apply migration `supabase/migrations/20260520100000_rides_body_type_dispatch.sql` (SQL Editor or `supabase db push`).
+Apply migrations (SQL Editor or `supabase db push`):
+
+- `20260520100000_rides_body_type_dispatch.sql` (body types, service links, `commando_body_type`)
+- `20260521110000_ensure_commando_body_type_column.sql` if you see a schema-cache error on save
+
+Then in Supabase → **Project Settings → API**, use **Reload schema** if PostgREST still cannot see `commando_body_type`.
 
 ## Deploy
 
