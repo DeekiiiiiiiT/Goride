@@ -23,18 +23,22 @@ export async function resolvePickupEta(
   db: SupabaseClient,
   pickupLat: number,
   pickupLng: number,
+  opts?: { allowedBodyTypeSlugs?: Set<string> },
 ): Promise<ResolvedPickupEta> {
   const freshSince = new Date(Date.now() - DRIVER_LOCATION_MAX_AGE_MS).toISOString();
   const { data: locs } = await db
     .from("driver_locations")
-    .select("user_id, lat, lng, updated_at")
+    .select("user_id, lat, lng, updated_at, body_type_slug")
     .gte("updated_at", freshSince)
     .eq("available_for_rides", true);
 
   type DriverRow = { user_id: string; lat: number; lng: number; haversineKm: number };
   const nearby: DriverRow[] = [];
 
+  const allowed = opts?.allowedBodyTypeSlugs;
   for (const row of locs ?? []) {
+    const bodySlug = (row as { body_type_slug?: string | null }).body_type_slug ?? null;
+    if (allowed && allowed.size > 0 && (!bodySlug || !allowed.has(bodySlug))) continue;
     const lat = Number(row.lat);
     const lng = Number(row.lng);
     const km = haversineKm(pickupLat, pickupLng, lat, lng);

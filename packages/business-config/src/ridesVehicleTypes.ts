@@ -89,8 +89,9 @@ export function vehicleTypeDescription(slug: string): string | undefined {
   return RIDES_VEHICLE_TYPES.find((v) => v.slug === n)?.description;
 }
 
-/** Capacity line for vehicle picker cards (e.g. "4 seats" or "Variable"). */
+/** Capacity line for vehicle picker cards (e.g. "up to 4 passengers" or "Variable"). */
 export function vehicleCapacityDisplay(vehicle: RidesVehicleType): string {
   if (vehicle.capacityLabel) return vehicle.capacityLabel;
-  return `${vehicle.seats} seats`;
+  if (vehicle.seats <= 0) return 'Variable';
+  return vehicle.seats === 1 ? 'up to 1 passenger' : `up to ${vehicle.seats} passengers`;
 }

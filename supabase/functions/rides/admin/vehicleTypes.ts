@@ -1,17 +1,22 @@
 /**
- * Admin CRUD for rides.vehicle_types
+ * Admin CRUD for rides.vehicle_types (body types + services).
  */
 import type { Context, Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { requireProductAdmin } from "../../_shared/productAdmin.ts";
 import type { RidesAdminTables } from "../../_shared/ridesAdminDb.ts";
+import {
+  slugFromCommandoBodyType,
+  normalizeTransportSolutionSlug,
+  TRANSPORT_SOLUTION_SLUG_RE,
+} from "../../_shared/transportSlug.ts";
 import { registerCommandoBodyTypeRoutes } from "./commandoBodyTypes.ts";
+import { registerServiceBodyTypeRoutes } from "./serviceBodyTypes.ts";
 import {
   invalidateVehicleTypesCache,
   type VehicleTypeDto,
   type VehicleTypeRow,
 } from "../fare/vehicleTypesDb.ts";
-
-const SLUG_RE = /^[a-z][a-z0-9_-]{0,30}$/;
+import { invalidateServiceMatchingCache } from "../fare/serviceMatching.ts";
 
 function inferSolutionKind(slug: string, kind?: string | null): "vehicle" | "service" {
   if (kind === "service" || kind === "vehicle") return kind;
@@ -29,29 +34,74 @@ function dto(row: VehicleTypeRow): VehicleTypeDto {
     sort_order: row.sort_order ?? 0,
     is_active: row.is_active !== false,
     solution_kind: inferSolutionKind(row.slug, row.solution_kind),
+    commando_body_type: row.commando_body_type ?? null,
   };
 }
 
-function parseBody(body: Record<string, unknown>, forCreate: boolean) {
-  const errors: string[] = [];
-  let slug = typeof body.slug === "string"
-    ? body.slug.trim().toLowerCase().replace(/\s+/g, "-")
-    : "";
-  if (forCreate) {
-    if (!slug) errors.push("slug_required");
-    else if (!SLUG_RE.test(slug)) errors.push("invalid_slug");
-  }
-
-  const label = typeof body.label === "string" ? body.label.trim() : "";
-  if (!label) errors.push("label_required");
-
-  const description = typeof body.description === "string" ? body.description.trim() : "";
+function parseSeats(body: Record<string, unknown>, defaultSeats: number): number | { error: string } {
   const seats = typeof body.seats === "number"
     ? Math.round(body.seats)
     : typeof body.seats === "string"
     ? parseInt(body.seats, 10)
-    : 4;
-  if (!Number.isFinite(seats) || seats < 0 || seats > 99) errors.push("invalid_seats");
+    : defaultSeats;
+  if (!Number.isFinite(seats) || seats < 0 || seats > 99) return { error: "invalid_seats" };
+  return seats;
+}
+
+function parseBodyTypeCreate(body: Record<string, unknown>) {
+  const commando = typeof body.commando_body_type === "string"
+    ? body.commando_body_type.trim()
+    : typeof body.label === "string"
+    ? body.label.trim()
+    : "";
+  if (!commando) return { error: "commando_body_type_required" } as const;
+
+  let slug = typeof body.slug === "string"
+    ? normalizeTransportSolutionSlug(body.slug)
+    : slugFromCommandoBodyType(commando);
+  if (!slug) return { error: "invalid_slug" } as const;
+  if (!TRANSPORT_SOLUTION_SLUG_RE.test(slug)) return { error: "invalid_slug" } as const;
+
+  const seats = parseSeats(body, 4);
+  if (typeof seats === "object") return seats;
+
+  const sort_order = typeof body.sort_order === "number"
+    ? Math.round(body.sort_order)
+    : typeof body.sort_order === "string"
+    ? parseInt(body.sort_order, 10)
+    : 0;
+
+  return {
+    slug,
+    patch: {
+      slug,
+      label: commando,
+      commando_body_type: commando,
+      description: "",
+      seats,
+      capacity_label: null,
+      tagline: null,
+      solution_kind: "vehicle" as const,
+      sort_order: Number.isFinite(sort_order) ? sort_order : 0,
+      is_active: body.is_active !== false,
+      updated_at: new Date().toISOString(),
+    },
+  } as const;
+}
+
+function parseServiceCreate(body: Record<string, unknown>) {
+  let slug = typeof body.slug === "string"
+    ? normalizeTransportSolutionSlug(body.slug)
+    : "";
+  if (!slug) return { error: "slug_required" } as const;
+  if (!TRANSPORT_SOLUTION_SLUG_RE.test(slug)) return { error: "invalid_slug" } as const;
+
+  const label = typeof body.label === "string" ? body.label.trim() : "";
+  if (!label) return { error: "label_required" } as const;
+
+  const description = typeof body.description === "string" ? body.description.trim() : "";
+  const seats = parseSeats(body, 4);
+  if (typeof seats === "object") return seats;
 
   const capacity_label = typeof body.capacity_label === "string"
     ? (body.capacity_label.trim() || null)
@@ -71,33 +121,72 @@ function parseBody(body: Record<string, unknown>, forCreate: boolean) {
     ? parseInt(body.sort_order, 10)
     : 0;
 
-  const is_active = body.is_active !== false;
-
-  let solution_kind: "vehicle" | "service" = "vehicle";
-  if (body.solution_kind === "service" || body.solution_kind === "vehicle") {
-    solution_kind = body.solution_kind;
-  } else if (typeof body.solution_kind === "string") {
-    const k = body.solution_kind.trim().toLowerCase();
-    if (k === "service" || k === "vehicle") solution_kind = k;
-    else errors.push("invalid_solution_kind");
-  }
-
-  if (errors.length) return { error: errors[0] } as const;
-
   return {
     slug,
     patch: {
       label,
+      commando_body_type: null,
       description,
       seats,
-      solution_kind,
+      solution_kind: "service" as const,
       ...(capacity_label !== undefined ? { capacity_label } : {}),
       ...(tagline !== undefined ? { tagline } : {}),
       sort_order: Number.isFinite(sort_order) ? sort_order : 0,
-      is_active,
+      is_active: body.is_active !== false,
       updated_at: new Date().toISOString(),
     },
   } as const;
+}
+
+function parseCreate(body: Record<string, unknown>) {
+  const kind = body.solution_kind === "service" ? "service" : "vehicle";
+  return kind === "service" ? parseServiceCreate(body) : parseBodyTypeCreate(body);
+}
+
+function parsePatch(body: Record<string, unknown>, existing: VehicleTypeRow) {
+  const isBody = inferSolutionKind(existing.slug, existing.solution_kind) === "vehicle";
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+
+  if (isBody) {
+    if (body.seats !== undefined) {
+      const seats = parseSeats(body, existing.seats ?? 4);
+      if (typeof seats === "object") return seats;
+      patch.seats = seats;
+    }
+    if (body.sort_order !== undefined) {
+      const sort_order = typeof body.sort_order === "number"
+        ? Math.round(body.sort_order)
+        : parseInt(String(body.sort_order), 10);
+      if (Number.isFinite(sort_order)) patch.sort_order = sort_order;
+    }
+    if (body.is_active !== undefined) patch.is_active = Boolean(body.is_active);
+    return { patch } as const;
+  }
+
+  if (typeof body.label === "string" && body.label.trim()) patch.label = body.label.trim();
+  if (typeof body.description === "string") patch.description = body.description.trim();
+  if (body.seats !== undefined) {
+    const seats = parseSeats(body, existing.seats ?? 4);
+    if (typeof seats === "object") return seats;
+    patch.seats = seats;
+  }
+  if (body.capacity_label !== undefined) {
+    patch.capacity_label = typeof body.capacity_label === "string"
+      ? (body.capacity_label.trim() || null)
+      : null;
+  }
+  if (body.tagline !== undefined) {
+    patch.tagline = typeof body.tagline === "string" ? (body.tagline.trim() || null) : null;
+  }
+  if (body.sort_order !== undefined) {
+    const sort_order = typeof body.sort_order === "number"
+      ? Math.round(body.sort_order)
+      : parseInt(String(body.sort_order), 10);
+    if (Number.isFinite(sort_order)) patch.sort_order = sort_order;
+  }
+  if (body.is_active !== undefined) patch.is_active = Boolean(body.is_active);
+
+  return { patch } as const;
 }
 
 type DbBundle = {
@@ -133,7 +222,7 @@ export function registerVehicleTypeAdminRoutes(
     const adminUser = await requireProductAdmin(c, "rides");
     if (adminUser instanceof Response) return adminUser;
     const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-    const parsed = parseBody(body, true);
+    const parsed = parseCreate(body);
     if ("error" in parsed) return c.json({ error: parsed.error }, 400);
 
     const resolved = await ridesDbOrResponse(c);
@@ -151,6 +240,7 @@ export function registerVehicleTypeAdminRoutes(
     }
 
     invalidateVehicleTypesCache();
+    invalidateServiceMatchingCache();
     await adminAudit(db, tables, adminUser.id, "admin_vehicle_type_created", { slug: parsed.slug });
     return c.json({ vehicle_type: dto(data as VehicleTypeRow) }, 201);
   });
@@ -160,19 +250,23 @@ export function registerVehicleTypeAdminRoutes(
     if (adminUser instanceof Response) return adminUser;
     const slug = decodeURIComponent(c.req.param("slug")).trim().toLowerCase();
     const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-    const parsed = parseBody(body, false);
-    if ("error" in parsed) return c.json({ error: parsed.error }, 400);
 
     const resolved = await ridesDbOrResponse(c);
     if (resolved instanceof Response) return resolved;
     const { db, tables } = resolved;
 
+    const { data: existing } = await db.from(tables.vehicle_types).select("*").eq("slug", slug).maybeSingle();
+    if (!existing) return c.json({ error: "not_found" }, 404);
+
+    const parsed = parsePatch(body, existing as VehicleTypeRow);
+    if ("error" in parsed) return c.json({ error: parsed.error }, 400);
+
     const { data, error } = await db.from(tables.vehicle_types).update(parsed.patch).eq("slug", slug).select("*")
       .maybeSingle();
     if (error) return c.json({ error: "update_failed", message: error.message }, 500);
-    if (!data) return c.json({ error: "not_found" }, 404);
 
     invalidateVehicleTypesCache();
+    invalidateServiceMatchingCache();
     await adminAudit(db, tables, adminUser.id, "admin_vehicle_type_updated", { slug });
     return c.json({ vehicle_type: dto(data as VehicleTypeRow) });
   });
@@ -181,6 +275,7 @@ export function registerVehicleTypeAdminRoutes(
   admin.post("/vehicle-types/:slug/delete", (c) => handleDelete(c, ridesDbOrResponse, adminAudit));
 
   registerCommandoBodyTypeRoutes(admin);
+  registerServiceBodyTypeRoutes(admin, ridesDbOrResponse);
 }
 
 async function handleDelete(
@@ -215,6 +310,7 @@ async function handleDelete(
   if (error) return c.json({ error: "delete_failed", message: error.message }, 500);
 
   invalidateVehicleTypesCache();
+  invalidateServiceMatchingCache();
   await adminAudit(db, tables, adminUser.id, "admin_vehicle_type_deleted", { slug });
   return c.json({ ok: true });
 }

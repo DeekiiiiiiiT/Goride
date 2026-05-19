@@ -10,6 +10,7 @@ export type RidesAdminTables = {
   fare_rules: string;
   surge_cells: string;
   vehicle_types: string;
+  service_body_types: string;
   audit_events: string;
   rider_profiles: string;
   rider_admin_notes: string;
@@ -26,6 +27,7 @@ const RIDES_NATIVE: RidesAdminTables = {
   fare_rules: "fare_rules",
   surge_cells: "surge_cells",
   vehicle_types: "vehicle_types",
+  service_body_types: "service_body_types",
   audit_events: "audit_events",
   rider_profiles: "rider_profiles",
   rider_admin_notes: "rider_admin_notes",
@@ -37,6 +39,7 @@ const PUBLIC_VIEWS: RidesAdminTables = {
   fare_rules: "rides_fare_rules",
   surge_cells: "rides_surge_cells",
   vehicle_types: "rides_vehicle_types",
+  service_body_types: "rides_service_body_types",
   audit_events: "rides_audit_events",
   rider_profiles: "rides_rider_profiles",
   rider_admin_notes: "rides_rider_admin_notes",

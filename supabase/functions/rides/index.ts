@@ -18,6 +18,11 @@ import { registerAdminRoutes } from "./admin.ts";
 import { assertRiderCanBook } from "./fare/riderAccount.ts";
 import { getRidesAdminDb } from "../_shared/ridesAdminDb.ts";
 import { loadVehicleTypesFromDb } from "./fare/vehicleTypesDb.ts";
+import {
+  allowedBodySlugsForWave,
+  loadServiceBodyTypeTiers,
+} from "./fare/serviceMatching.ts";
+import { isActiveBodyTypeSlug, resolveDriverBodyTypeSlug } from "./fare/driverBodyType.ts";
 
 /** Match Supabase path prefix: .../functions/v1/rides/<route> → /rides/<route> */
 const app = new Hono().basePath("/rides");
@@ -195,10 +200,28 @@ async function runMatchingWave(
   const timeoutSec = Number(ride.driver_offer_timeout_seconds ?? 15);
 
   const freshSince = new Date(Date.now() - DRIVER_LOCATION_MAX_AGE_MS).toISOString();
-  const { data: locs } = await db.from("driver_locations").select("user_id, lat, lng, updated_at").gte(
+  const { data: locs } = await db.from("driver_locations").select(
+    "user_id, lat, lng, updated_at, body_type_slug",
+  ).gte(
     "updated_at",
     freshSince,
   ).eq("available_for_rides", true);
+
+  const serviceSlug = typeof ride.vehicle_option === "string"
+    ? ride.vehicle_option.trim().toLowerCase()
+    : "";
+  let allowedBodySlugs = new Set<string>();
+  let tiersCount = 0;
+  if (serviceSlug) {
+    try {
+      const { db: adminDb, tables } = await getRidesAdminDb();
+      const tiers = await loadServiceBodyTypeTiers(adminDb, tables, serviceSlug);
+      tiersCount = tiers.length;
+      allowedBodySlugs = allowedBodySlugsForWave(tiers, wave);
+    } catch {
+      allowedBodySlugs = new Set();
+    }
+  }
 
   const { data: declinedRows } = await db.from("driver_offers").select("driver_user_id, status").eq(
     "ride_request_id",
@@ -207,13 +230,29 @@ async function runMatchingWave(
 
   const excluded = new Set((declinedRows ?? []).map((r: { driver_user_id: string }) => r.driver_user_id));
 
-  type Cand = { user_id: string; lat: number; lng: number; d: number };
+  type Cand = { user_id: string; lat: number; lng: number; d: number; body_type_slug: string | null };
   const candidates: Cand[] = [];
+  let filteredOutBodyType = 0;
   for (const row of locs ?? []) {
     const uid = row.user_id as string;
     if (excluded.has(uid)) continue;
+    const bodySlug = (row as { body_type_slug?: string | null }).body_type_slug ?? null;
+    if (tiersCount > 0) {
+      if (!bodySlug || !allowedBodySlugs.has(bodySlug)) {
+        filteredOutBodyType++;
+        continue;
+      }
+    }
     const d = haversineKm(pickupLat, pickupLng, Number(row.lat), Number(row.lng));
-    if (d <= radiusKm) candidates.push({ user_id: uid, lat: Number(row.lat), lng: Number(row.lng), d });
+    if (d <= radiusKm) {
+      candidates.push({
+        user_id: uid,
+        lat: Number(row.lat),
+        lng: Number(row.lng),
+        d,
+        body_type_slug: bodySlug,
+      });
+    }
   }
   candidates.sort((a, b) => a.d - b.d || a.user_id.localeCompare(b.user_id));
 
@@ -263,6 +302,9 @@ async function runMatchingWave(
     radius_km: radiusKm,
     offers: picked.length,
     matching_route_source: matchingRouteSource,
+    service_slug: serviceSlug,
+    allowed_body_types: [...allowedBodySlugs],
+    filtered_out_body_type: filteredOutBodyType,
   });
   logLine({
     event: "matching_wave",
@@ -278,11 +320,13 @@ app.get("/health", (c) => c.json({ service: "rides", status: "ok" }));
 app.get("/v1/vehicle-types", async (c) => {
   try {
     const { db, tables } = await getRidesAdminDb();
-    const vehicle_types = await loadVehicleTypesFromDb(db, tables.vehicle_types, { activeOnly: true });
-    return c.json({ vehicle_types });
+    const all = await loadVehicleTypesFromDb(db, tables.vehicle_types, { activeOnly: true });
+    const services = all.filter((t) => t.solution_kind === "service");
+    return c.json({ services, vehicle_types: services });
   } catch {
-    const vehicle_types = await loadVehicleTypesFromDb(svc(), "vehicle_types", { activeOnly: true });
-    return c.json({ vehicle_types });
+    const all = await loadVehicleTypesFromDb(svc(), "vehicle_types", { activeOnly: true });
+    const services = all.filter((t) => t.solution_kind === "service");
+    return c.json({ services, vehicle_types: services });
   }
 });
 
@@ -311,6 +355,15 @@ app.post("/v1/quote", async (c) => {
   const vehicleType = typeof body.vehicle_option === "string" ? body.vehicle_option : "uberx";
   const db = svc();
 
+  let allowedBodyTypeSlugs: Set<string> | undefined;
+  try {
+    const { db: adminDb, tables } = await getRidesAdminDb();
+    const tiers = await loadServiceBodyTypeTiers(adminDb, tables, vehicleType);
+    if (tiers.length) allowedBodyTypeSlugs = allowedBodySlugsForWave(tiers, 1);
+  } catch {
+    allowedBodyTypeSlugs = undefined;
+  }
+
   const quote = await buildFareQuote(db, {
     pickupLat: pickup_lat,
     pickupLng: pickup_lng,
@@ -318,6 +371,7 @@ app.post("/v1/quote", async (c) => {
     dropoffLng: dropoff_lng,
     vehicleType,
     readSurge: readSurgeMultiplier,
+    allowedBodyTypeSlugs,
   });
 
   await audit(null, auth.user.id, "fare_quoted", {
@@ -539,12 +593,28 @@ app.post("/v1/drivers/presence", async (c) => {
   const lng = Number(body.lng);
   if (Number.isNaN(lat) || Number.isNaN(lng)) return c.json({ error: "invalid_coordinates" }, 400);
 
+  let bodyTypeSlug: string | null = null;
+  const explicit = typeof body.body_type_slug === "string" ? body.body_type_slug : null;
+  bodyTypeSlug = await resolveDriverBodyTypeSlug(auth.user.id, explicit);
+
+  if (bodyTypeSlug) {
+    try {
+      const { db: adminDb, tables } = await getRidesAdminDb();
+      const ok = await isActiveBodyTypeSlug(adminDb, tables.vehicle_types, bodyTypeSlug);
+      if (!ok) bodyTypeSlug = null;
+    } catch {
+      const ok = await isActiveBodyTypeSlug(svc(), "vehicle_types", bodyTypeSlug);
+      if (!ok) bodyTypeSlug = null;
+    }
+  }
+
   const upsert = {
     user_id: auth.user.id,
     lat,
     lng,
     heading_degrees: body.heading_degrees != null ? Number(body.heading_degrees) : null,
     available_for_rides: Boolean(body.available_for_rides ?? true),
+    body_type_slug: bodyTypeSlug,
     updated_at: new Date().toISOString(),
   };
 

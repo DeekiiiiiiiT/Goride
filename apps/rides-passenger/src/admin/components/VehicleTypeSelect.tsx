@@ -10,12 +10,12 @@ type Props = {
 };
 
 export function VehicleTypeSelect({ value, onChange }: Props) {
-  const { vehicles, services, loading, active } = useVehicleTypesContext();
+  const { services, loading, active } = useVehicleTypesContext();
   const selected = value || DEFAULT_VEHICLE_OPTION;
 
   return (
     <div className="space-y-2">
-      <label className="block text-sm font-medium text-slate-300">Transport option</label>
+      <label className="block text-sm font-medium text-slate-300">Service</label>
       {loading && active.length === 0 ? (
         <p className="text-sm text-slate-500 flex items-center gap-2">
           <Loader2 className="w-4 h-4 animate-spin" />
@@ -23,7 +23,7 @@ export function VehicleTypeSelect({ value, onChange }: Props) {
         </p>
       ) : (
         <TransportOptionPicker
-          vehicles={vehicles}
+          vehicles={[]}
           services={services}
           selected={selected}
           onSelect={onChange}

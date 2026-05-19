@@ -20,7 +20,7 @@ export function TripCalculator() {
   const [dropoffAddress, setDropoffAddress] = useState('');
   const [pickup, setPickup] = useState<{ lat: number; lng: number } | null>(null);
   const [dropoff, setDropoff] = useState<{ lat: number; lng: number } | null>(null);
-  const { vehicles, services } = useVehicleTypesContext();
+  const { services } = useVehicleTypesContext();
   const [vehicleOption, setVehicleOption] = useState<string>(DEFAULT_VEHICLE_OPTION);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quote, setQuote] = useState<FareQuoteResponse | null>(null);
@@ -85,7 +85,7 @@ export function TripCalculator() {
       <div className="max-w-lg">
         <div className="rounded-3xl bg-white p-5 sm:p-6 shadow-xl shadow-black/20 ring-1 ring-zinc-200/90 space-y-5 text-zinc-900">
           <TransportOptionPicker
-            vehicles={vehicles}
+            vehicles={[]}
             services={services}
             selected={vehicleOption}
             onSelect={(slug) => {

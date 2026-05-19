@@ -39,6 +39,7 @@ export async function buildFareQuote(
     dropoffLng: number;
     vehicleType: string;
     readSurge: (cellKey: string) => Promise<number>;
+    allowedBodyTypeSlugs?: Set<string>;
   },
 ): Promise<BuiltFareQuote> {
   const vehicleType = params.vehicleType || "uberx";
@@ -77,7 +78,9 @@ export async function buildFareQuote(
     fare_breakdown: breakdown,
   });
 
-  const pickupEta = await resolvePickupEta(db, params.pickupLat, params.pickupLng);
+  const pickupEta = await resolvePickupEta(db, params.pickupLat, params.pickupLng, {
+    allowedBodyTypeSlugs: params.allowedBodyTypeSlugs,
+  });
   const etaPickupSeconds = pickupEta.pickupSeconds ?? 0;
   const etaArrivalAt = pickupEta.driversAvailable && pickupEta.pickupSeconds != null
     ? new Date(

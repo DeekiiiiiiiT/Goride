@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { supabase } from '../../utils/supabase/client';
 import type { DriverOfferWithRide, RideRequestRow } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
 import {
@@ -33,11 +34,46 @@ function statusTitle(r: RideRequestRow | null): string {
   }
 }
 
+function slugFromBodyLabel(label: string): string {
+  return label
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9_-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-+/, '')
+    .slice(0, 31);
+}
+
 export function RideDispatchPage() {
   const [online, setOnline] = useState(false);
   const [offers, setOffers] = useState<DriverOfferWithRide[]>([]);
   const [activeRide, setActiveRide] = useState<RideRequestRow | null>(null);
+  const [bodyTypeSlug, setBodyTypeSlug] = useState<string | null>(null);
   const watchId = useRef<number | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: profile } = await supabase
+        .from('driver_profiles')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (!profile?.id) return;
+      const { data: vehicle } = await supabase
+        .from('driver_vehicles')
+        .select('body_type')
+        .eq('driver_profile_id', profile.id)
+        .eq('status', 'active')
+        .order('is_primary', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const label = (vehicle as { body_type?: string | null } | null)?.body_type?.trim();
+      if (label) setBodyTypeSlug(slugFromBodyLabel(label) || null);
+    })();
+  }, []);
 
   const refreshOffers = useCallback(async () => {
     try {
@@ -68,6 +104,11 @@ export function RideDispatchPage() {
 
   useEffect(() => {
     if (!online || !navigator.geolocation) return;
+    if (!bodyTypeSlug) {
+      toast.error('Set body type on your primary vehicle before going online.');
+      setOnline(false);
+      return;
+    }
     watchId.current = navigator.geolocation.watchPosition(
       async (pos) => {
         try {
@@ -76,6 +117,7 @@ export function RideDispatchPage() {
             lng: pos.coords.longitude,
             heading_degrees: pos.coords.heading ?? undefined,
             available_for_rides: true,
+            body_type_slug: bodyTypeSlug,
           });
         } catch (e: unknown) {
           console.warn('presence failed', e);
@@ -87,7 +129,7 @@ export function RideDispatchPage() {
     return () => {
       if (watchId.current != null) navigator.geolocation.clearWatch(watchId.current);
     };
-  }, [online]);
+  }, [online, bodyTypeSlug]);
 
   useEffect(() => {
     if (!activeRide?.id) return;

@@ -35,18 +35,26 @@ export type RidesVehicleTypeDto = {
   sort_order: number;
   is_active: boolean;
   solution_kind: TransportSolutionKind;
+  commando_body_type?: string | null;
 };
 
 export type RidesVehicleTypeInput = {
   slug?: string;
-  label: string;
-  description: string;
+  label?: string;
+  commando_body_type?: string;
+  description?: string;
   seats: number;
   capacity_label?: string | null;
   tagline?: string | null;
   sort_order?: number;
   is_active?: boolean;
   solution_kind: TransportSolutionKind;
+};
+
+export type ServiceBodyTypeLink = {
+  body_type_slug: string;
+  priority: number;
+  label?: string;
 };
 
 export function inferSolutionKind(
@@ -75,7 +83,8 @@ export function vehicleCapacityDisplay(
   v: Pick<RidesVehicleTypeDto, 'capacity_label' | 'seats'>,
 ): string {
   if (v.capacity_label?.trim()) return v.capacity_label.trim();
-  return `${v.seats} seats`;
+  if (v.seats <= 0) return 'Variable';
+  return v.seats === 1 ? 'up to 1 passenger' : `up to ${v.seats} passengers`;
 }
 
 export function vehicleTypeLabelFromList(slug: string, types: RidesVehicleTypeDto[]): string {

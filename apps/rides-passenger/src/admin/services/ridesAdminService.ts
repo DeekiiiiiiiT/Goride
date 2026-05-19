@@ -10,7 +10,11 @@ import type {
   RiderAdminPermissions,
 } from '@roam/types/rides';
 import type { RideRequestRow } from '@roam/types/rides';
-import type { RidesVehicleTypeDto, RidesVehicleTypeInput } from '@/types/vehicleTypes';
+import type {
+  RidesVehicleTypeDto,
+  RidesVehicleTypeInput,
+  ServiceBodyTypeLink,
+} from '@/types/vehicleTypes';
 
 const RIDES_BASE = API_ENDPOINTS.rides;
 
@@ -167,6 +171,35 @@ export async function updateVehicleType(
     headers: headers(accessToken, 'application/json'),
     body: JSON.stringify(input),
   });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function getServiceBodyTypes(
+  accessToken: string,
+  serviceSlug: string,
+): Promise<{ service_slug: string; body_types: ServiceBodyTypeLink[] }> {
+  const res = await fetch(
+    `${RIDES_BASE}/admin/services/${encodeURIComponent(serviceSlug)}/body-types`,
+    { headers: headers(accessToken) },
+  );
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function setServiceBodyTypes(
+  accessToken: string,
+  serviceSlug: string,
+  bodyTypes: ServiceBodyTypeLink[],
+): Promise<{ service_slug: string; body_types: ServiceBodyTypeLink[] }> {
+  const res = await fetch(
+    `${RIDES_BASE}/admin/services/${encodeURIComponent(serviceSlug)}/body-types`,
+    {
+      method: 'PUT',
+      headers: headers(accessToken, 'application/json'),
+      body: JSON.stringify({ body_types: bodyTypes }),
+    },
+  );
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
 }

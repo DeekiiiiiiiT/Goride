@@ -20,7 +20,10 @@ async function ridesHeaders(): Promise<HeadersInit> {
 
 const base = API_ENDPOINTS.rides;
 
-export async function ridesListVehicleTypes(): Promise<{ vehicle_types: RidesVehicleTypeDto[] }> {
+export async function ridesListVehicleTypes(): Promise<{
+  services?: RidesVehicleTypeDto[];
+  vehicle_types: RidesVehicleTypeDto[];
+}> {
   const res = await fetch(`${base}/v1/vehicle-types`, { headers: await ridesHeaders() });
   if (!res.ok) throw new Error(await res.text());
   return res.json();

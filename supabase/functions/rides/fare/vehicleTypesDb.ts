@@ -20,6 +20,7 @@ export type VehicleTypeRow = {
   sort_order: number;
   is_active: boolean;
   solution_kind?: TransportSolutionKind | string | null;
+  commando_body_type?: string | null;
 };
 
 export type VehicleTypeDto = {
@@ -32,6 +33,7 @@ export type VehicleTypeDto = {
   sort_order: number;
   is_active: boolean;
   solution_kind: TransportSolutionKind;
+  commando_body_type: string | null;
 };
 
 function inferSolutionKind(slug: string, kind?: string | null): TransportSolutionKind {
@@ -53,6 +55,7 @@ function rowToDto(r: VehicleTypeRow): VehicleTypeDto {
     sort_order: r.sort_order ?? 0,
     is_active: r.is_active !== false,
     solution_kind: inferSolutionKind(r.slug, r.solution_kind),
+    commando_body_type: r.commando_body_type ?? null,
   };
 }
 
@@ -127,6 +130,19 @@ export async function isKnownVehicleSlug(
   return FALLBACK_TYPES.some((v) => v.slug === slug);
 }
 
+/** Fare rules and rider booking must reference an active service slug. */
+export async function isKnownServiceSlug(
+  db: SupabaseClient,
+  tableName: string,
+  raw: string,
+): Promise<boolean> {
+  const slug = raw.trim().toLowerCase();
+  const types = await loadVehicleTypesFromDb(db, tableName, { activeOnly: false });
+  const hit = types.find((t) => t.slug === slug);
+  if (hit) return hit.solution_kind === "service" && hit.is_active;
+  return false;
+}
+
 export function vehicleTypesForFareLookupFromList(
   vehicleType: string,
   knownSlugs: string[],
@@ -144,5 +160,6 @@ export function vehicleTypesForFareLookupFromList(
 
 export function capacityDisplay(v: VehicleTypeDto): string {
   if (v.capacity_label?.trim()) return v.capacity_label.trim();
-  return `${v.seats} seats`;
+  if (v.seats <= 0) return "Variable";
+  return v.seats === 1 ? "up to 1 passenger" : `up to ${v.seats} passengers`;
 }

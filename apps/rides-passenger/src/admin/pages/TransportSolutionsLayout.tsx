@@ -2,7 +2,7 @@ import React from 'react';
 import { NavLink, Outlet, useOutletContext } from 'react-router-dom';
 
 const SUB_TABS = [
-  { to: '/admin/fare-rules/transport-solutions/vehicles', label: 'Vehicle types', end: true },
+  { to: '/admin/fare-rules/transport-solutions/vehicles', label: 'Body types', end: true },
   { to: '/admin/fare-rules/transport-solutions/services', label: 'Services', end: true },
 ] as const;
 
@@ -14,8 +14,8 @@ export function TransportSolutionsLayout() {
       <div>
         <h2 className="text-xl font-semibold text-white">Transport Solutions</h2>
         <p className="text-sm text-slate-400 mt-1 max-w-2xl">
-          Vehicle types are chosen from body types in Commando (motor vehicle database). Services are
-          configured separately. Names appear in booking and fare rules; the ID is fixed after creation.
+          Body types define which Commando vehicle shapes can receive trip offers. Services are what
+          riders book; link each service to one or more body types in priority order for dispatch waves.
         </p>
       </div>
 

@@ -7,9 +7,13 @@ import type { Session } from '@supabase/supabase-js';
 import {
   createVehicleType,
   deleteVehicleType,
+  getServiceBodyTypes,
   listCommandoBodyTypes,
+  setServiceBodyTypes,
   updateVehicleType,
 } from '../services/ridesAdminService';
+import type { ServiceBodyTypeLink } from '@/types/vehicleTypes';
+import { ServiceBodyTypeLinker } from '../components/ServiceBodyTypeLinker';
 import { useVehicleTypesContext } from '../context/VehicleTypesContext';
 import {
   normalizeTransportSolutionSlug,
@@ -40,10 +44,12 @@ function TypeCard({
   row,
   onEdit,
   onDelete,
+  linkedBodyLabels,
 }: {
   row: RidesVehicleTypeDto;
   onEdit: (row: RidesVehicleTypeDto) => void;
   onDelete: (row: RidesVehicleTypeDto) => void;
+  linkedBodyLabels?: string[];
 }) {
   return (
     <div
@@ -62,8 +68,21 @@ function TypeCard({
             </span>
           </div>
           <p className="text-xs text-slate-500 font-mono mt-0.5">{row.slug}</p>
-          <p className="text-xs text-slate-400 mt-1">{row.description}</p>
-          {row.tagline && <p className="text-[11px] text-slate-500 mt-1">{row.tagline}</p>}
+          {row.solution_kind === 'vehicle' ? (
+            <p className="text-xs text-slate-400 mt-1">
+              Commando: {row.commando_body_type ?? row.label}
+            </p>
+          ) : (
+            <>
+              <p className="text-xs text-slate-400 mt-1">{row.description}</p>
+              {linkedBodyLabels && linkedBodyLabels.length > 0 && (
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Body types: {linkedBodyLabels.join(' → ')}
+                </p>
+              )}
+              {row.tagline && <p className="text-[11px] text-slate-500 mt-1">{row.tagline}</p>}
+            </>
+          )}
           {!row.is_active && (
             <span className="inline-block mt-2 text-[10px] uppercase tracking-wide text-amber-400/90">
               Inactive
@@ -101,6 +120,7 @@ function Section({
   onAdd,
   onEdit,
   onDelete,
+  serviceBodyLabels,
 }: {
   title: string;
   description: string;
@@ -109,6 +129,7 @@ function Section({
   onAdd: () => void;
   onEdit: (row: RidesVehicleTypeDto) => void;
   onDelete: (row: RidesVehicleTypeDto) => void;
+  serviceBodyLabels?: Record<string, string[]>;
 }) {
   return (
     <section className="space-y-3 max-w-xl">
@@ -131,7 +152,13 @@ function Section({
       ) : (
         <div className="space-y-2">
           {items.map((row) => (
-            <TypeCard key={row.slug} row={row} onEdit={onEdit} onDelete={onDelete} />
+            <TypeCard
+              key={row.slug}
+              row={row}
+              onEdit={onEdit}
+              onDelete={onDelete}
+              linkedBodyLabels={serviceBodyLabels?.[row.slug]}
+            />
           ))}
         </div>
       )}
@@ -144,14 +171,13 @@ const KIND_META: Record<
   { title: string; description: string; addLabel: string }
 > = {
   vehicle: {
-    title: 'Vehicle types',
-    description:
-      'Passenger ride tiers linked to body types in Commando (motor vehicle database).',
-    addLabel: 'Add vehicle type',
+    title: 'Body types',
+    description: 'Commando motor-vehicle shapes used to match drivers to trips.',
+    addLabel: 'Add body type',
   },
   service: {
     title: 'Services',
-    description: 'Non-passenger offerings such as package delivery.',
+    description: 'Rider-facing products. Link body types below to control dispatch priority.',
     addLabel: 'Add service',
   },
 };
@@ -172,6 +198,8 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
   const [commandoBodyTypes, setCommandoBodyTypes] = useState<string[]>([]);
   const [commandoLoading, setCommandoLoading] = useState(false);
   const [selectedCommandoBody, setSelectedCommandoBody] = useState('');
+  const [serviceBodyLabels, setServiceBodyLabels] = useState<Record<string, string[]>>({});
+  const [linkedBodyTypes, setLinkedBodyTypes] = useState<ServiceBodyTypeLink[]>([]);
 
   const usedVehicleSlugs = useMemo(() => new Set(items.map((row) => row.slug)), [items]);
 
@@ -210,9 +238,35 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
     };
   }, [dialogOpen, editing, kind, session.access_token]);
 
+  useEffect(() => {
+    if (kind !== 'service' || allServices.length === 0) {
+      setServiceBodyLabels({});
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const map: Record<string, string[]> = {};
+      await Promise.all(
+        allServices.map(async (svc) => {
+          try {
+            const res = await getServiceBodyTypes(session.access_token, svc.slug);
+            map[svc.slug] = res.body_types.map((b) => b.label ?? b.body_type_slug);
+          } catch {
+            map[svc.slug] = [];
+          }
+        }),
+      );
+      if (!cancelled) setServiceBodyLabels(map);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [kind, allServices, session.access_token]);
+
   const openCreate = () => {
     setEditing(null);
     setSelectedCommandoBody('');
+    setLinkedBodyTypes([]);
     setForm({ ...emptyForm(kind), sort_order: (items.length + 1) * 10 });
     setDialogOpen(true);
   };
@@ -229,6 +283,7 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
 
   const openEdit = (row: RidesVehicleTypeDto) => {
     setEditing(row);
+    setSelectedCommandoBody(row.commando_body_type ?? row.label);
     setForm({
       slug: row.slug,
       label: row.label,
@@ -240,6 +295,13 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
       is_active: row.is_active,
       solution_kind: row.solution_kind,
     });
+    if (row.solution_kind === 'service') {
+      void getServiceBodyTypes(session.access_token, row.slug)
+        .then((res) => setLinkedBodyTypes(res.body_types))
+        .catch(() => setLinkedBodyTypes([]));
+    } else {
+      setLinkedBodyTypes([]);
+    }
     setDialogOpen(true);
   };
 
@@ -257,35 +319,95 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
     }
   };
 
+  const toggleLinkedBody = (bodySlug: string, label: string) => {
+    setLinkedBodyTypes((prev) => {
+      const hit = prev.find((b) => b.body_type_slug === bodySlug);
+      if (hit) return prev.filter((b) => b.body_type_slug !== bodySlug);
+      return [...prev, { body_type_slug: bodySlug, priority: (prev.length + 1) * 10, label }];
+    });
+  };
+
+  const moveLinkedBody = (index: number, dir: -1 | 1) => {
+    setLinkedBodyTypes((prev) => {
+      const next = [...prev];
+      const j = index + dir;
+      if (j < 0 || j >= next.length) return prev;
+      const tmp = next[index];
+      next[index] = next[j];
+      next[j] = tmp;
+      return next.map((b, i) => ({ ...b, priority: (i + 1) * 10 }));
+    });
+  };
+
   const save = async () => {
     setSaving(true);
-    const payload: RidesVehicleTypeInput = {
-      label: form.label.trim(),
-      description: form.description.trim(),
-      seats: form.seats,
-      capacity_label: form.capacity_label?.trim() || null,
-      tagline: form.tagline?.trim() || null,
-      sort_order: form.sort_order ?? 0,
-      is_active: form.is_active !== false,
-      solution_kind: form.solution_kind,
-    };
     try {
-      if (editing) {
-        await updateVehicleType(session.access_token, editing.slug, payload);
-        toast.success('Updated');
+      if (kind === 'vehicle') {
+        const payload: RidesVehicleTypeInput = {
+          seats: form.seats,
+          sort_order: form.sort_order ?? 0,
+          is_active: form.is_active !== false,
+          solution_kind: 'vehicle',
+        };
+        if (editing) {
+          await updateVehicleType(session.access_token, editing.slug, payload);
+          toast.success('Updated');
+        } else {
+          if (!selectedCommandoBody) {
+            toast.error('Select a body type from Commando.');
+            return;
+          }
+          const slug = normalizeTransportSolutionSlug(selectedCommandoBody);
+          const slugError = validateTransportSolutionSlug(slug);
+          if (slugError) {
+            toast.error(slugError);
+            return;
+          }
+          await createVehicleType(session.access_token, {
+            ...payload,
+            slug,
+            commando_body_type: selectedCommandoBody,
+          });
+          toast.success('Created');
+        }
       } else {
-        if (kind === 'vehicle' && !selectedCommandoBody) {
-          toast.error('Select a body type from Commando.');
+        const label = form.label?.trim() ?? '';
+        if (!label) {
+          toast.error('Display name is required.');
           return;
         }
-        const slug = normalizeTransportSolutionSlug(form.slug);
-        const slugError = validateTransportSolutionSlug(slug);
-        if (slugError) {
-          toast.error(slugError);
-          return;
+        const payload: RidesVehicleTypeInput = {
+          label,
+          description: form.description?.trim() ?? '',
+          seats: form.seats,
+          capacity_label: form.capacity_label?.trim() || null,
+          tagline: form.tagline?.trim() || null,
+          sort_order: form.sort_order ?? 0,
+          is_active: form.is_active !== false,
+          solution_kind: 'service',
+        };
+        let serviceSlug = editing?.slug ?? '';
+        if (editing) {
+          await updateVehicleType(session.access_token, editing.slug, payload);
+        } else {
+          const slug = normalizeTransportSolutionSlug(form.slug);
+          const slugError = validateTransportSolutionSlug(slug);
+          if (slugError) {
+            toast.error(slugError);
+            return;
+          }
+          await createVehicleType(session.access_token, { ...payload, slug });
+          serviceSlug = slug;
         }
-        await createVehicleType(session.access_token, { ...payload, slug });
-        toast.success('Created');
+        await setServiceBodyTypes(
+          session.access_token,
+          serviceSlug,
+          linkedBodyTypes.map((b, i) => ({
+            body_type_slug: b.body_type_slug,
+            priority: b.priority ?? (i + 1) * 10,
+          })),
+        );
+        toast.success(editing ? 'Updated' : 'Created');
       }
       setDialogOpen(false);
       await reload();
@@ -296,7 +418,8 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
     }
   };
 
-  const kindLabel = form.solution_kind === 'service' ? 'service' : 'vehicle type';
+  const kindLabel =
+    form.solution_kind === 'service' ? 'service' : 'body type';
 
   return (
     <div className="space-y-4">
@@ -314,6 +437,7 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
           onAdd={openCreate}
           onEdit={openEdit}
           onDelete={(row) => void handleDelete(row)}
+          serviceBodyLabels={kind === 'service' ? serviceBodyLabels : undefined}
         />
       )}
 
@@ -400,55 +524,58 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
                   ID: <span className="font-mono text-slate-300">{editing.slug}</span>
                 </p>
               )}
+              {form.solution_kind === 'service' && (
+                <>
+                  <label className="block">
+                    <span className="text-sm text-slate-300">Display name</span>
+                    <input
+                      className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white"
+                      value={form.label}
+                      onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm text-slate-300">Description</span>
+                    <textarea
+                      className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white min-h-[72px]"
+                      value={form.description}
+                      onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                    />
+                  </label>
+                </>
+              )}
               <label className="block">
-                <span className="text-sm text-slate-300">Display name</span>
+                <span className="text-sm text-slate-300">Seats</span>
                 <input
+                  type="number"
+                  min={0}
+                  max={99}
                   className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white"
-                  value={form.label}
-                  onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
+                  value={form.seats}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, seats: parseInt(e.target.value, 10) || 0 }))
+                  }
                 />
               </label>
-              <label className="block">
-                <span className="text-sm text-slate-300">Description</span>
-                <textarea
-                  className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white min-h-[72px]"
-                  value={form.description}
-                  onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                />
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block">
-                  <span className="text-sm text-slate-300">Seats</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={99}
-                    className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white"
-                    value={form.seats}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, seats: parseInt(e.target.value, 10) || 0 }))
-                    }
+              {form.solution_kind === 'service' && (
+                <>
+                  <label className="block">
+                    <span className="text-sm text-slate-300">Tagline (optional)</span>
+                    <input
+                      className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white"
+                      value={form.tagline ?? ''}
+                      placeholder="e.g. Send a package"
+                      onChange={(e) => setForm((f) => ({ ...f, tagline: e.target.value }))}
+                    />
+                  </label>
+                  <ServiceBodyTypeLinker
+                    allBodyTypes={allVehicles}
+                    linked={linkedBodyTypes}
+                    onToggle={toggleLinkedBody}
+                    onMove={moveLinkedBody}
                   />
-                </label>
-                <label className="block">
-                  <span className="text-sm text-slate-300">Capacity label</span>
-                  <input
-                    className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white"
-                    value={form.capacity_label ?? ''}
-                    placeholder="e.g. Variable"
-                    onChange={(e) => setForm((f) => ({ ...f, capacity_label: e.target.value }))}
-                  />
-                </label>
-              </div>
-              <label className="block">
-                <span className="text-sm text-slate-300">Tagline (optional)</span>
-                <input
-                  className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white"
-                  value={form.tagline ?? ''}
-                  placeholder="e.g. Send a package"
-                  onChange={(e) => setForm((f) => ({ ...f, tagline: e.target.value }))}
-                />
-              </label>
+                </>
+              )}
               <label className="block">
                 <span className="text-sm text-slate-300">Sort order</span>
                 <input

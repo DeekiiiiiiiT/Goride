@@ -6,14 +6,15 @@ import {
   type RidesVehicleTypeDto,
 } from '@/types/vehicleTypes';
 
+import { listVehicleTypes } from '@/admin/services/ridesAdminService';
+import { ridesListVehicleTypes } from '@/services/ridesEdge';
+
 function normalizeList(rows: RidesVehicleTypeDto[]): RidesVehicleTypeDto[] {
   return rows.map((t) => ({
     ...t,
     solution_kind: inferSolutionKind(t.slug, t.solution_kind),
   }));
 }
-import { listVehicleTypes } from '@/admin/services/ridesAdminService';
-import { ridesListVehicleTypes } from '@/services/ridesEdge';
 
 type Options = {
   accessToken?: string;
@@ -34,8 +35,9 @@ export function useRidesVehicleTypes({ accessToken, admin = false }: Options = {
         const { vehicle_types } = await listVehicleTypes(accessToken);
         setTypes(normalizeList(vehicle_types));
       } else {
-        const { vehicle_types } = await ridesListVehicleTypes();
-        setTypes(normalizeList(vehicle_types));
+        const res = await ridesListVehicleTypes();
+        const rows = res.services ?? res.vehicle_types ?? [];
+        setTypes(normalizeList(rows));
       }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load vehicle types');

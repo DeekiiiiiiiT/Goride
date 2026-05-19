@@ -8,7 +8,7 @@ import { formatMoneyMinor } from '@roam/types/rides';
 import { RoamPlaceField } from '@/components/RoamPlaceField';
 import { TripRouteMap } from '@/components/TripRouteMap';
 import { ridesCreateRequest, ridesQuote } from '@/services/ridesEdge';
-import { DEFAULT_VEHICLE_OPTION, splitTransportSolutions } from '@/types/vehicleTypes';
+import { DEFAULT_VEHICLE_OPTION } from '@/types/vehicleTypes';
 import { TransportOptionPicker } from '@/components/TransportOptionPicker';
 import { useRidesVehicleTypes } from '@/hooks/useRidesVehicleTypes';
 import { formatVehicleEtaLine } from '@/utils/formatRideEta';
@@ -19,9 +19,14 @@ export default function HomePage() {
   const [dropoffAddress, setDropoffAddress] = useState('');
   const [pickup, setPickup] = useState<{ lat: number; lng: number } | null>(null);
   const [dropoff, setDropoff] = useState<{ lat: number; lng: number } | null>(null);
-  const { types: allTypes } = useRidesVehicleTypes();
-  const { vehicles, services } = splitTransportSolutions(allTypes);
+  const { active: services } = useRidesVehicleTypes();
   const [vehicleOption, setVehicleOption] = useState<string>(DEFAULT_VEHICLE_OPTION);
+
+  useEffect(() => {
+    if (services.length > 0 && !services.some((s) => s.slug === vehicleOption)) {
+      setVehicleOption(services[0].slug);
+    }
+  }, [services, vehicleOption]);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [bookLoading, setBookLoading] = useState(false);
   const [quote, setQuote] = useState<FareQuoteResponse | null>(null);
@@ -150,7 +155,7 @@ export default function HomePage() {
 
         <div className="rounded-3xl bg-white p-5 sm:p-6 shadow-xl shadow-zinc-900/6 ring-1 ring-zinc-200/90 space-y-5">
           <TransportOptionPicker
-            vehicles={vehicles}
+            vehicles={[]}
             services={services}
             selected={vehicleOption}
             onSelect={(slug) => {

@@ -18,7 +18,7 @@ import {
   type LocationScope,
 } from "./fare/jamaicaLocations.ts";
 import { normalizeVehicleType } from "./fare/ridesVehicleTypes.ts";
-import { isKnownVehicleSlug } from "./fare/vehicleTypesDb.ts";
+import { isKnownServiceSlug } from "./fare/vehicleTypesDb.ts";
 import { registerVehicleTypeAdminRoutes } from "./admin/vehicleTypes.ts";
 import { registerRiderAdminRoutes } from "./admin/riders.ts";
 
@@ -275,10 +275,11 @@ export function registerAdminRoutes(
     if (resolved instanceof Response) return resolved;
     const { db, tables } = resolved;
 
-    if (!(await isKnownVehicleSlug(db, tables.vehicle_types, vehicleTypeRaw))) {
-      const { data: allowed } = await db.from(tables.vehicle_types).select("slug").eq("is_active", true);
+    if (!(await isKnownServiceSlug(db, tables.vehicle_types, vehicleTypeRaw))) {
+      const { data: allowed } = await db.from(tables.vehicle_types).select("slug").eq("is_active", true)
+        .eq("solution_kind", "service");
       return c.json({
-        error: "unknown_vehicle_type",
+        error: "unknown_service",
         allowed: (allowed ?? []).map((r: { slug: string }) => r.slug),
       }, 400);
     }
@@ -366,10 +367,11 @@ export function registerAdminRoutes(
     }
     if (typeof body.vehicle_type === "string" && body.vehicle_type.trim()) {
       const raw = body.vehicle_type.trim().toLowerCase();
-      if (!(await isKnownVehicleSlug(db, tables.vehicle_types, raw))) {
-        const { data: allowed } = await db.from(tables.vehicle_types).select("slug").eq("is_active", true);
+      if (!(await isKnownServiceSlug(db, tables.vehicle_types, raw))) {
+        const { data: allowed } = await db.from(tables.vehicle_types).select("slug").eq("is_active", true)
+          .eq("solution_kind", "service");
         return c.json({
-          error: "unknown_vehicle_type",
+          error: "unknown_service",
           allowed: (allowed ?? []).map((r: { slug: string }) => r.slug),
         }, 400);
       }

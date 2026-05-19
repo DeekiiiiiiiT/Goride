@@ -124,6 +124,8 @@ export interface DriverPresenceBody {
   lng: number;
   heading_degrees?: number;
   available_for_rides?: boolean;
+  /** Normalized rides body-type slug (from Commando motor vehicle catalog). */
+  body_type_slug?: string;
 }
 
 export interface DriverTransitionBody {
