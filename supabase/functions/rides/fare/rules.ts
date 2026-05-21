@@ -49,16 +49,16 @@ async function fetchActiveRule(
   db: SupabaseClient,
   locationKey: string,
   vehicleType: string,
-) {
+): Promise<Record<string, unknown> | null> {
   const base = () =>
     db.from("fare_rules").select("*").eq("vehicle_type", vehicleType).eq("is_active", true);
 
-  const { data: byKey } = await base().eq("location_key", locationKey).maybeSingle();
-  if (byKey) return byKey;
+  const byKey = await base().eq("location_key", locationKey).maybeSingle();
+  if (byKey?.data) return byKey.data as Record<string, unknown>;
 
   // Legacy rows may only have `city` populated.
-  const { data: byCity } = await base().eq("city", locationKey).maybeSingle();
-  return byCity;
+  const byCity = await base().eq("city", locationKey).maybeSingle();
+  return (byCity?.data as Record<string, unknown> | null) ?? null;
 }
 
 export type LoadedFareRules = FareRulesInput & {
@@ -96,17 +96,17 @@ export async function loadFareRules(
         };
       }
 
-      const { data } = await fetchActiveRule(db, locationKey, vSlug);
-      if (!data) continue;
+      const row = await fetchActiveRule(db, locationKey, vSlug);
+      if (!row) continue;
 
       const rules: FareRulesInput = {
-        baseFareMinor: Number(data.base_fare_minor),
-        pricePerKmMinor: Number(data.price_per_km_minor),
-        pricePerMinMinor: Number(data.price_per_min_minor),
-        bookingFeeMinor: Number(data.booking_fee_minor ?? 0),
-        estimatedTollsMinor: Number(data.estimated_tolls_minor ?? 0),
-        minFareMinor: Number(data.min_fare_minor),
-        currency: String(data.currency ?? "JMD"),
+        baseFareMinor: Number(row.base_fare_minor),
+        pricePerKmMinor: Number(row.price_per_km_minor),
+        pricePerMinMinor: Number(row.price_per_min_minor),
+        bookingFeeMinor: Number(row.booking_fee_minor ?? 0),
+        estimatedTollsMinor: Number(row.estimated_tolls_minor ?? 0),
+        minFareMinor: Number(row.min_fare_minor),
+        currency: String(row.currency ?? "JMD"),
       };
       cache.set(cacheKey, { rules, locationKey, at: Date.now() });
       return {
