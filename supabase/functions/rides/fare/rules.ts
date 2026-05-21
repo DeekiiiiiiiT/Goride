@@ -18,6 +18,7 @@ export { resolvePickupLocation, resolveCity } from "./resolveLocation.ts";
 /** Thrown when no active fare_rules row matches pickup + vehicle (production: no hardcoded fallback). */
 export class FareRuleNotFoundError extends Error {
   readonly code = "no_fare_rule";
+  debug?: Record<string, unknown>;
 
   constructor(
     readonly vehicleType: string,
@@ -41,23 +42,48 @@ export class FareRuleNotFoundError extends Error {
       location_key: this.resolvedLocationKey,
       location_keys_tried: this.locationKeysTried,
       vehicle_types_tried: this.vehicleTypesTried,
+      ...(this.debug ? { debug: this.debug } : {}),
     };
   }
 }
 
+type FareRuleLookupDiag = {
+  location_key: string;
+  vehicle_type: string;
+  table: string;
+  by_key_error: string | null;
+  by_city_error: string | null;
+  found: boolean;
+};
+
+function postgrestErrMsg(err: { code?: string; message?: string } | null): string | null {
+  if (!err) return null;
+  return `${err.code ?? "?"}: ${err.message ?? "unknown"}`;
+}
+
 async function fetchActiveRule(
   db: SupabaseClient,
+  fareRulesTable: string,
   locationKey: string,
   vehicleType: string,
+  diag?: FareRuleLookupDiag,
 ): Promise<Record<string, unknown> | null> {
   const base = () =>
-    db.from("fare_rules").select("*").eq("vehicle_type", vehicleType).eq("is_active", true);
+    db.from(fareRulesTable).select("*").eq("vehicle_type", vehicleType).eq("is_active", true);
 
   const byKey = await base().eq("location_key", locationKey).maybeSingle();
+  if (diag) {
+    diag.by_key_error = postgrestErrMsg(byKey.error);
+    diag.found = Boolean(byKey?.data);
+  }
   if (byKey?.data) return byKey.data as Record<string, unknown>;
 
   // Legacy rows may only have `city` populated.
   const byCity = await base().eq("city", locationKey).maybeSingle();
+  if (diag) {
+    diag.by_city_error = postgrestErrMsg(byCity.error);
+    diag.found = diag.found || Boolean(byCity?.data);
+  }
   return (byCity?.data as Record<string, unknown> | null) ?? null;
 }
 
@@ -72,16 +98,20 @@ export async function loadFareRules(
   pickupLat: number,
   pickupLng: number,
   vehicleType: string,
+  opts?: { fareRulesTable?: string; vehicleTypesTable?: string },
 ): Promise<LoadedFareRules> {
+  const fareRulesTable = opts?.fareRulesTable ?? "fare_rules";
+  const vehicleTypesTable = opts?.vehicleTypesTable ?? "vehicle_types";
   const resolved = resolvePickupLocation(pickupLat, pickupLng);
   const keysToTry = resolved.fallbackKeys.length
     ? resolved.fallbackKeys
     : locationKeysForFallback(resolved.locationKey);
 
-  const catalog = await loadVehicleTypesFromDb(db, "vehicle_types", { activeOnly: false });
+  const catalog = await loadVehicleTypesFromDb(db, vehicleTypesTable, { activeOnly: false });
   const knownSlugs = catalog.map((t) => t.slug);
   const vehicleSlugs = vehicleTypesForFareLookupFromList(vehicleType, knownSlugs);
   const canonicalVehicle = vehicleType.trim().toLowerCase() || normalizeVehicleType(vehicleType);
+  const lookupDiags: FareRuleLookupDiag[] = [];
 
   for (const locationKey of keysToTry) {
     for (const vSlug of vehicleSlugs) {
@@ -96,7 +126,16 @@ export async function loadFareRules(
         };
       }
 
-      const row = await fetchActiveRule(db, locationKey, vSlug);
+      const diag: FareRuleLookupDiag = {
+        location_key: locationKey,
+        vehicle_type: vSlug,
+        table: fareRulesTable,
+        by_key_error: null,
+        by_city_error: null,
+        found: false,
+      };
+      const row = await fetchActiveRule(db, fareRulesTable, locationKey, vSlug, diag);
+      lookupDiags.push(diag);
       if (!row) continue;
 
       const rules: FareRulesInput = {
@@ -118,10 +157,19 @@ export async function loadFareRules(
     }
   }
 
-  throw new FareRuleNotFoundError(
+  const err = new FareRuleNotFoundError(
     canonicalVehicle || vehicleType,
     resolved.locationKey,
     keysToTry,
     vehicleSlugs,
   );
+  err.debug = {
+    fare_rules_table: fareRulesTable,
+    vehicle_types_table: vehicleTypesTable,
+    lookup_attempts: lookupDiags.slice(0, 24),
+    jamaica_roam_standard: lookupDiags.find(
+      (d) => d.location_key === "jamaica" && d.vehicle_type === "roam-standard",
+    ),
+  };
+  throw err;
 }

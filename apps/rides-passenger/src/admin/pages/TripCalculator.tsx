@@ -77,6 +77,25 @@ export function TripCalculator() {
     } catch (e: unknown) {
       setQuote(null);
       const msg = e instanceof Error ? e.message : 'Quote failed';
+      // #region agent log
+      fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b7ab08' },
+        body: JSON.stringify({
+          sessionId: 'b7ab08',
+          hypothesisId: 'H4',
+          location: 'TripCalculator.tsx:fetchQuote',
+          message: 'trip calculator quote failed',
+          data: {
+            vehicleOption: option,
+            pickup,
+            dropoff,
+            error: msg,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       toast.error(msg.length > 220 ? `${msg.slice(0, 217)}…` : msg);
     } finally {
       setQuoteLoading(false);
