@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   activeVehicleTypes,
   fallbackVehicleTypes,
@@ -51,7 +51,10 @@ export function useRidesVehicleTypes({ accessToken, admin = false }: Options = {
     void reload();
   }, [reload]);
 
-  const active = admin ? types : activeVehicleTypes(types);
+  const active = useMemo(
+    () => (admin ? types : activeVehicleTypes(types)),
+    [types, admin],
+  );
 
   return { types, active, loading, error, reload };
 }

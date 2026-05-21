@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@roam/auth-client';
 import { toast } from 'sonner';
@@ -34,12 +34,16 @@ export default function HomePage() {
   const [pickupMapOpen, setPickupMapOpen] = useState(false);
   const { active: services } = useRidesVehicleTypes();
   const [vehicleOption, setVehicleOption] = useState<string>(DEFAULT_VEHICLE_OPTION);
+  const serviceSlugs = useMemo(
+    () => services.map((s) => s.slug).join(','),
+    [services],
+  );
 
   useEffect(() => {
     if (services.length > 0 && !services.some((s) => s.slug === vehicleOption)) {
       setVehicleOption(services[0].slug);
     }
-  }, [services, vehicleOption]);
+  }, [serviceSlugs, vehicleOption, services]);
 
   const [quotesLoading, setQuotesLoading] = useState(false);
   const [bookLoading, setBookLoading] = useState(false);
@@ -49,6 +53,7 @@ export default function HomePage() {
 
   const coordsReady = pickup && dropoff;
   const quote = vehicleOption ? quotesBySlug[vehicleOption] ?? null : null;
+  const hasQuotes = Object.keys(quotesBySlug).length > 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -143,10 +148,22 @@ export default function HomePage() {
           : 'Could not get fares',
       );
     }
-  }, [pickup, dropoff, services]);
+  }, [pickup, dropoff, serviceSlugs]);
+
+  /** Stable key so quote fetch only runs when coords or service list actually change. */
+  const quoteFetchKey = useMemo(() => {
+    if (!pickup || !dropoff) return '';
+    return [
+      pickup.lat.toFixed(5),
+      pickup.lng.toFixed(5),
+      dropoff.lat.toFixed(5),
+      dropoff.lng.toFixed(5),
+      serviceSlugs,
+    ].join('|');
+  }, [pickup, dropoff, serviceSlugs]);
 
   useEffect(() => {
-    if (!coordsReady) {
+    if (!quoteFetchKey) {
       setQuotesBySlug({});
       return;
     }
@@ -157,7 +174,7 @@ export default function HomePage() {
     return () => {
       if (quoteDebounceRef.current) clearTimeout(quoteDebounceRef.current);
     };
-  }, [coordsReady, fetchAllServiceQuotes]);
+  }, [quoteFetchKey, fetchAllServiceQuotes]);
 
   const clearQuotes = () => setQuotesBySlug({});
 
@@ -222,7 +239,7 @@ export default function HomePage() {
           pickup={pickup}
           dropoff={dropoff}
           encodedPolyline={quote?.route_polyline_encoded}
-          quoteLoading={quotesLoading && coordsReady}
+          quoteLoading={quotesLoading && coordsReady && !hasQuotes}
         />
 
         {/* Floating header on map */}
