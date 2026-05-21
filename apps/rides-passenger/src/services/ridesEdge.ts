@@ -29,21 +29,47 @@ export async function ridesListVehicleTypes(): Promise<{
   return res.json();
 }
 
+type RidesErrorBody = {
+  error?: string;
+  message?: string;
+  allowed?: string[];
+  vehicle_type?: string;
+  location_keys_tried?: string[];
+};
+
 async function parseRidesError(res: Response): Promise<never> {
   const text = await res.text();
-  try {
-    const body = JSON.parse(text) as { error?: string; message?: string };
-    if (body.error === 'no_fare_rule') {
+  let body: RidesErrorBody = {};
+  if (text.trim()) {
+    try {
+      body = JSON.parse(text) as RidesErrorBody;
+    } catch {
+      const snippet = text.trim().slice(0, 180);
       throw new Error(
-        body.message ??
-          'No fare rule for this trip. Add an active rule in Admin → Fare Rules.',
+        snippet.startsWith('<')
+          ? 'Rides API returned HTML — redeploy the rides Edge function or check Supabase URL.'
+          : snippet || `Request failed (HTTP ${res.status})`,
       );
     }
-    if (body.message) throw new Error(body.message);
-    if (body.error) throw new Error(`${body.error} (HTTP ${res.status})`);
-  } catch (e) {
-    if (e instanceof Error && !e.message.startsWith('{')) throw e;
   }
+  if (body.error === 'no_fare_rule') {
+    const svc = body.vehicle_type ? `"${body.vehicle_type}"` : 'this service';
+    const loc = body.location_keys_tried?.[0];
+    throw new Error(
+      body.message ??
+        `No active fare rule for ${svc}${loc ? ` at ${loc}` : ''}. In Fare Rules, add Jamaica (or parish) + the same service.`,
+    );
+  }
+  if (body.error === 'unknown_service') {
+    const list = body.allowed?.length ? body.allowed.join(', ') : '';
+    throw new Error(
+      list
+        ? `Unknown service. Active: ${list}`
+        : 'Unknown service — pick Roam S, Comfort, etc.',
+    );
+  }
+  if (body.message) throw new Error(body.message);
+  if (body.error) throw new Error(`${body.error} (HTTP ${res.status})`);
   throw new Error(text.trim() || `HTTP ${res.status}`);
 }
 

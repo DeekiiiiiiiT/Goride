@@ -6,7 +6,6 @@ import { formatMoneyMinor } from '@roam/types/rides';
 import { RoamPlaceField } from '@/components/RoamPlaceField';
 import { TripRouteMap } from '@/components/TripRouteMap';
 import { ridesQuote } from '@/services/ridesEdge';
-import { DEFAULT_VEHICLE_OPTION } from '@/types/vehicleTypes';
 import { TransportOptionPicker } from '@/components/TransportOptionPicker';
 import { useVehicleTypesContext } from '../context/VehicleTypesContext';
 import { formatVehicleEtaLine } from '@/utils/formatRideEta';
@@ -44,7 +43,7 @@ export function TripCalculator() {
   const [pickup, setPickup] = useState<{ lat: number; lng: number } | null>(null);
   const [dropoff, setDropoff] = useState<{ lat: number; lng: number } | null>(null);
   const { services } = useVehicleTypesContext();
-  const [vehicleOption, setVehicleOption] = useState<string>(DEFAULT_VEHICLE_OPTION);
+  const [vehicleOption, setVehicleOption] = useState<string>('');
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quote, setQuote] = useState<FareQuoteResponse | null>(null);
   const [showBreakdown, setShowBreakdown] = useState(false);
@@ -52,8 +51,19 @@ export function TripCalculator() {
 
   const coordsReady = Boolean(pickup && dropoff);
 
+  useEffect(() => {
+    if (!vehicleOption && services.length > 0) {
+      setVehicleOption(services[0].slug);
+    }
+  }, [services, vehicleOption]);
+
   const fetchQuote = useCallback(async () => {
     if (!pickup || !dropoff) return;
+    const option = vehicleOption || services[0]?.slug;
+    if (!option) {
+      toast.error('No active services loaded. Check Transport Solutions, then refresh.');
+      return;
+    }
     setQuoteLoading(true);
     try {
       const q = await ridesQuote({
@@ -61,17 +71,17 @@ export function TripCalculator() {
         pickup_lng: pickup.lng,
         dropoff_lat: dropoff.lat,
         dropoff_lng: dropoff.lng,
-        vehicle_option: vehicleOption,
+        vehicle_option: option,
       });
       setQuote(q);
     } catch (e: unknown) {
       setQuote(null);
       const msg = e instanceof Error ? e.message : 'Quote failed';
-      toast.error(msg.length > 120 ? 'Quote failed — check rides function is deployed' : msg);
+      toast.error(msg.length > 220 ? `${msg.slice(0, 217)}…` : msg);
     } finally {
       setQuoteLoading(false);
     }
-  }, [pickup, dropoff, vehicleOption]);
+  }, [pickup, dropoff, vehicleOption, services]);
 
   useEffect(() => {
     if (!coordsReady) {

@@ -2,10 +2,11 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { FareRulesInput } from "./compute.ts";
 import { locationKeysForFallback } from "./jamaicaLocations.ts";
 import { resolvePickupLocation } from "./resolveLocation.ts";
+import { normalizeVehicleType } from "./ridesVehicleTypes.ts";
 import {
-  normalizeVehicleType,
-  vehicleTypesForFareLookup,
-} from "./ridesVehicleTypes.ts";
+  loadVehicleTypesFromDb,
+  vehicleTypesForFareLookupFromList,
+} from "./vehicleTypesDb.ts";
 
 const CACHE_TTL_MS = 60_000;
 
@@ -71,8 +72,10 @@ export async function loadFareRules(
     ? resolved.fallbackKeys
     : locationKeysForFallback(resolved.locationKey);
 
-  const vehicleSlugs = vehicleTypesForFareLookup(vehicleType);
-  const canonicalVehicle = normalizeVehicleType(vehicleType);
+  const catalog = await loadVehicleTypesFromDb(db, "vehicle_types", { activeOnly: false });
+  const knownSlugs = catalog.map((t) => t.slug);
+  const vehicleSlugs = vehicleTypesForFareLookupFromList(vehicleType, knownSlugs);
+  const canonicalVehicle = vehicleType.trim().toLowerCase() || normalizeVehicleType(vehicleType);
 
   for (const locationKey of keysToTry) {
     for (const vSlug of vehicleSlugs) {

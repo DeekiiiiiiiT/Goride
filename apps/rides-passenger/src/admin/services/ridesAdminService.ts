@@ -126,7 +126,7 @@ async function parseError(res: Response): Promise<string> {
   }
   try {
     const body = trimmed
-      ? (JSON.parse(trimmed) as { error?: string; message?: string })
+      ? (JSON.parse(trimmed) as { error?: string; message?: string; allowed?: string[] })
       : {};
     if (body.message) return body.message;
     if (body.error === 'rides_admin_db_unavailable') {
@@ -134,6 +134,13 @@ async function parseError(res: Response): Promise<string> {
     }
     if (body.error === 'rider_admin_db_unavailable') {
       return body.message ?? 'Rider admin tables are missing. Run supabase db push or apply migration 20260518150000_ensure_rider_public_views.sql in the SQL Editor.';
+    }
+    if (body.error === 'unknown_service') {
+      const allowed = body.allowed;
+      const list = Array.isArray(allowed) && allowed.length ? allowed.join(', ') : '';
+      return list
+        ? `Select a valid service. Active services: ${list}`
+        : 'Select a valid service (Transport Solutions → Services) before saving this rule.';
     }
     if (body.error === 'city_and_vehicle_required') {
       return 'Location and vehicle type are required. Redeploy the rides Edge function, then hard-refresh this page.';

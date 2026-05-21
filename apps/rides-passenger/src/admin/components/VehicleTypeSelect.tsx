@@ -1,6 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
-import { DEFAULT_VEHICLE_OPTION } from '@/types/vehicleTypes';
 import { TransportOptionPicker } from '@/components/TransportOptionPicker';
 import { useVehicleTypesContext } from '../context/VehicleTypesContext';
 
@@ -11,7 +10,13 @@ type Props = {
 
 export function VehicleTypeSelect({ value, onChange }: Props) {
   const { services, loading, active } = useVehicleTypesContext();
-  const selected = value || DEFAULT_VEHICLE_OPTION;
+  const serviceSlugs = new Set(services.map((s) => s.slug));
+  const selected =
+    value && serviceSlugs.has(value) ? value : services[0]?.slug ?? '';
+
+  useEffect(() => {
+    if (selected && selected !== value) onChange(selected);
+  }, [selected, value, onChange]);
 
   return (
     <div className="space-y-2">

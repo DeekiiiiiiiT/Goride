@@ -22,7 +22,6 @@ import { FareRuleDetailOverlay } from '../components/FareRuleDetailOverlay';
 import {
   buildLocationKey,
   currencyForMarket,
-  DEFAULT_RIDES_VEHICLE_TYPE,
   getCaribbeanCountry,
   isJamaicaMarket,
   JAMAICA_MARKET_SLUG,
@@ -33,7 +32,7 @@ const DEFAULT_LOCATION: JamaicaLocationValue = { scope: 'country' };
 
 const EMPTY_FORM: FareRuleAdminInput = {
   location_scope: 'country',
-  vehicle_type: DEFAULT_RIDES_VEHICLE_TYPE,
+  vehicle_type: '',
   currency: '',
   is_active: true,
   base_fare: 0,
@@ -48,8 +47,12 @@ interface FareRulesManagerProps {
   accessToken: string | undefined;
 }
 
+function defaultServiceSlug(services: { slug: string }[]): string {
+  return services[0]?.slug ?? '';
+}
+
 export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
-  const { vehicleTypeTableLabel } = useVehicleTypesContext();
+  const { vehicleTypeTableLabel, services } = useVehicleTypesContext();
   const [rules, setRules] = useState<FareRuleAdminDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -82,7 +85,12 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
     setDetailRule(null);
     setEditing(null);
     setCountrySlug(JAMAICA_MARKET_SLUG);
-    setForm({ ...EMPTY_FORM, currency: currencyForMarket(JAMAICA_MARKET_SLUG) });
+    const serviceSlug = defaultServiceSlug(services);
+    setForm({
+      ...EMPTY_FORM,
+      vehicle_type: serviceSlug,
+      currency: currencyForMarket(JAMAICA_MARKET_SLUG),
+    });
     setLocation(DEFAULT_LOCATION);
     setDialogOpen(true);
   };
@@ -137,6 +145,11 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
 
   const save = async () => {
     if (!accessToken) return;
+    const serviceSlug = form.vehicle_type?.trim().toLowerCase() ?? '';
+    if (!serviceSlug || !services.some((s) => s.slug === serviceSlug)) {
+      toast.error('Select a service (Roam S, Comfort, Courier, etc.) before saving.');
+      return;
+    }
     if (
       form.base_fare <= 0 ||
       form.price_per_km <= 0 ||
