@@ -9,6 +9,7 @@ import {
   updateFareRule,
   formatMoneyMinor,
 } from '../services/ridesAdminService';
+import { CaribbeanCountryCurrencyPicker } from '../components/CaribbeanCountryCurrencyPicker';
 import {
   JamaicaLocationPicker,
   locationValueFromRule,
@@ -18,21 +19,29 @@ import { VehicleTypeSelect } from '../components/VehicleTypeSelect';
 import { useVehicleTypesContext } from '../context/VehicleTypesContext';
 import { FareRuleActionsMenu } from '../components/FareRuleActionsMenu';
 import { FareRuleDetailOverlay } from '../components/FareRuleDetailOverlay';
-import { buildLocationKey, DEFAULT_RIDES_VEHICLE_TYPE } from '@roam/business-config';
+import {
+  buildLocationKey,
+  currencyForMarket,
+  DEFAULT_RIDES_VEHICLE_TYPE,
+  getCaribbeanCountry,
+  isJamaicaMarket,
+  JAMAICA_MARKET_SLUG,
+  marketSlugFromLocationKey,
+} from '@roam/business-config';
 
 const DEFAULT_LOCATION: JamaicaLocationValue = { scope: 'country' };
 
 const EMPTY_FORM: FareRuleAdminInput = {
   location_scope: 'country',
   vehicle_type: DEFAULT_RIDES_VEHICLE_TYPE,
-  currency: 'JMD',
+  currency: '',
   is_active: true,
-  base_fare: 300,
-  price_per_km: 120,
-  price_per_min: 50,
-  booking_fee: 50,
+  base_fare: 0,
+  price_per_km: 0,
+  price_per_min: 0,
+  booking_fee: 0,
   estimated_tolls: 0,
-  min_fare: 500,
+  min_fare: 0,
 };
 
 interface FareRulesManagerProps {
@@ -46,6 +55,7 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<FareRuleAdminDto | null>(null);
   const [form, setForm] = useState<FareRuleAdminInput>(EMPTY_FORM);
+  const [countrySlug, setCountrySlug] = useState(JAMAICA_MARKET_SLUG);
   const [location, setLocation] = useState<JamaicaLocationValue>(DEFAULT_LOCATION);
   const [saving, setSaving] = useState(false);
   const [detailRule, setDetailRule] = useState<FareRuleAdminDto | null>(null);
@@ -71,7 +81,8 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
   const openCreate = () => {
     setDetailRule(null);
     setEditing(null);
-    setForm({ ...EMPTY_FORM });
+    setCountrySlug(JAMAICA_MARKET_SLUG);
+    setForm({ ...EMPTY_FORM, currency: currencyForMarket(JAMAICA_MARKET_SLUG) });
     setLocation(DEFAULT_LOCATION);
     setDialogOpen(true);
   };
@@ -79,6 +90,8 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
   const openEdit = (rule: FareRuleAdminDto) => {
     setDetailRule(null);
     setEditing(rule);
+    const market = marketSlugFromLocationKey(rule.location_key ?? rule.city ?? JAMAICA_MARKET_SLUG);
+    setCountrySlug(market);
     setLocation(locationValueFromRule(rule));
     setForm({
       location_scope: locationValueFromRule(rule).scope,
@@ -86,7 +99,7 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
       parish: rule.parish ?? undefined,
       locality: rule.locality ?? undefined,
       vehicle_type: rule.vehicle_type,
-      currency: rule.currency,
+      currency: currencyForMarket(market),
       is_active: rule.is_active,
       base_fare: rule.base_fare,
       price_per_km: rule.price_per_km,
@@ -124,14 +137,29 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
 
   const save = async () => {
     if (!accessToken) return;
+    if (
+      form.base_fare <= 0 ||
+      form.price_per_km <= 0 ||
+      form.price_per_min <= 0 ||
+      form.min_fare <= 0 ||
+      form.booking_fee < 0 ||
+      form.estimated_tolls < 0
+    ) {
+      toast.error('Enter all pricing amounts before saving (tolls and booking fee may be 0).');
+      return;
+    }
     setSaving(true);
-    const locationKey = buildLocationKey(location);
+    const locationKey = isJamaicaMarket(countrySlug)
+      ? buildLocationKey(location)
+      : countrySlug;
+    const jamaicaLoc = isJamaicaMarket(countrySlug);
     const payload: FareRuleAdminInput = {
       ...form,
-      location_scope: location.scope,
-      county: location.county,
-      parish: location.parish,
-      locality: location.locality,
+      currency: currencyForMarket(countrySlug),
+      location_scope: jamaicaLoc ? location.scope : 'country',
+      county: jamaicaLoc ? location.county : undefined,
+      parish: jamaicaLoc ? location.parish : undefined,
+      locality: jamaicaLoc ? location.locality : undefined,
       location_key: locationKey,
       city: locationKey,
     };
@@ -298,21 +326,34 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
             </div>
 
             <div className="p-4 space-y-4">
-              <JamaicaLocationPicker value={location} onChange={setLocation} />
+              <CaribbeanCountryCurrencyPicker
+                countrySlug={countrySlug}
+                currencyCode={form.currency ?? currencyForMarket(countrySlug)}
+                onCountryChange={(slug, code) => {
+                  setCountrySlug(slug);
+                  setForm((f) => ({ ...f, currency: code }));
+                  if (!isJamaicaMarket(slug)) {
+                    setLocation(DEFAULT_LOCATION);
+                  }
+                }}
+              />
+
+              {isJamaicaMarket(countrySlug) ? (
+                <JamaicaLocationPicker value={location} onChange={setLocation} />
+              ) : (
+                <div className="rounded-lg border border-slate-700 bg-slate-800/40 px-3 py-2.5 text-sm text-slate-400">
+                  Location: whole territory —{' '}
+                  <span className="font-mono text-slate-300">{countrySlug}</span>
+                  <span className="block mt-1 text-xs">
+                    {getCaribbeanCountry(countrySlug)?.label ?? countrySlug}
+                  </span>
+                </div>
+              )}
 
               <VehicleTypeSelect
                 value={form.vehicle_type}
                 onChange={(vehicle_type) => setForm((f) => ({ ...f, vehicle_type }))}
               />
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-300">Currency</label>
-                <input
-                  value={form.currency ?? 'JMD'}
-                  onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value }))}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-                />
-              </div>
 
               <div className="grid grid-cols-2 gap-3">
                 {(
@@ -331,9 +372,16 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
                       type="number"
                       min={0}
                       step={0.01}
-                      value={form[key]}
-                      onChange={(e) => setForm((f) => ({ ...f, [key]: Number(e.target.value) }))}
-                      className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                      value={form[key] === 0 ? '' : form[key]}
+                      placeholder="0"
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        setForm((f) => ({
+                          ...f,
+                          [key]: raw === '' ? 0 : Number(raw),
+                        }));
+                      }}
+                      className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
                     />
                   </div>
                 ))}
