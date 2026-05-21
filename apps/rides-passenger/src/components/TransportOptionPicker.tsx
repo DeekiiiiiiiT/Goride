@@ -1,8 +1,17 @@
 import React from 'react';
+import { Loader2 } from 'lucide-react';
 import type { RidesVehicleTypeDto } from '@/types/vehicleTypes';
 import { vehicleCapacityDisplay } from '@/types/vehicleTypes';
 
 type Variant = 'admin' | 'rider';
+
+export type ServiceQuoteDisplay = {
+  fareLabel: string | null;
+  etaLine?: string | null;
+  tripMinutes?: number | null;
+  loading?: boolean;
+  unavailable?: boolean;
+};
 
 type Props = {
   vehicles: RidesVehicleTypeDto[];
@@ -10,8 +19,10 @@ type Props = {
   selected: string;
   onSelect: (slug: string) => void;
   variant?: Variant;
-  /** Shown under the label on the selected option (e.g. trip ETA). */
+  /** @deprecated Use quoteBySlug for per-service fares */
   selectedEtaLine?: string | null;
+  /** Per-service fare + ETA (Uber-style, shown on every row). */
+  quoteBySlug?: Record<string, ServiceQuoteDisplay>;
 };
 
 function OptionCard({
@@ -20,12 +31,14 @@ function OptionCard({
   onSelect,
   variant,
   etaLine,
+  quote,
 }: {
   v: RidesVehicleTypeDto;
   active: boolean;
   onSelect: () => void;
   variant: Variant;
   etaLine?: string | null;
+  quote?: ServiceQuoteDisplay;
 }) {
   if (variant === 'admin') {
     return (
@@ -53,6 +66,13 @@ function OptionCard({
     );
   }
 
+  const displayEta = quote?.etaLine ?? etaLine;
+  const tripMin =
+    quote?.tripMinutes != null ? `~${Math.round(quote.tripMinutes)} min` : null;
+  const metaLine = [vehicleCapacityDisplay(v), tripMin, displayEta]
+    .filter(Boolean)
+    .join(' · ');
+
   return (
     <button
       type="button"
@@ -63,15 +83,27 @@ function OptionCard({
           : 'border-zinc-200 bg-zinc-50 hover:bg-white'
       }`}
     >
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="font-semibold text-sm text-zinc-900">{v.label}</span>
-        <span className="text-xs text-zinc-500">{vehicleCapacityDisplay(v)}</span>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <span className="font-semibold text-sm text-zinc-900">{v.label}</span>
+          {metaLine && (
+            <p className="text-xs text-zinc-500 mt-0.5 tabular-nums leading-snug">{metaLine}</p>
+          )}
+          <p className="text-xs text-zinc-600 mt-0.5 leading-snug line-clamp-2">{v.description}</p>
+          {v.tagline && <p className="text-[11px] text-zinc-500 mt-1">{v.tagline}</p>}
+        </div>
+        <div className="shrink-0 text-right pt-0.5 min-w-[5.5rem]">
+          {quote?.loading ? (
+            <Loader2 className="h-5 w-5 animate-spin text-zinc-400 ml-auto" aria-label="Loading fare" />
+          ) : quote?.unavailable ? (
+            <span className="text-xs text-zinc-400">—</span>
+          ) : quote?.fareLabel ? (
+            <span className="text-sm font-semibold tabular-nums text-zinc-900">{quote.fareLabel}</span>
+          ) : (
+            <span className="text-xs text-zinc-400">—</span>
+          )}
+        </div>
       </div>
-      {etaLine && (
-        <p className="text-xs text-zinc-500 mt-0.5 tabular-nums">{etaLine}</p>
-      )}
-      <p className="text-xs text-zinc-600 mt-0.5 leading-snug">{v.description}</p>
-      {v.tagline && <p className="text-[11px] text-zinc-500 mt-1">{v.tagline}</p>}
     </button>
   );
 }
@@ -83,6 +115,7 @@ export function TransportOptionPicker({
   onSelect,
   variant = 'rider',
   selectedEtaLine,
+  quoteBySlug,
 }: Props) {
   const sectionTitle =
     variant === 'admin'
@@ -103,6 +136,7 @@ export function TransportOptionPicker({
                 onSelect={() => onSelect(v.slug)}
                 variant={variant}
                 etaLine={selected === v.slug ? selectedEtaLine : null}
+                quote={quoteBySlug?.[v.slug]}
               />
             ))}
           </div>
@@ -120,6 +154,7 @@ export function TransportOptionPicker({
                 onSelect={() => onSelect(v.slug)}
                 variant={variant}
                 etaLine={selected === v.slug ? selectedEtaLine : null}
+                quote={quoteBySlug?.[v.slug]}
               />
             ))}
           </div>

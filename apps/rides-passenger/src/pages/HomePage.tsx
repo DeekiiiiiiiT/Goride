@@ -17,7 +17,10 @@ import {
 } from '@/services/locationService';
 import { ridesCreateRequest, ridesQuote } from '@/services/ridesEdge';
 import { DEFAULT_VEHICLE_OPTION } from '@/types/vehicleTypes';
-import { TransportOptionPicker } from '@/components/TransportOptionPicker';
+import {
+  TransportOptionPicker,
+  type ServiceQuoteDisplay,
+} from '@/components/TransportOptionPicker';
 import { useRidesVehicleTypes } from '@/hooks/useRidesVehicleTypes';
 import { formatVehicleEtaLine } from '@/utils/formatRideEta';
 
@@ -38,13 +41,14 @@ export default function HomePage() {
     }
   }, [services, vehicleOption]);
 
-  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quotesLoading, setQuotesLoading] = useState(false);
   const [bookLoading, setBookLoading] = useState(false);
-  const [quote, setQuote] = useState<FareQuoteResponse | null>(null);
+  const [quotesBySlug, setQuotesBySlug] = useState<Record<string, FareQuoteResponse>>({});
   const quoteDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [initialGpsLoading, setInitialGpsLoading] = useState(true);
 
   const coordsReady = pickup && dropoff;
+  const quote = vehicleOption ? quotesBySlug[vehicleOption] ?? null : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -100,39 +104,62 @@ export default function HomePage() {
     navigate('/login');
   };
 
-  const fetchQuote = useCallback(async () => {
-    if (!pickup || !dropoff) return;
-    setQuoteLoading(true);
-    try {
-      const q = await ridesQuote({
-        pickup_lat: pickup.lat,
-        pickup_lng: pickup.lng,
-        dropoff_lat: dropoff.lat,
-        dropoff_lng: dropoff.lng,
-        vehicle_option: vehicleOption,
-      });
-      setQuote(q);
-    } catch (e: unknown) {
-      setQuote(null);
-      toast.error(e instanceof Error ? e.message : 'Quote failed');
-    } finally {
-      setQuoteLoading(false);
+  const fetchAllServiceQuotes = useCallback(async () => {
+    if (!pickup || !dropoff || services.length === 0) return;
+    setQuotesLoading(true);
+    const coords = {
+      pickup_lat: pickup.lat,
+      pickup_lng: pickup.lng,
+      dropoff_lat: dropoff.lat,
+      dropoff_lng: dropoff.lng,
+    };
+
+    const results = await Promise.allSettled(
+      services.map((s) =>
+        ridesQuote({ ...coords, vehicle_option: s.slug }),
+      ),
+    );
+
+    const next: Record<string, FareQuoteResponse> = {};
+    let anySuccess = false;
+    results.forEach((result, i) => {
+      const slug = services[i].slug;
+      if (result.status === 'fulfilled') {
+        next[slug] = result.value;
+        anySuccess = true;
+      }
+    });
+
+    setQuotesBySlug(next);
+    setQuotesLoading(false);
+
+    if (!anySuccess) {
+      const firstErr = results.find((r) => r.status === 'rejected') as
+        | PromiseRejectedResult
+        | undefined;
+      toast.error(
+        firstErr?.reason instanceof Error
+          ? firstErr.reason.message
+          : 'Could not get fares',
+      );
     }
-  }, [pickup, dropoff, vehicleOption]);
+  }, [pickup, dropoff, services]);
 
   useEffect(() => {
     if (!coordsReady) {
-      setQuote(null);
+      setQuotesBySlug({});
       return;
     }
     if (quoteDebounceRef.current) clearTimeout(quoteDebounceRef.current);
     quoteDebounceRef.current = setTimeout(() => {
-      void fetchQuote();
+      void fetchAllServiceQuotes();
     }, 400);
     return () => {
       if (quoteDebounceRef.current) clearTimeout(quoteDebounceRef.current);
     };
-  }, [coordsReady, fetchQuote]);
+  }, [coordsReady, fetchAllServiceQuotes]);
+
+  const clearQuotes = () => setQuotesBySlug({});
 
   const handleBook = async () => {
     if (!pickup || !dropoff) {
@@ -161,25 +188,31 @@ export default function HomePage() {
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Could not request ride');
       if (e instanceof Error && e.message.includes('expired')) {
-        void fetchQuote();
+        void fetchAllServiceQuotes();
       }
     } finally {
       setBookLoading(false);
     }
   };
 
-  const clearQuote = () => setQuote(null);
-
-  const fareLabel = quote
-    ? formatMoneyMinor(quote.fare_estimate_minor, quote.currency)
-    : null;
   const surge = quote?.surge_multiplier ?? null;
-  const canBook = coordsReady && Boolean(quote?.quote_token) && !quoteLoading;
-  const vehicleEtaLine = coordsReady && quote && !quoteLoading
-    ? formatVehicleEtaLine(quote)
-    : null;
+  const canBook = coordsReady && Boolean(quote?.quote_token) && !quotesLoading;
 
   const selectedService = services.find((s) => s.slug === vehicleOption);
+
+  const quoteBySlug: Record<string, ServiceQuoteDisplay> = {};
+  for (const s of services) {
+    const q = quotesBySlug[s.slug];
+    quoteBySlug[s.slug] = {
+      loading: quotesLoading && !q,
+      unavailable: !quotesLoading && coordsReady && !q,
+      fareLabel: q
+        ? formatMoneyMinor(q.fare_estimate_minor, q.currency)
+        : null,
+      etaLine: q ? formatVehicleEtaLine(q) : null,
+      tripMinutes: q?.eta_trip_minutes_estimate ?? null,
+    };
+  }
 
   return (
     <div className="min-h-[100dvh] flex flex-col bg-zinc-100 text-zinc-900">
@@ -189,7 +222,7 @@ export default function HomePage() {
           pickup={pickup}
           dropoff={dropoff}
           encodedPolyline={quote?.route_polyline_encoded}
-          quoteLoading={quoteLoading && coordsReady}
+          quoteLoading={quotesLoading && coordsReady}
         />
 
         {/* Floating header on map */}
@@ -250,9 +283,9 @@ export default function HomePage() {
                 onLocationClick={() => setPickupMapOpen(true)}
                 onChangeText={(text) => {
                   setPickupAddress(text);
-                  setPickup(null);
-                  clearQuote();
-                }}
+              setPickup(null);
+              clearQuotes();
+            }}
                 onResolved={({ address, lat, lng }) => {
                   setPickupAddress(address);
                   setPickup({ lat, lng });
@@ -270,9 +303,9 @@ export default function HomePage() {
                 placeholder="Where to?"
                 onChangeText={(text) => {
                   setDropoffAddress(text);
-                  setDropoff(null);
-                  clearQuote();
-                }}
+              setDropoff(null);
+              clearQuotes();
+            }}
                 onResolved={({ address, lat, lng }) => {
                   setDropoffAddress(address);
                   setDropoff({ lat, lng });
@@ -292,11 +325,8 @@ export default function HomePage() {
                   vehicles={[]}
                   services={services}
                   selected={vehicleOption}
-                  onSelect={(slug) => {
-                    setVehicleOption(slug);
-                    clearQuote();
-                  }}
-                  selectedEtaLine={vehicleEtaLine}
+                  onSelect={setVehicleOption}
+                  quoteBySlug={quoteBySlug}
                 />
               </div>
             )}
@@ -310,23 +340,8 @@ export default function HomePage() {
 
           {/* Sticky footer CTA */}
           <div className="shrink-0 border-t border-zinc-100 bg-white safe-x safe-b px-4 py-4 space-y-3">
-            {fareLabel && !quoteLoading && (
-              <div className="flex items-center justify-between gap-2 text-sm">
-                <span className="text-zinc-600">
-                  {selectedService?.label ?? 'Estimated fare'}
-                  {quote && (
-                    <span className="text-zinc-400">
-                      {' '}
-                      · {quote.distance_estimate_km.toFixed(1)} km · ~{Math.round(quote.eta_trip_minutes_estimate)} min
-                    </span>
-                  )}
-                </span>
-                <span className="text-lg font-semibold tabular-nums text-zinc-900">{fareLabel}</span>
-              </div>
-            )}
-
-            {quoteLoading && coordsReady && (
-              <p className="text-sm text-zinc-500 text-center">Calculating fare…</p>
+            {quotesLoading && coordsReady && (
+              <p className="text-sm text-zinc-500 text-center">Getting prices…</p>
             )}
 
             <button
