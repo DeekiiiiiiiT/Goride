@@ -207,6 +207,8 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
           <h2 className="text-xl font-semibold text-white">Fare Rules</h2>
           <p className="text-sm text-slate-400 mt-1 max-w-xl">
             Control upfront pricing for Roam Rides. Amounts are in major units (e.g. JMD dollars).
+            One active rule per service (Courier, Roam S, etc.); All Jamaica applies nationwide unless
+            a parish or town rule overrides it.
           </p>
         </div>
         <button
@@ -272,7 +274,8 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
                       {r.location_label ?? r.location_key ?? r.city}
                     </td>
                     <td className="px-4 py-3 text-slate-300">
-                      {vehicleTypeTableLabel(r.vehicle_type)}
+                      <div>{vehicleTypeTableLabel(r.vehicle_type)}</div>
+                      <div className="text-xs font-mono text-slate-500 mt-0.5">{r.vehicle_type}</div>
                     </td>
                     <td className="px-4 py-3 tabular-nums text-slate-300 hidden sm:table-cell">
                       {fmt(r.base_fare_minor, r.currency)}

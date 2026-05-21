@@ -4,6 +4,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   DEFAULT_RIDES_VEHICLE_TYPE,
+  FARE_RULE_SERVICE_ALIASES,
   RIDES_VEHICLE_TYPES as FALLBACK_TYPES,
   RIDES_VEHICLE_LEGACY_ALIASES,
 } from "./ridesVehicleTypes.ts";
@@ -152,6 +153,9 @@ export function vehicleTypesForFareLookupFromList(
   const keys = new Set<string>([canonical, raw]);
   if (canonical === "uberx") keys.add("standard");
   if (raw === "standard") keys.add("uberx");
+  for (const alias of FARE_RULE_SERVICE_ALIASES[canonical] ?? FARE_RULE_SERVICE_ALIASES[raw] ?? []) {
+    keys.add(alias);
+  }
   for (const s of knownSlugs) {
     if (s === canonical || s === raw) keys.add(s);
   }

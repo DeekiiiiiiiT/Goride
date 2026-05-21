@@ -35,6 +35,7 @@ type RidesErrorBody = {
   allowed?: string[];
   vehicle_type?: string;
   location_keys_tried?: string[];
+  vehicle_types_tried?: string[];
 };
 
 async function parseRidesError(res: Response): Promise<never> {
@@ -54,10 +55,15 @@ async function parseRidesError(res: Response): Promise<never> {
   }
   if (body.error === 'no_fare_rule') {
     const svc = body.vehicle_type ? `"${body.vehicle_type}"` : 'this service';
-    const loc = body.location_keys_tried?.[0];
+    const triedLocs = body.location_keys_tried?.length
+      ? ` Locations tried: ${body.location_keys_tried.join(' → ')}.`
+      : '';
+    const triedSlugs = body.vehicle_types_tried?.length
+      ? ` Service IDs tried: ${body.vehicle_types_tried.join(', ')}.`
+      : '';
     throw new Error(
       body.message ??
-        `No active fare rule for ${svc}${loc ? ` at ${loc}` : ''}. In Fare Rules, add Jamaica (or parish) + the same service.`,
+        `No active fare rule for ${svc}.${triedLocs}${triedSlugs} Add All Jamaica + that service in Fare Rules; service ID must match Transport Solutions.`,
     );
   }
   if (body.error === 'unknown_service') {

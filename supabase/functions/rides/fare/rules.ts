@@ -27,7 +27,8 @@ export class FareRuleNotFoundError extends Error {
   ) {
     super(
       `No active fare rule for "${vehicleType}" at this pickup (${resolvedLocationKey}). ` +
-        `Add an active rule in Fare Rules (location + vehicle type).`,
+        `Each service needs its own rule. In Fare Rules, confirm All Jamaica + this service is active ` +
+        `and the rule’s service ID matches Transport Solutions (e.g. roam-standard, not an old slug like roam-s).`,
     );
     this.name = "FareRuleNotFoundError";
   }
@@ -49,10 +50,15 @@ async function fetchActiveRule(
   locationKey: string,
   vehicleType: string,
 ) {
-  return db.from("fare_rules").select("*").eq("location_key", locationKey).eq(
-    "vehicle_type",
-    vehicleType,
-  ).eq("is_active", true).maybeSingle();
+  const base = () =>
+    db.from("fare_rules").select("*").eq("vehicle_type", vehicleType).eq("is_active", true);
+
+  const { data: byKey } = await base().eq("location_key", locationKey).maybeSingle();
+  if (byKey) return byKey;
+
+  // Legacy rows may only have `city` populated.
+  const { data: byCity } = await base().eq("city", locationKey).maybeSingle();
+  return byCity;
 }
 
 export type LoadedFareRules = FareRulesInput & {

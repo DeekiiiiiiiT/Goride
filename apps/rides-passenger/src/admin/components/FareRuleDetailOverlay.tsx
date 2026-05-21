@@ -76,7 +76,17 @@ export function FareRuleDetailOverlay({ rule, onClose, onEdit, onDelete }: Props
               label="Location key"
               value={<span className="font-mono text-xs text-slate-400">{rule.location_key ?? rule.city}</span>}
             />
-            <DetailRow label="Vehicle" value={vehicleTypeTableLabel(rule.vehicle_type)} />
+            <DetailRow
+              label="Service"
+              value={
+                <span>
+                  {vehicleTypeTableLabel(rule.vehicle_type)}
+                  <span className="block font-mono text-xs text-slate-500 font-normal mt-0.5">
+                    {rule.vehicle_type}
+                  </span>
+                </span>
+              }
+            />
             <DetailRow
               label="Status"
               value={

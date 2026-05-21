@@ -111,8 +111,8 @@ export function TripCalculator() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-400 max-w-2xl">
-        Preview the same fare estimate riders see when booking. Requires an active fare rule in
-        Fare Rules for the pickup location and service type — no built-in rate fallback.
+        Preview the same fare estimate riders see when booking. Each selected service needs its own
+        active rule (Fare Rules → All Jamaica or a finer location). No built-in rate fallback.
       </p>
 
       <div className="max-w-lg">

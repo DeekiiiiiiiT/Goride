@@ -48,6 +48,19 @@ export const RIDES_VEHICLE_LEGACY_ALIASES: Record<string, RidesVehicleTypeSlug> 
   standard: 'uberx',
 };
 
+/**
+ * Alternate `fare_rules.vehicle_type` slugs for the same rider product
+ * (e.g. after renaming a service in Transport Solutions).
+ */
+export const FARE_RULE_SERVICE_ALIASES: Record<string, readonly string[]> = {
+  'roam-standard': ['roam-standard', 'roam-s'],
+  'roam-s': ['roam-s', 'roam-standard'],
+  'roam-xl': ['roam-xl', 'uberxl'],
+  uberxl: ['uberxl', 'roam-xl'],
+  'roam-comfort': ['roam-comfort', 'comfort'],
+  comfort: ['comfort', 'roam-comfort'],
+};
+
 export const DEFAULT_RIDES_VEHICLE_TYPE: RidesVehicleTypeSlug = 'uberx';
 
 /** Slugs accepted by admin API validation (canonical + legacy aliases). */
@@ -69,6 +82,9 @@ export function vehicleTypesForFareLookup(vehicleType: string): string[] {
   const keys = new Set<string>([canonical, raw]);
   if (canonical === 'uberx') keys.add('standard');
   if (raw === 'standard') keys.add('uberx');
+  for (const alias of FARE_RULE_SERVICE_ALIASES[canonical] ?? FARE_RULE_SERVICE_ALIASES[raw] ?? []) {
+    keys.add(alias);
+  }
   return [...keys];
 }
 
