@@ -55,7 +55,7 @@ export function DriverLoginPage() {
             <p className="mt-2 text-sm font-medium text-slate-600 dark:text-slate-300">
               {mainView === 'login'
                 ? loginMethod === 'email'
-                  ? 'Sign in to your account'
+                  ? 'Sign in with Google, email, or phone.'
                   : 'Sign in with your phone'
                 : signupSubView === 'confirm-email'
                   ? 'Confirm your email'
@@ -143,6 +143,15 @@ export function DriverLoginPage() {
 
             {mainView === 'login' && loginMethod === 'email' && (
               <>
+                <GoogleSignupButton variant="login" onError={msg => setError(msg || null)} />
+                <div className="relative py-3">
+                  <div className="absolute inset-0 flex items-center" aria-hidden>
+                    <span className="w-full border-t border-slate-200 dark:border-slate-600" />
+                  </div>
+                  <div className="relative flex justify-center text-xs font-medium uppercase tracking-wide text-slate-400">
+                    <span className="bg-white/90 px-2 dark:bg-slate-800/60">or email</span>
+                  </div>
+                </div>
                 <form onSubmit={e => void handleEmailLogin(e)} className="space-y-4">
                   <div>
                     <label className="mb-1.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">Email</label>

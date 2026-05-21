@@ -44,10 +44,39 @@ export function RidesAdminLayout() {
   const location = useLocation();
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+    const initSession = async () => {
+      const { data: { session: cached } } = await supabase.auth.getSession();
+      if (!cached) {
+        setSession(null);
+        setLoading(false);
+        return;
+      }
+
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        await supabase.auth.signOut();
+        setSession(null);
+        setLoading(false);
+        return;
+      }
+
+      const now = Math.floor(Date.now() / 1000);
+      const expiresAt = cached.expires_at ?? 0;
+      if (expiresAt - now < 120) {
+        const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+        if (refreshError || !refreshed.session) {
+          await supabase.auth.signOut();
+          setSession(null);
+        } else {
+          setSession(refreshed.session);
+        }
+      } else {
+        setSession(cached);
+      }
       setLoading(false);
-    });
+    };
+
+    void initSession();
 
     const {
       data: { subscription },

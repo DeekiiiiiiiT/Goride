@@ -15,6 +15,29 @@ function formatBreakdownMinor(minor: number, currency: string) {
   return formatMoneyMinor(minor, currency);
 }
 
+function formatRatePer(minor: number | undefined, currency: string, unit: 'km' | 'min') {
+  if (minor == null) return '—';
+  return `${formatMoneyMinor(minor, currency)}/${unit}`;
+}
+
+function BreakdownRow({
+  label,
+  units,
+  amount,
+}: {
+  label: string;
+  units: string;
+  amount: string;
+}) {
+  return (
+    <li className="grid grid-cols-[minmax(5rem,1fr)_minmax(7.5rem,1.4fr)_auto] gap-x-3 gap-y-0.5 items-baseline">
+      <span className="text-zinc-500">{label}</span>
+      <span className="text-zinc-600 text-xs tabular-nums">{units}</span>
+      <span className="tabular-nums text-zinc-900 text-right">{amount}</span>
+    </li>
+  );
+}
+
 export function TripCalculator() {
   const [pickupAddress, setPickupAddress] = useState('');
   const [dropoffAddress, setDropoffAddress] = useState('');
@@ -78,8 +101,8 @@ export function TripCalculator() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-400 max-w-2xl">
-        Preview the same fare estimate riders see when booking. Uses live fare rules, surge, and
-        routing from the rides API.
+        Preview the same fare estimate riders see when booking. Requires an active fare rule in
+        Fare Rules for the pickup location and service type — no built-in rate fallback.
       </p>
 
       <div className="max-w-lg">
@@ -190,55 +213,71 @@ export function TripCalculator() {
                 {showBreakdown ? 'Hide' : 'Show'} fare breakdown (admin)
               </button>
               {showBreakdown && (
-                <ul className="px-4 py-3 text-sm space-y-1.5 bg-white border-t border-zinc-100">
-                  <li className="flex justify-between gap-2">
-                    <span className="text-zinc-500">Base</span>
-                    <span className="tabular-nums">
-                      {formatBreakdownMinor(b.base_minor, quote!.currency)}
-                    </span>
-                  </li>
-                  <li className="flex justify-between gap-2">
-                    <span className="text-zinc-500">Booking fee</span>
-                    <span className="tabular-nums">
-                      {formatBreakdownMinor(b.booking_fee_minor, quote!.currency)}
-                    </span>
-                  </li>
-                  {(b.estimated_tolls_minor ?? 0) > 0 && (
-                    <li className="flex justify-between gap-2">
-                      <span className="text-zinc-500">Estimated tolls</span>
-                      <span className="tabular-nums">
-                        {formatBreakdownMinor(b.estimated_tolls_minor ?? 0, quote!.currency)}
+                <div className="bg-white border-t border-zinc-100 text-sm">
+                  <p className="px-4 py-2.5 text-xs leading-relaxed text-emerald-900 bg-emerald-50/80 border-b border-emerald-100">
+                    Matched fare rule:{' '}
+                    <span className="font-mono">{b.vehicle_type ?? quote.vehicle_option}</span> ·{' '}
+                    <span className="font-mono">{b.location_key}</span>
+                  </p>
+                  <ul className="px-4 py-3 space-y-1.5">
+                    <li className="grid grid-cols-[minmax(5rem,1fr)_minmax(7.5rem,1.4fr)_auto] gap-x-3 pb-1 text-[11px] font-medium uppercase tracking-wide text-zinc-400">
+                      <span>Item</span>
+                      <span>Units / rate</span>
+                      <span className="text-right">Amount</span>
+                    </li>
+                    <BreakdownRow
+                      label="Base"
+                      units="flat"
+                      amount={formatBreakdownMinor(b.base_minor, quote.currency)}
+                    />
+                    <BreakdownRow
+                      label="Booking fee"
+                      units="flat"
+                      amount={formatBreakdownMinor(b.booking_fee_minor, quote.currency)}
+                    />
+                    {(b.estimated_tolls_minor ?? 0) > 0 && (
+                      <BreakdownRow
+                        label="Estimated tolls"
+                        units="flat"
+                        amount={formatBreakdownMinor(b.estimated_tolls_minor ?? 0, quote.currency)}
+                      />
+                    )}
+                    <BreakdownRow
+                      label="Distance"
+                      units={`${(b.distance_km ?? quote.distance_estimate_km).toFixed(1)} km × ${formatRatePer(b.price_per_km_minor, quote.currency, 'km')}`}
+                      amount={formatBreakdownMinor(b.distance_component_minor, quote.currency)}
+                    />
+                    <BreakdownRow
+                      label="Time"
+                      units={`${Math.round(b.duration_minutes ?? quote.eta_trip_minutes_estimate)} min × ${formatRatePer(b.price_per_min_minor, quote.currency, 'min')}`}
+                      amount={formatBreakdownMinor(b.time_component_minor, quote.currency)}
+                    />
+                    {b.min_fare_minor != null && (
+                      <BreakdownRow
+                        label="Min fare"
+                        units="floor"
+                        amount={formatBreakdownMinor(b.min_fare_minor, quote.currency)}
+                      />
+                    )}
+                    <li className="grid grid-cols-[minmax(5rem,1fr)_minmax(7.5rem,1.4fr)_auto] gap-x-3 gap-y-0.5 items-baseline border-t border-zinc-100 pt-1.5">
+                      <span className="text-zinc-500">Subtotal (pre-surge)</span>
+                      <span className="text-zinc-400 text-xs">—</span>
+                      <span className="tabular-nums text-zinc-900 text-right">
+                        {formatBreakdownMinor(b.subtotal_before_surge_minor, quote.currency)}
                       </span>
                     </li>
-                  )}
-                  <li className="flex justify-between gap-2">
-                    <span className="text-zinc-500">Distance</span>
-                    <span className="tabular-nums">
-                      {formatBreakdownMinor(b.distance_component_minor, quote!.currency)}
-                    </span>
-                  </li>
-                  <li className="flex justify-between gap-2">
-                    <span className="text-zinc-500">Time</span>
-                    <span className="tabular-nums">
-                      {formatBreakdownMinor(b.time_component_minor, quote!.currency)}
-                    </span>
-                  </li>
-                  <li className="flex justify-between gap-2 border-t border-zinc-100 pt-1.5">
-                    <span className="text-zinc-500">Subtotal (pre-surge)</span>
-                    <span className="tabular-nums">
-                      {formatBreakdownMinor(b.subtotal_before_surge_minor, quote!.currency)}
-                    </span>
-                  </li>
-                  <li className="flex justify-between gap-2">
-                    <span className="text-zinc-500">After surge (×{b.surge_multiplier})</span>
-                    <span className="tabular-nums">
-                      {formatBreakdownMinor(b.after_surge_minor, quote!.currency)}
-                    </span>
-                  </li>
-                  {b.min_fare_applied && (
-                    <li className="text-amber-700 text-xs pt-1">Minimum fare applied</li>
-                  )}
-                </ul>
+                    <BreakdownRow
+                      label={`After surge (×${b.surge_multiplier})`}
+                      units="× subtotal"
+                      amount={formatBreakdownMinor(b.after_surge_minor, quote.currency)}
+                    />
+                    {b.min_fare_applied && (
+                      <li className="text-amber-700 text-xs pt-1 col-span-3">
+                        Minimum fare applied after surge
+                      </li>
+                    )}
+                  </ul>
+                </div>
               )}
             </div>
           )}

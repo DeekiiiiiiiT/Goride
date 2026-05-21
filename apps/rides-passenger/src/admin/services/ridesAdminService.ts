@@ -3,6 +3,7 @@
  */
 
 import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
+import { supabase } from '@roam/auth-client';
 import type {
   RiderDetailDto,
   RiderDirectoryRow,
@@ -82,6 +83,41 @@ function headers(accessToken: string, contentType?: string): HeadersInit {
   return h;
 }
 
+/** Prefer live session token; refresh when close to expiry. */
+async function resolveAccessToken(accessToken: string): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const active = session?.access_token ?? accessToken;
+  const expiresAt = session?.expires_at ?? 0;
+  const now = Math.floor(Date.now() / 1000);
+  if (session && expiresAt - now < 90) {
+    const { data, error } = await supabase.auth.refreshSession();
+    if (!error && data.session?.access_token) return data.session.access_token;
+  }
+  return active;
+}
+
+async function adminFetch(
+  accessToken: string,
+  url: string,
+  init?: Omit<RequestInit, 'headers'>,
+): Promise<Response> {
+  let token = await resolveAccessToken(accessToken);
+  const withHeaders = (t: string): RequestInit => ({
+    ...init,
+    headers: headers(t, init?.body != null ? 'application/json' : undefined),
+  });
+
+  let res = await fetch(url, withHeaders(token));
+  if (res.status === 401) {
+    const { data, error } = await supabase.auth.refreshSession();
+    if (!error && data.session?.access_token) {
+      token = data.session.access_token;
+      res = await fetch(url, withHeaders(token));
+    }
+  }
+  return res;
+}
+
 async function parseError(res: Response): Promise<string> {
   const text = await res.text();
   const trimmed = text.trim();
@@ -121,6 +157,9 @@ async function parseError(res: Response): Promise<string> {
     if (body.error === 'slug_required') {
       return 'ID is required.';
     }
+    if (res.status === 401 || body.error === 'Unauthorized: invalid token') {
+      return 'Session expired or invalid. Sign out, then sign in again. If it persists, ensure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY match the same Supabase project as production.';
+    }
     if (body.error) return `${body.error} (HTTP ${res.status})`;
     return trimmed || `HTTP ${res.status}`;
   } catch {
@@ -144,8 +183,7 @@ export type CommandoBodyTypesResponse = {
 export async function listCommandoBodyTypes(
   accessToken: string,
 ): Promise<CommandoBodyTypesResponse> {
-  const res = await fetch(`${RIDES_BASE}/admin/commando/body-types`, {
-    headers: headers(accessToken),
+  const res = await adminFetch(accessToken,`${RIDES_BASE}/admin/commando/body-types`, {
   });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
@@ -154,8 +192,7 @@ export async function listCommandoBodyTypes(
 export async function listVehicleTypes(
   accessToken: string,
 ): Promise<{ vehicle_types: RidesVehicleTypeDto[] }> {
-  const res = await fetch(`${RIDES_BASE}/admin/vehicle-types`, {
-    headers: headers(accessToken),
+  const res = await adminFetch(accessToken,`${RIDES_BASE}/admin/vehicle-types`, {
   });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
@@ -165,9 +202,8 @@ export async function createVehicleType(
   accessToken: string,
   input: RidesVehicleTypeInput & { slug: string },
 ): Promise<{ vehicle_type: RidesVehicleTypeDto }> {
-  const res = await fetch(`${RIDES_BASE}/admin/vehicle-types`, {
+  const res = await adminFetch(accessToken,`${RIDES_BASE}/admin/vehicle-types`, {
     method: 'POST',
-    headers: headers(accessToken, 'application/json'),
     body: JSON.stringify(input),
   });
   if (!res.ok) throw new Error(await parseError(res));
@@ -179,9 +215,8 @@ export async function updateVehicleType(
   slug: string,
   input: RidesVehicleTypeInput,
 ): Promise<{ vehicle_type: RidesVehicleTypeDto }> {
-  const res = await fetch(`${RIDES_BASE}/admin/vehicle-types/${encodeURIComponent(slug)}`, {
+  const res = await adminFetch(accessToken,`${RIDES_BASE}/admin/vehicle-types/${encodeURIComponent(slug)}`, {
     method: 'PATCH',
-    headers: headers(accessToken, 'application/json'),
     body: JSON.stringify(input),
   });
   if (!res.ok) throw new Error(await parseError(res));
@@ -192,9 +227,8 @@ export async function getServiceBodyTypes(
   accessToken: string,
   serviceSlug: string,
 ): Promise<{ service_slug: string; body_types: ServiceBodyTypeLink[] }> {
-  const res = await fetch(
+  const res = await adminFetch(accessToken,
     `${RIDES_BASE}/admin/services/${encodeURIComponent(serviceSlug)}/body-types`,
-    { headers: headers(accessToken) },
   );
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
@@ -205,11 +239,10 @@ export async function setServiceBodyTypes(
   serviceSlug: string,
   bodyTypes: ServiceBodyTypeLink[],
 ): Promise<{ service_slug: string; body_types: ServiceBodyTypeLink[] }> {
-  const res = await fetch(
+  const res = await adminFetch(accessToken,
     `${RIDES_BASE}/admin/services/${encodeURIComponent(serviceSlug)}/body-types`,
     {
       method: 'PUT',
-      headers: headers(accessToken, 'application/json'),
       body: JSON.stringify({ body_types: bodyTypes }),
     },
   );
@@ -221,11 +254,10 @@ export async function deleteVehicleType(
   accessToken: string,
   slug: string,
 ): Promise<{ ok: boolean }> {
-  const res = await fetch(
+  const res = await adminFetch(accessToken,
     `${RIDES_BASE}/admin/vehicle-types/${encodeURIComponent(slug)}/delete`,
     {
       method: 'POST',
-      headers: headers(accessToken, 'application/json'),
       body: '{}',
     },
   );
@@ -236,8 +268,7 @@ export async function deleteVehicleType(
 export async function listFareRules(
   accessToken: string
 ): Promise<{ rules: FareRuleAdminDto[] }> {
-  const res = await fetch(`${RIDES_BASE}/admin/fare-rules`, {
-    headers: headers(accessToken),
+  const res = await adminFetch(accessToken,`${RIDES_BASE}/admin/fare-rules`, {
   });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
@@ -247,9 +278,8 @@ export async function createFareRule(
   accessToken: string,
   input: FareRuleAdminInput
 ): Promise<{ rule: FareRuleAdminDto }> {
-  const res = await fetch(`${RIDES_BASE}/admin/fare-rules`, {
+  const res = await adminFetch(accessToken,`${RIDES_BASE}/admin/fare-rules`, {
     method: 'POST',
-    headers: headers(accessToken, 'application/json'),
     body: JSON.stringify(input),
   });
   if (!res.ok) throw new Error(await parseError(res));
@@ -261,9 +291,8 @@ export async function updateFareRule(
   id: string,
   input: Partial<FareRuleAdminInput>
 ): Promise<{ rule: FareRuleAdminDto }> {
-  const res = await fetch(`${RIDES_BASE}/admin/fare-rules/${id}`, {
+  const res = await adminFetch(accessToken,`${RIDES_BASE}/admin/fare-rules/${id}`, {
     method: 'PATCH',
-    headers: headers(accessToken, 'application/json'),
     body: JSON.stringify(input),
   });
   if (!res.ok) throw new Error(await parseError(res));
@@ -278,9 +307,8 @@ export async function deleteFareRule(
   let res: Response;
   try {
     // POST avoids browser/CORS issues with DELETE on some deployed rides functions.
-    res = await fetch(url, {
+    res = await adminFetch(accessToken, url, {
       method: 'POST',
-      headers: headers(accessToken, 'application/json'),
       body: '{}',
     });
   } catch {
@@ -300,8 +328,7 @@ export async function listSurgeCells(
   if (opts.search) sp.set('search', opts.search);
   if (opts.page != null) sp.set('page', String(opts.page));
   if (opts.limit != null) sp.set('limit', String(opts.limit));
-  const res = await fetch(`${RIDES_BASE}/admin/surge-cells?${sp.toString()}`, {
-    headers: headers(accessToken),
+  const res = await adminFetch(accessToken,`${RIDES_BASE}/admin/surge-cells?${sp.toString()}`, {
   });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
@@ -312,9 +339,8 @@ export async function updateSurgeCell(
   cellKey: string,
   surge_multiplier: number
 ): Promise<{ cell: SurgeCellAdminRow }> {
-  const res = await fetch(`${RIDES_BASE}/admin/surge-cells/${encodeURIComponent(cellKey)}`, {
+  const res = await adminFetch(accessToken,`${RIDES_BASE}/admin/surge-cells/${encodeURIComponent(cellKey)}`, {
     method: 'PATCH',
-    headers: headers(accessToken, 'application/json'),
     body: JSON.stringify({ surge_multiplier }),
   });
   if (!res.ok) throw new Error(await parseError(res));
@@ -326,11 +352,10 @@ export async function resetSurgeCell(
   cellKey: string,
   reset_multiplier = false
 ): Promise<{ cell: SurgeCellAdminRow }> {
-  const res = await fetch(
+  const res = await adminFetch(accessToken,
     `${RIDES_BASE}/admin/surge-cells/${encodeURIComponent(cellKey)}/reset`,
     {
       method: 'POST',
-      headers: headers(accessToken, 'application/json'),
       body: JSON.stringify({ reset_multiplier }),
     }
   );
@@ -342,9 +367,8 @@ export async function resetAllSurgeCells(
   accessToken: string,
   reset_multiplier = true
 ): Promise<{ ok: boolean; rows_updated: number }> {
-  const res = await fetch(`${RIDES_BASE}/admin/surge-cells/reset-all`, {
+  const res = await adminFetch(accessToken,`${RIDES_BASE}/admin/surge-cells/reset-all`, {
     method: 'POST',
-    headers: headers(accessToken, 'application/json'),
     body: JSON.stringify({ reset_multiplier }),
   });
   if (!res.ok) throw new Error(await parseError(res));
@@ -361,8 +385,7 @@ export async function listRiders(
   if (opts.sort) sp.set('sort', opts.sort);
   if (opts.page != null) sp.set('page', String(opts.page));
   if (opts.limit != null) sp.set('limit', String(opts.limit));
-  const res = await fetch(`${RIDES_BASE}/admin/riders?${sp.toString()}`, {
-    headers: headers(accessToken),
+  const res = await adminFetch(accessToken,`${RIDES_BASE}/admin/riders?${sp.toString()}`, {
   });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
@@ -372,8 +395,7 @@ export async function getRiderDetail(
   accessToken: string,
   userId: string,
 ): Promise<{ rider: RiderDetailDto; permissions: RiderAdminPermissions }> {
-  const res = await fetch(`${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}`, {
-    headers: headers(accessToken),
+  const res = await adminFetch(accessToken,`${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}`, {
   });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
@@ -387,9 +409,8 @@ export async function listRiderTrips(
   const sp = new URLSearchParams();
   if (opts.page != null) sp.set('page', String(opts.page));
   if (opts.limit != null) sp.set('limit', String(opts.limit));
-  const res = await fetch(
+  const res = await adminFetch(accessToken,
     `${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}/trips?${sp.toString()}`,
-    { headers: headers(accessToken) },
   );
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
@@ -399,8 +420,7 @@ export async function listRiderNotes(
   accessToken: string,
   userId: string,
 ): Promise<{ notes: RiderAdminNote[] }> {
-  const res = await fetch(`${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}/notes`, {
-    headers: headers(accessToken),
+  const res = await adminFetch(accessToken,`${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}/notes`, {
   });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
@@ -411,9 +431,8 @@ export async function addRiderNote(
   userId: string,
   body: string,
 ): Promise<{ note: RiderAdminNote }> {
-  const res = await fetch(`${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}/notes`, {
+  const res = await adminFetch(accessToken,`${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}/notes`, {
     method: 'POST',
-    headers: headers(accessToken, 'application/json'),
     body: JSON.stringify({ body }),
   });
   if (!res.ok) throw new Error(await parseError(res));
@@ -425,9 +444,8 @@ export async function patchRiderProfile(
   userId: string,
   patch: { display_name?: string; phone?: string },
 ): Promise<unknown> {
-  const res = await fetch(`${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}`, {
+  const res = await adminFetch(accessToken,`${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}`, {
     method: 'PATCH',
-    headers: headers(accessToken, 'application/json'),
     body: JSON.stringify(patch),
   });
   if (!res.ok) throw new Error(await parseError(res));
@@ -439,18 +457,16 @@ export async function suspendRider(
   userId: string,
   reason: string,
 ): Promise<void> {
-  const res = await fetch(`${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}/suspend`, {
+  const res = await adminFetch(accessToken,`${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}/suspend`, {
     method: 'POST',
-    headers: headers(accessToken, 'application/json'),
     body: JSON.stringify({ reason }),
   });
   if (!res.ok) throw new Error(await parseError(res));
 }
 
 export async function unsuspendRider(accessToken: string, userId: string): Promise<void> {
-  const res = await fetch(`${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}/unsuspend`, {
+  const res = await adminFetch(accessToken,`${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}/unsuspend`, {
     method: 'POST',
-    headers: headers(accessToken, 'application/json'),
     body: JSON.stringify({}),
   });
   if (!res.ok) throw new Error(await parseError(res));
@@ -461,9 +477,8 @@ export async function banRider(
   userId: string,
   reason: string,
 ): Promise<void> {
-  const res = await fetch(`${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}/ban`, {
+  const res = await adminFetch(accessToken,`${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}/ban`, {
     method: 'POST',
-    headers: headers(accessToken, 'application/json'),
     body: JSON.stringify({ reason }),
   });
   if (!res.ok) throw new Error(await parseError(res));
@@ -473,11 +488,10 @@ export async function resetRiderPassword(
   accessToken: string,
   userId: string,
 ): Promise<{ ok: boolean; message: string; email?: string; recovery_link?: string }> {
-  const res = await fetch(
+  const res = await adminFetch(accessToken,
     `${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}/reset-password`,
     {
       method: 'POST',
-      headers: headers(accessToken, 'application/json'),
       body: JSON.stringify({}),
     },
   );
@@ -489,9 +503,8 @@ export async function signOutRiderAllDevices(
   accessToken: string,
   userId: string,
 ): Promise<void> {
-  const res = await fetch(`${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}/sign-out`, {
+  const res = await adminFetch(accessToken,`${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}/sign-out`, {
     method: 'POST',
-    headers: headers(accessToken, 'application/json'),
     body: JSON.stringify({}),
   });
   if (!res.ok) throw new Error(await parseError(res));
@@ -520,8 +533,7 @@ export type DispatchSettingsPatch = Partial<
 export async function getDispatchSettings(
   accessToken: string,
 ): Promise<{ settings: DispatchSettingsDto }> {
-  const res = await fetch(`${RIDES_BASE}/admin/dispatch-settings`, {
-    headers: headers(accessToken),
+  const res = await adminFetch(accessToken,`${RIDES_BASE}/admin/dispatch-settings`, {
   });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
@@ -531,9 +543,8 @@ export async function updateDispatchSettings(
   accessToken: string,
   patch: DispatchSettingsPatch,
 ): Promise<{ settings: DispatchSettingsDto }> {
-  const res = await fetch(`${RIDES_BASE}/admin/dispatch-settings`, {
+  const res = await adminFetch(accessToken,`${RIDES_BASE}/admin/dispatch-settings`, {
     method: 'PATCH',
-    headers: headers(accessToken, 'application/json'),
     body: JSON.stringify(patch),
   });
   if (!res.ok) throw new Error(await parseError(res));

@@ -11,6 +11,7 @@ import { cors } from "https://deno.land/x/hono@v4.3.11/middleware.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { jsonEdgeForbidden, ridesUserSurfaceRole } from "../_shared/authEdge.ts";
 import { buildFareQuote, gridCellKey } from "./fare/buildQuote.ts";
+import { FareRuleNotFoundError } from "./fare/rules.ts";
 import { rankDriversByDriveTime } from "./fare/distanceMatrix.ts";
 import { haversineKm } from "./fare/routing.ts";
 import { quoteTokenHash, verifyQuoteToken } from "./fare/quoteToken.ts";
@@ -405,16 +406,24 @@ app.post("/v1/quote", async (c) => {
     allowedBodyTypeSlugs = undefined;
   }
 
-  const quote = await buildFareQuote(db, {
-    pickupLat: pickup_lat,
-    pickupLng: pickup_lng,
-    dropoffLat: dropoff_lat,
-    dropoffLng: dropoff_lng,
-    vehicleType,
-    readSurge: readSurgeMultiplier,
-    allowedBodyTypeSlugs,
-    dispatchSettings,
-  });
+  let quote: Awaited<ReturnType<typeof buildFareQuote>>;
+  try {
+    quote = await buildFareQuote(db, {
+      pickupLat: pickup_lat,
+      pickupLng: pickup_lng,
+      dropoffLat: dropoff_lat,
+      dropoffLng: dropoff_lng,
+      vehicleType,
+      readSurge: readSurgeMultiplier,
+      allowedBodyTypeSlugs,
+      dispatchSettings,
+    });
+  } catch (e) {
+    if (e instanceof FareRuleNotFoundError) {
+      return c.json(e.toResponseBody(), 404);
+    }
+    throw e;
+  }
 
   await audit(null, auth.user.id, "fare_quoted", {
     distance_km: quote.distanceKm,

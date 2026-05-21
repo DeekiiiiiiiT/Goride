@@ -85,7 +85,7 @@ subtotal = base + booking_fee + (km × per_km) + (min × per_min)
 fare_minor = max(min_fare, round(subtotal × surge_multiplier))
 ```
 
-Env fallbacks if no DB row: `ROAM_RIDES_*_MINOR` (see `supabase/functions/rides/fare/rules.ts`).
+If no active `fare_rules` row matches pickup + vehicle, quote returns **`no_fare_rule`** (404) — configure rules in Admin → Fare Rules.
 
 ### Book (`POST /v1/requests`)
 

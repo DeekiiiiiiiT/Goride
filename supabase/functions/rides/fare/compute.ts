@@ -21,6 +21,16 @@ export interface FareBreakdown {
   after_surge_minor: number;
   min_fare_applied: boolean;
   fare_estimate_minor: number;
+  /** Rates and inputs used for this quote (admin / transparency). */
+  price_per_km_minor: number;
+  price_per_min_minor: number;
+  min_fare_minor: number;
+  distance_km: number;
+  duration_minutes: number;
+  currency: string;
+  rule_source: "database";
+  location_key: string;
+  vehicle_type: string;
 }
 
 export function computeFareMinor(params: {
@@ -28,6 +38,8 @@ export function computeFareMinor(params: {
   distanceKm: number;
   durationMinutes: number;
   surgeMultiplier: number;
+  locationKey: string;
+  vehicleType: string;
 }): { fareMinor: bigint; breakdown: FareBreakdown; durationMinutes: number } {
   const durationMinutes = Math.max(1, Math.round(params.durationMinutes));
   const distanceKm = Math.max(0, params.distanceKm);
@@ -60,6 +72,15 @@ export function computeFareMinor(params: {
       after_surge_minor: afterSurge,
       min_fare_applied: minApplied,
       fare_estimate_minor: Number(fareMinor),
+      price_per_km_minor: params.rules.pricePerKmMinor,
+      price_per_min_minor: params.rules.pricePerMinMinor,
+      min_fare_minor: minFare,
+      distance_km: distanceKm,
+      duration_minutes: durationMinutes,
+      currency: params.rules.currency,
+      rule_source: "database",
+      location_key: params.locationKey,
+      vehicle_type: params.vehicleType,
     },
   };
 }

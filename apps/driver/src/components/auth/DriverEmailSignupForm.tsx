@@ -203,11 +203,15 @@ function GoogleMark({ className }: { className?: string }) {
 export function GoogleSignupButton({
   disabled,
   onError,
+  variant = 'signup',
 }: {
   disabled?: boolean;
   onError: (msg: string) => void;
+  /** Same OAuth flow for new and returning users; label only. */
+  variant?: 'signup' | 'login';
 }) {
   const [loading, setLoading] = useState(false);
+  const label = variant === 'login' ? 'Sign in with Google' : 'Continue with Google';
 
   const onClick = async () => {
     onError('');
@@ -225,7 +229,13 @@ export function GoogleSignupButton({
       if (error) throw error;
     } catch (err: unknown) {
       sessionStorage.removeItem(DRIVER_OAUTH_INTENT_KEY);
-      onError(err instanceof Error ? err.message : 'Google sign-up failed.');
+      onError(
+        err instanceof Error
+          ? err.message
+          : variant === 'login'
+            ? 'Google sign-in failed.'
+            : 'Google sign-up failed.',
+      );
     } finally {
       setLoading(false);
     }
@@ -239,7 +249,7 @@ export function GoogleSignupButton({
       className="flex w-full items-center justify-center gap-3 rounded-lg border border-slate-300 bg-white py-3 text-sm font-semibold text-slate-800 shadow-sm transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900/60 dark:text-slate-100 dark:hover:bg-slate-800/80"
     >
       {loading ? <Loader2 className="h-5 w-5 animate-spin text-slate-600 dark:text-slate-300" /> : <GoogleMark className="h-5 w-5" />}
-      Continue with Google
+      {label}
     </button>
   );
 }

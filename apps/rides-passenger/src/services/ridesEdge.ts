@@ -29,6 +29,24 @@ export async function ridesListVehicleTypes(): Promise<{
   return res.json();
 }
 
+async function parseRidesError(res: Response): Promise<never> {
+  const text = await res.text();
+  try {
+    const body = JSON.parse(text) as { error?: string; message?: string };
+    if (body.error === 'no_fare_rule') {
+      throw new Error(
+        body.message ??
+          'No fare rule for this trip. Add an active rule in Admin → Fare Rules.',
+      );
+    }
+    if (body.message) throw new Error(body.message);
+    if (body.error) throw new Error(`${body.error} (HTTP ${res.status})`);
+  } catch (e) {
+    if (e instanceof Error && !e.message.startsWith('{')) throw e;
+  }
+  throw new Error(text.trim() || `HTTP ${res.status}`);
+}
+
 export async function ridesQuote(body: {
   pickup_lat: number;
   pickup_lng: number;
@@ -41,7 +59,7 @@ export async function ridesQuote(body: {
     headers: await ridesHeaders(),
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) await parseRidesError(res);
   return res.json();
 }
 

@@ -63,6 +63,8 @@ export async function buildFareQuote(
     distanceKm: route.distanceKm,
     durationMinutes: route.durationMinutes,
     surgeMultiplier: surge,
+    locationKey: rules.location_key,
+    vehicleType: rules.vehicle_type,
   });
 
   const quoteToken = await mintQuoteToken({

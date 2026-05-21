@@ -5,6 +5,11 @@ const supabaseUrl = `https://${projectId}.supabase.co`;
 const supabaseKey = publicAnonKey;
 
 export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+  },
   global: {
     fetch: (url, options) => {
       const controller = new AbortController();

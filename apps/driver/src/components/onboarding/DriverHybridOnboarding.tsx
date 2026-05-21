@@ -1,11 +1,42 @@
 import React, { useEffect, useState } from 'react';
-import { Building2, Car, Loader2 } from 'lucide-react';
+import { ArrowLeft, Building2, Car, Loader2 } from 'lucide-react';
 import { Button } from '@roam/ui';
 import { Input } from '@roam/ui';
 import { Label } from '@roam/ui';
+import { useAuth } from '../../contexts/AuthContext';
 import { useDriver } from '../../contexts/DriverContext';
 import { DriverOnboardingPage } from '../auth/DriverOnboardingPage';
+import { ThemeToggleButton } from '../layout/ThemeToggleButton';
 import { api } from '../../services/api';
+
+function OnboardingShellHeader({ onBack }: { onBack?: () => void }) {
+  const { signOut } = useAuth();
+
+  return (
+    <div className="flex items-center justify-between px-4 pt-4">
+      {onBack ? (
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex items-center gap-1 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => void signOut()}
+          className="inline-flex items-center gap-1 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Sign out
+        </button>
+      )}
+      <ThemeToggleButton />
+    </div>
+  );
+}
 
 type Step = 'mode' | 'fleet' | 'profile';
 
@@ -61,8 +92,9 @@ export function DriverHybridOnboarding() {
 
   if (step === 'fleet') {
     return (
-      <div className="flex min-h-screen flex-col bg-gradient-to-br from-slate-100 via-white to-slate-100 px-4 py-10 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
-        <div className="mx-auto w-full max-w-sm">
+      <div className="flex min-h-screen flex-col bg-gradient-to-br from-slate-100 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+        <OnboardingShellHeader onBack={() => setStep('mode')} />
+        <div className="mx-auto w-full max-w-sm px-4 pb-10 pt-2">
           <h1 className="text-center text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Join your fleet</h1>
           <p className="mt-2 text-center text-sm text-slate-600 dark:text-slate-300">
             Paste the organization ID your fleet admin shared with you.
@@ -97,8 +129,9 @@ export function DriverHybridOnboarding() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-gradient-to-br from-slate-100 via-white to-slate-100 px-4 py-10 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
-      <div className="mx-auto w-full max-w-sm">
+    <div className="flex min-h-screen flex-col bg-gradient-to-br from-slate-100 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+      <OnboardingShellHeader />
+      <div className="mx-auto w-full max-w-sm px-4 pb-10 pt-2">
         <h1 className="text-center text-2xl font-bold tracking-tight text-slate-900 dark:text-white">How do you drive?</h1>
         <p className="mt-2 text-center text-sm text-slate-600 dark:text-slate-300">
           Choose one to continue. You can finish documents on the next step.

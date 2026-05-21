@@ -26,6 +26,50 @@ import {
 
 type OutletContext = { session: Session };
 
+/** Commando catalog total includes the driver; one driver seat is subtracted for riders. */
+const DRIVER_SEATS = 1;
+
+function passengerSeatsFromCatalogTotal(catalogTotal: number): number {
+  return Math.max(0, catalogTotal - DRIVER_SEATS);
+}
+
+function resolveCatalogTotal(
+  bodyType: string,
+  commandoSeatsByBody: Record<string, number>,
+  storedPassengerSeats?: number,
+): number | null {
+  const fromCatalog = commandoSeatsByBody[bodyType];
+  if (fromCatalog != null && fromCatalog > 0) return fromCatalog;
+  if (storedPassengerSeats != null && storedPassengerSeats >= 0) {
+    return storedPassengerSeats + DRIVER_SEATS;
+  }
+  return null;
+}
+
+function ReadOnlySeatField({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: number | null;
+  hint?: string;
+}) {
+  return (
+    <label className="block space-y-1.5">
+      <span className="text-sm text-slate-300">{label}</span>
+      <input
+        type="text"
+        readOnly
+        tabIndex={-1}
+        value={value != null ? String(value) : '—'}
+        className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-300 cursor-not-allowed"
+      />
+      {hint ? <p className="text-xs text-slate-500">{hint}</p> : null}
+    </label>
+  );
+}
+
 function emptyForm(kind: TransportSolutionKind): RidesVehicleTypeInput & { slug: string } {
   return {
     slug: '',
@@ -199,6 +243,8 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
   const [commandoSeatsByBody, setCommandoSeatsByBody] = useState<Record<string, number>>({});
   const [commandoLoading, setCommandoLoading] = useState(false);
   const [selectedCommandoBody, setSelectedCommandoBody] = useState('');
+  /** Total seats from Commando (includes driver). */
+  const [catalogSeatingTotal, setCatalogSeatingTotal] = useState<number | null>(null);
   const [serviceBodyLabels, setServiceBodyLabels] = useState<Record<string, string[]>>({});
   const [linkedBodyTypes, setLinkedBodyTypes] = useState<ServiceBodyTypeLink[]>([]);
 
@@ -210,6 +256,17 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
       return slug.length > 0 && !usedVehicleSlugs.has(slug);
     });
   }, [commandoBodyTypes, usedVehicleSlugs]);
+
+  const vehicleSeatBreakdown = useMemo(() => {
+    const catalogTotal = catalogSeatingTotal;
+    const passengerSeats =
+      catalogTotal != null ? passengerSeatsFromCatalogTotal(catalogTotal) : null;
+    return {
+      catalogTotal,
+      driverSeats: DRIVER_SEATS,
+      passengerSeats,
+    };
+  }, [catalogSeatingTotal]);
 
   useEffect(() => {
     if (!dialogOpen || editing || kind !== 'vehicle') return;
@@ -275,6 +332,7 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
   const openCreate = () => {
     setEditing(null);
     setSelectedCommandoBody('');
+    setCatalogSeatingTotal(null);
     setLinkedBodyTypes([]);
     setForm({ ...emptyForm(kind), sort_order: (items.length + 1) * 10 });
     setDialogOpen(true);
@@ -283,18 +341,27 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
   const pickCommandoBodyType = (bodyType: string) => {
     setSelectedCommandoBody(bodyType);
     const slug = normalizeTransportSolutionSlug(bodyType);
-    const seatsFromCatalog = commandoSeatsByBody[bodyType];
+    const total = resolveCatalogTotal(bodyType, commandoSeatsByBody);
+    setCatalogSeatingTotal(total);
     setForm((f) => ({
       ...f,
       slug,
       label: bodyType,
-      seats: seatsFromCatalog ?? f.seats ?? 4,
+      seats: total != null ? passengerSeatsFromCatalogTotal(total) : 0,
     }));
   };
 
   const openEdit = (row: RidesVehicleTypeDto) => {
     setEditing(row);
-    setSelectedCommandoBody(row.commando_body_type ?? row.label);
+    const bodyLabel = row.commando_body_type ?? row.label;
+    setSelectedCommandoBody(bodyLabel);
+    if (row.solution_kind === 'vehicle') {
+      setCatalogSeatingTotal(
+        resolveCatalogTotal(bodyLabel, commandoSeatsByBody, row.seats),
+      );
+    } else {
+      setCatalogSeatingTotal(null);
+    }
     setForm({
       slug: row.slug,
       label: row.label,
@@ -354,8 +421,13 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
     setSaving(true);
     try {
       if (kind === 'vehicle') {
+        const passengerSeats = vehicleSeatBreakdown.passengerSeats;
+        if (passengerSeats == null) {
+          toast.error('Select a body type with seating capacity from Commando.');
+          return;
+        }
         const payload: RidesVehicleTypeInput = {
-          seats: form.seats,
+          seats: passengerSeats,
           sort_order: form.sort_order ?? 0,
           is_active: form.is_active !== false,
           solution_kind: 'vehicle',
@@ -555,31 +627,42 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
                   </label>
                 </>
               )}
-              <label className="block">
-                <span className="text-sm text-slate-300">
-                  Seating capacity
-                  {form.solution_kind === 'vehicle' && selectedCommandoBody ? (
-                    <span className="text-slate-500 font-normal"> (from Commando)</span>
-                  ) : null}
-                </span>
-                <input
-                  type="number"
-                  min={0}
-                  max={99}
-                  className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white"
-                  value={form.seats}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, seats: parseInt(e.target.value, 10) || 0 }))
-                  }
-                />
-                {form.solution_kind === 'vehicle' && selectedCommandoBody ? (
-                  <p className="mt-1 text-xs text-slate-500">
-                    {commandoSeatsByBody[selectedCommandoBody] != null
-                      ? `Catalog max for ${selectedCommandoBody}: ${commandoSeatsByBody[selectedCommandoBody]} passengers. You can override.`
-                      : 'No seating data in catalog for this body type — enter a value.'}
-                  </p>
-                ) : null}
-              </label>
+              {form.solution_kind === 'vehicle' ? (
+                <div className="space-y-3">
+                  <p className="text-xs text-slate-500 uppercase tracking-wide">Seating (Commando)</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <ReadOnlySeatField
+                      label="Seating capacity"
+                      value={vehicleSeatBreakdown.catalogTotal}
+                      hint="Total seats in catalog (includes driver)"
+                    />
+                    <ReadOnlySeatField
+                      label="Driver seat"
+                      value={vehicleSeatBreakdown.driverSeats}
+                      hint="Fixed at 1"
+                    />
+                    <ReadOnlySeatField
+                      label="Passenger seats"
+                      value={vehicleSeatBreakdown.passengerSeats}
+                      hint="Saved for rider display (total − driver)"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <label className="block">
+                  <span className="text-sm text-slate-300">Seats</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={99}
+                    className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white"
+                    value={form.seats}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, seats: parseInt(e.target.value, 10) || 0 }))
+                    }
+                  />
+                </label>
+              )}
               {form.solution_kind === 'service' && (
                 <>
                   <label className="block">

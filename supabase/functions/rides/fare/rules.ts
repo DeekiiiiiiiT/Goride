@@ -3,27 +3,45 @@ import type { FareRulesInput } from "./compute.ts";
 import { locationKeysForFallback } from "./jamaicaLocations.ts";
 import { resolvePickupLocation } from "./resolveLocation.ts";
 import {
-  DEFAULT_RIDES_VEHICLE_TYPE,
   normalizeVehicleType,
   vehicleTypesForFareLookup,
 } from "./ridesVehicleTypes.ts";
 
 const CACHE_TTL_MS = 60_000;
 
-const ENV_FALLBACK: FareRulesInput = {
-  baseFareMinor: Number(Deno.env.get("ROAM_RIDES_BASE_MINOR") ?? 30000),
-  pricePerKmMinor: Number(Deno.env.get("ROAM_RIDES_PER_KM_MINOR") ?? 12000),
-  pricePerMinMinor: Number(Deno.env.get("ROAM_RIDES_PER_MIN_MINOR") ?? 5000),
-  bookingFeeMinor: Number(Deno.env.get("ROAM_RIDES_BOOKING_FEE_MINOR") ?? 5000),
-  estimatedTollsMinor: Number(Deno.env.get("ROAM_RIDES_ESTIMATED_TOLLS_MINOR") ?? 0),
-  minFareMinor: Number(Deno.env.get("ROAM_RIDES_MIN_FARE_MINOR") ?? 50000),
-  currency: "JMD",
-};
-
 type CacheEntry = { rules: FareRulesInput; locationKey: string; at: number };
 const cache = new Map<string, CacheEntry>();
 
 export { resolvePickupLocation, resolveCity } from "./resolveLocation.ts";
+
+/** Thrown when no active fare_rules row matches pickup + vehicle (production: no hardcoded fallback). */
+export class FareRuleNotFoundError extends Error {
+  readonly code = "no_fare_rule";
+
+  constructor(
+    readonly vehicleType: string,
+    readonly resolvedLocationKey: string,
+    readonly locationKeysTried: string[],
+    readonly vehicleTypesTried: string[],
+  ) {
+    super(
+      `No active fare rule for "${vehicleType}" at this pickup (${resolvedLocationKey}). ` +
+        `Add an active rule in Fare Rules (location + vehicle type).`,
+    );
+    this.name = "FareRuleNotFoundError";
+  }
+
+  toResponseBody(): Record<string, unknown> {
+    return {
+      error: this.code,
+      message: this.message,
+      vehicle_type: this.vehicleType,
+      location_key: this.resolvedLocationKey,
+      location_keys_tried: this.locationKeysTried,
+      vehicle_types_tried: this.vehicleTypesTried,
+    };
+  }
+}
 
 async function fetchActiveRule(
   db: SupabaseClient,
@@ -36,12 +54,18 @@ async function fetchActiveRule(
   ).eq("is_active", true).maybeSingle();
 }
 
+export type LoadedFareRules = FareRulesInput & {
+  location_key: string;
+  vehicle_type: string;
+  city: string;
+};
+
 export async function loadFareRules(
   db: SupabaseClient,
   pickupLat: number,
   pickupLng: number,
   vehicleType: string,
-): Promise<FareRulesInput & { location_key: string; vehicle_type: string; city: string }> {
+): Promise<LoadedFareRules> {
   const resolved = resolvePickupLocation(pickupLat, pickupLng);
   const keysToTry = resolved.fallbackKeys.length
     ? resolved.fallbackKeys
@@ -85,10 +109,10 @@ export async function loadFareRules(
     }
   }
 
-  return {
-    ...ENV_FALLBACK,
-    location_key: resolved.locationKey,
-    city: resolved.locationKey,
-    vehicle_type: canonicalVehicle || DEFAULT_RIDES_VEHICLE_TYPE,
-  };
+  throw new FareRuleNotFoundError(
+    canonicalVehicle || vehicleType,
+    resolved.locationKey,
+    keysToTry,
+    vehicleSlugs,
+  );
 }

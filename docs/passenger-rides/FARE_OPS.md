@@ -61,7 +61,7 @@ Quotes pick up fare-rule changes within about **60 seconds** (Edge cache). Surge
 | `GOOGLE_MAPS_API_KEY_RIDES` | Server: Directions + Distance Matrix (fare quotes, driver matching) |
 | `GOOGLE_MAPS_SERVER_KEY_RIDES` | Alternate server key (same APIs) |
 | `ROAM_RIDES_QUOTE_SECRET` | Sign `quote_token` (required in production) |
-| `ROAM_RIDES_*_MINOR` | Optional env fallback if DB row missing |
+| *(none)* | Fare rates come only from active `fare_rules` rows — quotes return `no_fare_rule` (404) if none match |
 
 Enable on the Google Cloud project tied to the rides key:
 

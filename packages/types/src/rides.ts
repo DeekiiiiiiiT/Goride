@@ -25,6 +25,16 @@ export interface FareBreakdown {
   after_surge_minor: number;
   min_fare_applied: boolean;
   fare_estimate_minor: number;
+  /** Rates and inputs used for this quote (admin transparency). */
+  price_per_km_minor?: number;
+  price_per_min_minor?: number;
+  min_fare_minor?: number;
+  distance_km?: number;
+  duration_minutes?: number;
+  currency?: string;
+  rule_source?: 'database';
+  location_key?: string;
+  vehicle_type?: string;
 }
 
 export interface RideRequestRow {
