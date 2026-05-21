@@ -9,6 +9,21 @@ export interface GeoCoordinates {
   longitude: number;
 }
 
+export interface GeoPositionWithAccuracy {
+  lat: number;
+  lng: number;
+  accuracyMeters: number;
+}
+
+/** Accuracy thresholds in meters */
+export const GPS_ACCURACY = {
+  PRECISE: 20,
+  ACCEPTABLE: 50,
+  POOR: 100,
+} as const;
+
+export type AccuracyLevel = 'precise' | 'approximate' | 'poor';
+
 export interface AddressResult {
   display_name: string;
   lat: string | number;
@@ -238,6 +253,120 @@ export const getCurrentPosition = async (): Promise<GeoCoordinates> => {
     });
   }
 };
+
+/** Get accuracy level from meters */
+export function getAccuracyLevel(accuracyMeters: number): AccuracyLevel {
+  if (accuracyMeters <= GPS_ACCURACY.PRECISE) return 'precise';
+  if (accuracyMeters <= GPS_ACCURACY.ACCEPTABLE) return 'approximate';
+  return 'poor';
+}
+
+/** Get current position with accuracy info */
+export const getCurrentPositionWithAccuracy = (): Promise<GeoPositionWithAccuracy> =>
+  new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('Geolocation is not supported by your browser'));
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracyMeters: position.coords.accuracy,
+        });
+      },
+      (error) => {
+        let message = 'Unknown error getting location';
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            message = 'Location permission denied';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            message = 'Location information is unavailable';
+            break;
+          case error.TIMEOUT:
+            message = 'The request to get user location timed out';
+            break;
+        }
+        reject(new Error(message));
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+    );
+  });
+
+export type PositionWatchCallback = (position: GeoPositionWithAccuracy) => void;
+export type PositionErrorCallback = (error: Error) => void;
+
+/** Watch position continuously with accuracy updates. Returns cleanup function. */
+export function watchPosition(
+  onPosition: PositionWatchCallback,
+  onError?: PositionErrorCallback,
+): () => void {
+  if (!navigator.geolocation) {
+    onError?.(new Error('Geolocation is not supported by your browser'));
+    return () => {};
+  }
+
+  const watchId = navigator.geolocation.watchPosition(
+    (position) => {
+      onPosition({
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        accuracyMeters: position.coords.accuracy,
+      });
+    },
+    (error) => {
+      let message = 'Unknown error getting location';
+      switch (error.code) {
+        case error.PERMISSION_DENIED:
+          message = 'Location permission denied';
+          break;
+        case error.POSITION_UNAVAILABLE:
+          message = 'Location information is unavailable';
+          break;
+        case error.TIMEOUT:
+          message = 'The request to get user location timed out';
+          break;
+      }
+      onError?.(new Error(message));
+    },
+    { enableHighAccuracy: true, timeout: 20000, maximumAge: 5000 },
+  );
+
+  return () => navigator.geolocation.clearWatch(watchId);
+}
+
+/** Snap coordinates to nearest road using Google Roads API (requires Roads API enabled) */
+export async function snapToNearestRoad(
+  lat: number,
+  lng: number,
+): Promise<{ lat: number; lng: number } | null> {
+  try {
+    await loadGoogleMapsApi();
+    
+    // Use the Geocoder to find nearest road-addressable location
+    const geocoder = new window.google.maps.Geocoder();
+    
+    return new Promise((resolve) => {
+      geocoder.geocode(
+        { location: { lat, lng } },
+        (results, status) => {
+          if (status === 'OK' && results?.[0]?.geometry?.location) {
+            const snapped = results[0].geometry.location;
+            resolve({ lat: snapped.lat(), lng: snapped.lng() });
+          } else {
+            resolve(null);
+          }
+        },
+      );
+    });
+  } catch (e) {
+    console.warn('Snap to road failed:', e);
+    return null;
+  }
+}
 
 /** Coordinates → formatted address (Google Geocoder, legacy API). */
 export const reverseGeocode = async (lat: number, lon: number): Promise<string> => {

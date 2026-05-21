@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Loader2, MapPin, X } from 'lucide-react';
+import { Loader2, MapPin, Navigation, X } from 'lucide-react';
 import {
   type AddressResult,
   debounce,
@@ -19,6 +19,12 @@ type Props = {
   clearable?: boolean;
   /** External loading state (e.g. while resolving device location). */
   isLoading?: boolean;
+  /** Show a "use my location" button. */
+  showLocationButton?: boolean;
+  /** Callback when location button is clicked. */
+  onLocationClick?: () => void;
+  /** Is the location button in loading state. */
+  locationLoading?: boolean;
 };
 
 export function RoamPlaceField({
@@ -29,6 +35,9 @@ export function RoamPlaceField({
   placeholder,
   clearable = false,
   isLoading = false,
+  showLocationButton = false,
+  onLocationClick,
+  locationLoading = false,
 }: Props) {
   const [suggestions, setSuggestions] = useState<AddressResult[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -68,8 +77,9 @@ export function RoamPlaceField({
     setShowSuggestions(false);
   };
 
-  const loading = isLoading || resolving;
+  const loading = isLoading || resolving || locationLoading;
   const showClear = clearable && value.trim().length > 0 && !loading;
+  const hasRightElements = showClear || loading || showLocationButton;
 
   const handleSelect = async (s: AddressResult) => {
     const placeId = s.place_id;
@@ -97,7 +107,7 @@ export function RoamPlaceField({
       </span>
       <div className="relative" ref={wrapperRef}>
         <input
-          className={`input-touch w-full rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 outline-none focus:border-emerald-500/55 focus:bg-white focus:ring-4 focus:ring-emerald-500/12 ${showClear || loading ? 'pr-10' : ''}`}
+          className={`input-touch w-full rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 outline-none focus:border-emerald-500/55 focus:bg-white focus:ring-4 focus:ring-emerald-500/12 ${hasRightElements ? 'pr-16' : ''}`}
           value={value}
           placeholder={placeholder}
           autoComplete="off"
@@ -111,21 +121,36 @@ export function RoamPlaceField({
             if (suggestions.length > 0) setShowSuggestions(true);
           }}
         />
-        {(loading || showClear) && (
-          <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center">
+        {hasRightElements && (
+          <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
             {loading ? (
               <div className="pointer-events-none p-1 text-zinc-400">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={handleClear}
-                className="rounded-full p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 touch-manipulation"
-                aria-label="Clear address"
-              >
-                <X className="h-4 w-4" aria-hidden />
-              </button>
+              <>
+                {showClear && (
+                  <button
+                    type="button"
+                    onClick={handleClear}
+                    className="rounded-full p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 touch-manipulation"
+                    aria-label="Clear address"
+                  >
+                    <X className="h-4 w-4" aria-hidden />
+                  </button>
+                )}
+                {showLocationButton && onLocationClick && (
+                  <button
+                    type="button"
+                    onClick={onLocationClick}
+                    disabled={locationLoading}
+                    className="rounded-full p-1.5 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 touch-manipulation disabled:opacity-50"
+                    aria-label="Use my location"
+                  >
+                    <Navigation className="h-4 w-4" aria-hidden />
+                  </button>
+                )}
+              </>
             )}
           </div>
         )}

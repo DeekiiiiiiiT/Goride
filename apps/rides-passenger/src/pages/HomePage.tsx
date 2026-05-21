@@ -7,7 +7,13 @@ import type { FareQuoteResponse } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
 import { RoamPlaceField } from '@/components/RoamPlaceField';
 import { TripRouteMap } from '@/components/TripRouteMap';
-import { resolveCurrentPickupLocation } from '@/services/locationService';
+import { PickupMapSelector, type PickupLocation } from '@/components/PickupMapSelector';
+import { GpsAccuracyBadge } from '@/components/GpsAccuracyBadge';
+import {
+  getCurrentPositionWithAccuracy,
+  watchPosition,
+  type GeoPositionWithAccuracy,
+} from '@/services/locationService';
 import { ridesCreateRequest, ridesQuote } from '@/services/ridesEdge';
 import { DEFAULT_VEHICLE_OPTION } from '@/types/vehicleTypes';
 import { TransportOptionPicker } from '@/components/TransportOptionPicker';
@@ -20,6 +26,7 @@ export default function HomePage() {
   const [dropoffAddress, setDropoffAddress] = useState('');
   const [pickup, setPickup] = useState<{ lat: number; lng: number } | null>(null);
   const [dropoff, setDropoff] = useState<{ lat: number; lng: number } | null>(null);
+  const [pickupAccuracy, setPickupAccuracy] = useState<number | null>(null);
   const { active: services } = useRidesVehicleTypes();
   const [vehicleOption, setVehicleOption] = useState<string>(DEFAULT_VEHICLE_OPTION);
 
@@ -28,64 +35,59 @@ export default function HomePage() {
       setVehicleOption(services[0].slug);
     }
   }, [services, vehicleOption]);
+
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [bookLoading, setBookLoading] = useState(false);
   const [quote, setQuote] = useState<FareQuoteResponse | null>(null);
   const quoteDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pickupGeolocCancelled = useRef(false);
-  const pickupAutoFillDone = useRef(false);
-  const pickupGeolocInFlight = useRef(false);
-  const [pickupGeolocLoading, setPickupGeolocLoading] = useState(false);
+  const [initialGpsLoading, setInitialGpsLoading] = useState(true);
 
   const coordsReady = pickup && dropoff;
 
-  const fillPickupFromCurrentLocation = useCallback(async () => {
-    if (
-      pickupGeolocCancelled.current ||
-      pickupAutoFillDone.current ||
-      pickupGeolocInFlight.current
-    ) {
-      return;
-    }
-    pickupGeolocInFlight.current = true;
-    setPickupGeolocLoading(true);
-    try {
-      const resolved = await resolveCurrentPickupLocation();
-      if (pickupGeolocCancelled.current) return;
-      setPickupAddress(resolved.address);
-      setPickup({ lat: resolved.lat, lng: resolved.lng });
-      pickupAutoFillDone.current = true;
-    } catch (e) {
-      console.warn('Pickup auto-fill failed:', e);
-    } finally {
-      pickupGeolocInFlight.current = false;
-      setPickupGeolocLoading(false);
-    }
-  }, []);
-
+  // Initial GPS position fetch with accuracy
   useEffect(() => {
-    let disposed = false;
+    let cancelled = false;
 
-    void fillPickupFromCurrentLocation();
-
-    if (navigator.permissions?.query) {
-      void navigator.permissions
-        .query({ name: 'geolocation' })
-        .then((status) => {
-          if (disposed) return;
-          const retryIfGranted = () => {
-            if (status.state === 'granted') void fillPickupFromCurrentLocation();
-          };
-          retryIfGranted();
-          status.onchange = retryIfGranted;
-        })
-        .catch(() => {});
-    }
+    void (async () => {
+      try {
+        const position: GeoPositionWithAccuracy = await getCurrentPositionWithAccuracy();
+        if (cancelled) return;
+        setPickup({ lat: position.lat, lng: position.lng });
+        setPickupAccuracy(position.accuracyMeters);
+      } catch (e) {
+        console.warn('Initial GPS failed:', e);
+      } finally {
+        if (!cancelled) setInitialGpsLoading(false);
+      }
+    })();
 
     return () => {
-      disposed = true;
+      cancelled = true;
     };
-  }, [fillPickupFromCurrentLocation]);
+  }, []);
+
+  // Watch position for continuous accuracy updates (optional, stop after booking)
+  useEffect(() => {
+    const stopWatching = watchPosition(
+      (position) => {
+        setPickupAccuracy(position.accuracyMeters);
+      },
+      (error) => {
+        console.warn('Position watch error:', error);
+      },
+    );
+
+    return stopWatching;
+  }, []);
+
+  // Handle map pickup changes (from dragging or "use my location")
+  const handlePickupChange = useCallback((location: PickupLocation) => {
+    setPickupAddress(location.address);
+    setPickup({ lat: location.lat, lng: location.lng });
+    if (location.accuracyMeters != null) {
+      setPickupAccuracy(location.accuracyMeters);
+    }
+  }, []);
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -218,19 +220,34 @@ export default function HomePage() {
             selectedEtaLine={vehicleEtaLine}
           />
 
+          {/* Interactive Pickup Map */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-emerald-600" aria-hidden />
+                Set pickup location
+              </span>
+              <GpsAccuracyBadge accuracyMeters={pickupAccuracy} />
+            </div>
+            <PickupMapSelector
+              pickup={pickup}
+              accuracy={pickupAccuracy}
+              onPickupChange={handlePickupChange}
+              isLoading={initialGpsLoading}
+            />
+          </div>
+
           <RoamPlaceField
             label={
               <>
                 <MapPin className="w-4 h-4 text-emerald-600" aria-hidden />
-                Pickup
+                Pickup address
               </>
             }
             value={pickupAddress}
-            placeholder="Search pickup (e.g. Half Way Tree)"
+            placeholder="Search or drag map above"
             clearable
-            isLoading={pickupGeolocLoading}
             onChangeText={(text) => {
-              pickupGeolocCancelled.current = true;
               setPickupAddress(text);
               setPickup(null);
               clearQuote();
