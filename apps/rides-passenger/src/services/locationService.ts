@@ -173,6 +173,71 @@ export const getPlaceDetails = async (
   return null;
 };
 
+/** Browser Geolocation API — current device position. */
+export const getCurrentPosition = (): Promise<GeoCoordinates> => {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('Geolocation is not supported by your browser'));
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+      },
+      (error) => {
+        let message = 'Unknown error getting location';
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            message = 'Location permission denied';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            message = 'Location information is unavailable';
+            break;
+          case error.TIMEOUT:
+            message = 'The request to get user location timed out';
+            break;
+        }
+        reject(new Error(message));
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+    );
+  });
+};
+
+/** Coordinates → formatted address (Google Geocoder). */
+export const reverseGeocode = async (lat: number, lon: number): Promise<string> => {
+  await loadGoogleMapsApi();
+
+  const geocode = (
+    geocoder: google.maps.Geocoder,
+  ): Promise<string> =>
+    new Promise((resolve, reject) => {
+      geocoder.geocode({ location: { lat, lng: lon } }, (results, status) => {
+        if (status === 'OK' && results?.[0]) {
+          resolve(results[0].formatted_address);
+        } else {
+          reject(new Error('Address not found'));
+        }
+      });
+    });
+
+  if (window.google?.maps?.importLibrary) {
+    const { Geocoder } = (await google.maps.importLibrary('geocoding')) as {
+      Geocoder: new () => google.maps.Geocoder;
+    };
+    return geocode(new Geocoder());
+  }
+
+  if (!window.google?.maps?.Geocoder) {
+    throw new Error('Google Maps Geocoder not available');
+  }
+  return geocode(new window.google.maps.Geocoder());
+};
+
 export function debounce<T extends (...args: unknown[]) => unknown>(
   func: T,
   wait: number,

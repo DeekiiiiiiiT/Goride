@@ -7,6 +7,7 @@ import type { FareQuoteResponse } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
 import { RoamPlaceField } from '@/components/RoamPlaceField';
 import { TripRouteMap } from '@/components/TripRouteMap';
+import { getCurrentPosition, reverseGeocode } from '@/services/locationService';
 import { ridesCreateRequest, ridesQuote } from '@/services/ridesEdge';
 import { DEFAULT_VEHICLE_OPTION } from '@/types/vehicleTypes';
 import { TransportOptionPicker } from '@/components/TransportOptionPicker';
@@ -31,8 +32,29 @@ export default function HomePage() {
   const [bookLoading, setBookLoading] = useState(false);
   const [quote, setQuote] = useState<FareQuoteResponse | null>(null);
   const quoteDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pickupGeolocCancelled = useRef(false);
 
   const coordsReady = pickup && dropoff;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const position = await getCurrentPosition();
+        const address = await reverseGeocode(position.latitude, position.longitude);
+        if (cancelled || pickupGeolocCancelled.current) return;
+        setPickupAddress(address);
+        setPickup({ lat: position.latitude, lng: position.longitude });
+      } catch {
+        // Permission denied or unavailable — user can search manually.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -174,7 +196,9 @@ export default function HomePage() {
             }
             value={pickupAddress}
             placeholder="Search pickup (e.g. Half Way Tree)"
+            clearable
             onChangeText={(text) => {
+              pickupGeolocCancelled.current = true;
               setPickupAddress(text);
               setPickup(null);
               clearQuote();

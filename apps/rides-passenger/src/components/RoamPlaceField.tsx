@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Loader2, MapPin } from 'lucide-react';
+import { Loader2, MapPin, X } from 'lucide-react';
 import {
   type AddressResult,
   debounce,
@@ -15,9 +15,18 @@ type Props = {
   onChangeText: (text: string) => void;
   onResolved: (place: ResolvedPlace) => void;
   placeholder?: string;
+  /** Show an X control to clear the field when it has text. */
+  clearable?: boolean;
 };
 
-export function RoamPlaceField({ label, value, onChangeText, onResolved, placeholder }: Props) {
+export function RoamPlaceField({
+  label,
+  value,
+  onChangeText,
+  onResolved,
+  placeholder,
+  clearable = false,
+}: Props) {
   const [suggestions, setSuggestions] = useState<AddressResult[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [resolving, setResolving] = useState(false);
@@ -50,6 +59,14 @@ export function RoamPlaceField({ label, value, onChangeText, onResolved, placeho
     return () => document.removeEventListener('mousedown', onDoc);
   }, []);
 
+  const handleClear = () => {
+    onChangeText('');
+    setSuggestions([]);
+    setShowSuggestions(false);
+  };
+
+  const showClear = clearable && value.trim().length > 0 && !resolving;
+
   const handleSelect = async (s: AddressResult) => {
     const placeId = s.place_id;
     if (!placeId) return;
@@ -76,7 +93,7 @@ export function RoamPlaceField({ label, value, onChangeText, onResolved, placeho
       </span>
       <div className="relative" ref={wrapperRef}>
         <input
-          className="input-touch w-full rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 pr-10 outline-none focus:border-emerald-500/55 focus:bg-white focus:ring-4 focus:ring-emerald-500/12"
+          className={`input-touch w-full rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 outline-none focus:border-emerald-500/55 focus:bg-white focus:ring-4 focus:ring-emerald-500/12 ${showClear || resolving ? 'pr-10' : ''}`}
           value={value}
           placeholder={placeholder}
           autoComplete="off"
@@ -90,9 +107,22 @@ export function RoamPlaceField({ label, value, onChangeText, onResolved, placeho
             if (suggestions.length > 0) setShowSuggestions(true);
           }}
         />
-        {resolving && (
-          <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400">
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+        {(resolving || showClear) && (
+          <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center">
+            {resolving ? (
+              <div className="pointer-events-none p-1 text-zinc-400">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={handleClear}
+                className="rounded-full p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 touch-manipulation"
+                aria-label="Clear address"
+              >
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+            )}
           </div>
         )}
 
