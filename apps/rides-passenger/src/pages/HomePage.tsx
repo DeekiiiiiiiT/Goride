@@ -7,7 +7,7 @@ import type { FareQuoteResponse } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
 import { RoamPlaceField } from '@/components/RoamPlaceField';
 import { TripRouteMap } from '@/components/TripRouteMap';
-import { getCurrentPosition, reverseGeocode } from '@/services/locationService';
+import { resolveCurrentPickupLocation } from '@/services/locationService';
 import { ridesCreateRequest, ridesQuote } from '@/services/ridesEdge';
 import { DEFAULT_VEHICLE_OPTION } from '@/types/vehicleTypes';
 import { TransportOptionPicker } from '@/components/TransportOptionPicker';
@@ -33,28 +33,59 @@ export default function HomePage() {
   const [quote, setQuote] = useState<FareQuoteResponse | null>(null);
   const quoteDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pickupGeolocCancelled = useRef(false);
+  const pickupAutoFillDone = useRef(false);
+  const pickupGeolocInFlight = useRef(false);
+  const [pickupGeolocLoading, setPickupGeolocLoading] = useState(false);
 
   const coordsReady = pickup && dropoff;
 
-  useEffect(() => {
-    let cancelled = false;
+  const fillPickupFromCurrentLocation = useCallback(async () => {
+    if (
+      pickupGeolocCancelled.current ||
+      pickupAutoFillDone.current ||
+      pickupGeolocInFlight.current
+    ) {
+      return;
+    }
+    pickupGeolocInFlight.current = true;
+    setPickupGeolocLoading(true);
+    try {
+      const resolved = await resolveCurrentPickupLocation();
+      if (pickupGeolocCancelled.current) return;
+      setPickupAddress(resolved.address);
+      setPickup({ lat: resolved.lat, lng: resolved.lng });
+      pickupAutoFillDone.current = true;
+    } catch (e) {
+      console.warn('Pickup auto-fill failed:', e);
+    } finally {
+      pickupGeolocInFlight.current = false;
+      setPickupGeolocLoading(false);
+    }
+  }, []);
 
-    void (async () => {
-      try {
-        const position = await getCurrentPosition();
-        const address = await reverseGeocode(position.latitude, position.longitude);
-        if (cancelled || pickupGeolocCancelled.current) return;
-        setPickupAddress(address);
-        setPickup({ lat: position.latitude, lng: position.longitude });
-      } catch {
-        // Permission denied or unavailable — user can search manually.
-      }
-    })();
+  useEffect(() => {
+    let disposed = false;
+
+    void fillPickupFromCurrentLocation();
+
+    if (navigator.permissions?.query) {
+      void navigator.permissions
+        .query({ name: 'geolocation' })
+        .then((status) => {
+          if (disposed) return;
+          const retryIfGranted = () => {
+            if (status.state === 'granted') void fillPickupFromCurrentLocation();
+          };
+          retryIfGranted();
+          status.onchange = retryIfGranted;
+        })
+        .catch(() => {});
+    }
 
     return () => {
-      cancelled = true;
+      disposed = true;
     };
-  }, []);
+  }, [fillPickupFromCurrentLocation]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -197,6 +228,7 @@ export default function HomePage() {
             value={pickupAddress}
             placeholder="Search pickup (e.g. Half Way Tree)"
             clearable
+            isLoading={pickupGeolocLoading}
             onChangeText={(text) => {
               pickupGeolocCancelled.current = true;
               setPickupAddress(text);

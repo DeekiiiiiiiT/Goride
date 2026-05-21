@@ -17,6 +17,8 @@ type Props = {
   placeholder?: string;
   /** Show an X control to clear the field when it has text. */
   clearable?: boolean;
+  /** External loading state (e.g. while resolving device location). */
+  isLoading?: boolean;
 };
 
 export function RoamPlaceField({
@@ -26,6 +28,7 @@ export function RoamPlaceField({
   onResolved,
   placeholder,
   clearable = false,
+  isLoading = false,
 }: Props) {
   const [suggestions, setSuggestions] = useState<AddressResult[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -65,7 +68,8 @@ export function RoamPlaceField({
     setShowSuggestions(false);
   };
 
-  const showClear = clearable && value.trim().length > 0 && !resolving;
+  const loading = isLoading || resolving;
+  const showClear = clearable && value.trim().length > 0 && !loading;
 
   const handleSelect = async (s: AddressResult) => {
     const placeId = s.place_id;
@@ -93,7 +97,7 @@ export function RoamPlaceField({
       </span>
       <div className="relative" ref={wrapperRef}>
         <input
-          className={`input-touch w-full rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 outline-none focus:border-emerald-500/55 focus:bg-white focus:ring-4 focus:ring-emerald-500/12 ${showClear || resolving ? 'pr-10' : ''}`}
+          className={`input-touch w-full rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 outline-none focus:border-emerald-500/55 focus:bg-white focus:ring-4 focus:ring-emerald-500/12 ${showClear || loading ? 'pr-10' : ''}`}
           value={value}
           placeholder={placeholder}
           autoComplete="off"
@@ -107,9 +111,9 @@ export function RoamPlaceField({
             if (suggestions.length > 0) setShowSuggestions(true);
           }}
         />
-        {(resolving || showClear) && (
+        {(loading || showClear) && (
           <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center">
-            {resolving ? (
+            {loading ? (
               <div className="pointer-events-none p-1 text-zinc-400">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
               </div>

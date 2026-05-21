@@ -18,8 +18,23 @@ export interface AddressResult {
 
 let mapsLoadedPromise: Promise<void> | null = null;
 
+const waitForGeocoder = async (maxMs = 5000): Promise<void> => {
+  const step = 100;
+  for (let elapsed = 0; elapsed < maxMs; elapsed += step) {
+    if (window.google?.maps?.Geocoder) return;
+    await new Promise((r) => window.setTimeout(r, step));
+  }
+  if (!window.google?.maps?.Geocoder) {
+    throw new Error('Google Maps Geocoder not available');
+  }
+};
+
 export const loadGoogleMapsApi = async (): Promise<void> => {
-  if (typeof window !== 'undefined' && window.google?.maps?.importLibrary) {
+  if (
+    typeof window !== 'undefined' &&
+    window.google?.maps &&
+    (window.google.maps.Geocoder || window.google.maps.importLibrary)
+  ) {
     return Promise.resolve();
   }
 
@@ -173,9 +188,8 @@ export const getPlaceDetails = async (
   return null;
 };
 
-/** Browser Geolocation API — current device position. */
-export const getCurrentPosition = (): Promise<GeoCoordinates> => {
-  return new Promise((resolve, reject) => {
+const readCurrentPosition = (options: PositionOptions): Promise<GeoCoordinates> =>
+  new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
       reject(new Error('Geolocation is not supported by your browser'));
       return;
@@ -203,40 +217,87 @@ export const getCurrentPosition = (): Promise<GeoCoordinates> => {
         }
         reject(new Error(message));
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+      options,
     );
+  });
+
+/** Browser Geolocation API — current device position (high accuracy, then coarse fallback). */
+export const getCurrentPosition = async (): Promise<GeoCoordinates> => {
+  try {
+    return await readCurrentPosition({
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 0,
+    });
+  } catch (highAccuracyError) {
+    console.warn('High-accuracy geolocation failed, retrying:', highAccuracyError);
+    return readCurrentPosition({
+      enableHighAccuracy: false,
+      timeout: 15000,
+      maximumAge: 60_000,
+    });
+  }
+};
+
+/** Coordinates → formatted address (Google Geocoder, legacy API). */
+export const reverseGeocode = async (lat: number, lon: number): Promise<string> => {
+  await loadGoogleMapsApi();
+  await waitForGeocoder();
+
+  const geocoder = new window.google.maps.Geocoder();
+  return new Promise((resolve, reject) => {
+    geocoder.geocode({ location: { lat, lng: lon } }, (results, status) => {
+      if (status === 'OK' && results?.[0]?.formatted_address) {
+        resolve(results[0].formatted_address);
+        return;
+      }
+      reject(new Error(`Geocoder status: ${status}`));
+    });
   });
 };
 
-/** Coordinates → formatted address (Google Geocoder). */
-export const reverseGeocode = async (lat: number, lon: number): Promise<string> => {
-  await loadGoogleMapsApi();
+async function reverseGeocodeNominatim(lat: number, lon: number): Promise<string> {
+  const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18`;
+  const res = await fetch(url, {
+    headers: { Accept: 'application/json', 'Accept-Language': 'en' },
+  });
+  if (!res.ok) throw new Error(`Nominatim error: ${res.status}`);
+  const data = (await res.json()) as { display_name?: string };
+  if (!data.display_name) throw new Error('Nominatim returned no address');
+  return data.display_name;
+}
 
-  const geocode = (
-    geocoder: google.maps.Geocoder,
-  ): Promise<string> =>
-    new Promise((resolve, reject) => {
-      geocoder.geocode({ location: { lat, lng: lon } }, (results, status) => {
-        if (status === 'OK' && results?.[0]) {
-          resolve(results[0].formatted_address);
-        } else {
-          reject(new Error('Address not found'));
-        }
-      });
-    });
+function formatCoordsAsAddress(lat: number, lon: number): string {
+  return `Current location (${lat.toFixed(5)}, ${lon.toFixed(5)})`;
+}
 
-  if (window.google?.maps?.importLibrary) {
-    const { Geocoder } = (await google.maps.importLibrary('geocoding')) as {
-      Geocoder: new () => google.maps.Geocoder;
-    };
-    return geocode(new Geocoder());
+/** Best-effort address string for coordinates (Google → OSM → coords label). */
+export async function resolveAddressFromCoordinates(lat: number, lon: number): Promise<string> {
+  try {
+    return await reverseGeocode(lat, lon);
+  } catch (e) {
+    console.warn('Google reverse geocode failed:', e);
   }
-
-  if (!window.google?.maps?.Geocoder) {
-    throw new Error('Google Maps Geocoder not available');
+  try {
+    return await reverseGeocodeNominatim(lat, lon);
+  } catch (e) {
+    console.warn('Nominatim reverse geocode failed:', e);
   }
-  return geocode(new window.google.maps.Geocoder());
-};
+  return formatCoordsAsAddress(lat, lon);
+}
+
+export type ResolvedDeviceLocation = { address: string; lat: number; lng: number };
+
+/** Device GPS → pickup address + coordinates. */
+export async function resolveCurrentPickupLocation(): Promise<ResolvedDeviceLocation> {
+  const position = await getCurrentPosition();
+  const address = await resolveAddressFromCoordinates(position.latitude, position.longitude);
+  return {
+    address,
+    lat: position.latitude,
+    lng: position.longitude,
+  };
+}
 
 export function debounce<T extends (...args: unknown[]) => unknown>(
   func: T,
