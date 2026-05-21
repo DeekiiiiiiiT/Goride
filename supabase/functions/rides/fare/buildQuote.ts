@@ -42,11 +42,24 @@ export async function buildFareQuote(
     readSurge: (cellKey: string) => Promise<number>;
     allowedBodyTypeSlugs?: Set<string>;
     dispatchSettings?: DispatchSettings;
+    /** PostgREST client + table for fare_rules (public view when rides schema is not exposed). */
+    fareRulesDb?: SupabaseClient;
+    fareRulesTable?: string;
+    vehicleTypesTable?: string;
   },
 ): Promise<BuiltFareQuote> {
   const vehicleType = params.vehicleType || "uberx";
   const resolved = resolvePickupLocation(params.pickupLat, params.pickupLng);
-  const rules = await loadFareRules(db, params.pickupLat, params.pickupLng, vehicleType);
+  const rules = await loadFareRules(
+    params.fareRulesDb ?? db,
+    params.pickupLat,
+    params.pickupLng,
+    vehicleType,
+    {
+      fareRulesTable: params.fareRulesTable,
+      vehicleTypesTable: params.vehicleTypesTable,
+    },
+  );
   const city = resolved.locationKey;
   const route = await getRouteEstimate(
     params.pickupLat,

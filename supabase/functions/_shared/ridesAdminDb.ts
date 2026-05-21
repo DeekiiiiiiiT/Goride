@@ -93,6 +93,42 @@ async function resolveFromEnv(): Promise<Resolved | null> {
   return null;
 }
 
+/**
+ * DB + table names for fare_rules lookups in /v1/quote.
+ * Never falls back to the rides-schema svc() client (hosted PostgREST often omits `rides`).
+ */
+export async function resolveFareRulesDbForQuote(): Promise<{
+  db: SupabaseClient;
+  fareRulesTable: string;
+  vehicleTypesTable: string;
+  source: "admin_resolved" | "public_views_fallback" | "public_views_forced";
+}> {
+  const publicFallback = () => ({
+    db: serviceClient("public"),
+    fareRulesTable: PUBLIC_VIEWS.fare_rules,
+    vehicleTypesTable: PUBLIC_VIEWS.vehicle_types,
+    source: "public_views_fallback" as const,
+  });
+
+  try {
+    const r = await getRidesAdminDb();
+    if (r.tables.fare_rules === RIDES_NATIVE.fare_rules) {
+      const { error } = await r.db.from(r.tables.fare_rules).select("id").limit(1);
+      if (isMissingRidesAdminTableError(error)) {
+        return { ...publicFallback(), source: "public_views_forced" };
+      }
+    }
+    return {
+      db: r.db,
+      fareRulesTable: r.tables.fare_rules,
+      vehicleTypesTable: r.tables.vehicle_types,
+      source: "admin_resolved",
+    };
+  } catch {
+    return publicFallback();
+  }
+}
+
 /** Resolve once per isolate; tries rides schema then public views. */
 export async function getRidesAdminDb(): Promise<Resolved> {
   if (resolved) return resolved;

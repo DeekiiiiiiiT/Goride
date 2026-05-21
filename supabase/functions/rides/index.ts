@@ -17,7 +17,7 @@ import { haversineKm } from "./fare/routing.ts";
 import { quoteTokenHash, verifyQuoteToken } from "./fare/quoteToken.ts";
 import { registerAdminRoutes } from "./admin.ts";
 import { assertRiderCanBook } from "./fare/riderAccount.ts";
-import { getRidesAdminDb } from "../_shared/ridesAdminDb.ts";
+import { getRidesAdminDb, resolveFareRulesDbForQuote } from "../_shared/ridesAdminDb.ts";
 import { loadVehicleTypesFromDb } from "./fare/vehicleTypesDb.ts";
 import {
   allowedBodySlugsForWave,
@@ -387,6 +387,8 @@ app.post("/v1/quote", async (c) => {
   const vehicleType = typeof body.vehicle_option === "string" ? body.vehicle_option : "uberx";
   const db = svc();
 
+  const fareRulesAccess = await resolveFareRulesDbForQuote();
+
   let dispatchSettings = DEFAULT_DISPATCH_SETTINGS;
   let allowedBodyTypeSlugs: Set<string> | undefined;
   try {
@@ -417,6 +419,9 @@ app.post("/v1/quote", async (c) => {
       readSurge: readSurgeMultiplier,
       allowedBodyTypeSlugs,
       dispatchSettings,
+      fareRulesDb: fareRulesAccess.db,
+      fareRulesTable: fareRulesAccess.fareRulesTable,
+      vehicleTypesTable: fareRulesAccess.vehicleTypesTable,
     });
   } catch (e) {
     if (e instanceof FareRuleNotFoundError) {

@@ -36,32 +36,7 @@ type RidesErrorBody = {
   vehicle_type?: string;
   location_keys_tried?: string[];
   vehicle_types_tried?: string[];
-  debug?: Record<string, unknown>;
 };
-
-// #region agent log
-function agentDebugLog(
-  hypothesisId: string,
-  message: string,
-  data: Record<string, unknown>,
-): void {
-  fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Debug-Session-Id': 'b7ab08',
-    },
-    body: JSON.stringify({
-      sessionId: 'b7ab08',
-      hypothesisId,
-      location: 'ridesEdge.ts',
-      message,
-      data,
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-}
-// #endregion
 
 async function parseRidesError(res: Response): Promise<never> {
   const text = await res.text();
@@ -79,15 +54,6 @@ async function parseRidesError(res: Response): Promise<never> {
     }
   }
   if (body.error === 'no_fare_rule') {
-    // #region agent log
-    agentDebugLog('H1-H5', 'quote no_fare_rule', {
-      status: res.status,
-      vehicle_type: body.vehicle_type,
-      location_keys_tried: body.location_keys_tried,
-      vehicle_types_tried: body.vehicle_types_tried,
-      debug: body.debug,
-    });
-    // #endregion
     const svc = body.vehicle_type ? `"${body.vehicle_type}"` : 'this service';
     const triedLocs = body.location_keys_tried?.length
       ? ` Locations tried: ${body.location_keys_tried.join(' → ')}.`
