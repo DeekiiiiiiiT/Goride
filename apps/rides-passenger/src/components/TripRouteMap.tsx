@@ -7,9 +7,10 @@ type Props = {
   pickup: LatLng;
   dropoff: LatLng;
   encodedPolyline?: string | null;
+  variant?: 'card' | 'hero';
 };
 
-export function TripRouteMap({ pickup, dropoff, encodedPolyline }: Props) {
+export function TripRouteMap({ pickup, dropoff, encodedPolyline, variant = 'card' }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -109,10 +110,16 @@ export function TripRouteMap({ pickup, dropoff, encodedPolyline }: Props) {
     };
   }, [pickup.lat, pickup.lng, dropoff.lat, dropoff.lng, encodedPolyline]);
 
+  const isHero = variant === 'hero';
+
   if (status === 'error') {
     return (
       <div
-        className="h-48 rounded-2xl border border-zinc-200 bg-zinc-50 flex items-center justify-center text-sm text-zinc-500"
+        className={
+          isHero
+            ? 'flex h-full w-full items-center justify-center bg-zinc-100 text-sm text-zinc-500'
+            : 'h-48 rounded-2xl border border-zinc-200 bg-zinc-50 flex items-center justify-center text-sm text-zinc-500'
+        }
         role="img"
         aria-label="Route map unavailable"
       >
@@ -122,7 +129,13 @@ export function TripRouteMap({ pickup, dropoff, encodedPolyline }: Props) {
   }
 
   return (
-    <div className="relative h-48 rounded-2xl overflow-hidden border border-zinc-200 ring-1 ring-zinc-100">
+    <div
+      className={
+        isHero
+          ? 'relative h-full w-full overflow-hidden'
+          : 'relative h-48 rounded-2xl overflow-hidden border border-zinc-200 ring-1 ring-zinc-100'
+      }
+    >
       {status === 'loading' && (
         <div className="absolute inset-0 z-10 bg-zinc-100 animate-pulse" aria-hidden />
       )}

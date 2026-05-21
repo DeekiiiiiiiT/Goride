@@ -26,6 +26,8 @@ type Props = {
   isLoading?: boolean;
   /** Enable snap-to-road feature (attempts to snap pin to nearest road) */
   enableSnapToRoad?: boolean;
+  /** Root container height / layout classes */
+  className?: string;
 };
 
 export function PickupMapSelector({
@@ -34,6 +36,7 @@ export function PickupMapSelector({
   onPickupChange,
   isLoading = false,
   enableSnapToRoad = true,
+  className = 'h-56',
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -250,7 +253,7 @@ export function PickupMapSelector({
   if (mapStatus === 'error') {
     return (
       <div
-        className="h-56 rounded-2xl border border-zinc-200 bg-zinc-50 flex items-center justify-center text-sm text-zinc-500"
+        className={`rounded-2xl border border-zinc-200 bg-zinc-50 flex items-center justify-center text-sm text-zinc-500 ${className}`}
         role="img"
         aria-label="Map unavailable"
       >
@@ -260,7 +263,7 @@ export function PickupMapSelector({
   }
 
   return (
-    <div className="relative h-56 rounded-2xl overflow-hidden border border-zinc-200 ring-1 ring-zinc-100">
+    <div className={`relative rounded-2xl overflow-hidden border border-zinc-200 ring-1 ring-zinc-100 ${className}`}>
       {/* Loading overlay */}
       {(mapStatus === 'loading' || isLoading) && (
         <div className="absolute inset-0 z-20 bg-zinc-100/80 flex items-center justify-center">
