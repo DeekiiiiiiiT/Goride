@@ -15,8 +15,19 @@ export function needsFleetOwnerProvision(user: User | null | undefined): boolean
   const orgId = meta.organizationId as string | undefined;
   const pl = meta.productLine as string | undefined;
   if (!isFleetPortalUser(user)) return true;
-  if (!orgId) return true;
-  if (pl !== 'fleet') return true;
+  if (pl && pl !== 'fleet') return true;
+  if (!pl) return true;
   if (meta.businessType && meta.businessType !== 'rideshare') return true;
+  // Legacy fleet owners created before the split often have no organizationId in metadata;
+  // AuthContext treats admin org as user.id — do not force them through signup again.
+  if (!orgId) {
+    const legacyOwner =
+      meta.role === 'admin' ||
+      meta.role === 'fleet_owner' ||
+      getJwtRoles(user).includes('admin') ||
+      getJwtRoles(user).includes('fleet_owner');
+    if (legacyOwner) return false;
+    return true;
+  }
   return false;
 }

@@ -51,8 +51,11 @@ export function isFleetOwnerProvisioned(user: {
   if (!userCanAccessFleetPortal(user)) return false;
   const meta = user.user_metadata || {};
   const orgId = meta.organizationId as string | undefined;
-  if (!orgId) return false;
-  return inferProductLineFromUser(meta) === "fleet";
+  const line = inferProductLineFromUser(meta);
+  if (line !== "fleet") return false;
+  if (orgId) return true;
+  const legacyRole = meta.role;
+  return legacyRole === "admin" || legacyRole === "fleet_owner";
 }
 
 const ASSIGNABLE_ROLES = new Set([
