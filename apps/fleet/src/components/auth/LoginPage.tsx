@@ -12,6 +12,7 @@ import { BUSINESS_TYPES } from '../../utils/businessTypes';
 import { LockoutCountdown } from './LockoutCountdown';
 import {
   IS_RIDESHARE_FLEET_PRODUCT,
+  IS_ENTERPRISE_PRODUCT,
   withProductLineHeaders,
 } from '../../config/productLine';
 import { supabaseAnonFunctionHeaders } from '@roam/api-client';
