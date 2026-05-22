@@ -83,6 +83,13 @@ import { checkRateLimit, recordFailedAttempt, clearRateLimit, getClientIp, getRa
 import { registerMaintenanceRoutes } from "./maintenance_routes.ts";
 import { registerPendingVehicleCatalogRoutes } from "./pending_vehicle_catalog_routes.ts";
 import { registerPartSourcingRoutes } from "./part_sourcing_routes.ts";
+import {
+  provisionFleetOwner,
+  enableDriverForFleetOwner,
+  isFleetOwnerProvisioned,
+  userCanAccessFleetPortal,
+  userCanAccessDriverPortal,
+} from "./fleet_owner_provision.ts";
 import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
 import {
   applyCatalogGateOnCreate,
@@ -255,6 +262,14 @@ async function upsertDriverProfileFromServer(opts: {
   }
   const { error } = await supabase.from("driver_profiles").upsert(row, { onConflict: "user_id" });
   if (error) console.warn("[driver_profiles] upsert failed:", error.message);
+}
+
+function getProvisionDeps() {
+  return {
+    supabase,
+    upsertDriverProfile: upsertDriverProfileFromServer,
+    invalidateCustomerCache,
+  };
 }
 
 registerMaintenanceRoutes(app, supabase);
@@ -10267,32 +10282,17 @@ app.post("/make-server-37f42386/signup", async (c) => {
 
     const userId = data.user.id;
 
-    // Step 8.1: For admin/fleet_owner, set organizationId = own user ID (self-referencing)
+    // Step 8.1: For admin/fleet_owner — full provision (org, product line, dual driver role on fleet)
     if (normalizedRole === 'admin') {
-      try {
-        await supabase.auth.admin.updateUserById(userId, {
-          user_metadata: { ...userMetadata, organizationId: userId },
-        });
-        console.log(`[Signup] Admin ${email}: set organizationId=${userId} (self-referencing)`);
-      } catch (orgErr: any) {
-        console.warn(`[Signup] Failed to set organizationId on admin user (non-fatal): ${orgErr.message}`);
+      const prov = await provisionFleetOwner(getProvisionDeps(), userId, {
+        name,
+        alsoDrive: productLine === 'fleet',
+        productLine,
+      });
+      if (!prov.ok) {
+        console.warn(`[Signup] provisionFleetOwner failed for ${email}:`, prov.error);
+        return c.json({ error: prov.error }, prov.status ?? 500);
       }
-
-      // Persist businessType to org-scoped preferences
-      if (businessType) {
-        try {
-          await kv.set(`preferences:${userId}`, { businessType });
-          // Also write to legacy global key for backward compatibility
-          const existing = await kv.get("preferences:general") || {};
-          await kv.set("preferences:general", { ...existing, businessType });
-          console.log(`[Signup] Saved businessType '${businessType}' to preferences:${userId}`);
-        } catch (prefErr: any) {
-          console.warn(`[Signup] Failed to save businessType to preferences (non-fatal): ${prefErr.message}`);
-        }
-      }
-
-      // Invalidate customer cache so super admin sees new fleet owner
-      await invalidateCustomerCache();
     }
 
     // Step 8.1: For drivers, create a driver profile (unlinked — no organizationId)
@@ -10322,6 +10322,33 @@ app.post("/make-server-37f42386/signup", async (c) => {
         onboardingComplete: false,
         markFleetJoined: false,
       });
+    }
+
+    // Fleet owner email signup: return session so client can enter dashboard immediately
+    if (normalizedRole === 'admin' && productLine === 'fleet') {
+      try {
+        const { createClient: createAnonClient } = await import("npm:@supabase/supabase-js@2");
+        const anonClient = createAnonClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_ANON_KEY")!,
+        );
+        const { data: signIn, error: signInErr } = await anonClient.auth.signInWithPassword({ email, password });
+        if (!signInErr && signIn?.session) {
+          return c.json({
+            success: true,
+            access_token: signIn.session.access_token,
+            refresh_token: signIn.session.refresh_token,
+            user: {
+              id: signIn.user.id,
+              email: signIn.user.email,
+              name: signIn.user.user_metadata?.name,
+              role: 'admin',
+            },
+          });
+        }
+      } catch (sessErr: any) {
+        console.warn(`[Signup] Post-signup session (non-fatal): ${sessErr.message}`);
+      }
     }
 
     return c.json({ success: true, data });
@@ -12908,21 +12935,19 @@ app.post("/make-server-37f42386/fleet-login", async (c) => {
       }, 401);
     }
 
-    // Enterprise gate: WHITELIST — only allow 'admin' (fleet manager) role on fleet portal
-    // All other roles (driver, superadmin, platform_owner, platform_support, platform_analyst)
-    // are rejected with a generic error. Whitelist approach ensures any future roles are
-    // blocked by default.
-    const userRole = data?.user?.user_metadata?.role;
-    if (userRole !== 'admin') {
-      // Sign out immediately — don't leave a dangling session
+    // Fleet portal: admin / fleet_owner (app_metadata.roles or legacy user_metadata.role)
+    if (!userCanAccessFleetPortal(data.user)) {
       await anonClient.auth.signOut();
       await recordFailedAttempt(clientIp, 'fleet');
       await recordFailedAttempt(email.toLowerCase(), 'fleet');
+      const userRole = data?.user?.user_metadata?.role;
       console.log(`[FleetLogin] Non-fleet account ${email} (role: ${userRole}) rejected from fleet portal`);
       return c.json({
         error: "Invalid email or password.",
       }, 401);
     }
+
+    const userRole = data?.user?.user_metadata?.role ?? 'admin';
 
     const loginProductLine = resolveProductLine(c);
     const ownerProductLine = inferProductLineFromUser(data.user?.user_metadata as Record<string, unknown>);
@@ -12962,6 +12987,115 @@ app.post("/make-server-37f42386/fleet-login", async (c) => {
   } catch (e: any) {
     console.error("[FleetLogin] Error:", e);
     return c.json({ error: e.message || "Login failed" }, 500);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /fleet-owner/provision — OAuth / phone fleet owner setup (authenticated)
+// ---------------------------------------------------------------------------
+app.post("/make-server-37f42386/fleet-owner/provision", requireAuth(), async (c) => {
+  try {
+    const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+    if (!rbacUser || rbacUser.userId === "_anon_passthrough") {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const productLine = resolveProductLine(c);
+    if (productLine !== "fleet") {
+      return c.json({ error: "Fleet owner provisioning is only available on Roam Fleet." }, 403);
+    }
+
+    try {
+      const platformSettings = await getPlatformSettingsCached(productLine);
+      const regMode = platformSettings.registrationMode || "open";
+      if (regMode === "invite_only") {
+        return c.json({
+          error: "Registration is currently disabled. Please contact your platform administrator.",
+        }, 403);
+      }
+      if (regMode === "domain_restricted") {
+        const emailDomain = rbacUser.email.split("@")[1]?.toLowerCase();
+        const allowedDomains = (platformSettings.allowedDomains || []).map((d: string) => d.toLowerCase());
+        if (!emailDomain || !allowedDomains.includes(emailDomain)) {
+          return c.json({
+            error: `Registration is restricted to approved domains (${allowedDomains.map((d: string) => "@" + d).join(", ")}).`,
+          }, 403);
+        }
+      }
+    } catch (regErr: any) {
+      console.log(`[FleetOwnerProvision] registration mode check failed open: ${regErr.message}`);
+    }
+
+    const body = await c.req.json().catch(() => ({}));
+    const name = typeof body?.name === "string" ? body.name.trim() : undefined;
+    const alsoDrive = body?.alsoDrive !== false;
+
+    const result = await provisionFleetOwner(getProvisionDeps(), rbacUser.userId, {
+      name,
+      alsoDrive,
+      productLine: "fleet",
+    });
+
+    if (!result.ok) {
+      return c.json({ error: result.error }, result.status ?? 500);
+    }
+
+    return c.json({
+      success: true,
+      alreadyProvisioned: result.alreadyProvisioned,
+      organizationId: result.organizationId,
+    });
+  } catch (e: any) {
+    console.error("[FleetOwnerProvision] Error:", e);
+    return c.json({ error: e.message || "Provisioning failed" }, 500);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /fleet-owner/enable-driver — Fleet-only owner adds driver capability
+// ---------------------------------------------------------------------------
+app.post("/make-server-37f42386/fleet-owner/enable-driver", requireAuth(), async (c) => {
+  try {
+    const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+    if (!rbacUser || rbacUser.userId === "_anon_passthrough") {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const result = await enableDriverForFleetOwner(getProvisionDeps(), rbacUser.userId);
+    if (!result.ok) {
+      return c.json({ error: result.error }, result.status ?? 500);
+    }
+
+    return c.json({ success: true, alreadyEnabled: result.alreadyEnabled });
+  } catch (e: any) {
+    console.error("[FleetOwnerEnableDriver] Error:", e);
+    return c.json({ error: e.message || "Failed to enable driver access" }, 500);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /fleet-owner/status — Whether current user is provisioned as fleet owner
+// ---------------------------------------------------------------------------
+app.get("/make-server-37f42386/fleet-owner/status", requireAuth(), async (c) => {
+  try {
+    const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+    if (!rbacUser || rbacUser.userId === "_anon_passthrough") {
+      return c.json({ provisioned: false }, 200);
+    }
+
+    const { data: authData, error } = await supabase.auth.admin.getUserById(rbacUser.userId);
+    if (error || !authData?.user) {
+      return c.json({ provisioned: false }, 200);
+    }
+
+    return c.json({
+      provisioned: isFleetOwnerProvisioned(authData.user),
+      organizationId: authData.user.user_metadata?.organizationId ?? null,
+      canDrive: userCanAccessDriverPortal(authData.user),
+    });
+  } catch (e: any) {
+    console.error("[FleetOwnerStatus] Error:", e);
+    return c.json({ error: e.message }, 500);
   }
 });
 
@@ -13007,17 +13141,19 @@ app.post("/make-server-37f42386/driver-login", async (c) => {
       }, 401);
     }
 
-    // Enterprise gate: reject non-driver accounts on driver portal
-    const userRole = data?.user?.user_metadata?.role;
-    if (userRole !== 'driver') {
+    // Driver portal: driver role in JWT roles[] or legacy metadata (dual identity: admin+driver)
+    if (!userCanAccessDriverPortal(data.user)) {
       await anonClient.auth.signOut();
       await recordFailedAttempt(clientIp, 'driver');
       await recordFailedAttempt(email.toLowerCase(), 'driver');
+      const userRole = data?.user?.user_metadata?.role;
       console.log(`[DriverLogin] Non-driver account ${email} (role: ${userRole}) rejected from driver portal`);
       return c.json({
         error: "Invalid email or password.",
       }, 401);
     }
+
+    const userRole = data?.user?.user_metadata?.role ?? 'driver';
 
     if (!data?.session) {
       return c.json({ error: "Sign-in succeeded but no session was returned" }, 500);

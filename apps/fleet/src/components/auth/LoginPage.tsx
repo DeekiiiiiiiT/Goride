@@ -506,8 +506,18 @@ export function LoginPage() {
               </>
             )}
 
-            {/* Invite-only notice (create-account link removed for simpler manager login) */}
             <div className="mt-6 text-center">
+              {!isRegistering && registrationMode !== 'invite_only' && (
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  New fleet owner?{' '}
+                  <a
+                    href="/signup"
+                    className="font-semibold text-indigo-600 hover:text-indigo-500 dark:text-indigo-400"
+                  >
+                    Create your fleet account
+                  </a>
+                </p>
+              )}
               {registrationMode === 'invite_only' && !isRegistering && (
                 <p className="text-sm text-slate-500 dark:text-slate-400">
                   Registration is by invitation only. Contact your administrator.

@@ -4,6 +4,9 @@ import { AuthProvider, useAuth } from './components/auth/AuthContext';
 import { BusinessConfigProvider } from './components/auth/BusinessConfigContext';
 import { PlatformConfigProvider } from './components/auth/PlatformConfigContext';
 import { LoginPage } from './components/auth/LoginPage';
+import { FleetOwnerSignupPage } from './components/auth/signup/FleetOwnerSignupPage';
+import { FleetOwnerSignupComplete } from './components/auth/signup/FleetOwnerSignupComplete';
+import { isFleetPortalUser } from './utils/fleetOwnerUser';
 import { PassengerFleetSurfaceGate } from './components/auth/PassengerFleetSurfaceGate';
 import { AppLayout } from './components/layout/AppLayout';
 import { Dashboard } from './components/dashboard/Dashboard';
@@ -65,7 +68,7 @@ function inferClientProductLine(meta: Record<string, unknown> | undefined): 'fle
 }
 
 function AppContent() {
-  const { user, role, resolvedRole, loading, signOut } = useAuth();
+  const { user, role, resolvedRole, loading, needsProvision, signOut } = useAuth();
   // useAlertPusher(); // DISABLED: Was causing infinite loop feedback with Dashboard alert sync
   
   const [currentPage, setCurrentPage] = useState('dashboard');
@@ -183,9 +186,35 @@ function AppContent() {
     return <PassengerFleetSurfaceGate onSignOut={signOut} />;
   }
 
+  const signupPath =
+    typeof window !== 'undefined' &&
+    (window.location.pathname === '/signup' || window.location.pathname.startsWith('/signup/'));
+  const fromRoamdriver =
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('from') === 'roamdriver';
+
+  if (signupPath) {
+    if (!user) {
+      return <FleetOwnerSignupPage fromRoamdriver={fromRoamdriver} />;
+    }
+    if (needsProvision) {
+      return <FleetOwnerSignupComplete fromRoamdriver={fromRoamdriver} />;
+    }
+    if (isFleetPortalUser(user) && !needsProvision) {
+      window.location.replace('/');
+      return (
+        <div className="flex h-screen items-center justify-center text-slate-500">Loading dashboard…</div>
+      );
+    }
+  }
+
   // Main Fleet Portal — Authentication Gate
-  if (!user || role !== 'admin') {
+  if (!user || !isFleetPortalUser(user)) {
     return <LoginPage />;
+  }
+
+  if (needsProvision) {
+    return <FleetOwnerSignupComplete fromRoamdriver={fromRoamdriver} />;
   }
 
   const ownerProductLine = inferClientProductLine(user.user_metadata as Record<string, unknown>);

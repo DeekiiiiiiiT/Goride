@@ -1,7 +1,10 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../../utils/supabase/client';
 import { resolveRole, Role } from '../../utils/permissions';
+import { FLEET_OAUTH_INTENT_KEY, FLEET_OAUTH_INTENT_VALUE } from '../../utils/fleetAuthSignup';
+import { provisionFleetOwnerAccount } from '../../services/fleetOwnerAuth';
+import { needsFleetOwnerProvision } from '../../utils/fleetOwnerUser';
 
 type UserRole = 'admin' | 'manager' | 'viewer' | 'driver' | 'superadmin';
 
@@ -12,7 +15,9 @@ interface AuthContextType {
   resolvedRole: Role | null;
   organizationId: string | null;
   loading: boolean;
+  needsProvision: boolean;
   signOut: () => Promise<void>;
+  refreshSession: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -22,7 +27,9 @@ const AuthContext = createContext<AuthContextType>({
   resolvedRole: null,
   organizationId: null,
   loading: true,
+  needsProvision: false,
   signOut: async () => {},
+  refreshSession: async () => {},
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -46,6 +53,29 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [resolvedRole, setResolvedRole] = useState<Role | null>(null);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [needsProvision, setNeedsProvision] = useState(false);
+
+  const applySession = useCallback((session: Session | null) => {
+    setSession(session);
+    setUser(session?.user ?? null);
+    if (session?.user) {
+      const userRole = session.user.user_metadata?.role as UserRole;
+      setRole(userRole || null);
+      setResolvedRole(resolveRole(userRole || null));
+      setOrganizationId(deriveOrgId(session.user));
+      setNeedsProvision(needsFleetOwnerProvision(session.user));
+    } else {
+      setRole(null);
+      setResolvedRole(null);
+      setOrganizationId(null);
+      setNeedsProvision(false);
+    }
+  }, []);
+
+  const refreshSession = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    applySession(session);
+  }, [applySession]);
 
   useEffect(() => {
     // 1. Get initial session
@@ -65,14 +95,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           return;
         }
 
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          const userRole = session.user.user_metadata?.role as UserRole;
-          setRole(userRole || null);
-          setResolvedRole(resolveRole(userRole || null));
-          setOrganizationId(deriveOrgId(session.user));
-        }
+        applySession(session);
       } catch (error: any) {
         console.error('Error fetching session:', error);
         // Belt-and-suspenders: also clear on unexpected throw
@@ -86,25 +109,38 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     // 2. Listen for changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-         const userRole = session.user.user_metadata?.role as UserRole;
-         setRole(userRole || null);
-         setResolvedRole(resolveRole(userRole || null));
-         setOrganizationId(deriveOrgId(session.user));
-      } else {
-        setRole(null);
-        setResolvedRole(null);
-        setOrganizationId(null);
-      }
+      applySession(session);
       setLoading(false);
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [applySession]);
+
+  /** Google OAuth on /signup: provision fleet owner when intent flag is set */
+  useEffect(() => {
+    if (!user || !session?.access_token) return;
+    if (sessionStorage.getItem(FLEET_OAUTH_INTENT_KEY) !== FLEET_OAUTH_INTENT_VALUE) return;
+    if (!needsFleetOwnerProvision(user)) {
+      sessionStorage.removeItem(FLEET_OAUTH_INTENT_KEY);
+      return;
+    }
+    void (async () => {
+      try {
+        const name =
+          (typeof user.user_metadata?.name === 'string' && user.user_metadata.name) ||
+          (typeof user.user_metadata?.full_name === 'string' && user.user_metadata.full_name) ||
+          undefined;
+        await provisionFleetOwnerAccount(session.access_token, { name, alsoDrive: true });
+        await refreshSession();
+      } catch (e) {
+        console.warn('fleet oauth provision:', e);
+      } finally {
+        sessionStorage.removeItem(FLEET_OAUTH_INTENT_KEY);
+      }
+    })();
+  }, [user?.id, session?.access_token, refreshSession]);
 
   const signOut = async () => {
     // 1. Clear local state immediately to update UI
@@ -124,7 +160,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, role, resolvedRole, organizationId, loading, signOut }}>
+    <AuthContext.Provider value={{ session, user, role, resolvedRole, organizationId, loading, needsProvision, signOut, refreshSession }}>
       {children}
     </AuthContext.Provider>
   );

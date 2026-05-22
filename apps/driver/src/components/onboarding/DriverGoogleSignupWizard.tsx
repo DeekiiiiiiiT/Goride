@@ -256,32 +256,6 @@ export function DriverGoogleSignupWizard() {
     }
   };
 
-  const finishFleetOwner = async () => {
-    if (!profile?.id) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const { error: metaErr } = await supabase.auth.updateUser({
-        data: { signup_intent: 'fleet_owner' },
-      });
-      if (metaErr) throw metaErr;
-      const { error: upErr } = await supabase
-        .from('driver_profiles')
-        .update({
-          mode: 'independent',
-          onboarding_complete: true,
-          onboarding_step: null,
-        })
-        .eq('id', profile.id);
-      if (upErr) throw upErr;
-      await refreshProfile();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not save.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleJoinFleet = async () => {
     setJoinError(null);
     const id = fleetId.trim();
@@ -445,14 +419,12 @@ export function DriverGoogleSignupWizard() {
           <div className="mt-8 space-y-3 rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-xl dark:border-slate-700/60 dark:bg-slate-800/60">
             <a
               href={url}
-              target="_blank"
-              rel="noopener noreferrer"
               className="flex w-full items-center justify-center rounded-lg border border-emerald-600 bg-emerald-600 py-3 text-sm font-semibold text-white hover:bg-emerald-500"
             >
-              Open fleet signup
+              Create fleet on Roam Fleet
             </a>
-            <Button type="button" variant="secondary" className="w-full" disabled={loading} onClick={() => void finishFleetOwner()}>
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Continue to driver app'}
+            <Button type="button" variant="ghost" className="w-full" disabled={loading} onClick={() => void finishIndependent()}>
+              Skip — continue as driver only
             </Button>
             <Button type="button" variant="ghost" className="w-full" onClick={() => setUi('archetype')}>
               Back

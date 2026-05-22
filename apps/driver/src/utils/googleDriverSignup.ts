@@ -25,6 +25,10 @@ export function needsGoogleExtendedSignup(user: User | null, profile: DriverProf
 }
 
 export function defaultRoamFleetSignupUrl(): string {
-  const u = import.meta.env.VITE_ROAM_FLEET_SIGNUP_URL;
-  return typeof u === 'string' && u.trim() ? u.trim() : 'https://roamfleet.co';
+  const base =
+    typeof import.meta.env.VITE_ROAM_FLEET_SIGNUP_URL === 'string' &&
+    import.meta.env.VITE_ROAM_FLEET_SIGNUP_URL.trim()
+      ? import.meta.env.VITE_ROAM_FLEET_SIGNUP_URL.trim().replace(/\/$/, '')
+      : 'https://roamfleet.co';
+  return `${base}/signup?from=roamdriver`;
 }

@@ -63,6 +63,7 @@ import { Separator } from "../ui/separator";
 // DataResetModal kept as a file but no longer rendered from Settings — deletion centralized in Data Center > Delete tab
 import { SystemHardeningPanel } from '../admin/SystemHardeningPanel';
 import { SyncCenter } from '../sync/SyncCenter';
+import { FleetEnableDriverCard } from './FleetEnableDriverCard';
 
 export function SettingsPage() {
   return (
@@ -225,6 +226,7 @@ function GeneralPanel() {
 
   return (
     <div className="grid gap-6">
+      <FleetEnableDriverCard />
       <Card>
         <CardHeader>
           <CardTitle>Preferences</CardTitle>
