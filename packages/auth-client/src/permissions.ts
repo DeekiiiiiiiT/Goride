@@ -31,6 +31,10 @@ export type Role =
   | 'rides_ops'
   | 'driver_admin'
   | 'driver_ops'
+  | 'fleet_admin'
+  | 'fleet_ops'
+  | 'enterprise_admin'
+  | 'enterprise_ops'
   // Customer-level (Fleet Manager side)
   | 'fleet_owner'
   | 'fleet_manager'
@@ -113,6 +117,30 @@ export const ROLE_META: Record<Role, RoleMeta> = {
     level: 600,
     label: 'Driver Operations',
     description: 'Manage driver compliance and support tools.',
+    tier: 'platform',
+  },
+  fleet_admin: {
+    level: 800,
+    label: 'Fleet Admin',
+    description: 'Roam Fleet product admin — rideshare fleet manager accounts.',
+    tier: 'platform',
+  },
+  fleet_ops: {
+    level: 600,
+    label: 'Fleet Operations',
+    description: 'Approve and support rideshare fleet manager signups.',
+    tier: 'platform',
+  },
+  enterprise_admin: {
+    level: 800,
+    label: 'Enterprise Admin',
+    description: 'Roam Enterprise platform administration.',
+    tier: 'platform',
+  },
+  enterprise_ops: {
+    level: 600,
+    label: 'Enterprise Operations',
+    description: 'Multi-vertical fleet platform operations.',
     tier: 'platform',
   },
 

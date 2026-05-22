@@ -10,6 +10,11 @@ import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { BUSINESS_TYPES } from '../../utils/businessTypes';
 import { LockoutCountdown } from './LockoutCountdown';
+import {
+  IS_RIDESHARE_FLEET_PRODUCT,
+  IS_ENTERPRISE_PRODUCT,
+  withProductLineHeaders,
+} from '../../config/productLine';
 
 // Map icon string names from BUSINESS_TYPES to actual lucide components
 const ICON_MAP: Record<string, React.ComponentType<any>> = {
@@ -40,14 +45,24 @@ export function LoginPage() {
   const [registrationMode, setRegistrationMode] = useState<'open' | 'invite_only' | 'domain_restricted'>('open');
   const [allowedDomains, setAllowedDomains] = useState<string[]>([]);
   const [passwordPolicy, setPasswordPolicy] = useState<{ minLength: number; requireUppercase: boolean; requireNumber: boolean; requireSpecialChar: boolean } | null>(null);
+  const [enabledBusinessTypes, setEnabledBusinessTypes] = useState<Record<string, boolean>>({});
+  const [platformDisplayName, setPlatformDisplayName] = useState(
+    IS_ENTERPRISE_PRODUCT ? 'Roam Enterprise' : 'Roam Fleet',
+  );
+
+  const signupBusinessTypes = BUSINESS_TYPES.filter(
+    (bt) => !IS_ENTERPRISE_PRODUCT || enabledBusinessTypes[bt.key] !== false,
+  );
 
   React.useEffect(() => {
-    fetch(`${API_ENDPOINTS.admin}/platform-status`)
+    fetch(`${API_ENDPOINTS.admin}/platform-status`, { headers: withProductLineHeaders() })
       .then(res => res.json())
       .then(data => {
         if (data.registrationMode) setRegistrationMode(data.registrationMode);
         if (data.allowedDomains) setAllowedDomains(data.allowedDomains);
         if (data.passwordPolicy) setPasswordPolicy(data.passwordPolicy);
+        if (data.enabledBusinessTypes) setEnabledBusinessTypes(data.enabledBusinessTypes);
+        if (data.platformName) setPlatformDisplayName(data.platformName);
       })
       .catch(() => {});
   }, []);
@@ -61,10 +76,10 @@ export function LoginPage() {
       // Enterprise: all login goes through server-side route with rate limiting & role gating
       const res = await fetch(`${API_ENDPOINTS.admin}/fleet-login`, {
         method: 'POST',
-        headers: {
+        headers: withProductLineHeaders({
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${publicAnonKey}`,
-        },
+        }),
         body: JSON.stringify({ email, password }),
       });
 
@@ -82,6 +97,10 @@ export function LoginPage() {
       }
 
       if (!res.ok) {
+        if (res.status === 403 && data?.wrongProductLine) {
+          setError(data.error || 'Please sign in on the correct Roam product.');
+          return;
+        }
         const msg = data?.error || 'Login failed';
         // If the server indicates we just got locked out (retryAfterSec in non-429 response)
         if (data?.retryAfterSec) {
@@ -128,18 +147,15 @@ export function LoginPage() {
               name: name || email.split('@')[0],
               role: 'admin',
           };
-          if (selectedBusinessType) {
-              body.businessType = selectedBusinessType;
-          }
+          body.businessType = IS_RIDESHARE_FLEET_PRODUCT ? 'rideshare' : selectedBusinessType;
 
-          // Use the /signup endpoint (Phase 2 replacement for /users)
           const res = await fetch(`${API_ENDPOINTS.admin}/signup`, {
               method: 'POST',
-              headers: {
+              headers: withProductLineHeaders({
                   'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${publicAnonKey}`
-              },
-              body: JSON.stringify(body)
+                  'Authorization': `Bearer ${publicAnonKey}`,
+              }),
+              body: JSON.stringify(body),
           });
 
           const data = await res.json().catch(e => {
@@ -207,7 +223,7 @@ export function LoginPage() {
 
       {/* Business type cards */}
       <div className="grid grid-cols-1 gap-2.5">
-        {BUSINESS_TYPES.map((bt) => {
+        {signupBusinessTypes.map((bt) => {
           const IconComp = ICON_MAP[bt.icon] || Car;
           const isSelected = selectedBusinessType === bt.key;
           return (
@@ -286,7 +302,7 @@ export function LoginPage() {
             <div className="h-9 w-9 rounded-lg bg-white/10 backdrop-blur-sm flex items-center justify-center border border-white/10">
               <Car className="h-5 w-5 text-white" />
             </div>
-            <span className="text-xl font-bold tracking-tight text-white">Roam Fleet</span>
+            <span className="text-xl font-bold tracking-tight text-white">{platformDisplayName}</span>
           </div>
 
           {/* Center: Hero */}
@@ -349,7 +365,7 @@ export function LoginPage() {
             <div className="h-8 w-8 rounded-lg bg-indigo-600 flex items-center justify-center">
               <Car className="h-4 w-4 text-white" />
             </div>
-            <span className="text-lg font-bold text-slate-900 dark:text-white">Roam Fleet</span>
+            <span className="text-lg font-bold text-slate-900 dark:text-white">{platformDisplayName}</span>
           </div>
         </div>
 
@@ -365,7 +381,7 @@ export function LoginPage() {
                 </h2>
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-1.5">
                   {isRegistering
-                    ? 'Get started with Roam Fleet in minutes.'
+                    ? `Get started with ${platformDisplayName} in minutes.`
                     : 'Sign in to access your fleet dashboard.'}
                 </p>
               </div>
@@ -421,8 +437,12 @@ export function LoginPage() {
                 <form onSubmit={(e) => {
                   e.preventDefault();
                   if (isRegistering) {
-                    setAdminSignupStep(2);
-                    setError(null);
+                    if (IS_RIDESHARE_FLEET_PRODUCT) {
+                      void handleRegister(e);
+                    } else {
+                      setAdminSignupStep(2);
+                      setError(null);
+                    }
                   } else {
                     handleLogin(e);
                   }

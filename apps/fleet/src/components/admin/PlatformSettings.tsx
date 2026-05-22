@@ -42,6 +42,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { API_ENDPOINTS } from '../../services/apiConfig';
+import { IS_ENTERPRISE_PRODUCT, withProductLineHeaders } from '../../config/productLine';
 
 // -------------------------------------------------------------------
 // Types
@@ -187,7 +188,7 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
     setError(null);
     try {
       const res = await fetch(`${API_ENDPOINTS.admin}/admin/platform-settings`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: withProductLineHeaders({ Authorization: `Bearer ${accessToken}` }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -219,10 +220,10 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
     try {
       const res = await fetch(`${API_ENDPOINTS.admin}/admin/platform-settings`, {
         method: 'PUT',
-        headers: {
+        headers: withProductLineHeaders({
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
-        },
+        }),
         body: JSON.stringify(settings),
       });
       if (!res.ok) {
@@ -446,7 +447,8 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
         )}
       </SettingsSection>
 
-      {/* ── Section: Business Types ── */}
+      {/* ── Section: Business Types (enterprise only) ── */}
+      {IS_ENTERPRISE_PRODUCT && (
       <SettingsSection
         icon={<Building2 className="w-4 h-4 text-purple-400" />}
         title="Business Types"
@@ -494,6 +496,7 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
           </p>
         </div>
       </SettingsSection>
+      )}
 
       {/* ── Section: System Info ── */}
       <SettingsSection

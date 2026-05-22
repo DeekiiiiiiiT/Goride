@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { BusinessType } from '../../types/data';
 import { DEFAULT_BUSINESS_TYPE, isValidBusinessType } from '../../utils/businessTypes';
+import { IS_RIDESHARE_FLEET_PRODUCT } from '../../config/productLine';
 import { api } from '../../services/api';
 import { supabase } from '../../utils/supabase/client';
 
@@ -25,6 +26,12 @@ export function BusinessConfigProvider({ children }: { children: React.ReactNode
       try {
         // Priority 1: KV preferences (admin explicitly set via Settings)
         const prefs = await api.getPreferences();
+        if (IS_RIDESHARE_FLEET_PRODUCT) {
+          setBusinessTypeState('rideshare');
+          localStorage.setItem('preference_business_type', 'rideshare');
+          setIsLoading(false);
+          return;
+        }
         if (prefs?.businessType && isValidBusinessType(prefs.businessType)) {
           setBusinessTypeState(prefs.businessType);
           localStorage.setItem('preference_business_type', prefs.businessType);
@@ -52,6 +59,11 @@ export function BusinessConfigProvider({ children }: { children: React.ReactNode
         }
       } catch (err) {
         console.log('BusinessConfigContext: Failed to load preferences, using default:', err);
+        if (IS_RIDESHARE_FLEET_PRODUCT) {
+          setBusinessTypeState('rideshare');
+          localStorage.setItem('preference_business_type', 'rideshare');
+          return;
+        }
         // Fallback chain: session metadata -> localStorage -> default
         try {
           const { data: { session } } = await supabase.auth.getSession();

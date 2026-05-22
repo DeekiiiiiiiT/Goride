@@ -159,7 +159,7 @@ export function DriverGoogleSignupWizard() {
       return;
     }
     if (!certified) {
-      setError('Please confirm that your information is accurate.');
+      setError('Please check the certification box below to confirm your information is accurate.');
       return;
     }
     if (!user) return;
@@ -661,8 +661,22 @@ export function DriverGoogleSignupWizard() {
                   </button>
                 </div>
               </div>
-              <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
-                <Checkbox checked={certified} onCheckedChange={v => setCertified(v === true)} className="mt-0.5" />
+              <label
+                htmlFor="driver-google-certify"
+                className={cn(
+                  'flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm transition-colors',
+                  certified
+                    ? 'border-emerald-500/50 bg-emerald-500/5 text-slate-700 dark:text-slate-200'
+                    : 'border-slate-200 bg-slate-50/80 text-slate-600 dark:border-slate-600 dark:bg-slate-900/40 dark:text-slate-300',
+                  error?.includes('certification box') && !certified && 'border-amber-500/60 ring-1 ring-amber-500/30',
+                )}
+              >
+                <Checkbox
+                  id="driver-google-certify"
+                  checked={certified}
+                  onCheckedChange={v => setCertified(v === true)}
+                  className="mt-0.5 border-slate-400 dark:border-slate-500"
+                />
                 <span>I certify that the information I provided is true and complete to the best of my knowledge.</span>
               </label>
               <Button type="submit" className="w-full bg-gradient-to-r from-emerald-600 to-teal-600" disabled={loading}>

@@ -4,6 +4,9 @@
   import path from 'path';
 
   export default defineConfig({
+    define: {
+      'import.meta.env.VITE_PRODUCT_LINE': JSON.stringify(process.env.VITE_PRODUCT_LINE || 'fleet'),
+    },
     plugins: [react(), tailwindcss()],
     resolve: {
       extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],

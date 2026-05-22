@@ -12,8 +12,9 @@ Include **scheme + host + port + path** where your apps handle the post-auth lan
 
 | App | Dev (typical) | Production (example) |
 |-----|---------------|-------------------------|
-| Fleet | `http://localhost:3000/` | `https://roamfleet.co/` |
-| Admin | `http://localhost:3001/` | (same host as fleet or dedicated admin URL) |
+| Fleet (rideshare) | `http://localhost:3000/` | `https://roamfleet.co/` |
+| Enterprise fleet | `http://localhost:3003/` | `https://roamenterprise.co/` |
+| Enterprise Super Admin | `http://localhost:3001/` | `https://roamenterprise.co/admin` (deploy `@roam/admin` here) |
 | Driver | `http://localhost:3002/` | `https://roamdriver.co/` |
 | Dash customer | `http://localhost:5174/` | `https://roamdash.co/` (or customer subdomain) |
 | Dash merchant | `http://localhost:5175/` | `https://partner.roamdash.co/` (if used) |

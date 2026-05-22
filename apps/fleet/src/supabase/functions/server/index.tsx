@@ -20,6 +20,17 @@ import { requireAuth, requirePermission, hasPermission, type RbacUser } from "./
 import { logAdminAction, getAuditLogs, getAuditLogsByActor } from "./audit_log.ts";
 import { stampOrg, filterByOrg, belongsToOrg, getOrgId, isLegacyOrgPlaceholder } from "./org_scope.ts";
 import {
+  resolveProductLine,
+  platformSettingsKvKey,
+  LEGACY_PLATFORM_SETTINGS_KEY,
+  inferProductLineFromUser,
+  assertFleetOwnerProductLine,
+  isEnabledBusinessType,
+  isProductLine,
+  type ProductLine,
+} from "./product_line.ts";
+import { requireProductAdmin } from "./product_admin_guard.ts";
+import {
   appendCanonicalLedgerEvents,
   deleteAllCanonicalLedgerBySourceType,
   deleteCanonicalLedgerBySource,
@@ -473,12 +484,21 @@ app.use('*', async (c, next) => {
 // Reads platform:settings from cache/KV. If maintenanceMode is true, blocks
 // all non-admin, non-auth, non-status routes with 503.
 // ---------------------------------------------------------------------------
-async function getPlatformSettingsCached(): Promise<any> {
-  const cached = memCache.platformSettingsCache.get('platform:settings');
+async function getPlatformSettingsCached(productLine?: ProductLine): Promise<any> {
+  const line = productLine ?? 'fleet';
+  const cacheKey = platformSettingsKvKey(line);
+  const cached = memCache.platformSettingsCache.get(cacheKey);
   if (cached) return cached;
-  const settings = await kv.get('platform:settings');
+
+  let settings = await kv.get(cacheKey);
+  if (!settings && line === 'fleet') {
+    settings = await kv.get(LEGACY_PLATFORM_SETTINGS_KEY);
+  }
+  if (!settings && line === 'enterprise') {
+    settings = await kv.get(LEGACY_PLATFORM_SETTINGS_KEY);
+  }
   if (settings) {
-    memCache.platformSettingsCache.set('platform:settings', settings);
+    memCache.platformSettingsCache.set(cacheKey, settings);
   }
   return settings || {};
 }
@@ -486,15 +506,25 @@ async function getPlatformSettingsCached(): Promise<any> {
 // Public endpoint: GET /platform-status (no auth required)
 app.get("/make-server-37f42386/platform-status", async (c) => {
   try {
-    const settings = await getPlatformSettingsCached();
+    const productLine = resolveProductLine(c);
+    const settings = await getPlatformSettingsCached(productLine);
+    const defaultName = productLine === 'enterprise' ? 'Roam Enterprise' : 'Roam Fleet';
     return c.json({
+      productLine,
       maintenanceMode: settings.maintenanceMode || false,
       maintenanceMessage: settings.maintenanceMessage || "We're performing scheduled maintenance. Back soon!",
-      platformName: settings.platformName || 'Roam Fleet',
+      platformName: settings.platformName || defaultName,
       registrationMode: settings.registrationMode || 'open',
       allowedDomains: settings.allowedDomains || [],
       defaultCurrency: settings.defaultCurrency || 'JMD',
       fleetTimezone: settings.fleetTimezone || 'America/Jamaica',
+      enabledBusinessTypes: settings.enabledBusinessTypes || {
+        rideshare: true,
+        delivery: true,
+        taxi: true,
+        trucking: true,
+        shipping: true,
+      },
       announcement: (() => {
         const ann = settings.announcement;
         if (!ann || !ann.enabled) return null;
@@ -520,7 +550,8 @@ app.get("/make-server-37f42386/platform-status", async (c) => {
 // Public endpoint: GET /platform-feature-flags (no auth required)
 app.get("/make-server-37f42386/platform-feature-flags", async (c) => {
   try {
-    const settings = await getPlatformSettingsCached();
+    const productLine = resolveProductLine(c);
+    const settings = await getPlatformSettingsCached(productLine);
     const defaultModules = {
       fuelManagement: true,
       tollManagement: true,
@@ -556,7 +587,8 @@ app.use('*', async (c, next) => {
   }
 
   try {
-    const settings = await getPlatformSettingsCached();
+    const productLine = resolveProductLine(c);
+    const settings = await getPlatformSettingsCached(productLine);
     if (settings.maintenanceMode === true) {
       return c.json({
         error: 'Platform is under maintenance. Please try again later.',
@@ -10114,7 +10146,8 @@ app.get("/make-server-37f42386/users", requireAuth(), async (c) => {
 // Phase 8: Proper organizationId assignment & error handling
 app.post("/make-server-37f42386/signup", async (c) => {
   try {
-    const { email, password, name, role, businessType } = await c.req.json();
+    const productLine = resolveProductLine(c);
+    const { email, password, name, role, businessType: rawBusinessType } = await c.req.json();
 
     // Rate limit: check by IP
     const clientIp = getClientIp(c);
@@ -10137,9 +10170,23 @@ app.post("/make-server-37f42386/signup", async (c) => {
       return c.json({ error: "Invalid role. Must be 'admin' or 'driver'" }, 400);
     }
 
+    let businessType = rawBusinessType as string | undefined;
+    if (normalizedRole === 'admin') {
+      if (productLine === 'fleet') {
+        businessType = 'rideshare';
+      } else if (!businessType) {
+        return c.json({ error: "businessType is required for enterprise signup" }, 400);
+      } else {
+        const platformSettingsBt = await getPlatformSettingsCached('enterprise');
+        if (!isEnabledBusinessType(platformSettingsBt, businessType)) {
+          return c.json({ error: `Business type "${businessType}" is not enabled for new registrations` }, 403);
+        }
+      }
+    }
+
     // Phase 5: Password policy validation
     try {
-      const platformSettings5 = await getPlatformSettingsCached();
+      const platformSettings5 = await getPlatformSettingsCached(productLine);
       const sp = platformSettings5.securityPolicies || {};
       const pwErrors: string[] = [];
       if (sp.minPasswordLength && password.length < sp.minPasswordLength) {
@@ -10163,7 +10210,7 @@ app.post("/make-server-37f42386/signup", async (c) => {
 
     // Phase 4: Registration mode enforcement
     try {
-      const platformSettings = await getPlatformSettingsCached();
+      const platformSettings = await getPlatformSettingsCached(productLine);
       const regMode = platformSettings.registrationMode || 'open';
 
       if (regMode === 'invite_only') {
@@ -10189,11 +10236,12 @@ app.post("/make-server-37f42386/signup", async (c) => {
     };
     if (normalizedRole === 'admin' && businessType) {
       userMetadata.businessType = businessType;
+      userMetadata.productLine = productLine;
     }
 
     // Phase 4: If requireApproval is enabled, mark new accounts as pending
     try {
-      const platformSettings = await getPlatformSettingsCached();
+      const platformSettings = await getPlatformSettingsCached(productLine);
       if (platformSettings.requireApproval === true && normalizedRole === 'admin') {
         userMetadata.accountStatus = 'pending_approval';
       }
@@ -10634,6 +10682,7 @@ app.post("/make-server-37f42386/admin/create-customer", requireAuth(), async (c)
       return c.json({ error: "Only the platform owner can create customer accounts" }, 403);
     }
 
+    const productLine = resolveProductLine(c);
     const { email, name, businessType } = await c.req.json();
     if (!email || !name || !businessType) {
       return c.json({ error: "email, name, and businessType are all required" }, 400);
@@ -10642,6 +10691,15 @@ app.post("/make-server-37f42386/admin/create-customer", requireAuth(), async (c)
     const allowedTypes = ['rideshare', 'delivery', 'taxi', 'trucking', 'shipping'];
     if (!allowedTypes.includes(businessType)) {
       return c.json({ error: `Invalid businessType. Must be one of: ${allowedTypes.join(', ')}` }, 400);
+    }
+
+    if (productLine === 'fleet' && businessType !== 'rideshare') {
+      return c.json({ error: "Roam Fleet only supports rideshare business type" }, 400);
+    }
+
+    const entSettings = await getPlatformSettingsCached('enterprise');
+    if (productLine === 'enterprise' && !isEnabledBusinessType(entSettings, businessType)) {
+      return c.json({ error: `Business type "${businessType}" is not enabled` }, 403);
     }
 
     // Generate temporary password
@@ -10658,6 +10716,7 @@ app.post("/make-server-37f42386/admin/create-customer", requireAuth(), async (c)
         name,
         role: 'admin',
         businessType,
+        productLine: productLine === 'fleet' ? 'fleet' : 'enterprise',
       },
       email_confirm: true,
     });
@@ -10672,7 +10731,11 @@ app.post("/make-server-37f42386/admin/create-customer", requireAuth(), async (c)
     // Set organizationId to the new user's own ID (self-referencing for fleet owners)
     const userId = data.user.id;
     const { error: updateErr } = await supabase.auth.admin.updateUserById(userId, {
-      user_metadata: { ...data.user.user_metadata, organizationId: userId },
+      user_metadata: {
+        ...data.user.user_metadata,
+        organizationId: userId,
+        productLine: productLine === 'fleet' ? 'fleet' : 'enterprise',
+      },
     });
     if (updateErr) {
       console.error(`[Create Customer] Failed to set organizationId for ${userId}:`, updateErr);
@@ -12861,6 +12924,22 @@ app.post("/make-server-37f42386/fleet-login", async (c) => {
       }, 401);
     }
 
+    const loginProductLine = resolveProductLine(c);
+    const ownerProductLine = inferProductLineFromUser(data.user?.user_metadata as Record<string, unknown>);
+    if (!assertFleetOwnerProductLine(data.user?.user_metadata as Record<string, unknown>, loginProductLine)) {
+      await anonClient.auth.signOut();
+      await recordFailedAttempt(clientIp, 'fleet');
+      await recordFailedAttempt(email.toLowerCase(), 'fleet');
+      console.log(`[FleetLogin] Product line mismatch ${email}: user=${ownerProductLine} portal=${loginProductLine}`);
+      return c.json({
+        error: loginProductLine === 'fleet'
+          ? "This account is registered on Roam Enterprise. Sign in at roamenterprise.co"
+          : "This account is registered on Roam Fleet. Sign in at roamfleet.co",
+        wrongProductLine: true,
+        expectedProductLine: ownerProductLine,
+      }, 403);
+    }
+
     if (!data?.session) {
       return c.json({ error: "Sign-in succeeded but no session was returned" }, 500);
     }
@@ -13622,8 +13701,10 @@ app.post("/make-server-37f42386/admin/vehicle-catalog-gate/backfill", requireAut
  * Layer 2: KV cache (warm path - ~50ms, 5min TTL)
  * Layer 3: Auth API (cold path - ~500-2000ms)
  */
-async function fetchCustomersWithCache(): Promise<any[]> {
-  const cacheKey = "admin:customers:list";
+async function fetchCustomersWithCache(productLineFilter?: ProductLine): Promise<any[]> {
+  const cacheKey = productLineFilter
+    ? `admin:customers:list:${productLineFilter}`
+    : "admin:customers:list";
   
   // Layer 1: Memory cache (hot path - <5ms)
   const memCached = memCache.customerCache.get(cacheKey);
@@ -13649,13 +13730,22 @@ async function fetchCustomersWithCache(): Promise<any[]> {
   if (error) throw new Error(`Auth API error: ${error.message}`);
   
   // Filter to fleet managers (role === 'admin')
-  const customers = (data?.users || [])
-    .filter((u: any) => u.user_metadata?.role === "admin")
-    .map((u: any) => ({
+  let customers = (data?.users || [])
+    .filter((u: any) => u.user_metadata?.role === "admin");
+
+  if (productLineFilter) {
+    customers = customers.filter((u: any) =>
+      inferProductLineFromUser(u.user_metadata) === productLineFilter
+    );
+  }
+
+  customers = customers.map((u: any) => ({
       id: u.id,
       email: u.email || "",
       name: u.user_metadata?.name || "",
       businessType: u.user_metadata?.businessType || "rideshare",
+      productLine: inferProductLineFromUser(u.user_metadata),
+      accountStatus: u.user_metadata?.accountStatus || null,
       createdAt: u.created_at || null,
       lastSignIn: u.last_sign_in_at || null,
       status: u.last_sign_in_at
@@ -13678,9 +13768,10 @@ async function fetchCustomersWithCache(): Promise<any[]> {
  * Invalidate customer cache when data changes
  */
 async function invalidateCustomerCache(): Promise<void> {
-  const cacheKey = "admin:customers:list";
-  memCache.customerCache.invalidate(cacheKey);
-  await cache.setCache(cacheKey, null, 0); // Expire KV cache
+  for (const key of ["admin:customers:list", "admin:customers:list:fleet", "admin:customers:list:enterprise"]) {
+    memCache.customerCache.invalidate(key);
+    await cache.setCache(key, null, 0);
+  }
   console.log("[AdminCustomers] Cache invalidated");
 }
 
@@ -13706,11 +13797,162 @@ app.get("/make-server-37f42386/admin/customers", async (c) => {
     }
 
     // Fetch with multi-layer caching
-    const customers = await fetchCustomersWithCache();
+    const customers = await fetchCustomersWithCache('enterprise');
     return c.json({ customers });
   } catch (e: any) {
     console.log(`admin/customers error: ${e.message}`);
     return c.json({ error: `Server error: ${e.message}` }, 500);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Fleet product admin (roamfleet.co/admin) — rideshare fleet owner ops
+// ---------------------------------------------------------------------------
+
+app.get("/make-server-37f42386/fleet-admin/customers", async (c) => {
+  try {
+    const auth = await requireProductAdmin(c, "fleet");
+    if (auth instanceof Response) return auth;
+
+    const forceRefresh = c.req.query("refresh") === "true";
+    if (forceRefresh) await invalidateCustomerCache();
+
+    const customers = await fetchCustomersWithCache("fleet");
+    return c.json({ customers });
+  } catch (e: any) {
+    console.log(`fleet-admin/customers error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/fleet-admin/customers/:userId/approve", async (c) => {
+  try {
+    const auth = await requireProductAdmin(c, "fleet");
+    if (auth instanceof Response) return auth;
+
+    const userId = c.req.param("userId");
+    const { data: target, error: getErr } = await supabase.auth.admin.getUserById(userId);
+    if (getErr || !target.user) {
+      return c.json({ error: "User not found" }, 404);
+    }
+    if (target.user.user_metadata?.role !== "admin") {
+      return c.json({ error: "Not a fleet manager account" }, 400);
+    }
+    if (inferProductLineFromUser(target.user.user_metadata) !== "fleet") {
+      return c.json({ error: "User is not a Roam Fleet customer" }, 400);
+    }
+
+    const meta = { ...(target.user.user_metadata || {}) };
+    delete meta.accountStatus;
+    const { error: updErr } = await supabase.auth.admin.updateUserById(userId, {
+      user_metadata: meta,
+    });
+    if (updErr) throw updErr;
+
+    await invalidateCustomerCache();
+    await logAdminAction({
+      actorId: auth.id,
+      actorName: auth.email,
+      action: "approve_fleet_customer",
+      targetId: userId,
+      targetEmail: target.user.email || "",
+      details: "Cleared pending_approval",
+    });
+
+    return c.json({ success: true });
+  } catch (e: any) {
+    console.log(`fleet-admin/approve error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// POST /admin/migrate-product-lines — one-time backfill (superadmin)
+app.post("/make-server-37f42386/admin/migrate-product-lines", async (c) => {
+  try {
+    const auth = await verifySuperadmin(c);
+    if (auth instanceof Response) return auth;
+
+    let page = 1;
+    let migrated = 0;
+    let skipped = 0;
+    const perPage = 100;
+
+    while (true) {
+      const { data: { users }, error } = await supabase.auth.admin.listUsers({ page, perPage });
+      if (error) throw error;
+      if (!users?.length) break;
+
+      for (const u of users) {
+        if (u.user_metadata?.role !== "admin") continue;
+        if (u.user_metadata?.productLine && isProductLine(u.user_metadata.productLine)) {
+          skipped++;
+          continue;
+        }
+        const bt = u.user_metadata?.businessType || "rideshare";
+        const productLine: ProductLine = bt === "rideshare" ? "fleet" : "enterprise";
+        await supabase.auth.admin.updateUserById(u.id, {
+          user_metadata: { ...u.user_metadata, productLine },
+        });
+        migrated++;
+      }
+
+      if (users.length < perPage) break;
+      page++;
+    }
+
+    await invalidateCustomerCache();
+    return c.json({ success: true, migrated, skipped });
+  } catch (e: any) {
+    console.log(`migrate-product-lines error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// POST /admin/migrate-platform-settings — copy legacy key to fleet + enterprise
+app.post("/make-server-37f42386/admin/migrate-platform-settings", async (c) => {
+  try {
+    const auth = await verifySuperadmin(c);
+    if (auth instanceof Response) return auth;
+
+    const legacy = await kv.get(LEGACY_PLATFORM_SETTINGS_KEY);
+    if (!legacy) {
+      return c.json({ error: "No legacy platform:settings found" }, 404);
+    }
+
+    const fleetSettings = {
+      ...legacy,
+      platformName: legacy.platformName?.includes("Enterprise") ? "Roam Fleet" : (legacy.platformName || "Roam Fleet"),
+      enabledBusinessTypes: {
+        rideshare: true,
+        delivery: false,
+        taxi: false,
+        trucking: false,
+        shipping: false,
+      },
+      updatedAt: new Date().toISOString(),
+    };
+
+    const enterpriseSettings = {
+      ...legacy,
+      platformName: legacy.platformName || "Roam Enterprise",
+      enabledBusinessTypes: legacy.enabledBusinessTypes || {
+        rideshare: true,
+        delivery: true,
+        taxi: true,
+        trucking: true,
+        shipping: true,
+      },
+      updatedAt: new Date().toISOString(),
+    };
+
+    await kv.set(platformSettingsKvKey("fleet"), fleetSettings);
+    await kv.set(platformSettingsKvKey("enterprise"), enterpriseSettings);
+    memCache.platformSettingsCache.invalidate(platformSettingsKvKey("fleet"));
+    memCache.platformSettingsCache.invalidate(platformSettingsKvKey("enterprise"));
+
+    return c.json({ success: true });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
   }
 });
 
@@ -14050,8 +14292,9 @@ app.get("/make-server-37f42386/admin/platform-settings", async (c) => {
     const auth = await verifySuperadmin(c);
     if (auth instanceof Response) return auth;
 
-    const settings = await kv.get("platform:settings");
-    return c.json({ settings: settings || null });
+    const productLine = resolveProductLine(c);
+    const settings = await getPlatformSettingsCached(productLine);
+    return c.json({ settings: settings || null, productLine });
   } catch (e: any) {
     console.log(`admin/platform-settings GET error: ${e.message}`);
     return c.json({ error: e.message }, 500);
@@ -14159,15 +14402,18 @@ app.put("/make-server-37f42386/admin/platform-settings", async (c) => {
     const auth = await verifySuperadmin(c);
     if (auth instanceof Response) return auth;
 
+    const productLine = resolveProductLine(c);
+    const settingsKey = platformSettingsKvKey(productLine);
+
     // Read old settings BEFORE overwriting so we can diff for audit
-    const oldSettings = await kv.get("platform:settings");
+    const oldSettings = await kv.get(settingsKey);
 
     const settings = await c.req.json();
     settings.updatedAt = new Date().toISOString();
-    await kv.set("platform:settings", settings);
+    await kv.set(settingsKey, settings);
 
     // Immediately invalidate cached settings so maintenance mode propagates instantly
-    memCache.platformSettingsCache.invalidate('platform:settings');
+    memCache.platformSettingsCache.invalidate(settingsKey);
 
     // Build a human-readable diff for the audit log
     let details = "Initial settings configuration";

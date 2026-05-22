@@ -32,6 +32,7 @@ import { OfflineProvider } from './components/providers/OfflineProvider';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { API_ENDPOINTS } from './services/apiConfig';
+import { withProductLineHeaders } from './config/productLine';
 import { publicAnonKey } from './utils/supabase/info';
 
 import { fuelService } from './services/fuelService';
@@ -41,6 +42,9 @@ import { PAGE_PERMISSION_MAP } from './utils/permissions';
 import { isPassengerOnlyMetadataRole } from '@roam/auth-client';
 import { MaintenancePage } from './components/MaintenancePage';
 import { FeatureFlagProvider } from './components/auth/FeatureFlagContext';
+import { WrongProductLineGate } from './components/auth/WrongProductLineGate';
+import { FleetProductAdminPortal } from './admin/FleetProductAdminPortal';
+import { PRODUCT_LINE } from './config/productLine';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -52,6 +56,13 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+function inferClientProductLine(meta: Record<string, unknown> | undefined): 'fleet' | 'enterprise' {
+  const pl = meta?.productLine;
+  if (pl === 'fleet' || pl === 'enterprise') return pl;
+  if (meta?.businessType === 'rideshare') return 'fleet';
+  return 'enterprise';
+}
 
 function AppContent() {
   const { user, role, resolvedRole, loading, signOut } = useAuth();
@@ -71,7 +82,7 @@ function AppContent() {
   }>({ active: false, message: '', platformName: 'Roam Fleet', checked: false });
 
   useEffect(() => {
-    fetch(`${API_ENDPOINTS.fleet}/platform-status`)
+    fetch(`${API_ENDPOINTS.fleet}/platform-status`, { headers: withProductLineHeaders() })
       .then(res => res.json())
       .then(data => {
         setMaintenanceStatus({
@@ -175,6 +186,16 @@ function AppContent() {
   // Main Fleet Portal — Authentication Gate
   if (!user || role !== 'admin') {
     return <LoginPage />;
+  }
+
+  const ownerProductLine = inferClientProductLine(user.user_metadata as Record<string, unknown>);
+  if (ownerProductLine !== PRODUCT_LINE) {
+    return (
+      <WrongProductLineGate
+        expectedProductLine={ownerProductLine}
+        onSignOut={signOut}
+      />
+    );
   }
 
   // Maintenance Mode Gate — block non-platform users when maintenance is active
@@ -347,6 +368,14 @@ function AppContent() {
 }
 
 export default function App() {
+  if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <FleetProductAdminPortal />
+      </QueryClientProvider>
+    );
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>

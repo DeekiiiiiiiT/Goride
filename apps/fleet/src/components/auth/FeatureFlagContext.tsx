@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { API_ENDPOINTS } from '../../services/apiConfig';
+import { withProductLineHeaders } from '../../config/productLine';
 
 interface EnabledModules {
   fuelManagement: boolean;
@@ -39,7 +40,9 @@ export function FeatureFlagProvider({ children }: { children: React.ReactNode })
 
   const fetchFlags = useCallback(async () => {
     try {
-      const res = await fetch(`${API_ENDPOINTS.fleet}/platform-feature-flags`);
+      const res = await fetch(`${API_ENDPOINTS.fleet}/platform-feature-flags`, {
+        headers: withProductLineHeaders(),
+      });
       if (res.ok) {
         const data = await res.json();
         setEnabledModules({ ...ALL_ENABLED, ...(data.enabledModules || {}) });

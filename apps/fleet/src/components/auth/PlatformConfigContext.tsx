@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { API_ENDPOINTS } from '../../services/apiConfig';
+import { withProductLineHeaders } from '../../config/productLine';
 
 interface PlatformConfig {
   defaultCurrency: string;
@@ -25,7 +26,7 @@ export function PlatformConfigProvider({ children }: { children: React.ReactNode
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API_ENDPOINTS.admin}/platform-status`)
+    fetch(`${API_ENDPOINTS.admin}/platform-status`, { headers: withProductLineHeaders() })
       .then(res => res.json())
       .then(data => {
         if (data.defaultCurrency) setCurrency(data.defaultCurrency);

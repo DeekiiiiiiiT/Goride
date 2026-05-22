@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import "react-day-picker/dist/style.css";
+import "./calendar-dropdown.css";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { DayPicker } from "react-day-picker";
 
@@ -76,11 +77,11 @@ function Calendar({
         dropdown: "rdp-dropdown",
         dropdown_month: cn(
           "rdp-dropdown_month",
-          "min-h-9 min-w-[5.5rem] rounded-md border border-slate-200 bg-white px-1 shadow-sm focus-within:ring-2 focus-within:ring-emerald-500/35 dark:border-slate-600 dark:bg-slate-900",
+          "min-h-9 min-w-[5.5rem] rounded-md border px-1 shadow-sm focus-within:ring-2 focus-within:ring-emerald-500/35",
         ),
         dropdown_year: cn(
           "rdp-dropdown_year",
-          "min-h-9 min-w-[4.5rem] rounded-md border border-slate-200 bg-white px-1 shadow-sm focus-within:ring-2 focus-within:ring-emerald-500/35 dark:border-slate-600 dark:bg-slate-900",
+          "min-h-9 min-w-[4.5rem] rounded-md border px-1 shadow-sm focus-within:ring-2 focus-within:ring-emerald-500/35",
         ),
         dropdown_icon: cn(
           "rdp-dropdown_icon",

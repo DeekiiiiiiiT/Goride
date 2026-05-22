@@ -13,6 +13,10 @@ export const PLATFORM_ROLES = [
 
 /** Product-scoped admin roles */
 export type ProductAdminRole =
+  | 'fleet_admin'     // Roam Fleet product admin (roamfleet.co/admin)
+  | 'fleet_ops'
+  | 'enterprise_admin' // Roam Enterprise platform admin
+  | 'enterprise_ops'
   | 'dash_admin'      // Full Dash admin access
   | 'dash_ops'        // Dash operations (merchants, orders)
   | 'rides_admin'     // Full Rides admin access
@@ -26,6 +30,8 @@ export type AdminRole = typeof PLATFORM_ROLES[number] | ProductAdminRole;
 /** Product admin access matrix - which roles can access which product admin */
 export const PRODUCT_ADMIN_ACCESS = {
   platform: [...PLATFORM_ROLES],
+  fleet: [...PLATFORM_ROLES, 'fleet_admin', 'fleet_ops'],
+  enterprise: [...PLATFORM_ROLES, 'enterprise_admin', 'enterprise_ops'],
   dash: [...PLATFORM_ROLES, 'dash_admin', 'dash_ops'],
   rides: [...PLATFORM_ROLES, 'rides_admin', 'rides_ops'],
   driver: [...PLATFORM_ROLES, 'driver_admin', 'driver_ops'],
@@ -72,6 +78,22 @@ export function getAccessibleProducts(role: string | null | undefined): ProductK
  * Role metadata for product admin roles
  */
 export const PRODUCT_ROLE_META: Record<ProductAdminRole, { label: string; description: string }> = {
+  fleet_admin: {
+    label: 'Fleet Admin',
+    description: 'Roam Fleet product ops — rideshare fleet owner accounts',
+  },
+  fleet_ops: {
+    label: 'Fleet Operations',
+    description: 'Approve and support rideshare fleet manager signups',
+  },
+  enterprise_admin: {
+    label: 'Enterprise Admin',
+    description: 'Roam Enterprise platform administration',
+  },
+  enterprise_ops: {
+    label: 'Enterprise Operations',
+    description: 'Multi-vertical fleet platform operations',
+  },
   dash_admin: {
     label: 'Dash Admin',
     description: 'Full access to Roam Dash admin - merchants, orders, payouts',

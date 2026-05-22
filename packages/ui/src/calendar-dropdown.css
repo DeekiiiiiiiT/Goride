@@ -1,0 +1,52 @@
+/* Month/year dropdowns — override react-day-picker focus styles (#e7edff) that flash white on first open */
+
+.rdp-dropdown_month,
+.rdp-dropdown_year {
+  background-color: rgb(30 41 59);
+  border-color: rgb(71 85 105);
+}
+
+.rdp-dropdown_month .rdp-caption_label,
+.rdp-dropdown_year .rdp-caption_label {
+  color: rgb(241 245 249);
+  background-color: transparent;
+}
+
+/* Month is often auto-focused when the calendar opens — without this, label goes white-on-white */
+.rdp-dropdown:focus-visible:not([disabled]) + .rdp-caption_label {
+  background-color: rgb(51 65 85) !important;
+  color: rgb(241 245 249) !important;
+  border: 2px solid rgb(16 185 129 / 0.45);
+  border-radius: 6px;
+}
+
+/* Native <select> option list only — do not put color-scheme on the visible month/year box */
+.rdp-dropdown_month .rdp-dropdown,
+.rdp-dropdown_year .rdp-dropdown {
+  color-scheme: light;
+  color: #0f172a;
+}
+
+.rdp-dropdown_month option,
+.rdp-dropdown_year option {
+  color: #0f172a;
+  background-color: #ffffff;
+}
+
+/* Light-themed pages using the same calendar */
+:root:not(.dark) .rdp-dropdown_month,
+:root:not(.dark) .rdp-dropdown_year {
+  background-color: #ffffff;
+  border-color: rgb(226 232 240);
+}
+
+:root:not(.dark) .rdp-dropdown_month .rdp-caption_label,
+:root:not(.dark) .rdp-dropdown_year .rdp-caption_label {
+  color: rgb(15 23 42);
+}
+
+:root:not(.dark) .rdp-dropdown:focus-visible:not([disabled]) + .rdp-caption_label {
+  background-color: rgb(241 245 249) !important;
+  color: rgb(15 23 42) !important;
+  border-color: rgb(16 185 129 / 0.45);
+}

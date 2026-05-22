@@ -70,7 +70,7 @@ export function DriverOnboardingPage() {
       return;
     }
     if (!certified) {
-      setError('Please confirm that your information is accurate.');
+      setError('Please check the certification box below to confirm your information is accurate.');
       return;
     }
     if (!user) return;
@@ -136,14 +136,6 @@ export function DriverOnboardingPage() {
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-xl backdrop-blur-sm dark:border-slate-700/60 dark:bg-slate-800/60">
-            <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/40">
-              <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Connect social account</p>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Link Google, Apple, or Facebook (coming soon).</p>
-              <Button type="button" variant="secondary" className="mt-3 w-full" disabled>
-                Connect now
-              </Button>
-            </div>
-
             <form onSubmit={e => void handleSubmit(e)} className="space-y-4">
               {error && (
                 <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
@@ -256,8 +248,22 @@ export function DriverOnboardingPage() {
                 </div>
               </div>
 
-              <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
-                <Checkbox checked={certified} onCheckedChange={v => setCertified(v === true)} className="mt-0.5" />
+              <label
+                htmlFor="driver-certify"
+                className={cn(
+                  'flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm transition-colors',
+                  certified
+                    ? 'border-emerald-500/50 bg-emerald-500/5 text-slate-700 dark:text-slate-200'
+                    : 'border-slate-200 bg-slate-50/80 text-slate-600 dark:border-slate-600 dark:bg-slate-900/40 dark:text-slate-300',
+                  error?.includes('certification box') && !certified && 'border-amber-500/60 ring-1 ring-amber-500/30',
+                )}
+              >
+                <Checkbox
+                  id="driver-certify"
+                  checked={certified}
+                  onCheckedChange={v => setCertified(v === true)}
+                  className="mt-0.5 border-slate-400 dark:border-slate-500"
+                />
                 <span>I certify that the information I provided is true and complete to the best of my knowledge.</span>
               </label>
 

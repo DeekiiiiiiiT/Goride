@@ -4,6 +4,8 @@
   "packageManager": "pnpm@11.1.0",
   "scripts": {
     "dev": "pnpm --filter @roam/fleet dev",
+    "dev:enterprise": "pnpm --filter @roam/enterprise dev",
+    "build:enterprise": "pnpm --filter @roam/enterprise build",
     "dev:customer": "pnpm --filter @roam/dash-customer dev",
     "dev:merchant": "pnpm --filter @roam/dash-merchant dev",
     "dev:all": "pnpm --parallel -r dev",

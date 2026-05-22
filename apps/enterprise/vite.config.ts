@@ -5,10 +5,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const adminSrc = path.resolve(__dirname, 'src');
 const fleetSrc = path.resolve(__dirname, '../fleet/src');
 
-/** Fleet UI was generated with `pkg@semver` import specifiers; resolve to real packages in admin. */
 function resolveFleetVersionedPackages(fleetSrcRoot: string): Plugin {
   const semverSuffix = /^(.+)@(\d+\.\d+[\d.\w-]*)$/;
   const fleetRootNorm = normalizePath(fleetSrcRoot);
@@ -34,19 +32,9 @@ export default defineConfig({
   resolve: {
     extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
     alias: [
-      { find: '@', replacement: adminSrc },
-      /** Reuse fleet Super-Admin–equivalent screens without duplicating code */
       { find: '@fleet', replacement: fleetSrc },
-      /** Fleet sources still reference this legacy import string */
+      { find: '@', replacement: fleetSrc },
       { find: 'sonner@2.0.3', replacement: 'sonner' },
-      /**
-       * Fleet database views import `../auth/AuthContext` (fleet). When bundled into admin,
-       * use admin AuthProvider so `session` / platform login match the host app.
-       */
-      {
-        find: normalizePath(path.resolve(fleetSrc, 'components/auth/AuthContext.tsx')),
-        replacement: normalizePath(path.resolve(adminSrc, 'components/auth/AuthContext.tsx')),
-      },
     ],
   },
   build: {
@@ -54,7 +42,7 @@ export default defineConfig({
     outDir: 'dist',
   },
   server: {
-    port: 3001,
+    port: 3003,
     host: 'localhost',
     strictPort: true,
     open: true,
