@@ -366,7 +366,16 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
 // ---------------------------------------------------------------------------
 
 /** All canonical role strings for quick lookup. */
-const VALID_ROLES = new Set<string>(Object.keys(ROLE_META));
+export const VALID_ROLES = new Set<string>(Object.keys(ROLE_META));
+
+const LEGACY_ASSIGNABLE_ROLES = new Set<string>(['superadmin', 'admin', 'manager', 'viewer']);
+
+/** Roles that may be written via server-side assignUserRoles. */
+export function isAssignableRole(raw: string): boolean {
+  const r = (raw ?? '').trim();
+  if (!r) return false;
+  return VALID_ROLES.has(r) || LEGACY_ASSIGNABLE_ROLES.has(r);
+}
 
 /**
  * Map a raw role string (possibly a legacy value from Supabase user_metadata)

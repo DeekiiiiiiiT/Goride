@@ -8,6 +8,7 @@ import {
   requireProductAdmin,
   type ProductAdminUser,
 } from "../../_shared/productAdmin.ts";
+import { getJwtRoles, jwtPrimaryRole } from "../../_shared/authEdge.ts";
 import { getRiderAdminDb, type RidesAdminTables } from "../../_shared/ridesAdminDb.ts";
 
 type RiderAdminDb = Awaited<ReturnType<typeof getRiderAdminDb>>;
@@ -79,8 +80,10 @@ async function riderAudit(
 }
 
 function isPassengerUser(user: { user_metadata?: Record<string, unknown>; app_metadata?: Record<string, unknown> }): boolean {
-  const role = (user.user_metadata?.role ?? user.app_metadata?.role) as string | undefined;
-  return role === "passenger";
+  if (getJwtRoles(user).includes("passenger")) return true;
+  const surface = user.user_metadata?.surface;
+  if (surface === "passenger") return true;
+  return jwtPrimaryRole(user) === "passenger";
 }
 
 async function ensureProfile(

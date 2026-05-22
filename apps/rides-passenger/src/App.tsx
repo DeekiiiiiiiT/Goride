@@ -1,11 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
 import {
   supabase,
-  shouldSkipOauthSurfaceRolePatch,
+  shouldSkipOauthSurfaceWrite,
   isRidesPassengerUiBlockedRole,
-  needsRidesSurfaceRolePatch,
 } from '@roam/auth-client';
 import { PASSENGER_OAUTH_INTENT_KEY, PASSENGER_OAUTH_INTENT_VALUE } from './utils/passengerAuthSignup';
 import HomePage from './pages/HomePage';
@@ -30,7 +29,6 @@ export default function App() {
   const isAdminPath = location.pathname.startsWith('/admin');
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const passengerSurfacePatchRef = useRef<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
@@ -41,56 +39,21 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  /** Google OAuth does not send `options.data`; attach passenger role when signup started from this app. */
+  /** Google OAuth: record surface only when signup started from this app. */
   useEffect(() => {
     const user = session?.user;
-    if (!user) return;
+    if (!user || isAdminPath) return;
     void (async () => {
       try {
         if (sessionStorage.getItem(PASSENGER_OAUTH_INTENT_KEY) !== PASSENGER_OAUTH_INTENT_VALUE) return;
-        const current = user.user_metadata?.role as string | undefined;
-        if (shouldSkipOauthSurfaceRolePatch(current, 'passenger')) {
-          sessionStorage.removeItem(PASSENGER_OAUTH_INTENT_KEY);
-          return;
-        }
-        await supabase.auth.updateUser({ data: { role: 'passenger' } });
+        if (shouldSkipOauthSurfaceWrite(user, 'passenger')) return;
+        await supabase.auth.updateUser({ data: { surface: 'passenger' } });
       } catch (e) {
-        console.warn('passenger oauth role patch:', e);
+        console.warn('passenger oauth surface patch:', e);
       } finally {
         sessionStorage.removeItem(PASSENGER_OAUTH_INTENT_KEY);
       }
     })();
-  }, [session?.user?.id]);
-
-  /** Same Supabase session as Roam Driver — switch metadata to passenger once per login (avoid re-render loops). */
-  useEffect(() => {
-    const user = session?.user;
-    if (!user || isAdminPath) {
-      if (!user) passengerSurfacePatchRef.current = null;
-      return;
-    }
-    if (passengerSurfacePatchRef.current === user.id) return;
-
-    const current = user.user_metadata?.role as string | undefined;
-    if (!needsRidesSurfaceRolePatch(current, 'passenger')) {
-      passengerSurfacePatchRef.current = user.id;
-      return;
-    }
-
-    let cancelled = false;
-    void (async () => {
-      try {
-        await supabase.auth.updateUser({ data: { role: 'passenger' } });
-      } catch (e) {
-        console.warn('passenger surface role patch:', e);
-      } finally {
-        if (!cancelled) passengerSurfacePatchRef.current = user.id;
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
   }, [session?.user?.id, isAdminPath]);
 
   if (loading) {
@@ -104,12 +67,7 @@ export default function App() {
     );
   }
 
-  const role = session?.user?.user_metadata?.role as string | undefined;
-  if (
-    session?.user &&
-    !isAdminPath &&
-    isRidesPassengerUiBlockedRole(role)
-  ) {
+  if (session?.user && !isAdminPath && isRidesPassengerUiBlockedRole(session.user)) {
     return (
       <WrongRidesSurfaceGate
         onSignOut={async () => {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { supabase } from '@roam/auth-client';
+import { supabase, hasProductAdminRole, jwtPrimaryRole } from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
 import {
   LayoutDashboard,
@@ -18,14 +18,6 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { RidesAdminLoginForm } from './components/RidesAdminLoginForm';
-
-const ALLOWED_ROLES = [
-  'platform_owner',
-  'platform_support',
-  'superadmin',
-  'rides_admin',
-  'rides_ops',
-];
 
 const NAV_ITEMS = [
   { id: 'dashboard', path: '/admin', label: 'Dashboard', icon: LayoutDashboard },
@@ -104,8 +96,8 @@ export function RidesAdminLayout() {
     return <RidesAdminLoginForm />;
   }
 
-  const userRole = session.user.user_metadata?.role || session.user.app_metadata?.role;
-  const hasAccess = userRole && ALLOWED_ROLES.includes(userRole);
+  const userRole = jwtPrimaryRole(session.user);
+  const hasAccess = hasProductAdminRole(session.user, 'rides');
 
   if (!hasAccess) {
     return (

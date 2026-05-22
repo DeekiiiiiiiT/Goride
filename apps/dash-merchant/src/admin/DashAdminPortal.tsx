@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '@roam/auth-client';
+import { supabase, hasProductAdminRole, jwtPrimaryRole } from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
 import { LayoutDashboard, Store, ClipboardList, Loader2, ShieldAlert } from 'lucide-react';
 import { Toaster } from 'sonner';
@@ -75,8 +75,8 @@ export function DashAdminPortal() {
     );
   }
 
-  const userRole = session.user.user_metadata?.role || session.user.app_metadata?.role;
-  const hasAccess = userRole && ALLOWED_ROLES.includes(userRole);
+  const userRole = jwtPrimaryRole(session.user);
+  const hasAccess = hasProductAdminRole(session.user, 'dash');
 
   if (!hasAccess) {
     return (

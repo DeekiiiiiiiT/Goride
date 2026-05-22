@@ -4,6 +4,7 @@
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireProductAdmin } from "../../_shared/productAdmin.ts";
+import { getJwtRoles, jwtPrimaryRole } from "../../_shared/authEdge.ts";
 import {
   getDriverAdminDb,
   type DriverAdminTables,
@@ -73,8 +74,10 @@ function isDriverUser(user: {
   user_metadata?: Record<string, unknown>;
   app_metadata?: Record<string, unknown>;
 }): boolean {
-  const role = (user.user_metadata?.role ?? user.app_metadata?.role) as string | undefined;
-  return role === "driver";
+  if (getJwtRoles(user).includes("driver")) return true;
+  const surface = user.user_metadata?.surface;
+  if (surface === "driver") return true;
+  return jwtPrimaryRole(user) === "driver";
 }
 
 function computeLiveStatus(

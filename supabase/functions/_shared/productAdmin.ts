@@ -3,7 +3,7 @@
  * Allows both platform roles and product-specific admin roles.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { jwtPrimaryRole } from "./authEdge.ts";
+import { getJwtRoles, jwtPrimaryRole } from "./authEdge.ts";
 
 /** Product identifiers */
 export type ProductKey = "dash" | "rides" | "driver";
@@ -58,15 +58,16 @@ export async function requireProductAdmin(
     return c.json({ error: "Unauthorized: invalid token" }, 401);
   }
 
-  const rawRole = jwtPrimaryRole(user);
+  const roles = getJwtRoles(user);
   const allowedRoles = PRODUCT_ADMIN_ROLES[product];
+  const matched = roles.find((r) => allowedRoles.has(r));
 
-  if (!allowedRoles.has(rawRole)) {
+  if (!matched) {
     return c.json(
       {
         error: "Forbidden",
         message: `${product} admin role required`,
-        currentRole: rawRole || "(none)",
+        currentRole: jwtPrimaryRole(user) || "(none)",
         allowedRoles: Array.from(allowedRoles),
       },
       403,
@@ -76,8 +77,8 @@ export async function requireProductAdmin(
   return {
     id: user.id,
     email: user.email || "",
-    role: rawRole,
-    isPlatformRole: PLATFORM_ROLES.has(rawRole),
+    role: matched,
+    isPlatformRole: PLATFORM_ROLES.has(matched),
   };
 }
 
@@ -90,6 +91,19 @@ export function hasProductAdminAccess(
 ): boolean {
   if (!role) return false;
   return PRODUCT_ADMIN_ROLES[product].has(role);
+}
+
+/**
+ * Check if any JWT role grants product admin access.
+ */
+export function userHasProductAdminAccess(
+  user: {
+    user_metadata?: Record<string, unknown>;
+    app_metadata?: Record<string, unknown>;
+  },
+  product: ProductKey,
+): boolean {
+  return getJwtRoles(user).some((r) => hasProductAdminAccess(r, product));
 }
 
 /**

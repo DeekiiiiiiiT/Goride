@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Outlet, useLocation, Link } from 'react-router-dom';
-import { supabase } from '@roam/auth-client';
+import { supabase, hasProductAdminRole, jwtPrimaryRole } from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
 import {
   LayoutDashboard,
@@ -26,14 +26,6 @@ import { ComplianceManager } from './pages/ComplianceManager';
 import { DriversListPage } from './pages/users/DriversListPage';
 import { DriverDetailPage } from './pages/users/DriverDetailPage';
 
-const ALLOWED_ROLES = [
-  'platform_owner',
-  'platform_support',
-  'superadmin',
-  'driver_admin',
-  'driver_ops',
-];
-
 const NAV_ITEMS = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { path: '/users', label: 'User Management', icon: Users, end: false },
@@ -55,7 +47,7 @@ function SupportStub() {
 function AdminLayoutShell({ session }: { session: Session }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
-  const userRole = session.user.user_metadata?.role || session.user.app_metadata?.role;
+  const userRole = jwtPrimaryRole(session.user);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -226,8 +218,8 @@ export function DriverAdminPortal() {
     return <DriverAdminLoginForm />;
   }
 
-  const userRole = session.user.user_metadata?.role || session.user.app_metadata?.role;
-  const hasAccess = userRole && ALLOWED_ROLES.includes(String(userRole));
+  const userRole = jwtPrimaryRole(session.user);
+  const hasAccess = hasProductAdminRole(session.user, 'driver');
 
   if (!hasAccess) {
     return (

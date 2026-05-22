@@ -10594,8 +10594,10 @@ app.post("/make-server-37f42386/admin/team/invite", requireAuth(), async (c) => 
       password: tempPassword,
       user_metadata: {
         name,
+      },
+      app_metadata: {
         role,
-        // No organizationId — platform users see all orgs
+        roles: [role],
       },
       email_confirm: true,
     });

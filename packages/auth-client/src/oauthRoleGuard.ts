@@ -1,11 +1,15 @@
 /**
- * Rules for applying `user_metadata.role` after Google OAuth from rider/driver apps.
- * Fleet / platform roles must never be overwritten by passenger/driver signup intents.
+ * Rules for OAuth / surface metadata on rider/driver apps.
+ * Permissions live in app_metadata; user_metadata.surface is UX-only.
  */
+
+import { getJwtRoles, hasPrivilegedJwtRole, jwtPrimaryRole, userMetadataSurface, type JwtUser } from './jwtRole';
 
 export const RIDES_SURFACE_ROLES = new Set(['passenger', 'driver']);
 
-/** Roles that must not be replaced by OAuth surface patch (fleet + platform + legacy aliases). */
+export type RidesSurface = 'passenger' | 'driver';
+
+/** Roles that must not be replaced by client surface writes (fleet + platform + product admin). */
 export const PRIVILEGED_METADATA_ROLES = new Set([
   'platform_owner',
   'platform_support',
@@ -18,18 +22,20 @@ export const PRIVILEGED_METADATA_ROLES = new Set([
   'admin',
   'manager',
   'viewer',
+  'dash_admin',
+  'dash_ops',
+  'rides_admin',
+  'rides_ops',
+  'driver_admin',
+  'driver_ops',
 ]);
 
 /**
- * If true, skip `updateUser({ data: { role: intended } })` for OAuth completion.
- * - Always skip when already `intended`.
- * - Skip for privileged fleet/platform roles.
- * - Skip for unknown non-rides strings (do not clobber custom metadata).
- * - Allow empty → intended, and passenger ↔ driver switches.
+ * @deprecated Use shouldSkipOauthSurfaceWrite with full user — checks legacy role string only.
  */
 export function shouldSkipOauthSurfaceRolePatch(
   current: string | null | undefined,
-  intended: 'passenger' | 'driver'
+  intended: RidesSurface,
 ): boolean {
   const r = (current ?? '').trim();
   if (!r) return false;
@@ -39,16 +45,26 @@ export function shouldSkipOauthSurfaceRolePatch(
   return true;
 }
 
+/** Skip writing user_metadata.surface when user has admin/fleet roles or surface already set. */
+export function shouldSkipOauthSurfaceWrite(user: JwtUser, intended: RidesSurface): boolean {
+  if (hasPrivilegedJwtRole(user)) return true;
+  const surface = userMetadataSurface(user);
+  if (surface === intended) return true;
+  const primary = jwtPrimaryRole(user);
+  if (primary && PRIVILEGED_METADATA_ROLES.has(primary)) return true;
+  return false;
+}
+
 export function isPassengerOnlyMetadataRole(raw: string | null | undefined): boolean {
   return (raw ?? '').trim() === 'passenger';
 }
 
-export type RidesSurfaceRole = 'passenger' | 'driver';
-
-/** True when the client should set `user_metadata.role` for this Roam surface. */
+/**
+ * @deprecated Surface auto-patch on login removed; kept for callers migrating off role patches.
+ */
 export function needsRidesSurfaceRolePatch(
   current: string | null | undefined,
-  intended: RidesSurfaceRole,
+  intended: RidesSurface,
 ): boolean {
   const r = (current ?? '').trim();
   if (!r) return true;
@@ -57,9 +73,26 @@ export function needsRidesSurfaceRolePatch(
   return true;
 }
 
-/** True when this metadata role must not use Roam Rides passenger shell (only passenger/driver allowed). */
-export function isRidesPassengerUiBlockedRole(raw: string | null | undefined): boolean {
-  const r = (raw ?? '').trim();
+/** Block Roam Rides passenger UI when JWT roles are not passenger/driver surface roles. */
+export function isRidesPassengerUiBlockedRole(
+  rawOrUser: string | null | undefined | JwtUser,
+): boolean {
+  if (rawOrUser && typeof rawOrUser === 'object') {
+    const user = rawOrUser as JwtUser;
+    if (hasPrivilegedJwtRole(user)) return true;
+    const roles = getJwtRoles(user);
+    if (roles.length > 0) {
+      return roles.some((r) => !RIDES_SURFACE_ROLES.has(r));
+    }
+    const surface = userMetadataSurface(user);
+    if (surface === 'passenger') return false;
+    if (surface === 'driver') return true;
+    const legacy = user.user_metadata?.role;
+    if (!legacy || typeof legacy !== 'string') return false;
+    return !RIDES_SURFACE_ROLES.has(legacy.trim());
+  }
+
+  const r = (rawOrUser ?? '').trim();
   if (!r) return false;
   return !RIDES_SURFACE_ROLES.has(r);
 }
