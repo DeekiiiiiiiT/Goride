@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Outlet, useLocation, Link } from 'react-router-dom';
-import { supabase, hasProductAdminRole, jwtPrimaryRole } from '@roam/auth-client';
+import { supabaseDriverAdmin as supabase, hasProductAdminRole, jwtPrimaryRole } from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
 import {
   LayoutDashboard,
@@ -228,9 +228,17 @@ export function DriverAdminPortal() {
           <ShieldAlert className="w-8 h-8 text-red-400" />
         </div>
         <h1 className="text-xl font-semibold mb-2">Access Denied</h1>
-        <p className="text-slate-400 text-center max-w-md mb-6">
-          You don&apos;t have permission to access the Driver Admin Portal. Your role:{' '}
-          <span className="font-mono text-slate-300">{String(userRole || '(none)')}</span>
+        <p className="text-slate-400 text-center max-w-md mb-2">
+          You don&apos;t have permission to access the Driver Admin Portal.
+        </p>
+        <p className="text-slate-500 text-center text-sm max-w-md mb-6 font-mono">
+          Signed in as: {session.user.email ?? '(unknown)'}
+          <br />
+          Role: {String(userRole || '(none)')}
+          <br />
+          <span className="text-slate-600 text-xs">
+            Admin access requires app_metadata role driver_admin (set in Supabase Dashboard).
+          </span>
         </p>
         <a
           href="/"

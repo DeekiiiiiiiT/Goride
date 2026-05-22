@@ -1,4 +1,4 @@
-export { supabase } from './supabase';
+export { supabase, supabaseDriverApp, supabaseDriverAdmin } from './supabase';
 export * from './permissions';
 export * from './oauthRoleGuard';
 export * from './jwtRole';

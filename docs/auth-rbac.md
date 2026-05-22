@@ -36,6 +36,29 @@ Platform staff invite (`POST .../admin/team/invite`) writes `app_metadata`, not 
 
 Run `supabase/migrations/20260522100000_auth_roles_to_app_metadata.sql` on staging/production to copy existing admin roles from `user_metadata` into `app_metadata`.
 
+**“No rows returned”** means no user had an admin role in `user_metadata` to copy. Grant access by email:
+
+```sql
+-- supabase/scripts/grant_driver_admin_by_email.sql
+UPDATE auth.users
+SET raw_app_meta_data = COALESCE(raw_app_meta_data, '{}'::jsonb)
+  || '{"role":"driver_admin","roles":["driver_admin"]}'::jsonb
+WHERE email = 'your-admin@email.com';
+```
+
+Different driver vs admin emails are fine — each account needs its own roles. The driver email does not affect the admin email.
+
+## Same host (`localhost:3002` / `roamdriver.co`)
+
+`/ and `/admin` are one origin, so they used to share one Supabase `localStorage` session — signing into `/` replaced whoever was logged into `/admin`.
+
+**Fix:** separate storage keys in `@roam/auth-client`:
+
+- `supabaseDriverApp` → `sb-<project>-auth-driver` (path `/`)
+- `supabaseDriverAdmin` → `sb-<project>-auth-admin` (path `/admin`)
+
+You can stay signed in as admin and driver at the same time in two tabs.
+
 ## Manual test matrix
 
 | Account | Action | Expected |

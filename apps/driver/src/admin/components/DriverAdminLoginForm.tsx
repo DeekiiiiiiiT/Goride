@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase } from '@roam/auth-client';
+import { supabaseDriverAdmin as supabase } from '@roam/auth-client';
 import { Loader2, AlertCircle, KeyRound, Car } from 'lucide-react';
 import '../../../../../packages/admin-core/src/styles/rides-admin-login.css';
 
