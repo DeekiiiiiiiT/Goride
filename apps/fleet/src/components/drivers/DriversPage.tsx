@@ -199,13 +199,17 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
   const { data: ledgerData, isLoading: ledgerLoading, isError: ledgerErrorQuery } = useQuery({
     queryKey: ['ledgerDriversSummary'],
     queryFn: async () => {
-      const result = await api.getLedgerDriversSummary();
-      if (result.success && result.data) {
-        console.log(`[DriversPage] Ledger summary loaded: ${result.meta.totalDrivers} drivers, ${result.meta.totalEntriesProcessed} entries in ${result.meta.durationMs}ms`);
-        return result.data;
-      } else {
-        console.error('[DriversPage] Ledger summary returned success=false');
-        throw new Error('Ledger summary failed');
+      try {
+        const result = await api.getLedgerDriversSummary();
+        if (result.success && result.data) {
+          console.log(`[DriversPage] Ledger summary loaded: ${result.meta.totalDrivers} drivers, ${result.meta.totalEntriesProcessed} entries in ${result.meta.durationMs}ms`);
+          return result.data;
+        }
+        console.warn('[DriversPage] Ledger summary unavailable — earnings may show $0');
+        return {};
+      } catch (e) {
+        console.warn('[DriversPage] Ledger summary fetch failed:', e);
+        return {};
       }
     },
     staleTime: 2 * 60 * 1000, // 2 minutes (financial data should be fresher)
@@ -257,13 +261,14 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
     
     // Index Metrics for fast lookup
     const metricsMap = new Map<string, import('../../types/data').DriverMetrics>();
-    importedMetrics.forEach(m => {
-        if (m.driverId) metricsMap.set(m.driverId, m);
+    (Array.isArray(importedMetrics) ? importedMetrics : []).forEach(m => {
+        if (m?.driverId) metricsMap.set(m.driverId, m);
     });
 
-    manualDrivers.forEach(d => {
+    (Array.isArray(manualDrivers) ? manualDrivers : []).forEach(d => {
+        if (!d || typeof d !== 'object') return;
         // Index by Name
-        if (d.name) manualDriverMap.set(d.name.toLowerCase().trim(), d);
+        if (d.name) manualDriverMap.set(String(d.name).toLowerCase().trim(), d);
         
         // Index by External IDs (Prioritized)
         if (d.uberDriverId) externalIdMap.set(d.uberDriverId, d);
@@ -277,10 +282,15 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
 
     // Process trips to extract unique drivers and aggregate data
     // Sort by date desc so we get latest vehicle/info
-    const sortedTrips = [...trips].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const safeTrips = Array.isArray(trips) ? trips : [];
+    const sortedTrips = [...safeTrips].sort((a, b) => {
+      const tb = a?.date ? new Date(a.date).getTime() : 0;
+      const ta = b?.date ? new Date(b.date).getTime() : 0;
+      return (Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0);
+    });
 
     sortedTrips.forEach(trip => {
-        if (!trip.driverId || trip.driverId === 'unknown') return;
+        if (!trip || !trip.driverId || trip.driverId === 'unknown') return;
 
         // Try to match with a Manual Driver Profile
         let driverId = trip.driverId;
@@ -376,7 +386,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
             driverStats.set(driverId, stats);
         }
 
-        const tripDate = trip.date.split('T')[0];
+        const tripDate = trip.date ? String(trip.date).split('T')[0] : '';
 
         // Update Totals
         driver.totalTrips += 1;
@@ -455,8 +465,8 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
         // Tier Logic
         if (tiers.length > 0) {
             // Priority 1: Real-Time Monthly Earnings Calculation (Matches Driver Detail View)
-            const tier = TierCalculations.getTierForEarnings(driver.monthlyEarnings, tiers);
-            driver.tier = tier.name;
+            const tier = TierCalculations.getTierForEarnings(driver.monthlyEarnings ?? 0, tiers);
+            driver.tier = tier?.name ?? 'Bronze';
         } else if (metric && metric.tier) {
              // Priority 2: Imported Metric Fallback
             driver.tier = metric.tier;
@@ -479,7 +489,8 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
     // Add Orphaned Manual Drivers (No trips found)
     const processedIds = new Set(processedDrivers.map(d => d.id));
     // @ts-ignore
-    const orphanedDrivers = manualDrivers.filter(d => !processedIds.has(d.id)).map(d => {
+    const orphanedDrivers = (Array.isArray(manualDrivers) ? manualDrivers : [])
+      .filter(d => d?.id && !processedIds.has(d.id)).map(d => {
         // Try to find imported metrics for orphan
         let metric = metricsMap.get(d.id);
         if (!metric && d.uberDriverId) metric = metricsMap.get(d.uberDriverId);
@@ -496,7 +507,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
              // If manual driver has a tier set, use it.
              if (!d.tier) {
                  const t = TierCalculations.getTierForEarnings(0, tiers);
-                 tier = t.name;
+                 tier = t?.name ?? 'Bronze';
              }
         }
 
@@ -507,7 +518,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
             todaysEarnings: 0,
             todaysTrips: 0,
             monthlyEarnings: 0, // No trips = 0 monthly
-            acceptanceRate: metric ? Math.round(metric.acceptanceRate * 100) : 100,
+            acceptanceRate: metric?.acceptanceRate != null ? Math.round(metric.acceptanceRate * 100) : 100,
             tier: tier,
             status: d.status || 'Active'
         };
@@ -524,7 +535,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
                 // Re-calculate tier with ledger monthly earnings
                 if (tiers.length > 0) {
                     const t = TierCalculations.getTierForEarnings(summary.monthlyEarnings, tiers);
-                    orphan.tier = t.name;
+                    orphan.tier = t?.name ?? 'Bronze';
                 }
             }
         }
@@ -538,13 +549,14 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
   // Apply Filters
   const filteredDrivers = useMemo(() => {
       return drivers.filter(driver => {
+          const q = searchQuery.toLowerCase();
           const matchesSearch = 
-            driver.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-            driver.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            driver.email.toLowerCase().includes(searchQuery.toLowerCase());
+            (driver.name ?? '').toLowerCase().includes(q) || 
+            (driver.id ?? '').toLowerCase().includes(q) ||
+            (driver.email ?? '').toLowerCase().includes(q);
           
-          const matchesStatus = statusFilter === 'all' || driver.status.toLowerCase() === statusFilter.toLowerCase();
-          const matchesTier = tierFilter === 'all' || driver.tier.toLowerCase() === tierFilter.toLowerCase();
+          const matchesStatus = statusFilter === 'all' || (driver.status ?? '').toLowerCase() === statusFilter.toLowerCase();
+          const matchesTier = tierFilter === 'all' || (driver.tier ?? 'Bronze').toLowerCase() === tierFilter.toLowerCase();
           
           let matchesPerformance = true;
           if (performanceFilter === 'high') {

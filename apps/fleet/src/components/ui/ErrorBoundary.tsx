@@ -8,6 +8,8 @@ interface Props {
   fallback?: ReactNode;
   name?: string;
   userId?: string;
+  /** When set, shown on Recover (e.g. leave a broken page) */
+  onRecoverNavigate?: () => void;
 }
 
 interface State {
@@ -80,10 +82,13 @@ export class ErrorBoundary extends Component<Props, State> {
                 variant="outline" 
                 size="sm" 
                 className="border-red-200 text-red-700 hover:bg-red-100 h-8 gap-2"
-                onClick={() => this.setState({ hasError: false, logId: undefined })}
+                onClick={() => {
+                  this.setState({ hasError: false, error: undefined, logId: undefined });
+                  this.props.onRecoverNavigate?.();
+                }}
             >
                 <RefreshCcw className="w-3 h-3" />
-                Recover View
+                {this.props.onRecoverNavigate ? 'Go to Dashboard' : 'Recover View'}
             </Button>
           </div>
         </div>

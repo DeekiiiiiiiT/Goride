@@ -267,7 +267,15 @@ function AppContent() {
   // Fleet Manager View (Default)
   return (
     <AppLayout currentPage={currentPage} onNavigate={setCurrentPage} onLogout={signOut}>
-      <ErrorBoundary name={`MainContent:${currentPage}`} userId={user?.id}>
+      <ErrorBoundary
+        key={currentPage}
+        name={`MainContent:${currentPage}`}
+        userId={user?.id}
+        onRecoverNavigate={() => {
+          setCurrentPage('dashboard');
+          setDriverIdForDetail(null);
+        }}
+      >
         {currentPage === 'dashboard' && <Dashboard />}
         {currentPage === 'imports' && (
           <PermissionGate permission="nav.imports" onNavigate={setCurrentPage}>
