@@ -12,9 +12,9 @@ import { BUSINESS_TYPES } from '../../utils/businessTypes';
 import { LockoutCountdown } from './LockoutCountdown';
 import {
   IS_RIDESHARE_FLEET_PRODUCT,
-  IS_ENTERPRISE_PRODUCT,
   withProductLineHeaders,
 } from '../../config/productLine';
+import { supabaseAnonFunctionHeaders } from '@roam/api-client';
 
 // Map icon string names from BUSINESS_TYPES to actual lucide components
 const ICON_MAP: Record<string, React.ComponentType<any>> = {
@@ -55,7 +55,9 @@ export function LoginPage() {
   );
 
   React.useEffect(() => {
-    fetch(`${API_ENDPOINTS.admin}/platform-status`, { headers: withProductLineHeaders() })
+    fetch(`${API_ENDPOINTS.admin}/platform-status`, {
+      headers: withProductLineHeaders(supabaseAnonFunctionHeaders()),
+    })
       .then(res => res.json())
       .then(data => {
         if (data.registrationMode) setRegistrationMode(data.registrationMode);
@@ -76,10 +78,9 @@ export function LoginPage() {
       // Enterprise: all login goes through server-side route with rate limiting & role gating
       const res = await fetch(`${API_ENDPOINTS.admin}/fleet-login`, {
         method: 'POST',
-        headers: withProductLineHeaders({
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`,
-        }),
+        headers: withProductLineHeaders(
+          supabaseAnonFunctionHeaders({ 'Content-Type': 'application/json' }),
+        ),
         body: JSON.stringify({ email, password }),
       });
 
@@ -151,10 +152,9 @@ export function LoginPage() {
 
           const res = await fetch(`${API_ENDPOINTS.admin}/signup`, {
               method: 'POST',
-              headers: withProductLineHeaders({
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${publicAnonKey}`,
-              }),
+              headers: withProductLineHeaders(
+                  supabaseAnonFunctionHeaders({ 'Content-Type': 'application/json' }),
+              ),
               body: JSON.stringify(body),
           });
 
