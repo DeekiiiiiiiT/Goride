@@ -83,8 +83,8 @@ export class ErrorBoundary extends Component<Props, State> {
                 size="sm" 
                 className="border-red-200 text-red-700 hover:bg-red-100 h-8 gap-2"
                 onClick={() => {
-                  this.setState({ hasError: false, error: undefined, logId: undefined });
                   this.props.onRecoverNavigate?.();
+                  this.setState({ hasError: false, error: undefined, logId: undefined });
                 }}
             >
                 <RefreshCcw className="w-3 h-3" />

@@ -69,8 +69,58 @@ import { tierService } from '../../services/tierService';
 import { TierCalculations } from '../../utils/tierCalculations';
 import { TierConfig } from '../../types/data';
 import { isSameMonth } from 'date-fns';
-import { isSidebarItemVisible } from '../../utils/businessTypes';
 import { usePermissions } from '../../hooks/usePermissions';
+
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function asNumber(value: unknown, fallback = 0): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function driverDisplayName(name: unknown): string {
+  if (typeof name === 'string' && name.trim()) return name.trim();
+  return 'Unknown Driver';
+}
+
+function driverInitials(name: unknown): string {
+  const label = driverDisplayName(name);
+  const initials = label
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('')
+    .slice(0, 2);
+  return initials || '??';
+}
+
+function normalizeDriverProfile(driver: Partial<DriverProfile> & { id: string }): DriverProfile {
+  return {
+    id: driver.id,
+    name: driverDisplayName(driver.name),
+    avatarUrl: driver.avatarUrl,
+    status: driver.status ?? 'Active',
+    vehicle: driver.vehicle ?? 'Unassigned',
+    phone: driver.phone ?? '—',
+    email: driver.email ?? '',
+    totalTrips: asNumber(driver.totalTrips),
+    totalEarnings: asNumber(driver.totalEarnings),
+    todaysEarnings: asNumber(driver.todaysEarnings),
+    todaysTrips: asNumber(driver.todaysTrips),
+    monthlyEarnings: asNumber(driver.monthlyEarnings),
+    acceptanceRate: asNumber(driver.acceptanceRate, 100),
+    tier: driver.tier ?? 'Bronze',
+    licenseFrontUrl: driver.licenseFrontUrl,
+    licenseBackUrl: driver.licenseBackUrl,
+    proofOfAddressUrl: driver.proofOfAddressUrl,
+    proofOfAddressType: driver.proofOfAddressType,
+    uberDriverId: driver.uberDriverId,
+    inDriveDriverId: driver.inDriveDriverId,
+    linkedTrips: driver.linkedTrips,
+  };
+}
 import {
   Dialog,
   DialogContent,
@@ -223,6 +273,9 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
   const ledgerError = ledgerErrorQuery;
   const loading = tripsLoading;
 
+  const safeManualDrivers = asArray<DriverProfile>(manualDrivers);
+  const safeImportedMetrics = asArray<import('../../types/data').DriverMetrics>(importedMetrics);
+
   const handleDeleteDriver = async () => {
     if (!driverToDelete) return;
     
@@ -261,11 +314,11 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
     
     // Index Metrics for fast lookup
     const metricsMap = new Map<string, import('../../types/data').DriverMetrics>();
-    (Array.isArray(importedMetrics) ? importedMetrics : []).forEach(m => {
+    (safeImportedMetrics).forEach(m => {
         if (m?.driverId) metricsMap.set(m.driverId, m);
     });
 
-    (Array.isArray(manualDrivers) ? manualDrivers : []).forEach(d => {
+    safeManualDrivers.forEach(d => {
         if (!d || typeof d !== 'object') return;
         // Index by Name
         if (d.name) manualDriverMap.set(String(d.name).toLowerCase().trim(), d);
@@ -330,6 +383,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
                  // Use Manual Profile Data
                  driverMap.set(driverId, {
                     ...matchedManualDriver,
+                    name: driverDisplayName(matchedManualDriver.name),
                     // Reset calculated metrics (will be summed up below)
                     totalTrips: 0,
                     totalEarnings: 0,
@@ -430,9 +484,9 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
           || (driver.uberDriverId ? ledgerSummary[driver.uberDriverId] : undefined)
           || (driver.inDriveDriverId ? ledgerSummary[driver.inDriveDriverId] : undefined);
         if (summary) {
-          driver.totalEarnings = summary.lifetimeEarnings;
-          driver.todaysEarnings = summary.todayEarnings;
-          driver.monthlyEarnings = summary.monthlyEarnings;
+          driver.totalEarnings = asNumber(summary.lifetimeEarnings);
+          driver.todaysEarnings = asNumber(summary.todayEarnings);
+          driver.monthlyEarnings = asNumber(summary.monthlyEarnings);
         }
         // If no ledger summary for this driver, earnings stay at 0 (not trip-based)
       }
@@ -489,7 +543,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
     // Add Orphaned Manual Drivers (No trips found)
     const processedIds = new Set(processedDrivers.map(d => d.id));
     // @ts-ignore
-    const orphanedDrivers = (Array.isArray(manualDrivers) ? manualDrivers : [])
+    const orphanedDrivers = safeManualDrivers
       .filter(d => d?.id && !processedIds.has(d.id)).map(d => {
         // Try to find imported metrics for orphan
         let metric = metricsMap.get(d.id);
@@ -529,9 +583,9 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
               || (orphan.uberDriverId ? ledgerSummary[orphan.uberDriverId] : undefined)
               || (orphan.inDriveDriverId ? ledgerSummary[orphan.inDriveDriverId] : undefined);
             if (summary) {
-                orphan.totalEarnings = summary.lifetimeEarnings;
-                orphan.todaysEarnings = summary.todayEarnings;
-                orphan.monthlyEarnings = summary.monthlyEarnings;
+                orphan.totalEarnings = asNumber(summary.lifetimeEarnings);
+                orphan.todaysEarnings = asNumber(summary.todayEarnings);
+                orphan.monthlyEarnings = asNumber(summary.monthlyEarnings);
                 // Re-calculate tier with ledger monthly earnings
                 if (tiers.length > 0) {
                     const t = TierCalculations.getTierForEarnings(summary.monthlyEarnings, tiers);
@@ -542,9 +596,8 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
         return orphan;
     });
 
-    // @ts-ignore
-    return [...processedDrivers, ...orphanedDrivers];
-  }, [trips, manualDrivers, importedMetrics, tiers, ledgerSummary, ledgerLoaded, ledgerError]);
+    return [...processedDrivers, ...orphanedDrivers].map((d) => normalizeDriverProfile(d));
+  }, [trips, safeManualDrivers, safeImportedMetrics, tiers, ledgerSummary, ledgerLoaded, ledgerError]);
 
   // Apply Filters
   const filteredDrivers = useMemo(() => {
@@ -605,9 +658,9 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
   const fleetStats = useMemo(() => {
     if (drivers.length === 0) return undefined;
     
-    const totalEarnings = drivers.reduce((sum, d) => sum + d.totalEarnings, 0);
-    const totalTrips = drivers.reduce((sum, d) => sum + d.totalTrips, 0);
-    const avgAcceptance = drivers.reduce((sum, d) => sum + d.acceptanceRate, 0) / drivers.length;
+    const totalEarnings = drivers.reduce((sum, d) => sum + asNumber(d.totalEarnings), 0);
+    const totalTrips = drivers.reduce((sum, d) => sum + asNumber(d.totalTrips), 0);
+    const avgAcceptance = drivers.reduce((sum, d) => sum + asNumber(d.acceptanceRate, 100), 0) / drivers.length;
     
     // Simplistic calculation for demo purposes
     return {
@@ -657,7 +710,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
     const driverTrips = selectedDriver?.linkedTrips || [];
     
     // Find relevant metrics for this driver
-    const driverMetrics = importedMetrics.filter(m => 
+    const driverMetrics = safeImportedMetrics.filter(m => 
         m.driverId === selectedDriver?.id || 
         (selectedDriver?.uberDriverId && m.driverId === selectedDriver.uberDriverId) ||
         (selectedDriver?.inDriveDriverId && m.driverId === selectedDriver.inDriveDriverId)
@@ -797,7 +850,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
                                         <Avatar className="h-10 w-10 border border-slate-200 dark:border-slate-700">
                                             <AvatarImage src={driver.avatarUrl} />
                                             <AvatarFallback className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-medium">
-                                                {driver.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                                {driverInitials(driver.name)}
                                             </AvatarFallback>
                                         </Avatar>
                                         <div>
