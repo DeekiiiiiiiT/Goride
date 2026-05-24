@@ -32,6 +32,12 @@ export async function ridesDriverPresence(body: DriverPresenceBody): Promise<voi
       if (parsed.error === 'fleet_not_eligible_for_dispatch') {
         throw new Error('fleet_not_eligible_for_dispatch');
       }
+      if (parsed.error === 'driver_not_active') {
+        throw new Error('driver_not_active');
+      }
+      if (parsed.error === 'no_driver_profile') {
+        throw new Error('no_driver_profile');
+      }
     } catch (e) {
       if (e instanceof Error && e.message === 'fleet_not_eligible_for_dispatch') throw e;
     }

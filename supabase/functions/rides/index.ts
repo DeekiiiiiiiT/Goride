@@ -72,6 +72,27 @@ function svc(): SupabaseClient {
   );
 }
 
+function pubSvc(): SupabaseClient {
+  return createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+  );
+}
+
+const DRIVER_LOCATIONS_SELECT = "user_id, lat, lng, updated_at, body_type_slug";
+
+async function loadAvailableDriverLocations(freshSince: string) {
+  const { data: native, error: nativeErr } = await svc().from("driver_locations").select(
+    DRIVER_LOCATIONS_SELECT,
+  ).gte("updated_at", freshSince).eq("available_for_rides", true);
+  if (!nativeErr && native) return native;
+
+  const { data: pubData } = await pubSvc().from("rides_driver_locations").select(
+    DRIVER_LOCATIONS_SELECT,
+  ).gte("updated_at", freshSince).eq("available_for_rides", true);
+  return pubData ?? [];
+}
+
 function authClient(authHeader: string) {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
@@ -225,12 +246,7 @@ async function runMatchingWave(
   );
 
   const freshSince = new Date(Date.now() - driverLocationMaxAgeMs(dispatchSettings)).toISOString();
-  const { data: locs } = await db.from("driver_locations").select(
-    "user_id, lat, lng, updated_at, body_type_slug",
-  ).gte(
-    "updated_at",
-    freshSince,
-  ).eq("available_for_rides", true);
+  const locs = await loadAvailableDriverLocations(freshSince);
 
   const serviceSlug = typeof ride.vehicle_option === "string"
     ? ride.vehicle_option.trim().toLowerCase()
@@ -579,10 +595,23 @@ app.post("/v1/requests", async (c) => {
     matching_wave: 0,
   };
 
-  const { data: ride, error } = await db.from("ride_requests").insert(insertRow).select("*").single();
-  if (error || !ride) {
-    logLine({ event: "insert_ride_failed", error: error?.message });
-    return c.json({ error: "insert_failed" }, 500);
+  let ride: Record<string, unknown> | null = null;
+  const { data: rpcRide, error: rpcError } = await pubSvc().rpc("rides_create_ride_request", {
+    p_row: insertRow,
+  });
+  if (!rpcError && rpcRide) {
+    ride = rpcRide as Record<string, unknown>;
+  } else {
+    const { data, error } = await db.from("ride_requests").insert(insertRow).select("*").single();
+    ride = data;
+    if (error || !ride) {
+      logLine({
+        event: "insert_ride_failed",
+        error: error?.message,
+        rpc_error: rpcError?.message,
+      });
+      return c.json({ error: "insert_failed" }, 500);
+    }
   }
 
   const reqId = crypto.randomUUID();
@@ -679,9 +708,9 @@ app.post("/v1/drivers/presence", async (c) => {
 
   const goingOnline = Boolean(body.available_for_rides ?? true);
   if (goingOnline) {
-    const eligible = await isDriverEligibleForDispatch(auth.user.id, dispatchSettings);
-    if (!eligible) {
-      return c.json({ error: "fleet_not_eligible_for_dispatch" }, 403);
+    const eligibility = await isDriverEligibleForDispatch(auth.user.id, dispatchSettings);
+    if (!eligibility.eligible) {
+      return c.json({ error: eligibility.reason ?? "not_eligible_for_dispatch" }, 403);
     }
   }
 
@@ -700,18 +729,35 @@ app.post("/v1/drivers/presence", async (c) => {
     }
   }
 
+  const headingRaw = body.heading_degrees != null ? Number(body.heading_degrees) : null;
+  const headingDegrees = headingRaw != null && Number.isFinite(headingRaw) ? headingRaw : null;
+
   const upsert = {
     user_id: auth.user.id,
     lat,
     lng,
-    heading_degrees: body.heading_degrees != null ? Number(body.heading_degrees) : null,
+    heading_degrees: headingDegrees,
     available_for_rides: Boolean(body.available_for_rides ?? true),
     body_type_slug: bodyTypeSlug,
     updated_at: new Date().toISOString(),
   };
 
-  const { error } = await svc().from("driver_locations").upsert(upsert);
-  if (error) return c.json({ error: "presence_failed" }, 500);
+  const { error: rpcError } = await pubSvc().rpc("rides_upsert_driver_presence", {
+    p_user_id: upsert.user_id,
+    p_lat: upsert.lat,
+    p_lng: upsert.lng,
+    p_heading_degrees: upsert.heading_degrees,
+    p_available_for_rides: upsert.available_for_rides,
+    p_body_type_slug: upsert.body_type_slug,
+  });
+
+  if (rpcError) {
+    const { error: fallbackError } = await svc().from("driver_locations").upsert(upsert);
+    if (fallbackError) {
+      logLine({ event: "presence_failed", message: rpcError.message, fallback: fallbackError.message });
+      return c.json({ error: "presence_failed", message: rpcError.message }, 500);
+    }
+  }
 
   logLine({ event: "driver_presence", user_id: auth.user.id, available: upsert.available_for_rides });
   return c.json({ ok: true });

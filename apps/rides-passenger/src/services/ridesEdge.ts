@@ -38,20 +38,12 @@ type RidesErrorBody = {
   vehicle_types_tried?: string[];
 };
 
-async function parseRidesError(res: Response): Promise<never> {
-  const text = await res.text();
-  let body: RidesErrorBody = {};
-  if (text.trim()) {
-    try {
-      body = JSON.parse(text) as RidesErrorBody;
-    } catch {
-      const snippet = text.trim().slice(0, 180);
-      throw new Error(
-        snippet.startsWith('<')
-          ? 'Rides API returned HTML — redeploy the rides Edge function or check Supabase URL.'
-          : snippet || `Request failed (HTTP ${res.status})`,
-      );
-    }
+function throwRidesErrorBody(body: RidesErrorBody, status: number, rawText: string): never {
+  if (body.error === 'quote_stale') {
+    throw new Error('Price expired — tap Fare estimate to refresh.');
+  }
+  if (body.error === 'insert_failed') {
+    throw new Error('Could not start your trip. Please try again in a moment.');
   }
   if (body.error === 'no_fare_rule') {
     const svc = body.vehicle_type ? `"${body.vehicle_type}"` : 'this service';
@@ -75,8 +67,26 @@ async function parseRidesError(res: Response): Promise<never> {
     );
   }
   if (body.message) throw new Error(body.message);
-  if (body.error) throw new Error(`${body.error} (HTTP ${res.status})`);
-  throw new Error(text.trim() || `HTTP ${res.status}`);
+  if (body.error) throw new Error(`${body.error} (HTTP ${status})`);
+  throw new Error(rawText.trim() || `HTTP ${status}`);
+}
+
+async function parseRidesError(res: Response): Promise<never> {
+  const text = await res.text();
+  let body: RidesErrorBody = {};
+  if (text.trim()) {
+    try {
+      body = JSON.parse(text) as RidesErrorBody;
+    } catch {
+      const snippet = text.trim().slice(0, 180);
+      throw new Error(
+        snippet.startsWith('<')
+          ? 'Rides API returned HTML — redeploy the rides Edge function or check Supabase URL.'
+          : snippet || `Request failed (HTTP ${res.status})`,
+      );
+    }
+  }
+  throwRidesErrorBody(body, res.status, text);
 }
 
 export async function ridesQuote(body: {
@@ -101,18 +111,7 @@ export async function ridesCreateRequest(body: CreateRideBody): Promise<{ ride: 
     headers: await ridesHeaders(),
     body: JSON.stringify(body),
   });
-  if (!res.ok) {
-    const text = await res.text();
-    try {
-      const parsed = JSON.parse(text) as { error?: string };
-      if (parsed.error === 'quote_stale') {
-        throw new Error('Price expired — tap Fare estimate to refresh.');
-      }
-    } catch (e) {
-      if (e instanceof Error && e.message.includes('Price expired')) throw e;
-    }
-    throw new Error(text);
-  }
+  if (!res.ok) await parseRidesError(res);
   return res.json();
 }
 

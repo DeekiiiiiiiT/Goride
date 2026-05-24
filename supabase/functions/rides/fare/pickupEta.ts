@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { estimateNearestPickupEta } from "./distanceMatrix.ts";
 import {
   DEFAULT_DISPATCH_SETTINGS,
@@ -39,11 +40,27 @@ export async function resolvePickupEta(
   const maxAgeMs = driverLocationMaxAgeMs(settings);
   const quoteRadiusKm = settings.quote_driver_radius_km;
   const freshSince = new Date(Date.now() - maxAgeMs).toISOString();
-  const { data: locs } = await db
+  const locSelect = "user_id, lat, lng, updated_at, body_type_slug";
+  let locs: Record<string, unknown>[] | null = null;
+  const { data: nativeLocs, error: nativeErr } = await db
     .from("driver_locations")
-    .select("user_id, lat, lng, updated_at, body_type_slug")
+    .select(locSelect)
     .gte("updated_at", freshSince)
     .eq("available_for_rides", true);
+  if (!nativeErr && nativeLocs) {
+    locs = nativeLocs as Record<string, unknown>[];
+  } else {
+    const pub = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    );
+    const { data: pubLocs } = await pub
+      .from("rides_driver_locations")
+      .select(locSelect)
+      .gte("updated_at", freshSince)
+      .eq("available_for_rides", true);
+    locs = (pubLocs as Record<string, unknown>[] | null) ?? [];
+  }
 
   type DriverRow = { user_id: string; lat: number; lng: number; haversineKm: number };
   const nearby: DriverRow[] = [];

@@ -41,9 +41,24 @@ export async function getEligibleDriverUserIds(
 export async function isDriverEligibleForDispatch(
   userId: string,
   dispatchSettings: Pick<DispatchSettings, "independent_only_matching">,
-): Promise<boolean> {
-  const eligible = await getEligibleDriverUserIds([userId], dispatchSettings);
-  return eligible.has(userId);
+): Promise<{ eligible: boolean; reason?: string }> {
+  const db = publicDb();
+  const { data, error } = await db
+    .from("driver_profiles")
+    .select("user_id, mode, status")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("isDriverEligibleForDispatch lookup failed", error.message);
+    return { eligible: false, reason: "profile_lookup_failed" };
+  }
+  if (!data) return { eligible: false, reason: "no_driver_profile" };
+  if (data.status !== "active") return { eligible: false, reason: "driver_not_active" };
+  if (dispatchSettings.independent_only_matching && data.mode !== "independent") {
+    return { eligible: false, reason: "fleet_not_eligible_for_dispatch" };
+  }
+  return { eligible: true };
 }
 
 export async function getDriverProfileMode(userId: string): Promise<string | null> {

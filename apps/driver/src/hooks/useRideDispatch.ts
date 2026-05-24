@@ -180,9 +180,24 @@ export function useRideDispatch() {
           setPresenceError(null);
         } catch (e: unknown) {
           const message = e instanceof Error ? e.message : 'Could not go online';
-          setPresenceError(message);
+          let display = message;
+          try {
+            const parsed = JSON.parse(message) as { error?: string; message?: string };
+            if (parsed.error === 'presence_failed') {
+              display = 'Could not save your location. Please try again.';
+            } else if (parsed.error) {
+              display = parsed.error.replace(/_/g, ' ');
+            }
+          } catch {
+            /* use raw message */
+          }
+          setPresenceError(display);
           if (message.includes('fleet_not_eligible')) {
             toast.error('Fleet drivers cannot go online for Roam dispatch during beta.');
+          } else if (message.includes('driver_not_active')) {
+            toast.error('Your driver account is not active yet. Contact support.');
+          } else if (message.includes('no_driver_profile')) {
+            toast.error('No driver profile found for this login.');
           } else {
             toast.error('Could not register your location. Check permissions and try again.');
           }
