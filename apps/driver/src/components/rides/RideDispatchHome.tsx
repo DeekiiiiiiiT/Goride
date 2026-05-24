@@ -5,7 +5,8 @@ import { RideOfferCard } from './RideOfferCard';
 import { ActiveRidePanel } from './ActiveRidePanel';
 
 export function RideDispatchHome() {
-  const { online, offers, activeRide, toggleOnline, accept, decline, advance } = useRideDispatch();
+  const { online, offers, activeRide, toggleOnline, accept, decline, advance, vehicleReady, presenceError } =
+    useRideDispatch();
 
   const showWaiting = online && offers.length === 0 && !activeRide;
 
@@ -16,7 +17,8 @@ export function RideDispatchHome() {
         <button
           type="button"
           onClick={toggleOnline}
-          className={`shrink-0 rounded-full px-4 py-2 text-xs font-semibold transition-colors ${
+          disabled={!vehicleReady && !online}
+          className={`shrink-0 rounded-full px-4 py-2 text-xs font-semibold transition-colors disabled:opacity-50 ${
             online
               ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
               : 'bg-blue-600 text-white shadow-sm shadow-blue-600/30'
@@ -25,6 +27,10 @@ export function RideDispatchHome() {
           {online ? 'Online' : 'Go online'}
         </button>
       </div>
+
+      {!online && presenceError && (
+        <p className="text-sm text-red-600 dark:text-red-400 text-center px-2">{presenceError}</p>
+      )}
 
       {!online && (
         <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-6">

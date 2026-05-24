@@ -25,7 +25,18 @@ export async function ridesDriverPresence(body: DriverPresenceBody): Promise<voi
     headers: await ridesHeaders(),
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) {
+    const text = await res.text();
+    try {
+      const parsed = JSON.parse(text) as { error?: string };
+      if (parsed.error === 'fleet_not_eligible_for_dispatch') {
+        throw new Error('fleet_not_eligible_for_dispatch');
+      }
+    } catch (e) {
+      if (e instanceof Error && e.message === 'fleet_not_eligible_for_dispatch') throw e;
+    }
+    throw new Error(text);
+  }
 }
 
 export async function ridesDriverPendingOffers(): Promise<{ offers: DriverOfferWithRide[] }> {

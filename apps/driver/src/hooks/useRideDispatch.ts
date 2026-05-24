@@ -15,11 +15,15 @@ import { slugFromBodyLabel } from '../components/rides/rideDispatchUtils';
 const OFFER_POLL_MS = 4000;
 const OFFER_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3';
 
+const DEFAULT_BODY_TYPE_SLUG = 'standard';
+
 export function useRideDispatch() {
   const [online, setOnline] = useState(false);
   const [offers, setOffers] = useState<DriverOfferWithRide[]>([]);
   const [activeRide, setActiveRide] = useState<RideRequestRow | null>(null);
   const [bodyTypeSlug, setBodyTypeSlug] = useState<string | null>(null);
+  const [vehicleReady, setVehicleReady] = useState(false);
+  const [presenceError, setPresenceError] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
 
   const watchId = useRef<number | null>(null);
@@ -49,9 +53,13 @@ export function useRideDispatch() {
         .select('id')
         .eq('user_id', user.id)
         .maybeSingle();
-      if (!profile?.id) return;
+      if (!profile?.id) {
+        setBodyTypeSlug(DEFAULT_BODY_TYPE_SLUG);
+        setVehicleReady(true);
+        return;
+      }
 
-      const { data: vehicle } = await supabase
+      const { data: vehicle, error: vehicleError } = await supabase
         .from('driver_vehicles')
         .select('body_type')
         .eq('driver_profile_id', profile.id)
@@ -60,10 +68,17 @@ export function useRideDispatch() {
         .limit(1)
         .maybeSingle();
 
+      if (vehicleError) {
+        console.warn('driver_vehicles lookup failed', vehicleError.message);
+      }
+
       const label = (vehicle as { body_type?: string | null } | null)?.body_type?.trim();
-      if (label) setBodyTypeSlug(slugFromBodyLabel(label) || null);
+      setBodyTypeSlug(label ? slugFromBodyLabel(label) || DEFAULT_BODY_TYPE_SLUG : DEFAULT_BODY_TYPE_SLUG);
+      setVehicleReady(true);
     })();
   }, []);
+
+  const effectiveBodyTypeSlug = bodyTypeSlug ?? DEFAULT_BODY_TYPE_SLUG;
 
   const clearGeoWatch = useCallback(() => {
     if (watchId.current != null) {
@@ -80,12 +95,12 @@ export function useRideDispatch() {
         lat: coords.lat,
         lng: coords.lng,
         available_for_rides: false,
-        body_type_slug: bodyTypeSlug ?? undefined,
+        body_type_slug: effectiveBodyTypeSlug,
       });
     } catch (e: unknown) {
       console.warn('offline presence failed', e);
     }
-  }, [bodyTypeSlug]);
+  }, [effectiveBodyTypeSlug]);
 
   const refreshOffers = useCallback(async () => {
     try {
@@ -147,11 +162,6 @@ export function useRideDispatch() {
 
   useEffect(() => {
     if (!online || !navigator.geolocation) return;
-    if (!bodyTypeSlug) {
-      toast.error('Set body type on your primary vehicle before going online.');
-      setOnline(false);
-      return;
-    }
 
     watchId.current = navigator.geolocation.watchPosition(
       async (pos) => {
@@ -165,18 +175,30 @@ export function useRideDispatch() {
             lng: pos.coords.longitude,
             heading_degrees: pos.coords.heading ?? undefined,
             available_for_rides: true,
-            body_type_slug: bodyTypeSlug,
+            body_type_slug: effectiveBodyTypeSlug,
           });
+          setPresenceError(null);
         } catch (e: unknown) {
+          const message = e instanceof Error ? e.message : 'Could not go online';
+          setPresenceError(message);
+          if (message.includes('fleet_not_eligible')) {
+            toast.error('Fleet drivers cannot go online for Roam dispatch during beta.');
+          } else {
+            toast.error('Could not register your location. Check permissions and try again.');
+          }
+          setOnline(false);
           console.warn('presence failed', e);
         }
       },
-      () => toast.error('Location permission needed for ride matching'),
+      () => {
+        toast.error('Location permission needed for ride matching');
+        setOnline(false);
+      },
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 },
     );
 
     return () => clearGeoWatch();
-  }, [online, bodyTypeSlug, clearGeoWatch]);
+  }, [online, effectiveBodyTypeSlug, clearGeoWatch]);
 
   useEffect(() => {
     if (!activeRide?.id) return;
@@ -205,12 +227,17 @@ export function useRideDispatch() {
   }, [online, clearGeoWatch, postOfflinePresence]);
 
   const goOnline = useCallback(() => {
-    if (!bodyTypeSlug) {
-      toast.error('Set body type on your primary vehicle before going online.');
+    if (!vehicleReady) {
+      toast.message('Loading your profile… try again in a moment.');
       return;
     }
+    if (!navigator.geolocation) {
+      toast.error('Location is not available on this device.');
+      return;
+    }
+    setPresenceError(null);
     setOnline(true);
-  }, [bodyTypeSlug]);
+  }, [vehicleReady]);
 
   const goOffline = useCallback(async () => {
     clearGeoWatch();
@@ -270,7 +297,9 @@ export function useRideDispatch() {
     online,
     offers,
     activeRide,
-    bodyTypeSlug,
+    bodyTypeSlug: effectiveBodyTypeSlug,
+    vehicleReady,
+    presenceError,
     goOnline,
     goOffline,
     toggleOnline,
