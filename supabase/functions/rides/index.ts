@@ -288,6 +288,8 @@ function normalizePresenceBodyTypeSlug(slug: string | null | undefined): string 
   const normalized = slug.trim().toLowerCase();
   return LEGACY_BODY_TYPE_SLUGS[normalized] ?? normalized;
 }
+
+function authClient(authHeader: string) {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_ANON_KEY") ?? "",
