@@ -193,7 +193,7 @@ Suspended/banned riders: `403` `rider_account_restricted` on `POST /v1/quote` an
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/v1/internal/reconcile-matching` | Expire offers + advance waves for all `matching` rides. Auth: `Authorization: Bearer $RIDES_CRON_SECRET`. Schedule every 15–60s via Supabase cron or external scheduler. |
+| POST | `/v1/internal/reconcile-matching` | Expire offers + advance waves for all `matching` rides. Auth: `Authorization: Bearer $SUPABASE_ANON_KEY` + header `X-Rides-Cron-Secret: $RIDES_CRON_SECRET`. Schedule every 15–60s via Supabase cron or external scheduler. |
 
 ### Observability
 

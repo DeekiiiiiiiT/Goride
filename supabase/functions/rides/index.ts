@@ -867,8 +867,7 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
 
 app.post("/v1/internal/reconcile-matching", async (c) => {
   const secret = Deno.env.get("RIDES_CRON_SECRET");
-  const authHeader = c.req.header("Authorization") ?? "";
-  const token = authHeader.replace(/^Bearer\s+/i, "");
+  const token = c.req.header("X-Rides-Cron-Secret") ?? "";
   if (!secret || token !== secret) {
     return c.json({ error: "unauthorized" }, 401);
   }
