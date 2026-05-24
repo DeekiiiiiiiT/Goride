@@ -45,6 +45,9 @@ function throwRidesErrorBody(body: RidesErrorBody, status: number, rawText: stri
   if (body.error === 'insert_failed') {
     throw new Error('Could not start your trip. Please try again in a moment.');
   }
+  if (body.error === 'not_found') {
+    throw new Error('Ride not found. It may still be syncing — go back and try again.');
+  }
   if (body.error === 'no_fare_rule') {
     const svc = body.vehicle_type ? `"${body.vehicle_type}"` : 'this service';
     const triedLocs = body.location_keys_tried?.length
@@ -120,7 +123,7 @@ export async function ridesGetRequest(id: string): Promise<{
   offers: DriverOfferRow[];
 }> {
   const res = await fetch(`${base}/v1/requests/${id}`, { headers: await ridesHeaders() });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) await parseRidesError(res);
   return res.json();
 }
 

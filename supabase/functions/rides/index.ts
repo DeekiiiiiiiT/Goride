@@ -93,6 +93,103 @@ async function loadAvailableDriverLocations(freshSince: string) {
   return pubData ?? [];
 }
 
+/** Reads ride_requests via rides schema, falling back to public.rides_ride_requests on hosted. */
+async function loadRideRequestById(id: string): Promise<Record<string, unknown> | null> {
+  const { data: native, error: nativeErr } = await svc().from("ride_requests").select("*").eq(
+    "id",
+    id,
+  ).maybeSingle();
+  if (!nativeErr && native) return native;
+
+  const { data: pub } = await pubSvc().from("rides_ride_requests").select("*").eq("id", id).maybeSingle();
+  return pub ?? null;
+}
+
+async function loadRideRequestByIdempotencyKey(key: string): Promise<Record<string, unknown> | null> {
+  const { data: native, error: nativeErr } = await svc().from("ride_requests").select("*").eq(
+    "idempotency_key",
+    key,
+  ).maybeSingle();
+  if (!nativeErr && native) return native;
+
+  const { data: pub } = await pubSvc().from("rides_ride_requests").select("*").eq(
+    "idempotency_key",
+    key,
+  ).maybeSingle();
+  return pub ?? null;
+}
+
+async function loadRideRequestsByIds(
+  ids: string[],
+  columns = "*",
+): Promise<Record<string, unknown>[]> {
+  if (ids.length === 0) return [];
+  const { data: native, error: nativeErr } = await svc().from("ride_requests").select(columns).in(
+    "id",
+    ids,
+  );
+  if (!nativeErr && native) return native;
+
+  const { data: pub } = await pubSvc().from("rides_ride_requests").select(columns).in("id", ids);
+  return pub ?? [];
+}
+
+async function loadMatchingRideIds(): Promise<string[]> {
+  const { data: native, error: nativeErr } = await svc().from("ride_requests").select("id").eq(
+    "status",
+    "matching",
+  );
+  if (!nativeErr && native) return native.map((row) => row.id as string);
+
+  const { data: pub } = await pubSvc().from("rides_ride_requests").select("id").eq("status", "matching");
+  return (pub ?? []).map((row) => row.id as string);
+}
+
+/** Reads driver_offers via rides schema, falling back to public.rides_driver_offers on hosted. */
+async function loadDriverOffersForRide(
+  rideId: string,
+  orderDesc = true,
+): Promise<Record<string, unknown>[]> {
+  let query = svc().from("driver_offers").select("*").eq("ride_request_id", rideId);
+  if (orderDesc) query = query.order("created_at", { ascending: false });
+  const { data: native, error: nativeErr } = await query;
+  if (!nativeErr && native) return native;
+
+  let pubQuery = pubSvc().from("rides_driver_offers").select("*").eq("ride_request_id", rideId);
+  if (orderDesc) pubQuery = pubQuery.order("created_at", { ascending: false });
+  const { data: pub } = await pubQuery;
+  return pub ?? [];
+}
+
+async function loadDriverOfferById(offerId: string): Promise<Record<string, unknown> | null> {
+  const { data: native, error: nativeErr } = await svc().from("driver_offers").select("*").eq(
+    "id",
+    offerId,
+  ).maybeSingle();
+  if (!nativeErr && native) return native;
+
+  const { data: pub } = await pubSvc().from("rides_driver_offers").select("*").eq("id", offerId)
+    .maybeSingle();
+  return pub ?? null;
+}
+
+async function loadPendingDriverOffersForDriver(
+  driverUserId: string,
+  nowIso: string,
+): Promise<Record<string, unknown>[]> {
+  const { data: native, error: nativeErr } = await svc().from("driver_offers").select("*").eq(
+    "driver_user_id",
+    driverUserId,
+  ).eq("status", "pending").gt("expires_at", nowIso);
+  if (!nativeErr && native) return native;
+
+  const { data: pub } = await pubSvc().from("rides_driver_offers").select("*").eq(
+    "driver_user_id",
+    driverUserId,
+  ).eq("status", "pending").gt("expires_at", nowIso);
+  return pub ?? [];
+}
+
 function authClient(authHeader: string) {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
@@ -187,15 +284,11 @@ async function expirePendingOffers(rideId: string) {
 async function reconcileMatching(rideId: string, requestId?: string) {
   const db = svc();
   await expirePendingOffers(rideId);
-  const { data: ride } = await db.from("ride_requests").select("*").eq("id", rideId).single();
+  const ride = await loadRideRequestById(rideId);
   if (!ride || ride.status !== "matching") return;
 
-  const { data: pendingRows } = await db.from("driver_offers").select("id").eq(
-    "ride_request_id",
-    rideId,
-  ).eq("status", "pending").limit(1);
-
-  if (pendingRows && pendingRows.length > 0) return;
+  const offerRows = await loadDriverOffersForRide(rideId, false);
+  if (offerRows.some((row) => row.status === "pending")) return;
 
   let dispatchSettings = DEFAULT_DISPATCH_SETTINGS;
   try {
@@ -270,12 +363,13 @@ async function runMatchingWave(
     }
   }
 
-  const { data: declinedRows } = await db.from("driver_offers").select("driver_user_id, status").eq(
-    "ride_request_id",
-    rideId,
-  ).in("status", ["declined", "expired"]);
+  const declinedRows = (await loadDriverOffersForRide(rideId, false)).filter((row) =>
+    row.status === "declined" || row.status === "expired"
+  );
 
-  const excluded = new Set((declinedRows ?? []).map((r: { driver_user_id: string }) => r.driver_user_id));
+  const excluded = new Set(
+    declinedRows.map((r) => r.driver_user_id as string),
+  );
 
   const eligibleIds = await getEligibleDriverUserIds(
     (locs ?? []).map((row) => row.user_id as string),
@@ -530,10 +624,7 @@ app.post("/v1/requests", async (c) => {
   const db = svc();
 
   if (idempotency_key) {
-    const { data: existing } = await db.from("ride_requests").select("*").eq(
-      "idempotency_key",
-      idempotency_key,
-    ).maybeSingle();
+    const existing = await loadRideRequestByIdempotencyKey(idempotency_key);
     if (existing) {
       return c.json({ ride: existing });
     }
@@ -635,21 +726,17 @@ app.get("/v1/requests/:id", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
   const id = c.req.param("id");
-  const db = svc();
-  const { data: ride } = await db.from("ride_requests").select("*").eq("id", id).single();
+  const ride = await loadRideRequestById(id);
   if (!ride) return c.json({ error: "not_found" }, 404);
   if (ride.rider_user_id !== auth.user.id && ride.assigned_driver_user_id !== auth.user.id) {
     return jsonEdgeForbidden(c, "forbidden");
   }
   const reqId = crypto.randomUUID();
   await reconcileMatching(id, reqId);
-  const { data: fresh } = await db.from("ride_requests").select("*").eq("id", id).single();
-  const { data: offers } = await db.from("driver_offers").select("*").eq("ride_request_id", id).order(
-    "created_at",
-    { ascending: false },
-  );
+  const fresh = await loadRideRequestById(id);
+  const offers = await loadDriverOffersForRide(id);
 
-  return c.json({ ride: fresh, offers: offers ?? [] });
+  return c.json({ ride: fresh, offers });
 });
 
 app.post("/v1/requests/:id/cancel", async (c) => {
@@ -658,12 +745,12 @@ app.post("/v1/requests/:id/cancel", async (c) => {
   const id = c.req.param("id");
   const body = await c.req.json().catch(() => ({}));
   const db = svc();
-  const { data: ride } = await db.from("ride_requests").select("*").eq("id", id).single();
+  const ride = await loadRideRequestById(id);
   if (!ride) return c.json({ error: "not_found" }, 404);
   if (ride.rider_user_id !== auth.user.id) return jsonEdgeForbidden(c, "forbidden");
 
   const terminal = ["completed", "cancelled"];
-  if (terminal.includes(ride.status)) return c.json({ ride });
+  if (terminal.includes(ride.status as string)) return c.json({ ride });
 
   await db.from("ride_requests").update({
     status: "cancelled",
@@ -682,7 +769,7 @@ app.post("/v1/requests/:id/cancel", async (c) => {
   await audit(id, auth.user.id, "ride_cancelled_rider", {});
   logLine({ event: "ride_cancelled_rider", ride_id: id });
 
-  const { data: fresh } = await db.from("ride_requests").select("*").eq("id", id).single();
+  const fresh = await loadRideRequestById(id);
   return c.json({ ride: fresh });
 });
 
@@ -775,23 +862,21 @@ app.get("/v1/drivers/offers", async (c) => {
     "pending",
   ).lte("expires_at", nowIso);
 
-  const { data: offers } = await db.from("driver_offers").select("*").eq(
-    "driver_user_id",
-    auth.user.id,
-  ).eq("status", "pending").gt("expires_at", nowIso);
+  const offers = await loadPendingDriverOffersForDriver(auth.user.id, nowIso);
 
-  const rideIds = [...new Set((offers ?? []).map((o: { ride_request_id: string }) => o.ride_request_id))];
+  const rideIds = [...new Set(offers.map((o) => o.ride_request_id as string))];
   let ridesById: Record<string, Record<string, unknown>> = {};
   if (rideIds.length > 0) {
-    const { data: rides } = await db.from("ride_requests").select(
+    const rides = await loadRideRequestsByIds(
+      rideIds,
       "id, pickup_address, dropoff_address, fare_estimate_minor, currency, distance_estimate_km, duration_estimate_minutes, vehicle_option, surge_multiplier",
-    ).in("id", rideIds);
-    ridesById = Object.fromEntries((rides ?? []).map((r: { id: string }) => [r.id, r]));
+    );
+    ridesById = Object.fromEntries(rides.map((r) => [r.id as string, r]));
   }
 
-  const enriched = (offers ?? []).map((o: { ride_request_id: string }) => ({
+  const enriched = offers.map((o) => ({
     ...o,
-    ride: ridesById[o.ride_request_id] ?? null,
+    ride: ridesById[o.ride_request_id as string] ?? null,
   }));
 
   return c.json({ offers: enriched });
@@ -806,16 +891,16 @@ app.post("/v1/drivers/offers/:offerId/accept", async (c) => {
   const db = svc();
   const nowIso = new Date().toISOString();
 
-  const { data: offer } = await db.from("driver_offers").select("*").eq("id", offerId).single();
+  const offer = await loadDriverOfferById(offerId);
   if (!offer || offer.driver_user_id !== auth.user.id) return c.json({ error: "not_found" }, 404);
   if (offer.status !== "pending") return c.json({ error: "offer_not_pending" }, 409);
-  if (offer.expires_at <= nowIso) {
+  if ((offer.expires_at as string) <= nowIso) {
     await db.from("driver_offers").update({ status: "expired" }).eq("id", offerId);
     return c.json({ error: "offer_expired" }, 410);
   }
 
   const rideId = offer.ride_request_id as string;
-  const { data: ride } = await db.from("ride_requests").select("*").eq("id", rideId).single();
+  const ride = await loadRideRequestById(rideId);
   if (!ride || ride.status !== "matching") return c.json({ error: "ride_not_matching" }, 409);
 
   await db.from("driver_offers").update({ status: "accepted" }).eq("id", offerId).eq("status", "pending");
@@ -831,7 +916,7 @@ app.post("/v1/drivers/offers/:offerId/accept", async (c) => {
     updated_at: nowIso,
   }).eq("id", rideId).eq("status", "matching");
 
-  const { data: freshRide } = await db.from("ride_requests").select("*").eq("id", rideId).single();
+  const freshRide = await loadRideRequestById(rideId);
 
   if (!freshRide || freshRide.status !== "driver_assigned") {
     await audit(rideId, auth.user.id, "accept_race_lost", { offer_id: offerId });
@@ -850,7 +935,7 @@ app.post("/v1/drivers/offers/:offerId/decline", async (c) => {
 
   const offerId = c.req.param("offerId");
   const db = svc();
-  const { data: offer } = await db.from("driver_offers").select("*").eq("id", offerId).single();
+  const offer = await loadDriverOfferById(offerId);
   if (!offer || offer.driver_user_id !== auth.user.id) return c.json({ error: "not_found" }, 404);
 
   await db.from("driver_offers").update({ status: "declined" }).eq("id", offerId).eq("status", "pending");
@@ -880,7 +965,7 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const next = body.status as RideStatus;
   const db = svc();
-  const { data: ride } = await db.from("ride_requests").select("*").eq("id", id).single();
+  const ride = await loadRideRequestById(id);
   if (!ride) return c.json({ error: "not_found" }, 404);
   if (ride.assigned_driver_user_id !== auth.user.id) return jsonEdgeForbidden(c, "forbidden");
 
@@ -907,7 +992,7 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
   await audit(id, auth.user.id, "driver_transition", { from: current, to: next });
   logLine({ event: "driver_transition", ride_id: id, from: current, to: next });
 
-  const { data: fresh } = await db.from("ride_requests").select("*").eq("id", id).single();
+  const fresh = await loadRideRequestById(id);
   return c.json({ ride: fresh });
 });
 
@@ -918,11 +1003,10 @@ app.post("/v1/internal/reconcile-matching", async (c) => {
     return c.json({ error: "unauthorized" }, 401);
   }
 
-  const db = svc();
-  const { data: rides } = await db.from("ride_requests").select("id").eq("status", "matching");
+  const rideIds = await loadMatchingRideIds();
   let processed = 0;
-  for (const row of rides ?? []) {
-    await reconcileMatching(row.id as string);
+  for (const rideId of rideIds) {
+    await reconcileMatching(rideId);
     processed += 1;
   }
 
