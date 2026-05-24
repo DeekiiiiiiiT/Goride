@@ -105,6 +105,10 @@ function parsePatch(
     patch.require_body_type_for_offers = body.require_body_type_for_offers === true;
   }
 
+  if (body.independent_only_matching !== undefined) {
+    patch.independent_only_matching = body.independent_only_matching === true;
+  }
+
   if (!Object.keys(patch).length) return { ok: false, error: "no_changes" };
 
   return { ok: true, patch };

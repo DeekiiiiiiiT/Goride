@@ -6,6 +6,7 @@ import {
   type DispatchSettings,
 } from "./dispatchSettings.ts";
 import { haversineKm } from "./routing.ts";
+import { getEligibleDriverUserIds } from "../../_shared/driverModeFilter.ts";
 
 /** Fallback when settings are not loaded. */
 export const DRIVER_LOCATION_MAX_AGE_MS =
@@ -48,7 +49,15 @@ export async function resolvePickupEta(
   const nearby: DriverRow[] = [];
 
   const allowed = opts?.allowedBodyTypeSlugs;
+  const candidateUserIds: string[] = [];
   for (const row of locs ?? []) {
+    candidateUserIds.push(row.user_id as string);
+  }
+  const eligibleIds = await getEligibleDriverUserIds(candidateUserIds, settings);
+
+  for (const row of locs ?? []) {
+    const uid = row.user_id as string;
+    if (!eligibleIds.has(uid)) continue;
     const bodySlug = (row as { body_type_slug?: string | null }).body_type_slug ?? null;
     if (allowed && allowed.size > 0 && (!bodySlug || !allowed.has(bodySlug))) continue;
     const lat = Number(row.lat);

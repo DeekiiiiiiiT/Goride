@@ -50,9 +50,14 @@ const independentOnlyNavItems: NavItem[] = [
 ];
 
 export function getNavigationItems(mode: DriverMode): NavItem[] {
-  return mode === 'fleet'
+  const items = mode === 'fleet'
     ? [...commonNavItems, ...fleetOnlyNavItems]
     : [...commonNavItems, ...independentOnlyNavItems];
+
+  if (mode === 'independent') {
+    return items.filter((item) => item.id !== 'passenger-rides');
+  }
+  return items;
 }
 
 export function getBottomNavItems(): NavItem[] {

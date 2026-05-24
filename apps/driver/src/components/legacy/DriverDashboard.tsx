@@ -19,6 +19,8 @@ import { ServiceRequestForm } from './ServiceRequestForm';
 import { ManualTripForm } from '../trips/ManualTripForm';
 import { TripFareDialog, type TripFareInitialData } from '../trips/TripFareDialog';
 import { TripTimer } from '../trips/TripTimer';
+import { RideDispatchHome } from '../rides/RideDispatchHome';
+import { useDriver } from '../../contexts/DriverContext';
 import { createManualTrip, ManualTripInput } from '../../utils/tripFactory';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
@@ -40,6 +42,7 @@ import { resolveMissingTripAddresses } from '../../utils/addressResolver';
 import { getDriverPortalTripEarnings } from '../../utils/tripEarnings';
 export function DriverDashboard() {
   const { user } = useAuth();
+  const { isIndependentDriver } = useDriver();
   const { driverRecord, loading: driverLoading } = useCurrentDriver();
   const [fuelFormOpen, setFuelFormOpen] = useState(false);
   const [serviceFormOpen, setServiceFormOpen] = useState(false);
@@ -483,7 +486,12 @@ export function DriverDashboard() {
               flaggedCount={flaggedCount}
             />
             
-            <TripTimer onComplete={handleTripComplete} />
+            {/* Phase 3 fleet rollout: replace TripTimer with RideDispatchHome for all drivers when independent_only_matching is off */}
+            {isIndependentDriver ? (
+              <RideDispatchHome />
+            ) : (
+              <TripTimer onComplete={handleTripComplete} />
+            )}
       </div>
 
       <FuelLogForm 

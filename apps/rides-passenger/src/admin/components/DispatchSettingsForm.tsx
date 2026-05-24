@@ -99,6 +99,7 @@ export function DispatchSettingsForm({ accessToken, role }: DispatchSettingsForm
         body_type_filtering_enabled: form.body_type_filtering_enabled,
         body_type_tier_mode: form.body_type_tier_mode,
         require_body_type_for_offers: form.require_body_type_for_offers,
+        independent_only_matching: form.independent_only_matching,
       });
       setForm(settings);
       toast.success('Dispatch settings saved');
@@ -284,6 +285,34 @@ export function DispatchSettingsForm({ accessToken, role }: DispatchSettingsForm
             <option value="expand">Expand — add lower-priority body types each wave</option>
             <option value="strict">Strict — only highest-priority body types</option>
           </select>
+        </label>
+      </section>
+
+      <section className="rounded-xl border border-slate-800 bg-slate-900/30 p-6 space-y-4">
+        <div>
+          <h3 className="text-base font-medium text-white">Driver rollout</h3>
+          <p className="text-sm text-slate-400 mt-1">
+            Control which Roam Driver accounts participate in passenger dispatch during beta.
+          </p>
+        </div>
+
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            disabled={!canEdit}
+            checked={form.independent_only_matching}
+            onChange={(e) =>
+              setForm({ ...form, independent_only_matching: e.target.checked })
+            }
+            className="mt-1 rounded border-slate-600"
+          />
+          <span className="text-sm text-slate-300">
+            Independent drivers only (beta)
+            <span className="block text-xs text-slate-500 mt-0.5">
+              When on, only independent drivers receive Roam passenger offers. Fleet drivers keep
+              the legacy START TRIP flow until this is turned off.
+            </span>
+          </span>
         </label>
       </section>
 

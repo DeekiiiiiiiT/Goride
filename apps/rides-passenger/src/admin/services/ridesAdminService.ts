@@ -545,6 +545,7 @@ export interface DispatchSettingsDto {
   body_type_filtering_enabled: boolean;
   body_type_tier_mode: BodyTypeTierMode;
   require_body_type_for_offers: boolean;
+  independent_only_matching: boolean;
   updated_at?: string;
   updated_by?: string | null;
 }

@@ -30,6 +30,10 @@ import {
   getWaveRadiusKm,
   loadDispatchSettings,
 } from "./fare/dispatchSettings.ts";
+import {
+  getEligibleDriverUserIds,
+  isDriverEligibleForDispatch,
+} from "../_shared/driverModeFilter.ts";
 
 /** Match Supabase path prefix: .../functions/v1/rides/<route> → /rides/<route> */
 const app = new Hono().basePath("/rides");
@@ -257,12 +261,18 @@ async function runMatchingWave(
 
   const excluded = new Set((declinedRows ?? []).map((r: { driver_user_id: string }) => r.driver_user_id));
 
+  const eligibleIds = await getEligibleDriverUserIds(
+    (locs ?? []).map((row) => row.user_id as string),
+    dispatchSettings,
+  );
+
   type Cand = { user_id: string; lat: number; lng: number; d: number; body_type_slug: string | null };
   const candidates: Cand[] = [];
   let filteredOutBodyType = 0;
   for (const row of locs ?? []) {
     const uid = row.user_id as string;
     if (excluded.has(uid)) continue;
+    if (!eligibleIds.has(uid)) continue;
     const bodySlug = (row as { body_type_slug?: string | null }).body_type_slug ?? null;
     if (tiersCount > 0) {
       if (!bodySlug) {
@@ -659,6 +669,22 @@ app.post("/v1/drivers/presence", async (c) => {
   const lng = Number(body.lng);
   if (Number.isNaN(lat) || Number.isNaN(lng)) return c.json({ error: "invalid_coordinates" }, 400);
 
+  let dispatchSettings = DEFAULT_DISPATCH_SETTINGS;
+  try {
+    const { db: adminDb, tables } = await getRidesAdminDb();
+    dispatchSettings = await loadDispatchSettings(adminDb, tables);
+  } catch {
+    /* use defaults */
+  }
+
+  const goingOnline = Boolean(body.available_for_rides ?? true);
+  if (goingOnline) {
+    const eligible = await isDriverEligibleForDispatch(auth.user.id, dispatchSettings);
+    if (!eligible) {
+      return c.json({ error: "fleet_not_eligible_for_dispatch" }, 403);
+    }
+  }
+
   let bodyTypeSlug: string | null = null;
   const explicit = typeof body.body_type_slug === "string" ? body.body_type_slug : null;
   bodyTypeSlug = await resolveDriverBodyTypeSlug(auth.user.id, explicit);
@@ -837,6 +863,26 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
 
   const { data: fresh } = await db.from("ride_requests").select("*").eq("id", id).single();
   return c.json({ ride: fresh });
+});
+
+app.post("/v1/internal/reconcile-matching", async (c) => {
+  const secret = Deno.env.get("RIDES_CRON_SECRET");
+  const authHeader = c.req.header("Authorization") ?? "";
+  const token = authHeader.replace(/^Bearer\s+/i, "");
+  if (!secret || token !== secret) {
+    return c.json({ error: "unauthorized" }, 401);
+  }
+
+  const db = svc();
+  const { data: rides } = await db.from("ride_requests").select("id").eq("status", "matching");
+  let processed = 0;
+  for (const row of rides ?? []) {
+    await reconcileMatching(row.id as string);
+    processed += 1;
+  }
+
+  logLine({ event: "reconcile_matching_batch", processed });
+  return c.json({ ok: true, processed });
 });
 
 registerAdminRoutes(app, { logLine });

@@ -16,6 +16,7 @@ export type DispatchSettings = {
   body_type_filtering_enabled: boolean;
   body_type_tier_mode: BodyTypeTierMode;
   require_body_type_for_offers: boolean;
+  independent_only_matching: boolean;
   updated_at?: string;
   updated_by?: string | null;
 };
@@ -30,6 +31,7 @@ export const DEFAULT_DISPATCH_SETTINGS: DispatchSettings = {
   body_type_filtering_enabled: true,
   body_type_tier_mode: "expand",
   require_body_type_for_offers: true,
+  independent_only_matching: true,
 };
 
 const CACHE_TTL_MS = 30_000;
@@ -99,6 +101,7 @@ export function rowToDispatchSettings(row: Record<string, unknown>): DispatchSet
     body_type_filtering_enabled: row.body_type_filtering_enabled !== false,
     body_type_tier_mode: tierMode,
     require_body_type_for_offers: row.require_body_type_for_offers !== false,
+    independent_only_matching: row.independent_only_matching !== false,
     updated_at: typeof row.updated_at === "string" ? row.updated_at : undefined,
     updated_by: typeof row.updated_by === "string" ? row.updated_by : null,
   };

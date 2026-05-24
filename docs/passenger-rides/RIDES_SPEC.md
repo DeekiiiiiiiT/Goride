@@ -189,6 +189,12 @@ Suspended/banned riders: `403` `rider_account_restricted` on `POST /v1/quote` an
 | POST | `/v1/drivers/offers/:id/decline` | Decline offer. |
 | PATCH | `/v1/requests/:id/driver-transition` | Body `{ "status": "<next>" }` per allowed graph. |
 
+#### Internal (ops)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/internal/reconcile-matching` | Expire offers + advance waves for all `matching` rides. Auth: `Authorization: Bearer $RIDES_CRON_SECRET`. Schedule every 15–60s via Supabase cron or external scheduler. |
+
 ### Observability
 
 | Method | Path | Description |
@@ -203,6 +209,20 @@ Suspended/banned riders: `403` `rider_account_restricted` on `POST /v1/quote` an
 - **Rate limiting**: per-IP sliding window on **`quote`** / **`requests`** (see Edge implementation).
 - **Privacy**: location TTL + retention policy for **`driver_locations`** (purge stale rows via cron — future).
 - **Compliance**: export/delete hooks via Supabase Auth + rider profile deletion cascade.
+
+---
+
+## 10. Driver app rollout (independent-first beta)
+
+- **`rides.dispatch_settings.independent_only_matching`** (default **true**): only **`driver_profiles.mode = independent`** drivers receive offers and may go online for Roam passenger dispatch. Fleet drivers keep the legacy **START TRIP** home flow until this flag is turned off in Control Panel.
+- Independent drivers: home screen **`RideDispatchHome`** — Go Online → listen for offers (Realtime + 4s poll fallback) → accept → state transitions.
+- Fleet drivers (beta): home **`TripTimer`** unchanged; **Ride offers** nav remains available as fallback.
+
+### Phase 3 — fleet-wide dispatch (when ready)
+
+1. Set **`independent_only_matching = false`** in Control Panel → Dispatch settings.
+2. In `apps/driver/src/components/legacy/DriverDashboard.tsx`, render **`RideDispatchHome`** for all drivers (remove `isIndependentDriver` branch).
+3. Deprecate **`TripTimer`** for Roam passenger trips; completed Roam rides live in **`rides.ride_requests`**.
 
 ---
 
