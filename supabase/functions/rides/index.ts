@@ -190,7 +190,104 @@ async function loadPendingDriverOffersForDriver(
   return pub ?? [];
 }
 
-function authClient(authHeader: string) {
+async function patchRideRequest(id: string, patch: Record<string, unknown>): Promise<boolean> {
+  const { error: rpcError } = await pubSvc().rpc("rides_patch_ride_request", {
+    p_id: id,
+    p_patch: patch,
+  });
+  if (!rpcError) return true;
+
+  const { error } = await svc().from("ride_requests").update(patch).eq("id", id);
+  if (error) {
+    logLine({
+      event: "patch_ride_failed",
+      ride_id: id,
+      error: error.message,
+      rpc_error: rpcError.message,
+    });
+  }
+  return !error;
+}
+
+async function insertDriverOfferRow(row: Record<string, unknown>): Promise<boolean> {
+  const { error: rpcError } = await pubSvc().rpc("rides_insert_driver_offer", { p_row: row });
+  if (!rpcError) return true;
+
+  const { error } = await svc().from("driver_offers").insert(row);
+  if (error) {
+    logLine({
+      event: "insert_offer_failed",
+      error: error.message,
+      rpc_error: rpcError.message,
+    });
+  }
+  return !error;
+}
+
+async function patchDriverOfferRow(id: string, patch: Record<string, unknown>): Promise<boolean> {
+  const { error: rpcError } = await pubSvc().rpc("rides_patch_driver_offer", {
+    p_id: id,
+    p_patch: patch,
+  });
+  if (!rpcError) return true;
+
+  const { error } = await svc().from("driver_offers").update(patch).eq("id", id);
+  return !error;
+}
+
+async function expirePendingOffersForRide(rideId: string, nowIso: string): Promise<void> {
+  const { error: rpcError } = await pubSvc().rpc("rides_expire_pending_offers", {
+    p_ride_id: rideId,
+    p_now: nowIso,
+  });
+  if (!rpcError) return;
+
+  await svc().from("driver_offers").update({ status: "expired" }).eq("ride_request_id", rideId).eq(
+    "status",
+    "pending",
+  ).lte("expires_at", nowIso);
+}
+
+async function supersedePendingOffersForRide(
+  rideId: string,
+  exceptOfferId?: string,
+): Promise<void> {
+  const { error: rpcError } = await pubSvc().rpc("rides_supersede_pending_offers", {
+    p_ride_id: rideId,
+    p_except_offer_id: exceptOfferId ?? null,
+  });
+  if (!rpcError) return;
+
+  let query = svc().from("driver_offers").update({ status: "superseded" }).eq(
+    "ride_request_id",
+    rideId,
+  ).eq("status", "pending");
+  if (exceptOfferId) query = query.neq("id", exceptOfferId);
+  await query;
+}
+
+async function expireDriverPendingOffers(driverUserId: string, nowIso: string): Promise<void> {
+  const { error: rpcError } = await pubSvc().rpc("rides_expire_driver_pending_offers", {
+    p_driver_user_id: driverUserId,
+    p_now: nowIso,
+  });
+  if (!rpcError) return;
+
+  await svc().from("driver_offers").update({ status: "expired" }).eq(
+    "driver_user_id",
+    driverUserId,
+  ).eq("status", "pending").lte("expires_at", nowIso);
+}
+
+const LEGACY_BODY_TYPE_SLUGS: Record<string, string> = {
+  standard: "sedan",
+};
+
+function normalizePresenceBodyTypeSlug(slug: string | null | undefined): string | null {
+  if (!slug?.trim()) return null;
+  const normalized = slug.trim().toLowerCase();
+  return LEGACY_BODY_TYPE_SLUGS[normalized] ?? normalized;
+}
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_ANON_KEY") ?? "",
@@ -275,10 +372,7 @@ async function audit(
 
 async function expirePendingOffers(rideId: string) {
   const nowIso = new Date().toISOString();
-  await svc().from("driver_offers").update({ status: "expired" }).eq("ride_request_id", rideId).eq(
-    "status",
-    "pending",
-  ).lte("expires_at", nowIso);
+  await expirePendingOffersForRide(rideId, nowIso);
 }
 
 async function reconcileMatching(rideId: string, requestId?: string) {
@@ -300,12 +394,12 @@ async function reconcileMatching(rideId: string, requestId?: string) {
 
   const wave = Number(ride.matching_wave ?? 0);
   if (wave >= dispatchSettings.max_match_waves) {
-    await db.from("ride_requests").update({
+    await patchRideRequest(rideId, {
       status: "cancelled",
       cancelled_by: "system",
       cancel_reason: "no_drivers_available",
       updated_at: new Date().toISOString(),
-    }).eq("id", rideId);
+    });
     const cellKey = gridCellKey(Number(ride.pickup_lat), Number(ride.pickup_lng));
     await bumpSurgeDemand(cellKey, -1);
     await audit(rideId, undefined, "ride_auto_cancelled_no_drivers", { wave });
@@ -431,14 +525,14 @@ async function runMatchingWave(
 
   const expiresAt = new Date(Date.now() + timeoutSec * 1000).toISOString();
 
-  await db.from("ride_requests").update({
+  await patchRideRequest(rideId, {
     matching_wave: wave,
     updated_at: new Date().toISOString(),
-  }).eq("id", rideId);
+  });
 
   for (let i = 0; i < picked.length; i++) {
     const c = picked[i];
-    await db.from("driver_offers").insert({
+    await insertDriverOfferRow({
       ride_request_id: rideId,
       driver_user_id: c.user_id,
       wave,
@@ -752,17 +846,14 @@ app.post("/v1/requests/:id/cancel", async (c) => {
   const terminal = ["completed", "cancelled"];
   if (terminal.includes(ride.status as string)) return c.json({ ride });
 
-  await db.from("ride_requests").update({
+  await patchRideRequest(id, {
     status: "cancelled",
     cancelled_by: "rider",
     cancel_reason: typeof body.reason === "string" ? body.reason : null,
     updated_at: new Date().toISOString(),
-  }).eq("id", id);
+  });
 
-  await db.from("driver_offers").update({ status: "superseded" }).eq("ride_request_id", id).eq(
-    "status",
-    "pending",
-  );
+  await supersedePendingOffersForRide(id);
 
   const cellKey = gridCellKey(Number(ride.pickup_lat), Number(ride.pickup_lng));
   await bumpSurgeDemand(cellKey, -1);
@@ -802,7 +893,9 @@ app.post("/v1/drivers/presence", async (c) => {
   }
 
   let bodyTypeSlug: string | null = null;
-  const explicit = typeof body.body_type_slug === "string" ? body.body_type_slug : null;
+  const explicit = typeof body.body_type_slug === "string"
+    ? normalizePresenceBodyTypeSlug(body.body_type_slug)
+    : null;
   bodyTypeSlug = await resolveDriverBodyTypeSlug(auth.user.id, explicit);
 
   if (bodyTypeSlug) {
@@ -814,6 +907,10 @@ app.post("/v1/drivers/presence", async (c) => {
       const ok = await isActiveBodyTypeSlug(svc(), "vehicle_types", bodyTypeSlug);
       if (!ok) bodyTypeSlug = null;
     }
+  }
+
+  if (goingOnline && !bodyTypeSlug) {
+    bodyTypeSlug = "sedan";
   }
 
   const headingRaw = body.heading_degrees != null ? Number(body.heading_degrees) : null;
@@ -857,10 +954,7 @@ app.get("/v1/drivers/offers", async (c) => {
 
   const db = svc();
   const nowIso = new Date().toISOString();
-  await db.from("driver_offers").update({ status: "expired" }).eq("driver_user_id", auth.user.id).eq(
-    "status",
-    "pending",
-  ).lte("expires_at", nowIso);
+  await expireDriverPendingOffers(auth.user.id, nowIso);
 
   const offers = await loadPendingDriverOffersForDriver(auth.user.id, nowIso);
 
@@ -895,7 +989,7 @@ app.post("/v1/drivers/offers/:offerId/accept", async (c) => {
   if (!offer || offer.driver_user_id !== auth.user.id) return c.json({ error: "not_found" }, 404);
   if (offer.status !== "pending") return c.json({ error: "offer_not_pending" }, 409);
   if ((offer.expires_at as string) <= nowIso) {
-    await db.from("driver_offers").update({ status: "expired" }).eq("id", offerId);
+    await patchDriverOfferRow(offerId, { status: "expired" });
     return c.json({ error: "offer_expired" }, 410);
   }
 
@@ -903,18 +997,15 @@ app.post("/v1/drivers/offers/:offerId/accept", async (c) => {
   const ride = await loadRideRequestById(rideId);
   if (!ride || ride.status !== "matching") return c.json({ error: "ride_not_matching" }, 409);
 
-  await db.from("driver_offers").update({ status: "accepted" }).eq("id", offerId).eq("status", "pending");
+  await patchDriverOfferRow(offerId, { status: "accepted" });
 
-  await db.from("driver_offers").update({ status: "superseded" }).eq("ride_request_id", rideId).neq(
-    "id",
-    offerId,
-  ).eq("status", "pending");
+  await supersedePendingOffersForRide(rideId, offerId);
 
-  await db.from("ride_requests").update({
+  await patchRideRequest(rideId, {
     status: "driver_assigned",
     assigned_driver_user_id: auth.user.id,
     updated_at: nowIso,
-  }).eq("id", rideId).eq("status", "matching");
+  });
 
   const freshRide = await loadRideRequestById(rideId);
 
@@ -938,7 +1029,7 @@ app.post("/v1/drivers/offers/:offerId/decline", async (c) => {
   const offer = await loadDriverOfferById(offerId);
   if (!offer || offer.driver_user_id !== auth.user.id) return c.json({ error: "not_found" }, 404);
 
-  await db.from("driver_offers").update({ status: "declined" }).eq("id", offerId).eq("status", "pending");
+  await patchDriverOfferRow(offerId, { status: "declined" });
 
   await reconcileMatching(offer.ride_request_id as string);
 
@@ -982,7 +1073,7 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
     patch.cancel_reason = typeof body.reason === "string" ? body.reason : null;
   }
 
-  await db.from("ride_requests").update(patch).eq("id", id);
+  await patchRideRequest(id, patch);
 
   if (next === "completed" || next === "cancelled") {
     const cellKey = gridCellKey(Number(ride.pickup_lat), Number(ride.pickup_lng));

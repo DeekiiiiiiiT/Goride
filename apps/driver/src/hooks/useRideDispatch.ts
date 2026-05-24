@@ -15,7 +15,7 @@ import { slugFromBodyLabel } from '../components/rides/rideDispatchUtils';
 const OFFER_POLL_MS = 4000;
 const OFFER_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3';
 
-const DEFAULT_BODY_TYPE_SLUG = 'standard';
+const DEFAULT_BODY_TYPE_SLUG = 'sedan';
 
 export function useRideDispatch() {
   const [online, setOnline] = useState(false);
