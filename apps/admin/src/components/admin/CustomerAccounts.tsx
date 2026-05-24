@@ -111,7 +111,29 @@ function formatRelative(iso: string | null): string {
 // -------------------------------------------------------------------
 // Component
 // -------------------------------------------------------------------
-export function CustomerAccounts() {
+export type CustomerAccountsProductLine = 'enterprise' | 'fleet';
+
+export interface CustomerAccountsProps {
+  /** Defaults to Enterprise per server contract. */
+  productLine?: CustomerAccountsProductLine;
+  pageTitle?: string;
+  subtitle?: string;
+}
+
+export function CustomerAccounts({
+  productLine = 'enterprise',
+  pageTitle,
+  subtitle,
+}: CustomerAccountsProps) {
+  const resolvedTitle =
+    pageTitle ??
+    (productLine === 'fleet' ? 'Fleet customer accounts' : 'Enterprise customer accounts');
+  const resolvedSubtitle =
+    subtitle ??
+    (productLine === 'fleet'
+      ? 'Rideshare fleet organizations (customers on the Fleet product line).'
+      : 'Enterprise organizations onboarded outside core rideshare fleets.');
+
   const { session, role } = useAuth();
   const queryClient = useQueryClient();
 
@@ -191,9 +213,10 @@ export function CustomerAccounts() {
 
   // Phase 6: React Query for admin customers caching
   const { data: customers = [], isLoading: loading, error: queryError, refetch } = useQuery({
-    queryKey: ['adminCustomers'],
+    queryKey: ['adminCustomers', productLine],
     queryFn: async () => {
-      const res = await fetch(`${API_ENDPOINTS.admin}/admin/customers`, {
+      const qs = new URLSearchParams({ productLine });
+      const res = await fetch(`${API_ENDPOINTS.admin}/admin/customers?${qs.toString()}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (!res.ok) {
@@ -538,8 +561,9 @@ export function CustomerAccounts() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-white">Customer Accounts</h1>
-          <p className="text-sm text-slate-400 mt-0.5">
+          <h1 className="text-xl font-bold text-white">{resolvedTitle}</h1>
+          <p className="text-sm text-slate-400 mt-0.5 max-w-xl">{resolvedSubtitle}</p>
+          <p className="text-xs text-slate-500 mt-2">
             {displayed.length} result{displayed.length !== 1 ? 's' : ''}
             {displayed.length !== customers.length ? ` (filtered from ${customers.length})` : ''}
           </p>

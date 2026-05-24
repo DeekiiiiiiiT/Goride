@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Users, Fuel, MapPin, Settings, ArrowRight, Loader2, Activity, Car, UserCog, Shield, Utensils } from 'lucide-react';
+import { Users, Fuel, MapPin, Settings, ArrowRight, Loader2, Activity, Car, UserCog, Shield, Utensils, Navigation, Building2, Truck } from 'lucide-react';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { useAuth } from '../auth/AuthContext';
 import { getMerchantStats } from '../../services/dashMerchantVerificationService';
@@ -48,6 +48,11 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
     unlinkedDriverCount: 0,
     teamMemberCount: 0,
     platformStaffCount: 0,
+    riderCount: 0,
+    enterpriseCustomerCount: 0,
+    enterpriseTeamMemberCount: 0,
+    fleetCustomerCount: 0,
+    fleetTeamMemberCount: 0,
     loading: true,
   });
   const [dashMerchantCounts, setDashMerchantCounts] = useState({
@@ -95,6 +100,11 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
           unlinkedDriverCount: data.unlinkedDriverCount || 0,
           teamMemberCount: data.teamMemberCount || 0,
           platformStaffCount: data.platformStaffCount || 0,
+          riderCount: data.riderCount || 0,
+          enterpriseCustomerCount: data.enterprise?.customerCount ?? 0,
+          enterpriseTeamMemberCount: data.enterprise?.teamMemberCount ?? 0,
+          fleetCustomerCount: data.fleet?.customerCount ?? 0,
+          fleetTeamMemberCount: data.fleet?.teamMemberCount ?? 0,
           loading: false,
         });
       } else {
@@ -146,10 +156,10 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
         <DashboardCard
           icon={<Users className="w-5 h-5 text-blue-400" />}
           color="bg-blue-500/15"
-          label="Customer Accounts"
+          label="Customer Accounts (combined)"
           value={stats.customerCount}
-          subtitle="Fleet manager organizations"
-          onClick={() => onNavigate('customers')}
+          subtitle="Split by Fleet vs Enterprise below"
+          onClick={() => onNavigate('enterprise-customers')}
         />
         <DashboardCard
           icon={<Car className="w-5 h-5 text-amber-400" />}
@@ -157,15 +167,15 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
           label="Total Drivers"
           value={stats.driverCount}
           subtitle={`${stats.linkedDriverCount} linked, ${stats.unlinkedDriverCount} unlinked`}
-          onClick={() => onNavigate('drivers')}
+          onClick={() => onNavigate('driver-users')}
         />
         <DashboardCard
           icon={<UserCog className="w-5 h-5 text-cyan-400" />}
           color="bg-cyan-500/15"
           label="Team Members"
           value={stats.teamMemberCount}
-          subtitle="Across all fleets"
-          onClick={() => onNavigate('team-members')}
+          subtitle="Fleet + Enterprise operators"
+          onClick={() => onNavigate('enterprise-team-members')}
         />
         <DashboardCard
           icon={<Shield className="w-5 h-5 text-rose-400" />}
@@ -192,12 +202,20 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
           onClick={() => onNavigate('toll-stations')}
         />
         <DashboardCard
+          icon={<Navigation className="w-5 h-5 text-teal-400" />}
+          color="bg-teal-500/15"
+          label="Registered Riders"
+          value={stats.riderCount}
+          subtitle="Roam Rides traveler profiles"
+          onClick={() => onNavigate('rides-users')}
+        />
+        <DashboardCard
           icon={<Utensils className={`w-5 h-5 ${dashMerchantCounts.pending > 0 ? 'text-amber-300' : 'text-emerald-400'}`} />}
           color={dashMerchantCounts.pending > 0 ? 'bg-amber-500/20' : 'bg-emerald-500/15'}
           label="Pending Merchants"
           value={dashMerchantCounts.pending}
           subtitle={`${dashMerchantCounts.approved} approved · ${dashMerchantCounts.in_review} in review`}
-          onClick={() => onNavigate('roam-dash-merchants')}
+          onClick={() => onNavigate('dash-merchants')}
         />
         <DashboardCard
           icon={<Activity className="w-5 h-5 text-slate-400" />}
@@ -209,14 +227,58 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
         />
       </div>
 
+      {/* Product-line breakout */}
+      <div className="space-y-4">
+        <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">Dominion splits</h2>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <DashboardCard
+            icon={<Building2 className="w-5 h-5 text-sky-400" />}
+            color="bg-sky-500/15"
+            label="Enterprise customers"
+            value={stats.enterpriseCustomerCount}
+            subtitle={`${stats.enterpriseTeamMemberCount} team operators`}
+            onClick={() => onNavigate('enterprise-overview')}
+          />
+          <DashboardCard
+            icon={<Truck className="w-5 h-5 text-amber-400" />}
+            color="bg-amber-500/15"
+            label="Fleet customers"
+            value={stats.fleetCustomerCount}
+            subtitle={`${stats.fleetTeamMemberCount} fleet operators`}
+            onClick={() => onNavigate('fleet-overview')}
+          />
+          <DashboardCard
+            icon={<Users className="w-5 h-5 text-slate-400" />}
+            color="bg-slate-700/30"
+            label="Enterprise team"
+            value={stats.enterpriseTeamMemberCount}
+            subtitle="Fleet managers & staff"
+            onClick={() => onNavigate('enterprise-team-members')}
+          />
+          <DashboardCard
+            icon={<Car className="w-5 h-5 text-amber-300" />}
+            color="bg-amber-500/15"
+            label="Fleet team"
+            value={stats.fleetTeamMemberCount}
+            subtitle="Rideshare org staff"
+            onClick={() => onNavigate('fleet-team-members')}
+          />
+        </div>
+      </div>
+
       {/* Quick actions */}
       <div>
         <h2 className="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wider">Quick Actions</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <QuickAction
-            label="View Customer Accounts"
-            description="Browse and manage fleet organizations"
-            onClick={() => onNavigate('customers')}
+            label="Customer accounts — Enterprise"
+            description="Fleet managers registered on Enterprise"
+            onClick={() => onNavigate('enterprise-customers')}
+          />
+          <QuickAction
+            label="Customer accounts — Fleet rideshare"
+            description="Fleet managers on rideshare product line"
+            onClick={() => onNavigate('fleet-customers')}
           />
           <QuickAction
             label="Station Database"
@@ -246,7 +308,7 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
           <QuickAction
             label="Review Merchants"
             description={`${dashMerchantCounts.pending} pending Roam Dash restaurant applications`}
-            onClick={() => onNavigate('roam-dash-merchants')}
+            onClick={() => onNavigate('dash-merchants')}
           />
           <QuickAction
             label="Platform Settings"

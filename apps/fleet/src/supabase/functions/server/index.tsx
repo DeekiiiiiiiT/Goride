@@ -16,7 +16,16 @@ import { pMap } from "./concurrency.ts";
 import { findMatchingStationSmart } from "./geo_matcher.ts";
 import * as fuelLogic from "./fuel_logic.ts";
 import { Buffer } from "node:buffer";
-import { requireAuth, requirePermission, hasPermission, type RbacUser } from "./rbac_middleware.ts";
+import {
+  requireAuth,
+  requirePermission,
+  hasPermission,
+  hasPlatformStaffAccess,
+  hasPlatformOwnerAccess,
+  isPlatformStaffFromAuthUser,
+  isPlatformOwnerFromAuthUser,
+  type RbacUser,
+} from "./rbac_middleware.ts";
 import { logAdminAction, getAuditLogs, getAuditLogsByActor } from "./audit_log.ts";
 import { stampOrg, filterByOrg, belongsToOrg, getOrgId, isLegacyOrgPlaceholder } from "./org_scope.ts";
 import {
@@ -10937,34 +10946,39 @@ function canonicalizeRole(role: string): string {
   return role;
 }
 
-// GET /admin/team-members — List all fleet sub-role users across all orgs
+// GET /admin/team-members — List fleet sub-role users (optional ?productLine=fleet|enterprise)
 app.get("/make-server-37f42386/admin/team-members", requireAuth(), async (c) => {
   try {
-    const rbacUser = c.get('rbacUser') as any;
-    const callerRole = rbacUser?.resolvedRole || rbacUser?.role;
-    if (callerRole !== 'platform_owner' && callerRole !== 'superadmin' && callerRole !== 'platform_support') {
+    const rbacUser = c.get('rbacUser') as RbacUser;
+    if (!hasPlatformStaffAccess(rbacUser)) {
       return c.json({ error: "Only platform owner or support can view team members" }, 403);
     }
+
+    const productLineParam = c.req.query("productLine");
+    const productLineFilter = isProductLine(productLineParam) ? productLineParam : null;
+    const includeUnassigned = c.req.query("includeUnassigned") === "true";
 
     const { data, error } = await supabase.auth.admin.listUsers({ perPage: 1000 });
     if (error) throw new Error(`Auth API error: ${error.message}`);
 
     const allUsers = data?.users || [];
 
-    // Org name lookup
     const orgNameMap: Record<string, string> = {};
+    const orgProductLineMap: Record<string, ProductLine> = {};
     for (const u of allUsers) {
       const meta = u.user_metadata || {};
       if (meta.role === 'admin' || (meta.role === 'superadmin' && meta.businessType)) {
         orgNameMap[u.id] = meta.name || u.email || 'Unknown Fleet';
+        orgProductLineMap[u.id] = inferProductLineFromUser(meta as Record<string, unknown>);
       }
     }
 
-    const members = allUsers
+    let members = allUsers
       .filter((u: any) => FLEET_SUB_ROLES.includes(u.user_metadata?.role))
       .map((u: any) => {
         const meta = u.user_metadata || {};
         const orgId = meta.organizationId || null;
+        const orgLine = orgId ? orgProductLineMap[orgId] : null;
         return {
           id: u.id,
           email: u.email || "",
@@ -10972,6 +10986,7 @@ app.get("/make-server-37f42386/admin/team-members", requireAuth(), async (c) => 
           role: canonicalizeRole(meta.role),
           organizationId: orgId,
           organizationName: orgId ? (orgNameMap[orgId] || 'Unknown Fleet') : null,
+          productLine: orgLine,
           createdAt: u.created_at || null,
           lastSignIn: u.last_sign_in_at || null,
           status: u.last_sign_in_at
@@ -10980,6 +10995,13 @@ app.get("/make-server-37f42386/admin/team-members", requireAuth(), async (c) => 
           isSuspended: !!u.banned_until && new Date(u.banned_until) > new Date(),
         };
       });
+
+    if (productLineFilter) {
+      members = members.filter((m: { organizationId: string | null; productLine: ProductLine | null }) => {
+        if (!m.organizationId) return includeUnassigned;
+        return m.productLine === productLineFilter;
+      });
+    }
 
     console.log(`[Admin Team Members] Returned ${members.length} team members`);
     return c.json({ members });
@@ -13301,25 +13323,46 @@ app.get("/make-server-37f42386/admin-check", async (c) => {
 // GET /admin-stats — Summary counts for the admin dashboard cards
 app.get("/make-server-37f42386/admin-stats", async (c) => {
   try {
-    // Count user breakdowns via Supabase Auth
     let customerCount = 0;
+    let enterpriseCustomerCount = 0;
+    let fleetCustomerCount = 0;
     let driverCount = 0;
     let linkedDriverCount = 0;
     let unlinkedDriverCount = 0;
     let teamMemberCount = 0;
+    let enterpriseTeamMemberCount = 0;
+    let fleetTeamMemberCount = 0;
     let platformStaffCount = 0;
+    let riderCount = 0;
+
     try {
       const { data } = await supabase.auth.admin.listUsers({ perPage: 1000 });
       if (data?.users) {
+        const orgProductLineMap: Record<string, ProductLine> = {};
+        for (const u of data.users) {
+          const meta = u.user_metadata || {};
+          if (meta.role === 'admin' || (meta.role === 'superadmin' && meta.businessType)) {
+            orgProductLineMap[u.id] = inferProductLineFromUser(meta as Record<string, unknown>);
+          }
+        }
+
         for (const u of data.users) {
           const role = u.user_metadata?.role;
-          if (role === 'admin') customerCount++;
-          else if (role === 'driver') {
+          if (role === 'admin') {
+            customerCount++;
+            const line = inferProductLineFromUser(u.user_metadata as Record<string, unknown>);
+            if (line === 'enterprise') enterpriseCustomerCount++;
+            else fleetCustomerCount++;
+          } else if (role === 'driver') {
             driverCount++;
             if (u.user_metadata?.organizationId) linkedDriverCount++;
           } else if (FLEET_SUB_ROLES.includes(role)) {
             teamMemberCount++;
-          } else if (role === 'platform_support' || role === 'platform_analyst') {
+            const orgId = u.user_metadata?.organizationId;
+            const orgLine = orgId ? orgProductLineMap[orgId] : null;
+            if (orgLine === 'enterprise') enterpriseTeamMemberCount++;
+            else if (orgLine === 'fleet') fleetTeamMemberCount++;
+          } else if (role === 'platform_support' || role === 'platform_analyst' || role === 'platform_owner' || role === 'superadmin') {
             platformStaffCount++;
           }
         }
@@ -13329,7 +13372,18 @@ app.get("/make-server-37f42386/admin-stats", async (c) => {
       console.log(`admin-stats: failed to count users: ${e.message}`);
     }
 
-    // Count fuel stations from KV (prefix: station:)
+    try {
+      const ridesDb = createClient(
+        Deno.env.get("SUPABASE_URL") || "",
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+        { db: { schema: "rides" } },
+      );
+      const { count } = await ridesDb.from("rider_profiles").select("user_id", { count: "exact", head: true });
+      riderCount = count ?? 0;
+    } catch (e: any) {
+      console.log(`admin-stats: failed to count riders: ${e.message}`);
+    }
+
     let fuelStationCount = 0;
     try {
       const stations = await kv.getByPrefix("station:");
@@ -13338,7 +13392,6 @@ app.get("/make-server-37f42386/admin-stats", async (c) => {
       console.log(`admin-stats: failed to count fuel stations: ${e.message}`);
     }
 
-    // Count toll stations from KV (prefix: toll_plaza:)
     let tollStationCount = 0;
     try {
       const tolls = await kv.getByPrefix("toll_plaza:");
@@ -13347,11 +13400,50 @@ app.get("/make-server-37f42386/admin-stats", async (c) => {
       console.log(`admin-stats: failed to count toll stations: ${e.message}`);
     }
 
+    let merchantPending = 0;
+    try {
+      const { count } = await supabase
+        .from("merchants")
+        .select("id", { count: "exact", head: true })
+        .eq("verification_status", "pending");
+      merchantPending = count ?? 0;
+    } catch (e: any) {
+      console.log(`admin-stats: failed to count pending merchants: ${e.message}`);
+    }
+
     const totalUserCount = customerCount + driverCount + teamMemberCount + platformStaffCount + 1;
-    return c.json({ customerCount, fuelStationCount, tollStationCount, driverCount, linkedDriverCount, unlinkedDriverCount, teamMemberCount, platformStaffCount, totalUserCount });
+    return c.json({
+      customerCount,
+      enterprise: { customerCount: enterpriseCustomerCount, teamMemberCount: enterpriseTeamMemberCount },
+      fleet: { customerCount: fleetCustomerCount, teamMemberCount: fleetTeamMemberCount },
+      fuelStationCount,
+      tollStationCount,
+      driverCount,
+      linkedDriverCount,
+      unlinkedDriverCount,
+      teamMemberCount,
+      platformStaffCount,
+      riderCount,
+      merchantPending,
+      totalUserCount,
+    });
   } catch (e: any) {
     console.log(`admin-stats error: ${e.message}`);
-    return c.json({ customerCount: 0, fuelStationCount: 0, tollStationCount: 0, driverCount: 0, linkedDriverCount: 0, unlinkedDriverCount: 0, teamMemberCount: 0, platformStaffCount: 0, totalUserCount: 0 });
+    return c.json({
+      customerCount: 0,
+      enterprise: { customerCount: 0, teamMemberCount: 0 },
+      fleet: { customerCount: 0, teamMemberCount: 0 },
+      fuelStationCount: 0,
+      tollStationCount: 0,
+      driverCount: 0,
+      linkedDriverCount: 0,
+      unlinkedDriverCount: 0,
+      teamMemberCount: 0,
+      platformStaffCount: 0,
+      riderCount: 0,
+      merchantPending: 0,
+      totalUserCount: 0,
+    });
   }
 });
 
@@ -13911,30 +14003,25 @@ async function invalidateCustomerCache(): Promise<void> {
   console.log("[AdminCustomers] Cache invalidated");
 }
 
-// GET /admin/customers — List all fleet manager accounts (superadmin only)
-app.get("/make-server-37f42386/admin/customers", async (c) => {
+// GET /admin/customers — List fleet manager accounts (?productLine=fleet|enterprise, default enterprise)
+app.get("/make-server-37f42386/admin/customers", requireAuth(), async (c) => {
   try {
-    // Verify superadmin
-    const accessToken = c.req.header("Authorization")?.split(" ")[1];
-    const { data: { user: reqUser }, error: authErr } = await supabase.auth.getUser(accessToken);
-    if (authErr || !reqUser) {
-      console.log(`admin/customers auth error: ${authErr?.message || "no user"}`);
-      return c.json({ error: "Unauthorized" }, 401);
-    }
-    if (reqUser.user_metadata?.role !== "superadmin") {
-      return c.json({ error: "Forbidden — superadmin only" }, 403);
+    const rbacUser = c.get('rbacUser') as RbacUser;
+    if (!hasPlatformStaffAccess(rbacUser)) {
+      return c.json({ error: "Forbidden — platform role required" }, 403);
     }
 
-    // Check for force refresh parameter
+    const productLineParam = c.req.query("productLine");
+    const productLine: ProductLine = isProductLine(productLineParam) ? productLineParam : "enterprise";
+
     const forceRefresh = c.req.query("refresh") === "true";
     if (forceRefresh) {
       console.log("[AdminCustomers] Force refresh requested");
       await invalidateCustomerCache();
     }
 
-    // Fetch with multi-layer caching
-    const customers = await fetchCustomersWithCache('enterprise');
-    return c.json({ customers });
+    const customers = await fetchCustomersWithCache(productLine);
+    return c.json({ customers, productLine });
   } catch (e: any) {
     console.log(`admin/customers error: ${e.message}`);
     return c.json({ error: `Server error: ${e.message}` }, 500);
@@ -14283,9 +14370,9 @@ app.post("/make-server-37f42386/admin/reset-password", async (c) => {
       console.log(`admin/reset-password auth error: ${authErr?.message || "no user"}`);
       return c.json({ error: "Unauthorized" }, 401);
     }
-    if (reqUser.user_metadata?.role !== "superadmin") {
-      console.log(`admin/reset-password forbidden: user ${reqUser.id} is not superadmin`);
-      return c.json({ error: "Forbidden — superadmin only" }, 403);
+    if (!isPlatformStaffFromAuthUser(reqUser)) {
+      console.log(`admin/reset-password forbidden: user ${reqUser.id} lacks platform staff access`);
+      return c.json({ error: "Forbidden — platform role required" }, 403);
     }
 
     const { email } = await c.req.json();
@@ -14314,9 +14401,9 @@ app.post("/make-server-37f42386/admin/force-logout", async (c) => {
       console.log(`admin/force-logout auth error: ${authErr?.message || "no user"}`);
       return c.json({ error: "Unauthorized" }, 401);
     }
-    if (reqUser.user_metadata?.role !== "superadmin") {
-      console.log(`admin/force-logout forbidden: user ${reqUser.id} is not superadmin`);
-      return c.json({ error: "Forbidden — superadmin only" }, 403);
+    if (!isPlatformStaffFromAuthUser(reqUser)) {
+      console.log(`admin/force-logout forbidden: user ${reqUser.id} lacks platform staff access`);
+      return c.json({ error: "Forbidden — platform role required" }, 403);
     }
 
     const { userId } = await c.req.json();
@@ -14345,9 +14432,9 @@ app.post("/make-server-37f42386/admin/toggle-suspend", async (c) => {
       console.log(`admin/toggle-suspend auth error: ${authErr?.message || "no user"}`);
       return c.json({ error: "Unauthorized" }, 401);
     }
-    if (reqUser.user_metadata?.role !== "superadmin") {
-      console.log(`admin/toggle-suspend forbidden: user ${reqUser.id} is not superadmin`);
-      return c.json({ error: "Forbidden — superadmin only" }, 403);
+    if (!isPlatformStaffFromAuthUser(reqUser)) {
+      console.log(`admin/toggle-suspend forbidden: user ${reqUser.id} lacks platform staff access`);
+      return c.json({ error: "Forbidden — platform role required" }, 403);
     }
 
     const { userId, suspend } = await c.req.json();
@@ -14382,9 +14469,9 @@ app.delete("/make-server-37f42386/admin/users/:userId/full-delete", async (c) =>
       console.log(`admin/full-delete auth error: ${authErr?.message || "no user"}`);
       return c.json({ error: "Unauthorized" }, 401);
     }
-    if (reqUser.user_metadata?.role !== "superadmin") {
-      console.log(`admin/full-delete forbidden: user ${reqUser.id} is not superadmin`);
-      return c.json({ error: "Forbidden — superadmin only" }, 403);
+    if (!isPlatformOwnerFromAuthUser(reqUser)) {
+      console.log(`admin/full-delete forbidden: user ${reqUser.id} lacks platform owner access`);
+      return c.json({ error: "Forbidden — platform owner only" }, 403);
     }
 
     const userId = c.req.param("userId");
@@ -14467,22 +14554,142 @@ app.delete("/make-server-37f42386/admin/users/:userId/full-delete", async (c) =>
   }
 });
 
-// ---------------------------------------------------------------------------
-// GET /admin/users/:userId/cross-product-status — View user status across all products
-// Shows Driver, Rider, Fleet membership, and Auth status in one unified view.
-// ---------------------------------------------------------------------------
+// Helper: build cross-product status payload for a user
+async function buildCrossProductStatus(userId: string, user: {
+  email?: string | null;
+  phone?: string | null;
+  created_at?: string;
+  last_sign_in_at?: string | null;
+  banned_until?: string | null;
+  email_confirmed_at?: string | null;
+  user_metadata?: Record<string, unknown>;
+}) {
+  const crossProductStatus: Record<string, unknown> = {
+    user_id: userId,
+    email: user.email,
+    phone: user.phone,
+    name: user.user_metadata?.name || null,
+    created_at: user.created_at,
+    last_sign_in_at: user.last_sign_in_at,
+    auth_status: {
+      banned_until: user.banned_until,
+      is_banned: !!user.banned_until && new Date(user.banned_until) > new Date(),
+      email_confirmed_at: user.email_confirmed_at,
+    },
+    products: {},
+  };
 
-app.get("/make-server-37f42386/admin/users/:userId/cross-product-status", async (c) => {
+  const products: Record<string, unknown> = {};
+
+  const { data: driverProfile } = await supabase
+    .from("driver_profiles")
+    .select("id, status, mode, onboarding_complete, suspended_at, deactivated_at, created_at")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (driverProfile) {
+    products.driver = {
+      exists: true,
+      profile_id: driverProfile.id,
+      status: driverProfile.status,
+      mode: driverProfile.mode,
+      onboarding_complete: driverProfile.onboarding_complete,
+      suspended_at: driverProfile.suspended_at,
+      deactivated_at: driverProfile.deactivated_at,
+      created_at: driverProfile.created_at,
+    };
+  } else {
+    products.driver = { exists: false };
+  }
+
   try {
-    const accessToken = c.req.header("Authorization")?.split(" ")[1];
-    const { data: { user: reqUser }, error: authErr } = await supabase.auth.getUser(accessToken);
-    if (authErr || !reqUser) {
-      return c.json({ error: "Unauthorized" }, 401);
+    const ridesDb = createClient(
+      Deno.env.get("SUPABASE_URL") || "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+      { db: { schema: "rides" } },
+    );
+    const { data: riderProfile } = await ridesDb
+      .from("rider_profiles")
+      .select("user_id, display_name, account_status, suspended_at, suspended_reason, created_at")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (riderProfile) {
+      products.rider = {
+        exists: true,
+        display_name: riderProfile.display_name,
+        account_status: riderProfile.account_status,
+        suspended_at: riderProfile.suspended_at,
+        suspended_reason: riderProfile.suspended_reason,
+        created_at: riderProfile.created_at,
+      };
+    } else {
+      products.rider = { exists: false };
     }
-    // Allow platform_owner, platform_support, or superadmin
-    const reqRole = reqUser.user_metadata?.role;
-    const allowedRoles = ["platform_owner", "platform_support", "superadmin"];
-    if (!allowedRoles.includes(reqRole)) {
+  } catch {
+    products.rider = { exists: false, error: "Could not check rides schema" };
+  }
+
+  const userMeta = user.user_metadata || {};
+  if (userMeta.role === "admin") {
+    const line = inferProductLineFromUser(userMeta);
+    products.fleet = {
+      exists: true,
+      role: "fleet_manager",
+      company_name: userMeta.companyName || userMeta.name,
+      business_type: userMeta.businessType,
+      product_line: line,
+      account_status: userMeta.accountStatus || "active",
+    };
+  } else if (FLEET_SUB_ROLES.includes(String(userMeta.role))) {
+    products.fleet = {
+      exists: true,
+      role: canonicalizeRole(String(userMeta.role)),
+      organization_id: userMeta.organizationId || null,
+      account_status: user.banned_until ? "suspended" : "active",
+    };
+  } else {
+    products.fleet = { exists: false };
+  }
+
+  crossProductStatus.products = products;
+  return crossProductStatus;
+}
+
+// GET /admin/users/lookup — Find user by email and return cross-product summary
+app.get("/make-server-37f42386/admin/users/lookup", requireAuth(), async (c) => {
+  try {
+    const rbacUser = c.get("rbacUser") as RbacUser;
+    if (!hasPlatformStaffAccess(rbacUser)) {
+      return c.json({ error: "Forbidden — platform role required" }, 403);
+    }
+
+    const email = c.req.query("email")?.trim().toLowerCase();
+    if (!email) {
+      return c.json({ error: "email query parameter is required" }, 400);
+    }
+
+    const { data, error } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+    if (error) throw error;
+
+    const match = (data?.users || []).find((u) => u.email?.toLowerCase() === email);
+    if (!match) {
+      return c.json({ error: "User not found" }, 404);
+    }
+
+    const status = await buildCrossProductStatus(match.id, match);
+    return c.json(status);
+  } catch (e: any) {
+    console.error("admin/users/lookup error:", e);
+    return c.json({ error: e.message || "Lookup failed" }, 500);
+  }
+});
+
+// GET /admin/users/:userId/cross-product-status — View user status across all products
+app.get("/make-server-37f42386/admin/users/:userId/cross-product-status", requireAuth(), async (c) => {
+  try {
+    const rbacUser = c.get("rbacUser") as RbacUser;
+    if (!hasPlatformStaffAccess(rbacUser)) {
       return c.json({ error: "Forbidden — platform role required" }, 403);
     }
 
@@ -14491,96 +14698,12 @@ app.get("/make-server-37f42386/admin/users/:userId/cross-product-status", async 
       return c.json({ error: "userId is required" }, 400);
     }
 
-    // Get user info from auth
     const { data: targetUser, error: getUserErr } = await supabase.auth.admin.getUserById(userId);
     if (getUserErr || !targetUser?.user) {
       return c.json({ error: "User not found" }, 404);
     }
-    const user = targetUser.user;
 
-    const crossProductStatus: Record<string, unknown> = {
-      user_id: userId,
-      email: user.email,
-      phone: user.phone,
-      created_at: user.created_at,
-      last_sign_in_at: user.last_sign_in_at,
-      auth_status: {
-        banned_until: user.banned_until,
-        is_banned: !!user.banned_until && new Date(user.banned_until) > new Date(),
-        email_confirmed_at: user.email_confirmed_at,
-      },
-      products: {},
-    };
-
-    const products: Record<string, unknown> = {};
-
-    // 1. Check Driver profile
-    const { data: driverProfile } = await supabase
-      .from("driver_profiles")
-      .select("id, status, mode, onboarding_complete, suspended_at, deactivated_at, created_at")
-      .eq("user_id", userId)
-      .maybeSingle();
-    
-    if (driverProfile) {
-      products.driver = {
-        exists: true,
-        profile_id: driverProfile.id,
-        status: driverProfile.status,
-        mode: driverProfile.mode,
-        onboarding_complete: driverProfile.onboarding_complete,
-        suspended_at: driverProfile.suspended_at,
-        deactivated_at: driverProfile.deactivated_at,
-        created_at: driverProfile.created_at,
-      };
-    } else {
-      products.driver = { exists: false };
-    }
-
-    // 2. Check Rider profile (in rides schema)
-    try {
-      const ridesDb = createClient(
-        Deno.env.get("SUPABASE_URL") || "",
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
-        { db: { schema: "rides" } }
-      );
-      const { data: riderProfile } = await ridesDb
-        .from("rider_profiles")
-        .select("user_id, display_name, account_status, suspended_at, suspended_reason, created_at")
-        .eq("user_id", userId)
-        .maybeSingle();
-      
-      if (riderProfile) {
-        products.rider = {
-          exists: true,
-          display_name: riderProfile.display_name,
-          account_status: riderProfile.account_status,
-          suspended_at: riderProfile.suspended_at,
-          suspended_reason: riderProfile.suspended_reason,
-          created_at: riderProfile.created_at,
-        };
-      } else {
-        products.rider = { exists: false };
-      }
-    } catch (e) {
-      products.rider = { exists: false, error: "Could not check rides schema" };
-    }
-
-    // 3. Check Fleet membership (from user_metadata)
-    const userMeta = user.user_metadata || {};
-    if (userMeta.role === "admin" && userMeta.productLine === "fleet") {
-      products.fleet = {
-        exists: true,
-        role: "fleet_manager",
-        company_name: userMeta.companyName || userMeta.name,
-        business_type: userMeta.businessType,
-        account_status: userMeta.accountStatus || "active",
-      };
-    } else {
-      products.fleet = { exists: false };
-    }
-
-    crossProductStatus.products = products;
-
+    const crossProductStatus = await buildCrossProductStatus(userId, targetUser.user);
     return c.json(crossProductStatus);
   } catch (e: any) {
     console.error("admin/cross-product-status error:", e);
@@ -14611,8 +14734,8 @@ async function verifySuperadmin(c: any): Promise<{ userId: string; email: string
   if (error || !reqUser) {
     return c.json({ error: "Unauthorized" }, 401);
   }
-  if (reqUser.user_metadata?.role !== "superadmin") {
-    return c.json({ error: "Forbidden — superadmin only" }, 403);
+  if (!isPlatformStaffFromAuthUser(reqUser)) {
+    return c.json({ error: "Forbidden — platform role required" }, 403);
   }
   return {
     userId: reqUser.id,
@@ -14630,7 +14753,7 @@ app.get("/make-server-37f42386/admin/cache-stats", async (c) => {
   try {
     const accessToken = c.req.header("Authorization")?.split(" ")[1];
     const { data: { user }, error } = await supabase.auth.getUser(accessToken);
-    if (error || !user || user.user_metadata?.role !== "superadmin") {
+    if (error || !user || !isPlatformStaffFromAuthUser(user)) {
       return c.json({ error: "Unauthorized" }, 401);
     }
 

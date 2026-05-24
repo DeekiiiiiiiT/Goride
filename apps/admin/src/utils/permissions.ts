@@ -502,8 +502,59 @@ export const PAGE_PERMISSION_MAP: Record<string, Permission> = {
  * Check whether a role can view a given sidebar page.
  * Pages not in PAGE_PERMISSION_MAP default to visible (safe fallback).
  */
-export function canViewPage(role: Role, pageId: string): boolean {
-  const perm = PAGE_PERMISSION_MAP[pageId];
-  if (!perm) return true; // not mapped → visible by default
-  return hasPermission(role, perm);
-}
+// ---------------------------------------------------------------------------
+// 7. Dominion Admin Portal pages (documentation / supplementary gating)
+// ---------------------------------------------------------------------------
+
+/**
+ * Sidebar / nested Dominion routes: who can authenticate to the portal at all still
+ * comes from JWT + `adminNavConfig.PLATFORM_ROLE_PAGES`. Use this map to label the
+ * highest-risk tooling on each route for audits.
+ */
+export type DominionPageSensitivity = 'standard' | 'destructive_possible';
+
+/** Page IDs emitted by Dominion `AdminLayout`. */
+export const PAGE_PERMISSIONS: Record<string, DominionPageSensitivity> = {
+  dashboard: 'standard',
+  'platform-team': 'standard',
+  'global-identity': 'destructive_possible',
+  'activity-log': 'standard',
+  'enterprise-overview': 'standard',
+  'enterprise-customers': 'standard',
+  'enterprise-team-members': 'standard',
+  'fleet-overview': 'standard',
+  'fleet-customers': 'standard',
+  'fleet-team-members': 'standard',
+  'driver-users': 'destructive_possible',
+  'driver-user-detail': 'destructive_possible',
+  'rides-users': 'destructive_possible',
+  'rider-user-detail': 'destructive_possible',
+  'roam-dash-overview': 'standard',
+  'dash-merchants': 'standard',
+  'roam-driver-overview': 'standard',
+  'roam-rides-overview': 'standard',
+  'fuel-stations': 'standard',
+  'fuel-analytics': 'standard',
+  'toll-stations': 'standard',
+  'toll-info': 'standard',
+  'motor-vehicles': 'standard',
+  'pending-motor-vehicles': 'standard',
+  'maintenance-templates': 'standard',
+  'parts-sourcing': 'standard',
+  'api-center': 'standard',
+  'api-center-overview': 'standard',
+  'api-center-usage': 'standard',
+  'api-center-keys': 'standard',
+  'api-center-budgets': 'standard',
+  'api-center-logs': 'standard',
+  'api-center-billing': 'standard',
+  'settings': 'destructive_possible',
+  'settings-general': 'standard',
+  'settings-features': 'standard',
+  'settings-registration': 'standard',
+  'settings-security': 'standard',
+  'settings-announcements': 'standard',
+  'settings-danger': 'destructive_possible',
+  'db-management': 'standard',
+  'db-settings': 'standard',
+};

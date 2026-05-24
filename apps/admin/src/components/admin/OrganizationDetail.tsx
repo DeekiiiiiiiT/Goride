@@ -20,14 +20,14 @@ import {
   Ship,
   ChevronDown,
   ChevronUp,
-  CircleCheck,
-  CircleX,
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { resolveRole } from '../../utils/permissions';
 import { API_ENDPOINTS } from '../../services/apiConfig';
-import { toast } from 'sonner';
+import type { CrossProductStatus } from '../../services/platform/identityService';
 import { ConfirmationModal } from './ConfirmationModal';
+import { CrossProductStatusPanel } from './platform/CrossProductStatusPanel';
+import { toast } from 'sonner';
 
 // -------------------------------------------------------------------
 // Types
@@ -77,47 +77,6 @@ interface OrgSummary {
   stats: OrgStats;
   teamMembers: OrgTeamMember[];
   drivers: OrgDriver[];
-}
-
-interface CrossProductStatus {
-  user_id: string;
-  email: string;
-  phone: string | null;
-  created_at: string;
-  last_sign_in_at: string | null;
-  auth_status: {
-    banned_until: string | null;
-    is_banned: boolean;
-    email_confirmed_at: string | null;
-  };
-  products: {
-    driver?: {
-      exists: boolean;
-      profile_id?: string;
-      status?: string;
-      mode?: string;
-      onboarding_complete?: boolean;
-      suspended_at?: string | null;
-      deactivated_at?: string | null;
-      created_at?: string;
-    };
-    rider?: {
-      exists: boolean;
-      display_name?: string;
-      account_status?: string;
-      suspended_at?: string | null;
-      suspended_reason?: string | null;
-      created_at?: string;
-      error?: string;
-    };
-    fleet?: {
-      exists: boolean;
-      role?: string;
-      company_name?: string;
-      business_type?: string;
-      account_status?: string;
-    };
-  };
 }
 
 interface Props {
@@ -587,156 +546,8 @@ export function OrganizationDetail({ orgId, onBack }: Props) {
         </button>
         
         {crossProductExpanded && (
-          <div className="px-4 pb-4 border-t border-slate-800">
-            {crossProductLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-5 h-5 text-slate-500 animate-spin" />
-              </div>
-            ) : crossProductStatus ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                {/* Driver Product */}
-                <div className="bg-slate-800/50 rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Car className="w-4 h-4 text-amber-400" />
-                    <span className="text-sm font-medium text-white">Roam Driver</span>
-                    {crossProductStatus.products.driver?.exists ? (
-                      <CircleCheck className="w-4 h-4 text-emerald-400 ml-auto" />
-                    ) : (
-                      <CircleX className="w-4 h-4 text-slate-500 ml-auto" />
-                    )}
-                  </div>
-                  {crossProductStatus.products.driver?.exists ? (
-                    <div className="space-y-1 text-xs">
-                      <div className="flex justify-between text-slate-400">
-                        <span>Status</span>
-                        <span className={`font-medium ${
-                          crossProductStatus.products.driver.status === 'active' ? 'text-emerald-400' :
-                          crossProductStatus.products.driver.status === 'suspended' ? 'text-amber-400' :
-                          crossProductStatus.products.driver.status === 'deactivated' ? 'text-red-400' :
-                          'text-slate-300'
-                        }`}>
-                          {crossProductStatus.products.driver.status || 'Unknown'}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-slate-400">
-                        <span>Mode</span>
-                        <span className="text-slate-300">{crossProductStatus.products.driver.mode || '—'}</span>
-                      </div>
-                      <div className="flex justify-between text-slate-400">
-                        <span>Onboarding</span>
-                        <span className="text-slate-300">{crossProductStatus.products.driver.onboarding_complete ? 'Complete' : 'Incomplete'}</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-slate-500">Not a driver</p>
-                  )}
-                </div>
-
-                {/* Rider Product */}
-                <div className="bg-slate-800/50 rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Navigation className="w-4 h-4 text-emerald-400" />
-                    <span className="text-sm font-medium text-white">Roam Rides</span>
-                    {crossProductStatus.products.rider?.exists ? (
-                      <CircleCheck className="w-4 h-4 text-emerald-400 ml-auto" />
-                    ) : (
-                      <CircleX className="w-4 h-4 text-slate-500 ml-auto" />
-                    )}
-                  </div>
-                  {crossProductStatus.products.rider?.exists ? (
-                    <div className="space-y-1 text-xs">
-                      <div className="flex justify-between text-slate-400">
-                        <span>Status</span>
-                        <span className={`font-medium ${
-                          crossProductStatus.products.rider.account_status === 'active' ? 'text-emerald-400' :
-                          crossProductStatus.products.rider.account_status === 'suspended' ? 'text-amber-400' :
-                          crossProductStatus.products.rider.account_status === 'banned' ? 'text-red-400' :
-                          'text-slate-300'
-                        }`}>
-                          {crossProductStatus.products.rider.account_status || 'Unknown'}
-                        </span>
-                      </div>
-                      {crossProductStatus.products.rider.display_name && (
-                        <div className="flex justify-between text-slate-400">
-                          <span>Name</span>
-                          <span className="text-slate-300 truncate max-w-[120px]">{crossProductStatus.products.rider.display_name}</span>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-slate-500">{crossProductStatus.products.rider?.error || 'Not a rider'}</p>
-                  )}
-                </div>
-
-                {/* Fleet Product */}
-                <div className="bg-slate-800/50 rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Truck className="w-4 h-4 text-blue-400" />
-                    <span className="text-sm font-medium text-white">Roam Fleet</span>
-                    {crossProductStatus.products.fleet?.exists ? (
-                      <CircleCheck className="w-4 h-4 text-emerald-400 ml-auto" />
-                    ) : (
-                      <CircleX className="w-4 h-4 text-slate-500 ml-auto" />
-                    )}
-                  </div>
-                  {crossProductStatus.products.fleet?.exists ? (
-                    <div className="space-y-1 text-xs">
-                      <div className="flex justify-between text-slate-400">
-                        <span>Role</span>
-                        <span className="text-slate-300">{crossProductStatus.products.fleet.role || 'Fleet Manager'}</span>
-                      </div>
-                      <div className="flex justify-between text-slate-400">
-                        <span>Status</span>
-                        <span className={`font-medium ${
-                          crossProductStatus.products.fleet.account_status === 'active' || !crossProductStatus.products.fleet.account_status ? 'text-emerald-400' :
-                          crossProductStatus.products.fleet.account_status === 'suspended' ? 'text-amber-400' :
-                          'text-slate-300'
-                        }`}>
-                          {crossProductStatus.products.fleet.account_status || 'Active'}
-                        </span>
-                      </div>
-                      {crossProductStatus.products.fleet.business_type && (
-                        <div className="flex justify-between text-slate-400">
-                          <span>Type</span>
-                          <span className="text-slate-300 capitalize">{crossProductStatus.products.fleet.business_type}</span>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-slate-500">Not a fleet manager</p>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-slate-500 py-4 text-center">Failed to load cross-product status</p>
-            )}
-
-            {/* Auth Status */}
-            {crossProductStatus?.auth_status && (
-              <div className="mt-4 pt-4 border-t border-slate-800">
-                <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Auth Status</h4>
-                <div className="flex flex-wrap gap-4 text-xs text-slate-400">
-                  <div>
-                    <span className="text-slate-500">Auth Ban: </span>
-                    {crossProductStatus.auth_status.is_banned ? (
-                      <span className="text-red-400">
-                        Banned until {crossProductStatus.auth_status.banned_until ? new Date(crossProductStatus.auth_status.banned_until).toLocaleDateString() : 'indefinitely'}
-                      </span>
-                    ) : (
-                      <span className="text-emerald-400">Not banned</span>
-                    )}
-                  </div>
-                  <div>
-                    <span className="text-slate-500">Email: </span>
-                    {crossProductStatus.auth_status.email_confirmed_at ? (
-                      <span className="text-emerald-400">Verified</span>
-                    ) : (
-                      <span className="text-amber-400">Unverified</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
+          <div className="px-4 pb-4 border-t border-slate-800 pt-4">
+            <CrossProductStatusPanel status={crossProductStatus ?? null} loading={crossProductLoading} />
           </div>
         )}
       </div>

@@ -131,8 +131,49 @@ export function pickRawRoleForRbac(
 export function hasPlatformStaffAccess(user: RbacUser): boolean {
   return user.resolvedRole === 'platform_owner'
     || user.resolvedRole === 'platform_support'
+    || user.resolvedRole === 'platform_analyst'
+    || user.rawRole === 'superadmin'
+    || user.rawRole === 'platform_owner'
+    || user.rawRole === 'platform_support'
+    || user.rawRole === 'platform_analyst';
+}
+
+/** Platform owner / superadmin only — full delete and other destructive platform ops. */
+export function hasPlatformOwnerAccess(user: RbacUser): boolean {
+  return user.resolvedRole === 'platform_owner'
     || user.rawRole === 'superadmin'
     || user.rawRole === 'platform_owner';
+}
+
+type SupabaseAuthUser = {
+  id: string;
+  email?: string | null;
+  app_metadata?: Record<string, unknown>;
+  user_metadata?: Record<string, unknown>;
+};
+
+export function rbacUserFromSupabaseUser(user: SupabaseAuthUser): RbacUser {
+  const appMeta = (user.app_metadata || {}) as Record<string, unknown>;
+  const meta = (user.user_metadata || {}) as Record<string, unknown>;
+  const rawRole = pickRawRoleForRbac(appMeta, meta);
+  const resolved = resolveRole(rawRole);
+  return {
+    userId: user.id,
+    email: user.email || '',
+    rawRole,
+    resolvedRole: resolved,
+    organizationId: (typeof meta.organizationId === 'string' && meta.organizationId)
+      ? meta.organizationId
+      : (resolved === 'fleet_owner' ? user.id : null),
+  };
+}
+
+export function isPlatformStaffFromAuthUser(user: SupabaseAuthUser): boolean {
+  return hasPlatformStaffAccess(rbacUserFromSupabaseUser(user));
+}
+
+export function isPlatformOwnerFromAuthUser(user: SupabaseAuthUser): boolean {
+  return hasPlatformOwnerAccess(rbacUserFromSupabaseUser(user));
 }
 
 export function resolveRole(raw: string | null | undefined): Role {

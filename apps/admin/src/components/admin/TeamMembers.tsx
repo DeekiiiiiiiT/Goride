@@ -39,6 +39,7 @@ interface TeamMember {
   role: string;
   organizationId: string | null;
   organizationName: string | null;
+  productLine?: string | null;
   createdAt: string | null;
   lastSignIn: string | null;
   status: 'active' | 'inactive';
@@ -90,7 +91,19 @@ function roleBadgeClasses(role: string): string {
 // -------------------------------------------------------------------
 // Component
 // -------------------------------------------------------------------
-export function TeamMembers() {
+export type TeamMembersProductLine = 'enterprise' | 'fleet';
+
+export interface TeamMembersProps {
+  productLine: TeamMembersProductLine;
+}
+
+export function TeamMembers({ productLine }: TeamMembersProps) {
+  const title =
+    productLine === 'enterprise' ? 'Enterprise team members' : 'Fleet team members';
+  const description =
+    productLine === 'enterprise'
+      ? 'Operators invited to Enterprise customer organizations.'
+      : 'Operators invited under rideshare fleet customer organizations.';
   const { session, role } = useAuth();
   const queryClient = useQueryClient();
 
@@ -135,9 +148,10 @@ export function TeamMembers() {
   const accessToken = session?.access_token;
 
   const { data: members = [], isLoading: loading, error: queryError, refetch } = useQuery({
-    queryKey: ['adminTeamMembers'],
+    queryKey: ['adminTeamMembers', productLine],
     queryFn: async () => {
-      const res = await fetch(`${API_ENDPOINTS.admin}/admin/team-members`, {
+      const qs = new URLSearchParams({ productLine });
+      const res = await fetch(`${API_ENDPOINTS.admin}/admin/team-members?${qs.toString()}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (!res.ok) {
@@ -396,8 +410,9 @@ export function TeamMembers() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-white">Fleet Team Members</h1>
-          <p className="text-sm text-slate-400 mt-0.5">
+          <h1 className="text-xl font-bold text-white">{title}</h1>
+          <p className="text-sm text-slate-400 mt-0.5 max-w-xl">{description}</p>
+          <p className="text-xs text-slate-500 mt-2">
             {displayed.length} result{displayed.length !== 1 ? 's' : ''}
             {displayed.length !== members.length ? ` (filtered from ${members.length})` : ''}
           </p>
