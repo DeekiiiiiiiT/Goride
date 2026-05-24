@@ -72,6 +72,69 @@ const VALID_ROLES = new Set<string>([
   'driver',
 ]);
 
+/** Product-scoped admin roles — must not override platform superadmin for RBAC. */
+const PRODUCT_ADMIN_ROLES = new Set([
+  'fleet_admin', 'fleet_ops', 'driver_admin', 'driver_ops',
+  'rides_admin', 'rides_ops', 'dash_admin', 'dash_ops',
+  'enterprise_admin', 'enterprise_ops',
+]);
+
+const PLATFORM_RAW_ROLES = [
+  'superadmin', 'platform_owner', 'platform_support', 'platform_analyst',
+] as const;
+
+function readRolesArray(meta: Record<string, unknown> | undefined): string[] {
+  const raw = meta?.roles;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((r): r is string => typeof r === 'string' && r.trim().length > 0)
+    .map((r) => r.trim());
+}
+
+function collectAllJwtRoles(
+  appMeta: Record<string, unknown>,
+  userMeta: Record<string, unknown>,
+): string[] {
+  const roles = new Set<string>();
+  if (typeof appMeta.role === 'string' && appMeta.role.trim()) {
+    roles.add(appMeta.role.trim());
+  }
+  for (const r of readRolesArray(appMeta)) roles.add(r);
+  if (typeof userMeta.role === 'string' && userMeta.role.trim()) {
+    roles.add(userMeta.role.trim());
+  }
+  return Array.from(roles);
+}
+
+/** Pick the RBAC role from JWT metadata; platform roles beat product admin roles. */
+export function pickRawRoleForRbac(
+  appMeta: Record<string, unknown>,
+  userMeta: Record<string, unknown>,
+): string {
+  const allRoles = collectAllJwtRoles(appMeta, userMeta);
+
+  for (const platformRole of PLATFORM_RAW_ROLES) {
+    if (allRoles.includes(platformRole)) return platformRole;
+  }
+
+  const appRole = typeof appMeta.role === 'string' ? appMeta.role.trim() : '';
+  if (appRole && !PRODUCT_ADMIN_ROLES.has(appRole)) {
+    return appRole;
+  }
+
+  const userRole = typeof userMeta.role === 'string' ? userMeta.role.trim() : '';
+  if (userRole) return userRole;
+
+  return 'fleet_viewer';
+}
+
+export function hasPlatformStaffAccess(user: RbacUser): boolean {
+  return user.resolvedRole === 'platform_owner'
+    || user.resolvedRole === 'platform_support'
+    || user.rawRole === 'superadmin'
+    || user.rawRole === 'platform_owner';
+}
+
 export function resolveRole(raw: string | null | undefined): Role {
   if (!raw) return 'fleet_viewer';
   switch (raw) {
@@ -237,14 +300,10 @@ export function requireAuth() {
         return;
       }
 
-      // Prefer app_metadata.role (set by Supabase admin / server) over user_metadata.role
+      // Resolve RBAC role from full JWT (platform roles beat product admin roles)
       const appMeta = (data.user.app_metadata || {}) as Record<string, unknown>;
       const meta = data.user.user_metadata || {};
-      const rawRole = (typeof appMeta.role === "string" && appMeta.role)
-        ? appMeta.role
-        : (typeof meta.role === "string" && meta.role)
-        ? meta.role
-        : "fleet_viewer";
+      const rawRole = pickRawRoleForRbac(appMeta, meta);
       const resolved = resolveRole(rawRole);
 
       const rbacUser: RbacUser = {

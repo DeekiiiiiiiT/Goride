@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../../utils/supabase/client';
-import { resolveRole, Role, isPlatformRole } from '../../utils/permissions';
+import { resolveRole, Role, isPlatformRole, pickAuthRawRole } from '../../utils/permissions';
 
 interface AuthContextType {
   session: Session | null;
@@ -45,8 +45,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
-          const rawRole = session.user.user_metadata?.role as string;
-          setRole(resolveRole(rawRole));
+          setRole(resolveRole(pickAuthRawRole(session.user)));
         }
       } catch (error: any) {
         console.error('Error fetching session:', error);
@@ -62,8 +61,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        const rawRole = session.user.user_metadata?.role as string;
-        setRole(resolveRole(rawRole));
+        setRole(resolveRole(pickAuthRawRole(session.user)));
       } else {
         setRole(null);
       }
@@ -88,7 +86,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  const isPlatformUser = isPlatformRole(user?.user_metadata?.role);
+  const isPlatformUser = isPlatformRole(pickAuthRawRole(user));
 
   return (
     <AuthContext.Provider value={{ session, user, role, isPlatformUser, loading, signOut }}>

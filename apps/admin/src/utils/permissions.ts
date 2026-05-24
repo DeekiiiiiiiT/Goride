@@ -315,6 +315,68 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
 /** All canonical role strings for quick lookup. */
 const VALID_ROLES = new Set<string>(Object.keys(ROLE_META));
 
+/** Product-scoped admin roles — must not override platform superadmin for RBAC. */
+const PRODUCT_ADMIN_ROLES = new Set([
+  'fleet_admin', 'fleet_ops', 'driver_admin', 'driver_ops',
+  'rides_admin', 'rides_ops', 'dash_admin', 'dash_ops',
+  'enterprise_admin', 'enterprise_ops',
+]);
+
+const PLATFORM_RAW_ROLES = [
+  'superadmin', 'platform_owner', 'platform_support', 'platform_analyst',
+] as const;
+
+function readRolesArray(meta: Record<string, unknown> | undefined): string[] {
+  const raw = meta?.roles;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((r): r is string => typeof r === 'string' && r.trim().length > 0)
+    .map((r) => r.trim());
+}
+
+function collectAllJwtRoles(
+  appMeta: Record<string, unknown>,
+  userMeta: Record<string, unknown>,
+): string[] {
+  const roles = new Set<string>();
+  if (typeof appMeta.role === 'string' && appMeta.role.trim()) {
+    roles.add(appMeta.role.trim());
+  }
+  for (const r of readRolesArray(appMeta)) roles.add(r);
+  if (typeof userMeta.role === 'string' && userMeta.role.trim()) {
+    roles.add(userMeta.role.trim());
+  }
+  return Array.from(roles);
+}
+
+/**
+ * Pick the effective RBAC role from Supabase Auth user metadata.
+ * Platform roles (superadmin, platform_owner, etc.) beat product admin roles
+ * such as fleet_admin that may also be present in app_metadata.
+ */
+export function pickAuthRawRole(
+  user: { app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> } | null | undefined,
+): string {
+  if (!user) return 'fleet_viewer';
+  const appMeta = user.app_metadata ?? {};
+  const userMeta = user.user_metadata ?? {};
+  const allRoles = collectAllJwtRoles(appMeta, userMeta);
+
+  for (const platformRole of PLATFORM_RAW_ROLES) {
+    if (allRoles.includes(platformRole)) return platformRole;
+  }
+
+  const appRole = typeof appMeta.role === 'string' ? appMeta.role.trim() : '';
+  if (appRole && !PRODUCT_ADMIN_ROLES.has(appRole)) {
+    return appRole;
+  }
+
+  const userRole = typeof userMeta.role === 'string' ? userMeta.role.trim() : '';
+  if (userRole) return userRole;
+
+  return 'fleet_viewer';
+}
+
 /**
  * Map a raw role string (possibly a legacy value from Supabase user_metadata)
  * to a canonical `Role`.
