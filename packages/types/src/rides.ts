@@ -213,6 +213,7 @@ export interface RiderAdminNote {
 export interface RiderAdminPermissions {
   can_write: boolean;
   can_ban: boolean;
+  can_delete: boolean;
   can_see_reset_link: boolean;
 }
 

@@ -14002,6 +14002,188 @@ app.post("/make-server-37f42386/fleet-admin/customers/:userId/approve", async (c
   }
 });
 
+// ---------------------------------------------------------------------------
+// Fleet Admin Lifecycle Actions: Suspend
+// ---------------------------------------------------------------------------
+
+app.post("/make-server-37f42386/fleet-admin/customers/:userId/suspend", async (c) => {
+  try {
+    const auth = await requireProductAdmin(c, "fleet");
+    if (auth instanceof Response) return auth;
+
+    const userId = c.req.param("userId");
+    const body = await c.req.json().catch(() => ({})) as { reason?: string };
+    const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+    if (!reason) {
+      return c.json({ error: "reason_required", message: "Suspension reason is required" }, 400);
+    }
+
+    const { data: target, error: getErr } = await supabase.auth.admin.getUserById(userId);
+    if (getErr || !target.user) {
+      return c.json({ error: "User not found" }, 404);
+    }
+    if (inferProductLineFromUser(target.user.user_metadata) !== "fleet") {
+      return c.json({ error: "User is not a Roam Fleet customer" }, 400);
+    }
+
+    const meta = { ...(target.user.user_metadata || {}), accountStatus: "suspended" };
+    const { error: updErr } = await supabase.auth.admin.updateUserById(userId, {
+      user_metadata: meta,
+      ban_duration: "8760h",
+    });
+    if (updErr) throw updErr;
+
+    await invalidateCustomerCache();
+    await logAdminAction({
+      actorId: auth.id,
+      actorName: auth.email,
+      action: "suspend_fleet_customer",
+      targetId: userId,
+      targetEmail: target.user.email || "",
+      details: reason,
+    });
+
+    return c.json({ success: true, status: "suspended" });
+  } catch (e: any) {
+    console.log(`fleet-admin/suspend error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Fleet Admin Lifecycle Actions: Reactivate
+// ---------------------------------------------------------------------------
+
+app.post("/make-server-37f42386/fleet-admin/customers/:userId/reactivate", async (c) => {
+  try {
+    const auth = await requireProductAdmin(c, "fleet");
+    if (auth instanceof Response) return auth;
+
+    const userId = c.req.param("userId");
+    const { data: target, error: getErr } = await supabase.auth.admin.getUserById(userId);
+    if (getErr || !target.user) {
+      return c.json({ error: "User not found" }, 404);
+    }
+    if (inferProductLineFromUser(target.user.user_metadata) !== "fleet") {
+      return c.json({ error: "User is not a Roam Fleet customer" }, 400);
+    }
+
+    const meta = { ...(target.user.user_metadata || {}) };
+    delete meta.accountStatus;
+    const { error: updErr } = await supabase.auth.admin.updateUserById(userId, {
+      user_metadata: meta,
+      ban_duration: "none",
+    });
+    if (updErr) throw updErr;
+
+    await invalidateCustomerCache();
+    await logAdminAction({
+      actorId: auth.id,
+      actorName: auth.email,
+      action: "reactivate_fleet_customer",
+      targetId: userId,
+      targetEmail: target.user.email || "",
+      details: "Account reactivated",
+    });
+
+    return c.json({ success: true, status: "active" });
+  } catch (e: any) {
+    console.log(`fleet-admin/reactivate error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Fleet Admin Lifecycle Actions: Sign Out All Devices
+// ---------------------------------------------------------------------------
+
+app.post("/make-server-37f42386/fleet-admin/customers/:userId/sign-out", async (c) => {
+  try {
+    const auth = await requireProductAdmin(c, "fleet");
+    if (auth instanceof Response) return auth;
+
+    const userId = c.req.param("userId");
+    const { data: target, error: getErr } = await supabase.auth.admin.getUserById(userId);
+    if (getErr || !target.user) {
+      return c.json({ error: "User not found" }, 404);
+    }
+
+    const { error } = await supabase.auth.admin.signOut(userId, "global");
+    if (error) throw error;
+
+    await logAdminAction({
+      actorId: auth.id,
+      actorName: auth.email,
+      action: "sign_out_fleet_customer",
+      targetId: userId,
+      targetEmail: target.user.email || "",
+      details: "All sessions terminated",
+    });
+
+    return c.json({ success: true });
+  } catch (e: any) {
+    console.log(`fleet-admin/sign-out error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Fleet Admin Lifecycle Actions: Delete (removes fleet access, keeps auth)
+// ---------------------------------------------------------------------------
+
+app.delete("/make-server-37f42386/fleet-admin/customers/:userId", async (c) => {
+  try {
+    const auth = await requireProductAdmin(c, "fleet");
+    if (auth instanceof Response) return auth;
+
+    // Only platform admins can delete
+    const PLATFORM_ROLES = ["platform_owner", "superadmin"];
+    if (!PLATFORM_ROLES.includes(auth.role)) {
+      return c.json({ error: "forbidden", message: "platform_owner or superadmin required for delete" }, 403);
+    }
+
+    const userId = c.req.param("userId");
+    const { data: target, error: getErr } = await supabase.auth.admin.getUserById(userId);
+    if (getErr || !target.user) {
+      return c.json({ error: "User not found" }, 404);
+    }
+    if (inferProductLineFromUser(target.user.user_metadata) !== "fleet") {
+      return c.json({ error: "User is not a Roam Fleet customer" }, 400);
+    }
+
+    // Clear fleet-related metadata (role, productLine, businessType)
+    const meta = { ...(target.user.user_metadata || {}) };
+    delete meta.role;
+    delete meta.productLine;
+    delete meta.businessType;
+    delete meta.companyName;
+    delete meta.accountStatus;
+
+    const { error: updErr } = await supabase.auth.admin.updateUserById(userId, {
+      user_metadata: meta,
+    });
+    if (updErr) throw updErr;
+
+    // Sign out from all devices
+    await supabase.auth.admin.signOut(userId, "global");
+
+    await invalidateCustomerCache();
+    await logAdminAction({
+      actorId: auth.id,
+      actorName: auth.email,
+      action: "delete_fleet_customer",
+      targetId: userId,
+      targetEmail: target.user.email || "",
+      details: "Fleet access removed",
+    });
+
+    return c.json({ success: true, message: "Fleet access removed. User can re-apply as a new customer." });
+  } catch (e: any) {
+    console.log(`fleet-admin/delete error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 // POST /admin/migrate-product-lines — one-time backfill (superadmin)
 app.post("/make-server-37f42386/admin/migrate-product-lines", async (c) => {
   try {
@@ -14184,6 +14366,225 @@ app.post("/make-server-37f42386/admin/toggle-suspend", async (c) => {
   } catch (e: any) {
     console.error("admin/toggle-suspend error:", e);
     return c.json({ error: e.message || "Failed to toggle suspend" }, 500);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /admin/users/:userId/full-delete — Full platform-wide user deletion (superadmin only)
+// This deletes the user from ALL products and removes them from auth.users entirely.
+// ---------------------------------------------------------------------------
+
+app.delete("/make-server-37f42386/admin/users/:userId/full-delete", async (c) => {
+  try {
+    const accessToken = c.req.header("Authorization")?.split(" ")[1];
+    const { data: { user: reqUser }, error: authErr } = await supabase.auth.getUser(accessToken);
+    if (authErr || !reqUser) {
+      console.log(`admin/full-delete auth error: ${authErr?.message || "no user"}`);
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+    if (reqUser.user_metadata?.role !== "superadmin") {
+      console.log(`admin/full-delete forbidden: user ${reqUser.id} is not superadmin`);
+      return c.json({ error: "Forbidden — superadmin only" }, 403);
+    }
+
+    const userId = c.req.param("userId");
+    if (!userId) {
+      return c.json({ error: "userId is required" }, 400);
+    }
+
+    // Get user info before deleting
+    const { data: targetUser, error: getUserErr } = await supabase.auth.admin.getUserById(userId);
+    if (getUserErr || !targetUser?.user) {
+      return c.json({ error: "User not found" }, 404);
+    }
+    const targetEmail = targetUser.user.email || "";
+
+    // Track what was cleaned up
+    const cleanedUp: string[] = [];
+
+    // 1. Delete driver_profiles row (if exists)
+    const { error: driverErr, count: driverCount } = await supabase
+      .from("driver_profiles")
+      .delete({ count: "exact" })
+      .eq("user_id", userId);
+    if (!driverErr && driverCount && driverCount > 0) {
+      cleanedUp.push("driver_profiles");
+    }
+
+    // 2. Delete rider_profiles row (if exists) - in rides schema
+    try {
+      const ridesDb = createClient(
+        Deno.env.get("SUPABASE_URL") || "",
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+        { db: { schema: "rides" } }
+      );
+      const { error: riderErr, count: riderCount } = await ridesDb
+        .from("rider_profiles")
+        .delete({ count: "exact" })
+        .eq("user_id", userId);
+      if (!riderErr && riderCount && riderCount > 0) {
+        cleanedUp.push("rider_profiles");
+      }
+    } catch (e) {
+      console.log(`Failed to delete rider_profiles (may not exist): ${e}`);
+    }
+
+    // 3. Force sign out from all devices
+    await supabase.auth.admin.signOut(userId, "global");
+    cleanedUp.push("sessions");
+
+    // 4. Delete from auth.users
+    const { error: deleteAuthErr } = await supabase.auth.admin.deleteUser(userId);
+    if (deleteAuthErr) {
+      console.error(`Failed to delete auth.users record: ${deleteAuthErr.message}`);
+      return c.json({ 
+        error: "partial_delete", 
+        message: `Cleaned up profiles but failed to delete auth record: ${deleteAuthErr.message}`,
+        cleaned_up: cleanedUp,
+      }, 500);
+    }
+    cleanedUp.push("auth.users");
+
+    // 5. Log the action
+    await logAdminAction({
+      actorId: reqUser.id,
+      actorName: reqUser.user_metadata?.name || "Admin",
+      action: "full_delete_user",
+      targetId: userId,
+      targetEmail,
+      details: `Cleaned up: ${cleanedUp.join(", ")}`,
+    });
+
+    console.log(`User ${userId} (${targetEmail}) fully deleted. Cleaned up: ${cleanedUp.join(", ")}`);
+    return c.json({
+      success: true,
+      message: `User ${targetEmail} has been permanently deleted from all Roam products`,
+      cleaned_up: cleanedUp,
+    });
+  } catch (e: any) {
+    console.error("admin/full-delete error:", e);
+    return c.json({ error: e.message || "Failed to delete user" }, 500);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /admin/users/:userId/cross-product-status — View user status across all products
+// Shows Driver, Rider, Fleet membership, and Auth status in one unified view.
+// ---------------------------------------------------------------------------
+
+app.get("/make-server-37f42386/admin/users/:userId/cross-product-status", async (c) => {
+  try {
+    const accessToken = c.req.header("Authorization")?.split(" ")[1];
+    const { data: { user: reqUser }, error: authErr } = await supabase.auth.getUser(accessToken);
+    if (authErr || !reqUser) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+    // Allow platform_owner, platform_support, or superadmin
+    const reqRole = reqUser.user_metadata?.role;
+    const allowedRoles = ["platform_owner", "platform_support", "superadmin"];
+    if (!allowedRoles.includes(reqRole)) {
+      return c.json({ error: "Forbidden — platform role required" }, 403);
+    }
+
+    const userId = c.req.param("userId");
+    if (!userId) {
+      return c.json({ error: "userId is required" }, 400);
+    }
+
+    // Get user info from auth
+    const { data: targetUser, error: getUserErr } = await supabase.auth.admin.getUserById(userId);
+    if (getUserErr || !targetUser?.user) {
+      return c.json({ error: "User not found" }, 404);
+    }
+    const user = targetUser.user;
+
+    const crossProductStatus: Record<string, unknown> = {
+      user_id: userId,
+      email: user.email,
+      phone: user.phone,
+      created_at: user.created_at,
+      last_sign_in_at: user.last_sign_in_at,
+      auth_status: {
+        banned_until: user.banned_until,
+        is_banned: !!user.banned_until && new Date(user.banned_until) > new Date(),
+        email_confirmed_at: user.email_confirmed_at,
+      },
+      products: {},
+    };
+
+    const products: Record<string, unknown> = {};
+
+    // 1. Check Driver profile
+    const { data: driverProfile } = await supabase
+      .from("driver_profiles")
+      .select("id, status, mode, onboarding_complete, suspended_at, deactivated_at, created_at")
+      .eq("user_id", userId)
+      .maybeSingle();
+    
+    if (driverProfile) {
+      products.driver = {
+        exists: true,
+        profile_id: driverProfile.id,
+        status: driverProfile.status,
+        mode: driverProfile.mode,
+        onboarding_complete: driverProfile.onboarding_complete,
+        suspended_at: driverProfile.suspended_at,
+        deactivated_at: driverProfile.deactivated_at,
+        created_at: driverProfile.created_at,
+      };
+    } else {
+      products.driver = { exists: false };
+    }
+
+    // 2. Check Rider profile (in rides schema)
+    try {
+      const ridesDb = createClient(
+        Deno.env.get("SUPABASE_URL") || "",
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+        { db: { schema: "rides" } }
+      );
+      const { data: riderProfile } = await ridesDb
+        .from("rider_profiles")
+        .select("user_id, display_name, account_status, suspended_at, suspended_reason, created_at")
+        .eq("user_id", userId)
+        .maybeSingle();
+      
+      if (riderProfile) {
+        products.rider = {
+          exists: true,
+          display_name: riderProfile.display_name,
+          account_status: riderProfile.account_status,
+          suspended_at: riderProfile.suspended_at,
+          suspended_reason: riderProfile.suspended_reason,
+          created_at: riderProfile.created_at,
+        };
+      } else {
+        products.rider = { exists: false };
+      }
+    } catch (e) {
+      products.rider = { exists: false, error: "Could not check rides schema" };
+    }
+
+    // 3. Check Fleet membership (from user_metadata)
+    const userMeta = user.user_metadata || {};
+    if (userMeta.role === "admin" && userMeta.productLine === "fleet") {
+      products.fleet = {
+        exists: true,
+        role: "fleet_manager",
+        company_name: userMeta.companyName || userMeta.name,
+        business_type: userMeta.businessType,
+        account_status: userMeta.accountStatus || "active",
+      };
+    } else {
+      products.fleet = { exists: false };
+    }
+
+    crossProductStatus.products = products;
+
+    return c.json(crossProductStatus);
+  } catch (e: any) {
+    console.error("admin/cross-product-status error:", e);
+    return c.json({ error: e.message || "Failed to fetch cross-product status" }, 500);
   }
 });
 

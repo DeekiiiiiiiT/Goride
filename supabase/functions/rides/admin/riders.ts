@@ -35,6 +35,8 @@ const RIDER_WRITE_ROLES = new Set([
 
 const BAN_ROLES = new Set(["platform_owner", "superadmin"]);
 
+const DELETE_ROLES = new Set(["platform_owner", "superadmin"]);
+
 type AccountStatus = "active" | "suspended" | "banned";
 
 function serviceAuth() {
@@ -58,6 +60,16 @@ function requireBan(admin: ProductAdminUser): Response | null {
   if (!BAN_ROLES.has(admin.role)) {
     return new Response(
       JSON.stringify({ error: "forbidden", message: "platform_owner or superadmin required" }),
+      { status: 403, headers: { "Content-Type": "application/json" } },
+    );
+  }
+  return null;
+}
+
+function requireDelete(admin: ProductAdminUser): Response | null {
+  if (!DELETE_ROLES.has(admin.role)) {
+    return new Response(
+      JSON.stringify({ error: "forbidden", message: "platform_owner or superadmin required for delete actions" }),
       { status: 403, headers: { "Content-Type": "application/json" } },
     );
   }
@@ -363,6 +375,7 @@ export function registerRiderAdminRoutes(admin: Hono) {
       permissions: {
         can_write: RIDER_WRITE_ROLES.has(adminUser.role),
         can_ban: BAN_ROLES.has(adminUser.role),
+        can_delete: DELETE_ROLES.has(adminUser.role),
         can_see_reset_link: isPlatformRole(adminUser.role),
       },
     });
@@ -625,5 +638,49 @@ export function registerRiderAdminRoutes(admin: Hono) {
     });
 
     return c.json({ ok: true });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Delete Rider (product-scoped removal)
+  // ---------------------------------------------------------------------------
+
+  admin.delete("/riders/:userId", async (c) => {
+    const adminUser = await requireProductAdmin(c, "rides");
+    if (adminUser instanceof Response) return adminUser;
+    const denied = requireDelete(adminUser);
+    if (denied) return denied;
+
+    const userId = c.req.param("userId");
+    const resolved = await riderDbOrResponse(c);
+    if (resolved instanceof Response) return resolved;
+    const { db, tables } = resolved;
+
+    // Verify profile exists
+    const { data: profile } = await db.from(tables.rider_profiles)
+      .select("user_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!profile) {
+      return c.json({ error: "not_found", message: "Rider profile not found" }, 404);
+    }
+
+    // Delete the rider profile
+    const { error: deleteErr } = await db.from(tables.rider_profiles)
+      .delete()
+      .eq("user_id", userId);
+
+    if (deleteErr) {
+      return c.json({ error: "delete_failed", message: deleteErr.message }, 500);
+    }
+
+    // Force sign out from all devices
+    const auth = serviceAuth();
+    await auth.auth.admin.signOut(userId, "global");
+
+    await riderAudit(db, tables, adminUser.id, "admin_rider_deleted", {
+      rider_user_id: userId,
+    });
+
+    return c.json({ ok: true, message: "Rider profile deleted. User can re-signup as a new rider." });
   });
 }

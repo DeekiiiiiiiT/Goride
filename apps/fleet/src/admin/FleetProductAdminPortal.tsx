@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../utils/supabase/client';
-import { hasProductAdminRole, jwtPrimaryRole } from '@roam/auth-client';
+import { hasProductAdminRole, jwtPrimaryRole, isPlatformRole } from '@roam/auth-client';
 import type { Session } from '@supabase/supabase-js';
 import {
   LayoutDashboard,
@@ -9,9 +9,21 @@ import {
   LogOut,
   Loader2,
   CheckCircle2,
+  MoreHorizontal,
+  Trash2,
+  X,
 } from 'lucide-react';
-import { approveFleetCustomer, fetchFleetAdminCustomers, type FleetAdminCustomer } from './fleetAdminService';
+import {
+  approveFleetCustomer,
+  deleteFleetCustomer,
+  fetchFleetAdminCustomers,
+  reactivateFleetCustomer,
+  signOutFleetCustomer,
+  suspendFleetCustomer,
+  type FleetAdminCustomer,
+} from './fleetAdminService';
 import { Button } from '../components/ui/button';
+import { toast } from 'sonner';
 
 const DRIVER_ADMIN_URL = 'https://roamdriver.co/admin';
 const RIDES_ADMIN_URL = 'https://roam-s.co/admin';
@@ -76,12 +88,21 @@ function FleetAdminLogin({ onSession }: { onSession: (s: Session) => void }) {
   );
 }
 
+type ModalType = 'suspend' | 'delete' | null;
+
 export function FleetProductAdminPortal() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [customers, setCustomers] = useState<FleetAdminCustomer[]>([]);
   const [customersLoading, setCustomersLoading] = useState(false);
   const [page, setPage] = useState<'dashboard' | 'customers'>('dashboard');
+  
+  // Action state
+  const [actionMenuId, setActionMenuId] = useState<string | null>(null);
+  const [modal, setModal] = useState<ModalType>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<FleetAdminCustomer | null>(null);
+  const [reason, setReason] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
@@ -103,6 +124,70 @@ export function FleetProductAdminPortal() {
       setCustomersLoading(false);
     }
   }, [session?.access_token]);
+
+  const userRole = session?.user ? jwtPrimaryRole(session.user) : null;
+  const canDelete = userRole ? isPlatformRole(userRole) : false;
+
+  const doSuspend = async () => {
+    if (!session?.access_token || !selectedCustomer || !reason.trim()) return;
+    setActionLoading(true);
+    try {
+      await suspendFleetCustomer(session.access_token, selectedCustomer.id, reason.trim());
+      toast.success('Customer suspended');
+      setModal(null);
+      setSelectedCustomer(null);
+      setReason('');
+      void loadCustomers();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to suspend');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const doReactivate = async (customer: FleetAdminCustomer) => {
+    if (!session?.access_token) return;
+    setActionLoading(true);
+    try {
+      await reactivateFleetCustomer(session.access_token, customer.id);
+      toast.success('Customer reactivated');
+      void loadCustomers();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to reactivate');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const doSignOut = async (customer: FleetAdminCustomer) => {
+    if (!session?.access_token) return;
+    if (!window.confirm(`Sign out ${customer.email} from all devices?`)) return;
+    setActionLoading(true);
+    try {
+      await signOutFleetCustomer(session.access_token, customer.id);
+      toast.success('Customer signed out from all devices');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to sign out');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const doDelete = async () => {
+    if (!session?.access_token || !selectedCustomer) return;
+    setActionLoading(true);
+    try {
+      await deleteFleetCustomer(session.access_token, selectedCustomer.id);
+      toast.success('Customer removed from Roam Fleet');
+      setModal(null);
+      setSelectedCustomer(null);
+      void loadCustomers();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to delete');
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (session && page === 'customers') void loadCustomers();
@@ -221,24 +306,93 @@ export function FleetProductAdminPortal() {
                         <td className="p-3">
                           {c.accountStatus === 'pending_approval' ? (
                             <span className="text-amber-400">Pending</span>
+                          ) : c.isSuspended || c.accountStatus === 'suspended' ? (
+                            <span className="text-red-400">Suspended</span>
                           ) : (
-                            <span className="text-emerald-400">{c.status}</span>
+                            <span className="text-emerald-400">{c.status || 'Active'}</span>
                           )}
                         </td>
                         <td className="p-3 text-right">
-                          {c.accountStatus === 'pending_approval' && (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={async () => {
-                                await approveFleetCustomer(token, c.id);
-                                await loadCustomers();
-                              }}
-                            >
-                              <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                              Approve
-                            </Button>
-                          )}
+                          <div className="flex items-center justify-end gap-2">
+                            {c.accountStatus === 'pending_approval' && (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={async () => {
+                                  await approveFleetCustomer(token, c.id);
+                                  await loadCustomers();
+                                }}
+                              >
+                                <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                                Approve
+                              </Button>
+                            )}
+                            <div className="relative">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setActionMenuId(actionMenuId === c.id ? null : c.id)}
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                              {actionMenuId === c.id && (
+                                <div className="absolute right-0 mt-1 w-48 rounded-lg border border-slate-700 bg-slate-900 shadow-xl z-20 py-1 text-sm">
+                                  {c.isSuspended || c.accountStatus === 'suspended' ? (
+                                    <button
+                                      type="button"
+                                      className="w-full text-left px-3 py-2 hover:bg-slate-800"
+                                      onClick={() => {
+                                        setActionMenuId(null);
+                                        void doReactivate(c);
+                                      }}
+                                    >
+                                      Reactivate account
+                                    </button>
+                                  ) : c.accountStatus !== 'pending_approval' && (
+                                    <button
+                                      type="button"
+                                      className="w-full text-left px-3 py-2 hover:bg-slate-800"
+                                      onClick={() => {
+                                        setActionMenuId(null);
+                                        setSelectedCustomer(c);
+                                        setModal('suspend');
+                                      }}
+                                    >
+                                      Suspend account
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center gap-2"
+                                    onClick={() => {
+                                      setActionMenuId(null);
+                                      void doSignOut(c);
+                                    }}
+                                  >
+                                    <LogOut className="h-3.5 w-3.5" />
+                                    Sign out all devices
+                                  </button>
+                                  {canDelete && (
+                                    <>
+                                      <hr className="my-1 border-slate-800" />
+                                      <button
+                                        type="button"
+                                        className="w-full text-left px-3 py-2 hover:bg-slate-800 text-red-400 flex items-center gap-2"
+                                        onClick={() => {
+                                          setActionMenuId(null);
+                                          setSelectedCustomer(c);
+                                          setModal('delete');
+                                        }}
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                        Remove from Fleet
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -249,6 +403,85 @@ export function FleetProductAdminPortal() {
           </div>
         )}
       </main>
+
+      {/* Suspend Modal */}
+      {modal === 'suspend' && selectedCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60" onClick={() => { setModal(null); setSelectedCustomer(null); setReason(''); }} />
+          <div className="relative w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">Suspend Customer</h3>
+              <button
+                type="button"
+                onClick={() => { setModal(null); setSelectedCustomer(null); setReason(''); }}
+                className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-slate-400 mb-2">
+              Suspending <strong>{selectedCustomer.email}</strong> will temporarily block their access to Roam Fleet.
+            </p>
+            <label className="block text-xs text-slate-500 mb-1 mt-4">Reason (required)</label>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Why is this customer being suspended?"
+              rows={3}
+              className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-sm text-white resize-none"
+            />
+            <div className="flex justify-end gap-2 mt-4">
+              <Button variant="outline" onClick={() => { setModal(null); setSelectedCustomer(null); setReason(''); }}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => void doSuspend()}
+                disabled={!reason.trim() || actionLoading}
+                className="bg-amber-600 hover:bg-amber-500"
+              >
+                {actionLoading ? 'Suspending...' : 'Suspend'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Modal */}
+      {modal === 'delete' && selectedCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60" onClick={() => { setModal(null); setSelectedCustomer(null); }} />
+          <div className="relative w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">Remove from Roam Fleet</h3>
+              <button
+                type="button"
+                onClick={() => { setModal(null); setSelectedCustomer(null); }}
+                className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-slate-400 mb-4">
+              This will remove <strong>{selectedCustomer.email}</strong> from Roam Fleet. They will be signed out and can re-apply as a new customer.
+            </p>
+            <p className="text-sm text-amber-300 mb-4">
+              This does <strong>not</strong> delete their account from other Roam products (Driver, Rider, etc.).
+            </p>
+            <div className="flex justify-end gap-2 mt-4">
+              <Button variant="outline" onClick={() => { setModal(null); setSelectedCustomer(null); }}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => void doDelete()}
+                disabled={actionLoading}
+                className="bg-red-600 hover:bg-red-500"
+              >
+                {actionLoading ? 'Removing...' : 'Remove Customer'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

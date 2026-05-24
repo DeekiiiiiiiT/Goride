@@ -1,14 +1,25 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link, useOutletContext, useParams } from 'react-router-dom';
+import { Link, useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
-import { ArrowLeft, Copy, Loader2 } from 'lucide-react';
+import { ArrowLeft, Copy, Loader2, MoreHorizontal, LogOut, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
-import type { DriverDetailDto, DriverLiveStatus } from '@roam/types/driver';
+import type { DriverDetailDto, DriverLiveStatus, DriverAdminPermissions } from '@roam/types/driver';
 import type { RideRequestRow } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
-import { getDriverDetail, listDriverTrips } from '../../services/driverAdminService';
+import {
+  getDriverDetail,
+  listDriverTrips,
+  suspendDriver,
+  unsuspendDriver,
+  deactivateDriver,
+  reactivateDriver,
+  signOutDriver,
+  resetDriverPassword,
+  deleteDriver,
+} from '../../services/driverAdminService';
 
 type Tab = 'overview' | 'trips' | 'compliance';
+type ModalType = 'suspend' | 'deactivate' | 'delete' | null;
 
 interface OutletContext {
   session: Session;
@@ -40,13 +51,21 @@ function LiveBadge({ status }: { status: DriverLiveStatus }) {
 export function DriverDetailPage() {
   const { userId } = useParams<{ userId: string }>();
   const { session } = useOutletContext<OutletContext>();
+  const navigate = useNavigate();
   const token = session.access_token;
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [driver, setDriver] = useState<DriverDetailDto | null>(null);
+  const [permissions, setPermissions] = useState<DriverAdminPermissions | null>(null);
   const [tab, setTab] = useState<Tab>('overview');
   const [trips, setTrips] = useState<RideRequestRow[]>([]);
+
+  // Actions UI state
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [modal, setModal] = useState<ModalType>(null);
+  const [reason, setReason] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
 
   const load = useCallback(async () => {
     if (!token || !userId) return;
@@ -55,10 +74,12 @@ export function DriverDetailPage() {
     try {
       const res = await getDriverDetail(token, userId);
       setDriver(res.driver);
+      setPermissions(res.permissions);
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : 'Failed to load driver';
       setLoadError(message);
       setDriver(null);
+      setPermissions(null);
       toast.error(message);
     } finally {
       setLoading(false);
@@ -78,6 +99,117 @@ export function DriverDetailPage() {
     if (!userId) return;
     void navigator.clipboard.writeText(userId);
     toast.success('User ID copied');
+  };
+
+  // ---------------------------------------------------------------------------
+  // Lifecycle Actions
+  // ---------------------------------------------------------------------------
+
+  const doSuspend = async () => {
+    if (!token || !userId || !reason.trim()) return;
+    setActionLoading(true);
+    try {
+      await suspendDriver(token, userId, reason.trim());
+      toast.success('Driver suspended');
+      setModal(null);
+      setReason('');
+      void load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to suspend');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const doUnsuspend = async () => {
+    if (!token || !userId) return;
+    setActionLoading(true);
+    try {
+      await unsuspendDriver(token, userId);
+      toast.success('Driver unsuspended');
+      void load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to unsuspend');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const doDeactivate = async () => {
+    if (!token || !userId || !reason.trim()) return;
+    setActionLoading(true);
+    try {
+      await deactivateDriver(token, userId, reason.trim());
+      toast.success('Driver deactivated');
+      setModal(null);
+      setReason('');
+      void load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to deactivate');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const doReactivate = async () => {
+    if (!token || !userId) return;
+    setActionLoading(true);
+    try {
+      await reactivateDriver(token, userId);
+      toast.success('Driver reactivated');
+      void load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to reactivate');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const doSignOut = async () => {
+    if (!token || !userId) return;
+    if (!window.confirm('Sign out this driver from all devices?')) return;
+    setActionLoading(true);
+    try {
+      await signOutDriver(token, userId);
+      toast.success('Driver signed out from all devices');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to sign out');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const doResetPassword = async () => {
+    if (!token || !userId) return;
+    setActionLoading(true);
+    try {
+      const res = await resetDriverPassword(token, userId);
+      if (res.recovery_link) {
+        await navigator.clipboard.writeText(res.recovery_link);
+        toast.success('Recovery link copied to clipboard');
+      } else {
+        toast.success(`Password reset email sent to ${res.email}`);
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to reset password');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const doDelete = async () => {
+    if (!token || !userId) return;
+    setActionLoading(true);
+    try {
+      await deleteDriver(token, userId);
+      toast.success('Driver removed from Roam Driver');
+      setModal(null);
+      navigate('/users');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to delete');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   if (loading) {
@@ -125,6 +257,21 @@ export function DriverDetailPage() {
         Back to drivers
       </Link>
 
+      {/* Status Banner */}
+      {driver.status !== 'active' && driver.status !== 'pending' && (
+        <div
+          className={`rounded-lg border px-4 py-3 text-sm ${
+            driver.status === 'deactivated'
+              ? 'border-red-500/40 bg-red-500/10 text-red-200'
+              : 'border-amber-500/40 bg-amber-500/10 text-amber-200'
+          }`}
+        >
+          Account is <strong>{driver.status}</strong>
+          {driver.suspended_reason ? ` — ${driver.suspended_reason}` : ''}
+          {driver.deactivated_reason ? ` — ${driver.deactivated_reason}` : ''}
+        </div>
+      )}
+
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -146,7 +293,226 @@ export function DriverDetailPage() {
             {driver.user_id}
           </button>
         </div>
+
+        {/* Actions Dropdown */}
+        {permissions?.can_write && (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setActionsOpen((o) => !o)}
+              disabled={actionLoading}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 text-sm hover:bg-slate-800 disabled:opacity-50"
+            >
+              {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Actions'}
+              <MoreHorizontal className="w-4 h-4" />
+            </button>
+            {actionsOpen && (
+              <div className="absolute right-0 mt-2 w-56 rounded-lg border border-slate-700 bg-slate-900 shadow-xl z-20 py-1 text-sm">
+                {/* Suspend / Unsuspend */}
+                {driver.status === 'active' && (
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-2 hover:bg-slate-800"
+                    onClick={() => {
+                      setActionsOpen(false);
+                      setModal('suspend');
+                    }}
+                  >
+                    Suspend account
+                  </button>
+                )}
+                {driver.status === 'suspended' && (
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-2 hover:bg-slate-800"
+                    onClick={() => {
+                      setActionsOpen(false);
+                      void doUnsuspend();
+                    }}
+                  >
+                    Unsuspend account
+                  </button>
+                )}
+
+                {/* Deactivate / Reactivate */}
+                {(driver.status === 'active' || driver.status === 'suspended') && (
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-2 hover:bg-slate-800 text-amber-300"
+                    onClick={() => {
+                      setActionsOpen(false);
+                      setModal('deactivate');
+                    }}
+                  >
+                    Deactivate account
+                  </button>
+                )}
+                {driver.status === 'deactivated' && (
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-2 hover:bg-slate-800"
+                    onClick={() => {
+                      setActionsOpen(false);
+                      void doReactivate();
+                    }}
+                  >
+                    Reactivate account
+                  </button>
+                )}
+
+                <hr className="my-1 border-slate-800" />
+
+                {/* Password Reset */}
+                <button
+                  type="button"
+                  className="w-full text-left px-3 py-2 hover:bg-slate-800"
+                  onClick={() => {
+                    setActionsOpen(false);
+                    void doResetPassword();
+                  }}
+                >
+                  Send password reset
+                </button>
+
+                {/* Sign Out */}
+                <button
+                  type="button"
+                  className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center gap-2"
+                  onClick={() => {
+                    setActionsOpen(false);
+                    void doSignOut();
+                  }}
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  Sign out all devices
+                </button>
+
+                {/* Delete (platform only) */}
+                {permissions?.can_delete && (
+                  <>
+                    <hr className="my-1 border-slate-800" />
+                    <button
+                      type="button"
+                      className="w-full text-left px-3 py-2 hover:bg-slate-800 text-red-400 flex items-center gap-2"
+                      onClick={() => {
+                        setActionsOpen(false);
+                        setModal('delete');
+                      }}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Remove from Roam Driver
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Modals */}
+      {modal === 'suspend' && (
+        <Modal
+          title="Suspend Driver"
+          onClose={() => { setModal(null); setReason(''); }}
+        >
+          <p className="text-sm text-slate-400 mb-4">
+            Suspending will temporarily block this driver from using the app. They can be unsuspended later.
+          </p>
+          <label className="block text-xs text-slate-500 mb-1">Reason (required)</label>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Why is this driver being suspended?"
+            rows={3}
+            className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-sm text-white resize-none"
+          />
+          <div className="flex justify-end gap-2 mt-4">
+            <button
+              type="button"
+              onClick={() => { setModal(null); setReason(''); }}
+              className="px-3 py-2 rounded-lg border border-slate-700 text-sm hover:bg-slate-800"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void doSuspend()}
+              disabled={!reason.trim() || actionLoading}
+              className="px-3 py-2 rounded-lg bg-amber-600 text-white text-sm hover:bg-amber-500 disabled:opacity-50"
+            >
+              {actionLoading ? 'Suspending...' : 'Suspend'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {modal === 'deactivate' && (
+        <Modal
+          title="Deactivate Driver"
+          onClose={() => { setModal(null); setReason(''); }}
+        >
+          <p className="text-sm text-slate-400 mb-4">
+            Deactivating is a stronger action than suspension. The driver will be blocked from the app until manually reactivated.
+          </p>
+          <label className="block text-xs text-slate-500 mb-1">Reason (required)</label>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Why is this driver being deactivated?"
+            rows={3}
+            className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-sm text-white resize-none"
+          />
+          <div className="flex justify-end gap-2 mt-4">
+            <button
+              type="button"
+              onClick={() => { setModal(null); setReason(''); }}
+              className="px-3 py-2 rounded-lg border border-slate-700 text-sm hover:bg-slate-800"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void doDeactivate()}
+              disabled={!reason.trim() || actionLoading}
+              className="px-3 py-2 rounded-lg bg-red-600 text-white text-sm hover:bg-red-500 disabled:opacity-50"
+            >
+              {actionLoading ? 'Deactivating...' : 'Deactivate'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {modal === 'delete' && (
+        <Modal
+          title="Remove from Roam Driver"
+          onClose={() => setModal(null)}
+        >
+          <p className="text-sm text-slate-400 mb-4">
+            This will permanently delete this driver's profile. They will be signed out and can sign up again as a new driver.
+          </p>
+          <p className="text-sm text-amber-300 mb-4">
+            This does <strong>not</strong> delete their account from other Roam products (Rider, Fleet, etc.).
+          </p>
+          <div className="flex justify-end gap-2 mt-4">
+            <button
+              type="button"
+              onClick={() => setModal(null)}
+              className="px-3 py-2 rounded-lg border border-slate-700 text-sm hover:bg-slate-800"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void doDelete()}
+              disabled={actionLoading}
+              className="px-3 py-2 rounded-lg bg-red-600 text-white text-sm hover:bg-red-500 disabled:opacity-50"
+            >
+              {actionLoading ? 'Removing...' : 'Remove Driver'}
+            </button>
+          </div>
+        </Modal>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <KpiCard label="Total trips" value={String(stats.total_trips ?? 0)} />
@@ -268,6 +634,35 @@ function Row({ label, value }: { label: string; value: string }) {
     <div className="flex justify-between gap-4 text-sm">
       <span className="text-slate-500">{label}</span>
       <span className="text-slate-200 text-right">{value}</span>
+    </div>
+  );
+}
+
+function Modal({
+  title,
+  children,
+  onClose,
+}: {
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-white">{title}</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        {children}
+      </div>
     </div>
   );
 }

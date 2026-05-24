@@ -125,6 +125,8 @@ export interface DriverDirectoryStats {
 
 export interface DriverAdminPermissions {
   can_write: boolean;
+  can_delete: boolean;
+  can_see_reset_link: boolean;
 }
 
 export interface DriverDetailDto {
@@ -150,6 +152,13 @@ export interface DriverDetailDto {
     available_for_rides: boolean;
     updated_at: string;
   } | null;
+  // Suspend/deactivate metadata
+  suspended_at: string | null;
+  suspended_reason: string | null;
+  suspended_by: string | null;
+  deactivated_at: string | null;
+  deactivated_reason: string | null;
+  deactivated_by: string | null;
   stats: DriverDirectoryStats;
   recent_trips: Array<Record<string, unknown>>;
   recent_offers: Array<Record<string, unknown>>;

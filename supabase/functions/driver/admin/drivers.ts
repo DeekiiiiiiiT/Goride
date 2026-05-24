@@ -1,16 +1,86 @@
 /**
  * Driver admin — user directory (Uber-style metrics + live status).
+ * Includes lifecycle actions: suspend, unsuspend, deactivate, reactivate, sign-out, delete.
  */
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { requireProductAdmin } from "../../_shared/productAdmin.ts";
+import {
+  isPlatformRole,
+  requireProductAdmin,
+  type ProductAdminUser,
+} from "../../_shared/productAdmin.ts";
 import { getJwtRoles, jwtPrimaryRole } from "../../_shared/authEdge.ts";
 import {
   getDriverAdminDb,
   type DriverAdminTables,
 } from "../../_shared/driverAdminDb.ts";
+import { getRiderAdminDb } from "../../_shared/ridesAdminDb.ts";
 
 type DriverAdminDb = Awaited<ReturnType<typeof getDriverAdminDb>>;
+
+// ---------------------------------------------------------------------------
+// Permission Role Sets
+// ---------------------------------------------------------------------------
+
+/** Roles allowed to perform write actions (suspend, unsuspend, sign-out) */
+const DRIVER_WRITE_ROLES = new Set([
+  "driver_admin",
+  "platform_owner",
+  "platform_support",
+  "superadmin",
+]);
+
+/** Roles allowed to delete driver profiles (destructive action) */
+const DRIVER_DELETE_ROLES = new Set([
+  "platform_owner",
+  "superadmin",
+]);
+
+// ---------------------------------------------------------------------------
+// Permission Helpers
+// ---------------------------------------------------------------------------
+
+function requireWrite(admin: ProductAdminUser): Response | null {
+  if (!DRIVER_WRITE_ROLES.has(admin.role)) {
+    return new Response(
+      JSON.stringify({ error: "forbidden", message: "driver_admin or platform role required for write actions" }),
+      { status: 403, headers: { "Content-Type": "application/json" } },
+    );
+  }
+  return null;
+}
+
+function requireDelete(admin: ProductAdminUser): Response | null {
+  if (!DRIVER_DELETE_ROLES.has(admin.role)) {
+    return new Response(
+      JSON.stringify({ error: "forbidden", message: "platform_owner or superadmin required for delete actions" }),
+      { status: 403, headers: { "Content-Type": "application/json" } },
+    );
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Audit Helper
+// ---------------------------------------------------------------------------
+
+async function driverAudit(
+  actorId: string,
+  eventType: string,
+  payload: Record<string, unknown>,
+) {
+  try {
+    const ridesDb = await getRiderAdminDb();
+    await ridesDb.db.from(ridesDb.tables.audit_events).insert({
+      ride_request_id: null,
+      actor_user_id: actorId,
+      event_type: eventType,
+      payload,
+    });
+  } catch (e) {
+    console.error("[driverAudit] Failed to log audit event:", e);
+  }
+}
 
 const ACTIVE_TRIP_STATUSES = [
   "driver_assigned",
@@ -402,6 +472,13 @@ export function registerDriverUserAdminRoutes(admin: Hono) {
         created_at: authData.user.created_at,
         last_sign_in_at: authData.user.last_sign_in_at,
         location: location ?? null,
+        // Suspend/deactivate metadata
+        suspended_at: (profile?.suspended_at as string | null) ?? null,
+        suspended_reason: (profile?.suspended_reason as string | null) ?? null,
+        suspended_by: (profile?.suspended_by as string | null) ?? null,
+        deactivated_at: (profile?.deactivated_at as string | null) ?? null,
+        deactivated_reason: (profile?.deactivated_reason as string | null) ?? null,
+        deactivated_by: (profile?.deactivated_by as string | null) ?? null,
         stats: stats ?? {
           total_trips: 0,
           completed_trips: 0,
@@ -420,9 +497,310 @@ export function registerDriverUserAdminRoutes(admin: Hono) {
         vehicles: vehicles ?? [],
       },
       permissions: {
-        can_write: false,
+        can_write: DRIVER_WRITE_ROLES.has(adminUser.role),
+        can_delete: DRIVER_DELETE_ROLES.has(adminUser.role),
+        can_see_reset_link: isPlatformRole(adminUser.role),
       },
     });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Lifecycle Actions: Suspend
+  // ---------------------------------------------------------------------------
+
+  admin.post("/drivers/:userId/suspend", async (c) => {
+    const adminUser = await requireProductAdmin(c, "driver");
+    if (adminUser instanceof Response) return adminUser;
+    const denied = requireWrite(adminUser);
+    if (denied) return denied;
+
+    const userId = c.req.param("userId");
+    const body = await c.req.json().catch(() => ({})) as { reason?: string };
+    const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+    if (!reason) return c.json({ error: "reason_required", message: "Suspension reason is required" }, 400);
+
+    const resolved = await driverDbOrResponse(c);
+    if (resolved instanceof Response) return resolved;
+    const { db, tables } = resolved;
+
+    // Verify driver profile exists
+    const { data: profile } = await db.from(tables.driver_profiles)
+      .select("user_id, status")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!profile) return c.json({ error: "not_found", message: "Driver profile not found" }, 404);
+
+    const now = new Date().toISOString();
+    const { error: updateErr } = await db.from(tables.driver_profiles).update({
+      status: "suspended",
+      suspended_at: now,
+      suspended_reason: reason,
+      suspended_by: adminUser.id,
+      updated_at: now,
+    }).eq("user_id", userId);
+
+    if (updateErr) {
+      return c.json({ error: "update_failed", message: updateErr.message }, 500);
+    }
+
+    // Apply auth-level ban (1 year = 8760 hours)
+    const auth = serviceAuth();
+    await auth.auth.admin.updateUserById(userId, { ban_duration: "8760h" });
+
+    await driverAudit(adminUser.id, "admin_driver_suspend", {
+      driver_user_id: userId,
+      reason,
+    });
+
+    return c.json({ ok: true, status: "suspended" });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Lifecycle Actions: Unsuspend
+  // ---------------------------------------------------------------------------
+
+  admin.post("/drivers/:userId/unsuspend", async (c) => {
+    const adminUser = await requireProductAdmin(c, "driver");
+    if (adminUser instanceof Response) return adminUser;
+    const denied = requireWrite(adminUser);
+    if (denied) return denied;
+
+    const userId = c.req.param("userId");
+    const resolved = await driverDbOrResponse(c);
+    if (resolved instanceof Response) return resolved;
+    const { db, tables } = resolved;
+
+    const now = new Date().toISOString();
+    const { error: updateErr } = await db.from(tables.driver_profiles).update({
+      status: "active",
+      suspended_at: null,
+      suspended_reason: null,
+      suspended_by: null,
+      updated_at: now,
+    }).eq("user_id", userId);
+
+    if (updateErr) {
+      return c.json({ error: "update_failed", message: updateErr.message }, 500);
+    }
+
+    // Remove auth-level ban
+    const auth = serviceAuth();
+    await auth.auth.admin.updateUserById(userId, { ban_duration: "none" });
+
+    await driverAudit(adminUser.id, "admin_driver_unsuspend", {
+      driver_user_id: userId,
+    });
+
+    return c.json({ ok: true, status: "active" });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Lifecycle Actions: Deactivate (permanent, stronger than suspend)
+  // ---------------------------------------------------------------------------
+
+  admin.post("/drivers/:userId/deactivate", async (c) => {
+    const adminUser = await requireProductAdmin(c, "driver");
+    if (adminUser instanceof Response) return adminUser;
+    const denied = requireWrite(adminUser);
+    if (denied) return denied;
+
+    const userId = c.req.param("userId");
+    const body = await c.req.json().catch(() => ({})) as { reason?: string };
+    const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+    if (!reason) return c.json({ error: "reason_required", message: "Deactivation reason is required" }, 400);
+
+    const resolved = await driverDbOrResponse(c);
+    if (resolved instanceof Response) return resolved;
+    const { db, tables } = resolved;
+
+    const { data: profile } = await db.from(tables.driver_profiles)
+      .select("user_id, status")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!profile) return c.json({ error: "not_found", message: "Driver profile not found" }, 404);
+
+    const now = new Date().toISOString();
+    const { error: updateErr } = await db.from(tables.driver_profiles).update({
+      status: "deactivated",
+      deactivated_at: now,
+      deactivated_reason: reason,
+      deactivated_by: adminUser.id,
+      updated_at: now,
+    }).eq("user_id", userId);
+
+    if (updateErr) {
+      return c.json({ error: "update_failed", message: updateErr.message }, 500);
+    }
+
+    // Apply long-term auth-level ban (~100 years)
+    const auth = serviceAuth();
+    await auth.auth.admin.updateUserById(userId, { ban_duration: "876000h" });
+
+    await driverAudit(adminUser.id, "admin_driver_deactivate", {
+      driver_user_id: userId,
+      reason,
+    });
+
+    return c.json({ ok: true, status: "deactivated" });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Lifecycle Actions: Reactivate (from deactivated state)
+  // ---------------------------------------------------------------------------
+
+  admin.post("/drivers/:userId/reactivate", async (c) => {
+    const adminUser = await requireProductAdmin(c, "driver");
+    if (adminUser instanceof Response) return adminUser;
+    const denied = requireWrite(adminUser);
+    if (denied) return denied;
+
+    const userId = c.req.param("userId");
+    const resolved = await driverDbOrResponse(c);
+    if (resolved instanceof Response) return resolved;
+    const { db, tables } = resolved;
+
+    const now = new Date().toISOString();
+    const { error: updateErr } = await db.from(tables.driver_profiles).update({
+      status: "active",
+      deactivated_at: null,
+      deactivated_reason: null,
+      deactivated_by: null,
+      suspended_at: null,
+      suspended_reason: null,
+      suspended_by: null,
+      updated_at: now,
+    }).eq("user_id", userId);
+
+    if (updateErr) {
+      return c.json({ error: "update_failed", message: updateErr.message }, 500);
+    }
+
+    // Remove auth-level ban
+    const auth = serviceAuth();
+    await auth.auth.admin.updateUserById(userId, { ban_duration: "none" });
+
+    await driverAudit(adminUser.id, "admin_driver_reactivate", {
+      driver_user_id: userId,
+    });
+
+    return c.json({ ok: true, status: "active" });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Lifecycle Actions: Sign Out (force logout all devices)
+  // ---------------------------------------------------------------------------
+
+  admin.post("/drivers/:userId/sign-out", async (c) => {
+    const adminUser = await requireProductAdmin(c, "driver");
+    if (adminUser instanceof Response) return adminUser;
+    const denied = requireWrite(adminUser);
+    if (denied) return denied;
+
+    const userId = c.req.param("userId");
+    const auth = serviceAuth();
+    const { error } = await auth.auth.admin.signOut(userId, "global");
+    if (error) {
+      return c.json({ error: "sign_out_failed", message: error.message }, 500);
+    }
+
+    await driverAudit(adminUser.id, "admin_driver_sign_out", {
+      driver_user_id: userId,
+    });
+
+    return c.json({ ok: true });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Lifecycle Actions: Reset Password
+  // ---------------------------------------------------------------------------
+
+  admin.post("/drivers/:userId/reset-password", async (c) => {
+    const adminUser = await requireProductAdmin(c, "driver");
+    if (adminUser instanceof Response) return adminUser;
+    const denied = requireWrite(adminUser);
+    if (denied) return denied;
+
+    const userId = c.req.param("userId");
+    const auth = serviceAuth();
+    
+    const { data: userData, error: userErr } = await auth.auth.admin.getUserById(userId);
+    if (userErr || !userData.user?.email) {
+      return c.json({ error: "user_not_found", message: "Could not find user email" }, 404);
+    }
+
+    const { data: linkData, error: linkErr } = await auth.auth.admin.generateLink({
+      type: "recovery",
+      email: userData.user.email,
+    });
+    if (linkErr) {
+      return c.json({ error: "reset_failed", message: linkErr.message }, 500);
+    }
+
+    await driverAudit(adminUser.id, "admin_driver_reset_password", {
+      driver_user_id: userId,
+    });
+
+    const payload: Record<string, unknown> = {
+      ok: true,
+      message: "Password recovery initiated",
+      email: userData.user.email,
+    };
+    if (isPlatformRole(adminUser.role) && linkData.properties?.action_link) {
+      payload.recovery_link = linkData.properties.action_link;
+    }
+
+    return c.json(payload);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Lifecycle Actions: Delete (removes driver_profiles row, keeps auth.users)
+  // ---------------------------------------------------------------------------
+
+  admin.delete("/drivers/:userId", async (c) => {
+    const adminUser = await requireProductAdmin(c, "driver");
+    if (adminUser instanceof Response) return adminUser;
+    const denied = requireDelete(adminUser);
+    if (denied) return denied;
+
+    const userId = c.req.param("userId");
+    const resolved = await driverDbOrResponse(c);
+    if (resolved instanceof Response) return resolved;
+    const { db, tables } = resolved;
+
+    // Verify profile exists
+    const { data: profile } = await db.from(tables.driver_profiles)
+      .select("id, user_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!profile) {
+      return c.json({ error: "not_found", message: "Driver profile not found" }, 404);
+    }
+
+    // Delete related data first (driver_vehicles, etc.)
+    if (profile.id) {
+      await db.from("driver_vehicles").delete().eq("driver_profile_id", profile.id);
+      await db.from("driver_platform_connections").delete().eq("driver_profile_id", profile.id);
+    }
+
+    // Delete the driver profile
+    const { error: deleteErr } = await db.from(tables.driver_profiles)
+      .delete()
+      .eq("user_id", userId);
+
+    if (deleteErr) {
+      return c.json({ error: "delete_failed", message: deleteErr.message }, 500);
+    }
+
+    // Force sign out from all devices
+    const auth = serviceAuth();
+    await auth.auth.admin.signOut(userId, "global");
+
+    await driverAudit(adminUser.id, "admin_driver_deleted", {
+      driver_user_id: userId,
+      profile_id: profile.id,
+    });
+
+    return c.json({ ok: true, message: "Driver profile deleted. User can re-signup as a new driver." });
   });
 
   admin.get("/drivers/:userId/trips", async (c) => {

@@ -234,3 +234,127 @@ export async function updateComplianceStatus(
   if (!res.ok) throw new Error(await parseError(res));
   return parseJson(res);
 }
+
+// ---------------------------------------------------------------------------
+// Driver Lifecycle Actions
+// ---------------------------------------------------------------------------
+
+/**
+ * Suspend a driver account (temporary block).
+ * Sets status to "suspended", applies 1-year auth ban.
+ */
+export async function suspendDriver(
+  accessToken: string,
+  userId: string,
+  reason: string,
+): Promise<{ ok: boolean; status: string }> {
+  const res = await fetch(`${DRIVER_BASE}/admin/drivers/${encodeURIComponent(userId)}/suspend`, {
+    method: 'POST',
+    headers: headers(accessToken, 'application/json'),
+    body: JSON.stringify({ reason }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return parseJson(res);
+}
+
+/**
+ * Unsuspend a driver account (lift temporary block).
+ * Sets status back to "active", removes auth ban.
+ */
+export async function unsuspendDriver(
+  accessToken: string,
+  userId: string,
+): Promise<{ ok: boolean; status: string }> {
+  const res = await fetch(`${DRIVER_BASE}/admin/drivers/${encodeURIComponent(userId)}/unsuspend`, {
+    method: 'POST',
+    headers: headers(accessToken, 'application/json'),
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return parseJson(res);
+}
+
+/**
+ * Deactivate a driver account (permanent block, stronger than suspend).
+ * Sets status to "deactivated", applies ~100-year auth ban.
+ */
+export async function deactivateDriver(
+  accessToken: string,
+  userId: string,
+  reason: string,
+): Promise<{ ok: boolean; status: string }> {
+  const res = await fetch(`${DRIVER_BASE}/admin/drivers/${encodeURIComponent(userId)}/deactivate`, {
+    method: 'POST',
+    headers: headers(accessToken, 'application/json'),
+    body: JSON.stringify({ reason }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return parseJson(res);
+}
+
+/**
+ * Reactivate a deactivated driver account.
+ * Sets status back to "active", removes auth ban.
+ */
+export async function reactivateDriver(
+  accessToken: string,
+  userId: string,
+): Promise<{ ok: boolean; status: string }> {
+  const res = await fetch(`${DRIVER_BASE}/admin/drivers/${encodeURIComponent(userId)}/reactivate`, {
+    method: 'POST',
+    headers: headers(accessToken, 'application/json'),
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return parseJson(res);
+}
+
+/**
+ * Force sign out a driver from all devices.
+ */
+export async function signOutDriver(
+  accessToken: string,
+  userId: string,
+): Promise<{ ok: boolean }> {
+  const res = await fetch(`${DRIVER_BASE}/admin/drivers/${encodeURIComponent(userId)}/sign-out`, {
+    method: 'POST',
+    headers: headers(accessToken, 'application/json'),
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return parseJson(res);
+}
+
+/**
+ * Send password reset email for a driver.
+ * Platform admins may receive the recovery link directly.
+ */
+export async function resetDriverPassword(
+  accessToken: string,
+  userId: string,
+): Promise<{ ok: boolean; message: string; email?: string; recovery_link?: string }> {
+  const res = await fetch(`${DRIVER_BASE}/admin/drivers/${encodeURIComponent(userId)}/reset-password`, {
+    method: 'POST',
+    headers: headers(accessToken, 'application/json'),
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return parseJson(res);
+}
+
+/**
+ * Delete driver profile (product-scoped removal).
+ * Removes driver_profiles row, user can re-signup as a new driver.
+ * Does NOT delete auth.users - user retains access to other Roam products.
+ */
+export async function deleteDriver(
+  accessToken: string,
+  userId: string,
+): Promise<{ ok: boolean; message: string }> {
+  const res = await fetch(`${DRIVER_BASE}/admin/drivers/${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+    headers: headers(accessToken),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return parseJson(res);
+}

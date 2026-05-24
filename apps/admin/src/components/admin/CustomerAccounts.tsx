@@ -28,6 +28,8 @@ import {
   Check,
   X,
   KeyRound,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { resolveRole } from '../../utils/permissions';
@@ -117,9 +119,11 @@ export function CustomerAccounts() {
   const resolved = resolveRole(role || (session?.user as any)?.user_metadata?.role);
   const isPlatformOwner = resolved === 'platform_owner';
   const isPlatformSupport = resolved === 'platform_support';
+  const isSuperadmin = (session?.user as any)?.user_metadata?.role === 'superadmin';
   const canSuspend = isPlatformOwner || isPlatformSupport;    // owner + support can suspend
   const canEdit = isPlatformOwner;                             // only owner can edit details
   const canResetPassword = isPlatformOwner || isPlatformSupport;
+  const canFullDelete = isSuperadmin;                          // only superadmin can permanently delete
   // platform_analyst gets read-only (no actions at all)
 
   const [search, setSearch] = useState('');
@@ -167,6 +171,11 @@ export function CustomerAccounts() {
 
   // Phase 7: Set Password modal
   const [setPasswordTarget, setSetPasswordTarget] = useState<Customer | null>(null);
+
+  // Phase 8: Full delete modal (superadmin only)
+  const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
+  const [deleteConfirmEmail, setDeleteConfirmEmail] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -406,6 +415,35 @@ export function CustomerAccounts() {
         }
       },
     });
+  };
+
+  // Phase 8: Full platform delete (superadmin only)
+  const handleOpenDeleteModal = (customer: Customer) => {
+    setOpenDropdown(null);
+    setDeleteTarget(customer);
+    setDeleteConfirmEmail('');
+  };
+
+  const handleFullDelete = async () => {
+    if (!deleteTarget || deleteConfirmEmail.toLowerCase() !== deleteTarget.email.toLowerCase()) return;
+    setDeleteLoading(true);
+    try {
+      const res = await fetch(`${API_ENDPOINTS.admin}/admin/users/${deleteTarget.id}/full-delete`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      toast.success(`${deleteTarget.email} has been permanently deleted from all Roam products`);
+      setDeleteTarget(null);
+      setDeleteConfirmEmail('');
+      refetch();
+    } catch (err: any) {
+      console.error('Full delete error:', err);
+      toast.error(err.message || 'Failed to delete user');
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   // CSV Export
@@ -760,6 +798,17 @@ export function CustomerAccounts() {
                                     )}
                                   </>
                                 )}
+                                {canFullDelete && (
+                                  <>
+                                    <div className="border-t border-slate-700 my-1" />
+                                    <button
+                                      className="w-full px-3 py-2 text-left text-sm text-red-500 hover:bg-slate-700 flex items-center gap-2"
+                                      onClick={() => handleOpenDeleteModal(c)}
+                                    >
+                                      <Trash2 className="w-4 h-4" /> Delete Platform Account
+                                    </button>
+                                  </>
+                                )}
                               </div>
                             )}
                           </div>
@@ -1010,6 +1059,69 @@ export function CustomerAccounts() {
           accessToken={accessToken || ''}
           onClose={() => setSetPasswordTarget(null)}
         />
+      )}
+
+      {/* Full Delete Modal (superadmin only) */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center gap-3 text-red-400">
+              <div className="bg-red-500/20 p-2 rounded-full">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <h2 className="text-lg font-bold text-white">Delete Platform Account</h2>
+            </div>
+
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+              <p className="text-sm text-red-300">
+                <strong>Warning:</strong> This action is <strong>permanent and irreversible</strong>.
+              </p>
+            </div>
+
+            <div className="space-y-2 text-sm text-slate-300">
+              <p>
+                Deleting <strong>{deleteTarget.name || deleteTarget.email}</strong> will:
+              </p>
+              <ul className="list-disc list-inside text-slate-400 space-y-1 pl-2">
+                <li>Remove their Driver profile (if any)</li>
+                <li>Remove their Rider profile (if any)</li>
+                <li>Remove their Fleet membership (if any)</li>
+                <li>Sign them out of all devices</li>
+                <li>Permanently delete their auth account</li>
+              </ul>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">
+                Type <span className="text-amber-400 font-mono">{deleteTarget.email}</span> to confirm
+              </label>
+              <input
+                type="text"
+                value={deleteConfirmEmail}
+                onChange={e => setDeleteConfirmEmail(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500/50"
+                placeholder={deleteTarget.email}
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={() => { setDeleteTarget(null); setDeleteConfirmEmail(''); }}
+                className="px-4 py-2 text-sm text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleFullDelete}
+                disabled={deleteLoading || deleteConfirmEmail.toLowerCase() !== deleteTarget.email.toLowerCase()}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-500 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {deleteLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                Delete Forever
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

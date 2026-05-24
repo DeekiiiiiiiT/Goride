@@ -517,6 +517,22 @@ export async function signOutRiderAllDevices(
   if (!res.ok) throw new Error(await parseError(res));
 }
 
+/**
+ * Delete rider profile (product-scoped removal).
+ * Removes rider_profiles row, user can re-signup as a new rider.
+ * Does NOT delete auth.users - user retains access to other Roam products.
+ */
+export async function deleteRider(
+  accessToken: string,
+  userId: string,
+): Promise<{ ok: boolean; message: string }> {
+  const res = await adminFetch(accessToken, `${RIDES_BASE}/admin/riders/${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
 export type BodyTypeTierMode = 'expand' | 'strict';
 
 export interface DispatchSettingsDto {
