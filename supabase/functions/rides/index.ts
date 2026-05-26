@@ -190,6 +190,17 @@ async function loadPendingDriverOffersForDriver(
   return pub ?? [];
 }
 
+function isMissingDbRpc(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  const msg = (error.message ?? "").toLowerCase();
+  return (
+    error.code === "PGRST202" ||
+    error.code === "42883" ||
+    msg.includes("could not find the function") ||
+    msg.includes("function") && msg.includes("does not exist")
+  );
+}
+
 async function patchRideRequest(id: string, patch: Record<string, unknown>): Promise<boolean> {
   const { data: rpcData, error: rpcError } = await pubSvc().rpc("rides_patch_ride_request", {
     p_id: id,
@@ -197,22 +208,58 @@ async function patchRideRequest(id: string, patch: Record<string, unknown>): Pro
   });
   if (!rpcError && rpcData != null) return true;
 
-  const { error } = await svc().from("ride_requests").update(patch).eq("id", id);
-  if (error) {
+  const { data: directRow, error: directError } = await svc().from("ride_requests").update(patch).eq(
+    "id",
+    id,
+  ).select("id").maybeSingle();
+  if (!directError && directRow) {
+    if (rpcError) {
+      logLine({
+        event: "patch_ride_rpc_fallback",
+        ride_id: id,
+        rpc_error: rpcError.message,
+      });
+    }
+    return true;
+  }
+
+  logLine({
+    event: "patch_ride_failed",
+    ride_id: id,
+    error: directError?.message,
+    rpc_error: rpcError?.message,
+    rpc_missing: isMissingDbRpc(rpcError),
+  });
+  return false;
+}
+
+async function cancelRideRequestRow(
+  id: string,
+  cancelledBy: "rider" | "driver" | "system",
+  reason: string | null,
+): Promise<boolean> {
+  const { data: cancelData, error: cancelError } = await pubSvc().rpc("rides_cancel_ride_request", {
+    p_id: id,
+    p_cancelled_by: cancelledBy,
+    p_cancel_reason: reason,
+  });
+  if (!cancelError && cancelData != null) return true;
+
+  if (cancelError && !isMissingDbRpc(cancelError)) {
     logLine({
-      event: "patch_ride_failed",
+      event: "cancel_ride_rpc_error",
       ride_id: id,
-      error: error.message,
-      rpc_error: rpcError.message,
-    });
-  } else if (rpcError) {
-    logLine({
-      event: "patch_ride_rpc_fallback",
-      ride_id: id,
-      rpc_error: rpcError.message,
+      error: cancelError.message,
+      code: cancelError.code,
     });
   }
-  return !error;
+
+  return patchRideRequest(id, {
+    status: "cancelled",
+    cancelled_by: cancelledBy,
+    cancel_reason: reason,
+    updated_at: new Date().toISOString(),
+  });
 }
 
 async function loadMatchingRideIdsForRider(riderUserId: string): Promise<string[]> {
@@ -237,12 +284,7 @@ async function cancelPriorMatchingRidesForRider(
   const ids = await loadMatchingRideIdsForRider(riderUserId);
   const now = new Date().toISOString();
   for (const rideId of ids) {
-    const ok = await patchRideRequest(rideId, {
-      status: "cancelled",
-      cancelled_by: "rider",
-      cancel_reason: reason,
-      updated_at: now,
-    });
+    const ok = await cancelRideRequestRow(rideId, "rider", reason);
     if (!ok) {
       logLine({ event: "cancel_prior_matching_failed", ride_id: rideId, rider_user_id: riderUserId });
       continue;
@@ -966,14 +1008,14 @@ app.post("/v1/requests/:id/cancel", async (c) => {
   const terminal = ["completed", "cancelled"];
   if (terminal.includes(ride.status as string)) return c.json({ ride });
 
-  const patched = await patchRideRequest(id, {
-    status: "cancelled",
-    cancelled_by: "rider",
-    cancel_reason: typeof body.reason === "string" ? body.reason : null,
-    updated_at: new Date().toISOString(),
-  });
+  const cancelReason = typeof body.reason === "string" ? body.reason : null;
+  const patched = await cancelRideRequestRow(id, "rider", cancelReason);
   if (!patched) {
-    return c.json({ error: "update_failed", message: "Could not cancel ride" }, 500);
+    return c.json({
+      error: "update_failed",
+      message:
+        "Could not cancel ride. Run supabase/scripts/apply_rides_matching_writes.sql in the Supabase SQL editor, then redeploy the rides edge function.",
+    }, 500);
   }
 
   await supersedePendingOffersForRide(id);
