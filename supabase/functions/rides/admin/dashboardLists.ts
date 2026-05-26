@@ -55,44 +55,7 @@ export function registerDashboardListRoutes(
         .order("created_at", { ascending: false })
         .limit(LIST_LIMIT);
       if (error) return c.json({ error: "list_failed", message: error.message }, 500);
-      const rides = data ?? [];
-      const matching = rides.filter((r) => r.status === "matching");
-      const waveZero = matching.filter((r) => Number(r.matching_wave ?? 0) === 0);
-      // #region agent log
-      console.log(JSON.stringify({
-        event: "debug_trace",
-        sessionId: "93407e",
-        hypothesisId: "H5",
-        location: "dashboardLists.ts:active_rides",
-        message: "admin active rides snapshot",
-        data: {
-          total: rides.length,
-          matching: matching.length,
-          matching_wave_zero: waveZero.length,
-          oldest_matching_hours: waveZero.length
-            ? Math.round((Date.now() - new Date(String(waveZero[waveZero.length - 1]?.created_at)).getTime()) / 3600000)
-            : 0,
-        },
-        timestamp: Date.now(),
-      }));
-      fetch("http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "93407e" },
-        body: JSON.stringify({
-          sessionId: "93407e",
-          hypothesisId: "H5",
-          location: "dashboardLists.ts:active_rides",
-          message: "admin active rides snapshot",
-          data: {
-            total: rides.length,
-            matching: matching.length,
-            matching_wave_zero: waveZero.length,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
-      return c.json({ rides });
+      return c.json({ rides: data ?? [] });
     }
 
     if (view === "riders_on_trip") {

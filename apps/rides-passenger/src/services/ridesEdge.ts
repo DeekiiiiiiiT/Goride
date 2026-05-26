@@ -115,26 +115,7 @@ export async function ridesCreateRequest(body: CreateRideBody): Promise<{ ride: 
     body: JSON.stringify(body),
   });
   if (!res.ok) await parseRidesError(res);
-  const json = (await res.json()) as { ride: RideRequestRow };
-  // #region agent log
-  fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '93407e' },
-    body: JSON.stringify({
-      sessionId: '93407e',
-      hypothesisId: 'H6',
-      location: 'ridesEdge.ts:ridesCreateRequest',
-      message: 'rider booked',
-      data: {
-        ride_id: json.ride?.id,
-        status: json.ride?.status,
-        matching_wave: json.ride?.matching_wave,
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-  return json;
+  return res.json();
 }
 
 export async function ridesGetRequest(id: string): Promise<{

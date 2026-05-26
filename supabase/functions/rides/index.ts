@@ -219,17 +219,7 @@ async function insertDriverOfferRow(
   row: Record<string, unknown>,
 ): Promise<{ ok: boolean; error?: string }> {
   const { error: rpcError } = await pubSvc().rpc("rides_insert_driver_offer", { p_row: row });
-  if (!rpcError) {
-    // #region agent log
-    debugLog("H9", "index.ts:insertDriverOfferRow", "offer inserted via rpc", {
-      ride_request_id: row.ride_request_id,
-      driver_user_id: row.driver_user_id,
-      wave: row.wave,
-      status: row.status,
-    });
-    // #endregion
-    return { ok: true };
-  }
+  if (!rpcError) return { ok: true };
 
   const { error } = await svc().from("driver_offers").insert(row);
   if (!error) {
@@ -238,15 +228,6 @@ async function insertDriverOfferRow(
       ride_request_id: row.ride_request_id,
       rpc_error: rpcError.message,
     });
-    // #region agent log
-    debugLog("H9", "index.ts:insertDriverOfferRow", "offer inserted via fallback", {
-      ride_request_id: row.ride_request_id,
-      driver_user_id: row.driver_user_id,
-      wave: row.wave,
-      status: row.status,
-      rpc_error: rpcError.message,
-    });
-    // #endregion
     return { ok: true };
   }
   const msg = [rpcError.message, error.message].filter(Boolean).join(" | ");
@@ -256,16 +237,6 @@ async function insertDriverOfferRow(
     error: error.message,
     rpc_error: rpcError.message,
   });
-  // #region agent log
-  debugLog("H9", "index.ts:insertDriverOfferRow", "offer insert failed", {
-    ride_request_id: row.ride_request_id,
-    driver_user_id: row.driver_user_id,
-    wave: row.wave,
-    status: row.status,
-    rpc_error: rpcError.message,
-    fallback_error: error.message,
-  });
-  // #endregion
   return { ok: false, error: msg };
 }
 
@@ -344,36 +315,6 @@ function authClient(authHeader: string) {
 
 function logLine(payload: Record<string, unknown>) {
   console.log(JSON.stringify({ svc: "rides", ts: new Date().toISOString(), ...payload }));
-}
-
-/** Debug-mode trace (also in Supabase function logs via debug_trace). */
-function debugLog(
-  hypothesisId: string,
-  location: string,
-  message: string,
-  data: Record<string, unknown>,
-  runId = "pre-fix",
-) {
-  const payload = {
-    sessionId: "93407e",
-    runId,
-    hypothesisId,
-    location,
-    message,
-    data,
-    timestamp: Date.now(),
-  };
-  logLine({ event: "debug_trace", ...payload });
-  // #region agent log
-  fetch("http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "93407e",
-    },
-    body: JSON.stringify(payload),
-  }).catch(() => {});
-  // #endregion
 }
 
 function clientIp(c: { req: { header: (n: string) => string | undefined } }): string {
@@ -456,27 +397,10 @@ async function reconcileMatching(rideId: string, requestId?: string) {
   const db = svc();
   await expirePendingOffers(rideId);
   const ride = await loadRideRequestById(rideId);
-  // #region agent log
-  debugLog("H5", "index.ts:reconcileMatching", "reconcile entry", {
-    ride_id: rideId,
-    status: ride?.status ?? null,
-    matching_wave: ride?.matching_wave ?? null,
-    has_ride: Boolean(ride),
-  });
-  // #endregion
   if (!ride || ride.status !== "matching") return;
 
   const offerRows = await loadDriverOffersForRide(rideId, false);
-  const pendingCount = offerRows.filter((r) => r.status === "pending").length;
-  // #region agent log
-  debugLog("H8", "index.ts:reconcileMatching", "offer pending gate", {
-    ride_id: rideId,
-    offer_rows: offerRows.length,
-    pending_count: pendingCount,
-    statuses: offerRows.slice(0, 8).map((r) => r.status),
-  });
-  // #endregion
-  if (pendingCount > 0) return;
+  if (offerRows.some((row) => row.status === "pending")) return;
 
   let dispatchSettings = DEFAULT_DISPATCH_SETTINGS;
   try {
@@ -528,15 +452,6 @@ async function runMatchingWave(
 
   const freshSince = new Date(Date.now() - driverLocationMaxAgeMs(dispatchSettings)).toISOString();
   const locs = await loadAvailableDriverLocations(freshSince);
-  // #region agent log
-  debugLog("H1", "index.ts:runMatchingWave", "driver pool loaded", {
-    ride_id: rideId,
-    wave,
-    loc_rows: (locs ?? []).length,
-    fresh_since: freshSince,
-    location_max_age_min: dispatchSettings.driver_location_max_age_minutes,
-  });
-  // #endregion
 
   const serviceSlug = typeof ride.vehicle_option === "string"
     ? ride.vehicle_option.trim().toLowerCase()
@@ -572,15 +487,6 @@ async function runMatchingWave(
     (locs ?? []).map((row) => row.user_id as string),
     dispatchSettings,
   );
-  // #region agent log
-  debugLog("H2", "index.ts:runMatchingWave", "eligibility filter", {
-    ride_id: rideId,
-    wave,
-    loc_rows: (locs ?? []).length,
-    eligible_drivers: eligibleIds.size,
-    independent_only: dispatchSettings.independent_only_matching,
-  });
-  // #endregion
 
   type Cand = { user_id: string; lat: number; lng: number; d: number; body_type_slug: string | null };
   const candidates: Cand[] = [];
@@ -617,17 +523,6 @@ async function runMatchingWave(
     }
   }
   candidates.sort((a, b) => a.d - b.d || a.user_id.localeCompare(b.user_id));
-  // #region agent log
-  debugLog("H3", "index.ts:runMatchingWave", "geo/body filter", {
-    ride_id: rideId,
-    wave,
-    radius_km: radiusKm,
-    candidates: candidates.length,
-    filtered_body_type: filteredOutBodyType,
-    tiers_count: tiersCount,
-    service_slug: serviceSlug || null,
-  });
-  // #endregion
 
   logLine({
     event: "match_wave_diag",
@@ -673,13 +568,6 @@ async function runMatchingWave(
     updated_at: new Date().toISOString(),
   });
   if (!patchOk) {
-    // #region agent log
-    debugLog("H4", "index.ts:runMatchingWave", "matching_wave patch failed", {
-      ride_id: rideId,
-      wave,
-      picked: picked.length,
-    });
-    // #endregion
     logLine({
       event: "match_wave_aborted_patch_failed",
       ride_id: rideId,
@@ -736,16 +624,6 @@ async function runMatchingWave(
       message: e instanceof Error ? e.message : String(e),
     });
   }
-
-  // #region agent log
-  debugLog("H4", "index.ts:runMatchingWave", "wave complete", {
-    ride_id: rideId,
-    wave,
-    picked: picked.length,
-    offers_inserted: offersInserted,
-    last_offer_err: lastOfferErr ?? null,
-  });
-  // #endregion
 
   logLine({
     event: "matching_wave",
@@ -1008,17 +886,10 @@ app.post("/v1/requests", async (c) => {
 
   await runMatchingWave(ride.id, ride, 1, reqId);
 
-  const afterBook = await loadRideRequestById(ride.id as string);
-  // #region agent log
-  debugLog("H6", "index.ts:POST /v1/requests", "book + wave 1 done", {
-    ride_id: ride.id,
-    matching_wave: afterBook?.matching_wave ?? null,
-    status: afterBook?.status ?? null,
-  });
-  // #endregion
+  const freshRide = await loadRideRequestById(ride.id as string);
 
   logLine({ event: "ride_created", ride_id: ride.id, request_id: reqId });
-  return c.json({ ride: afterBook ?? ride });
+  return c.json({ ride: freshRide ?? ride });
 });
 
 app.get("/v1/requests/:id", async (c) => {
@@ -1148,15 +1019,6 @@ app.post("/v1/drivers/presence", async (c) => {
     }
   }
 
-  // #region agent log
-  debugLog("H7", "index.ts:POST /v1/drivers/presence", "presence saved", {
-    available: upsert.available_for_rides,
-    body_type_slug: upsert.body_type_slug,
-    lat_round: Math.round(upsert.lat * 100) / 100,
-    lng_round: Math.round(upsert.lng * 100) / 100,
-  });
-  // #endregion
-
   logLine({ event: "driver_presence", user_id: auth.user.id, available: upsert.available_for_rides });
   return c.json({ ok: true });
 });
@@ -1171,13 +1033,6 @@ app.get("/v1/drivers/offers", async (c) => {
   await expireDriverPendingOffers(auth.user.id, nowIso);
 
   const offers = await loadPendingDriverOffersForDriver(auth.user.id, nowIso);
-  // #region agent log
-  debugLog("H10", "index.ts:GET /v1/drivers/offers", "pending offers for driver", {
-    driver_user_id: auth.user.id,
-    pending_count: offers.length,
-    ride_ids: offers.slice(0, 5).map((o) => o.ride_request_id),
-  });
-  // #endregion
 
   const rideIds = [...new Set(offers.map((o) => o.ride_request_id as string))];
   let ridesById: Record<string, Record<string, unknown>> = {};
@@ -1207,16 +1062,6 @@ app.post("/v1/drivers/offers/:offerId/accept", async (c) => {
   const nowIso = new Date().toISOString();
 
   const offer = await loadDriverOfferById(offerId);
-  // #region agent log
-  debugLog("H11", "index.ts:POST /v1/drivers/offers/:offerId/accept", "accept called", {
-    offer_id: offerId,
-    driver_user_id: auth.user.id,
-    offer_status: offer?.status ?? null,
-    offer_expires_at: offer?.expires_at ?? null,
-    ride_request_id: offer?.ride_request_id ?? null,
-    now_iso: nowIso,
-  });
-  // #endregion
   if (!offer || offer.driver_user_id !== auth.user.id) return c.json({ error: "not_found" }, 404);
   if (offer.status !== "pending") return c.json({ error: "offer_not_pending" }, 409);
   if ((offer.expires_at as string) <= nowIso) {
@@ -1239,14 +1084,6 @@ app.post("/v1/drivers/offers/:offerId/accept", async (c) => {
   });
 
   const freshRide = await loadRideRequestById(rideId);
-  // #region agent log
-  debugLog("H11", "index.ts:POST /v1/drivers/offers/:offerId/accept", "accept result ride status", {
-    offer_id: offerId,
-    ride_id: rideId,
-    fresh_status: freshRide?.status ?? null,
-    assigned_driver_user_id: freshRide?.assigned_driver_user_id ?? null,
-  });
-  // #endregion
 
   if (!freshRide || freshRide.status !== "driver_assigned") {
     await audit(rideId, auth.user.id, "accept_race_lost", { offer_id: offerId });

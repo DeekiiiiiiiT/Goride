@@ -177,25 +177,6 @@ export function useRideDispatch() {
             available_for_rides: true,
             body_type_slug: effectiveBodyTypeSlug,
           });
-          // #region agent log
-          fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '93407e' },
-            body: JSON.stringify({
-              sessionId: '93407e',
-              hypothesisId: 'H7',
-              location: 'useRideDispatch.ts:presence',
-              message: 'driver presence ok',
-              data: {
-                online: true,
-                body_type_slug: effectiveBodyTypeSlug,
-                lat_round: Math.round(pos.coords.latitude * 100) / 100,
-                lng_round: Math.round(pos.coords.longitude * 100) / 100,
-              },
-              timestamp: Date.now(),
-            }),
-          }).catch(() => {});
-          // #endregion
           setPresenceError(null);
         } catch (e: unknown) {
           const message = e instanceof Error ? e.message : 'Could not go online';
