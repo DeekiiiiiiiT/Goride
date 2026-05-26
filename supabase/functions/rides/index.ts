@@ -317,6 +317,36 @@ function logLine(payload: Record<string, unknown>) {
   console.log(JSON.stringify({ svc: "rides", ts: new Date().toISOString(), ...payload }));
 }
 
+/** Debug-mode trace (also in Supabase function logs via debug_trace). */
+function debugLog(
+  hypothesisId: string,
+  location: string,
+  message: string,
+  data: Record<string, unknown>,
+  runId = "pre-fix",
+) {
+  const payload = {
+    sessionId: "93407e",
+    runId,
+    hypothesisId,
+    location,
+    message,
+    data,
+    timestamp: Date.now(),
+  };
+  logLine({ event: "debug_trace", ...payload });
+  // #region agent log
+  fetch("http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "93407e",
+    },
+    body: JSON.stringify(payload),
+  }).catch(() => {});
+  // #endregion
+}
+
 function clientIp(c: { req: { header: (n: string) => string | undefined } }): string {
   return c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
     c.req.header("cf-connecting-ip") ||
@@ -397,6 +427,14 @@ async function reconcileMatching(rideId: string, requestId?: string) {
   const db = svc();
   await expirePendingOffers(rideId);
   const ride = await loadRideRequestById(rideId);
+  // #region agent log
+  debugLog("H5", "index.ts:reconcileMatching", "reconcile entry", {
+    ride_id: rideId,
+    status: ride?.status ?? null,
+    matching_wave: ride?.matching_wave ?? null,
+    has_ride: Boolean(ride),
+  });
+  // #endregion
   if (!ride || ride.status !== "matching") return;
 
   const offerRows = await loadDriverOffersForRide(rideId, false);
@@ -452,6 +490,15 @@ async function runMatchingWave(
 
   const freshSince = new Date(Date.now() - driverLocationMaxAgeMs(dispatchSettings)).toISOString();
   const locs = await loadAvailableDriverLocations(freshSince);
+  // #region agent log
+  debugLog("H1", "index.ts:runMatchingWave", "driver pool loaded", {
+    ride_id: rideId,
+    wave,
+    loc_rows: (locs ?? []).length,
+    fresh_since: freshSince,
+    location_max_age_min: dispatchSettings.driver_location_max_age_minutes,
+  });
+  // #endregion
 
   const serviceSlug = typeof ride.vehicle_option === "string"
     ? ride.vehicle_option.trim().toLowerCase()
@@ -487,6 +534,15 @@ async function runMatchingWave(
     (locs ?? []).map((row) => row.user_id as string),
     dispatchSettings,
   );
+  // #region agent log
+  debugLog("H2", "index.ts:runMatchingWave", "eligibility filter", {
+    ride_id: rideId,
+    wave,
+    loc_rows: (locs ?? []).length,
+    eligible_drivers: eligibleIds.size,
+    independent_only: dispatchSettings.independent_only_matching,
+  });
+  // #endregion
 
   type Cand = { user_id: string; lat: number; lng: number; d: number; body_type_slug: string | null };
   const candidates: Cand[] = [];
@@ -523,6 +579,17 @@ async function runMatchingWave(
     }
   }
   candidates.sort((a, b) => a.d - b.d || a.user_id.localeCompare(b.user_id));
+  // #region agent log
+  debugLog("H3", "index.ts:runMatchingWave", "geo/body filter", {
+    ride_id: rideId,
+    wave,
+    radius_km: radiusKm,
+    candidates: candidates.length,
+    filtered_body_type: filteredOutBodyType,
+    tiers_count: tiersCount,
+    service_slug: serviceSlug || null,
+  });
+  // #endregion
 
   logLine({
     event: "match_wave_diag",
@@ -568,6 +635,13 @@ async function runMatchingWave(
     updated_at: new Date().toISOString(),
   });
   if (!patchOk) {
+    // #region agent log
+    debugLog("H4", "index.ts:runMatchingWave", "matching_wave patch failed", {
+      ride_id: rideId,
+      wave,
+      picked: picked.length,
+    });
+    // #endregion
     logLine({
       event: "match_wave_aborted_patch_failed",
       ride_id: rideId,
@@ -624,6 +698,16 @@ async function runMatchingWave(
       message: e instanceof Error ? e.message : String(e),
     });
   }
+
+  // #region agent log
+  debugLog("H4", "index.ts:runMatchingWave", "wave complete", {
+    ride_id: rideId,
+    wave,
+    picked: picked.length,
+    offers_inserted: offersInserted,
+    last_offer_err: lastOfferErr ?? null,
+  });
+  // #endregion
 
   logLine({
     event: "matching_wave",
@@ -886,8 +970,17 @@ app.post("/v1/requests", async (c) => {
 
   await runMatchingWave(ride.id, ride, 1, reqId);
 
+  const afterBook = await loadRideRequestById(ride.id as string);
+  // #region agent log
+  debugLog("H6", "index.ts:POST /v1/requests", "book + wave 1 done", {
+    ride_id: ride.id,
+    matching_wave: afterBook?.matching_wave ?? null,
+    status: afterBook?.status ?? null,
+  });
+  // #endregion
+
   logLine({ event: "ride_created", ride_id: ride.id, request_id: reqId });
-  return c.json({ ride });
+  return c.json({ ride: afterBook ?? ride });
 });
 
 app.get("/v1/requests/:id", async (c) => {
@@ -1016,6 +1109,15 @@ app.post("/v1/drivers/presence", async (c) => {
       return c.json({ error: "presence_failed", message: rpcError.message }, 500);
     }
   }
+
+  // #region agent log
+  debugLog("H7", "index.ts:POST /v1/drivers/presence", "presence saved", {
+    available: upsert.available_for_rides,
+    body_type_slug: upsert.body_type_slug,
+    lat_round: Math.round(upsert.lat * 100) / 100,
+    lng_round: Math.round(upsert.lng * 100) / 100,
+  });
+  // #endregion
 
   logLine({ event: "driver_presence", user_id: auth.user.id, available: upsert.available_for_rides });
   return c.json({ ok: true });
