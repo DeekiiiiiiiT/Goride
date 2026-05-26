@@ -49,20 +49,35 @@ export function registerDriverAdminRoutes(app: Hono, _deps: Deps) {
       .or("onboarding_complete.eq.false,background_check_status.neq.approved");
 
     const { data: locations } = await db.from(tables.driver_locations)
-      .select("user_id, available_for_rides, updated_at")
-      .eq("available_for_rides", true);
+      .select("user_id, available_for_rides, updated_at");
+
+    const { data: activeTrips } = await db.from(tables.ride_requests)
+      .select("assigned_driver_user_id")
+      .in("status", ACTIVE_TRIP_STATUSES)
+      .not("assigned_driver_user_id", "is", null);
+
+    const onTripDriverIds = new Set(
+      (activeTrips ?? [])
+        .map((t) => t.assigned_driver_user_id as string)
+        .filter(Boolean),
+    );
 
     const now = Date.now();
-    const onlineNow = (locations ?? []).filter((l) => {
-      if (!l.updated_at) return false;
-      return now - new Date(l.updated_at as string).getTime() <= ONLINE_STALE_MS;
-    }).length;
+    let onlineNow = 0;
+    for (const l of locations ?? []) {
+      const uid = l.user_id as string;
+      if (onTripDriverIds.has(uid)) continue;
+      if (!l.available_for_rides || !l.updated_at) continue;
+      const age = now - new Date(l.updated_at as string).getTime();
+      if (age <= ONLINE_STALE_MS) onlineNow += 1;
+    }
 
     return c.json({
       total_drivers: totalDrivers ?? 0,
       active_drivers: activeDrivers ?? 0,
       pending_compliance: pendingCompliance ?? 0,
       online_now: onlineNow,
+      on_trip_now: onTripDriverIds.size,
     });
   });
 

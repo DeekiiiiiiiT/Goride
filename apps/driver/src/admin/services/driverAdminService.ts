@@ -48,7 +48,10 @@ export interface DriverStats {
   total_drivers: number;
   active_drivers: number;
   pending_compliance: number;
+  /** Available for dispatch (fresh GPS, not on an active trip). */
   online_now: number;
+  /** Assigned to an active ride (en route, at pickup, or on trip). */
+  on_trip_now: number;
 }
 
 function headers(accessToken: string, contentType?: string): HeadersInit {

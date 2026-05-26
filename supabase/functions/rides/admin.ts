@@ -22,8 +22,9 @@ import { isKnownServiceSlug } from "./fare/vehicleTypesDb.ts";
 import { registerVehicleTypeAdminRoutes } from "./admin/vehicleTypes.ts";
 import { registerRiderAdminRoutes } from "./admin/riders.ts";
 import { registerDispatchSettingsAdminRoutes } from "./admin/dispatchSettings.ts";
+import { registerDashboardStatsRoutes } from "./admin/dashboardStats.ts";
 
-type RidesAdminDb = Awaited<ReturnType<typeof getRidesAdminDb>>;
+export type RidesAdminDb = Awaited<ReturnType<typeof getRidesAdminDb>>;
 
 async function ridesDbOrResponse(
   c: { json: (body: unknown, status?: number) => Response },
@@ -638,6 +639,8 @@ export function registerAdminRoutes(
   registerRiderAdminRoutes(admin);
 
   registerDispatchSettingsAdminRoutes(admin, ridesDbOrResponse, adminAudit);
+
+  registerDashboardStatsRoutes(admin, ridesDbOrResponse);
 
   app.route("/admin", admin);
 }

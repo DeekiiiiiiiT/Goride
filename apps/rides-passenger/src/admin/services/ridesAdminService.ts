@@ -74,6 +74,15 @@ export interface SurgeCellAdminRow {
   updated_at: string | null;
 }
 
+export interface RidesAdminStats {
+  active_rides: number;
+  riders_on_trip: number;
+  todays_completed_rides: number;
+  online_drivers: number;
+  drivers_on_trip: number;
+  avg_surge_multiplier: number;
+}
+
 function headers(accessToken: string, contentType?: string): HeadersInit {
   const h: Record<string, string> = {
     Authorization: `Bearer ${accessToken}`,
@@ -172,6 +181,12 @@ async function parseError(res: Response): Promise<string> {
   } catch {
     return trimmed ? `${trimmed.slice(0, 200)} (HTTP ${res.status})` : `HTTP ${res.status}`;
   }
+}
+
+export async function getRidesAdminStats(accessToken: string): Promise<RidesAdminStats> {
+  const res = await adminFetch(accessToken, `${RIDES_BASE}/admin/stats`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
 }
 
 export type CommandoBodyTypeFacet = {

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useOutletContext } from 'react-router-dom';
+import { useOutletContext } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
-import { MapPin, Bell, ShieldCheck, Car, Users, Loader2 } from 'lucide-react';
+import { MapPin, ShieldCheck, Car, Users, Loader2, Route } from 'lucide-react';
 import { toast } from 'sonner';
 import { getDriverStats } from '../services/driverAdminService';
 
@@ -17,6 +17,7 @@ export function DriverAdminDashboard() {
     active_drivers: 0,
     pending_compliance: 0,
     online_now: 0,
+    on_trip_now: 0,
   });
   const [loading, setLoading] = useState(true);
 
@@ -47,7 +48,7 @@ export function DriverAdminDashboard() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         <StatCard
           title="Total Drivers"
           value={String(stats.total_drivers)}
@@ -57,8 +58,14 @@ export function DriverAdminDashboard() {
         <StatCard
           title="Online Now"
           value={String(stats.online_now)}
-          subtitle="Available or on trip"
+          subtitle="Available for dispatch"
           icon={<MapPin className="w-5 h-5 text-emerald-400" />}
+        />
+        <StatCard
+          title="On Trip"
+          value={String(stats.on_trip_now)}
+          subtitle="Active rides in progress"
+          icon={<Route className="w-5 h-5 text-amber-400" />}
         />
         <StatCard
           title="Active Drivers"
@@ -72,16 +79,6 @@ export function DriverAdminDashboard() {
           subtitle="Needs review"
           icon={<ShieldCheck className="w-5 h-5 text-blue-400" />}
         />
-      </div>
-
-      <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-6">
-        <h3 className="text-lg font-medium text-white mb-4">Quick Links</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <QuickLink to="/users" title="User Management" description="Directory, metrics, live status" />
-          <QuickLink to="/presence" title="Driver Presence" description="Monitor locations" color="emerald" />
-          <QuickLink to="/offers" title="Offer Monitor" description="Active ride offers" color="amber" icon={<Bell className="w-4 h-4" />} />
-          <QuickLink to="/compliance" title="Compliance" description="Verification queue" color="blue" />
-        </div>
       </div>
     </div>
   );
@@ -107,39 +104,5 @@ function StatCard({
       <p className="text-2xl font-semibold text-white">{value}</p>
       <p className="text-xs text-slate-500 mt-1">{subtitle}</p>
     </div>
-  );
-}
-
-function QuickLink({
-  to,
-  title,
-  description,
-  color = 'violet',
-  icon,
-}: {
-  to: string;
-  title: string;
-  description: string;
-  color?: 'violet' | 'emerald' | 'amber' | 'blue';
-  icon?: React.ReactNode;
-}) {
-  const colorClasses = {
-    violet: 'border-violet-500/30 hover:border-violet-500/50',
-    emerald: 'border-emerald-500/30 hover:border-emerald-500/50',
-    amber: 'border-amber-500/30 hover:border-amber-500/50',
-    blue: 'border-blue-500/30 hover:border-blue-500/50',
-  };
-
-  return (
-    <Link
-      to={to}
-      className={`block rounded-lg border bg-slate-800/30 p-4 transition-colors ${colorClasses[color]}`}
-    >
-      <p className="font-medium text-white flex items-center gap-2">
-        {icon}
-        {title}
-      </p>
-      <p className="text-sm text-slate-400 mt-1">{description}</p>
-    </Link>
   );
 }
