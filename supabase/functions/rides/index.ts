@@ -219,7 +219,17 @@ async function insertDriverOfferRow(
   row: Record<string, unknown>,
 ): Promise<{ ok: boolean; error?: string }> {
   const { error: rpcError } = await pubSvc().rpc("rides_insert_driver_offer", { p_row: row });
-  if (!rpcError) return { ok: true };
+  if (!rpcError) {
+    // #region agent log
+    debugLog("H9", "index.ts:insertDriverOfferRow", "offer inserted via rpc", {
+      ride_request_id: row.ride_request_id,
+      driver_user_id: row.driver_user_id,
+      wave: row.wave,
+      status: row.status,
+    });
+    // #endregion
+    return { ok: true };
+  }
 
   const { error } = await svc().from("driver_offers").insert(row);
   if (!error) {
@@ -228,6 +238,15 @@ async function insertDriverOfferRow(
       ride_request_id: row.ride_request_id,
       rpc_error: rpcError.message,
     });
+    // #region agent log
+    debugLog("H9", "index.ts:insertDriverOfferRow", "offer inserted via fallback", {
+      ride_request_id: row.ride_request_id,
+      driver_user_id: row.driver_user_id,
+      wave: row.wave,
+      status: row.status,
+      rpc_error: rpcError.message,
+    });
+    // #endregion
     return { ok: true };
   }
   const msg = [rpcError.message, error.message].filter(Boolean).join(" | ");
@@ -237,6 +256,16 @@ async function insertDriverOfferRow(
     error: error.message,
     rpc_error: rpcError.message,
   });
+  // #region agent log
+  debugLog("H9", "index.ts:insertDriverOfferRow", "offer insert failed", {
+    ride_request_id: row.ride_request_id,
+    driver_user_id: row.driver_user_id,
+    wave: row.wave,
+    status: row.status,
+    rpc_error: rpcError.message,
+    fallback_error: error.message,
+  });
+  // #endregion
   return { ok: false, error: msg };
 }
 
@@ -438,7 +467,16 @@ async function reconcileMatching(rideId: string, requestId?: string) {
   if (!ride || ride.status !== "matching") return;
 
   const offerRows = await loadDriverOffersForRide(rideId, false);
-  if (offerRows.some((row) => row.status === "pending")) return;
+  const pendingCount = offerRows.filter((r) => r.status === "pending").length;
+  // #region agent log
+  debugLog("H8", "index.ts:reconcileMatching", "offer pending gate", {
+    ride_id: rideId,
+    offer_rows: offerRows.length,
+    pending_count: pendingCount,
+    statuses: offerRows.slice(0, 8).map((r) => r.status),
+  });
+  // #endregion
+  if (pendingCount > 0) return;
 
   let dispatchSettings = DEFAULT_DISPATCH_SETTINGS;
   try {
@@ -1133,6 +1171,13 @@ app.get("/v1/drivers/offers", async (c) => {
   await expireDriverPendingOffers(auth.user.id, nowIso);
 
   const offers = await loadPendingDriverOffersForDriver(auth.user.id, nowIso);
+  // #region agent log
+  debugLog("H10", "index.ts:GET /v1/drivers/offers", "pending offers for driver", {
+    driver_user_id: auth.user.id,
+    pending_count: offers.length,
+    ride_ids: offers.slice(0, 5).map((o) => o.ride_request_id),
+  });
+  // #endregion
 
   const rideIds = [...new Set(offers.map((o) => o.ride_request_id as string))];
   let ridesById: Record<string, Record<string, unknown>> = {};
@@ -1162,6 +1207,16 @@ app.post("/v1/drivers/offers/:offerId/accept", async (c) => {
   const nowIso = new Date().toISOString();
 
   const offer = await loadDriverOfferById(offerId);
+  // #region agent log
+  debugLog("H11", "index.ts:POST /v1/drivers/offers/:offerId/accept", "accept called", {
+    offer_id: offerId,
+    driver_user_id: auth.user.id,
+    offer_status: offer?.status ?? null,
+    offer_expires_at: offer?.expires_at ?? null,
+    ride_request_id: offer?.ride_request_id ?? null,
+    now_iso: nowIso,
+  });
+  // #endregion
   if (!offer || offer.driver_user_id !== auth.user.id) return c.json({ error: "not_found" }, 404);
   if (offer.status !== "pending") return c.json({ error: "offer_not_pending" }, 409);
   if ((offer.expires_at as string) <= nowIso) {
@@ -1184,6 +1239,14 @@ app.post("/v1/drivers/offers/:offerId/accept", async (c) => {
   });
 
   const freshRide = await loadRideRequestById(rideId);
+  // #region agent log
+  debugLog("H11", "index.ts:POST /v1/drivers/offers/:offerId/accept", "accept result ride status", {
+    offer_id: offerId,
+    ride_id: rideId,
+    fresh_status: freshRide?.status ?? null,
+    assigned_driver_user_id: freshRide?.assigned_driver_user_id ?? null,
+  });
+  // #endregion
 
   if (!freshRide || freshRide.status !== "driver_assigned") {
     await audit(rideId, auth.user.id, "accept_race_lost", { offer_id: offerId });
