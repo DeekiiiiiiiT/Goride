@@ -205,23 +205,39 @@ async function patchRideRequest(id: string, patch: Record<string, unknown>): Pro
       error: error.message,
       rpc_error: rpcError.message,
     });
-  }
-  return !error;
-}
-
-async function insertDriverOfferRow(row: Record<string, unknown>): Promise<boolean> {
-  const { error: rpcError } = await pubSvc().rpc("rides_insert_driver_offer", { p_row: row });
-  if (!rpcError) return true;
-
-  const { error } = await svc().from("driver_offers").insert(row);
-  if (error) {
+  } else if (rpcError) {
     logLine({
-      event: "insert_offer_failed",
-      error: error.message,
+      event: "patch_ride_rpc_fallback",
+      ride_id: id,
       rpc_error: rpcError.message,
     });
   }
   return !error;
+}
+
+async function insertDriverOfferRow(
+  row: Record<string, unknown>,
+): Promise<{ ok: boolean; error?: string }> {
+  const { error: rpcError } = await pubSvc().rpc("rides_insert_driver_offer", { p_row: row });
+  if (!rpcError) return { ok: true };
+
+  const { error } = await svc().from("driver_offers").insert(row);
+  if (!error) {
+    logLine({
+      event: "insert_offer_via_fallback",
+      ride_request_id: row.ride_request_id,
+      rpc_error: rpcError.message,
+    });
+    return { ok: true };
+  }
+  const msg = [rpcError.message, error.message].filter(Boolean).join(" | ");
+  logLine({
+    event: "insert_offer_failed",
+    ride_request_id: row.ride_request_id,
+    error: error.message,
+    rpc_error: rpcError.message,
+  });
+  return { ok: false, error: msg };
 }
 
 async function patchDriverOfferRow(id: string, patch: Record<string, unknown>): Promise<boolean> {
@@ -479,7 +495,11 @@ async function runMatchingWave(
     const uid = row.user_id as string;
     if (excluded.has(uid)) continue;
     if (!eligibleIds.has(uid)) continue;
-    const bodySlug = (row as { body_type_slug?: string | null }).body_type_slug ?? null;
+    const rawBodySlug = (row as { body_type_slug?: string | null }).body_type_slug ?? null;
+    // GPS rows written before slug support (or cleared by validation) are null — assume sedan so
+    // require_body_type_for_offers does not zero out the candidate pool during beta.
+    const bodySlug = rawBodySlug ??
+      (tiersCount > 0 ? (normalizePresenceBodyTypeSlug("standard") ?? "sedan") : null);
     if (tiersCount > 0) {
       if (!bodySlug) {
         if (dispatchSettings.require_body_type_for_offers) {
@@ -504,6 +524,22 @@ async function runMatchingWave(
   }
   candidates.sort((a, b) => a.d - b.d || a.user_id.localeCompare(b.user_id));
 
+  logLine({
+    event: "match_wave_diag",
+    ride_id: rideId,
+    wave,
+    radius_km: radiusKm,
+    loc_rows: (locs ?? []).length,
+    eligible_drivers: eligibleIds.size,
+    candidates: candidates.length,
+    filtered_body_type: filteredOutBodyType,
+    service_slug: serviceSlug,
+    tiers_count: tiersCount,
+    pickup_lat: pickupLat,
+    pickup_lng: pickupLng,
+    request_id: requestId ?? null,
+  });
+
   const { ranked, source: matchingRouteSource } = await rankDriversByDriveTime(
     { lat: pickupLat, lng: pickupLng },
     candidates.map((c) => ({
@@ -527,14 +563,26 @@ async function runMatchingWave(
 
   const expiresAt = new Date(Date.now() + timeoutSec * 1000).toISOString();
 
-  await patchRideRequest(rideId, {
+  const patchOk = await patchRideRequest(rideId, {
     matching_wave: wave,
     updated_at: new Date().toISOString(),
   });
+  if (!patchOk) {
+    logLine({
+      event: "match_wave_aborted_patch_failed",
+      ride_id: rideId,
+      wave,
+      picked: picked.length,
+      request_id: requestId ?? null,
+    });
+    return;
+  }
 
+  let offersInserted = 0;
+  let lastOfferErr: string | undefined;
   for (let i = 0; i < picked.length; i++) {
     const c = picked[i];
-    await insertDriverOfferRow({
+    const ins = await insertDriverOfferRow({
       ride_request_id: rideId,
       driver_user_id: c.user_id,
       wave,
@@ -543,23 +591,47 @@ async function runMatchingWave(
       status: "pending",
       expires_at: expiresAt,
     });
+    if (ins.ok) offersInserted += 1;
+    else lastOfferErr = ins.error;
   }
 
-  await audit(rideId, ride.rider_user_id as string | undefined, "matching_wave", {
-    wave,
-    radius_km: radiusKm,
-    offers: picked.length,
-    matching_route_source: matchingRouteSource,
-    service_slug: serviceSlug,
-    allowed_body_types: [...allowedBodySlugs],
-    filtered_out_body_type: filteredOutBodyType,
-  });
+  if (picked.length > 0 && offersInserted === 0) {
+    logLine({
+      event: "match_wave_zero_offers_inserted",
+      ride_id: rideId,
+      wave,
+      attempted: picked.length,
+      last_error: lastOfferErr ?? "unknown",
+      request_id: requestId ?? null,
+    });
+  }
+
+  try {
+    await audit(rideId, ride.rider_user_id as string | undefined, "matching_wave", {
+      wave,
+      radius_km: radiusKm,
+      offers: picked.length,
+      offers_inserted: offersInserted,
+      matching_route_source: matchingRouteSource,
+      service_slug: serviceSlug,
+      allowed_body_types: [...allowedBodySlugs],
+      filtered_out_body_type: filteredOutBodyType,
+    });
+  } catch (e: unknown) {
+    logLine({
+      event: "audit_matching_wave_failed",
+      ride_id: rideId,
+      message: e instanceof Error ? e.message : String(e),
+    });
+  }
+
   logLine({
     event: "matching_wave",
     ride_id: rideId,
     wave,
     offers: picked.length,
-    request_id: requestId,
+    offers_inserted: offersInserted,
+    request_id: requestId ?? null,
   });
 }
 
