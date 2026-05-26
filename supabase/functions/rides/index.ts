@@ -191,11 +191,11 @@ async function loadPendingDriverOffersForDriver(
 }
 
 async function patchRideRequest(id: string, patch: Record<string, unknown>): Promise<boolean> {
-  const { error: rpcError } = await pubSvc().rpc("rides_patch_ride_request", {
+  const { data: rpcData, error: rpcError } = await pubSvc().rpc("rides_patch_ride_request", {
     p_id: id,
     p_patch: patch,
   });
-  if (!rpcError) return true;
+  if (!rpcError && rpcData != null) return true;
 
   const { error } = await svc().from("ride_requests").update(patch).eq("id", id);
   if (error) {
@@ -213,6 +213,48 @@ async function patchRideRequest(id: string, patch: Record<string, unknown>): Pro
     });
   }
   return !error;
+}
+
+async function loadMatchingRideIdsForRider(riderUserId: string): Promise<string[]> {
+  const { data: native, error: nativeErr } = await svc().from("ride_requests").select("id").eq(
+    "rider_user_id",
+    riderUserId,
+  ).eq("status", "matching");
+  if (!nativeErr && native) return native.map((row) => row.id as string);
+
+  const { data: pub } = await pubSvc().from("rides_ride_requests").select("id").eq(
+    "rider_user_id",
+    riderUserId,
+  ).eq("status", "matching");
+  return (pub ?? []).map((row) => row.id as string);
+}
+
+/** Ends stale matching requests when a rider books again without cancelling the prior search. */
+async function cancelPriorMatchingRidesForRider(
+  riderUserId: string,
+  reason: string,
+): Promise<void> {
+  const ids = await loadMatchingRideIdsForRider(riderUserId);
+  const now = new Date().toISOString();
+  for (const rideId of ids) {
+    const ok = await patchRideRequest(rideId, {
+      status: "cancelled",
+      cancelled_by: "rider",
+      cancel_reason: reason,
+      updated_at: now,
+    });
+    if (!ok) {
+      logLine({ event: "cancel_prior_matching_failed", ride_id: rideId, rider_user_id: riderUserId });
+      continue;
+    }
+    await supersedePendingOffersForRide(rideId);
+    const ride = await loadRideRequestById(rideId);
+    if (ride) {
+      const cellKey = gridCellKey(Number(ride.pickup_lat), Number(ride.pickup_lng));
+      await bumpSurgeDemand(cellKey, -1);
+    }
+    await audit(rideId, riderUserId, "ride_cancelled_rider", { auto: true, reason });
+  }
 }
 
 async function insertDriverOfferRow(
@@ -819,6 +861,8 @@ app.post("/v1/requests", async (c) => {
   const locked = verified.payload;
   const cellKey = gridCellKey(pickup_lat, pickup_lng);
 
+  await cancelPriorMatchingRidesForRider(auth.user.id, "replaced_by_new_booking");
+
   await bumpSurgeDemand(cellKey, 1);
 
   let bookDispatchSettings = DEFAULT_DISPATCH_SETTINGS;
@@ -922,12 +966,15 @@ app.post("/v1/requests/:id/cancel", async (c) => {
   const terminal = ["completed", "cancelled"];
   if (terminal.includes(ride.status as string)) return c.json({ ride });
 
-  await patchRideRequest(id, {
+  const patched = await patchRideRequest(id, {
     status: "cancelled",
     cancelled_by: "rider",
     cancel_reason: typeof body.reason === "string" ? body.reason : null,
     updated_at: new Date().toISOString(),
   });
+  if (!patched) {
+    return c.json({ error: "update_failed", message: "Could not cancel ride" }, 500);
+  }
 
   await supersedePendingOffersForRide(id);
 

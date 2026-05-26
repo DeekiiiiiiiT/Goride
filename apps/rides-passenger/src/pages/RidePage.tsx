@@ -1,10 +1,20 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import type { RideRequestStatus } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@roam/ui';
 import { ridesCancelRequest, ridesGetRequest } from '@/services/ridesEdge';
 
 function statusLabel(s: RideRequestStatus): string {
@@ -28,9 +38,21 @@ function statusLabel(s: RideRequestStatus): string {
   }
 }
 
+const CANCELLABLE_STATUSES: RideRequestStatus[] = [
+  'matching',
+  'driver_assigned',
+];
+
+function isCancellable(status: RideRequestStatus | undefined): boolean {
+  return Boolean(status && CANCELLABLE_STATUSES.includes(status));
+}
+
 export default function RidePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const { data, error, refetch, isFetching } = useQuery({
     queryKey: ['ride', id],
@@ -49,15 +71,28 @@ export default function RidePage() {
 
   const ride = data?.ride;
 
-  const cancel = async () => {
+  const performCancel = async () => {
     if (!id) return;
+    setCancelling(true);
     try {
       await ridesCancelRequest(id, 'rider_changed_plans');
       toast.success('Ride cancelled');
-      await refetch();
+      setCancelDialogOpen(false);
+      setLeaveDialogOpen(false);
+      navigate('/', { replace: true });
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Cancel failed');
+    } finally {
+      setCancelling(false);
     }
+  };
+
+  const handleBack = () => {
+    if (!ride || !isCancellable(ride.status)) {
+      navigate('/');
+      return;
+    }
+    setLeaveDialogOpen(true);
   };
 
   if (!id) return null;
@@ -68,7 +103,7 @@ export default function RidePage() {
         <div className="max-w-lg mx-auto safe-x px-4 py-3 flex items-center gap-2">
           <button
             type="button"
-            onClick={() => navigate('/')}
+            onClick={handleBack}
             className="btn-touch inline-flex items-center justify-center rounded-2xl border border-zinc-200 bg-white px-3 hover:bg-zinc-50 touch-manipulation active:scale-[0.98]"
             aria-label="Back to home"
           >
@@ -119,18 +154,15 @@ export default function RidePage() {
               </div>
             </div>
 
-            {(ride.status === 'matching' || ride.status === 'driver_assigned') && (
-              <div className="flex flex-col gap-3">
-                {ride.status === 'matching' && (
-                  <button
-                    type="button"
-                    onClick={cancel}
-                    className="btn-touch w-full rounded-2xl border border-zinc-300 bg-white text-base font-semibold text-zinc-800 hover:bg-zinc-50 touch-manipulation active:scale-[0.99]"
-                  >
-                    Cancel search
-                  </button>
-                )}
-              </div>
+            {isCancellable(ride.status) && (
+              <button
+                type="button"
+                onClick={() => setCancelDialogOpen(true)}
+                disabled={cancelling}
+                className="btn-touch w-full rounded-2xl border border-zinc-300 bg-white text-base font-semibold text-zinc-800 hover:bg-zinc-50 touch-manipulation active:scale-[0.99] disabled:opacity-60"
+              >
+                {ride.status === 'matching' ? 'Cancel search' : 'Cancel ride'}
+              </button>
             )}
 
             {ride.status === 'completed' && (
@@ -166,13 +198,65 @@ export default function RidePage() {
                   to="/"
                   className="btn-touch inline-flex items-center justify-center w-full rounded-2xl bg-zinc-900 text-white text-base font-semibold hover:bg-zinc-800"
                 >
-                  Start over
+                  Back to home
                 </Link>
               </div>
             )}
           </>
         )}
       </main>
+
+      <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <AlertDialogContent className="rounded-3xl border-zinc-200 max-w-[calc(100%-2rem)] sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel this ride?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Your driver search will stop and this booking will be marked as cancelled. You can book again from home.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-2">
+            <AlertDialogCancel disabled={cancelling} className="rounded-2xl mt-0">
+              Keep waiting
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={cancelling}
+              onClick={(e) => {
+                e.preventDefault();
+                void performCancel();
+              }}
+              className="rounded-2xl bg-zinc-900 hover:bg-zinc-800"
+            >
+              {cancelling ? 'Cancelling…' : 'Yes, cancel ride'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={leaveDialogOpen} onOpenChange={setLeaveDialogOpen}>
+        <AlertDialogContent className="rounded-3xl border-zinc-200 max-w-[calc(100%-2rem)] sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel before leaving?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This ride is still active. Going home without cancelling keeps it in the driver search queue.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-2">
+            <AlertDialogCancel disabled={cancelling} className="rounded-2xl mt-0">
+              Keep searching
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={cancelling}
+              onClick={(e) => {
+                e.preventDefault();
+                void performCancel();
+              }}
+              className="rounded-2xl bg-zinc-900 hover:bg-zinc-800"
+            >
+              {cancelling ? 'Cancelling…' : 'Cancel ride & go home'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -133,6 +133,6 @@ export async function ridesCancelRequest(id: string, reason?: string): Promise<{
     headers: await ridesHeaders(),
     body: JSON.stringify({ reason }),
   });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) await parseRidesError(res);
   return res.json();
 }
