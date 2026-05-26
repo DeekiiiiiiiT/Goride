@@ -65,6 +65,11 @@ export function registerDashboardStatsRoutes(
       .eq("status", "completed")
       .gte("updated_at", dayStart);
 
+    const { count: cancelledToday } = await db.from(tables.ride_requests)
+      .select("*", { count: "exact", head: true })
+      .eq("status", "cancelled")
+      .gte("updated_at", dayStart);
+
     const { data: surgeRows } = await db.from(tables.surge_cells).select("surge_multiplier");
     let avgSurge = 1;
     if (surgeRows && surgeRows.length > 0) {
@@ -111,6 +116,7 @@ export function registerDashboardStatsRoutes(
       active_rides: activeRides ?? 0,
       riders_on_trip: ridersOnTrip,
       todays_completed_rides: todaysCompleted ?? 0,
+      cancelled_rides_today: cancelledToday ?? 0,
       online_drivers: onlineDrivers,
       drivers_on_trip: driversOnTrip,
       avg_surge_multiplier: avgSurge,

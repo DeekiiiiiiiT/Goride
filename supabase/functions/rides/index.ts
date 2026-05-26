@@ -79,18 +79,49 @@ function pubSvc(): SupabaseClient {
   );
 }
 
-const DRIVER_LOCATIONS_SELECT = "user_id, lat, lng, updated_at, body_type_slug";
+const DRIVER_LOCATIONS_SELECT_FULL = "user_id, lat, lng, updated_at, body_type_slug";
+const DRIVER_LOCATIONS_SELECT_BASE = "user_id, lat, lng, updated_at";
 
-async function loadAvailableDriverLocations(freshSince: string) {
-  const { data: native, error: nativeErr } = await svc().from("driver_locations").select(
-    DRIVER_LOCATIONS_SELECT,
-  ).gte("updated_at", freshSince).eq("available_for_rides", true);
-  if (!nativeErr && native) return native;
+async function queryFreshDriverLocations(
+  db: ReturnType<typeof svc>,
+  table: string,
+  select: string,
+  freshSince: string,
+): Promise<{ rows: Record<string, unknown>[] | null; error: string | null }> {
+  const { data, error } = await db.from(table).select(select)
+    .gte("updated_at", freshSince)
+    .eq("available_for_rides", true);
+  if (error) return { rows: null, error: error.message };
+  return { rows: (data ?? []) as Record<string, unknown>[], error: null };
+}
 
-  const { data: pubData } = await pubSvc().from("rides_driver_locations").select(
-    DRIVER_LOCATIONS_SELECT,
-  ).gte("updated_at", freshSince).eq("available_for_rides", true);
-  return pubData ?? [];
+/** Fresh online drivers for matching. Retries without body_type_slug when API schema cache lags migrations. */
+async function loadAvailableDriverLocations(freshSince: string): Promise<Record<string, unknown>[]> {
+  const selects = [DRIVER_LOCATIONS_SELECT_FULL, DRIVER_LOCATIONS_SELECT_BASE];
+  const sources: Array<{ db: ReturnType<typeof svc>; table: string }> = [
+    { db: svc(), table: "driver_locations" },
+    { db: pubSvc(), table: "rides_driver_locations" },
+  ];
+  let lastError: string | null = null;
+
+  for (const select of selects) {
+    for (const { db, table } of sources) {
+      const { rows, error } = await queryFreshDriverLocations(db, table, select, freshSince);
+      if (error) {
+        lastError = error;
+        continue;
+      }
+      if (rows && rows.length > 0) return rows;
+      if (rows && rows.length === 0 && select === DRIVER_LOCATIONS_SELECT_BASE) {
+        return rows;
+      }
+    }
+  }
+
+  if (lastError) {
+    logLine({ event: "load_driver_locs_failed", error: lastError, fresh_since: freshSince });
+  }
+  return [];
 }
 
 /** Reads ride_requests via rides schema, falling back to public.rides_ride_requests on hosted. */
@@ -608,12 +639,13 @@ async function runMatchingWave(
   }
   candidates.sort((a, b) => a.d - b.d || a.user_id.localeCompare(b.user_id));
 
+  const locCount = (locs ?? []).length;
   logLine({
     event: "match_wave_diag",
     ride_id: rideId,
     wave,
     radius_km: radiusKm,
-    loc_rows: (locs ?? []).length,
+    loc_rows: locCount,
     eligible_drivers: eligibleIds.size,
     candidates: candidates.length,
     filtered_body_type: filteredOutBodyType,
@@ -622,6 +654,13 @@ async function runMatchingWave(
     pickup_lat: pickupLat,
     pickup_lng: pickupLng,
     request_id: requestId ?? null,
+    fresh_since: freshSince,
+    ...(locCount === 0
+      ? {
+        hint:
+          "No fresh driver_locations with available_for_rides=true; confirm driver is Online and PostgREST schema cache includes driver_locations",
+      }
+      : {}),
   });
 
   const { ranked, source: matchingRouteSource } = await rankDriversByDriveTime(

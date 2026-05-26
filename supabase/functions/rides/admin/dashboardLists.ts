@@ -80,6 +80,16 @@ export function registerDashboardListRoutes(
       return c.json({ rides: data ?? [] });
     }
 
+    if (view === "cancelled_rides") {
+      const { data, error } = await db.from(tables.ride_requests)
+        .select("*")
+        .eq("status", "cancelled")
+        .order("updated_at", { ascending: false })
+        .limit(LIST_LIMIT);
+      if (error) return c.json({ error: "list_failed", message: error.message }, 500);
+      return c.json({ rides: data ?? [] });
+    }
+
     if (view === "drivers_online") {
       try {
         const driverResolved = await getDriverAdminDb();
@@ -146,6 +156,9 @@ export function registerDashboardListRoutes(
       }
     }
 
-    return c.json({ error: "invalid_view", allowed: ["active_rides", "riders_on_trip", "todays_rides", "drivers_online"] }, 400);
+    return c.json({
+      error: "invalid_view",
+      allowed: ["active_rides", "riders_on_trip", "todays_rides", "cancelled_rides", "drivers_online"],
+    }, 400);
   });
 }

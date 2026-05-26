@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
-import { Activity, Car, Loader2, MapPin, TrendingUp, Users } from 'lucide-react';
+import { Activity, Car, Loader2, MapPin, TrendingUp, Users, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { getRidesAdminStats, type RidesDashboardTab } from '../services/ridesAdminService';
 import { RidesDashboardDrilldown } from '../components/RidesDashboardDrilldown';
@@ -15,6 +15,7 @@ type RidesAdminStats = {
   active_rides: number;
   riders_on_trip: number;
   todays_completed_rides: number;
+  cancelled_rides_today: number;
   online_drivers: number;
   drivers_on_trip: number;
   avg_surge_multiplier: number;
@@ -49,6 +50,13 @@ const CARD_TABS: Array<{
     icon: <Car className="w-5 h-5 text-sky-400" />,
   },
   {
+    tab: 'cancelled_rides',
+    title: 'Cancellations',
+    subtitle: 'Cancelled today (UTC)',
+    statKey: 'cancelled_rides_today',
+    icon: <XCircle className="w-5 h-5 text-rose-400" />,
+  },
+  {
     tab: 'drivers_online',
     title: 'Drivers Online',
     subtitle: 'Available for dispatch',
@@ -71,6 +79,7 @@ export function RidesAdminDashboard() {
     active_rides: 0,
     riders_on_trip: 0,
     todays_completed_rides: 0,
+    cancelled_rides_today: 0,
     online_drivers: 0,
     drivers_on_trip: 0,
     avg_surge_multiplier: 1,
@@ -81,7 +90,12 @@ export function RidesAdminDashboard() {
   useEffect(() => {
     if (!accessToken) return;
     void getRidesAdminStats(accessToken)
-      .then(setStats)
+      .then((s) =>
+        setStats({
+          ...s,
+          cancelled_rides_today: s.cancelled_rides_today ?? 0,
+        }),
+      )
       .catch((e: unknown) => {
         toast.error(e instanceof Error ? e.message : 'Failed to load dashboard stats');
       })
@@ -105,7 +119,7 @@ export function RidesAdminDashboard() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         {CARD_TABS.map((card) => (
           <StatCard
             key={card.tab}

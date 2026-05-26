@@ -78,6 +78,7 @@ export interface RidesAdminStats {
   active_rides: number;
   riders_on_trip: number;
   todays_completed_rides: number;
+  cancelled_rides_today: number;
   online_drivers: number;
   drivers_on_trip: number;
   avg_surge_multiplier: number;
@@ -193,6 +194,7 @@ export type RidesDashboardTab =
   | 'active_rides'
   | 'riders_on_trip'
   | 'todays_rides'
+  | 'cancelled_rides'
   | 'drivers_online'
   | 'surge';
 

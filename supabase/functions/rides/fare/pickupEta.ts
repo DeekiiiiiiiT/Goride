@@ -40,26 +40,36 @@ export async function resolvePickupEta(
   const maxAgeMs = driverLocationMaxAgeMs(settings);
   const quoteRadiusKm = settings.quote_driver_radius_km;
   const freshSince = new Date(Date.now() - maxAgeMs).toISOString();
-  const locSelect = "user_id, lat, lng, updated_at, body_type_slug";
-  let locs: Record<string, unknown>[] | null = null;
-  const { data: nativeLocs, error: nativeErr } = await db
-    .from("driver_locations")
-    .select(locSelect)
-    .gte("updated_at", freshSince)
-    .eq("available_for_rides", true);
-  if (!nativeErr && nativeLocs) {
-    locs = nativeLocs as Record<string, unknown>[];
-  } else {
-    const pub = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-    );
-    const { data: pubLocs } = await pub
+  const locSelects = [
+    "user_id, lat, lng, updated_at, body_type_slug",
+    "user_id, lat, lng, updated_at",
+  ];
+  let locs: Record<string, unknown>[] = [];
+  const pub = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+  );
+  for (const locSelect of locSelects) {
+    const { data: nativeLocs, error: nativeErr } = await db
+      .from("driver_locations")
+      .select(locSelect)
+      .gte("updated_at", freshSince)
+      .eq("available_for_rides", true);
+    if (!nativeErr && nativeLocs?.length) {
+      locs = nativeLocs as Record<string, unknown>[];
+      break;
+    }
+    const { data: pubLocs, error: pubErr } = await pub
       .from("rides_driver_locations")
       .select(locSelect)
       .gte("updated_at", freshSince)
       .eq("available_for_rides", true);
-    locs = (pubLocs as Record<string, unknown>[] | null) ?? [];
+    if (!pubErr && pubLocs?.length) {
+      locs = pubLocs as Record<string, unknown>[];
+      break;
+    }
+    if (!nativeErr && nativeLocs) locs = nativeLocs as Record<string, unknown>[];
+    else if (!pubErr && pubLocs) locs = pubLocs as Record<string, unknown>[];
   }
 
   type DriverRow = { user_id: string; lat: number; lng: number; haversineKm: number };
