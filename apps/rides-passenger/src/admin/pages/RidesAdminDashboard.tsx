@@ -3,17 +3,71 @@ import { useOutletContext } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
 import { Activity, Car, Loader2, MapPin, TrendingUp, Users } from 'lucide-react';
 import { toast } from 'sonner';
-import { getRidesAdminStats } from '../services/ridesAdminService';
+import { getRidesAdminStats, type RidesDashboardTab } from '../services/ridesAdminService';
+import { RidesDashboardDrilldown } from '../components/RidesDashboardDrilldown';
 
 interface OutletContext {
   session: Session;
   role: string | undefined;
 }
 
+type RidesAdminStats = {
+  active_rides: number;
+  riders_on_trip: number;
+  todays_completed_rides: number;
+  online_drivers: number;
+  drivers_on_trip: number;
+  avg_surge_multiplier: number;
+};
+
+const CARD_TABS: Array<{
+  tab: RidesDashboardTab;
+  title: string;
+  subtitle: string;
+  statKey: keyof RidesAdminStats;
+  icon: React.ReactNode;
+}> = [
+  {
+    tab: 'active_rides',
+    title: 'Active Rides',
+    subtitle: 'Matching or in progress',
+    statKey: 'active_rides',
+    icon: <Activity className="w-5 h-5 text-emerald-400" />,
+  },
+  {
+    tab: 'riders_on_trip',
+    title: 'Riders on Trip',
+    subtitle: 'Driver assigned through on trip',
+    statKey: 'riders_on_trip',
+    icon: <Users className="w-5 h-5 text-violet-400" />,
+  },
+  {
+    tab: 'todays_rides',
+    title: "Today's Rides",
+    subtitle: 'Completed today (UTC)',
+    statKey: 'todays_completed_rides',
+    icon: <Car className="w-5 h-5 text-sky-400" />,
+  },
+  {
+    tab: 'drivers_online',
+    title: 'Drivers Online',
+    subtitle: 'Available for dispatch',
+    statKey: 'online_drivers',
+    icon: <MapPin className="w-5 h-5 text-amber-400" />,
+  },
+  {
+    tab: 'surge',
+    title: 'Avg. Surge',
+    subtitle: 'Across all cells',
+    statKey: 'avg_surge_multiplier',
+    icon: <TrendingUp className="w-5 h-5 text-blue-400" />,
+  },
+];
+
 export function RidesAdminDashboard() {
   const { session, role } = useOutletContext<OutletContext>();
   const accessToken = session.access_token;
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<RidesAdminStats>({
     active_rides: 0,
     riders_on_trip: 0,
     todays_completed_rides: 0,
@@ -22,6 +76,7 @@ export function RidesAdminDashboard() {
     avg_surge_multiplier: 1,
   });
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<RidesDashboardTab>('active_rides');
 
   useEffect(() => {
     if (!accessToken) return;
@@ -46,42 +101,33 @@ export function RidesAdminDashboard() {
       <div>
         <h2 className="text-xl font-semibold text-white">Dashboard</h2>
         <p className="text-sm text-slate-400 mt-1">
-          Roam Rides admin overview and metrics.
+          Roam Rides admin overview and metrics. Click a card or tab to see the underlying list.
         </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-        <StatCard
-          title="Active Rides"
-          value={String(stats.active_rides)}
-          subtitle="Matching or in progress"
-          icon={<Activity className="w-5 h-5 text-emerald-400" />}
-        />
-        <StatCard
-          title="Riders on Trip"
-          value={String(stats.riders_on_trip)}
-          subtitle="Driver assigned through on trip"
-          icon={<Users className="w-5 h-5 text-violet-400" />}
-        />
-        <StatCard
-          title="Today's Rides"
-          value={String(stats.todays_completed_rides)}
-          subtitle="Completed today (UTC)"
-          icon={<Car className="w-5 h-5 text-sky-400" />}
-        />
-        <StatCard
-          title="Drivers Online"
-          value={String(stats.online_drivers)}
-          subtitle="Available for dispatch"
-          icon={<MapPin className="w-5 h-5 text-amber-400" />}
-        />
-        <StatCard
-          title="Avg. Surge"
-          value={stats.avg_surge_multiplier.toFixed(2)}
-          subtitle="Across all cells"
-          icon={<TrendingUp className="w-5 h-5 text-blue-400" />}
-        />
+        {CARD_TABS.map((card) => (
+          <StatCard
+            key={card.tab}
+            title={card.title}
+            value={
+              card.tab === 'surge'
+                ? stats.avg_surge_multiplier.toFixed(2)
+                : String(stats[card.statKey])
+            }
+            subtitle={card.subtitle}
+            icon={card.icon}
+            selected={activeTab === card.tab}
+            onClick={() => setActiveTab(card.tab)}
+          />
+        ))}
       </div>
+
+      <RidesDashboardDrilldown
+        accessToken={accessToken}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
 
       <p className="text-xs text-slate-500">
         Logged in as: <span className="font-mono">{role || 'unknown'}</span>
@@ -101,20 +147,32 @@ function StatCard({
   value,
   subtitle,
   icon,
+  selected,
+  onClick,
 }: {
   title: string;
   value: string;
   subtitle: string;
   icon: React.ReactNode;
+  selected: boolean;
+  onClick: () => void;
 }) {
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-4">
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-xl border p-4 text-left w-full transition-colors ${
+        selected
+          ? 'border-violet-500/50 bg-violet-500/10 ring-1 ring-violet-500/30'
+          : 'border-slate-800 bg-slate-900/30 hover:border-slate-600 hover:bg-slate-900/50'
+      }`}
+    >
       <div className="flex items-center justify-between mb-2">
         <p className="text-xs text-slate-500 uppercase tracking-wide">{title}</p>
         {icon}
       </div>
       <p className="text-2xl font-semibold text-white">{value}</p>
       <p className="text-xs text-slate-500 mt-1">{subtitle}</p>
-    </div>
+    </button>
   );
 }

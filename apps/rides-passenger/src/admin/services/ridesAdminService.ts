@@ -189,6 +189,35 @@ export async function getRidesAdminStats(accessToken: string): Promise<RidesAdmi
   return res.json();
 }
 
+export type RidesDashboardTab =
+  | 'active_rides'
+  | 'riders_on_trip'
+  | 'todays_rides'
+  | 'drivers_online'
+  | 'surge';
+
+export type DashboardOnlineDriverRow = {
+  user_id: string;
+  display_name: string | null;
+  lat: number;
+  lng: number;
+  body_type_slug: string | null;
+  updated_at: string;
+  available_for_rides: boolean;
+};
+
+export async function listRidesDashboardView(
+  accessToken: string,
+  view: Exclude<RidesDashboardTab, 'surge'>,
+): Promise<{ rides?: RideRequestRow[]; drivers?: DashboardOnlineDriverRow[] }> {
+  const res = await adminFetch(
+    accessToken,
+    `${RIDES_BASE}/admin/dashboard/list?view=${encodeURIComponent(view)}`,
+  );
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
 export type CommandoBodyTypeFacet = {
   body_type: string;
   seating_capacity: number | null;
