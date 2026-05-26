@@ -26,7 +26,25 @@ Super Admin → **User Management** (`/admin/users`) for driver (`role: driver`)
 
 - Apply migration `20260519120000_driver_admin_directory.sql` and redeploy the `driver` Edge function.
 - Hosted Supabase: ensures `public.driver_directory_stats`, `public.rides_driver_locations`, `public.rides_driver_offers`.
-- API: `GET /functions/v1/driver/admin/drivers`, `GET .../drivers/:userId`, `GET .../drivers/:userId/trips`.
+- API: `GET /functions/v1/driver/admin/drivers`, `GET .../drivers/:userId`, `GET .../drivers/:userId/trips`, `GET .../admin/ledger/trips`.
+
+## Deploy order (independent driver / trip ledger)
+
+1. Apply migration `20260526120000_ride_payment_and_completion.sql` and reload PostgREST schema.
+2. Redeploy the `rides` Edge function (driver `me/trips`, `me/earnings`, completion ledger fields).
+3. Redeploy the `driver` Edge function (platform trip ledger).
+4. Ship the driver app (independent Home / Earnings / Trips UI).
+
+## Manual test checklist (independent vs fleet)
+
+| Scenario | Expected |
+|----------|----------|
+| Independent driver, Trips tab | Roam trips from `rides.ride_requests` |
+| Independent Home, This week | Cash earnings for completed trips in calendar week (Jamaica) |
+| Independent Earnings | Lifetime cash total; digital $0 + coming soon |
+| Fleet driver, Home | Welcome / milestone / Uber-InDrive cards + TripTimer unchanged |
+| Fleet driver, Trips / Earnings | Legacy KV-backed screens unchanged |
+| Admin Trip Ledger | All platform trips with filters |
 
 ## Manual test checklist
 

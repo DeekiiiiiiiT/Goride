@@ -11,6 +11,8 @@ import { NotificationCenter } from '../notifications/NotificationCenter';
 import { DriverDashboard } from '../legacy/DriverDashboard';
 import { DriverEarnings } from '../legacy/DriverEarnings';
 import { DriverTrips } from '../legacy/DriverTrips';
+import { IndependentEarningsPage } from '../independent/IndependentEarningsPage';
+import { IndependentTripsPage } from '../independent/IndependentTripsPage';
 import { DriverProfile } from '../legacy/DriverProfile';
 import { DriverExpenses } from '../legacy/DriverExpenses';
 import { DriverEquipment } from '../legacy/DriverEquipment';
@@ -29,7 +31,7 @@ import { InsuranceCenter } from '../independent/InsuranceCenter';
 import { RideDispatchPage } from '../rides/RideDispatchPage';
 
 export function DriverShell() {
-  const { mode, isFleetDriver, fleet, loading } = useDriver();
+  const { mode, isFleetDriver, isIndependentDriver, fleet, loading } = useDriver();
   const { user, signOut } = useAuth();
   const { driverRecord } = useCurrentDriver();
   const { needsCheckIn, isLoading: checkInHookLoading, submitCheckIn } = useWeeklyCheckIn(driverRecord?.id);
@@ -91,9 +93,9 @@ export function DriverShell() {
       case 'passenger-rides':
         return <RideDispatchPage />;
       case 'earnings':
-        return <DriverEarnings />;
+        return isIndependentDriver ? <IndependentEarningsPage /> : <DriverEarnings />;
       case 'trips':
-        return <DriverTrips />;
+        return isIndependentDriver ? <IndependentTripsPage /> : <DriverTrips />;
       case 'profile':
         return <DriverProfile onNavigate={setCurrentPage} onLogout={handleSignOut} />;
 

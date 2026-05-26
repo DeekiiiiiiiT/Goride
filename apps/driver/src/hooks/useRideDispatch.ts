@@ -302,6 +302,9 @@ export function useRideDispatch() {
     try {
       const { ride } = await ridesDriverTransition(activeRide.id, { status });
       setActiveRide(ride);
+      if (status === 'completed') {
+        window.dispatchEvent(new Event('roam-driver-trip-completed'));
+      }
       toast.success('Updated');
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Transition failed');

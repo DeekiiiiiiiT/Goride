@@ -34,6 +34,11 @@ import {
   getEligibleDriverUserIds,
   isDriverEligibleForDispatch,
 } from "../_shared/driverModeFilter.ts";
+import {
+  aggregateDriverEarnings,
+  listDriverRideRequests,
+  type DriverEarningsPeriod,
+} from "../_shared/driverRideQueries.ts";
 
 /** Match Supabase path prefix: .../functions/v1/rides/<route> → /rides/<route> */
 const app = new Hono().basePath("/rides");
@@ -1241,6 +1246,45 @@ app.post("/v1/drivers/offers/:offerId/decline", async (c) => {
   return c.json({ ok: true });
 });
 
+app.get("/v1/drivers/me/trips", async (c) => {
+  const auth = await requireUser(c.req.header("Authorization"));
+  if ("error" in auth) return c.json({ error: auth.error }, auth.status);
+  if (ridesUserSurfaceRole(auth.user) !== "driver") return jsonEdgeForbidden(c, "forbidden_role");
+
+  const page = Math.max(1, Number(c.req.query("page") ?? 1));
+  const limit = Math.min(100, Math.max(1, Number(c.req.query("limit") ?? 25)));
+
+  const result = await listDriverRideRequests(svc(), pubSvc(), {
+    driverUserId: auth.user.id,
+    page,
+    limit,
+  });
+
+  if ("error" in result) {
+    return c.json({ error: "list_failed", message: result.error }, 500);
+  }
+
+  return c.json(result);
+});
+
+app.get("/v1/drivers/me/earnings", async (c) => {
+  const auth = await requireUser(c.req.header("Authorization"));
+  if ("error" in auth) return c.json({ error: auth.error }, auth.status);
+  if (ridesUserSurfaceRole(auth.user) !== "driver") return jsonEdgeForbidden(c, "forbidden_role");
+
+  const rawPeriod = (c.req.query("period") ?? "week").toLowerCase();
+  const period: DriverEarningsPeriod = rawPeriod === "today" || rawPeriod === "all"
+    ? rawPeriod
+    : "week";
+
+  const result = await aggregateDriverEarnings(svc(), pubSvc(), auth.user.id, period);
+  if ("error" in result) {
+    return c.json({ error: "earnings_failed", message: result.error }, 500);
+  }
+
+  return c.json(result);
+});
+
 const DRIVER_TRANSITIONS: Record<RideStatus, RideStatus[]> = {
   matching: [],
   driver_assigned: ["driver_en_route_pickup", "cancelled"],
@@ -1270,7 +1314,15 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
 
   const patch: Record<string, unknown> = { status: next, updated_at: new Date().toISOString() };
   if (next === "completed") {
-    patch.fare_final_minor = Number(ride.fare_estimate_minor);
+    const fareMinor = Number(ride.fare_final_minor ?? ride.fare_estimate_minor);
+    if (!Number.isFinite(fareMinor) || fareMinor < 0) {
+      return c.json({ error: "invalid_fare", message: "Cannot complete ride without a valid fare" }, 400);
+    }
+    patch.fare_final_minor = fareMinor;
+    patch.completed_at = new Date().toISOString();
+    if (!ride.payment_method) {
+      patch.payment_method = "cash";
+    }
   }
   if (next === "cancelled") {
     patch.cancelled_by = "driver";
@@ -1284,7 +1336,11 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
     await bumpSurgeDemand(cellKey, -1);
   }
 
-  await audit(id, auth.user.id, "driver_transition", { from: current, to: next });
+  const auditPayload: Record<string, unknown> = { from: current, to: next };
+  if (next === "completed") {
+    auditPayload.payment_method = patch.payment_method ?? ride.payment_method;
+  }
+  await audit(id, auth.user.id, next === "completed" ? "ride_completed" : "driver_transition", auditPayload);
   logLine({ event: "driver_transition", ride_id: id, from: current, to: next });
 
   const fresh = await loadRideRequestById(id);

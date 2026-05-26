@@ -16,6 +16,7 @@ import {
   Loader2,
   ShieldAlert,
   ExternalLink,
+  ScrollText,
 } from 'lucide-react';
 import { Toaster } from 'sonner';
 import { DriverAdminLoginForm } from './components/DriverAdminLoginForm';
@@ -25,10 +26,12 @@ import { OfferMonitor } from './pages/OfferMonitor';
 import { ComplianceManager } from './pages/ComplianceManager';
 import { DriversListPage } from './pages/users/DriversListPage';
 import { DriverDetailPage } from './pages/users/DriverDetailPage';
+import { TripLedgerPage } from './pages/TripLedgerPage';
 
 const NAV_ITEMS = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { path: '/users', label: 'User Management', icon: Users, end: false },
+  { path: '/ledger', label: 'Trip Ledger', icon: ScrollText, end: false },
   { path: '/presence', label: 'Driver Presence', icon: MapPin, end: false },
   { path: '/offers', label: 'Offer Monitor', icon: Bell, end: false },
   { path: '/compliance', label: 'Compliance', icon: ShieldCheck, end: false },
@@ -256,6 +259,7 @@ export function DriverAdminPortal() {
         <Route index element={<DriverAdminDashboard />} />
         <Route path="users" element={<DriversListPage />} />
         <Route path="users/:userId" element={<DriverDetailPage />} />
+        <Route path="ledger" element={<TripLedgerPage />} />
         <Route path="presence" element={<DriverPresenceManager />} />
         <Route path="offers" element={<OfferMonitor />} />
         <Route path="compliance" element={<ComplianceManager />} />

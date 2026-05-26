@@ -147,6 +147,40 @@ export async function getDriverDetail(
   return parseJson(res);
 }
 
+export interface PlatformLedgerTripRow extends RideRequestRow {
+  driver_display_name?: string | null;
+}
+
+export async function listPlatformLedgerTrips(
+  accessToken: string,
+  opts: {
+    page?: number;
+    limit?: number;
+    driver_user_id?: string;
+    status?: string;
+    payment_method?: 'cash' | 'card';
+    from?: string;
+    to?: string;
+    q?: string;
+  } = {},
+): Promise<{ trips: PlatformLedgerTripRow[]; total: number; page: number; limit: number }> {
+  const sp = new URLSearchParams();
+  if (opts.page != null) sp.set('page', String(opts.page));
+  if (opts.limit != null) sp.set('limit', String(opts.limit));
+  if (opts.driver_user_id) sp.set('driver_user_id', opts.driver_user_id);
+  if (opts.status) sp.set('status', opts.status);
+  if (opts.payment_method) sp.set('payment_method', opts.payment_method);
+  if (opts.from) sp.set('from', opts.from);
+  if (opts.to) sp.set('to', opts.to);
+  if (opts.q) sp.set('q', opts.q);
+
+  const res = await fetch(`${DRIVER_BASE}/admin/ledger/trips?${sp.toString()}`, {
+    headers: headers(accessToken),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return parseJson(res);
+}
+
 export async function listDriverTrips(
   accessToken: string,
   userId: string,

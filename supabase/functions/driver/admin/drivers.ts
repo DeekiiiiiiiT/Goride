@@ -15,6 +15,7 @@ import {
   type DriverAdminTables,
 } from "../../_shared/driverAdminDb.ts";
 import { getRiderAdminDb } from "../../_shared/ridesAdminDb.ts";
+import { listDriverRideRequests } from "../../_shared/driverRideQueries.ts";
 
 type DriverAdminDb = Awaited<ReturnType<typeof getDriverAdminDb>>;
 
@@ -813,15 +814,96 @@ export function registerDriverUserAdminRoutes(admin: Hono) {
 
     const page = Math.max(1, Number(c.req.query("page") ?? 1));
     const limit = Math.min(100, Math.max(1, Number(c.req.query("limit") ?? 25)));
-    const offset = (page - 1) * limit;
 
-    const { data, error, count } = await resolved.db.from(resolved.tables.ride_requests)
-      .select("*", { count: "exact" })
-      .eq("assigned_driver_user_id", userId)
-      .order("created_at", { ascending: false })
-      .range(offset, offset + limit - 1);
+    const ridesDb = resolved.ridesDb ?? createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      { db: { schema: "rides" } },
+    );
 
-    if (error) return c.json({ error: "list_failed", message: error.message }, 500);
-    return c.json({ trips: data ?? [], total: count ?? 0, page, limit });
+    const result = await listDriverRideRequests(ridesDb, resolved.db, {
+      driverUserId: userId,
+      page,
+      limit,
+    });
+
+    if ("error" in result) {
+      return c.json({ error: "list_failed", message: result.error }, 500);
+    }
+    return c.json({ trips: result.trips, total: result.total, page: result.page, limit: result.limit });
+  });
+
+  admin.get("/ledger/trips", async (c) => {
+    const adminUser = await requireProductAdmin(c, "driver");
+    if (adminUser instanceof Response) return adminUser;
+
+    const resolved = await driverDbOrResponse(c);
+    if (resolved instanceof Response) return resolved;
+
+    const page = Math.max(1, Number(c.req.query("page") ?? 1));
+    const limit = Math.min(100, Math.max(1, Number(c.req.query("limit") ?? 25)));
+    const driverUserId = c.req.query("driver_user_id")?.trim() || undefined;
+    const status = c.req.query("status")?.trim() || undefined;
+    const payment_method = c.req.query("payment_method")?.trim() as "cash" | "card" | undefined;
+    const from = c.req.query("from")?.trim() || undefined;
+    const to = c.req.query("to")?.trim() || undefined;
+    const q = c.req.query("q")?.trim() || undefined;
+
+    const ridesDb = resolved.ridesDb ?? createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      { db: { schema: "rides" } },
+    );
+
+    const result = await listDriverRideRequests(ridesDb, resolved.db, {
+      driverUserId,
+      page,
+      limit,
+      status,
+      payment_method: payment_method === "cash" || payment_method === "card" ? payment_method : undefined,
+      from,
+      to,
+      q,
+    });
+
+    if ("error" in result) {
+      return c.json({ error: "list_failed", message: result.error }, 500);
+    }
+
+    const driverIds = [
+      ...new Set(
+        result.trips
+          .map((t) => t.assigned_driver_user_id as string | null)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+
+    const driverNames: Record<string, string> = {};
+    if (driverIds.length > 0) {
+      const { data: profiles } = await resolved.db.from(resolved.tables.driver_profiles)
+        .select("user_id, display_name, first_name, last_name")
+        .in("user_id", driverIds);
+      for (const p of profiles ?? []) {
+        const uid = p.user_id as string;
+        const name = (p.display_name as string | null) ||
+          [p.first_name, p.last_name].filter(Boolean).join(" ") ||
+          null;
+        if (name) driverNames[uid] = name;
+      }
+    }
+
+    const trips = result.trips.map((t) => ({
+      ...t,
+      driver_display_name: t.assigned_driver_user_id
+        ? driverNames[t.assigned_driver_user_id as string] ?? null
+        : null,
+    }));
+
+    return c.json({
+      trips,
+      total: result.total,
+      page: result.page,
+      limit: result.limit,
+    });
   });
 }

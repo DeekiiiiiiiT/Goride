@@ -14,6 +14,10 @@ export type RideRequestStatus =
 
 export type DriverOfferStatus = 'pending' | 'accepted' | 'declined' | 'expired' | 'superseded';
 
+export type RidePaymentMethod = 'cash' | 'card';
+
+export type DriverEarningsPeriod = 'today' | 'week' | 'all';
+
 export interface FareBreakdown {
   base_minor: number;
   booking_fee_minor: number;
@@ -62,8 +66,26 @@ export interface RideRequestRow {
   cancelled_by: 'rider' | 'driver' | 'system' | null;
   driver_offer_timeout_seconds: number;
   matching_wave: number;
+  payment_method?: RidePaymentMethod | null;
+  completed_at?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface DriverMyTripsResponse {
+  trips: RideRequestRow[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface DriverEarningsSummary {
+  period: DriverEarningsPeriod;
+  cash_minor: number;
+  digital_minor: number;
+  currency: string;
+  trip_count: number;
+  digital_payments_enabled: boolean;
 }
 
 export interface DriverOfferRow {

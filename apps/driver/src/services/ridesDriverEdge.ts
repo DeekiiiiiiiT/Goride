@@ -1,6 +1,9 @@
 import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
 import { supabase } from '../utils/supabase/client';
 import type {
+  DriverEarningsPeriod,
+  DriverEarningsSummary,
+  DriverMyTripsResponse,
   DriverOfferWithRide,
   DriverPresenceBody,
   DriverTransitionBody,
@@ -82,6 +85,30 @@ export async function ridesDriverTransition(id: string, body: DriverTransitionBo
     method: 'PATCH',
     headers: await ridesHeaders(),
     body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function ridesDriverMyTrips(
+  opts: { page?: number; limit?: number } = {},
+): Promise<DriverMyTripsResponse> {
+  const sp = new URLSearchParams();
+  if (opts.page != null) sp.set('page', String(opts.page));
+  if (opts.limit != null) sp.set('limit', String(opts.limit));
+  const qs = sp.toString();
+  const res = await fetch(`${base}/v1/drivers/me/trips${qs ? `?${qs}` : ''}`, {
+    headers: await ridesHeaders(),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function ridesDriverMyEarnings(
+  period: DriverEarningsPeriod,
+): Promise<DriverEarningsSummary> {
+  const res = await fetch(`${base}/v1/drivers/me/earnings?period=${encodeURIComponent(period)}`, {
+    headers: await ridesHeaders(),
   });
   if (!res.ok) throw new Error(await res.text());
   return res.json();

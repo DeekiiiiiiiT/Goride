@@ -37,6 +37,7 @@ import { TierCalculations } from '../../utils/tierCalculations';
 import { generateMonthlyProjection } from '../tiers/quota-utils';
 import { format, isSameWeek } from "date-fns";
 import { DriverOverview } from './DriverOverview';
+import { IndependentHomeEarnings } from '../independent/IndependentHomeEarnings';
 import { formatSafeDate, formatSafeTime } from '../../utils/timeUtils';
 import { resolveMissingTripAddresses } from '../../utils/addressResolver';
 import { getDriverPortalTripEarnings } from '../../utils/tripEarnings';
@@ -93,6 +94,12 @@ export function DriverDashboard() {
   useEffect(() => {
     let mounted = true;
     if (!user || driverLoading) return;
+
+    if (isIndependentDriver) {
+      setLoading(false);
+      hasLoadedDashboardRef.current = true;
+      return;
+    }
 
     const fetchData = async () => {
       // Safety timeout to prevent infinite loading
@@ -256,7 +263,7 @@ export function DriverDashboard() {
     fetchData();
     
     return () => { mounted = false; };
-  }, [user?.id, driverRecord?.id, driverRecord?.driverId, driverLoading]);
+  }, [user?.id, driverRecord?.id, driverRecord?.driverId, driverLoading, isIndependentDriver]);
 
   const handleAction = (action: string) => {
     if (action === 'Fuel Log' || action === 'log_fuel') {
@@ -469,22 +476,26 @@ export function DriverDashboard() {
             : 'flex min-h-[calc(100dvh-10.5rem-env(safe-area-inset-bottom,0px))] flex-col gap-6'
         }
       >
-            <DriverOverview
-              className="shrink-0"
-              tierState={tierState}
-              metrics={metrics}
-              todayEarnings={todayEarnings}
-              goals={goals}
-              recentTrip={recentTrip}
-              driverRecord={driverRecord}
-              loading={loading}
-              unclaimedTripIds={unclaimedTripIds}
-              debugDrivers={debugDrivers}
-              isFixing={isFixing}
-              onClaimId={handleClaimId}
-              onAction={handleAction}
-              flaggedCount={flaggedCount}
-            />
+            {isIndependentDriver ? (
+              <IndependentHomeEarnings />
+            ) : (
+              <DriverOverview
+                className="shrink-0"
+                tierState={tierState}
+                metrics={metrics}
+                todayEarnings={todayEarnings}
+                goals={goals}
+                recentTrip={recentTrip}
+                driverRecord={driverRecord}
+                loading={loading}
+                unclaimedTripIds={unclaimedTripIds}
+                debugDrivers={debugDrivers}
+                isFixing={isFixing}
+                onClaimId={handleClaimId}
+                onAction={handleAction}
+                flaggedCount={flaggedCount}
+              />
+            )}
             
             {/* Phase 3 fleet rollout: replace TripTimer with RideDispatchHome for all drivers when independent_only_matching is off */}
             {isIndependentDriver ? (
