@@ -41,9 +41,9 @@ import {
 } from "../_shared/driverRideQueries.ts";
 import {
   finalizeRideLedgerFields,
-  persistRideLedgerLines,
+  persistRideLedgerLinesForTerminalState,
 } from "../_shared/rideLedgerLines.ts";
-import { syncCompletedRideToFleetKv } from "../_shared/rideToFleetTrip.ts";
+import { syncRideToFleetKv } from "../_shared/rideToFleetTrip.ts";
 
 /** Match Supabase path prefix: .../functions/v1/rides/<route> → /rides/<route> */
 const app = new Hono().basePath("/rides");
@@ -303,6 +303,28 @@ async function cancelRideRequestRow(
   });
 }
 
+async function handleTerminalRideLedgerAndSync(rideId: string): Promise<void> {
+  const fresh = await loadRideRequestById(rideId);
+  if (!fresh) return;
+  const status = String(fresh.status ?? "");
+  if (status !== "completed" && status !== "cancelled") return;
+
+  try {
+    await persistRideLedgerLinesForTerminalState(svc(), fresh);
+    if (status === "completed") {
+      await finalizeRideLedgerFields(svc(), rideId, fresh);
+    }
+  } catch (e) {
+    console.error("[rides] ledger line persist failed:", e);
+  }
+
+  try {
+    await syncRideToFleetKv(fresh);
+  } catch (e) {
+    console.error("[rides] fleet KV sync failed:", e);
+  }
+}
+
 async function loadMatchingRideIdsForRider(riderUserId: string): Promise<string[]> {
   const { data: native, error: nativeErr } = await svc().from("ride_requests").select("id").eq(
     "rider_user_id",
@@ -337,6 +359,7 @@ async function cancelPriorMatchingRidesForRider(
       await bumpSurgeDemand(cellKey, -1);
     }
     await audit(rideId, riderUserId, "ride_cancelled_rider", { auto: true, reason });
+    await handleTerminalRideLedgerAndSync(rideId);
   }
 }
 
@@ -547,6 +570,7 @@ async function reconcileMatching(rideId: string, requestId?: string) {
     await bumpSurgeDemand(cellKey, -1);
     await audit(rideId, undefined, "ride_auto_cancelled_no_drivers", { wave });
     logLine({ event: "ride_auto_cancelled", ride_id: rideId, request_id: requestId });
+    await handleTerminalRideLedgerAndSync(rideId);
     return;
   }
 
@@ -1073,6 +1097,7 @@ app.post("/v1/requests/:id/cancel", async (c) => {
   await bumpSurgeDemand(cellKey, -1);
   await audit(id, auth.user.id, "ride_cancelled_rider", {});
   logLine({ event: "ride_cancelled_rider", ride_id: id });
+  await handleTerminalRideLedgerAndSync(id);
 
   const fresh = await loadRideRequestById(id);
   return c.json({ ride: fresh });
@@ -1340,21 +1365,8 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
 
   await patchRideRequest(id, patch);
 
-  if (next === "completed") {
-    const freshForLedger = await loadRideRequestById(id);
-    if (freshForLedger) {
-      try {
-        await persistRideLedgerLines(svc(), freshForLedger);
-        await finalizeRideLedgerFields(svc(), id, freshForLedger);
-      } catch (e) {
-        console.error("[rides] ledger line persist failed:", e);
-      }
-      try {
-        await syncCompletedRideToFleetKv(freshForLedger);
-      } catch (e) {
-        console.error("[rides] fleet KV sync failed:", e);
-      }
-    }
+  if (next === "completed" || next === "cancelled") {
+    await handleTerminalRideLedgerAndSync(id);
   }
 
   if (next === "completed" || next === "cancelled") {

@@ -27,12 +27,21 @@ export function TripLedgerPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [status, setStatus] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [lineKind, setLineKind] = useState('');
 
   const load = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     try {
-      const res = await listPlatformLedgerTrips(token, { page, limit: 50 });
+      const res = await listPlatformLedgerTrips(token, {
+        page,
+        limit: 50,
+        status: status || undefined,
+        payment_method: paymentMethod === 'cash' || paymentMethod === 'card' ? paymentMethod : undefined,
+        line_kind: lineKind || undefined,
+      });
       setTrips(res.trips);
       setTotal(res.total);
     } catch (e: unknown) {
@@ -42,7 +51,7 @@ export function TripLedgerPage() {
     } finally {
       setLoading(false);
     }
-  }, [token, page]);
+  }, [token, page, status, paymentMethod, lineKind]);
 
   useEffect(() => {
     void load();
@@ -55,6 +64,45 @@ export function TripLedgerPage() {
         <p className="text-sm text-slate-400 mt-1">
           Passenger-side payment history ({total} trips)
         </p>
+      </div>
+
+      <div className="flex flex-wrap gap-3">
+        <select
+          value={status}
+          onChange={(e) => {
+            setPage(1);
+            setStatus(e.target.value);
+          }}
+          className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-sm"
+        >
+          <option value="">All statuses</option>
+          <option value="completed">Completed</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+        <select
+          value={paymentMethod}
+          onChange={(e) => {
+            setPage(1);
+            setPaymentMethod(e.target.value);
+          }}
+          className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-sm"
+        >
+          <option value="">All payments</option>
+          <option value="cash">Cash</option>
+          <option value="card">Card</option>
+        </select>
+        <select
+          value={lineKind}
+          onChange={(e) => {
+            setPage(1);
+            setLineKind(e.target.value);
+          }}
+          className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-sm"
+        >
+          <option value="">All line kinds</option>
+          <option value="fare_earning">Fare earning</option>
+          <option value="trip_cancelled">Trip cancelled</option>
+        </select>
       </div>
 
       <div className="rounded-xl border border-slate-800 overflow-hidden">
@@ -75,6 +123,7 @@ export function TripLedgerPage() {
                 <th className="px-4 py-3">Pickup</th>
                 <th className="px-4 py-3">Charged</th>
                 <th className="px-4 py-3">Payment</th>
+                <th className="px-4 py-3">Status</th>
               </tr>
             </thead>
             <tbody>
@@ -113,6 +162,9 @@ export function TripLedgerPage() {
                       </td>
                       <td className="px-4 py-3 text-slate-400 capitalize">
                         {t.payment_method ?? '—'}
+                      </td>
+                      <td className="px-4 py-3 text-slate-400 capitalize">
+                        {t.status.replace(/_/g, ' ')}
                       </td>
                     </tr>
                     {expanded && lines.length > 0 && (

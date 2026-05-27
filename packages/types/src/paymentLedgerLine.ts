@@ -28,7 +28,8 @@ export type PaymentLedgerLineKind =
   | 'toll_refund'
   | 'cancellation'
   | 'adjustment'
-  | 'payout';
+  | 'payout'
+  | 'trip_cancelled';
 
 /** Fare component breakdown (major currency units for fleet KV; minor for Postgres platform lines). */
 export interface PaymentLedgerFareBreakdown {

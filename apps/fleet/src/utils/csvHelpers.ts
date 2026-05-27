@@ -412,6 +412,8 @@ export interface ProcessedBatch {
     };
     /** Transaction-grain lines from Uber payments_transaction.csv. */
     paymentLedgerLines?: PaymentLedgerLine[];
+    /** Period driver quality snapshots from driver_quality.csv (non-money audit). */
+    driverQualitySnapshots?: import('./data').DriverQualitySnapshot[];
 }
 
 // Helper to extract and clean driver name
@@ -1031,6 +1033,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
     let organizationName = knownFleetName || ''; // Phase 1: Track Fleet Owner Name
     const disputeRefundsMap = new Map<string, DisputeRefund>(); // Dispute Refund: keyed by supportCaseId for dedup
     const paymentLedgerLines: PaymentLedgerLine[] = [];
+    const driverQualitySnapshots: import('../types/data').DriverQualitySnapshot[] = [];
     const paymentLineDedup = new Set<string>();
     
     // Phase 2: Calculate Global Fleet Stats for Static Reconstruction
@@ -1404,7 +1407,9 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                     if (row[schema.vehicleId]) current.vehicleId = String(row[schema.vehicleId]);
                     if (row[schema.distance]) current.distance = parseFloat(String(row[schema.distance]).replace(/[^0-9.]/g, '')) || 0;
                     if (row[schema.status]) {
-                        const s = String(row[schema.status]).toLowerCase();
+                        const rawStatus = String(row[schema.status]).trim();
+                        current.uberTripStatus = rawStatus;
+                        const s = rawStatus.toLowerCase();
                         
                         // Capture raw status for detailed breakdown
                         if (s.includes('cancel') || s.includes('failed')) {
@@ -1419,9 +1424,11 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
 
                     // Extract Service Type
                     if (row['Product Type']) current.serviceType = String(row['Product Type']);
-                    else current.serviceType = 'UberX'; 
+                    else current.serviceType = 'UberX';
 
-                    const payType = mapUberTripActivityPaymentType(readUberCsvPaymentTypeCell(row));
+                    const rawPayType = readUberCsvPaymentTypeCell(row);
+                    if (rawPayType) current.uberPaymentTypeRaw = String(rawPayType).trim().toLowerCase();
+                    const payType = mapUberTripActivityPaymentType(rawPayType);
                     if (payType) current.paymentMethod = payType;
 
                     // Robust Time Extraction (Dynamic Column Search)
@@ -1956,6 +1963,12 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                      'Cash Collected'            // Simple
                  ])).replace(/[^0-9.-]/g, '')) || 0);
 
+                 const totalTips = parseFloat(String(getValue([
+                     'Total Earnings:Tip',
+                     'Total Earnings : Tip',
+                     'Total Earnings: Tip',
+                 ])).replace(/[^0-9.-]/g, '')) || 0;
+
                  // 3. Date Extraction
                  let pStart = row['Period Start'] || row['Start Date'] || row['Date'];
                  let pEnd = row['Period End'] || row['End Date'] || row['Date'];
@@ -1973,6 +1986,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                      netFare,
                      totalCashExposure: cashCollected, // Explicitly store from Summary Report
                      ...(refundsToll > 0.005 ? { refundsToll } : {}),
+                     ...(totalTips > 0.005 ? { totalTips } : {}),
                      
                      // Calculations
                      periodChange: balanceEnd - balanceStart,
@@ -2111,6 +2125,27 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                      if (hoj > 0) current.hoursOnJob = hoj;
                      if (tc > 0) current.tripsCompleted = tc;
                      
+                     if (file.type === 'uber_driver_quality' && dId) {
+                         const toInt = (v: unknown) => parseInt(String(v ?? '0'), 10) || 0;
+                         const toRate = (v: unknown) => parseFloat(String(v ?? '0').replace('%', '')) / 100 || 0;
+                         driverQualitySnapshots.push({
+                             driverId: dId,
+                             driverName: current.driverName,
+                             tripsCompleted: toInt(row['Trips completed']),
+                             acceptanceRate: arKey ? toRate(row[arKey!]) : ar,
+                             cancellationRate: crKey ? toRate(row[crKey!]) : cr,
+                             completionRate: toRate(row['Completion rate']),
+                             ratingLast4Weeks: parseFloat(String(row['Driver ratings (last 4 weeks)'] ?? '0')) || undefined,
+                             ratingLast500: rating,
+                             tripsAccepted: toInt(row['Trips Accepted(Excluding trip radar or similar)']),
+                             tripsRejected: toInt(row['Trips Rejected']),
+                             tripsCancelled: toInt(row['Trips Cancelled']),
+                             tripsCancelledDriverAtFault: toInt(row['Trips Cancelled-Driver At Fault']),
+                             tripsFailed: toInt(row['Trips Failed']),
+                             totalTripAssignments: toInt(row['Total Trips Assignments']),
+                         });
+                     }
+
                      // Populate Trip Meter Data
                      const onTrip = current.onTripHours || 0;
                      const totalOnline = current.onlineHours || 0;
@@ -2616,6 +2651,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                 ? { uberTripsMissingTripActivity }
                 : undefined,
         paymentLedgerLines: paymentLedgerLines.length > 0 ? paymentLedgerLines : undefined,
+        driverQualitySnapshots: driverQualitySnapshots.length > 0 ? driverQualitySnapshots : undefined,
     };
 }
 

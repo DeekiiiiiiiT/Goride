@@ -42,6 +42,15 @@ function buildRideLedgerLineInserts(ride: Record<string, unknown>) {
   return { lines, completedAt, paymentMethod, riderUserId, driverUserId };
 }
 
+function buildCancelledRideLedgerLines(ride: Record<string, unknown>) {
+  const rideId = String(ride.id);
+  return [{
+    line_kind: 'trip_cancelled',
+    idempotency_key: `ride:${rideId}|cancelled`,
+    paid_to_you_minor: 0,
+  }];
+}
+
 describe('ride completion ledger lines', () => {
   it('builds fare, tip, and platform fee lines with idempotent keys', () => {
     const result = buildRideLedgerLineInserts({
@@ -71,10 +80,27 @@ describe('ride completion ledger lines', () => {
       assigned_driver_user_id: 'driver-2',
       payment_method: 'cash',
       fare_final_minor: 80000,
+      status: 'completed',
     });
 
     expect(result.lines).toHaveLength(1);
     expect(result.paymentMethod).toBe('cash');
     expect(result.lines[0].paid_to_you_minor).toBe(80000);
+  });
+
+  it('cancelled ride produces trip_cancelled audit line at $0', () => {
+    const lines = buildCancelledRideLedgerLines({
+      id: 'ride-cancel',
+      rider_user_id: 'rider-1',
+      assigned_driver_user_id: 'driver-1',
+      status: 'cancelled',
+      cancelled_by: 'rider',
+      cancel_reason: 'changed mind',
+      updated_at: '2026-05-27T10:00:00.000Z',
+    });
+    expect(lines).toHaveLength(1);
+    expect(lines[0].line_kind).toBe('trip_cancelled');
+    expect(lines[0].paid_to_you_minor).toBe(0);
+    expect(lines[0].idempotency_key).toBe('ride:ride-cancel|cancelled');
   });
 });

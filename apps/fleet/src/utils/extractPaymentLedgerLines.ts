@@ -194,6 +194,9 @@ export function applyPaymentLineRollupsToTrips<T extends Record<string, unknown>
       paymentRowCount: tripLines.length,
       externalTransactionIds,
       transactionType: transactionTypes || trip.transactionType,
+      paymentLineRollupMatch: trip.amount != null
+        ? Math.abs(paidToYouNet - Number(trip.amount)) <= 0.05
+        : true,
     };
   });
 }

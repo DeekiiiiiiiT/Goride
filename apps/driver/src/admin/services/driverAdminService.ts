@@ -169,6 +169,7 @@ export async function listPlatformLedgerTrips(
     driver_user_id?: string;
     status?: string;
     payment_method?: 'cash' | 'card';
+    line_kind?: string;
     from?: string;
     to?: string;
     q?: string;
@@ -180,6 +181,7 @@ export async function listPlatformLedgerTrips(
   if (opts.driver_user_id) sp.set('driver_user_id', opts.driver_user_id);
   if (opts.status) sp.set('status', opts.status);
   if (opts.payment_method) sp.set('payment_method', opts.payment_method);
+  if (opts.line_kind) sp.set('line_kind', opts.line_kind);
   if (opts.from) sp.set('from', opts.from);
   if (opts.to) sp.set('to', opts.to);
   if (opts.q) sp.set('q', opts.q);

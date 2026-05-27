@@ -501,6 +501,23 @@ export const ALL_COLUMNS: RenderColumnDef[] = [
     align: 'right', sortable: true,
   },
   {
+    key: 'uberTripStatus', label: 'Uber Status', defaultVisible: false, group: 'uber',
+    render: (t) => t.uberTripStatus || (t.status === 'Cancelled' ? 'cancelled' : t.status) || '—',
+    minWidth: '120px', sortable: true,
+  },
+  {
+    key: 'paymentLineRollupMatch', label: 'Lines Match', defaultVisible: true, group: 'uber',
+    render: (t) => {
+      if (t.paymentLineRollupMatch === undefined) return '—';
+      return t.paymentLineRollupMatch ? (
+        <span className="text-emerald-600 dark:text-emerald-400">Yes</span>
+      ) : (
+        <span className="text-amber-600 dark:text-amber-400">No</span>
+      );
+    },
+    sortable: true,
+  },
+  {
     key: 'uberSsotMatch', label: 'SSOT Match', defaultVisible: false, group: 'uber',
     render: (t) => {
       if (t.uberSsotFarePlusTipsMatch === undefined) return '—';

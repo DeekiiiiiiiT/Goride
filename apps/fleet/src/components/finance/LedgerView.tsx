@@ -108,6 +108,15 @@ const DATE_PRESETS = [
   { label: 'All Time', getValue: () => ({ startDate: undefined, endDate: undefined }) },
 ];
 
+const EVENT_TYPE_QUICK_FILTERS: Array<{ label: string; value: LedgerEventType | undefined }> = [
+  { label: 'All Types', value: undefined },
+  { label: 'Payment Lines', value: 'payment_line' },
+  { label: 'Fare', value: 'fare_earning' },
+  { label: 'Tips', value: 'tip' },
+  { label: 'Payouts', value: 'payout_bank' },
+  { label: 'Adjustments', value: 'adjustment' },
+];
+
 // ─── Props ────────────────────────────────────────────────────────────
 
 interface LedgerViewProps {
@@ -965,6 +974,28 @@ function LedgerViewInner({ driverId, vehicleId, compact = false, eventTypesFilte
                 )}
               >
                 {opt.icon}
+                {opt.label}
+              </button>
+            ))}
+
+            <div className="h-4 w-px bg-slate-200 mx-1" />
+
+            {/* Event type quick filters */}
+            {EVENT_TYPE_QUICK_FILTERS.map((opt) => (
+              <button
+                key={opt.label}
+                onClick={() => {
+                  if (filters.eventType === opt.value) return;
+                  setFilters(prev => ({ ...prev, eventType: opt.value }));
+                  setPage(1);
+                }}
+                className={cn(
+                  'px-2.5 py-1 rounded-md text-xs font-medium transition-colors',
+                  filters.eventType === opt.value
+                    ? 'bg-indigo-100 text-indigo-700 border border-indigo-300'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-transparent'
+                )}
+              >
                 {opt.label}
               </button>
             ))}

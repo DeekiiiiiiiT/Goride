@@ -29,6 +29,7 @@ export function registerPlatformLedgerAdminRoutes(admin: Hono) {
     const driverUserId = c.req.query("driver_user_id")?.trim() || undefined;
     const status = c.req.query("status")?.trim() || undefined;
     const payment_method = c.req.query("payment_method")?.trim() as "cash" | "card" | undefined;
+    const line_kind = c.req.query("line_kind")?.trim() || undefined;
     const from = c.req.query("from")?.trim() || undefined;
     const to = c.req.query("to")?.trim() || undefined;
     const grain = c.req.query("grain")?.trim() === "line" ? "line" as const : "trip" as const;
@@ -47,6 +48,7 @@ export function registerPlatformLedgerAdminRoutes(admin: Hono) {
         limit,
         from,
         to,
+        lineKind: line_kind,
       });
       if ("error" in lineResult) {
         return c.json({ error: "list_failed", message: lineResult.error }, 500);
@@ -61,6 +63,7 @@ export function registerPlatformLedgerAdminRoutes(admin: Hono) {
       limit,
       status,
       payment_method: payment_method === "cash" || payment_method === "card" ? payment_method : undefined,
+      lineKind: line_kind,
       from,
       to,
       dateField: "completed_at",

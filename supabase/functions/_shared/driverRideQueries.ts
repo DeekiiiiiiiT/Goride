@@ -40,6 +40,10 @@ export interface ListDriverTripsOpts {
   /** Filter ledger listings by completion time when available. */
   dateField?: "created_at" | "completed_at";
   grain?: "trip" | "line";
+  /** Filter trips/lines to those with a ledger line of this kind. */
+  lineKind?: string;
+  /** Internal: restrict to specific ride request ids (from lineKind resolution). */
+  rideIds?: string[];
 }
 
 export interface ListDriverTripsResult {
@@ -75,6 +79,9 @@ function applyTripFilters(
   }
   if (opts.riderUserId) {
     q = q.eq("rider_user_id", opts.riderUserId);
+  }
+  if (opts.rideIds && opts.rideIds.length > 0) {
+    q = q.in("id", opts.rideIds);
   }
   if (opts.status?.trim()) {
     q = q.eq("status", opts.status.trim());
@@ -142,10 +149,26 @@ export async function listDriverRideRequests(
   publicDb: SupabaseClient,
   opts: ListDriverTripsOpts,
 ): Promise<ListDriverTripsResult | { error: string }> {
-  const native = await listFromTable(ridesDb, "ride_requests", opts);
+  let effectiveOpts = opts;
+  if (opts.lineKind) {
+    const { data, error } = await ridesDb
+      .from("ledger_lines")
+      .select("ride_request_id")
+      .eq("line_kind", opts.lineKind);
+    if (error) return { error: error.message };
+    const rideIds = [...new Set((data ?? []).map((r) => String(r.ride_request_id)))];
+    if (rideIds.length === 0) {
+      const page = Math.max(1, Number(opts.page ?? 1));
+      const limit = Math.min(100, Math.max(1, Number(opts.limit ?? 25)));
+      return { trips: [], total: 0, page, limit };
+    }
+    effectiveOpts = { ...opts, rideIds };
+  }
+
+  const native = await listFromTable(ridesDb, "ride_requests", effectiveOpts);
   if (!("error" in native)) return native;
 
-  const pub = await listFromTable(publicDb, "rides_ride_requests", opts);
+  const pub = await listFromTable(publicDb, "rides_ride_requests", effectiveOpts);
   if (!("error" in pub)) return pub;
 
   return { error: pub.error };

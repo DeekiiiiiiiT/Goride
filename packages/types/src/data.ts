@@ -138,6 +138,13 @@ export interface Trip {
   /** Uber transaction UUIDs from payment lines. */
   externalTransactionIds?: string[];
 
+  /** Raw Uber trip_activity Trip status (e.g. rider_cancelled, completed). */
+  uberTripStatus?: string;
+  /** Raw Payment Type from trip_activity (cash, braintree, digital). */
+  uberPaymentTypeRaw?: string;
+  /** Trip rollup paidToYouNet matches trip amount within tolerance. */
+  paymentLineRollupMatch?: boolean;
+
   [key: string]: any; // Allow dynamic properties
 }
 

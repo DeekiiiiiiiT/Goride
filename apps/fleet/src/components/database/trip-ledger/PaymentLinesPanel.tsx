@@ -45,11 +45,11 @@ export function PaymentLinesPanel({ tripId, batchId, platform }: PaymentLinesPan
 
     const load = async () => {
       try {
-        if (platform === 'Roam') {
-          setLines([]);
-          return;
-        }
-        const res = await api.getPaymentLedgerLines({ tripId, batchId });
+        const res = await api.getPaymentLedgerLines({
+          tripId,
+          batchId,
+          platform: platform === 'Roam' ? 'Roam' : undefined,
+        });
         if (!cancelled) setLines(res.data || []);
       } catch (e: unknown) {
         if (!cancelled) {
@@ -67,7 +67,7 @@ export function PaymentLinesPanel({ tripId, batchId, platform }: PaymentLinesPan
     };
   }, [tripId, batchId, platform]);
 
-  if (platform && platform !== 'Uber') {
+  if (platform && platform !== 'Uber' && platform !== 'Roam') {
     return null;
   }
 

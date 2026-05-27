@@ -1,0 +1,2 @@
+﻿Driver UUID,Driver first name,Driver last name,Trips completed,Acceptance rate,Cancellation rate,Completion rate,Driver ratings (last 4 weeks),Driver ratings (previous 500 trips),Driver's current acceptance rate as seen in driver app,Driver's current cancellation rate as seen in driver app,Trips Accepted(Excluding trip radar or similar),Trips Rejected,Trips Cancelled,Trips Cancelled-Driver At Fault,Trips Failed,Total Trips Assignments
+52ff47da-ef48-41b8-93d5-80a09b85ce5b,KENNY GREGORY,RATTRAYCAS,70,0.37,0.16,0.24,5.00,5.00,36.0%,16.0%,108,184,17,17,0,0

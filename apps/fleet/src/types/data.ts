@@ -137,6 +137,11 @@ export interface Trip {
   paymentRowCount?: number;
   /** Uber transaction UUIDs from payment lines. */
   externalTransactionIds?: string[];
+  /** Raw Uber trip_activity Trip status (e.g. rider_cancelled, completed). */
+  uberTripStatus?: string;
+  /** Raw Payment Type from trip_activity (cash, braintree, digital). */
+  uberPaymentTypeRaw?: string;
+  paymentLineRollupMatch?: boolean;
   /** When true, fare canonical events come from payment lines (not trip rollup). */
   usesPaymentLineSsot?: boolean;
 
@@ -479,6 +484,25 @@ export interface OrganizationMetrics {
 
     /** From `payments_organization` when present: toll-only portion of refunds (excludes support adjustments). */
     refundsToll?: number;
+    /** From `payments_organization` / `payments_driver`: tip total for the period. */
+    totalTips?: number;
+}
+
+export interface DriverQualitySnapshot {
+    driverId: string;
+    driverName?: string;
+    tripsCompleted?: number;
+    acceptanceRate?: number;
+    cancellationRate?: number;
+    completionRate?: number;
+    ratingLast4Weeks?: number;
+    ratingLast500?: number;
+    tripsAccepted?: number;
+    tripsRejected?: number;
+    tripsCancelled?: number;
+    tripsCancelledDriverAtFault?: number;
+    tripsFailed?: number;
+    totalTripAssignments?: number;
 }
 
 // Phase 8.4: Driver Portal & Maintenance Reporting

@@ -2170,12 +2170,35 @@ export const api = {
     return response.json();
   },
 
+  async importDriverQualitySnapshots(
+    batchId: string,
+    snapshots: Array<Record<string, unknown>>,
+  ): Promise<{ imported: number; batchId: string }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/payment-ledger-lines/driver-quality-snapshots/import`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${publicAnonKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ batchId, snapshots }),
+      },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || 'Failed to import driver quality snapshots');
+    }
+    return response.json();
+  },
+
   async getPaymentLedgerLines(params?: {
     tripId?: string;
     batchId?: string;
     driverId?: string;
     from?: string;
     to?: string;
+    platform?: string;
   }): Promise<{ data: import('@roam/types/paymentLedgerLine').PaymentLedgerLine[]; total: number }> {
     const qs = new URLSearchParams();
     if (params?.tripId) qs.set('tripId', params.tripId);
@@ -2183,6 +2206,7 @@ export const api = {
     if (params?.driverId) qs.set('driverId', params.driverId);
     if (params?.from) qs.set('from', params.from);
     if (params?.to) qs.set('to', params.to);
+    if (params?.platform) qs.set('platform', params.platform);
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/payment-ledger-lines?${qs.toString()}`,
       { headers: { Authorization: `Bearer ${publicAnonKey}` } },

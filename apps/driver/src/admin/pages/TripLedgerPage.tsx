@@ -29,6 +29,7 @@ export function TripLedgerPage() {
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
+  const [lineKind, setLineKind] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -41,6 +42,7 @@ export function TripLedgerPage() {
         q: q.trim() || undefined,
         status: status || undefined,
         payment_method: paymentMethod === 'cash' || paymentMethod === 'card' ? paymentMethod : undefined,
+        line_kind: lineKind || undefined,
       });
       setTrips(res.trips);
       setTotal(res.total);
@@ -51,7 +53,7 @@ export function TripLedgerPage() {
     } finally {
       setLoading(false);
     }
-  }, [token, page, q, status, paymentMethod]);
+  }, [token, page, q, status, paymentMethod, lineKind]);
 
   useEffect(() => {
     void load();
@@ -105,6 +107,20 @@ export function TripLedgerPage() {
           <option value="">All payments</option>
           <option value="cash">Cash</option>
           <option value="card">Card</option>
+        </select>
+        <select
+          value={lineKind}
+          onChange={(e) => {
+            setPage(1);
+            setLineKind(e.target.value);
+          }}
+          className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm"
+        >
+          <option value="">All line kinds</option>
+          <option value="fare_earning">Fare earning</option>
+          <option value="tip">Tip</option>
+          <option value="platform_fee">Platform fee</option>
+          <option value="trip_cancelled">Trip cancelled</option>
         </select>
       </div>
 

@@ -34,6 +34,7 @@ export async function listPlatformLedgerLines(
   if (opts.riderUserId) q = q.eq("rider_user_id", opts.riderUserId);
   if (opts.from) q = q.gte("reporting_at", opts.from);
   if (opts.to) q = q.lte("reporting_at", opts.to);
+  if (opts.lineKind) q = q.eq("line_kind", opts.lineKind);
 
   const { count, error: countErr } = await q;
   if (countErr) return { error: countErr.message };
@@ -43,6 +44,7 @@ export async function listPlatformLedgerLines(
   if (opts.riderUserId) dataQ = dataQ.eq("rider_user_id", opts.riderUserId);
   if (opts.from) dataQ = dataQ.gte("reporting_at", opts.from);
   if (opts.to) dataQ = dataQ.lte("reporting_at", opts.to);
+  if (opts.lineKind) dataQ = dataQ.eq("line_kind", opts.lineKind);
 
   const { data, error } = await dataQ
     .order("reporting_at", { ascending: false })

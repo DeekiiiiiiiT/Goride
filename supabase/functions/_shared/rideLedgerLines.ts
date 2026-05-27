@@ -104,11 +104,51 @@ export function buildRideLedgerLineInserts(ride: Record<string, unknown>): RideL
   return lines;
 }
 
-export async function persistRideLedgerLines(
-  db: SupabaseClient,
+function cancelDescription(ride: Record<string, unknown>): string {
+  const by = String(ride.cancelled_by ?? "unknown");
+  const reason = ride.cancel_reason ? ` — ${String(ride.cancel_reason)}` : "";
+  return `Roam trip cancelled (${by})${reason}`;
+}
+
+export function buildCancelledRideLedgerLines(ride: Record<string, unknown>): RideLedgerLineInsert[] {
+  const rideId = String(ride.id);
+  const riderUserId = String(ride.rider_user_id);
+  const driverUserId = (ride.assigned_driver_user_id as string | null) ?? null;
+  const paymentMethod = (ride.payment_method as "cash" | "card" | null) ?? null;
+  const reportingAt = String(
+    ride.updated_at ?? ride.created_at ?? new Date().toISOString(),
+  );
+
+  return [{
+    ride_request_id: rideId,
+    line_kind: "trip_cancelled",
+    description: cancelDescription(ride),
+    reporting_at: reportingAt,
+    paid_to_you_minor: 0,
+    earnings_gross_minor: 0,
+    cash_collected_minor: 0,
+    bank_transferred_minor: 0,
+    fare_breakdown: {},
+    payment_method: paymentMethod,
+    driver_user_id: driverUserId,
+    rider_user_id: riderUserId,
+    idempotency_key: `ride:${rideId}|cancelled`,
+  }];
+}
+
+export function buildLedgerLinesForTerminalState(
   ride: Record<string, unknown>,
+): RideLedgerLineInsert[] {
+  const status = String(ride.status ?? "");
+  if (status === "completed") return buildRideLedgerLineInserts(ride);
+  if (status === "cancelled") return buildCancelledRideLedgerLines(ride);
+  return [];
+}
+
+async function upsertLedgerLines(
+  db: SupabaseClient,
+  lines: RideLedgerLineInsert[],
 ): Promise<{ inserted: number; skipped: number }> {
-  const lines = buildRideLedgerLineInserts(ride);
   let inserted = 0;
   let skipped = 0;
 
@@ -129,6 +169,22 @@ export async function persistRideLedgerLines(
   }
 
   return { inserted, skipped };
+}
+
+export async function persistRideLedgerLines(
+  db: SupabaseClient,
+  ride: Record<string, unknown>,
+): Promise<{ inserted: number; skipped: number }> {
+  return persistRideLedgerLinesForTerminalState(db, ride);
+}
+
+export async function persistRideLedgerLinesForTerminalState(
+  db: SupabaseClient,
+  ride: Record<string, unknown>,
+): Promise<{ inserted: number; skipped: number }> {
+  const lines = buildLedgerLinesForTerminalState(ride);
+  if (lines.length === 0) return { inserted: 0, skipped: 0 };
+  return upsertLedgerLines(db, lines);
 }
 
 export async function finalizeRideLedgerFields(

@@ -100,6 +100,7 @@ import { validateMergedImportPreview } from '../../utils/importValidation';
 import { buildCanonicalImportEvents } from '../../utils/buildCanonicalImportEvents';
 import { buildPaymentLedgerCanonicalEvents } from '../../utils/buildPaymentLedgerCanonicalEvents';
 import type { PaymentLedgerLine } from '@roam/types/paymentLedgerLine';
+import type { DriverQualitySnapshot } from '../../types/data';
 import { computeUberImportReconciliation } from '../../utils/uberImportReconciliation';
 import { reconcileUberNetFareByDriver } from '../../utils/uberStatementReconciliation';
 
@@ -111,6 +112,7 @@ import { BulkEntityImportFlow } from './BulkEntityImportFlow';
 import { SystemBackupRestore } from './SystemBackupRestore';
 import { ImportExportHistory } from './ImportExportHistory';
 import { ImportBatchAuditPanel } from './ImportBatchAuditPanel';
+import { ImportReconciliationSummary } from './ImportReconciliationSummary';
 import { CategoryGroupCard, CategoryGroup } from './CategoryGroupCard';
 
 type Step = 'select_platform' | 'upload' | 'review_files' | 'preview_merged' | 'success';
@@ -231,6 +233,9 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
   const [processedVehicleTime, setProcessedVehicleTime] = useState<VehicleTimeDistance[]>([]);
   const [processedDisputeRefunds, setProcessedDisputeRefunds] = useState<DisputeRefund[]>([]);
   const [processedPaymentLedgerLines, setProcessedPaymentLedgerLines] = useState<PaymentLedgerLine[]>([]);
+  const [processedDriverQualitySnapshots, setProcessedDriverQualitySnapshots] = useState<
+    DriverQualitySnapshot[]
+  >([]);
   const [processedUberStatementsByDriverId, setProcessedUberStatementsByDriverId] = useState<
     Record<string, UberSsotTotals> | undefined
   >(undefined);
@@ -423,6 +428,7 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
         importWarnings,
         uberStatementsByDriverId,
         paymentLedgerLines,
+        driverQualitySnapshots,
       } = mergeAndProcessData(uploadedFiles, availableFields, knownFleetName, fuelCards);
 
       if (organizationName) {
@@ -461,6 +467,7 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
       setProcessedVehicleTime(vehicleTimeData || []);
       setProcessedDisputeRefunds(disputeRefunds || []);
       setProcessedPaymentLedgerLines(paymentLedgerLines || []);
+      setProcessedDriverQualitySnapshots(driverQualitySnapshots || []);
       setProcessedUberStatementsByDriverId(uberStatementsByDriverId);
       if ((disputeRefunds || []).length > 0) {
           console.log(`[Import] Found ${disputeRefunds!.length} dispute refund(s) in CSV`);
@@ -885,6 +892,21 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
               } catch (plErr: unknown) {
                   const msg = plErr instanceof Error ? plErr.message : String(plErr);
                   toast.error(`Payment ledger line import failed: ${msg}`);
+              }
+          }
+
+          if (processedDriverQualitySnapshots.length > 0) {
+              try {
+                  const dqResult = await api.importDriverQualitySnapshots(
+                      batchId,
+                      processedDriverQualitySnapshots.map((s) => ({ ...s, batchId })),
+                  );
+                  if (dqResult.imported > 0) {
+                      toast.success(`Saved ${dqResult.imported} driver quality snapshot(s)`);
+                  }
+              } catch (dqErr: unknown) {
+                  const msg = dqErr instanceof Error ? dqErr.message : String(dqErr);
+                  toast.error(`Driver quality snapshot import failed: ${msg}`);
               }
           }
 
@@ -1816,6 +1838,12 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
                           </div>
                       </CardContent>
                   </Card>
+
+                  <ImportReconciliationSummary
+                      organizationMetrics={processedOrganizationMetrics[0]}
+                      paymentLines={processedPaymentLedgerLines}
+                      trips={processedData}
+                  />
 
                   {/* Uber Reconciliation (SSOT vs Roam) */}
                   <Card>
