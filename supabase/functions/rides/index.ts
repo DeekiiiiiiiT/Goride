@@ -44,6 +44,12 @@ import {
   persistRideLedgerLinesForTerminalState,
 } from "../_shared/rideLedgerLines.ts";
 import { syncRideToFleetKv } from "../_shared/rideToFleetTrip.ts";
+import {
+  applyRideTransition,
+  maybeAutoEnRouteOnAccept,
+  type ApplyTransitionDeps,
+} from "./rideLifecycle.ts";
+import { evaluateGeofenceTransitions, cleanupRideLiveState } from "./rideGeofence.ts";
 
 /** Match Supabase path prefix: .../functions/v1/rides/<route> → /rides/<route> */
 const app = new Hono().basePath("/rides");
@@ -323,6 +329,43 @@ async function handleTerminalRideLedgerAndSync(rideId: string): Promise<void> {
   } catch (e) {
     console.error("[rides] fleet KV sync failed:", e);
   }
+}
+
+function transitionDeps(): ApplyTransitionDeps {
+  return {
+    loadRideRequestById,
+    patchRideRequest,
+    handleTerminalRideLedgerAndSync,
+    bumpSurgeDemand,
+    audit,
+    cleanupLiveState: async (rideId: string) => cleanupRideLiveState(svc(), rideId),
+  };
+}
+
+async function loadDispatchSettingsForRides(): Promise<typeof DEFAULT_DISPATCH_SETTINGS> {
+  try {
+    const { db: adminDb, tables } = await getRidesAdminDb();
+    return await loadDispatchSettings(adminDb, tables);
+  } catch {
+    return DEFAULT_DISPATCH_SETTINGS;
+  }
+}
+
+async function loadActiveRideIds(): Promise<string[]> {
+  const active = [
+    "driver_assigned",
+    "driver_en_route_pickup",
+    "driver_arrived_pickup",
+    "on_trip",
+  ];
+  const { data: native, error: nativeErr } = await svc().from("ride_requests").select("id").in(
+    "status",
+    active,
+  );
+  if (!nativeErr && native) return native.map((row) => row.id as string);
+
+  const { data: pub } = await pubSvc().from("rides_ride_requests").select("id").in("status", active);
+  return (pub ?? []).map((row) => row.id as string);
 }
 
 async function loadMatchingRideIdsForRider(riderUserId: string): Promise<string[]> {
@@ -1011,6 +1054,9 @@ app.post("/v1/requests", async (c) => {
       body.driver_offer_timeout_seconds ?? bookDispatchSettings.default_driver_offer_timeout_seconds,
     ),
     matching_wave: 0,
+    route_polyline_encoded: typeof body.route_polyline_encoded === "string"
+      ? body.route_polyline_encoded
+      : null,
   };
 
   let ride: Record<string, unknown> | null = null;
@@ -1255,7 +1301,16 @@ app.post("/v1/drivers/offers/:offerId/accept", async (c) => {
 
   await audit(rideId, auth.user.id, "offer_accepted", { offer_id: offerId });
   logLine({ event: "offer_accepted", ride_id: rideId, driver_id: auth.user.id });
-  return c.json({ ride: freshRide });
+
+  const settings = await loadDispatchSettingsForRides();
+  const rideOut = await maybeAutoEnRouteOnAccept(
+    transitionDeps(),
+    settings,
+    rideId,
+    auth.user.id,
+  );
+
+  return c.json({ ride: rideOut ?? freshRide });
 });
 
 app.post("/v1/drivers/offers/:offerId/decline", async (c) => {
@@ -1325,6 +1380,135 @@ const DRIVER_TRANSITIONS: Record<RideStatus, RideStatus[]> = {
   cancelled: [],
 };
 
+app.post("/v1/drivers/ride-location", async (c) => {
+  const auth = await requireUser(c.req.header("Authorization"));
+  if ("error" in auth) return c.json({ error: auth.error }, auth.status);
+  if (ridesUserSurfaceRole(auth.user) !== "driver") return jsonEdgeForbidden(c, "forbidden_role");
+
+  const body = await c.req.json().catch(() => ({}));
+  const rideId = typeof body.ride_id === "string" ? body.ride_id : "";
+  const lat = Number(body.lat);
+  const lng = Number(body.lng);
+  const clientSeq = Number(body.client_seq);
+  if (!rideId || Number.isNaN(lat) || Number.isNaN(lng) || !Number.isFinite(clientSeq)) {
+    return c.json({ error: "invalid_body" }, 400);
+  }
+
+  if (!rateLimit(`loc:${rideId}:${auth.user.id}`, 1, 2000)) {
+    return c.json({ error: "rate_limited" }, 429);
+  }
+
+  const recordedAtRaw = typeof body.recorded_at === "string" ? body.recorded_at : new Date().toISOString();
+  const recordedMs = Date.parse(recordedAtRaw);
+  const nowMs = Date.now();
+  if (!Number.isFinite(recordedMs) || recordedMs < nowMs - 60_000 || recordedMs > nowMs + 10_000) {
+    return c.json({ error: "stale_location" }, 400);
+  }
+
+  const { data: rpcResult, error: rpcError } = await pubSvc().rpc("rides_insert_location_update", {
+    p_ride_id: rideId,
+    p_driver_user_id: auth.user.id,
+    p_lat: lat,
+    p_lng: lng,
+    p_heading: body.heading_degrees != null ? Number(body.heading_degrees) : null,
+    p_speed_mps: body.speed_mps != null ? Number(body.speed_mps) : null,
+    p_accuracy_m: body.accuracy_m != null ? Number(body.accuracy_m) : null,
+    p_recorded_at: new Date(recordedMs).toISOString(),
+    p_client_seq: Math.trunc(clientSeq),
+  });
+
+  if (rpcError) {
+    if (isMissingDbRpc(rpcError)) {
+      return c.json({ error: "location_rpc_missing", message: rpcError.message }, 503);
+    }
+    return c.json({ error: "location_failed", message: rpcError.message }, 500);
+  }
+
+  const ingest = rpcResult as Record<string, unknown> | null;
+  if (ingest && ingest.ok === false) {
+    const err = String(ingest.error ?? "forbidden");
+    const status = err === "not_found" ? 404 : err === "ride_not_active" ? 409 : 403;
+    return c.json({ error: err }, status);
+  }
+
+  const ride = await loadRideRequestById(rideId);
+  if (!ride) return c.json({ error: "not_found" }, 404);
+
+  let geofenceResult = null;
+  if (ingest && ingest.duplicate !== true) {
+    const settings = await loadDispatchSettingsForRides();
+    geofenceResult = await evaluateGeofenceTransitions(
+      svc(),
+      transitionDeps(),
+      settings,
+      ride,
+      {
+        lat,
+        lng,
+        speedMps: body.speed_mps != null ? Number(body.speed_mps) : null,
+        accuracyM: body.accuracy_m != null ? Number(body.accuracy_m) : null,
+        recordedAt: new Date(recordedMs).toISOString(),
+      },
+      auth.user.id,
+    );
+  }
+
+  const freshRide = await loadRideRequestById(rideId);
+  return c.json({
+    ok: true,
+    ride: freshRide,
+    live: geofenceResult
+      ? {
+          distance_to_pickup_m: geofenceResult.distanceToPickupM,
+          distance_to_dropoff_m: geofenceResult.distanceToDropoffM,
+          transition_applied: geofenceResult.transitionApplied ?? null,
+          complete_suggested: geofenceResult.completeSuggested ?? false,
+        }
+      : undefined,
+  });
+});
+
+app.get("/v1/requests/:id/live", async (c) => {
+  const auth = await requireUser(c.req.header("Authorization"));
+  if ("error" in auth) return c.json({ error: auth.error }, auth.status);
+
+  const id = c.req.param("id");
+  const ride = await loadRideRequestById(id);
+  if (!ride) return c.json({ error: "not_found" }, 404);
+
+  const role = ridesUserSurfaceRole(auth.user);
+  const isRider = ride.rider_user_id === auth.user.id;
+  const isDriver = ride.assigned_driver_user_id === auth.user.id;
+  if (!isRider && !isDriver && role !== "admin") {
+    return jsonEdgeForbidden(c, "forbidden");
+  }
+
+  const driverLocation =
+    ride.last_driver_lat != null && ride.last_driver_lng != null
+      ? {
+          lat: Number(ride.last_driver_lat),
+          lng: Number(ride.last_driver_lng),
+          heading: ride.last_driver_heading != null ? Number(ride.last_driver_heading) : null,
+          updated_at: ride.last_driver_location_at ?? null,
+        }
+      : null;
+
+  return c.json({
+    ride: {
+      id: ride.id,
+      status: ride.status,
+      pickup_lat: ride.pickup_lat,
+      pickup_lng: ride.pickup_lng,
+      dropoff_lat: ride.dropoff_lat,
+      dropoff_lng: ride.dropoff_lng,
+      route_polyline_encoded: ride.route_polyline_encoded ?? null,
+      complete_suggested_at: ride.complete_suggested_at ?? null,
+      last_driver_location_at: ride.last_driver_location_at ?? null,
+    },
+    driver_location: driverLocation,
+  });
+});
+
 app.patch("/v1/requests/:id/driver-transition", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
@@ -1333,56 +1517,35 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
   const id = c.req.param("id");
   const body = await c.req.json().catch(() => ({}));
   const next = body.status as RideStatus;
-  const db = svc();
+
   const ride = await loadRideRequestById(id);
   if (!ride) return c.json({ error: "not_found" }, 404);
   if (ride.assigned_driver_user_id !== auth.user.id) return jsonEdgeForbidden(c, "forbidden");
 
   const current = ride.status as RideStatus;
-  const allowed = DRIVER_TRANSITIONS[current];
-  if (!allowed?.includes(next)) return c.json({ error: "invalid_transition", current, next }, 400);
+  if (!DRIVER_TRANSITIONS[current]?.includes(next)) {
+    return c.json({ error: "invalid_transition", current, next }, 400);
+  }
 
-  const patch: Record<string, unknown> = { status: next, updated_at: new Date().toISOString() };
-  if (next === "completed") {
-    const fareMinor = Number(ride.fare_final_minor ?? ride.fare_estimate_minor);
-    if (!Number.isFinite(fareMinor) || fareMinor < 0) {
+  const result = await applyRideTransition(transitionDeps(), {
+    rideId: id,
+    next,
+    actorUserId: auth.user.id,
+    source: "manual",
+    expectedFrom: current,
+    cancelReason: typeof body.reason === "string" ? body.reason : null,
+    cancelledBy: next === "cancelled" ? "driver" : undefined,
+  });
+
+  if (!result.ok) {
+    if (result.error === "invalid_fare") {
       return c.json({ error: "invalid_fare", message: "Cannot complete ride without a valid fare" }, 400);
     }
-    patch.fare_final_minor = fareMinor;
-    patch.completed_at = new Date().toISOString();
-    patch.fare_final_breakdown = ride.fare_breakdown ?? null;
-    patch.platform_fee_minor = 0;
-    patch.tip_minor = 0;
-    patch.driver_net_minor = fareMinor;
-    if (!ride.payment_method) {
-      patch.payment_method = "cash";
-    }
-  }
-  if (next === "cancelled") {
-    patch.cancelled_by = "driver";
-    patch.cancel_reason = typeof body.reason === "string" ? body.reason : null;
+    return c.json({ error: result.error ?? "transition_failed", current: result.current }, 400);
   }
 
-  await patchRideRequest(id, patch);
-
-  if (next === "completed" || next === "cancelled") {
-    await handleTerminalRideLedgerAndSync(id);
-  }
-
-  if (next === "completed" || next === "cancelled") {
-    const cellKey = gridCellKey(Number(ride.pickup_lat), Number(ride.pickup_lng));
-    await bumpSurgeDemand(cellKey, -1);
-  }
-
-  const auditPayload: Record<string, unknown> = { from: current, to: next };
-  if (next === "completed") {
-    auditPayload.payment_method = patch.payment_method ?? ride.payment_method;
-  }
-  await audit(id, auth.user.id, next === "completed" ? "ride_completed" : "driver_transition", auditPayload);
-  logLine({ event: "driver_transition", ride_id: id, from: current, to: next });
-
-  const fresh = await loadRideRequestById(id);
-  return c.json({ ride: fresh });
+  logLine({ event: "driver_transition", ride_id: id, from: current, to: next, source: "manual" });
+  return c.json({ ride: result.ride });
 });
 
 app.post("/v1/internal/reconcile-matching", async (c) => {
@@ -1401,6 +1564,64 @@ app.post("/v1/internal/reconcile-matching", async (c) => {
 
   logLine({ event: "reconcile_matching_batch", processed });
   return c.json({ ok: true, processed });
+});
+
+app.post("/v1/internal/reconcile-active-rides", async (c) => {
+  const secret = Deno.env.get("RIDES_CRON_SECRET");
+  const token = c.req.header("X-Rides-Cron-Secret") ?? "";
+  if (!secret || token !== secret) {
+    return c.json({ error: "unauthorized" }, 401);
+  }
+
+  const settings = await loadDispatchSettingsForRides();
+  const rideIds = await loadActiveRideIds();
+  let noShowCancelled = 0;
+  let staleAlerts = 0;
+  const nowMs = Date.now();
+
+  for (const rideId of rideIds) {
+    const ride = await loadRideRequestById(rideId);
+    if (!ride) continue;
+
+    const lastLocMs = ride.last_driver_location_at
+      ? Date.parse(String(ride.last_driver_location_at))
+      : NaN;
+    if (
+      Number.isFinite(lastLocMs) &&
+      nowMs - lastLocMs > 2 * 60 * 60 * 1000 &&
+      ["driver_en_route_pickup", "driver_arrived_pickup", "on_trip"].includes(String(ride.status))
+    ) {
+      staleAlerts += 1;
+      await audit(rideId, null, "ride_stale_location_alert", {
+        last_driver_location_at: ride.last_driver_location_at,
+        status: ride.status,
+      });
+    }
+
+    if (
+      settings.no_show_auto_cancel_enabled &&
+      ride.status === "driver_arrived_pickup" &&
+      ride.arrived_pickup_at
+    ) {
+      const arrivedMs = Date.parse(String(ride.arrived_pickup_at));
+      const waitMin = (nowMs - arrivedMs) / 60_000;
+      if (waitMin >= settings.no_show_cancel_minutes) {
+        const tr = await applyRideTransition(transitionDeps(), {
+          rideId,
+          next: "cancelled",
+          actorUserId: null,
+          source: "system",
+          expectedFrom: "driver_arrived_pickup",
+          cancelReason: "rider_no_show",
+          cancelledBy: "system",
+        });
+        if (tr.ok && !tr.skipped) noShowCancelled += 1;
+      }
+    }
+  }
+
+  logLine({ event: "reconcile_active_rides", rides: rideIds.length, noShowCancelled, staleAlerts });
+  return c.json({ ok: true, rides: rideIds.length, no_show_cancelled: noShowCancelled, stale_alerts: staleAlerts });
 });
 
 registerAdminRoutes(app, { logLine });

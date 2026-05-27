@@ -17,6 +17,17 @@ export type DispatchSettings = {
   body_type_tier_mode: BodyTypeTierMode;
   require_body_type_for_offers: boolean;
   independent_only_matching: boolean;
+  trip_location_interval_seconds: number;
+  pickup_geofence_radius_m: number;
+  dropoff_geofence_radius_m: number;
+  arrival_dwell_seconds: number;
+  max_speed_mps_for_arrival: number;
+  auto_en_route_on_accept: boolean;
+  auto_arrive_enabled: boolean;
+  auto_complete_suggest_enabled: boolean;
+  no_show_cancel_minutes: number;
+  gps_max_accuracy_m_for_arrival: number;
+  no_show_auto_cancel_enabled: boolean;
   updated_at?: string;
   updated_by?: string | null;
 };
@@ -32,6 +43,17 @@ export const DEFAULT_DISPATCH_SETTINGS: DispatchSettings = {
   body_type_tier_mode: "expand",
   require_body_type_for_offers: true,
   independent_only_matching: true,
+  trip_location_interval_seconds: 4,
+  pickup_geofence_radius_m: 80,
+  dropoff_geofence_radius_m: 100,
+  arrival_dwell_seconds: 15,
+  max_speed_mps_for_arrival: 4,
+  auto_en_route_on_accept: true,
+  auto_arrive_enabled: true,
+  auto_complete_suggest_enabled: true,
+  no_show_cancel_minutes: 5,
+  gps_max_accuracy_m_for_arrival: 50,
+  no_show_auto_cancel_enabled: false,
 };
 
 const CACHE_TTL_MS = 30_000;
@@ -102,6 +124,38 @@ export function rowToDispatchSettings(row: Record<string, unknown>): DispatchSet
     body_type_tier_mode: tierMode,
     require_body_type_for_offers: row.require_body_type_for_offers !== false,
     independent_only_matching: row.independent_only_matching !== false,
+    trip_location_interval_seconds: Math.min(
+      30,
+      Math.max(2, Number(row.trip_location_interval_seconds ?? DEFAULT_DISPATCH_SETTINGS.trip_location_interval_seconds)),
+    ),
+    pickup_geofence_radius_m: Math.min(
+      500,
+      Math.max(20, Number(row.pickup_geofence_radius_m ?? DEFAULT_DISPATCH_SETTINGS.pickup_geofence_radius_m)),
+    ),
+    dropoff_geofence_radius_m: Math.min(
+      500,
+      Math.max(20, Number(row.dropoff_geofence_radius_m ?? DEFAULT_DISPATCH_SETTINGS.dropoff_geofence_radius_m)),
+    ),
+    arrival_dwell_seconds: Math.min(
+      120,
+      Math.max(0, Number(row.arrival_dwell_seconds ?? DEFAULT_DISPATCH_SETTINGS.arrival_dwell_seconds)),
+    ),
+    max_speed_mps_for_arrival: Math.min(
+      20,
+      Math.max(0, Number(row.max_speed_mps_for_arrival ?? DEFAULT_DISPATCH_SETTINGS.max_speed_mps_for_arrival)),
+    ),
+    auto_en_route_on_accept: row.auto_en_route_on_accept !== false,
+    auto_arrive_enabled: row.auto_arrive_enabled !== false,
+    auto_complete_suggest_enabled: row.auto_complete_suggest_enabled !== false,
+    no_show_cancel_minutes: Math.min(
+      60,
+      Math.max(0, Number(row.no_show_cancel_minutes ?? DEFAULT_DISPATCH_SETTINGS.no_show_cancel_minutes)),
+    ),
+    gps_max_accuracy_m_for_arrival: Math.min(
+      200,
+      Math.max(10, Number(row.gps_max_accuracy_m_for_arrival ?? DEFAULT_DISPATCH_SETTINGS.gps_max_accuracy_m_for_arrival)),
+    ),
+    no_show_auto_cancel_enabled: row.no_show_auto_cancel_enabled === true,
     updated_at: typeof row.updated_at === "string" ? row.updated_at : undefined,
     updated_by: typeof row.updated_by === "string" ? row.updated_by : null,
   };

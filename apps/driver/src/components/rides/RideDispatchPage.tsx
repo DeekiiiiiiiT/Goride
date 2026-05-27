@@ -4,7 +4,18 @@ import { RideOfferCard } from './RideOfferCard';
 import { ActiveRidePanel } from './ActiveRidePanel';
 
 export function RideDispatchPage() {
-  const { online, offers, activeRide, toggleOnline, accept, decline, advance } = useRideDispatch();
+  const {
+    online,
+    offers,
+    activeRide,
+    toggleOnline,
+    accept,
+    decline,
+    advance,
+    trackingError,
+    gpsAccuracyM,
+    isTracking,
+  } = useRideDispatch();
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 px-4 py-6 max-w-lg mx-auto space-y-6">
@@ -27,7 +38,15 @@ export function RideDispatchPage() {
         </section>
       )}
 
-      {activeRide && <ActiveRidePanel ride={activeRide} onAdvance={advance} />}
+      {activeRide && (
+        <ActiveRidePanel
+          ride={activeRide}
+          onAdvance={advance}
+          trackingError={trackingError}
+          gpsAccuracyM={gpsAccuracyM}
+          isTracking={isTracking}
+        />
+      )}
     </div>
   );
 }

@@ -199,6 +199,7 @@ export default function HomePage() {
         vehicle_option: vehicleOption,
         quote_token: quote.quote_token,
         idempotency_key: crypto.randomUUID(),
+        route_polyline_encoded: quote.route_polyline_encoded,
       });
       toast.success('Searching for a driver…');
       navigate(`/ride/${ride.id}`);

@@ -5,8 +5,20 @@ import { RideOfferCard } from './RideOfferCard';
 import { ActiveRidePanel } from './ActiveRidePanel';
 
 export function RideDispatchHome() {
-  const { online, offers, activeRide, toggleOnline, accept, decline, advance, vehicleReady, presenceError } =
-    useRideDispatch();
+  const {
+    online,
+    offers,
+    activeRide,
+    toggleOnline,
+    accept,
+    decline,
+    advance,
+    vehicleReady,
+    presenceError,
+    trackingError,
+    gpsAccuracyM,
+    isTracking,
+  } = useRideDispatch();
 
   const showWaiting = online && offers.length === 0 && !activeRide;
 
@@ -66,7 +78,14 @@ export function RideDispatchHome() {
 
       {activeRide && (
         <div className="shrink-0">
-          <ActiveRidePanel ride={activeRide} onAdvance={advance} compact />
+          <ActiveRidePanel
+            ride={activeRide}
+            onAdvance={advance}
+            compact
+            trackingError={trackingError}
+            gpsAccuracyM={gpsAccuracyM}
+            isTracking={isTracking}
+          />
         </div>
       )}
     </div>

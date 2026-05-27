@@ -11,8 +11,11 @@ import {
   ridesDriverTransition,
 } from '../services/ridesDriverEdge';
 import { slugFromBodyLabel } from '../components/rides/rideDispatchUtils';
+import { useActiveRideTracking } from './useActiveRideTracking';
+import { openExternalNavigation } from '../utils/rideNavigation';
 
 const OFFER_POLL_MS = 4000;
+const RIDE_SYNC_MS = 30_000;
 const OFFER_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3';
 
 const DEFAULT_BODY_TYPE_SLUG = 'sedan';
@@ -30,6 +33,8 @@ export function useRideDispatch() {
   const lastCoords = useRef<{ lat: number; lng: number } | null>(null);
   const knownOfferIds = useRef<Set<string>>(new Set());
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const { trackingError, gpsAccuracyM, isTracking } = useActiveRideTracking(activeRide);
 
   useEffect(() => {
     audioRef.current = new Audio(OFFER_SOUND_URL);
@@ -220,9 +225,34 @@ export function useRideDispatch() {
     const t = window.setInterval(async () => {
       const keep = await pollActiveRide(activeRide.id);
       if (!keep) window.clearInterval(t);
-    }, OFFER_POLL_MS);
+    }, RIDE_SYNC_MS);
     return () => clearInterval(t);
   }, [activeRide?.id, pollActiveRide]);
+
+  useEffect(() => {
+    if (!activeRide?.id) return;
+
+    const channel = supabase
+      .channel(`driver-ride-${activeRide.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'rides',
+          table: 'ride_requests',
+          filter: `id=eq.${activeRide.id}`,
+        },
+        (payload) => {
+          const row = payload.new as RideRequestRow;
+          if (row?.id) setActiveRide(row);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [activeRide?.id]);
 
   useEffect(() => {
     const handleUnload = () => {
@@ -276,6 +306,11 @@ export function useRideDispatch() {
         const { ride } = await ridesDriverAcceptOffer(offer.id);
         setActiveRide(ride);
         toast.success('Ride assigned — head to pickup');
+        openExternalNavigation({
+          lat: ride.pickup_lat,
+          lng: ride.pickup_lng,
+          address: ride.pickup_address,
+        });
         await refreshOffers();
       } catch (e: unknown) {
         toast.error(e instanceof Error ? e.message : 'Could not accept');
@@ -297,17 +332,30 @@ export function useRideDispatch() {
     [refreshOffers],
   );
 
-  const advance = useCallback(async (status: RideRequestRow['status']) => {
+  const advance = useCallback(async (status: RideRequestRow['status'], reason?: string) => {
     if (!activeRide) return;
     try {
-      const { ride } = await ridesDriverTransition(activeRide.id, { status });
+      const { ride } = await ridesDriverTransition(activeRide.id, { status, reason });
       setActiveRide(ride);
+      if (status === 'on_trip') {
+        openExternalNavigation({
+          lat: ride.dropoff_lat,
+          lng: ride.dropoff_lng,
+          address: ride.dropoff_address,
+        });
+      }
       if (status === 'completed') {
         window.dispatchEvent(new Event('roam-driver-trip-completed'));
+        toast.success('Trip completed');
+      } else if (status === 'cancelled') {
+        setActiveRide(null);
+        toast.message('Ride cancelled');
+      } else {
+        toast.success('Updated');
       }
-      toast.success('Updated');
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Transition failed');
+      throw e;
     }
   }, [activeRide]);
 
@@ -318,6 +366,9 @@ export function useRideDispatch() {
     bodyTypeSlug: effectiveBodyTypeSlug,
     vehicleReady,
     presenceError,
+    trackingError,
+    gpsAccuracyM,
+    isTracking,
     goOnline,
     goOffline,
     toggleOnline,

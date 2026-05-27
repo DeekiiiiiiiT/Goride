@@ -1,0 +1,230 @@
+/**
+ * Server-side geofence evaluation for in-trip automation.
+ */
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { distanceMeters, isInsideGeofence, type LatLng } from "../_shared/geo.ts";
+import type { DispatchSettings } from "./fare/dispatchSettings.ts";
+import {
+  applyRideTransition,
+  type ApplyTransitionDeps,
+  type RideStatus,
+} from "./rideLifecycle.ts";
+
+export interface LocationFix {
+  lat: number;
+  lng: number;
+  speedMps?: number | null;
+  accuracyM?: number | null;
+  recordedAt: string;
+}
+
+export interface GeofenceEvalResult {
+  transitionApplied?: RideStatus;
+  completeSuggested?: boolean;
+  distanceToPickupM?: number;
+  distanceToDropoffM?: number;
+}
+
+const TELEPORT_THRESHOLD_M = 500;
+
+async function loadLiveState(db: SupabaseClient, rideId: string): Promise<Record<string, unknown>> {
+  const { data } = await db.from("ride_live_state").select("*").eq("ride_request_id", rideId).maybeSingle();
+  return (data ?? {}) as Record<string, unknown>;
+}
+
+async function upsertLiveState(
+  db: SupabaseClient,
+  rideId: string,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  const row = { ride_request_id: rideId, updated_at: new Date().toISOString(), ...patch };
+  await db.from("ride_live_state").upsert(row, { onConflict: "ride_request_id" });
+}
+
+function speedOk(speedMps: number | null | undefined, maxSpeed: number): boolean {
+  if (speedMps == null || !Number.isFinite(speedMps)) return true;
+  return speedMps <= maxSpeed;
+}
+
+function accuracyOk(accuracyM: number | null | undefined, maxAccuracy: number): boolean {
+  if (accuracyM == null || !Number.isFinite(accuracyM)) return true;
+  return accuracyM <= maxAccuracy;
+}
+
+function detectTeleport(
+  prev: LatLng | null,
+  fix: LatLng,
+  intervalSec = 5,
+): boolean {
+  if (!prev) return false;
+  const d = distanceMeters(prev, fix);
+  return d > TELEPORT_THRESHOLD_M && intervalSec <= 10;
+}
+
+export async function evaluateGeofenceTransitions(
+  db: SupabaseClient,
+  deps: ApplyTransitionDeps,
+  settings: DispatchSettings,
+  ride: Record<string, unknown>,
+  fix: LocationFix,
+  driverUserId: string,
+): Promise<GeofenceEvalResult> {
+  const rideId = String(ride.id);
+  const status = ride.status as RideStatus;
+  const point: LatLng = { lat: fix.lat, lng: fix.lng };
+  const pickup: LatLng = { lat: Number(ride.pickup_lat), lng: Number(ride.pickup_lng) };
+  const dropoff: LatLng = { lat: Number(ride.dropoff_lat), lng: Number(ride.dropoff_lng) };
+
+  const distPickup = distanceMeters(point, pickup);
+  const distDropoff = distanceMeters(point, dropoff);
+
+  const live = await loadLiveState(db, rideId);
+  const prevPoint: LatLng | null =
+    live.last_lat != null && live.last_lng != null
+      ? { lat: Number(live.last_lat), lng: Number(live.last_lng) }
+      : null;
+
+  if (detectTeleport(prevPoint, point)) {
+    await upsertLiveState(db, rideId, {
+      last_lat: fix.lat,
+      last_lng: fix.lng,
+      last_speed_mps: fix.speedMps ?? null,
+      last_accuracy_m: fix.accuracyM ?? null,
+    });
+    return { distanceToPickupM: distPickup, distanceToDropoffM: distDropoff };
+  }
+
+  const nowMs = Date.parse(fix.recordedAt) || Date.now();
+  const result: GeofenceEvalResult = {
+    distanceToPickupM: distPickup,
+    distanceToDropoffM: distDropoff,
+  };
+
+  if (
+    settings.auto_arrive_enabled &&
+    status === "driver_en_route_pickup" &&
+    accuracyOk(fix.accuracyM, settings.gps_max_accuracy_m_for_arrival) &&
+    speedOk(fix.speedMps, settings.max_speed_mps_for_arrival)
+  ) {
+    const inside = isInsideGeofence(
+      point,
+      pickup,
+      settings.pickup_geofence_radius_m,
+      fix.accuracyM ?? 0,
+    );
+    let dwellStart = live.pickup_dwell_started_at
+      ? Date.parse(String(live.pickup_dwell_started_at))
+      : null;
+
+    if (inside.isInside) {
+      if (!dwellStart) dwellStart = nowMs;
+      const dwellSec = (nowMs - dwellStart) / 1000;
+      if (dwellSec >= settings.arrival_dwell_seconds) {
+        const tr = await applyRideTransition(deps, {
+          rideId,
+          next: "driver_arrived_pickup",
+          actorUserId: driverUserId,
+          source: "geofence",
+          expectedFrom: "driver_en_route_pickup",
+        });
+        if (tr.ok && !tr.skipped) {
+          result.transitionApplied = "driver_arrived_pickup";
+          await upsertLiveState(db, rideId, {
+            pickup_dwell_started_at: null,
+            dropoff_dwell_started_at: null,
+            distance_to_target_m: distDropoff,
+            target: "dropoff",
+            last_lat: fix.lat,
+            last_lng: fix.lng,
+            last_speed_mps: fix.speedMps ?? null,
+            last_accuracy_m: fix.accuracyM ?? null,
+          });
+          return result;
+        }
+      }
+      await upsertLiveState(db, rideId, {
+        pickup_dwell_started_at: new Date(dwellStart).toISOString(),
+        distance_to_target_m: inside.distanceM,
+        target: "pickup",
+        last_lat: fix.lat,
+        last_lng: fix.lng,
+        last_speed_mps: fix.speedMps ?? null,
+        last_accuracy_m: fix.accuracyM ?? null,
+      });
+    } else {
+      await upsertLiveState(db, rideId, {
+        pickup_dwell_started_at: null,
+        distance_to_target_m: inside.distanceM,
+        target: "pickup",
+        last_lat: fix.lat,
+        last_lng: fix.lng,
+        last_speed_mps: fix.speedMps ?? null,
+        last_accuracy_m: fix.accuracyM ?? null,
+      });
+    }
+  }
+
+  if (
+    settings.auto_complete_suggest_enabled &&
+    status === "on_trip" &&
+    speedOk(fix.speedMps, settings.max_speed_mps_for_arrival)
+  ) {
+    const inside = isInsideGeofence(
+      point,
+      dropoff,
+      settings.dropoff_geofence_radius_m,
+      fix.accuracyM ?? 0,
+    );
+    let dwellStart = live.dropoff_dwell_started_at
+      ? Date.parse(String(live.dropoff_dwell_started_at))
+      : null;
+
+    if (inside.isInside) {
+      if (!dwellStart) dwellStart = nowMs;
+      const dwellSec = (nowMs - dwellStart) / 1000;
+      if (dwellSec >= settings.arrival_dwell_seconds) {
+        await deps.patchRideRequest(rideId, {
+          complete_suggested_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+        result.completeSuggested = true;
+      }
+      await upsertLiveState(db, rideId, {
+        dropoff_dwell_started_at: dwellStart ? new Date(dwellStart).toISOString() : null,
+        distance_to_target_m: inside.distanceM,
+        target: "dropoff",
+        last_lat: fix.lat,
+        last_lng: fix.lng,
+        last_speed_mps: fix.speedMps ?? null,
+        last_accuracy_m: fix.accuracyM ?? null,
+      });
+    } else {
+      await upsertLiveState(db, rideId, {
+        dropoff_dwell_started_at: null,
+        distance_to_target_m: inside.distanceM,
+        target: "dropoff",
+        last_lat: fix.lat,
+        last_lng: fix.lng,
+        last_speed_mps: fix.speedMps ?? null,
+        last_accuracy_m: fix.accuracyM ?? null,
+      });
+    }
+  }
+
+  if (!result.transitionApplied && status !== "on_trip") {
+    await upsertLiveState(db, rideId, {
+      last_lat: fix.lat,
+      last_lng: fix.lng,
+      last_speed_mps: fix.speedMps ?? null,
+      last_accuracy_m: fix.accuracyM ?? null,
+      distance_to_target_m: status === "driver_arrived_pickup" ? distPickup : distPickup,
+      target: status === "driver_en_route_pickup" || status === "driver_assigned" ? "pickup" : "dropoff",
+    });
+  }
+
+  return result;
+}
+
+export async function cleanupRideLiveState(db: SupabaseClient, rideId: string): Promise<void> {
+  await db.from("ride_live_state").delete().eq("ride_request_id", rideId);
+}

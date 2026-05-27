@@ -4,6 +4,7 @@ import type {
   CreateRideBody,
   DriverOfferRow,
   FareQuoteResponse,
+  RideLiveResponse,
   RideRequestRow,
 } from '@roam/types/rides';
 import type { RidesVehicleTypeDto } from '@/types/vehicleTypes';
@@ -129,6 +130,12 @@ export async function ridesGetRequest(id: string): Promise<{
   offers: DriverOfferRow[];
 }> {
   const res = await fetch(`${base}/v1/requests/${id}`, { headers: await ridesHeaders() });
+  if (!res.ok) await parseRidesError(res);
+  return res.json();
+}
+
+export async function ridesGetLive(id: string): Promise<RideLiveResponse> {
+  const res = await fetch(`${base}/v1/requests/${id}/live`, { headers: await ridesHeaders() });
   if (!res.ok) await parseRidesError(res);
   return res.json();
 }

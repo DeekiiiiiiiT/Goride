@@ -635,6 +635,17 @@ export interface DispatchSettingsDto {
   body_type_tier_mode: BodyTypeTierMode;
   require_body_type_for_offers: boolean;
   independent_only_matching: boolean;
+  trip_location_interval_seconds: number;
+  pickup_geofence_radius_m: number;
+  dropoff_geofence_radius_m: number;
+  arrival_dwell_seconds: number;
+  max_speed_mps_for_arrival: number;
+  auto_en_route_on_accept: boolean;
+  auto_arrive_enabled: boolean;
+  auto_complete_suggest_enabled: boolean;
+  no_show_cancel_minutes: number;
+  gps_max_accuracy_m_for_arrival: number;
+  no_show_auto_cancel_enabled: boolean;
   updated_at?: string;
   updated_by?: string | null;
 }

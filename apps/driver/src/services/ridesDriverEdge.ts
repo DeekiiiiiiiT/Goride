@@ -7,6 +7,7 @@ import type {
   DriverOfferWithRide,
   DriverPresenceBody,
   DriverTransitionBody,
+  RideLocationUpdateBody,
   RideRequestRow,
 } from '@roam/types/rides';
 
@@ -86,6 +87,21 @@ export async function ridesDriverTransition(id: string, body: DriverTransitionBo
     headers: await ridesHeaders(),
     body: JSON.stringify(body),
   });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function ridesDriverPostRideLocation(
+  body: RideLocationUpdateBody,
+): Promise<{ ok: boolean; ride?: RideRequestRow }> {
+  const res = await fetch(`${base}/v1/drivers/ride-location`, {
+    method: 'POST',
+    headers: await ridesHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (res.status === 429) {
+    throw new Error('rate_limited');
+  }
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }

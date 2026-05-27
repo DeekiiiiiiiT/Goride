@@ -68,6 +68,16 @@ export interface RideRequestRow {
   matching_wave: number;
   payment_method?: RidePaymentMethod | null;
   completed_at?: string | null;
+  en_route_at?: string | null;
+  arrived_pickup_at?: string | null;
+  trip_started_at?: string | null;
+  route_polyline_encoded?: string | null;
+  transition_version?: number;
+  last_driver_lat?: number | null;
+  last_driver_lng?: number | null;
+  last_driver_heading?: number | null;
+  last_driver_location_at?: string | null;
+  complete_suggested_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -149,6 +159,52 @@ export interface CreateRideBody {
   quote_token: string;
   idempotency_key?: string;
   driver_offer_timeout_seconds?: number;
+  route_polyline_encoded?: string;
+}
+
+export interface RideLocationUpdateBody {
+  ride_id: string;
+  lat: number;
+  lng: number;
+  heading_degrees?: number;
+  speed_mps?: number;
+  accuracy_m?: number;
+  recorded_at?: string;
+  client_seq: number;
+}
+
+export interface RideLiveResponse {
+  ride: {
+    id: string;
+    status: RideRequestStatus;
+    pickup_lat: number;
+    pickup_lng: number;
+    dropoff_lat: number;
+    dropoff_lng: number;
+    route_polyline_encoded?: string | null;
+    complete_suggested_at?: string | null;
+    last_driver_location_at?: string | null;
+  };
+  driver_location: {
+    lat: number;
+    lng: number;
+    heading: number | null;
+    updated_at: string | null;
+  } | null;
+}
+
+export interface DispatchAutomationSettings {
+  trip_location_interval_seconds: number;
+  pickup_geofence_radius_m: number;
+  dropoff_geofence_radius_m: number;
+  arrival_dwell_seconds: number;
+  max_speed_mps_for_arrival: number;
+  auto_en_route_on_accept: boolean;
+  auto_arrive_enabled: boolean;
+  auto_complete_suggest_enabled: boolean;
+  no_show_cancel_minutes: number;
+  gps_max_accuracy_m_for_arrival: number;
+  no_show_auto_cancel_enabled: boolean;
 }
 
 export interface DriverPresenceBody {

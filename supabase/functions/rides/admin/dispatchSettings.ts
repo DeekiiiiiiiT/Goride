@@ -109,6 +109,49 @@ function parsePatch(
     patch.independent_only_matching = body.independent_only_matching === true;
   }
 
+  const boolField = (key: string) => {
+    if (body[key] !== undefined) patch[key] = body[key] === true;
+  };
+  const intField = (key: string, min: number, max: number) => {
+    if (body[key] !== undefined) {
+      const n = Number(body[key]);
+      if (!Number.isFinite(n) || n < min || n > max) return { ok: false as const, error: `invalid_${key}` };
+      patch[key] = Math.round(n);
+    }
+    return null;
+  };
+  const numField = (key: string, min: number, max: number) => {
+    if (body[key] !== undefined) {
+      const n = Number(body[key]);
+      if (!Number.isFinite(n) || n < min || n > max) return { ok: false as const, error: `invalid_${key}` };
+      patch[key] = n;
+    }
+    return null;
+  };
+
+  for (const check of [
+    intField("trip_location_interval_seconds", 2, 30),
+    intField("pickup_geofence_radius_m", 20, 500),
+    intField("dropoff_geofence_radius_m", 20, 500),
+    intField("arrival_dwell_seconds", 0, 120),
+    numField("max_speed_mps_for_arrival", 0, 20),
+    intField("no_show_cancel_minutes", 0, 60),
+    intField("gps_max_accuracy_m_for_arrival", 10, 200),
+  ]) {
+    if (check) return check;
+  }
+
+  if (body.auto_en_route_on_accept !== undefined) {
+    patch.auto_en_route_on_accept = body.auto_en_route_on_accept === true;
+  }
+  if (body.auto_arrive_enabled !== undefined) {
+    patch.auto_arrive_enabled = body.auto_arrive_enabled === true;
+  }
+  if (body.auto_complete_suggest_enabled !== undefined) {
+    patch.auto_complete_suggest_enabled = body.auto_complete_suggest_enabled === true;
+  }
+  boolField("no_show_auto_cancel_enabled");
+
   if (!Object.keys(patch).length) return { ok: false, error: "no_changes" };
 
   return { ok: true, patch };

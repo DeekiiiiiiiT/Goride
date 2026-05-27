@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import type { RideRequestStatus } from '@roam/types/rides';
@@ -15,7 +15,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@roam/ui';
-import { ridesCancelRequest, ridesGetRequest } from '@/services/ridesEdge';
+import { supabase } from '@roam/auth-client';
+import { LiveRideMap } from '@/components/LiveRideMap';
+import { ridesCancelRequest, ridesGetLive, ridesGetRequest } from '@/services/ridesEdge';
 
 function statusLabel(s: RideRequestStatus): string {
   switch (s) {
@@ -41,15 +43,30 @@ function statusLabel(s: RideRequestStatus): string {
 const CANCELLABLE_STATUSES: RideRequestStatus[] = [
   'matching',
   'driver_assigned',
+  'driver_en_route_pickup',
+];
+
+const LIVE_MAP_STATUSES: RideRequestStatus[] = [
+  'driver_assigned',
+  'driver_en_route_pickup',
+  'driver_arrived_pickup',
+  'on_trip',
 ];
 
 function isCancellable(status: RideRequestStatus | undefined): boolean {
   return Boolean(status && CANCELLABLE_STATUSES.includes(status));
 }
 
+function showLiveMap(status: RideRequestStatus | undefined): boolean {
+  return Boolean(status && LIVE_MAP_STATUSES.includes(status));
+}
+
+const RIDE_SYNC_MS = 30_000;
+
 export default function RidePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -61,15 +78,58 @@ export default function RidePage() {
     refetchInterval: (q) => {
       const st = q.state.data?.ride.status;
       if (!st || st === 'completed' || st === 'cancelled') return false;
-      return 4000;
+      return RIDE_SYNC_MS;
     },
+  });
+
+  const ride = data?.ride;
+
+  const { data: liveData } = useQuery({
+    queryKey: ['ride-live', id],
+    enabled: Boolean(id && ride && showLiveMap(ride.status)),
+    queryFn: () => ridesGetLive(id!),
+    refetchInterval: RIDE_SYNC_MS,
   });
 
   useEffect(() => {
     if (error) toast.error(error instanceof Error ? error.message : 'Failed to load ride');
   }, [error]);
 
-  const ride = data?.ride;
+  useEffect(() => {
+    if (!id) return;
+
+    const channel = supabase
+      .channel(`rider-ride-${id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'rides',
+          table: 'ride_requests',
+          filter: `id=eq.${id}`,
+        },
+        () => {
+          void refetch();
+          void queryClient.invalidateQueries({ queryKey: ['ride-live', id] });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [id, refetch, queryClient]);
+
+  const driverLocation = useMemo(() => {
+    const fromLive = liveData?.driver_location;
+    if (fromLive?.lat != null && fromLive?.lng != null) {
+      return { lat: fromLive.lat, lng: fromLive.lng };
+    }
+    if (ride?.last_driver_lat != null && ride?.last_driver_lng != null) {
+      return { lat: ride.last_driver_lat, lng: ride.last_driver_lng };
+    }
+    return null;
+  }, [liveData, ride?.last_driver_lat, ride?.last_driver_lng]);
 
   const performCancel = async () => {
     if (!id) return;
@@ -97,6 +157,13 @@ export default function RidePage() {
 
   if (!id) return null;
 
+  const cancelCopy =
+    ride?.status === 'driver_en_route_pickup'
+      ? 'Your driver is already on the way. Cancelling now may affect their earnings.'
+      : ride?.status === 'matching'
+        ? 'Your driver search will stop and this booking will be marked as cancelled.'
+        : 'This ride will be cancelled. You can book again from home.';
+
   return (
     <div className="min-h-[100dvh] flex flex-col bg-zinc-100">
       <header className="sticky top-0 z-20 border-b border-zinc-200/90 bg-white/90 backdrop-blur-md safe-t">
@@ -111,7 +178,7 @@ export default function RidePage() {
           </button>
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-zinc-900 truncate">Live ride</p>
-            <p className="text-xs text-zinc-500 truncate">Updates every few seconds</p>
+            <p className="text-xs text-zinc-500 truncate">Live updates when driver is assigned</p>
           </div>
           {isFetching && (
             <span className="inline-flex items-center gap-1.5 text-xs text-zinc-500 shrink-0">
@@ -121,6 +188,17 @@ export default function RidePage() {
           )}
         </div>
       </header>
+
+      {ride && showLiveMap(ride.status) && (
+        <LiveRideMap
+          pickup={{ lat: ride.pickup_lat, lng: ride.pickup_lng }}
+          dropoff={{ lat: ride.dropoff_lat, lng: ride.dropoff_lng }}
+          encodedPolyline={ride.route_polyline_encoded}
+          driverLocation={driverLocation}
+          driverHeading={liveData?.driver_location?.heading ?? ride.last_driver_heading ?? null}
+          statusLabel={statusLabel(ride.status)}
+        />
+      )}
 
       <main className="flex-1 max-w-lg mx-auto w-full safe-x safe-b px-4 py-6 space-y-5">
         {!ride ? (
@@ -163,6 +241,12 @@ export default function RidePage() {
               >
                 {ride.status === 'matching' ? 'Cancel search' : 'Cancel ride'}
               </button>
+            )}
+
+            {ride.status === 'on_trip' && (
+              <p className="text-sm text-zinc-500 text-center px-2">
+                Need to stop the trip? Contact Roam support — in-trip cancellation is disabled for safety.
+              </p>
             )}
 
             {ride.status === 'completed' && (
@@ -210,9 +294,7 @@ export default function RidePage() {
         <AlertDialogContent className="rounded-3xl border-zinc-200 max-w-[calc(100%-2rem)] sm:max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel this ride?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Your driver search will stop and this booking will be marked as cancelled. You can book again from home.
-            </AlertDialogDescription>
+            <AlertDialogDescription>{cancelCopy}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-2">
             <AlertDialogCancel disabled={cancelling} className="rounded-2xl mt-0">
@@ -237,12 +319,12 @@ export default function RidePage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel before leaving?</AlertDialogTitle>
             <AlertDialogDescription>
-              This ride is still active. Going home without cancelling keeps it in the driver search queue.
+              This ride is still active. Going home without cancelling keeps it open for your driver.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-2">
             <AlertDialogCancel disabled={cancelling} className="rounded-2xl mt-0">
-              Keep searching
+              Keep ride
             </AlertDialogCancel>
             <AlertDialogAction
               disabled={cancelling}

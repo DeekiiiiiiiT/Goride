@@ -100,6 +100,17 @@ export function DispatchSettingsForm({ accessToken, role }: DispatchSettingsForm
         body_type_tier_mode: form.body_type_tier_mode,
         require_body_type_for_offers: form.require_body_type_for_offers,
         independent_only_matching: form.independent_only_matching,
+        trip_location_interval_seconds: form.trip_location_interval_seconds,
+        pickup_geofence_radius_m: form.pickup_geofence_radius_m,
+        dropoff_geofence_radius_m: form.dropoff_geofence_radius_m,
+        arrival_dwell_seconds: form.arrival_dwell_seconds,
+        max_speed_mps_for_arrival: form.max_speed_mps_for_arrival,
+        auto_en_route_on_accept: form.auto_en_route_on_accept,
+        auto_arrive_enabled: form.auto_arrive_enabled,
+        auto_complete_suggest_enabled: form.auto_complete_suggest_enabled,
+        no_show_cancel_minutes: form.no_show_cancel_minutes,
+        gps_max_accuracy_m_for_arrival: form.gps_max_accuracy_m_for_arrival,
+        no_show_auto_cancel_enabled: form.no_show_auto_cancel_enabled,
       });
       setForm(settings);
       toast.success('Dispatch settings saved');
@@ -312,6 +323,165 @@ export function DispatchSettingsForm({ accessToken, role }: DispatchSettingsForm
               When on, only independent drivers receive Roam passenger offers. Fleet drivers keep
               the legacy START TRIP flow until this is turned off.
             </span>
+          </span>
+        </label>
+      </section>
+
+      <section className="rounded-xl border border-slate-800 bg-slate-900/30 p-6 space-y-4">
+        <div>
+          <h3 className="text-base font-medium text-white">In-trip automation</h3>
+          <p className="text-sm text-slate-400 mt-1">
+            GPS geofencing and automatic status transitions. Toggle gradually in production.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <label className="block space-y-1.5">
+            <span className="text-xs text-slate-400 uppercase tracking-wide">Location interval (sec)</span>
+            <input
+              type="number"
+              min={2}
+              max={30}
+              disabled={!canEdit}
+              value={form.trip_location_interval_seconds}
+              onChange={(e) =>
+                setForm({ ...form, trip_location_interval_seconds: Number(e.target.value) })
+              }
+              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60"
+            />
+          </label>
+          <label className="block space-y-1.5">
+            <span className="text-xs text-slate-400 uppercase tracking-wide">Pickup geofence (m)</span>
+            <input
+              type="number"
+              min={20}
+              max={500}
+              disabled={!canEdit}
+              value={form.pickup_geofence_radius_m}
+              onChange={(e) =>
+                setForm({ ...form, pickup_geofence_radius_m: Number(e.target.value) })
+              }
+              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60"
+            />
+          </label>
+          <label className="block space-y-1.5">
+            <span className="text-xs text-slate-400 uppercase tracking-wide">Drop-off geofence (m)</span>
+            <input
+              type="number"
+              min={20}
+              max={500}
+              disabled={!canEdit}
+              value={form.dropoff_geofence_radius_m}
+              onChange={(e) =>
+                setForm({ ...form, dropoff_geofence_radius_m: Number(e.target.value) })
+              }
+              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60"
+            />
+          </label>
+          <label className="block space-y-1.5">
+            <span className="text-xs text-slate-400 uppercase tracking-wide">Arrival dwell (sec)</span>
+            <input
+              type="number"
+              min={0}
+              max={120}
+              disabled={!canEdit}
+              value={form.arrival_dwell_seconds}
+              onChange={(e) =>
+                setForm({ ...form, arrival_dwell_seconds: Number(e.target.value) })
+              }
+              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60"
+            />
+          </label>
+          <label className="block space-y-1.5">
+            <span className="text-xs text-slate-400 uppercase tracking-wide">Max speed for arrive (m/s)</span>
+            <input
+              type="number"
+              min={0}
+              max={20}
+              step={0.5}
+              disabled={!canEdit}
+              value={form.max_speed_mps_for_arrival}
+              onChange={(e) =>
+                setForm({ ...form, max_speed_mps_for_arrival: Number(e.target.value) })
+              }
+              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60"
+            />
+          </label>
+          <label className="block space-y-1.5">
+            <span className="text-xs text-slate-400 uppercase tracking-wide">GPS max accuracy (m)</span>
+            <input
+              type="number"
+              min={10}
+              max={200}
+              disabled={!canEdit}
+              value={form.gps_max_accuracy_m_for_arrival}
+              onChange={(e) =>
+                setForm({ ...form, gps_max_accuracy_m_for_arrival: Number(e.target.value) })
+              }
+              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60"
+            />
+          </label>
+          <label className="block space-y-1.5 sm:col-span-2">
+            <span className="text-xs text-slate-400 uppercase tracking-wide">No-show cancel after (min)</span>
+            <input
+              type="number"
+              min={0}
+              max={60}
+              disabled={!canEdit}
+              value={form.no_show_cancel_minutes}
+              onChange={(e) =>
+                setForm({ ...form, no_show_cancel_minutes: Number(e.target.value) })
+              }
+              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60"
+            />
+          </label>
+        </div>
+
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            disabled={!canEdit}
+            checked={form.auto_en_route_on_accept}
+            onChange={(e) => setForm({ ...form, auto_en_route_on_accept: e.target.checked })}
+            className="mt-1 rounded border-slate-600"
+          />
+          <span className="text-sm text-slate-300">Auto en route on accept</span>
+        </label>
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            disabled={!canEdit}
+            checked={form.auto_arrive_enabled}
+            onChange={(e) => setForm({ ...form, auto_arrive_enabled: e.target.checked })}
+            className="mt-1 rounded border-slate-600"
+          />
+          <span className="text-sm text-slate-300">Auto arrive at pickup (geofence)</span>
+        </label>
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            disabled={!canEdit}
+            checked={form.auto_complete_suggest_enabled}
+            onChange={(e) =>
+              setForm({ ...form, auto_complete_suggest_enabled: e.target.checked })
+            }
+            className="mt-1 rounded border-slate-600"
+          />
+          <span className="text-sm text-slate-300">Suggest complete at drop-off</span>
+        </label>
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            disabled={!canEdit}
+            checked={form.no_show_auto_cancel_enabled}
+            onChange={(e) =>
+              setForm({ ...form, no_show_auto_cancel_enabled: e.target.checked })
+            }
+            className="mt-1 rounded border-slate-600"
+          />
+          <span className="text-sm text-slate-300">
+            Auto-cancel rider no-show (after dwell at pickup)
+            <span className="block text-xs text-slate-500 mt-0.5">Off by default until QA sign-off.</span>
           </span>
         </label>
       </section>
