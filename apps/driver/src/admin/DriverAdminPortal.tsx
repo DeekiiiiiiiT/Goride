@@ -17,6 +17,7 @@ import {
   ShieldAlert,
   ExternalLink,
   ScrollText,
+  Shield,
 } from 'lucide-react';
 import { Toaster } from 'sonner';
 import { DriverAdminLoginForm } from './components/DriverAdminLoginForm';
@@ -27,6 +28,7 @@ import { ComplianceManager } from './pages/ComplianceManager';
 import { DriversListPage } from './pages/users/DriversListPage';
 import { DriverDetailPage } from './pages/users/DriverDetailPage';
 import { TripLedgerPage } from './pages/TripLedgerPage';
+import { DriverAppPermissionsPage } from './pages/AppPermissionsPage';
 
 const NAV_ITEMS = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -35,6 +37,7 @@ const NAV_ITEMS = [
   { path: '/presence', label: 'Driver Presence', icon: MapPin, end: false },
   { path: '/offers', label: 'Offer Monitor', icon: Bell, end: false },
   { path: '/compliance', label: 'Compliance', icon: ShieldCheck, end: false },
+  { path: '/permissions', label: 'App Permissions', icon: Shield, end: false },
   { path: '/support', label: 'Support Tools', icon: HeadphonesIcon, end: false },
 ];
 
@@ -263,6 +266,7 @@ export function DriverAdminPortal() {
         <Route path="presence" element={<DriverPresenceManager />} />
         <Route path="offers" element={<OfferMonitor />} />
         <Route path="compliance" element={<ComplianceManager />} />
+        <Route path="permissions" element={<DriverAppPermissionsPage />} />
         <Route path="support" element={<SupportStub />} />
       </Route>
     </Routes>

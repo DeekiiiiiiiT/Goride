@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@roam/admin-core": "workspace:*",
     "@roam/api-client": "workspace:*",
     "@roam/business-config": "workspace:*",
     "@roam/auth-client": "workspace:*",

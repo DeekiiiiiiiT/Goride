@@ -13,6 +13,16 @@ import {
 import { slugFromBodyLabel } from '../components/rides/rideDispatchUtils';
 import { useActiveRideTracking } from './useActiveRideTracking';
 import { openExternalNavigation } from '../utils/rideNavigation';
+import { useDriverPermissionPolicy } from './usePermissionPolicy';
+import {
+  checkGeolocationGranted,
+  isBlockedByPolicy,
+  isWebApplicable,
+  permissionKeyToGrantChecker,
+  readOnboardingDismissed,
+  requestGeolocationPermission,
+  shouldShowOnboardingPrompt,
+} from '@roam/types';
 
 const OFFER_POLL_MS = 4000;
 const RIDE_SYNC_MS = 30_000;
@@ -35,6 +45,33 @@ export function useRideDispatch() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const { trackingError, gpsAccuracyM, isTracking } = useActiveRideTracking(activeRide);
+  const { permissions } = useDriverPermissionPolicy();
+  const [permissionOnboardingOpen, setPermissionOnboardingOpen] = useState(false);
+  const [locationGoOnlineBlocked, setLocationGoOnlineBlocked] = useState(false);
+
+  useEffect(() => {
+    if (!permissions.length) return;
+    void (async () => {
+      for (const row of permissions) {
+        if (!row.enabled || !row.prompt_onboarding || !isWebApplicable(row.platform)) continue;
+        const grant = await permissionKeyToGrantChecker(row.key)();
+        if (shouldShowOnboardingPrompt(row, grant, readOnboardingDismissed('driver', row.key))) {
+          setPermissionOnboardingOpen(true);
+          return;
+        }
+      }
+    })();
+  }, [permissions]);
+
+  useEffect(() => {
+    void (async () => {
+      if (!permissions.length) return;
+      const geo = await checkGeolocationGranted();
+      setLocationGoOnlineBlocked(
+        isBlockedByPolicy(permissions, 'location_precise_while_using', geo),
+      );
+    })();
+  }, [permissions]);
 
   useEffect(() => {
     audioRef.current = new Audio(OFFER_SOUND_URL);
@@ -271,7 +308,7 @@ export function useRideDispatch() {
     };
   }, [online, clearGeoWatch, postOfflinePresence]);
 
-  const goOnline = useCallback(() => {
+  const goOnline = useCallback(async () => {
     if (!vehicleReady) {
       toast.message('Loading your profile… try again in a moment.');
       return;
@@ -280,9 +317,19 @@ export function useRideDispatch() {
       toast.error('Location is not available on this device.');
       return;
     }
+    const geo = await checkGeolocationGranted();
+    if (isBlockedByPolicy(permissions, 'location_precise_while_using', geo)) {
+      toast.error('Enable location to go online for passenger rides.');
+      const next = await requestGeolocationPermission();
+      setLocationGoOnlineBlocked(
+        isBlockedByPolicy(permissions, 'location_precise_while_using', next),
+      );
+      return;
+    }
+    setLocationGoOnlineBlocked(false);
     setPresenceError(null);
     setOnline(true);
-  }, [vehicleReady]);
+  }, [vehicleReady, permissions]);
 
   const goOffline = useCallback(async () => {
     clearGeoWatch();
@@ -296,7 +343,7 @@ export function useRideDispatch() {
     if (online) {
       void goOffline();
     } else {
-      goOnline();
+      void goOnline();
     }
   }, [online, goOffline, goOnline]);
 
@@ -376,5 +423,9 @@ export function useRideDispatch() {
     decline,
     advance,
     refreshOffers,
+    permissions,
+    permissionOnboardingOpen,
+    setPermissionOnboardingOpen,
+    locationGoOnlineBlocked,
   };
 }

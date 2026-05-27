@@ -2,6 +2,8 @@
 export { AdminShell } from './components/AdminShell';
 export { AdminSidebar } from './components/AdminSidebar';
 export { AdminAuthGate } from './components/AdminAuthGate';
+export { AppPermissionsTable } from './components/AppPermissionsTable';
+export type { AppPermissionPolicyPatch } from './components/AppPermissionsTable';
 
 // Hooks
 export { useAdminNav } from './hooks/useAdminNav';

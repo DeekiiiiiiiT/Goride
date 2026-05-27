@@ -11,6 +11,8 @@ import type {
   RiderAdminPermissions,
 } from '@roam/types/rides';
 import type { RideRequestRow } from '@roam/types/rides';
+import type { AppPermissionPolicyRow } from '@roam/types';
+import type { AppPermissionPolicyPatch } from '@roam/admin-core';
 import type {
   RidesVehicleTypeDto,
   RidesVehicleTypeInput,
@@ -671,6 +673,35 @@ export async function updateDispatchSettings(
     method: 'PATCH',
     body: JSON.stringify(patch),
   });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function getAppPermissionPolicy(
+  accessToken: string,
+  surface: 'rider' | 'driver',
+): Promise<{ permissions: AppPermissionPolicyRow[] }> {
+  const res = await adminFetch(
+    accessToken,
+    `${RIDES_BASE}/admin/app-permissions?surface=${encodeURIComponent(surface)}`,
+  );
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function updateAppPermissionPolicy(
+  accessToken: string,
+  surface: 'rider' | 'driver',
+  permissions: AppPermissionPolicyPatch[],
+): Promise<{ permissions: AppPermissionPolicyRow[] }> {
+  const res = await adminFetch(
+    accessToken,
+    `${RIDES_BASE}/admin/app-permissions?surface=${encodeURIComponent(surface)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ permissions }),
+    },
+  );
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
 }

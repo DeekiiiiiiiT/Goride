@@ -3,6 +3,7 @@ import { Radio } from 'lucide-react';
 import { useRideDispatch } from '../../hooks/useRideDispatch';
 import { RideOfferCard } from './RideOfferCard';
 import { ActiveRidePanel } from './ActiveRidePanel';
+import { PermissionOnboardingSheet } from '../PermissionOnboardingSheet';
 
 export function RideDispatchHome() {
   const {
@@ -18,18 +19,27 @@ export function RideDispatchHome() {
     trackingError,
     gpsAccuracyM,
     isTracking,
+    permissions,
+    permissionOnboardingOpen,
+    setPermissionOnboardingOpen,
+    locationGoOnlineBlocked,
   } = useRideDispatch();
 
   const showWaiting = online && offers.length === 0 && !activeRide;
 
   return (
     <div className="flex flex-1 flex-col gap-4 min-h-0">
+      <PermissionOnboardingSheet
+        permissions={permissions}
+        open={permissionOnboardingOpen}
+        onClose={() => setPermissionOnboardingOpen(false)}
+      />
       <div className="flex items-center justify-between gap-3 shrink-0">
         <DispatchStatusHeader online={online} />
         <button
           type="button"
           onClick={toggleOnline}
-          disabled={!vehicleReady && !online}
+          disabled={(!vehicleReady && !online) || (locationGoOnlineBlocked && !online)}
           className={`shrink-0 rounded-full px-4 py-2 text-xs font-semibold transition-colors disabled:opacity-50 ${
             online
               ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
@@ -44,7 +54,14 @@ export function RideDispatchHome() {
         <p className="text-sm text-red-600 dark:text-red-400 text-center px-2">{presenceError}</p>
       )}
 
-      {!online && (
+      {!online && locationGoOnlineBlocked && (
+        <p className="text-sm text-amber-700 dark:text-amber-400 text-center px-2 bg-amber-50 dark:bg-amber-950/40 rounded-xl py-3">
+          Location permission is required to go online. Use Allow above or enable location for this
+          site in browser settings.
+        </p>
+      )}
+
+      {!online && !locationGoOnlineBlocked && (
         <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-6">
           Go online to receive Roam ride requests from passengers nearby.
         </p>

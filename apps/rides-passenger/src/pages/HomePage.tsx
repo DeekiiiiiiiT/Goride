@@ -23,6 +23,17 @@ import {
 } from '@/components/TransportOptionPicker';
 import { useRidesVehicleTypes } from '@/hooks/useRidesVehicleTypes';
 import { formatVehicleEtaLine } from '@/utils/formatRideEta';
+import { usePermissionPolicy } from '@/hooks/usePermissionPolicy';
+import { PermissionOnboardingSheet } from '@/components/PermissionOnboardingSheet';
+import {
+  checkGeolocationGranted,
+  isBlockedByPolicy,
+  isWebApplicable,
+  permissionKeyToGrantChecker,
+  readOnboardingDismissed,
+  requestGeolocationPermission,
+  shouldShowOnboardingPrompt,
+} from '@roam/types';
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -48,6 +59,31 @@ export default function HomePage() {
   const [quotesLoading, setQuotesLoading] = useState(false);
   const [bookLoading, setBookLoading] = useState(false);
   const [quotesBySlug, setQuotesBySlug] = useState<Record<string, FareQuoteResponse>>({});
+  const { permissions } = usePermissionPolicy('rider');
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [locationBlocked, setLocationBlocked] = useState(false);
+
+  useEffect(() => {
+    if (!permissions.length) return;
+    void (async () => {
+      for (const row of permissions) {
+        if (!row.enabled || !row.prompt_onboarding || !isWebApplicable(row.platform)) continue;
+        const grant = await permissionKeyToGrantChecker(row.key)();
+        if (shouldShowOnboardingPrompt(row, grant, readOnboardingDismissed('rider', row.key))) {
+          setOnboardingOpen(true);
+          return;
+        }
+      }
+    })();
+  }, [permissions]);
+
+  useEffect(() => {
+    void (async () => {
+      if (!permissions.length) return;
+      const geo = await checkGeolocationGranted();
+      setLocationBlocked(isBlockedByPolicy(permissions, 'location_precise_while_using', geo));
+    })();
+  }, [permissions]);
   const quoteDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [initialGpsLoading, setInitialGpsLoading] = useState(true);
 
@@ -183,6 +219,13 @@ export default function HomePage() {
       toast.error('Choose pickup and drop-off from the search suggestions.');
       return;
     }
+    const geo = await checkGeolocationGranted();
+    if (isBlockedByPolicy(permissions, 'location_precise_while_using', geo)) {
+      toast.error('Enable location in your browser to book a ride.');
+      const next = await requestGeolocationPermission();
+      setLocationBlocked(isBlockedByPolicy(permissions, 'location_precise_while_using', next));
+      return;
+    }
     if (!quote?.quote_token) {
       toast.error('Wait for the fare estimate, or tap Refresh price.');
       return;
@@ -214,7 +257,8 @@ export default function HomePage() {
   };
 
   const surge = quote?.surge_multiplier ?? null;
-  const canBook = coordsReady && Boolean(quote?.quote_token) && !quotesLoading;
+  const canBook =
+    coordsReady && Boolean(quote?.quote_token) && !quotesLoading && !locationBlocked;
 
   const selectedService = services.find((s) => s.slug === vehicleOption);
 
@@ -234,6 +278,12 @@ export default function HomePage() {
 
   return (
     <div className="min-h-[100dvh] flex flex-col bg-zinc-100 text-zinc-900">
+      <PermissionOnboardingSheet
+        surface="rider"
+        permissions={permissions}
+        open={onboardingOpen}
+        onClose={() => setOnboardingOpen(false)}
+      />
       {/* Hero route map — top ~42% like Uber */}
       <div className="relative h-[42dvh] min-h-[200px] max-h-[360px] w-full shrink-0">
         <BookingHeroMap
@@ -360,6 +410,13 @@ export default function HomePage() {
           <div className="shrink-0 border-t border-zinc-100 bg-white safe-x safe-b px-4 py-4 space-y-3">
             {quotesLoading && coordsReady && (
               <p className="text-sm text-zinc-500 text-center">Getting prices…</p>
+            )}
+
+            {locationBlocked && (
+              <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-2xl px-4 py-2 text-center">
+                Location is required to book. Tap Allow when prompted, or enable location for this
+                site in browser settings.
+              </p>
             )}
 
             <button

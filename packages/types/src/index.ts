@@ -20,6 +20,8 @@ export * from './ledgerCanonical';
 export * from './paymentLedgerLine';
 export * from './mapRideLedgerLine';
 export * from './geo';
+export * from './appPermissionCatalog';
+export * from './appPermissionClient';
 export * from './maintenance';
 export * from './offline';
 export * from './osrm';

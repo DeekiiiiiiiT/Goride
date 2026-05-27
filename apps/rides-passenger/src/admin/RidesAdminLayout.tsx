@@ -17,6 +17,7 @@ import {
   Loader2,
   ShieldAlert,
   ExternalLink,
+  Shield,
 } from 'lucide-react';
 import { RidesAdminLoginForm } from './components/RidesAdminLoginForm';
 
@@ -27,6 +28,7 @@ const NAV_ITEMS = [
   { id: 'fare-rules', path: '/admin/fare-rules', label: 'Fare Rules', icon: CircleDollarSign },
   { id: 'surge', path: '/admin/surge', label: 'Surge Pricing', icon: TrendingUp },
   { id: 'control-panel', path: '/admin/control-panel', label: 'Control Panel', icon: SlidersHorizontal },
+  { id: 'app-permissions', path: '/admin/app-permissions', label: 'App Permissions', icon: Shield },
   { id: 'rides', path: '/admin/rides', label: 'Ride Operations', icon: Car },
 ];
 

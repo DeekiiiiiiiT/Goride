@@ -22,6 +22,7 @@ import { isKnownServiceSlug } from "./fare/vehicleTypesDb.ts";
 import { registerVehicleTypeAdminRoutes } from "./admin/vehicleTypes.ts";
 import { registerRiderAdminRoutes } from "./admin/riders.ts";
 import { registerDispatchSettingsAdminRoutes } from "./admin/dispatchSettings.ts";
+import { registerAppPermissionAdminRoutes } from "./admin/appPermissions.ts";
 import { registerDashboardStatsRoutes } from "./admin/dashboardStats.ts";
 import { registerDashboardListRoutes } from "./admin/dashboardLists.ts";
 import { registerPlatformLedgerAdminRoutes } from "./admin/platformLedger.ts";
@@ -641,6 +642,8 @@ export function registerAdminRoutes(
   registerRiderAdminRoutes(admin);
 
   registerDispatchSettingsAdminRoutes(admin, ridesDbOrResponse, adminAudit);
+
+  registerAppPermissionAdminRoutes(admin, ridesDbOrResponse, adminAudit);
 
   registerDashboardStatsRoutes(admin, ridesDbOrResponse);
   registerDashboardListRoutes(admin, ridesDbOrResponse);

@@ -10,6 +10,7 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@roam/types/rides': path.resolve(__dirname, '../../packages/types/src/rides.ts'),
+      '@roam/admin-core': path.resolve(__dirname, '../../packages/admin-core/src'),
     },
   },
   build: {

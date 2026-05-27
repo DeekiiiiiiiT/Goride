@@ -4,9 +4,10 @@ Manual test script for enterprise ride automation on **Roam Driver (web)** and *
 
 ## Prerequisites
 
-- Migrations applied (`20260530120000_ride_live_tracking.sql`)
+- Migrations applied (`20260530120000_ride_live_tracking.sql`, `20260531120000_app_permission_policy.sql`)
 - Rides Edge function deployed with location + geofence endpoints
-- Dispatch settings: enable flags in **Admin → Dispatch → In-trip automation** (staging: all on; production: gradual rollout)
+- Dispatch settings: enable flags in **Admin → Control Panel → In-trip automation** (staging: all on; production: gradual rollout)
+- Permission policy: **Admin → App Permissions** (rider + driver portals) — see `APP_PERMISSIONS.md`
 - Two test accounts: rider + independent driver
 - Real Android Chrome or iOS Safari devices with location enabled
 
@@ -75,6 +76,14 @@ During steps 2–6 on rider app:
 1. Turn off `auto_arrive_enabled` in dispatch settings.
 2. Repeat pickup approach — **Expect:** No auto-arrive; manual button works.
 
+## 11. App permission policy
+
+1. **Rides Admin → App Permissions:** toggle rider location **Block** on → rider cannot book until browser allows location.
+2. Toggle **Block** off → book works with manual addresses if location denied.
+3. **Driver Admin → App Permissions:** disable notifications **Prompt** → driver onboarding sheet skips notifications nag.
+4. Driver location **Block** on → **Go online** disabled until location granted.
+5. Native-only rows save without errors; web shows checklist only.
+
 ## Future (not in web v1 scope)
 
 - **Phase 6 — Capacitor native:** background GPS when phone locked or in full-screen Maps. Deferred until web v1 is stable in production.
@@ -88,3 +97,4 @@ During steps 2–6 on rider app:
 - [ ] Rider live map + realtime status
 - [ ] Ops active rides panel
 - [ ] No ledger regression on completed/cancelled trips
+- [ ] Permission policy admin + client gates (rider book, driver go online)

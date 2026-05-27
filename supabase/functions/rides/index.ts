@@ -50,6 +50,8 @@ import {
   type ApplyTransitionDeps,
 } from "./rideLifecycle.ts";
 import { evaluateGeofenceTransitions, cleanupRideLiveState } from "./rideGeofence.ts";
+import { loadAppPermissionPolicy, policyDto } from "../_shared/appPermissionPolicy.ts";
+import type { AppPermissionSurface } from "../_shared/appPermissionCatalog.ts";
 
 /** Match Supabase path prefix: .../functions/v1/rides/<route> → /rides/<route> */
 const app = new Hono().basePath("/rides");
@@ -836,6 +838,34 @@ async function runMatchingWave(
 }
 
 app.get("/health", (c) => c.json({ service: "rides", status: "ok" }));
+
+function parsePermissionSurface(raw: string | undefined): AppPermissionSurface | null {
+  const s = (raw ?? "").trim().toLowerCase();
+  if (s === "rider" || s === "driver") return s;
+  return null;
+}
+
+app.get("/v1/app-permission-policy", async (c) => {
+  const surface = parsePermissionSurface(c.req.query("surface"));
+  if (!surface) return c.json({ error: "invalid_surface" }, 400);
+
+  if (surface === "driver") {
+    const auth = await requireUser(c.req.header("Authorization"));
+    if ("error" in auth) return c.json({ error: auth.error }, auth.status);
+    if (ridesUserSurfaceRole(auth.user) !== "driver") {
+      return jsonEdgeForbidden(c, "forbidden_role");
+    }
+  }
+
+  try {
+    const { db, tables } = await getRidesAdminDb();
+    const permissions = await loadAppPermissionPolicy(db, tables.app_permission_policy, surface);
+    return c.json(policyDto(permissions));
+  } catch {
+    const permissions = await loadAppPermissionPolicy(svc(), "app_permission_policy", surface);
+    return c.json(policyDto(permissions));
+  }
+});
 
 app.get("/v1/vehicle-types", async (c) => {
   try {
