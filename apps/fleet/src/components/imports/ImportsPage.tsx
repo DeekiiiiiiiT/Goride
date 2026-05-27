@@ -98,6 +98,8 @@ import type { UberSsotTotals } from '../../utils/uberSsot';
 import { computeImportBundleFingerprint } from '../../utils/importBundleFingerprint';
 import { validateMergedImportPreview } from '../../utils/importValidation';
 import { buildCanonicalImportEvents } from '../../utils/buildCanonicalImportEvents';
+import { buildPaymentLedgerCanonicalEvents } from '../../utils/buildPaymentLedgerCanonicalEvents';
+import type { PaymentLedgerLine } from '@roam/types/paymentLedgerLine';
 import { computeUberImportReconciliation } from '../../utils/uberImportReconciliation';
 import { reconcileUberNetFareByDriver } from '../../utils/uberStatementReconciliation';
 
@@ -228,6 +230,7 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
   const [processedDriverTime, setProcessedDriverTime] = useState<DriverTimeDistance[]>([]);
   const [processedVehicleTime, setProcessedVehicleTime] = useState<VehicleTimeDistance[]>([]);
   const [processedDisputeRefunds, setProcessedDisputeRefunds] = useState<DisputeRefund[]>([]);
+  const [processedPaymentLedgerLines, setProcessedPaymentLedgerLines] = useState<PaymentLedgerLine[]>([]);
   const [processedUberStatementsByDriverId, setProcessedUberStatementsByDriverId] = useState<
     Record<string, UberSsotTotals> | undefined
   >(undefined);
@@ -419,6 +422,7 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
         disputeRefunds,
         importWarnings,
         uberStatementsByDriverId,
+        paymentLedgerLines,
       } = mergeAndProcessData(uploadedFiles, availableFields, knownFleetName, fuelCards);
 
       if (organizationName) {
@@ -456,6 +460,7 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
       setProcessedDriverTime(driverTimeData || []);
       setProcessedVehicleTime(vehicleTimeData || []);
       setProcessedDisputeRefunds(disputeRefunds || []);
+      setProcessedPaymentLedgerLines(paymentLedgerLines || []);
       setProcessedUberStatementsByDriverId(uberStatementsByDriverId);
       if ((disputeRefunds || []).length > 0) {
           console.log(`[Import] Found ${disputeRefunds!.length} dispute refund(s) in CSV`);
@@ -704,7 +709,16 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
             periodStart: periodStartYmd,
             periodEnd: periodEndYmd,
             uploadedBy,
+            usesPaymentLineSsot: processedPaymentLedgerLines.length > 0,
+            paymentLedgerLineCount: processedPaymentLedgerLines.length,
           };
+
+          const usesLineSsot = processedPaymentLedgerLines.length > 0;
+          const tripsForSave = calibratedTrips.map((t) => ({
+            ...t,
+            batchId,
+            ...(usesLineSsot ? { usesPaymentLineSsot: true } : {}),
+          }));
 
           // Save Batch Record FIRST
           await api.createBatch(batchMeta);
@@ -714,7 +728,7 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
               const fleetState = {
                   drivers: auditState.sanitized.drivers.map(d => d.data),
                   vehicles: auditState.sanitized.vehicles.map(v => v.data),
-                  trips: calibratedTrips.map(t => ({ ...t, batchId })), // Attach Batch ID and Calibrated Tags
+                  trips: tripsForSave,
                   financials: auditState.sanitized.financials.data,
                   metadata: auditState.sanitized.metadata,
                   insights: auditState.sanitized.insights
@@ -758,10 +772,7 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
               
           } else {
               // LEGACY FLOW (Fallback for standard merge)
-              const tripsWithBatch = calibratedTrips.map(trip => ({
-                ...trip,
-                batchId
-              }));
+              const tripsWithBatch = tripsForSave;
 
               await api.saveTrips(tripsWithBatch);
 
@@ -776,14 +787,27 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
           // Phase 3: Canonical ledger events (idempotent append to ledger_event:*)
           const orgForCanonical =
               auditState?.sanitized.financials.data ?? processedOrganizationMetrics[0] ?? null;
-          const canonicalEvents = buildCanonicalImportEvents({
+
+          const paymentLineEvents =
+              processedPaymentLedgerLines.length > 0
+                  ? buildPaymentLedgerCanonicalEvents(
+                        processedPaymentLedgerLines.map((l) => ({ ...l, batchId })),
+                        batchId,
+                        contentFingerprint,
+                    )
+                  : [];
+
+          const canonicalEvents = [
+              ...paymentLineEvents,
+              ...buildCanonicalImportEvents({
               batchId,
               sourceFileHash: contentFingerprint,
-              trips: calibratedTrips,
+              trips: tripsForSave,
               organizationMetrics: orgForCanonical,
               uberStatementsByDriverId: processedUberStatementsByDriverId,
               disputeRefunds: processedDisputeRefunds,
-          });
+          }),
+          ];
           const CANONICAL_APPEND_MAX = 200;
           let canonInserted = 0;
           let canonSkipped = 0;
@@ -838,6 +862,30 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
               await Promise.all(processedFuelEntries.map(entry => 
                   fuelService.createFuelEntry(entry)
               ));
+          }
+
+          // Payment ledger lines: persist transaction-grain rows
+          if (processedPaymentLedgerLines.length > 0) {
+              try {
+                  const plResult = await api.importPaymentLedgerLines(
+                      processedPaymentLedgerLines.map((l) => ({ ...l, batchId })),
+                  );
+                  if (plResult.imported > 0) {
+                      toast.success(`Imported ${plResult.imported} payment ledger line(s)`);
+                  }
+                  try {
+                      await api.patchImportBatch(batchId, {
+                          paymentLedgerLinesImported: plResult.imported,
+                          paymentLedgerLinesSkipped: plResult.skipped,
+                          usesPaymentLineSsot: true,
+                      });
+                  } catch {
+                      /* non-fatal */
+                  }
+              } catch (plErr: unknown) {
+                  const msg = plErr instanceof Error ? plErr.message : String(plErr);
+                  toast.error(`Payment ledger line import failed: ${msg}`);
+              }
           }
 
           // Dispute Refunds: Persist to server

@@ -125,6 +125,19 @@ export interface Trip {
   uberPromotionsAmount?: number;
   uberRefundExpenseAmount?: number;
 
+  /** Sum of `Paid to you` across payment ledger lines for this trip. */
+  paidToYouNet?: number;
+  /** Sum of bank transfer column across payment lines. */
+  bankTransferred?: number;
+  /** Sum of cancellation fare component across payment lines. */
+  cancellationFare?: number;
+  /** Latest `vs reporting` from payment lines. */
+  reportingAt?: string;
+  /** Count of payment ledger lines linked to this trip. */
+  paymentRowCount?: number;
+  /** Uber transaction UUIDs from payment lines. */
+  externalTransactionIds?: string[];
+
   [key: string]: any; // Allow dynamic properties
 }
 
@@ -195,6 +208,11 @@ export interface ImportBatch {
   canonicalEventsSkipped?: number;
   canonicalEventsFailed?: number;
   canonicalAppendCompletedAt?: string;
+  /** When true, fare SSOT comes from payment_ledger_line rows (not trip-level fare rollup). */
+  usesPaymentLineSsot?: boolean;
+  paymentLedgerLineCount?: number;
+  paymentLedgerLinesImported?: number;
+  paymentLedgerLinesSkipped?: number;
 }
 
 /** Phase 7: live recount of `ledger_event:*` rows tagged with `batchId`. */
@@ -515,6 +533,7 @@ export type LedgerEventType =
   | 'tip'
   /** Uber: prior-period fare credits/debits from `trip fare adjust order` rows — separate from `tip`. */
   | 'prior_period_adjustment'
+  | 'payment_line'
   | 'promotion'
   | 'refund_expense'
   | 'surge_bonus'
@@ -530,6 +549,13 @@ export type LedgerEventType =
   | 'wallet_credit'
   | 'wallet_debit'
   | 'cancelled_trip_loss'
+  | 'adjustment'
+  | 'statement_line'
+  | 'statement_adjustment'
+  | 'payout_cash'
+  | 'payout_bank'
+  | 'toll_support_adjustment'
+  | 'other';
   | 'adjustment'
   | 'other';
 
@@ -572,6 +598,11 @@ export interface LedgerEntry {
   sourceId: string;
   batchId?: string;
   batchName?: string;
+
+  /** Uber transaction UUID or platform line id. */
+  externalTransactionId?: string;
+  postingAt?: string;
+  uberDescription?: string;
 
   // FLEXIBLE METADATA
   metadata?: Record<string, any>;

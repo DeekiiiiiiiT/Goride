@@ -122,6 +122,13 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   wallet_debit: 'Wallet Debit',
   cancelled_trip_loss: 'Cancelled Trip',
   adjustment: 'Adjustment',
+  payment_line: 'Payment Line',
+  prior_period_adjustment: 'Prior Period Adjustment',
+  promotion: 'Promotion',
+  payout_cash: 'Cash Payout',
+  payout_bank: 'Bank Payout',
+  statement_line: 'Statement Line',
+  toll_support_adjustment: 'Toll Support Adjustment',
   other: 'Other',
 };
 

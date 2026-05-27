@@ -149,6 +149,16 @@ export async function getDriverDetail(
 
 export interface PlatformLedgerTripRow extends RideRequestRow {
   driver_display_name?: string | null;
+  ledger_lines?: Array<{
+    id: string;
+    line_kind: string;
+    description: string;
+    reporting_at: string;
+    paid_to_you_minor: number;
+    earnings_gross_minor: number;
+    payment_method: string | null;
+  }>;
+  ledger_line_count?: number;
 }
 
 export async function listPlatformLedgerTrips(

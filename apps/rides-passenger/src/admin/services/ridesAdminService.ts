@@ -469,6 +469,47 @@ export async function listRiderTrips(
   return res.json();
 }
 
+export interface PlatformLedgerTripRow extends RideRequestRow {
+  ledger_lines?: Array<{
+    id: string;
+    line_kind: string;
+    description: string;
+    reporting_at: string;
+    paid_to_you_minor: number;
+    earnings_gross_minor: number;
+    payment_method: string | null;
+  }>;
+  ledger_line_count?: number;
+}
+
+export async function listPlatformLedgerTrips(
+  accessToken: string,
+  opts: {
+    page?: number;
+    limit?: number;
+    rider_user_id?: string;
+    driver_user_id?: string;
+    status?: string;
+    payment_method?: 'cash' | 'card';
+    from?: string;
+    to?: string;
+  } = {},
+): Promise<{ trips: PlatformLedgerTripRow[]; total: number; page: number; limit: number }> {
+  const sp = new URLSearchParams();
+  if (opts.page != null) sp.set('page', String(opts.page));
+  if (opts.limit != null) sp.set('limit', String(opts.limit));
+  if (opts.rider_user_id) sp.set('rider_user_id', opts.rider_user_id);
+  if (opts.driver_user_id) sp.set('driver_user_id', opts.driver_user_id);
+  if (opts.status) sp.set('status', opts.status);
+  if (opts.payment_method) sp.set('payment_method', opts.payment_method);
+  if (opts.from) sp.set('from', opts.from);
+  if (opts.to) sp.set('to', opts.to);
+
+  const res = await adminFetch(accessToken, `${RIDES_BASE}/admin/ledger/trips?${sp.toString()}`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
 export async function listRiderNotes(
   accessToken: string,
   userId: string,

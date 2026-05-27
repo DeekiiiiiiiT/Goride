@@ -155,6 +155,13 @@ export function ImportBatchAuditPanel() {
                           ) : (
                             '—'
                           )}
+                          {b.usesPaymentLineSsot && (
+                            <div className="mt-1">
+                              <Badge variant="secondary" className="text-[10px] font-normal">
+                                {b.paymentLedgerLinesImported ?? b.paymentLedgerLineCount ?? 0} payment lines
+                              </Badge>
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className="align-top py-3 text-right">
                           <Button

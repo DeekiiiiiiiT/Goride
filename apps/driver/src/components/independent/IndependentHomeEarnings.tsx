@@ -26,13 +26,16 @@ export function IndependentHomeEarnings() {
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white',
             )}
           >
-            {p === 'today' ? 'Today' : 'This week'}
+            {p === 'today' ? 'Today' : 'Work week'}
           </button>
         ))}
       </div>
 
       <p className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
         Trip earnings
+      </p>
+      <p className="text-[10px] text-slate-400 dark:text-slate-500 mb-2 min-h-[14px] max-w-[260px]">
+        {period === 'week' ? 'Mon 4:00 AM – Mon 4:00 AM (Jamaica)' : '\u00A0'}
       </p>
 
       {loading && !data ? (

@@ -84,6 +84,7 @@ import tollApp, {
   executeTollResetForReconciliation,
 } from "./toll_controller.tsx";
 import disputeRefundApp from "./dispute_refund_controller.tsx";
+import paymentLedgerLineApp from "./payment_ledger_line_controller.tsx";
 import apiCenterApp from "./api_command_center.tsx";
 import { getFleetTimezone } from "./timezone_helper.tsx";
 import * as unverifiedVendor from './unverified_vendor_controller.tsx';
@@ -1448,6 +1449,7 @@ app.route("/", safetyApp);
 app.route("/", syncApp);
 app.route("/", tollApp);
 app.route("/", disputeRefundApp);
+app.route("/", paymentLedgerLineApp);
 app.route("/", apiCenterApp);
 
 // Google Maps Config Endpoint

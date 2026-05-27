@@ -9,6 +9,8 @@ import {
   type FileData,
 } from './csvHelpers';
 import { buildCanonicalImportEvents } from './buildCanonicalImportEvents';
+import { buildPaymentLedgerCanonicalEvents } from './buildPaymentLedgerCanonicalEvents';
+import { applyPaymentLineRollupsToTrips } from './extractPaymentLedgerLines';
 import { aggregateCanonicalEventsToLedgerDriverOverview } from './ledgerMoneyAggregate';
 import { reconcileUberNetFareByDriver } from './uberStatementReconciliation';
 import type { ParsedRow } from '../types/data';
@@ -56,6 +58,30 @@ describe('Phase 8 golden import bundle', () => {
     expect(dr.length).toBe(1);
     expect(dr[0].amount).toBe(7.5);
     expect(dr[0].source).toBe('platform_import');
+  });
+
+  it('extracts payment ledger lines and rolls up trip fields', () => {
+    const batch = mergeAndProcessData(loadGoldenBundle(), []);
+    expect(batch.paymentLedgerLines?.length).toBeGreaterThanOrEqual(1);
+
+    const tripLine = batch.paymentLedgerLines?.find(
+      (l) => l.tripId?.toLowerCase() === '22222222-2222-2222-2222-222222222222',
+    );
+    expect(tripLine).toBeDefined();
+    expect(tripLine?.paidToYou).toBe(12.5);
+
+    const rolled = applyPaymentLineRollupsToTrips(batch.trips, batch.paymentLedgerLines ?? []);
+    const trip = rolled.find((t) => t.id === '22222222-2222-2222-2222-222222222222');
+    expect(trip?.paymentRowCount).toBe(1);
+    expect(trip?.paidToYouNet).toBe(12.5);
+  });
+
+  it('buildPaymentLedgerCanonicalEvents produces payment_line events from import lines', () => {
+    const batch = mergeAndProcessData(loadGoldenBundle(), []);
+    const lines = batch.paymentLedgerLines ?? [];
+    const events = buildPaymentLedgerCanonicalEvents(lines, GOLDEN_BATCH_ID, 'golden-fixture');
+    expect(events.length).toBeGreaterThanOrEqual(1);
+    expect(events.some((e) => e.eventType === 'payment_line' || e.eventType === 'toll_support_adjustment')).toBe(true);
   });
 
   /**

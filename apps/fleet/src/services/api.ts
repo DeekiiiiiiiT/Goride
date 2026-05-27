@@ -2150,6 +2150,50 @@ export const api = {
     return response.json();
   },
 
+  // ── Payment ledger lines (Uber payments_transaction.csv grain) ───────
+
+  async importPaymentLedgerLines(
+    lines: import('@roam/types/paymentLedgerLine').PaymentLedgerLine[],
+  ): Promise<{ imported: number; skipped: number; total: number; message: string }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/payment-ledger-lines/import`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`,
+      },
+      body: JSON.stringify({ lines }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || 'Failed to import payment ledger lines');
+    }
+    return response.json();
+  },
+
+  async getPaymentLedgerLines(params?: {
+    tripId?: string;
+    batchId?: string;
+    driverId?: string;
+    from?: string;
+    to?: string;
+  }): Promise<{ data: import('@roam/types/paymentLedgerLine').PaymentLedgerLine[]; total: number }> {
+    const qs = new URLSearchParams();
+    if (params?.tripId) qs.set('tripId', params.tripId);
+    if (params?.batchId) qs.set('batchId', params.batchId);
+    if (params?.driverId) qs.set('driverId', params.driverId);
+    if (params?.from) qs.set('from', params.from);
+    if (params?.to) qs.set('to', params.to);
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/payment-ledger-lines?${qs.toString()}`,
+      { headers: { Authorization: `Bearer ${publicAnonKey}` } },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || 'Failed to fetch payment ledger lines');
+    }
+    return response.json();
+  },
+
   async getPerformanceReport(startDate: string, endDate: string, options?: { dailyRideTarget?: number, dailyEarningsTarget?: number, summaryOnly?: boolean, limit?: number, offset?: number }): Promise<{ data: any[], total: number, limit: number, offset: number }> {
     const params = new URLSearchParams({ startDate, endDate });
     if (options?.dailyRideTarget) params.append('dailyRideTarget', options.dailyRideTarget.toString());

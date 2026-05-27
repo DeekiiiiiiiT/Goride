@@ -22,6 +22,14 @@ BEGIN
     fare_final_minor = CASE
       WHEN p_patch ? 'fare_final_minor' THEN (p_patch->>'fare_final_minor')::BIGINT
       ELSE fare_final_minor
+    END,
+    payment_method = CASE
+      WHEN p_patch ? 'payment_method' THEN NULLIF(p_patch->>'payment_method', '')
+      ELSE payment_method
+    END,
+    completed_at = CASE
+      WHEN p_patch ? 'completed_at' THEN (p_patch->>'completed_at')::TIMESTAMPTZ
+      ELSE completed_at
     END
   WHERE id = p_id
   RETURNING * INTO rec;

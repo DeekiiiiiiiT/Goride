@@ -25,6 +25,8 @@ export const CANONICAL_LEDGER_EVENT_TYPES = [
   'payout_bank',
   'toll_support_adjustment',
   'dispute_refund',
+  /** One row per Uber payments_transaction.csv line (transaction-grain SSOT). */
+  'payment_line',
 ] as const;
 
 export type CanonicalLedgerEventType = (typeof CANONICAL_LEDGER_EVENT_TYPES)[number];
@@ -67,6 +69,12 @@ export interface CanonicalLedgerEvent {
   isReconciled?: boolean;
   /** Trip-sourced `fare_earning`: set `Cash` so driver-overview cash totals roll up (`ledgerMoneyAggregate`). */
   paymentMethod?: string;
+  /** Uber `transaction UUID` or platform line id for audit/disputes. */
+  externalTransactionId?: string;
+  /** Uber `vs reporting` or platform posting timestamp (ISO). */
+  postingAt?: string;
+  /** Raw Uber Description column (e.g. trip completed order). */
+  uberDescription?: string;
   metadata?: Record<string, unknown>;
 }
 

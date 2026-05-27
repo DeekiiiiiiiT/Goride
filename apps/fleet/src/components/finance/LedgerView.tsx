@@ -84,6 +84,13 @@ const EVENT_TYPE_CONFIG: Record<string, { label: string; color: string; bgColor:
   wallet_debit:       { label: 'Wallet Debit',      color: 'text-red-700',     bgColor: 'bg-red-50 border-red-200' },
   cancelled_trip_loss:{ label: 'Cancelled Trip',    color: 'text-slate-700',   bgColor: 'bg-slate-50 border-slate-200' },
   adjustment:         { label: 'Adjustment',        color: 'text-slate-700',   bgColor: 'bg-slate-100 border-slate-300' },
+  payment_line:       { label: 'Payment Line',      color: 'text-indigo-700',  bgColor: 'bg-indigo-50 border-indigo-200' },
+  prior_period_adjustment: { label: 'Prior Period Adj.', color: 'text-slate-700', bgColor: 'bg-slate-100 border-slate-300' },
+  promotion:          { label: 'Promotion',         color: 'text-emerald-700', bgColor: 'bg-emerald-50 border-emerald-200' },
+  payout_cash:        { label: 'Cash Payout',       color: 'text-purple-700',  bgColor: 'bg-purple-50 border-purple-200' },
+  payout_bank:        { label: 'Bank Payout',       color: 'text-purple-700',  bgColor: 'bg-purple-50 border-purple-200' },
+  statement_line:     { label: 'Statement Line',    color: 'text-slate-700',   bgColor: 'bg-slate-50 border-slate-200' },
+  toll_support_adjustment: { label: 'Toll Support Adj.', color: 'text-blue-700', bgColor: 'bg-blue-50 border-blue-200' },
   other:              { label: 'Other',             color: 'text-slate-700',   bgColor: 'bg-slate-50 border-slate-200' },
 };
 

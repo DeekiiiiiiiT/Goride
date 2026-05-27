@@ -125,6 +125,21 @@ export interface Trip {
   uberPromotionsAmount?: number;
   uberRefundExpenseAmount?: number;
 
+  /** Sum of `Paid to you` across payment ledger lines for this trip. */
+  paidToYouNet?: number;
+  /** Sum of bank transfer column across payment lines. */
+  bankTransferred?: number;
+  /** Sum of cancellation fare component across payment lines. */
+  cancellationFare?: number;
+  /** Latest `vs reporting` from payment lines. */
+  reportingAt?: string;
+  /** Count of payment ledger lines linked to this trip. */
+  paymentRowCount?: number;
+  /** Uber transaction UUIDs from payment lines. */
+  externalTransactionIds?: string[];
+  /** When true, fare canonical events come from payment lines (not trip rollup). */
+  usesPaymentLineSsot?: boolean;
+
   [key: string]: any; // Allow dynamic properties
 }
 
@@ -195,6 +210,11 @@ export interface ImportBatch {
   canonicalEventsSkipped?: number;
   canonicalEventsFailed?: number;
   canonicalAppendCompletedAt?: string;
+  /** When true, fare SSOT comes from payment_ledger_line rows (not trip-level fare rollup). */
+  usesPaymentLineSsot?: boolean;
+  paymentLedgerLineCount?: number;
+  paymentLedgerLinesImported?: number;
+  paymentLedgerLinesSkipped?: number;
 }
 
 /** Phase 7: live recount of `ledger_event:*` rows tagged with `batchId`. */

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { Trip } from '../../../types/data';
 import { Copy, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, ChevronsUpDown, AlertTriangle } from 'lucide-react';
+import { PaymentLinesPanel } from './PaymentLinesPanel';
 import { toast } from 'sonner@2.0.3';
 import type { ColumnDef } from './TripLedgerColumnToggle';
 
@@ -165,6 +166,16 @@ function getSortValue(trip: Trip, key: string): string | number | null {
     case 'anchorPeriod': return trip.anchorPeriodId || '';
     case 'routeId': return trip.routeId || '';
     case 'notes': return trip.notes || '';
+    case 'uberFareComponents': return trip.uberFareComponents ?? null;
+    case 'uberTips': return trip.uberTips ?? null;
+    case 'uberPriorPeriodAdjustment': return trip.uberPriorPeriodAdjustment ?? null;
+    case 'paidToYouNet': return trip.paidToYouNet ?? null;
+    case 'bankTransferred': return trip.bankTransferred ?? null;
+    case 'cancellationFare': return trip.cancellationFare ?? null;
+    case 'transactionType': return trip.transactionType || '';
+    case 'paymentRowCount': return trip.paymentRowCount ?? null;
+    case 'uberSsotMatch': return trip.uberSsotFarePlusTipsMatch === true ? 1 : trip.uberSsotFarePlusTipsMatch === false ? 0 : null;
+    case 'missingTripActivity': return trip.missingTripActivityInExport ? 1 : 0;
     default: return null;
   }
 }
@@ -447,6 +458,72 @@ export const ALL_COLUMNS: RenderColumnDef[] = [
     render: (t) => t.notes || '—',
     minWidth: '180px', sortable: true,
   },
+
+  // ── Uber SSOT fields ──
+  {
+    key: 'uberFareComponents', label: 'Uber Fare', defaultVisible: false, group: 'uber',
+    render: (t) => formatCurrency(t.uberFareComponents),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'uberTips', label: 'Uber Tips', defaultVisible: false, group: 'uber',
+    render: (t) => formatCurrency(t.uberTips),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'uberPriorPeriodAdjustment', label: 'Prior Period Adj.', defaultVisible: false, group: 'uber',
+    render: (t) => formatCurrency(t.uberPriorPeriodAdjustment),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'paidToYouNet', label: 'Paid To You (Net)', defaultVisible: false, group: 'uber',
+    render: (t) => formatCurrency(t.paidToYouNet),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'bankTransferred', label: 'Bank Transfer', defaultVisible: false, group: 'uber',
+    render: (t) => formatCurrency(t.bankTransferred),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'cancellationFare', label: 'Cancellation Fare', defaultVisible: false, group: 'uber',
+    render: (t) => formatCurrency(t.cancellationFare),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'transactionType', label: 'Transaction Type', defaultVisible: false, group: 'uber',
+    render: (t) => t.transactionType || '—',
+    minWidth: '160px', sortable: true,
+  },
+  {
+    key: 'paymentRowCount', label: 'Payment Rows', defaultVisible: false, group: 'uber',
+    render: (t) => t.paymentRowCount != null ? String(t.paymentRowCount) : '—',
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'uberSsotMatch', label: 'SSOT Match', defaultVisible: false, group: 'uber',
+    render: (t) => {
+      if (t.uberSsotFarePlusTipsMatch === undefined) return '—';
+      return t.uberSsotFarePlusTipsMatch ? (
+        <span className="text-emerald-600 dark:text-emerald-400">Yes</span>
+      ) : (
+        <span className="text-amber-600 dark:text-amber-400">No</span>
+      );
+    },
+    sortable: true,
+  },
+  {
+    key: 'missingTripActivity', label: 'Missing Activity', defaultVisible: false, group: 'uber',
+    render: (t) =>
+      t.missingTripActivityInExport ? (
+        <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
+          <AlertTriangle className="h-3 w-3" /> Yes
+        </span>
+      ) : (
+        '—'
+      ),
+    sortable: true,
+  },
 ];
 
 /** Super Admin Ledger Settings: UI sections (grouped headers). Technical groups core|financial|meta map to Common. */
@@ -685,6 +762,8 @@ function TripDetailPanel({ trip, colSpan, columnConfig }: TripDetailPanelProps) 
               <DetailField label="Adj. previous periods" value={formatCurrency(trip.uberPriorPeriodAdjustment)} />
             )}
           </div>
+
+          <PaymentLinesPanel tripId={trip.id} batchId={trip.batchId} platform={trip.platform} />
         </div>
       </td>
     </tr>

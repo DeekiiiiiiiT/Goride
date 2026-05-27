@@ -7,14 +7,29 @@ export type RidePaymentMethod = "cash" | "card";
 export type DriverEarningsPeriod = "today" | "week" | "all";
 
 const JAMAICA_TZ = "America/Jamaica";
+/** Roam driver work week: Monday 04:00 → next Monday 04:00 (America/Jamaica, no DST). */
+const WORK_WEEK_START_HOUR_JAMAICA = 4;
+/** Jamaica is UTC−5 year-round. */
+const JAMAICA_UTC_OFFSET_HOURS = 5;
+
+const WEEKDAY_MON_OFFSET: Record<string, number> = {
+  Mon: 0,
+  Tue: 1,
+  Wed: 2,
+  Thu: 3,
+  Fri: 4,
+  Sat: 5,
+  Sun: 6,
+};
 
 const LEDGER_TRIP_COLUMNS =
-  "fare_final_minor, fare_estimate_minor, payment_method, currency, completed_at, status";
+  "fare_final_minor, fare_estimate_minor, payment_method, currency, completed_at, updated_at, status";
 const LEGACY_TRIP_COLUMNS =
-  "fare_final_minor, fare_estimate_minor, currency, updated_at, status";
+  "fare_final_minor, fare_estimate_minor, currency, updated_at, created_at, status";
 
 export interface ListDriverTripsOpts {
   driverUserId?: string;
+  riderUserId?: string;
   page?: number;
   limit?: number;
   status?: string;
@@ -22,6 +37,9 @@ export interface ListDriverTripsOpts {
   from?: string;
   to?: string;
   q?: string;
+  /** Filter ledger listings by completion time when available. */
+  dateField?: "created_at" | "completed_at";
+  grain?: "trip" | "line";
 }
 
 export interface ListDriverTripsResult {
@@ -55,17 +73,21 @@ function applyTripFilters(
   if (opts.driverUserId) {
     q = q.eq("assigned_driver_user_id", opts.driverUserId);
   }
+  if (opts.riderUserId) {
+    q = q.eq("rider_user_id", opts.riderUserId);
+  }
   if (opts.status?.trim()) {
     q = q.eq("status", opts.status.trim());
   }
   if (!legacyMode && opts.payment_method) {
     q = q.eq("payment_method", opts.payment_method);
   }
+  const dateCol = !legacyMode && opts.dateField === "completed_at" ? "completed_at" : "created_at";
   if (opts.from) {
-    q = q.gte("created_at", opts.from);
+    q = q.gte(dateCol, opts.from);
   }
   if (opts.to) {
-    q = q.lte("created_at", opts.to);
+    q = q.lte(dateCol, opts.to);
   }
   if (opts.q?.trim()) {
     q = q.ilike("pickup_address", `%${opts.q.trim()}%`);
@@ -129,42 +151,114 @@ export async function listDriverRideRequests(
   return { error: pub.error };
 }
 
-const jamaicaDateFmt = new Intl.DateTimeFormat("en-CA", {
-  timeZone: JAMAICA_TZ,
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
-
-/** Calendar date string YYYY-MM-DD in America/Jamaica for an instant. */
-export function jamaicaDateKey(iso: string | Date): string {
-  const d = typeof iso === "string" ? new Date(iso) : iso;
-  return jamaicaDateFmt.format(d);
+interface JamaicaLocalParts {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  weekday: string;
 }
 
-function jamaicaTodayKey(): string {
-  return jamaicaDateKey(new Date());
+function jamaicaLocalParts(at: Date): JamaicaLocalParts {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: JAMAICA_TZ,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    hour12: false,
+    weekday: "short",
+  }).formatToParts(at);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return {
+    year: Number(get("year")),
+    month: Number(get("month")),
+    day: Number(get("day")),
+    hour: Number(get("hour")),
+    weekday: get("weekday"),
+  };
 }
 
-/** Monday YYYY-MM-DD of the calendar week containing `dateKey` (week starts Monday). */
-function jamaicaWeekMondayKey(dateKey: string): string {
-  const [y, m, d] = dateKey.split("-").map(Number);
-  const utc = new Date(Date.UTC(y, m - 1, d));
-  const dow = utc.getUTCDay();
-  const mondayOffset = dow === 0 ? -6 : 1 - dow;
-  utc.setUTCDate(utc.getUTCDate() + mondayOffset);
-  return utc.toISOString().slice(0, 10);
+/** Jamaica local civil time → UTC epoch ms (fixed UTC−5). */
+function jamaicaLocalToUtcMs(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute = 0,
+  second = 0,
+): number {
+  return Date.UTC(year, month - 1, day, hour + JAMAICA_UTC_OFFSET_HOURS, minute, second);
 }
 
-/** Whether completed_at falls in today or this calendar week (Mon–Sun) in Jamaica. */
+function addCalendarDays(
+  year: number,
+  month: number,
+  day: number,
+  deltaDays: number,
+): { year: number; month: number; day: number } {
+  const t = new Date(Date.UTC(year, month - 1, day + deltaDays));
+  return {
+    year: t.getUTCFullYear(),
+    month: t.getUTCMonth() + 1,
+    day: t.getUTCDate(),
+  };
+}
+
+/** Current work week [start, end) in UTC ms: Monday 04:00 Jamaica → next Monday 04:00. */
+export function jamaicaWorkWeekBounds(at: Date = new Date()): { startMs: number; endMs: number } {
+  const p = jamaicaLocalParts(at);
+  const daysFromMonday = WEEKDAY_MON_OFFSET[p.weekday] ?? 0;
+  let anchor = addCalendarDays(p.year, p.month, p.day, -daysFromMonday);
+  // Before Monday 04:00 → still in the previous work week
+  if (daysFromMonday === 0 && p.hour < WORK_WEEK_START_HOUR_JAMAICA) {
+    anchor = addCalendarDays(anchor.year, anchor.month, anchor.day, -7);
+  }
+  const startMs = jamaicaLocalToUtcMs(
+    anchor.year,
+    anchor.month,
+    anchor.day,
+    WORK_WEEK_START_HOUR_JAMAICA,
+  );
+  const endAnchor = addCalendarDays(anchor.year, anchor.month, anchor.day, 7);
+  const endMs = jamaicaLocalToUtcMs(
+    endAnchor.year,
+    endAnchor.month,
+    endAnchor.day,
+    WORK_WEEK_START_HOUR_JAMAICA,
+  );
+  return { startMs, endMs };
+}
+
+/** Calendar today [start, end) in UTC ms: midnight → midnight Jamaica. */
+function jamaicaTodayBounds(at: Date = new Date()): { startMs: number; endMs: number } {
+  const p = jamaicaLocalParts(at);
+  const startMs = jamaicaLocalToUtcMs(p.year, p.month, p.day, 0, 0, 0);
+  const next = addCalendarDays(p.year, p.month, p.day, 1);
+  const endMs = jamaicaLocalToUtcMs(next.year, next.month, next.day, 0, 0, 0);
+  return { startMs, endMs };
+}
+
+function instantInRange(iso: string, startMs: number, endMs: number): boolean {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return false;
+  return t >= startMs && t < endMs;
+}
+
+/** Whether completion falls in calendar today or the Mon 04:00 work week (Jamaica). */
 export function completedInJamaicaPeriod(
   completedAt: string | null | undefined,
   period: Exclude<DriverEarningsPeriod, "all">,
+  at: Date = new Date(),
 ): boolean {
   if (!completedAt) return false;
-  const key = jamaicaDateKey(completedAt);
-  if (period === "today") return key === jamaicaTodayKey();
-  return jamaicaWeekMondayKey(key) === jamaicaWeekMondayKey(jamaicaTodayKey());
+  if (period === "today") {
+    const { startMs, endMs } = jamaicaTodayBounds(at);
+    return instantInRange(completedAt, startMs, endMs);
+  }
+  const { startMs, endMs } = jamaicaWorkWeekBounds(at);
+  return instantInRange(completedAt, startMs, endMs);
 }
 
 export interface DriverEarningsAggregate {

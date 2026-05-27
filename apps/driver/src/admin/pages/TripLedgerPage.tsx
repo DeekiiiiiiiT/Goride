@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
-import { Loader2, Search } from 'lucide-react';
+import { ChevronDown, ChevronRight, Loader2, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatMoneyMinor } from '@roam/types/rides';
 import { listPlatformLedgerTrips, type PlatformLedgerTripRow } from '../services/driverAdminService';
@@ -29,6 +29,7 @@ export function TripLedgerPage() {
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -61,7 +62,7 @@ export function TripLedgerPage() {
       <div>
         <h2 className="text-xl font-semibold text-white">Trip ledger</h2>
         <p className="text-sm text-slate-400 mt-1">
-          All Roam passenger trips on the platform ({total} total)
+          Roam platform trips with payment line breakdown ({total} total)
         </p>
       </div>
 
@@ -118,46 +119,104 @@ export function TripLedgerPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-800 text-left text-slate-500">
-                <th className="px-4 py-3">When</th>
+                <th className="px-2 py-3 w-8" />
+                <th className="px-4 py-3">Completed</th>
                 <th className="px-4 py-3">Driver</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Pickup</th>
-                <th className="px-4 py-3">Fare</th>
+                <th className="px-4 py-3">Dropoff</th>
+                <th className="px-4 py-3">Gross fare</th>
+                <th className="px-4 py-3">Driver net</th>
                 <th className="px-4 py-3">Payment</th>
+                <th className="px-4 py-3">Lines</th>
               </tr>
             </thead>
             <tbody>
-              {trips.map((t) => (
-                <tr key={t.id} className="border-b border-slate-800/80 hover:bg-slate-900/50">
-                  <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
-                    {formatWhen(t.completed_at ?? t.created_at)}
-                  </td>
-                  <td className="px-4 py-3">
-                    {t.assigned_driver_user_id ? (
-                      <Link
-                        to={`/users/${t.assigned_driver_user_id}`}
-                        className="text-violet-300 hover:text-violet-200"
-                      >
-                        {t.driver_display_name ?? t.assigned_driver_user_id.slice(0, 8)}
-                      </Link>
-                    ) : (
-                      '—'
+              {trips.map((t) => {
+                const expanded = expandedId === t.id;
+                const lines = t.ledger_lines ?? [];
+                return (
+                  <React.Fragment key={t.id}>
+                    <tr
+                      className="border-b border-slate-800/80 hover:bg-slate-900/50 cursor-pointer"
+                      onClick={() => setExpandedId(expanded ? null : t.id)}
+                    >
+                      <td className="px-2 py-3 text-slate-500">
+                        {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                      </td>
+                      <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
+                        {formatWhen(t.completed_at ?? t.created_at)}
+                      </td>
+                      <td className="px-4 py-3">
+                        {t.assigned_driver_user_id ? (
+                          <Link
+                            to={`/users/${t.assigned_driver_user_id}`}
+                            className="text-violet-300 hover:text-violet-200"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {t.driver_display_name ?? t.assigned_driver_user_id.slice(0, 8)}
+                          </Link>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-slate-300 capitalize">
+                        {t.status.replace(/_/g, ' ')}
+                      </td>
+                      <td className="px-4 py-3 text-slate-400 truncate max-w-[180px]">
+                        {t.pickup_address ?? '—'}
+                      </td>
+                      <td className="px-4 py-3 text-slate-400 truncate max-w-[180px]">
+                        {t.dropoff_address ?? '—'}
+                      </td>
+                      <td className="px-4 py-3 tabular-nums">
+                        {formatMoneyMinor(t.fare_final_minor ?? t.fare_estimate_minor, t.currency)}
+                      </td>
+                      <td className="px-4 py-3 tabular-nums text-emerald-400">
+                        {t.driver_net_minor != null
+                          ? formatMoneyMinor(t.driver_net_minor, t.currency)
+                          : formatMoneyMinor(t.fare_final_minor ?? t.fare_estimate_minor, t.currency)}
+                      </td>
+                      <td className="px-4 py-3 text-slate-400 capitalize">
+                        {t.payment_method ?? '—'}
+                      </td>
+                      <td className="px-4 py-3 text-slate-500 tabular-nums">
+                        {t.ledger_line_count ?? lines.length ?? 0}
+                      </td>
+                    </tr>
+                    {expanded && lines.length > 0 && (
+                      <tr className="bg-slate-900/40">
+                        <td colSpan={10} className="px-6 py-3">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="text-slate-500 text-left">
+                                <th className="py-1 pr-4">Kind</th>
+                                <th className="py-1 pr-4">Description</th>
+                                <th className="py-1 pr-4 text-right">Paid to driver</th>
+                                <th className="py-1 text-right">Gross</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {lines.map((line) => (
+                                <tr key={line.id} className="text-slate-400">
+                                  <td className="py-1 pr-4">{line.line_kind}</td>
+                                  <td className="py-1 pr-4">{line.description}</td>
+                                  <td className="py-1 pr-4 text-right tabular-nums">
+                                    {formatMoneyMinor(line.paid_to_you_minor, t.currency)}
+                                  </td>
+                                  <td className="py-1 text-right tabular-nums">
+                                    {formatMoneyMinor(line.earnings_gross_minor, t.currency)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </td>
+                      </tr>
                     )}
-                  </td>
-                  <td className="px-4 py-3 text-slate-300 capitalize">
-                    {t.status.replace(/_/g, ' ')}
-                  </td>
-                  <td className="px-4 py-3 text-slate-400 truncate max-w-[220px]">
-                    {t.pickup_address ?? '—'}
-                  </td>
-                  <td className="px-4 py-3 tabular-nums">
-                    {formatMoneyMinor(t.fare_final_minor ?? t.fare_estimate_minor, t.currency)}
-                  </td>
-                  <td className="px-4 py-3 text-slate-400 capitalize">
-                    {t.payment_method ?? '—'}
-                  </td>
-                </tr>
-              ))}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         )}

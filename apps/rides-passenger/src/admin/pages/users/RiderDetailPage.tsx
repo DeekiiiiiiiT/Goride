@@ -21,6 +21,7 @@ import {
   banRider,
   deleteRider,
   getRiderDetail,
+  listPlatformLedgerTrips,
   listRiderNotes,
   listRiderTrips,
   patchRiderProfile,
@@ -28,9 +29,10 @@ import {
   signOutRiderAllDevices,
   suspendRider,
   unsuspendRider,
+  type PlatformLedgerTripRow,
 } from '../../services/ridesAdminService';
 
-type Tab = 'overview' | 'trips' | 'notes' | 'activity';
+type Tab = 'overview' | 'trips' | 'payments' | 'notes' | 'activity';
 
 interface OutletContext {
   session: Session;
@@ -57,6 +59,8 @@ export function RiderDetailPage() {
   const [permissions, setPermissions] = useState<RiderAdminPermissions | null>(null);
   const [tab, setTab] = useState<Tab>('overview');
   const [trips, setTrips] = useState<RideRequestRow[]>([]);
+  const [paymentTrips, setPaymentTrips] = useState<PlatformLedgerTripRow[]>([]);
+  const [expandedPaymentId, setExpandedPaymentId] = useState<string | null>(null);
   const [notes, setNotes] = useState<Awaited<ReturnType<typeof listRiderNotes>>['notes']>([]);
   const [noteText, setNoteText] = useState('');
   const [actionsOpen, setActionsOpen] = useState(false);
@@ -99,6 +103,13 @@ export function RiderDetailPage() {
   useEffect(() => {
     if (!token || !userId || tab !== 'notes') return;
     void listRiderNotes(token, userId).then((r) => setNotes(r.notes));
+  }, [token, userId, tab]);
+
+  useEffect(() => {
+    if (!token || !userId || tab !== 'payments') return;
+    void listPlatformLedgerTrips(token, { rider_user_id: userId, limit: 50, status: 'completed' }).then(
+      (r) => setPaymentTrips(r.trips),
+    );
   }, [token, userId, tab]);
 
   const copyId = () => {
@@ -246,6 +257,7 @@ export function RiderDetailPage() {
   const tabs: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'Overview' },
     { id: 'trips', label: 'Trips' },
+    { id: 'payments', label: 'Payment history' },
     { id: 'notes', label: 'Notes' },
     { id: 'activity', label: 'Activity' },
   ];
@@ -535,6 +547,90 @@ export function RiderDetailPage() {
                     </td>
                   </tr>
                 ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {tab === 'payments' && (
+        <div className="rounded-xl border border-slate-800 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-800 text-slate-500 text-left">
+                <th className="px-2 py-3 w-8" />
+                <th className="px-4 py-3">Completed</th>
+                <th className="px-4 py-3">Pickup</th>
+                <th className="px-4 py-3">Charged</th>
+                <th className="px-4 py-3">Payment</th>
+                <th className="px-4 py-3">Lines</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paymentTrips.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                    No completed payment history
+                  </td>
+                </tr>
+              ) : (
+                paymentTrips.map((t) => {
+                  const expanded = expandedPaymentId === t.id;
+                  const lines = t.ledger_lines ?? [];
+                  return (
+                    <React.Fragment key={t.id}>
+                      <tr
+                        className="border-b border-slate-800/80 hover:bg-slate-900/50 cursor-pointer"
+                        onClick={() => setExpandedPaymentId(expanded ? null : t.id)}
+                      >
+                        <td className="px-2 py-3 text-slate-500">
+                          {expanded ? '▼' : '▶'}
+                        </td>
+                        <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
+                          {formatWhen(t.completed_at ?? t.created_at)}
+                        </td>
+                        <td className="px-4 py-3 text-slate-400 max-w-[200px] truncate">
+                          {t.pickup_address ?? '—'}
+                        </td>
+                        <td className="px-4 py-3 tabular-nums">
+                          {formatMoneyMinor(t.fare_final_minor ?? t.fare_estimate_minor, t.currency)}
+                        </td>
+                        <td className="px-4 py-3 text-slate-400 capitalize">
+                          {t.payment_method ?? '—'}
+                        </td>
+                        <td className="px-4 py-3 text-slate-500 tabular-nums">
+                          {t.ledger_line_count ?? lines.length}
+                        </td>
+                      </tr>
+                      {expanded && lines.length > 0 && (
+                        <tr className="bg-slate-900/40">
+                          <td colSpan={6} className="px-6 py-3">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="text-slate-500 text-left">
+                                  <th className="py-1 pr-4">Kind</th>
+                                  <th className="py-1 pr-4">Description</th>
+                                  <th className="py-1 text-right">Amount</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {lines.map((line) => (
+                                  <tr key={line.id} className="text-slate-400">
+                                    <td className="py-1 pr-4">{line.line_kind}</td>
+                                    <td className="py-1 pr-4">{line.description}</td>
+                                    <td className="py-1 text-right tabular-nums">
+                                      {formatMoneyMinor(line.earnings_gross_minor, t.currency)}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })
               )}
             </tbody>
           </table>

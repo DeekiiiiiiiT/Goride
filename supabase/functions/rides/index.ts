@@ -39,6 +39,11 @@ import {
   listDriverRideRequests,
   type DriverEarningsPeriod,
 } from "../_shared/driverRideQueries.ts";
+import {
+  finalizeRideLedgerFields,
+  persistRideLedgerLines,
+} from "../_shared/rideLedgerLines.ts";
+import { syncCompletedRideToFleetKv } from "../_shared/rideToFleetTrip.ts";
 
 /** Match Supabase path prefix: .../functions/v1/rides/<route> → /rides/<route> */
 const app = new Hono().basePath("/rides");
@@ -1320,6 +1325,10 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
     }
     patch.fare_final_minor = fareMinor;
     patch.completed_at = new Date().toISOString();
+    patch.fare_final_breakdown = ride.fare_breakdown ?? null;
+    patch.platform_fee_minor = 0;
+    patch.tip_minor = 0;
+    patch.driver_net_minor = fareMinor;
     if (!ride.payment_method) {
       patch.payment_method = "cash";
     }
@@ -1330,6 +1339,23 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
   }
 
   await patchRideRequest(id, patch);
+
+  if (next === "completed") {
+    const freshForLedger = await loadRideRequestById(id);
+    if (freshForLedger) {
+      try {
+        await persistRideLedgerLines(svc(), freshForLedger);
+        await finalizeRideLedgerFields(svc(), id, freshForLedger);
+      } catch (e) {
+        console.error("[rides] ledger line persist failed:", e);
+      }
+      try {
+        await syncCompletedRideToFleetKv(freshForLedger);
+      } catch (e) {
+        console.error("[rides] fleet KV sync failed:", e);
+      }
+    }
+  }
 
   if (next === "completed" || next === "cancelled") {
     const cellKey = gridCellKey(Number(ride.pickup_lat), Number(ride.pickup_lng));

@@ -8,6 +8,7 @@ import {
   TrendingUp,
   SlidersHorizontal,
   Car,
+  ScrollText,
   Users,
   LogOut,
   Menu,
@@ -22,6 +23,7 @@ import { RidesAdminLoginForm } from './components/RidesAdminLoginForm';
 const NAV_ITEMS = [
   { id: 'dashboard', path: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'users', path: '/admin/users', label: 'User Management', icon: Users },
+  { id: 'ledger', path: '/admin/ledger', label: 'Trip Ledger', icon: ScrollText },
   { id: 'fare-rules', path: '/admin/fare-rules', label: 'Fare Rules', icon: CircleDollarSign },
   { id: 'surge', path: '/admin/surge', label: 'Surge Pricing', icon: TrendingUp },
   { id: 'control-panel', path: '/admin/control-panel', label: 'Control Panel', icon: SlidersHorizontal },

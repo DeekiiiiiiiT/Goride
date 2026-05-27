@@ -21,6 +21,7 @@ import { TransportSolutionKindPage } from './admin/pages/TransportSolutionKindPa
 import { SurgePage } from './admin/pages/SurgePage';
 import { ControlPanelPage } from './admin/pages/ControlPanelPage';
 import { RideOperationsPage } from './admin/pages/RideOperationsPage';
+import { TripLedgerPage } from './admin/pages/TripLedgerPage';
 import { RidersListPage } from './admin/pages/users/RidersListPage';
 import { RiderDetailPage } from './admin/pages/users/RiderDetailPage';
 
@@ -100,6 +101,7 @@ export default function App() {
         </Route>
         <Route path="surge" element={<SurgePage />} />
         <Route path="control-panel" element={<ControlPanelPage />} />
+        <Route path="ledger" element={<TripLedgerPage />} />
         <Route path="rides" element={<RideOperationsPage />} />
       </Route>
 

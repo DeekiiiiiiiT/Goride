@@ -9,6 +9,11 @@ import {
 } from './uberSsot';
 import { isUberTripFareAdjustOrderDescription } from './uberTripFareAdjustOrder';
 import { coerceDriverMetricPeriodIfDegenerate } from './driverMetricPeriod';
+import type { PaymentLedgerLine } from '@roam/types/paymentLedgerLine';
+import {
+  extractPaymentLedgerLineFromUberRow,
+  applyPaymentLineRollupsToTrips,
+} from './extractPaymentLedgerLines';
 
 // ... (Legacy code support if needed, but we focus on new logic)
 
@@ -405,6 +410,8 @@ export interface ProcessedBatch {
     importWarnings?: {
         uberTripsMissingTripActivity: number;
     };
+    /** Transaction-grain lines from Uber payments_transaction.csv. */
+    paymentLedgerLines?: PaymentLedgerLine[];
 }
 
 // Helper to extract and clean driver name
@@ -1023,6 +1030,8 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
     const vehicleTimeData: VehicleTimeDistance[] = [];
     let organizationName = knownFleetName || ''; // Phase 1: Track Fleet Owner Name
     const disputeRefundsMap = new Map<string, DisputeRefund>(); // Dispute Refund: keyed by supportCaseId for dedup
+    const paymentLedgerLines: PaymentLedgerLine[] = [];
+    const paymentLineDedup = new Set<string>();
     
     // Phase 2: Calculate Global Fleet Stats for Static Reconstruction
     const fleetStats = calculateFleetStats(files);
@@ -1262,6 +1271,14 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                         const nm = extractDriverName(row, UBER_SCHEMAS.PAYMENTS_ORDER.mapping);
                         if (nm && nm !== 'Unknown Driver') dmCash.driverName = nm;
                         driverMetricsMap.set(driverIdForCashSum, dmCash);
+                    }
+
+                    const payLine = extractPaymentLedgerLineFromUberRow(row as Record<string, unknown>, {
+                        tripInUberTripActivity: (id) => uberTripActivityTripIds.has(id.toLowerCase()),
+                    });
+                    if (payLine && !paymentLineDedup.has(payLine.idempotencyKey)) {
+                        paymentLineDedup.add(payLine.idempotencyKey);
+                        paymentLedgerLines.push(payLine);
                     }
                 }
 
@@ -2569,8 +2586,13 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
         (t) => t.missingTripActivityInExport
     ).length;
 
+    const tripsWithPaymentRollups = applyPaymentLineRollupsToTrips(
+        [...finalizedTrips, ...genericTrips],
+        paymentLedgerLines,
+    );
+
     return {
-        trips: [...finalizedTrips, ...genericTrips],
+        trips: tripsWithPaymentRollups,
         driverMetrics,
         vehicleMetrics,
         rentalContracts,
@@ -2593,6 +2615,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
             uberTripsMissingTripActivity > 0
                 ? { uberTripsMissingTripActivity }
                 : undefined,
+        paymentLedgerLines: paymentLedgerLines.length > 0 ? paymentLedgerLines : undefined,
     };
 }
 

@@ -16,6 +16,10 @@ import {
 } from "../../_shared/driverAdminDb.ts";
 import { getRiderAdminDb } from "../../_shared/ridesAdminDb.ts";
 import { listDriverRideRequests } from "../../_shared/driverRideQueries.ts";
+import {
+  aggregateLedgerLinesForTrips,
+  listPlatformLedgerLines,
+} from "../../_shared/platformLedgerQueries.ts";
 
 type DriverAdminDb = Awaited<ReturnType<typeof getDriverAdminDb>>;
 
@@ -848,12 +852,32 @@ export function registerDriverUserAdminRoutes(admin: Hono) {
     const from = c.req.query("from")?.trim() || undefined;
     const to = c.req.query("to")?.trim() || undefined;
     const q = c.req.query("q")?.trim() || undefined;
+    const grain = c.req.query("grain")?.trim() === "line" ? "line" as const : "trip" as const;
 
     const ridesDb = resolved.ridesDb ?? createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
       { db: { schema: "rides" } },
     );
+
+    if (grain === "line") {
+      const lineResult = await listPlatformLedgerLines(ridesDb, {
+        driverUserId,
+        page,
+        limit,
+        from,
+        to,
+      });
+      if ("error" in lineResult) {
+        return c.json({ error: "list_failed", message: lineResult.error }, 500);
+      }
+      return c.json({
+        lines: lineResult.lines,
+        total: lineResult.total,
+        page: lineResult.page,
+        limit: lineResult.limit,
+      });
+    }
 
     const result = await listDriverRideRequests(ridesDb, resolved.db, {
       driverUserId,
@@ -864,6 +888,7 @@ export function registerDriverUserAdminRoutes(admin: Hono) {
       from,
       to,
       q,
+      dateField: "completed_at",
     });
 
     if ("error" in result) {
@@ -899,8 +924,16 @@ export function registerDriverUserAdminRoutes(admin: Hono) {
         : null,
     }));
 
+    const rideIds = trips.map((t) => String(t.id));
+    const linesByRide = await aggregateLedgerLinesForTrips(ridesDb, rideIds);
+    const tripsWithLedger = trips.map((t) => ({
+      ...t,
+      ledger_lines: linesByRide[String(t.id)] ?? [],
+      ledger_line_count: (linesByRide[String(t.id)] ?? []).length,
+    }));
+
     return c.json({
-      trips,
+      trips: tripsWithLedger,
       total: result.total,
       page: result.page,
       limit: result.limit,

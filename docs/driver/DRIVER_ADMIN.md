@@ -35,6 +35,12 @@ Super Admin → **User Management** (`/admin/users`) for driver (`role: driver`)
 3. Redeploy the `driver` Edge function (platform trip ledger).
 4. Ship the driver app (independent Home / Earnings / Trips UI).
 
+## Independent driver work week (earnings)
+
+- **Work week** on Home uses **Monday 04:00 → next Monday 04:00** (`America/Jamaica`).
+- **Today** uses calendar midnight–midnight Jamaica.
+- Implemented in `supabase/functions/_shared/driverRideQueries.ts` (`jamaicaWorkWeekBounds`).
+
 ## Manual test checklist (independent vs fleet)
 
 | Scenario | Expected |

@@ -17,6 +17,7 @@ export * from './driverPayoutPeriod';
 export * from './equipment';
 export * from './expenses';
 export * from './ledgerCanonical';
+export * from './paymentLedgerLine';
 export * from './maintenance';
 export * from './offline';
 export * from './osrm';

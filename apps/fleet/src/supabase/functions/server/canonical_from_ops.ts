@@ -351,6 +351,8 @@ export async function appendCanonicalTripFaresIfEligibleWithStats(
   let failed = 0;
   const batch: Record<string, unknown>[] = [];
   for (const trip of trips) {
+    const platform = String(trip.platform || '').trim();
+    if (trip.usesPaymentLineSsot === true && platform === 'Uber') continue;
     batch.push(...buildCanonicalTripFareEventsFromTrip(trip));
   }
   if (batch.length === 0) return { inserted, skipped, failed };
