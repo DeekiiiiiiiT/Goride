@@ -39,7 +39,11 @@ export function IndependentHomeEarnings() {
         <Loader2 className="h-8 w-8 animate-spin text-emerald-600 dark:text-emerald-400" />
       ) : error ? (
         <div className="space-y-2">
-          <p className="text-sm text-red-500">{error}</p>
+          <p className="text-sm text-red-500 max-w-xs">
+            {error.includes('payment_method') && error.includes('does not exist')
+              ? 'Database update required. Ask your admin to run apply_ride_payment_and_completion.sql in Supabase.'
+              : error}
+          </p>
           <button
             type="button"
             onClick={() => void refresh()}

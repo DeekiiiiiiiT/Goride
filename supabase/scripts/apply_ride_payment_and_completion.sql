@@ -1,4 +1,7 @@
--- Independent driver ledger: payment method + completion timestamp on ride_requests.
+-- Run in Supabase SQL Editor if earnings/trips fail with:
+-- "column rides_ride_requests.payment_method does not exist"
+--
+-- Same as migration 20260526120000_ride_payment_and_completion.sql
 
 ALTER TABLE rides.ride_requests
   ADD COLUMN IF NOT EXISTS payment_method TEXT
@@ -9,13 +12,12 @@ CREATE INDEX IF NOT EXISTS idx_rides_requests_driver_completed
   ON rides.ride_requests(assigned_driver_user_id, completed_at DESC)
   WHERE status = 'completed';
 
--- Backfill existing completed trips as cash (v1 default).
 UPDATE rides.ride_requests
 SET payment_method = 'cash',
     completed_at = COALESCE(completed_at, updated_at)
 WHERE status = 'completed' AND payment_method IS NULL;
 
--- Extend driver directory stats with cash/digital lifetime splits.
+-- DROP required: CREATE OR REPLACE cannot insert new columns before last_online_at.
 DROP VIEW IF EXISTS public.driver_directory_stats;
 DROP VIEW IF EXISTS rides.driver_directory_stats;
 
@@ -88,7 +90,7 @@ CREATE VIEW public.driver_directory_stats AS
 
 GRANT SELECT ON public.driver_directory_stats TO service_role;
 
--- Recreate public view so PostgREST exposes payment_method + completed_at
+-- Refresh PostgREST schema cache (public view picks up new columns via rides.ride_requests)
 DROP VIEW IF EXISTS public.rides_ride_requests;
 CREATE VIEW public.rides_ride_requests AS
   SELECT * FROM rides.ride_requests;

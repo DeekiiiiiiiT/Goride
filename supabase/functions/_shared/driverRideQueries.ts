@@ -8,6 +8,11 @@ export type DriverEarningsPeriod = "today" | "week" | "all";
 
 const JAMAICA_TZ = "America/Jamaica";
 
+const LEDGER_TRIP_COLUMNS =
+  "fare_final_minor, fare_estimate_minor, payment_method, currency, completed_at, status";
+const LEGACY_TRIP_COLUMNS =
+  "fare_final_minor, fare_estimate_minor, currency, updated_at, status";
+
 export interface ListDriverTripsOpts {
   driverUserId?: string;
   page?: number;
@@ -26,6 +31,14 @@ export interface ListDriverTripsResult {
   limit: number;
 }
 
+function isMissingLedgerColumnError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("does not exist") &&
+    (m.includes("payment_method") || m.includes("completed_at"))
+  );
+}
+
 function effectiveFareMinor(row: Record<string, unknown>): number {
   const final = row.fare_final_minor;
   const estimate = row.fare_estimate_minor;
@@ -36,6 +49,7 @@ function effectiveFareMinor(row: Record<string, unknown>): number {
 function applyTripFilters(
   query: ReturnType<SupabaseClient["from"]>,
   opts: ListDriverTripsOpts,
+  legacyMode: boolean,
 ) {
   let q = query;
   if (opts.driverUserId) {
@@ -44,7 +58,7 @@ function applyTripFilters(
   if (opts.status?.trim()) {
     q = q.eq("status", opts.status.trim());
   }
-  if (opts.payment_method) {
+  if (!legacyMode && opts.payment_method) {
     q = q.eq("payment_method", opts.payment_method);
   }
   if (opts.from) {
@@ -63,21 +77,33 @@ async function listFromTable(
   db: SupabaseClient,
   table: string,
   opts: ListDriverTripsOpts,
+  legacyMode = false,
 ): Promise<ListDriverTripsResult | { error: string }> {
   const page = Math.max(1, Number(opts.page ?? 1));
   const limit = Math.min(100, Math.max(1, Number(opts.limit ?? 25)));
   const offset = (page - 1) * limit;
 
-  let countQuery = applyTripFilters(db.from(table).select("*", { count: "exact", head: true }), opts);
-  const { count, error: countErr } = await countQuery;
+  let countQuery = applyTripFilters(
+    db.from(table).select("*", { count: "exact", head: true }),
+    opts,
+    legacyMode,
+  );
+  let { count, error: countErr } = await countQuery;
+
+  if (countErr && isMissingLedgerColumnError(countErr.message) && !legacyMode) {
+    return listFromTable(db, table, opts, true);
+  }
   if (countErr) return { error: countErr.message };
 
-  let dataQuery = applyTripFilters(
-    db.from(table).select("*"),
-    opts,
-  ).order("created_at", { ascending: false }).range(offset, offset + limit - 1);
+  let dataQuery = applyTripFilters(db.from(table).select("*"), opts, legacyMode)
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit - 1);
 
-  const { data, error } = await dataQuery;
+  let { data, error } = await dataQuery;
+
+  if (error && isMissingLedgerColumnError(error.message) && !legacyMode) {
+    return listFromTable(db, table, opts, true);
+  }
   if (error) return { error: error.message };
 
   return {
@@ -150,17 +176,26 @@ export interface DriverEarningsAggregate {
   digital_payments_enabled: boolean;
 }
 
+function rowCompletedAt(r: Record<string, unknown>): string | null {
+  return (r.completed_at as string | null) ?? (r.updated_at as string | null);
+}
+
 async function aggregateFromTable(
   db: SupabaseClient,
   table: string,
   driverUserId: string,
   period: DriverEarningsPeriod,
+  legacyMode = false,
 ): Promise<DriverEarningsAggregate | { error: string }> {
+  const columns = legacyMode ? LEGACY_TRIP_COLUMNS : LEDGER_TRIP_COLUMNS;
   const { data, error } = await db.from(table)
-    .select("fare_final_minor, fare_estimate_minor, payment_method, currency, completed_at, status")
+    .select(columns)
     .eq("assigned_driver_user_id", driverUserId)
     .eq("status", "completed");
 
+  if (error && isMissingLedgerColumnError(error.message) && !legacyMode) {
+    return aggregateFromTable(db, table, driverUserId, period, true);
+  }
   if (error) return { error: error.message };
 
   let cash_minor = 0;
@@ -171,7 +206,7 @@ async function aggregateFromTable(
   for (const row of data ?? []) {
     const r = row as Record<string, unknown>;
     if (period !== "all") {
-      const completedAt = r.completed_at as string | null;
+      const completedAt = rowCompletedAt(r);
       if (!completedInJamaicaPeriod(completedAt, period)) continue;
     }
     const fare = effectiveFareMinor(r);
