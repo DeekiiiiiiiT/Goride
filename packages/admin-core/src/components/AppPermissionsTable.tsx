@@ -179,34 +179,40 @@ export function AppPermissionsTable({
                         {tierMeta.title}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-center align-middle">
-                      <AdminPermissionSwitch
-                        checked={row.enabled}
-                        disabled={!canEdit || saving}
-                        onCheckedChange={(v) => updateRow(row.key, { enabled: v })}
-                        aria-label={`${row.label} enabled`}
-                      />
+                    <td className="px-4 py-3 align-middle">
+                      <div className="flex justify-center">
+                        <AdminPermissionSwitch
+                          checked={row.enabled}
+                          disabled={!canEdit || saving}
+                          onCheckedChange={(v) => updateRow(row.key, { enabled: v })}
+                          aria-label={`${row.label} enabled`}
+                        />
+                      </div>
                     </td>
-                    <td className="px-4 py-3 text-center align-middle">
-                      <AdminPermissionSwitch
-                        checked={row.prompt_onboarding}
-                        disabled={!canEdit || saving || !row.enabled || nativeOnly}
-                        onCheckedChange={(v) => updateRow(row.key, { prompt_onboarding: v })}
-                        aria-label={`${row.label} prompt on onboarding`}
-                      />
+                    <td className="px-4 py-3 align-middle">
+                      <div className="flex justify-center">
+                        <AdminPermissionSwitch
+                          checked={row.prompt_onboarding}
+                          disabled={!canEdit || saving || !row.enabled || nativeOnly}
+                          onCheckedChange={(v) => updateRow(row.key, { prompt_onboarding: v })}
+                          aria-label={`${row.label} prompt on onboarding`}
+                        />
+                      </div>
                     </td>
-                    <td className="px-4 py-3 text-center align-middle">
-                      <AdminPermissionSwitch
-                        checked={row.block_until_granted}
-                        disabled={!canEdit || saving || !row.enabled || nativeOnly}
-                        onCheckedChange={(v) => updateRow(row.key, { block_until_granted: v })}
-                        aria-label={`${row.label} block until granted`}
-                        title={
-                          nativeOnly
-                            ? 'Blocking applies on native app only'
-                            : undefined
-                        }
-                      />
+                    <td className="px-4 py-3 align-middle">
+                      <div className="flex justify-center">
+                        <AdminPermissionSwitch
+                          checked={row.block_until_granted}
+                          disabled={!canEdit || saving || !row.enabled || nativeOnly}
+                          onCheckedChange={(v) => updateRow(row.key, { block_until_granted: v })}
+                          aria-label={`${row.label} block until granted`}
+                          title={
+                            nativeOnly
+                              ? 'Blocking applies on native app only'
+                              : undefined
+                          }
+                        />
+                      </div>
                     </td>
                   </tr>
                 );
