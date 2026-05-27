@@ -5,21 +5,19 @@ import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppPermissionsTable, type AppPermissionPolicyPatch } from '@roam/admin-core';
 import type { AppPermissionPolicyRow } from '@roam/types';
+import { canWriteAppPermissionPolicy } from '@roam/admin-core';
 import {
   getAppPermissionPolicy,
   updateAppPermissionPolicy,
 } from '../services/ridesAdminService';
 
-const WRITE_ROLES = new Set(['platform_owner', 'superadmin', 'rides_admin']);
-
 interface OutletContext {
   session: Session;
-  role: string | undefined;
 }
 
 export function AppPermissionsPage() {
-  const { session, role } = useOutletContext<OutletContext>();
-  const canEdit = role ? WRITE_ROLES.has(role) : false;
+  const { session } = useOutletContext<OutletContext>();
+  const canEdit = canWriteAppPermissionPolicy(session.user, 'rider');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [permissions, setPermissions] = useState<AppPermissionPolicyRow[]>([]);

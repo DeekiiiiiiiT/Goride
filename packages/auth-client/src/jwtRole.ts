@@ -41,6 +41,12 @@ export function getJwtRoles(user: JwtUser): string[] {
   return primary ? [primary] : [];
 }
 
+/** True when any JWT role is in the allowed set (use for write gates with multi-role users). */
+export function hasAnyJwtRole(user: JwtUser, allowed: ReadonlySet<string> | string[]): boolean {
+  const allow = allowed instanceof Set ? allowed : new Set(allowed);
+  return getJwtRoles(user).some((r) => allow.has(r));
+}
+
 /** True if any JWT role grants access to the product admin portal. */
 export function hasProductAdminRole(user: JwtUser, product: ProductKey): boolean {
   const roles = getJwtRoles(user);

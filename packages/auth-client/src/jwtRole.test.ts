@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   canUseDriverSurface,
   getJwtRoles,
+  hasAnyJwtRole,
   hasProductAdminRole,
   jwtPrimaryRole,
 } from './jwtRole';
@@ -28,6 +29,16 @@ describe('jwtPrimaryRole', () => {
   it('falls back to user_metadata.role', () => {
     const user = { user_metadata: { role: 'driver' } };
     expect(jwtPrimaryRole(user)).toBe('driver');
+  });
+});
+
+describe('hasAnyJwtRole', () => {
+  it('matches a secondary role when primary is different', () => {
+    const user = {
+      app_metadata: { roles: ['rides_admin', 'driver_admin'] },
+    };
+    expect(hasAnyJwtRole(user, ['driver_admin'])).toBe(true);
+    expect(hasAnyJwtRole(user, ['fleet_admin'])).toBe(false);
   });
 });
 

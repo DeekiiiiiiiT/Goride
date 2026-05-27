@@ -4,6 +4,11 @@ export { AdminSidebar } from './components/AdminSidebar';
 export { AdminAuthGate } from './components/AdminAuthGate';
 export { AppPermissionsTable } from './components/AppPermissionsTable';
 export type { AppPermissionPolicyPatch } from './components/AppPermissionsTable';
+export {
+  canWriteAppPermissionPolicy,
+  RIDER_APP_PERMISSION_WRITE_ROLES,
+  DRIVER_APP_PERMISSION_WRITE_ROLES,
+} from './appPermissionPolicyAuth';
 
 // Hooks
 export { useAdminNav } from './hooks/useAdminNav';

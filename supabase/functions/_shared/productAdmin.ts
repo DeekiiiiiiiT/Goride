@@ -28,6 +28,8 @@ export type ProductAdminUser = {
   id: string;
   email: string;
   role: string;
+  /** All roles on the JWT (for write gates when primary role differs). */
+  roles: string[];
   isPlatformRole: boolean;
 };
 
@@ -80,6 +82,7 @@ export async function requireProductAdmin(
     id: user.id,
     email: user.email || "",
     role: matched,
+    roles,
     isPlatformRole: PLATFORM_ROLES.has(matched),
   };
 }

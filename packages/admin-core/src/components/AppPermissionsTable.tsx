@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Loader2, Save, Shield } from 'lucide-react';
-import { Switch } from '@roam/ui';
+import { AdminPermissionSwitch } from './AdminPermissionSwitch';
 import type {
   AppPermissionPlatform,
   AppPermissionPolicyRow,
@@ -88,6 +88,13 @@ export function AppPermissionsTable({
 
   return (
     <div className="space-y-6">
+      {!canEdit && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          View only — you can see policy values but cannot save. Ask an admin with write access for
+          this surface, or use an account whose JWT includes the required role.
+        </div>
+      )}
+
       <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-4 flex gap-3">
         <Shield className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" aria-hidden />
         <div className="text-sm text-slate-300 space-y-1">
@@ -173,7 +180,7 @@ export function AppPermissionsTable({
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center align-middle">
-                      <Switch
+                      <AdminPermissionSwitch
                         checked={row.enabled}
                         disabled={!canEdit || saving}
                         onCheckedChange={(v) => updateRow(row.key, { enabled: v })}
@@ -181,7 +188,7 @@ export function AppPermissionsTable({
                       />
                     </td>
                     <td className="px-4 py-3 text-center align-middle">
-                      <Switch
+                      <AdminPermissionSwitch
                         checked={row.prompt_onboarding}
                         disabled={!canEdit || saving || !row.enabled || nativeOnly}
                         onCheckedChange={(v) => updateRow(row.key, { prompt_onboarding: v })}
@@ -189,7 +196,7 @@ export function AppPermissionsTable({
                       />
                     </td>
                     <td className="px-4 py-3 text-center align-middle">
-                      <Switch
+                      <AdminPermissionSwitch
                         checked={row.block_until_granted}
                         disabled={!canEdit || saving || !row.enabled || nativeOnly}
                         onCheckedChange={(v) => updateRow(row.key, { block_until_granted: v })}

@@ -1,17 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
-import { jwtPrimaryRole } from '@roam/auth-client';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { AppPermissionsTable, type AppPermissionPolicyPatch } from '@roam/admin-core';
+import {
+  AppPermissionsTable,
+  canWriteAppPermissionPolicy,
+  type AppPermissionPolicyPatch,
+} from '@roam/admin-core';
 import type { AppPermissionPolicyRow } from '@roam/types';
 import {
   getDriverAppPermissionPolicy,
   updateDriverAppPermissionPolicy,
 } from '../services/ridesPermissionAdminService';
-
-const WRITE_ROLES = new Set(['platform_owner', 'superadmin', 'driver_admin']);
 
 interface OutletContext {
   session: Session;
@@ -19,8 +20,7 @@ interface OutletContext {
 
 export function DriverAppPermissionsPage() {
   const { session } = useOutletContext<OutletContext>();
-  const userRole = jwtPrimaryRole(session.user);
-  const canEdit = userRole ? WRITE_ROLES.has(userRole) : false;
+  const canEdit = canWriteAppPermissionPolicy(session.user, 'driver');
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

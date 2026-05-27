@@ -25,9 +25,9 @@ function productForSurface(surface: AppPermissionSurface): ProductKey {
   return surface === "driver" ? "driver" : "rides";
 }
 
-function canWrite(surface: AppPermissionSurface, role: string): boolean {
+function canWrite(surface: AppPermissionSurface, roles: string[]): boolean {
   const set = surface === "driver" ? DRIVER_WRITE_ROLES : RIDES_WRITE_ROLES;
-  return set.has(role);
+  return roles.some((r) => set.has(r));
 }
 
 export function registerAppPermissionAdminRoutes(
@@ -65,7 +65,7 @@ export function registerAppPermissionAdminRoutes(
     const adminUser = await requireProductAdmin(c, productForSurface(surface));
     if (adminUser instanceof Response) return adminUser;
 
-    if (!canWrite(surface, adminUser.role)) {
+    if (!canWrite(surface, adminUser.roles)) {
       return c.json({
         error: "forbidden",
         message: `${surface === "driver" ? "driver_admin" : "rides_admin"} role required`,
