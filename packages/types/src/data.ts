@@ -556,8 +556,6 @@ export type LedgerEventType =
   | 'payout_bank'
   | 'toll_support_adjustment'
   | 'other';
-  | 'adjustment'
-  | 'other';
 
 export type LedgerDirection = 'inflow' | 'outflow';
 
