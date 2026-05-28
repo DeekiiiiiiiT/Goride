@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Building2, Car, Loader2 } from 'lucide-react';
+import { ArrowLeft, Briefcase, Building2, Car, Loader2 } from 'lucide-react';
 import { Button } from '@roam/ui';
 import { Input } from '@roam/ui';
 import { Label } from '@roam/ui';
@@ -8,6 +8,7 @@ import { useDriver } from '../../contexts/DriverContext';
 import { DriverOnboardingPage } from '../auth/DriverOnboardingPage';
 import { ThemeToggleButton } from '../layout/ThemeToggleButton';
 import { api } from '../../services/api';
+import { defaultRoamFleetSignupUrl } from '../../utils/googleDriverSignup';
 
 function OnboardingShellHeader({ onBack }: { onBack?: () => void }) {
   const { signOut } = useAuth();
@@ -38,7 +39,10 @@ function OnboardingShellHeader({ onBack }: { onBack?: () => void }) {
   );
 }
 
-type Step = 'mode' | 'fleet' | 'profile';
+type Step = 'mode' | 'fleet' | 'fleet_owner_cta' | 'profile';
+
+const archetypeCardClass =
+  'flex flex-col items-start gap-2 rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-emerald-500/40 hover:shadow-md dark:border-slate-700 dark:bg-slate-800/80 dark:hover:border-emerald-500/30';
 
 /**
  * Minimal hybrid flow: choose fleet vs independent, optional fleet UUID join, then shared profile wizard.
@@ -90,14 +94,44 @@ export function DriverHybridOnboarding() {
     return <DriverOnboardingPage />;
   }
 
+  if (step === 'fleet_owner_cta') {
+    const fleetSignupUrl = defaultRoamFleetSignupUrl();
+    return (
+      <div className="flex min-h-screen flex-col bg-gradient-to-br from-slate-100 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+        <OnboardingShellHeader onBack={() => setStep('mode')} />
+        <div className="mx-auto w-full max-w-sm px-4 pb-10 pt-2">
+          <h1 className="text-center text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Roam Fleet</h1>
+          <p className="mt-2 text-center text-sm text-slate-600 dark:text-slate-300">
+            Create your fleet organization in the Roam Fleet portal. You can still finish driver profile setup here
+            afterward if you also drive.
+          </p>
+          <div className="mt-8 space-y-3 rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-xl dark:border-slate-700/60 dark:bg-slate-800/60">
+            <a
+              href={fleetSignupUrl}
+              className="flex w-full items-center justify-center rounded-lg border border-emerald-600 bg-emerald-600 py-3 text-sm font-semibold text-white hover:bg-emerald-500"
+            >
+              Create fleet on Roam Fleet
+            </a>
+            <Button type="button" variant="ghost" className="w-full" onClick={goProfile}>
+              Skip — continue as driver only
+            </Button>
+            <Button type="button" variant="ghost" className="w-full" onClick={() => setStep('mode')}>
+              Back
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (step === 'fleet') {
     return (
       <div className="flex min-h-screen flex-col bg-gradient-to-br from-slate-100 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
         <OnboardingShellHeader onBack={() => setStep('mode')} />
         <div className="mx-auto w-full max-w-sm px-4 pb-10 pt-2">
-          <h1 className="text-center text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Join your fleet</h1>
+          <h1 className="text-center text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Join a fleet</h1>
           <p className="mt-2 text-center text-sm text-slate-600 dark:text-slate-300">
-            Paste the organization ID your fleet admin shared with you.
+            Enter the fleet organization ID your fleet admin gave you.
           </p>
           <div className="mt-8 rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-xl dark:border-slate-700/60 dark:bg-slate-800/60">
             {joinError && (
@@ -137,23 +171,26 @@ export function DriverHybridOnboarding() {
           Choose one to continue. You can finish documents on the next step.
         </p>
         <div className="mt-8 grid gap-4">
-          <button
-            type="button"
-            onClick={() => setStep('fleet')}
-            className="flex flex-col items-start gap-2 rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-emerald-500/40 hover:shadow-md dark:border-slate-700 dark:bg-slate-800/80 dark:hover:border-emerald-500/30"
-          >
-            <Building2 className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
-            <span className="text-base font-semibold text-slate-900 dark:text-white">With a fleet</span>
-            <span className="text-sm text-slate-600 dark:text-slate-300">I have a fleet ID from my company.</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => goProfile()}
-            className="flex flex-col items-start gap-2 rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-emerald-500/40 hover:shadow-md dark:border-slate-700 dark:bg-slate-800/80 dark:hover:border-emerald-500/30"
-          >
+          <button type="button" onClick={() => goProfile()} className={archetypeCardClass}>
             <Car className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
-            <span className="text-base font-semibold text-slate-900 dark:text-white">On my own</span>
-            <span className="text-sm text-slate-600 dark:text-slate-300">Independent driver — continue to profile setup.</span>
+            <span className="text-base font-semibold text-slate-900 dark:text-white">Independent driver</span>
+            <span className="text-sm text-slate-600 dark:text-slate-300">
+              Not tied to a fleet organization — continue to profile setup.
+            </span>
+          </button>
+          <button type="button" onClick={() => setStep('fleet')} className={archetypeCardClass}>
+            <Building2 className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+            <span className="text-base font-semibold text-slate-900 dark:text-white">Join a fleet</span>
+            <span className="text-sm text-slate-600 dark:text-slate-300">
+              Enter the fleet organization ID your fleet admin gave you.
+            </span>
+          </button>
+          <button type="button" onClick={() => setStep('fleet_owner_cta')} className={archetypeCardClass}>
+            <Briefcase className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+            <span className="text-base font-semibold text-slate-900 dark:text-white">Fleet operator / owner</span>
+            <span className="text-sm text-slate-600 dark:text-slate-300">
+              Create your fleet on Roam Fleet — manage drivers and operations.
+            </span>
           </button>
         </div>
       </div>

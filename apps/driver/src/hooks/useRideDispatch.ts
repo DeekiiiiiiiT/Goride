@@ -14,6 +14,8 @@ import { slugFromBodyLabel } from '../components/rides/rideDispatchUtils';
 import { useActiveRideTracking } from './useActiveRideTracking';
 import { openExternalNavigation } from '../utils/rideNavigation';
 import { useDriverPermissionPolicy } from './usePermissionPolicy';
+import { useActiveRideRecovery } from '../contexts/ActiveRideRecoveryContext';
+import { persistActiveRideId } from '../utils/driverActiveRideSession';
 import {
   checkGeolocationGranted,
   isBlockedByPolicy,
@@ -45,6 +47,8 @@ export function useRideDispatch() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const { trackingError, gpsAccuracyM, isTracking } = useActiveRideTracking(activeRide);
+  const { activeRide: recoveredRide, recoveryLoaded, setActiveRide: setRecoveredRide } =
+    useActiveRideRecovery();
   const { permissions } = useDriverPermissionPolicy();
   const [permissionOnboardingOpen, setPermissionOnboardingOpen] = useState(false);
   const [locationGoOnlineBlocked, setLocationGoOnlineBlocked] = useState(false);
@@ -72,6 +76,21 @@ export function useRideDispatch() {
       );
     })();
   }, [permissions]);
+
+  useEffect(() => {
+    if (!recoveryLoaded || !recoveredRide || activeRide) return;
+    setActiveRide(recoveredRide);
+    setOnline(true);
+  }, [recoveryLoaded, recoveredRide, activeRide]);
+
+  const syncActiveRide = useCallback(
+    (ride: RideRequestRow | null) => {
+      setActiveRide(ride);
+      setRecoveredRide(ride);
+      persistActiveRideId(ride?.id ?? null);
+    },
+    [setRecoveredRide],
+  );
 
   useEffect(() => {
     audioRef.current = new Audio(OFFER_SOUND_URL);
@@ -163,13 +182,16 @@ export function useRideDispatch() {
   const pollActiveRide = useCallback(async (id: string) => {
     try {
       const { ride } = await ridesDriverGetRequest(id);
-      setActiveRide(ride);
-      if (ride.status === 'completed' || ride.status === 'cancelled') return false;
+      syncActiveRide(ride);
+      if (ride.status === 'completed' || ride.status === 'cancelled') {
+        syncActiveRide(null);
+        return false;
+      }
       return true;
     } catch {
       return false;
     }
-  }, []);
+  }, [syncActiveRide]);
 
   useEffect(() => {
     if (!online) return;
@@ -281,7 +303,7 @@ export function useRideDispatch() {
         },
         (payload) => {
           const row = payload.new as RideRequestRow;
-          if (row?.id) setActiveRide(row);
+          if (row?.id) syncActiveRide(row);
         },
       )
       .subscribe();
@@ -289,7 +311,7 @@ export function useRideDispatch() {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [activeRide?.id]);
+  }, [activeRide?.id, syncActiveRide]);
 
   useEffect(() => {
     const handleUnload = () => {
@@ -351,7 +373,7 @@ export function useRideDispatch() {
     async (offer: DriverOfferWithRide) => {
       try {
         const { ride } = await ridesDriverAcceptOffer(offer.id);
-        setActiveRide(ride);
+        syncActiveRide(ride);
         toast.success('Ride assigned — head to pickup');
         openExternalNavigation({
           lat: ride.pickup_lat,
@@ -363,7 +385,7 @@ export function useRideDispatch() {
         toast.error(e instanceof Error ? e.message : 'Could not accept');
       }
     },
-    [refreshOffers],
+    [refreshOffers, syncActiveRide],
   );
 
   const decline = useCallback(
@@ -383,7 +405,7 @@ export function useRideDispatch() {
     if (!activeRide) return;
     try {
       const { ride } = await ridesDriverTransition(activeRide.id, { status, reason });
-      setActiveRide(ride);
+      syncActiveRide(ride);
       if (status === 'on_trip') {
         openExternalNavigation({
           lat: ride.dropoff_lat,
@@ -392,10 +414,11 @@ export function useRideDispatch() {
         });
       }
       if (status === 'completed') {
+        syncActiveRide(null);
         window.dispatchEvent(new Event('roam-driver-trip-completed'));
         toast.success('Trip completed');
       } else if (status === 'cancelled') {
-        setActiveRide(null);
+        syncActiveRide(null);
         toast.message('Ride cancelled');
       } else {
         toast.success('Updated');
@@ -404,7 +427,7 @@ export function useRideDispatch() {
       toast.error(e instanceof Error ? e.message : 'Transition failed');
       throw e;
     }
-  }, [activeRide]);
+  }, [activeRide, syncActiveRide]);
 
   return {
     online,

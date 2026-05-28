@@ -9,6 +9,7 @@ import { DriverHybridOnboarding } from './components/onboarding/DriverHybridOnbo
 import { DriverGoogleSignupWizard } from './components/onboarding/DriverGoogleSignupWizard';
 import { DriverShell } from './components/layout/DriverShell';
 import { AppErrorBoundary } from './components/layout/AppErrorBoundary';
+import { ActiveRideRecoveryProvider, useActiveRideRecovery } from './contexts/ActiveRideRecoveryContext';
 import { needsGoogleExtendedSignup } from './utils/googleDriverSignup';
 import { BrowserRouter } from 'react-router-dom';
 import { DriverAdminPortal } from './admin/DriverAdminPortal';
@@ -35,12 +36,17 @@ function AuthLoadingScreen() {
   );
 }
 
-function AuthenticatedDriverRoute() {
+function AuthenticatedDriverRouteInner() {
   const { user } = useAuth();
   const { profile, loading } = useDriver();
+  const { hasActiveRide, recoveryLoaded } = useActiveRideRecovery();
 
-  if (loading) {
+  if (loading || !recoveryLoaded) {
     return <AuthLoadingScreen />;
+  }
+
+  if (hasActiveRide) {
+    return <DriverShell forcePassengerRides />;
   }
 
   if (needsGoogleExtendedSignup(user, profile)) {
@@ -56,6 +62,14 @@ function AuthenticatedDriverRoute() {
   }
 
   return <DriverShell />;
+}
+
+function AuthenticatedDriverRoute() {
+  return (
+    <ActiveRideRecoveryProvider>
+      <AuthenticatedDriverRouteInner />
+    </ActiveRideRecoveryProvider>
+  );
 }
 
 function AppContent() {

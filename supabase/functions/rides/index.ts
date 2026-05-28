@@ -36,6 +36,7 @@ import {
 } from "../_shared/driverModeFilter.ts";
 import {
   aggregateDriverEarnings,
+  getDriverActiveRideRequest,
   listDriverRideRequests,
   type DriverEarningsPeriod,
 } from "../_shared/driverRideQueries.ts";
@@ -1380,6 +1381,19 @@ app.get("/v1/drivers/me/trips", async (c) => {
   }
 
   return c.json(result);
+});
+
+app.get("/v1/drivers/me/active-ride", async (c) => {
+  const auth = await requireUser(c.req.header("Authorization"));
+  if ("error" in auth) return c.json({ error: auth.error }, auth.status);
+  if (ridesUserSurfaceRole(auth.user) !== "driver") return jsonEdgeForbidden(c, "forbidden_role");
+
+  const result = await getDriverActiveRideRequest(svc(), pubSvc(), auth.user.id);
+  if ("error" in result) {
+    return c.json({ error: "active_ride_failed", message: result.error }, 500);
+  }
+
+  return c.json({ ride: result });
 });
 
 app.get("/v1/drivers/me/earnings", async (c) => {

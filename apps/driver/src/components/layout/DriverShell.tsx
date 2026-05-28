@@ -30,13 +30,13 @@ import { TaxCenter } from '../independent/TaxCenter';
 import { InsuranceCenter } from '../independent/InsuranceCenter';
 import { RideDispatchPage } from '../rides/RideDispatchPage';
 
-export function DriverShell() {
+export function DriverShell({ forcePassengerRides = false }: { forcePassengerRides?: boolean }) {
   const { mode, isFleetDriver, isIndependentDriver, fleet, loading } = useDriver();
   const { user, signOut } = useAuth();
   const { driverRecord } = useCurrentDriver();
   const { needsCheckIn, isLoading: checkInHookLoading, submitCheckIn } = useWeeklyCheckIn(driverRecord?.id);
 
-  const [currentPage, setCurrentPage] = useState('dashboard');
+  const [currentPage, setCurrentPage] = useState(forcePassengerRides ? 'passenger-rides' : 'dashboard');
   const [menuOpen, setMenuOpen] = useState(false);
   const [checkInOpen, setCheckInOpen] = useState(false);
   const [checkInSubmitting, setCheckInSubmitting] = useState(false);

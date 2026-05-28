@@ -47,6 +47,12 @@ export function RideDispatchPage() {
           isTracking={isTracking}
         />
       )}
+
+      {activeRide && !online && (
+        <p className="text-xs text-amber-600 dark:text-amber-400">
+          Trip in progress — location sync resumes when you are online.
+        </p>
+      )}
     </div>
   );
 }

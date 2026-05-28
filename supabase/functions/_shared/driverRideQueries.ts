@@ -143,6 +143,46 @@ async function listFromTable(
   };
 }
 
+const DRIVER_ACTIVE_RIDE_STATUSES = [
+  "driver_assigned",
+  "driver_en_route_pickup",
+  "driver_arrived_pickup",
+  "on_trip",
+];
+
+async function getActiveRideFromTable(
+  db: SupabaseClient,
+  table: string,
+  driverUserId: string,
+): Promise<Record<string, unknown> | null | { error: string }> {
+  const { data, error } = await db
+    .from(table)
+    .select("*")
+    .eq("assigned_driver_user_id", driverUserId)
+    .in("status", DRIVER_ACTIVE_RIDE_STATUSES)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) return { error: error.message };
+  return data as Record<string, unknown> | null;
+}
+
+/** Current in-progress trip for a driver (if any). */
+export async function getDriverActiveRideRequest(
+  ridesDb: SupabaseClient,
+  publicDb: SupabaseClient,
+  driverUserId: string,
+): Promise<Record<string, unknown> | null | { error: string }> {
+  const native = await getActiveRideFromTable(ridesDb, "ride_requests", driverUserId);
+  if (!("error" in native)) return native;
+
+  const pub = await getActiveRideFromTable(publicDb, "rides_ride_requests", driverUserId);
+  if (!("error" in pub)) return pub;
+
+  return { error: pub.error };
+}
+
 /** List trips from rides schema, falling back to public.rides_ride_requests. */
 export async function listDriverRideRequests(
   ridesDb: SupabaseClient,

@@ -98,6 +98,8 @@ export const DriverProvider = ({ children }: { children: React.ReactNode }) => {
 
       if (error && error.code !== 'PGRST116') {
         console.error('Error fetching driver profile:', error);
+        setLoading(false);
+        return;
       }
 
       if (data) {

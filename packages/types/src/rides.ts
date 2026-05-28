@@ -12,6 +12,18 @@ export type RideRequestStatus =
   | 'completed'
   | 'cancelled';
 
+/** Assigned to driver and not yet completed/cancelled. */
+export const DRIVER_ACTIVE_RIDE_STATUSES: readonly RideRequestStatus[] = [
+  'driver_assigned',
+  'driver_en_route_pickup',
+  'driver_arrived_pickup',
+  'on_trip',
+] as const;
+
+export function isDriverActiveRideStatus(status: RideRequestStatus | string): boolean {
+  return (DRIVER_ACTIVE_RIDE_STATUSES as readonly string[]).includes(status);
+}
+
 export type DriverOfferStatus = 'pending' | 'accepted' | 'declined' | 'expired' | 'superseded';
 
 export type RidePaymentMethod = 'cash' | 'card';
@@ -87,6 +99,10 @@ export interface DriverMyTripsResponse {
   total: number;
   page: number;
   limit: number;
+}
+
+export interface DriverActiveRideResponse {
+  ride: RideRequestRow | null;
 }
 
 export interface DriverEarningsSummary {

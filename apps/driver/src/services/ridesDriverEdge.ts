@@ -1,6 +1,7 @@
 import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
 import { supabase } from '../utils/supabase/client';
 import type {
+  DriverActiveRideResponse,
   DriverEarningsPeriod,
   DriverEarningsSummary,
   DriverMyTripsResponse,
@@ -51,6 +52,12 @@ export async function ridesDriverPresence(body: DriverPresenceBody): Promise<voi
 
 export async function ridesDriverPendingOffers(): Promise<{ offers: DriverOfferWithRide[] }> {
   const res = await fetch(`${base}/v1/drivers/offers`, { headers: await ridesHeaders() });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function ridesDriverActiveRide(): Promise<DriverActiveRideResponse> {
+  const res = await fetch(`${base}/v1/drivers/me/active-ride`, { headers: await ridesHeaders() });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
