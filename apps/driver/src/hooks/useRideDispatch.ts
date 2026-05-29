@@ -15,7 +15,7 @@ import { useActiveRideTracking } from './useActiveRideTracking';
 import { openExternalNavigation } from '../utils/rideNavigation';
 import { useDriverPermissionPolicy } from './usePermissionPolicy';
 import { useActiveRideRecovery } from '../contexts/ActiveRideRecoveryContext';
-import { persistActiveRideId } from '../utils/driverActiveRideSession';
+import { mergeDriverActiveRide, normalizeDriverRide } from '../utils/mergeActiveRide';
 import {
   checkGeolocationGranted,
   isBlockedByPolicy,
@@ -51,9 +51,18 @@ export function useRideDispatch() {
 
   const syncActiveRide = useCallback(
     (ride: RideRequestRow | null) => {
-      setActiveRide(ride);
-      setRecoveredRide(ride);
-      persistActiveRideId(ride?.id ?? null);
+      if (!ride) {
+        setActiveRide(null);
+        setRecoveredRide(null);
+        persistActiveRideId(null);
+        return;
+      }
+      setActiveRide((prev) => {
+        const merged = mergeDriverActiveRide(prev, ride);
+        setRecoveredRide(merged);
+        persistActiveRideId(merged.id);
+        return merged;
+      });
     },
     [setRecoveredRide],
   );
@@ -304,7 +313,7 @@ export function useRideDispatch() {
         },
         (payload) => {
           const row = payload.new as RideRequestRow;
-          if (row?.id) syncActiveRide(row);
+          if (row?.id) syncActiveRide(normalizeDriverRide(row));
         },
       )
       .subscribe();

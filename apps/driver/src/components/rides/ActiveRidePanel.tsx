@@ -118,9 +118,7 @@ export function ActiveRidePanel({
   isTracking,
   waitTimeInfo,
 }: ActiveRidePanelProps) {
-  const pinVerificationRequired = Boolean(
-    ride.pin_verification_pending ?? (ride.verification_pin && !ride.pin_verified_at),
-  );
+  const pinVerificationRequired = Boolean(ride.pin_verification_pending);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState(CANCEL_REASONS[0].value);
   const [advancing, setAdvancing] = useState(false);
@@ -233,14 +231,14 @@ export function ActiveRidePanel({
         {ride.status === 'driver_arrived_pickup' && (
           <>
             {waitTimeInfo && <WaitTimeDisplay waitTime={waitTimeInfo} />}
-            {pinVerificationRequired && !ride.pin_verified_at && (
+            {pinVerificationRequired && !ride.pin_verified_at ? (
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
                 <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
                   PIN verification required to start trip
                 </p>
               </div>
-            )}
+            ) : null}
             <SwipeToStart
               label={pinVerificationRequired && !ride.pin_verified_at ? "Swipe to verify PIN" : "Swipe to start trip"}
               disabled={advancing}

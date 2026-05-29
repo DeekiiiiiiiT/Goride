@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ArrowLeft, Loader2, Clock, AlertCircle } from 'lucide-react';
-import type { RideRequestStatus } from '@roam/types/rides';
+import type { RideRequestStatus, RideRequestRow } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
 import {
   AlertDialog,
@@ -61,8 +61,7 @@ function showLiveMap(status: RideRequestStatus | undefined): boolean {
   return Boolean(status && LIVE_MAP_STATUSES.includes(status));
 }
 
-const RIDE_SYNC_MS = 30_000;
-const RIDE_MATCHING_SYNC_MS = 5_000;
+const RIDE_SYNC_MS = 5_000;
 
 interface WaitTimeInfo {
   wait_time_charge_enabled?: boolean;
@@ -169,10 +168,12 @@ export default function RidePage() {
     queryKey: ['ride', id],
     enabled: Boolean(id),
     queryFn: () => ridesGetRequest(id!),
+    staleTime: 0,
+    refetchOnWindowFocus: true,
     refetchInterval: (q) => {
       const st = q.state.data?.ride.status;
       if (!st || st === 'completed' || st === 'cancelled') return false;
-      return st === 'matching' ? RIDE_MATCHING_SYNC_MS : RIDE_SYNC_MS;
+      return RIDE_SYNC_MS;
     },
   });
 
@@ -218,14 +219,30 @@ export default function RidePage() {
           table: 'ride_requests',
           filter: `id=eq.${id}`,
         },
-        () => {
+        (payload) => {
+          const row = payload.new as RideRequestRow;
+          if (row?.id) {
+            queryClient.setQueryData(
+              ['ride', id],
+              (prev: { ride: RideRequestRow; offers: unknown[] } | undefined) =>
+                prev ? { ...prev, ride: { ...prev.ride, ...row } } : prev,
+            );
+          }
           void refetch();
           void queryClient.invalidateQueries({ queryKey: ['ride-live', id] });
         },
       )
       .subscribe();
 
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void refetch();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
     return () => {
+      document.removeEventListener('visibilitychange', onVisible);
       void supabase.removeChannel(channel);
     };
   }, [id, refetch, queryClient]);

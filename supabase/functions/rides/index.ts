@@ -1237,7 +1237,9 @@ app.get("/v1/requests/:id", async (c) => {
     return jsonEdgeForbidden(c, "forbidden");
   }
   const reqId = crypto.randomUUID();
-  await reconcileMatching(id, reqId);
+  if (ride.status === "matching") {
+    await reconcileMatching(id, reqId);
+  }
   const fresh = await loadRideRequestById(id);
   const offers = await loadDriverOffersForRide(id);
 
