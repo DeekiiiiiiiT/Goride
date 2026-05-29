@@ -1,18 +1,26 @@
--- Optional: reference for scheduling matching reconciliation.
--- Requires RIDES_CRON_SECRET on the rides Edge function (redeploy after auth header fix).
-
+-- Rides matching hygiene + wave reconcile (hosted Supabase).
+--
+-- A) Database (automatic after migration 20260529100000_rides_matching_hygiene.sql):
+--    pg_cron job `rides-matching-hygiene` runs every minute:
+--    SELECT public.rides_run_matching_hygiene();
+--    Verify: SELECT * FROM cron.job WHERE jobname = 'rides-matching-hygiene';
+--
+-- B) Edge reconcile (recommended every 30–60s for wave advancement when drivers exist):
+--    Requires RIDES_CRON_SECRET on the rides Edge function.
+--
 -- curl example (use your anon key + cron secret; rotate secret if ever exposed):
--- curl -X POST "https://csfllzzastacofsvcdsc.supabase.co/functions/v1/rides/v1/internal/reconcile-matching" \
+-- curl -X POST "https://YOUR_PROJECT.supabase.co/functions/v1/rides/v1/internal/reconcile-matching" \
 --   -H "Authorization: Bearer YOUR_SUPABASE_ANON_KEY" \
 --   -H "apikey: YOUR_SUPABASE_ANON_KEY" \
 --   -H "X-Rides-Cron-Secret: YOUR_RIDES_CRON_SECRET"
-
--- Expected response: {"ok":true,"processed":0}
-
+--
+-- Expected response: {"ok":true,"processed":N,"hygiene":{"expired_offers":0,"cancelled_rides":0,"ran_at":"..."}}
+--
 -- Active ride watchdog (stale GPS alerts + optional no-show cancel):
--- curl -X POST "https://csfllzzastacofsvcdsc.supabase.co/functions/v1/rides/v1/internal/reconcile-active-rides" \
+-- curl -X POST "https://YOUR_PROJECT.supabase.co/functions/v1/rides/v1/internal/reconcile-active-rides" \
 --   -H "Authorization: Bearer YOUR_SUPABASE_ANON_KEY" \
 --   -H "apikey: YOUR_SUPABASE_ANON_KEY" \
 --   -H "X-Rides-Cron-Secret: YOUR_RIDES_CRON_SECRET"
-
--- Expected response: {"ok":true,"rides":0,"no_show_cancelled":0,"stale_alerts":0}
+--
+-- Manual one-off hygiene (SQL editor):
+-- SELECT public.rides_run_matching_hygiene();

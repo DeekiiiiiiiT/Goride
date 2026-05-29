@@ -81,6 +81,14 @@ function parsePatch(
     patch.driver_location_max_age_minutes = Math.round(n);
   }
 
+  if (body.max_matching_duration_minutes !== undefined) {
+    const n = Number(body.max_matching_duration_minutes);
+    if (!Number.isFinite(n) || n < 2 || n > 120) {
+      return { ok: false, error: "invalid_max_matching_duration_minutes" };
+    }
+    patch.max_matching_duration_minutes = Math.round(n);
+  }
+
   if (body.quote_driver_radius_km !== undefined) {
     const n = Number(body.quote_driver_radius_km);
     if (!Number.isFinite(n) || n < 1 || n > 50) {

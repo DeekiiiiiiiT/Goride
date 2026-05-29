@@ -111,6 +111,7 @@ export function DispatchSettingsForm({ accessToken, role }: DispatchSettingsForm
         no_show_cancel_minutes: form.no_show_cancel_minutes,
         gps_max_accuracy_m_for_arrival: form.gps_max_accuracy_m_for_arrival,
         no_show_auto_cancel_enabled: form.no_show_auto_cancel_enabled,
+        max_matching_duration_minutes: form.max_matching_duration_minutes,
       });
       setForm(settings);
       toast.success('Dispatch settings saved');
@@ -169,6 +170,25 @@ export function DispatchSettingsForm({ accessToken, role }: DispatchSettingsForm
               }
               className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60"
             />
+          </label>
+          <label className="block space-y-1.5 sm:col-span-2">
+            <span className="text-xs text-slate-400 uppercase tracking-wide">
+              Max matching duration (minutes)
+            </span>
+            <input
+              type="number"
+              min={2}
+              max={120}
+              disabled={!canEdit}
+              value={form.max_matching_duration_minutes}
+              onChange={(e) =>
+                setForm({ ...form, max_matching_duration_minutes: Number(e.target.value) })
+              }
+              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60"
+            />
+            <p className="text-xs text-slate-500">
+              System auto-cancels rides still matching after this time (orphan backstop).
+            </p>
           </label>
           <label className="block space-y-1.5 sm:col-span-2">
             <span className="text-xs text-slate-400 uppercase tracking-wide">

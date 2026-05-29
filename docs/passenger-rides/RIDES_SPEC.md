@@ -44,7 +44,13 @@ Canonical statuses (`rides.ride_requests.status`):
 4. Emit up to **`max_offers = 8`** **`pending`** rows in **`rides.driver_offers`** per wave with **`expires_at = now + driver_offer_timeout_seconds`** (default **15**).
 5. **Fairness (future hardening)**: rotate ranking seeds per wave / penalize chronic declines — tracked via **`wave`** and audit payloads.
 
-**GET reconcile**: expired **`pending`** offers are marked **`expired`**; if still **`matching`** and no **`pending`** offers remain, advance to next wave or terminal **`cancelled`** with reason **`no_drivers_available`** after **`max_waves`** (**3**).
+**GET reconcile**: expired **`pending`** offers are marked **`expired`**; if still **`matching`** and no **`pending`** offers remain, advance through waves in one pass (empty waves fast-forward) or terminal **`cancelled`** with reason **`no_drivers_available`** after **`max_waves`** (**3**). Rides still **`matching`** after **`max_matching_duration_minutes`** (default **15**) are auto-cancelled with **`matching_timeout`**.
+
+**Hygiene (DB + Edge)**:
+
+1. **`public.rides_run_matching_hygiene()`** (pg_cron every minute when available): expires all overdue **`pending`** offers; cancels stale **`matching`** rides past **`max_matching_duration_minutes`**.
+2. **`POST /v1/internal/reconcile-matching`**: runs hygiene RPC, then reconciles every **`matching`** ride (schedule every **30–60s**).
+3. Rider **`GET /v1/requests/:id`**: reconciles on each poll (**5s** while **`matching`**, **30s** otherwise).
 
 ---
 

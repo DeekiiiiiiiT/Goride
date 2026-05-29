@@ -28,6 +28,7 @@ export type DispatchSettings = {
   no_show_cancel_minutes: number;
   gps_max_accuracy_m_for_arrival: number;
   no_show_auto_cancel_enabled: boolean;
+  max_matching_duration_minutes: number;
   updated_at?: string;
   updated_by?: string | null;
 };
@@ -54,6 +55,7 @@ export const DEFAULT_DISPATCH_SETTINGS: DispatchSettings = {
   no_show_cancel_minutes: 5,
   gps_max_accuracy_m_for_arrival: 50,
   no_show_auto_cancel_enabled: false,
+  max_matching_duration_minutes: 15,
 };
 
 const CACHE_TTL_MS = 30_000;
@@ -156,6 +158,16 @@ export function rowToDispatchSettings(row: Record<string, unknown>): DispatchSet
       Math.max(10, Number(row.gps_max_accuracy_m_for_arrival ?? DEFAULT_DISPATCH_SETTINGS.gps_max_accuracy_m_for_arrival)),
     ),
     no_show_auto_cancel_enabled: row.no_show_auto_cancel_enabled === true,
+    max_matching_duration_minutes: Math.min(
+      120,
+      Math.max(
+        2,
+        Number(
+          row.max_matching_duration_minutes ??
+            DEFAULT_DISPATCH_SETTINGS.max_matching_duration_minutes,
+        ),
+      ),
+    ),
     updated_at: typeof row.updated_at === "string" ? row.updated_at : undefined,
     updated_by: typeof row.updated_by === "string" ? row.updated_by : null,
   };

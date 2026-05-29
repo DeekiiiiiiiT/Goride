@@ -25,6 +25,7 @@ const defaultSettings: DispatchSettings = {
   no_show_cancel_minutes: 5,
   gps_max_accuracy_m_for_arrival: 50,
   no_show_auto_cancel_enabled: false,
+  max_matching_duration_minutes: 15,
 };
 
 function mockDb(liveState: Record<string, unknown> = {}) {

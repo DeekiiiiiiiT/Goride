@@ -648,6 +648,7 @@ export interface DispatchSettingsDto {
   no_show_cancel_minutes: number;
   gps_max_accuracy_m_for_arrival: number;
   no_show_auto_cancel_enabled: boolean;
+  max_matching_duration_minutes: number;
   updated_at?: string;
   updated_by?: string | null;
 }

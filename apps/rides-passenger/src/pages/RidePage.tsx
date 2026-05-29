@@ -62,6 +62,7 @@ function showLiveMap(status: RideRequestStatus | undefined): boolean {
 }
 
 const RIDE_SYNC_MS = 30_000;
+const RIDE_MATCHING_SYNC_MS = 5_000;
 
 export default function RidePage() {
   const { id } = useParams<{ id: string }>();
@@ -78,7 +79,7 @@ export default function RidePage() {
     refetchInterval: (q) => {
       const st = q.state.data?.ride.status;
       if (!st || st === 'completed' || st === 'cancelled') return false;
-      return RIDE_SYNC_MS;
+      return st === 'matching' ? RIDE_MATCHING_SYNC_MS : RIDE_SYNC_MS;
     },
   });
 

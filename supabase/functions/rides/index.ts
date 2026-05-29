@@ -29,7 +29,9 @@ import {
   driverLocationMaxAgeMs,
   getWaveRadiusKm,
   loadDispatchSettings,
+  type DispatchSettings,
 } from "./fare/dispatchSettings.ts";
+import { isMatchingTimedOut } from "./fare/matchingHygiene.ts";
 import {
   getEligibleDriverUserIds,
   isDriverEligibleForDispatch,
@@ -587,40 +589,85 @@ async function expirePendingOffers(rideId: string) {
   await expirePendingOffersForRide(rideId, nowIso);
 }
 
-async function reconcileMatching(rideId: string, requestId?: string) {
-  const db = svc();
-  await expirePendingOffers(rideId);
-  const ride = await loadRideRequestById(rideId);
-  if (!ride || ride.status !== "matching") return;
+/** Max reconcile loop iterations (empty-wave fast-forward safety cap). */
+const RECONCILE_WAVE_LOOP_CAP = 8;
 
-  const offerRows = await loadDriverOffersForRide(rideId, false);
-  if (offerRows.some((row) => row.status === "pending")) return;
-
-  let dispatchSettings = DEFAULT_DISPATCH_SETTINGS;
+async function loadDispatchSettingsForMatching(): Promise<DispatchSettings> {
   try {
     const { db: adminDb, tables } = await getRidesAdminDb();
-    dispatchSettings = await loadDispatchSettings(adminDb, tables);
+    return await loadDispatchSettings(adminDb, tables);
   } catch {
-    /* use defaults */
+    return DEFAULT_DISPATCH_SETTINGS;
   }
+}
 
+async function cancelMatchingRideSystem(
+  rideId: string,
+  ride: Record<string, unknown>,
+  cancelReason: "no_drivers_available" | "matching_timeout",
+  extraAudit: Record<string, unknown>,
+  requestId?: string,
+): Promise<void> {
   const wave = Number(ride.matching_wave ?? 0);
-  if (wave >= dispatchSettings.max_match_waves) {
-    await patchRideRequest(rideId, {
-      status: "cancelled",
-      cancelled_by: "system",
-      cancel_reason: "no_drivers_available",
-      updated_at: new Date().toISOString(),
-    });
-    const cellKey = gridCellKey(Number(ride.pickup_lat), Number(ride.pickup_lng));
-    await bumpSurgeDemand(cellKey, -1);
-    await audit(rideId, undefined, "ride_auto_cancelled_no_drivers", { wave });
-    logLine({ event: "ride_auto_cancelled", ride_id: rideId, request_id: requestId });
-    await handleTerminalRideLedgerAndSync(rideId);
+  const patched = await patchRideRequest(rideId, {
+    status: "cancelled",
+    cancelled_by: "system",
+    cancel_reason: cancelReason,
+    updated_at: new Date().toISOString(),
+  });
+  if (!patched) {
+    logLine({ event: "cancel_matching_patch_failed", ride_id: rideId, cancel_reason: cancelReason });
     return;
   }
+  const cellKey = gridCellKey(Number(ride.pickup_lat), Number(ride.pickup_lng));
+  await bumpSurgeDemand(cellKey, -1);
+  const eventType = cancelReason === "matching_timeout"
+    ? "ride_auto_cancelled_matching_timeout"
+    : "ride_auto_cancelled_no_drivers";
+  await audit(rideId, undefined, eventType, { wave, ...extraAudit });
+  logLine({
+    event: cancelReason === "matching_timeout" ? "ride_matching_timeout" : "ride_auto_cancelled",
+    ride_id: rideId,
+    request_id: requestId ?? null,
+    wave,
+  });
+  await handleTerminalRideLedgerAndSync(rideId);
+}
 
-  await runMatchingWave(rideId, ride, wave + 1, requestId);
+async function reconcileMatching(rideId: string, requestId?: string) {
+  await expirePendingOffers(rideId);
+
+  const dispatchSettings = await loadDispatchSettingsForMatching();
+
+  for (let iter = 0; iter < RECONCILE_WAVE_LOOP_CAP; iter++) {
+    const ride = await loadRideRequestById(rideId);
+    if (!ride || ride.status !== "matching") return;
+
+    if (isMatchingTimedOut(ride, dispatchSettings)) {
+      await cancelMatchingRideSystem(rideId, ride, "matching_timeout", {}, requestId);
+      return;
+    }
+
+    const offerRows = await loadDriverOffersForRide(rideId, false);
+    if (offerRows.some((row) => row.status === "pending")) return;
+
+    const wave = Number(ride.matching_wave ?? 0);
+    if (wave >= dispatchSettings.max_match_waves) {
+      await cancelMatchingRideSystem(rideId, ride, "no_drivers_available", {}, requestId);
+      return;
+    }
+
+    await runMatchingWave(rideId, ride, wave + 1, requestId);
+
+    const afterOffers = await loadDriverOffersForRide(rideId, false);
+    if (afterOffers.some((row) => row.status === "pending")) return;
+  }
+
+  logLine({
+    event: "reconcile_matching_loop_cap",
+    ride_id: rideId,
+    request_id: requestId ?? null,
+  });
 }
 
 async function runMatchingWave(
@@ -1121,6 +1168,7 @@ app.post("/v1/requests", async (c) => {
   });
 
   await runMatchingWave(ride.id, ride, 1, reqId);
+  await reconcileMatching(ride.id as string, reqId);
 
   const freshRide = await loadRideRequestById(ride.id as string);
 
@@ -1599,6 +1647,14 @@ app.post("/v1/internal/reconcile-matching", async (c) => {
     return c.json({ error: "unauthorized" }, 401);
   }
 
+  let hygiene: Record<string, unknown> | null = null;
+  const { data: hygieneData, error: hygieneErr } = await pubSvc().rpc("rides_run_matching_hygiene");
+  if (!hygieneErr && hygieneData) {
+    hygiene = hygieneData as Record<string, unknown>;
+  } else if (hygieneErr) {
+    logLine({ event: "matching_hygiene_rpc_skipped", error: hygieneErr.message });
+  }
+
   const rideIds = await loadMatchingRideIds();
   let processed = 0;
   for (const rideId of rideIds) {
@@ -1606,8 +1662,8 @@ app.post("/v1/internal/reconcile-matching", async (c) => {
     processed += 1;
   }
 
-  logLine({ event: "reconcile_matching_batch", processed });
-  return c.json({ ok: true, processed });
+  logLine({ event: "reconcile_matching_batch", processed, hygiene });
+  return c.json({ ok: true, processed, hygiene });
 });
 
 app.post("/v1/internal/reconcile-active-rides", async (c) => {
