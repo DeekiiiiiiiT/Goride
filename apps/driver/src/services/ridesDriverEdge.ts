@@ -94,7 +94,19 @@ export async function ridesDriverTransition(id: string, body: DriverTransitionBo
     headers: await ridesHeaders(),
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) {
+    const text = await res.text();
+    try {
+      const parsed = JSON.parse(text) as { error?: string; message?: string };
+      if (parsed.error?.startsWith('pin_')) {
+        throw new Error(parsed.message ?? 'Incorrect PIN. Ask the rider for their 4-digit code.');
+      }
+      throw new Error(parsed.message ?? parsed.error ?? text);
+    } catch (e) {
+      if (e instanceof Error && e.message !== text) throw e;
+      throw new Error(text || 'Transition failed');
+    }
+  }
   return res.json();
 }
 

@@ -104,6 +104,8 @@ export interface RideRequestRow {
   actual_tolls_minor?: number | null;
   verification_pin?: string | null;
   pin_verified_at?: string | null;
+  /** True when driver must collect rider PIN before starting (driver API only). */
+  pin_verification_pending?: boolean;
   dropoff_arrived_at?: string | null;
   created_at: string;
   updated_at: string;

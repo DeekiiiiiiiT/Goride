@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '../utils/supabase/client';
-import type { DriverOfferWithRide, RideRequestRow } from '@roam/types/rides';
+import type { DriverOfferWithRide, DriverTransitionBody, RideRequestRow } from '@roam/types/rides';
 import {
   ridesDriverAcceptOffer,
   ridesDriverDeclineOffer,
@@ -375,11 +375,6 @@ export function useRideDispatch() {
         const { ride } = await ridesDriverAcceptOffer(offer.id);
         syncActiveRide(ride);
         toast.success('Ride assigned — head to pickup');
-        openExternalNavigation({
-          lat: ride.pickup_lat,
-          lng: ride.pickup_lng,
-          address: ride.pickup_address,
-        });
         await refreshOffers();
       } catch (e: unknown) {
         toast.error(e instanceof Error ? e.message : 'Could not accept');
@@ -401,12 +396,21 @@ export function useRideDispatch() {
     [refreshOffers],
   );
 
-  const advance = useCallback(async (status: RideRequestRow['status'], reason?: string) => {
+  const advance = useCallback(async (
+    status: RideRequestRow['status'],
+    reason?: string,
+    verificationPin?: string,
+  ) => {
     if (!activeRide) return;
     try {
-      const { ride } = await ridesDriverTransition(activeRide.id, { status, reason });
+      const body: DriverTransitionBody = { status, reason };
+      if (verificationPin) {
+        body.verification_pin = verificationPin;
+      }
+      const { ride } = await ridesDriverTransition(activeRide.id, body);
       syncActiveRide(ride);
       if (status === 'on_trip') {
+        toast.success('Trip started');
         openExternalNavigation({
           lat: ride.dropoff_lat,
           lng: ride.dropoff_lng,

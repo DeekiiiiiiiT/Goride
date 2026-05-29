@@ -19,13 +19,16 @@ interface WaitTimeInfo {
 
 interface ActiveRidePanelProps {
   ride: RideRequestRow;
-  onAdvance: (status: RideRequestRow['status'], reason?: string, pin?: string) => void;
+  onAdvance: (
+    status: RideRequestRow['status'],
+    reason?: string,
+    verificationPin?: string,
+  ) => Promise<void>;
   compact?: boolean;
   trackingError?: string | null;
   gpsAccuracyM?: number | null;
   isTracking?: boolean;
   waitTimeInfo?: WaitTimeInfo | null;
-  pinVerificationRequired?: boolean;
 }
 
 const CANCEL_REASONS = [
@@ -114,8 +117,10 @@ export function ActiveRidePanel({
   gpsAccuracyM,
   isTracking,
   waitTimeInfo,
-  pinVerificationRequired = false,
 }: ActiveRidePanelProps) {
+  const pinVerificationRequired = Boolean(
+    ride.pin_verification_pending ?? (ride.verification_pin && !ride.pin_verified_at),
+  );
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState(CANCEL_REASONS[0].value);
   const [advancing, setAdvancing] = useState(false);
@@ -129,6 +134,13 @@ export function ActiveRidePanel({
     setAdvancing(true);
     try {
       await onAdvance(status, reason, pin);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Transition failed';
+      if (status === 'on_trip' && msg.toLowerCase().includes('pin')) {
+        setPinModalOpen(true);
+        setPinError(msg);
+      }
+      throw e;
     } finally {
       setAdvancing(false);
       setCancelOpen(false);

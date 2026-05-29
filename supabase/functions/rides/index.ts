@@ -159,6 +159,14 @@ async function loadRideRequestById(id: string): Promise<Record<string, unknown> 
   return pub ?? null;
 }
 
+/** Hide verification PIN from driver clients; expose pending flag instead. */
+function sanitizeRideForDriver(ride: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (!ride) return null;
+  const pinPending = Boolean(ride.verification_pin && !ride.pin_verified_at);
+  const { verification_pin: _pin, ...rest } = ride;
+  return { ...rest, pin_verification_pending: pinPending };
+}
+
 async function loadRideRequestByIdempotencyKey(key: string): Promise<Record<string, unknown> | null> {
   const { data: native, error: nativeErr } = await svc().from("ride_requests").select("*").eq(
     "idempotency_key",
@@ -1418,7 +1426,7 @@ app.post("/v1/drivers/offers/:offerId/accept", async (c) => {
     auth.user.id,
   );
 
-  return c.json({ ride: rideOut ?? freshRide });
+  return c.json({ ride: sanitizeRideForDriver((rideOut ?? freshRide) as Record<string, unknown>) });
 });
 
 app.post("/v1/drivers/offers/:offerId/decline", async (c) => {
@@ -1470,7 +1478,7 @@ app.get("/v1/drivers/me/active-ride", async (c) => {
     return c.json({ error: "active_ride_failed", message: result.error }, 500);
   }
 
-  return c.json({ ride: result });
+  return c.json({ ride: result ? sanitizeRideForDriver(result as Record<string, unknown>) : null });
 });
 
 app.get("/v1/drivers/me/earnings", async (c) => {
@@ -1577,7 +1585,7 @@ app.post("/v1/drivers/ride-location", async (c) => {
   const freshRide = await loadRideRequestById(rideId);
   return c.json({
     ok: true,
-    ride: freshRide,
+    ride: sanitizeRideForDriver(freshRide),
     live: geofenceResult
       ? {
           distance_to_pickup_m: geofenceResult.distanceToPickupM,
@@ -1682,7 +1690,7 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
   }
 
   logLine({ event: "driver_transition", ride_id: id, from: current, to: next, source: "manual" });
-  return c.json({ ride: result.ride });
+  return c.json({ ride: sanitizeRideForDriver(result.ride as Record<string, unknown> | undefined ?? null) });
 });
 
 app.post("/v1/internal/reconcile-matching", async (c) => {
