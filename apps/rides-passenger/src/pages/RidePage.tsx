@@ -78,6 +78,12 @@ function formatSeconds(secs: number): string {
   return `${mins}:${remainingSecs.toString().padStart(2, '0')}`;
 }
 
+const RIDER_PIN_STATUSES: RideRequestRow['status'][] = [
+  'driver_assigned',
+  'driver_en_route_pickup',
+  'driver_arrived_pickup',
+];
+
 function RiderPinDisplay({ pin }: { pin: string }) {
   return (
     <div className="rounded-3xl bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/30 dark:to-slate-900 border border-emerald-200 dark:border-emerald-800 p-5 space-y-3">
@@ -187,7 +193,7 @@ export default function RidePage() {
       setDisplayPin(null);
       return;
     }
-    if (ride.status !== 'driver_arrived_pickup') return;
+    if (!RIDER_PIN_STATUSES.includes(ride.status)) return;
     const pin = ride.verification_pin;
     if (typeof pin === 'string' && /^\d{4}$/.test(pin)) {
       setDisplayPin((prev) => prev ?? pin);
@@ -383,7 +389,7 @@ export default function RidePage() {
               </div>
             </div>
 
-            {displayPin && ride.status === 'driver_arrived_pickup' && !ride.pin_verified_at && (
+            {displayPin && RIDER_PIN_STATUSES.includes(ride.status) && !ride.pin_verified_at && (
               <RiderPinDisplay pin={displayPin} />
             )}
 

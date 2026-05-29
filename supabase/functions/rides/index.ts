@@ -42,7 +42,6 @@ import {
   aggregateDriverEarnings,
   getDriverActiveRideRequest,
   listDriverRideRequests,
-  loadDriverUserIdsWithActiveRides,
   type DriverEarningsPeriod,
 } from "../_shared/driverRideQueries.ts";
 import {
@@ -207,7 +206,15 @@ async function ensureRideVerificationPin(
 
   const after = await loadRideRequestById(rideId);
   const savedPin = after?.verification_pin ? String(after.verification_pin) : pin;
-  return { ...ride, verification_pin: savedPin };
+  const result = { ...ride, verification_pin: savedPin };
+  // #region agent log
+  debugAgentLog("PIN", "index.ts:ensureRideVerificationPin", "pin generated", {
+    rideId,
+    status: ride.status,
+    hasPin: /^\d{4}$/.test(savedPin),
+  }, !/^\d{4}$/.test(savedPin));
+  // #endregion
+  return result;
 }
 
 async function loadRideRequestByIdempotencyKey(key: string): Promise<Record<string, unknown> | null> {
@@ -233,7 +240,7 @@ async function loadRideRequestsByIds(
     "id",
     ids,
   );
-  if (!nativeErr && native) return native;
+  if (!nativeErr && native && native.length > 0) return native;
 
   const { data: pub } = await pubSvc().from("rides_ride_requests").select(columns).in("id", ids);
   return pub ?? [];
@@ -286,7 +293,7 @@ async function loadPendingDriverOffersForDriver(
     "driver_user_id",
     driverUserId,
   ).eq("status", "pending").gt("expires_at", nowIso);
-  if (!nativeErr && native) return native;
+  if (!nativeErr && native && native.length > 0) return native;
 
   const { data: pub } = await pubSvc().from("rides_driver_offers").select("*").eq(
     "driver_user_id",
@@ -823,8 +830,6 @@ async function runMatchingWave(
     excluded.add(String(ride.assigned_driver_user_id));
   }
 
-  const busyDrivers = await loadDriverUserIdsWithActiveRides(svc(), pubSvc());
-
   const eligibleIds = await getEligibleDriverUserIds(
     (locs ?? []).map((row) => row.user_id as string),
     dispatchSettings,
@@ -836,7 +841,6 @@ async function runMatchingWave(
   for (const row of locs ?? []) {
     const uid = row.user_id as string;
     if (excluded.has(uid)) continue;
-    if (busyDrivers.has(uid)) continue;
     if (!eligibleIds.has(uid)) continue;
     const rawBodySlug = (row as { body_type_slug?: string | null }).body_type_slug ?? null;
     // GPS rows written before slug support (or cleared by validation) are null — assume sedan so
@@ -873,7 +877,6 @@ async function runMatchingWave(
     wave,
     locCount: (locs ?? []).length,
     excludedCount: excluded.size,
-    busyDriverCount: busyDrivers.size,
     eligibleCount: eligibleIds.size,
     candidateCount: candidates.length,
     filteredOutBodyType,
@@ -1311,9 +1314,13 @@ app.post("/v1/requests", async (c) => {
   await reconcileMatching(ride.id as string, reqId);
 
   const freshRide = await loadRideRequestById(ride.id as string);
+  let rideOut = freshRide ?? ride;
+  if (pinEnabled && rideOut) {
+    rideOut = await ensureRideVerificationPin(ride.id as string, rideOut, bookDispatchSettings);
+  }
 
   logLine({ event: "ride_created", ride_id: ride.id, request_id: reqId });
-  return c.json({ ride: freshRide ?? ride });
+  return c.json({ ride: rideOut });
 });
 
 app.get("/v1/requests/:id", async (c) => {
@@ -1338,7 +1345,9 @@ app.get("/v1/requests/:id", async (c) => {
   let waitTimeInfo: Record<string, unknown> | null = null;
   let rideOut = fresh ?? ride;
 
-  if (rideOut && isRider && rideOut.status === "driver_arrived_pickup") {
+  const riderPinStatuses = ["driver_assigned", "driver_en_route_pickup", "driver_arrived_pickup"];
+  if (rideOut && isRider && isPinFeatureEnabled(settings) &&
+    riderPinStatuses.includes(String(rideOut.status))) {
     rideOut = await ensureRideVerificationPin(id, rideOut, settings);
   }
 
@@ -1503,14 +1512,6 @@ app.get("/v1/drivers/offers", async (c) => {
 
   const offers = await loadPendingDriverOffersForDriver(auth.user.id, nowIso);
 
-  const activeRide = await getDriverActiveRideRequest(svc(), pubSvc(), auth.user.id);
-  const activeRideId = activeRide && !("error" in activeRide) && activeRide
-    ? String(activeRide.id)
-    : null;
-  const activeRideStatus = activeRide && !("error" in activeRide) && activeRide
-    ? String(activeRide.status)
-    : null;
-
   const rideIds = [...new Set(offers.map((o) => o.ride_request_id as string))];
   let ridesById: Record<string, Record<string, unknown>> = {};
   if (rideIds.length > 0) {
@@ -1521,26 +1522,21 @@ app.get("/v1/drivers/offers", async (c) => {
     ridesById = Object.fromEntries(rides.map((r) => [r.id as string, r]));
   }
 
-  const validOffers = offers.filter((o) => {
-    const rideRow = ridesById[o.ride_request_id as string];
-    return rideRow && String(rideRow.status) === "matching" && !rideRow.assigned_driver_user_id;
-  });
-
-  const enriched = validOffers.map((o) => ({
+  const enriched = offers.map((o) => ({
     ...o,
     ride: ridesById[o.ride_request_id as string] ?? null,
   }));
+
+  const missingRideRows = offers.filter((o) => !ridesById[o.ride_request_id as string]).length;
 
   // #region agent log
   debugAgentLog("C", "index.ts:GET/offers", "driver offers response", {
     driverId: auth.user.id,
     pendingCount: offers.length,
-    activeRideId,
-    activeRideStatus,
-    validCount: validOffers.length,
     returnedCount: enriched.length,
-    runId: "post-fix",
-  });
+    missingRideRows,
+    runId: "rollback-dispatch",
+  }, offers.length > 0 && missingRideRows > 0);
   // #endregion
 
   return c.json({ offers: enriched });
