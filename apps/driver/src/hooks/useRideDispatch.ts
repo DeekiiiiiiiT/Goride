@@ -177,6 +177,9 @@ export function useRideDispatch() {
   const refreshOffers = useCallback(async () => {
     try {
       const { offers: nextOffers } = await ridesDriverPendingOffers();
+      // #region agent log
+      fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'adf835'},body:JSON.stringify({sessionId:'adf835',hypothesisId:'C-F',location:'useRideDispatch.ts:refreshOffers',message:'driver polled offers',data:{count:nextOffers.length,online,hasActiveRide:Boolean(activeRide?.id),activeRideStatus:activeRide?.status??null},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       const nextIds = new Set(nextOffers.map((o) => o.id));
       const hasNew = nextOffers.some((o) => !knownOfferIds.current.has(o.id));
       knownOfferIds.current = nextIds;
@@ -185,10 +188,13 @@ export function useRideDispatch() {
         audioRef.current.play().catch(() => {});
         if (navigator.vibrate) navigator.vibrate(200);
       }
-    } catch {
+    } catch (e: unknown) {
+      // #region agent log
+      fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'adf835'},body:JSON.stringify({sessionId:'adf835',hypothesisId:'F',location:'useRideDispatch.ts:refreshOffers:catch',message:'offers poll failed',data:{error:e instanceof Error?e.message:'unknown'},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       /* offline / unauthorized handled elsewhere */
     }
-  }, [online]);
+  }, [online, activeRide?.id, activeRide?.status]);
 
   const pollActiveRide = useCallback(async (id: string) => {
     try {

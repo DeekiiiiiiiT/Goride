@@ -573,6 +573,30 @@ function logLine(payload: Record<string, unknown>) {
   console.log(JSON.stringify({ svc: "rides", ts: new Date().toISOString(), ...payload }));
 }
 
+// #region agent log
+function debugAgentLog(
+  hypothesisId: string,
+  location: string,
+  message: string,
+  data: Record<string, unknown>,
+) {
+  const payload = {
+    sessionId: "adf835",
+    hypothesisId,
+    location,
+    message,
+    data,
+    timestamp: Date.now(),
+  };
+  logLine({ event: "debug_agent", ...payload });
+  fetch("http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "adf835" },
+    body: JSON.stringify(payload),
+  }).catch(() => {});
+}
+// #endregion
+
 function clientIp(c: { req: { header: (n: string) => string | undefined } }): string {
   return c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
     c.req.header("cf-connecting-ip") ||
@@ -696,6 +720,10 @@ async function cancelMatchingRideSystem(
 
 async function reconcileMatching(rideId: string, requestId?: string) {
   await expirePendingOffers(rideId);
+
+  // #region agent log
+  debugAgentLog("E", "index.ts:reconcileMatching", "reconcile started", { rideId, requestId: requestId ?? null });
+  // #endregion
 
   const dispatchSettings = await loadDispatchSettingsForMatching();
 
@@ -832,6 +860,20 @@ async function runMatchingWave(
   }
   candidates.sort((a, b) => a.d - b.d || a.user_id.localeCompare(b.user_id));
 
+  // #region agent log
+  debugAgentLog("A-B", "index.ts:runMatchingWave", "matching wave candidate pool", {
+    rideId,
+    wave,
+    locCount: (locs ?? []).length,
+    excludedCount: excluded.size,
+    busyDriverCount: busyDrivers.size,
+    eligibleCount: eligibleIds.size,
+    candidateCount: candidates.length,
+    filteredOutBodyType,
+    radiusKm,
+  });
+  // #endregion
+
   const locCount = (locs ?? []).length;
   logLine({
     event: "match_wave_diag",
@@ -921,6 +963,17 @@ async function runMatchingWave(
       request_id: requestId ?? null,
     });
   }
+
+  // #region agent log
+  debugAgentLog("D", "index.ts:runMatchingWave:end", "offers inserted", {
+    rideId,
+    wave,
+    pickedCount: picked.length,
+    offersInserted,
+    lastOfferErr: lastOfferErr ?? null,
+    pickedDriverIds: picked.map((c) => c.user_id),
+  });
+  // #endregion
 
   try {
     await audit(rideId, ride.rider_user_id as string | undefined, "matching_wave", {
@@ -1471,6 +1524,16 @@ app.get("/v1/drivers/offers", async (c) => {
     ...o,
     ride: ridesById[o.ride_request_id as string] ?? null,
   }));
+
+  // #region agent log
+  debugAgentLog("C", "index.ts:GET/offers", "driver offers response", {
+    driverId: auth.user.id,
+    pendingCount: offers.length,
+    activeRideId,
+    validCount: validOffers.length,
+    returnedCount: enriched.length,
+  });
+  // #endregion
 
   return c.json({ offers: enriched });
 });
