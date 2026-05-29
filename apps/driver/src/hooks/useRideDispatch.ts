@@ -15,6 +15,7 @@ import { useActiveRideTracking } from './useActiveRideTracking';
 import { openExternalNavigation } from '../utils/rideNavigation';
 import { useDriverPermissionPolicy } from './usePermissionPolicy';
 import { useActiveRideRecovery } from '../contexts/ActiveRideRecoveryContext';
+import { persistActiveRideId } from '../utils/driverActiveRideSession';
 import { mergeDriverActiveRide, normalizeDriverRide } from '../utils/mergeActiveRide';
 import {
   checkGeolocationGranted,
@@ -58,10 +59,10 @@ export function useRideDispatch() {
         return;
       }
       setActiveRide((prev) => {
-        const merged = mergeDriverActiveRide(prev, ride);
-        setRecoveredRide(merged);
-        persistActiveRideId(merged.id);
-        return merged;
+        const next = mergeDriverActiveRide(prev, ride);
+        setRecoveredRide(next);
+        persistActiveRideId(next.id);
+        return next;
       });
     },
     [setRecoveredRide],
