@@ -193,17 +193,11 @@ export default function RidePage() {
 
   const ride = data?.ride;
   const waitTime = data?.wait_time as WaitTimeInfo | null | undefined;
-  const [displayPin, setDisplayPin] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!ride) return;
-    if (ride.status === 'on_trip' || ride.status === 'completed' || ride.pin_verified_at) {
-      setDisplayPin(null);
-      return;
-    }
-    if (!RIDER_PIN_STATUSES.includes(ride.status)) return;
-    const pin = normalizeRiderPin(data?.rider_pin ?? ride.verification_pin);
-    if (pin) setDisplayPin(pin);
+  const riderPin = useMemo(() => {
+    if (!ride || ride.pin_verified_at) return null;
+    if (!RIDER_PIN_STATUSES.includes(ride.status)) return null;
+    return normalizeRiderPin(data?.rider_pin ?? ride.verification_pin);
   }, [data?.rider_pin, ride?.verification_pin, ride?.status, ride?.pin_verified_at, ride]);
 
   const { data: liveData } = useQuery({
@@ -224,13 +218,13 @@ export default function RidePage() {
       prevStatusRef.current !== 'driver_arrived_pickup'
     ) {
       toast.success('Your driver has arrived', {
-        description: displayPin || ride.verification_pin
+        description: riderPin
           ? 'Share your 4-digit PIN when they ask for it.'
           : undefined,
       });
     }
     prevStatusRef.current = ride.status;
-  }, [ride?.status, ride?.verification_pin, displayPin]);
+  }, [ride?.status, riderPin]);
 
   useEffect(() => {
     if (!id) return;
@@ -250,12 +244,14 @@ export default function RidePage() {
           if (row?.id) {
             queryClient.setQueryData(
               ['ride', id],
-              (prev: { ride: RideRequestRow; offers: unknown[] } | undefined) => {
+              (prev: { ride: RideRequestRow; offers: unknown[]; rider_pin?: string | null } | undefined) => {
                 if (!prev) return prev;
                 const mergedRide = { ...prev.ride, ...row };
-                const mergedPin = normalizeRiderPin(row.verification_pin ?? prev.ride.verification_pin);
+                const mergedPin = normalizeRiderPin(
+                  row.verification_pin ?? prev.rider_pin ?? prev.ride.verification_pin,
+                );
                 if (mergedPin) mergedRide.verification_pin = mergedPin;
-                return { ...prev, ride: mergedRide };
+                return { ...prev, ride: mergedRide, rider_pin: mergedPin ?? prev.rider_pin ?? null };
               },
             );
           }
@@ -390,16 +386,15 @@ export default function RidePage() {
               </div>
             </div>
 
-            {RIDER_PIN_STATUSES.includes(ride.status) && !ride.pin_verified_at && (
-              displayPin ? (
-                <RiderPinDisplay pin={displayPin} />
-              ) : ride.status === 'driver_arrived_pickup' ? (
-                <div className="rounded-3xl bg-emerald-50 border border-emerald-200 p-5 text-center space-y-2">
-                  <Loader2 className="w-6 h-6 text-emerald-600 animate-spin mx-auto" aria-hidden />
-                  <p className="text-sm font-medium text-emerald-900">Preparing your trip PIN…</p>
-                  <p className="text-xs text-emerald-700">Share this code with your driver when it appears</p>
-                </div>
-              ) : null
+            {riderPin && !ride.pin_verified_at && (
+              <RiderPinDisplay pin={riderPin} />
+            )}
+
+            {ride.status === 'driver_arrived_pickup' && !riderPin && !ride.pin_verified_at && (
+              <div className="rounded-3xl bg-emerald-50 border border-emerald-200 p-5 text-center space-y-2">
+                <Loader2 className="w-6 h-6 text-emerald-600 animate-spin mx-auto" aria-hidden />
+                <p className="text-sm font-medium text-emerald-900">Loading your trip PIN…</p>
+              </div>
             )}
 
             {ride.status === 'driver_arrived_pickup' && waitTime && (

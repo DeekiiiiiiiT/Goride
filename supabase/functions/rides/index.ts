@@ -158,10 +158,28 @@ async function loadRideRequestById(id: string): Promise<Record<string, unknown> 
     "id",
     id,
   ).maybeSingle();
-  if (!nativeErr && native) return native;
+  let ride: Record<string, unknown> | null = (!nativeErr && native)
+    ? (native as Record<string, unknown>)
+    : null;
 
-  const { data: pub } = await pubSvc().from("rides_ride_requests").select("*").eq("id", id).maybeSingle();
-  return pub ?? null;
+  if (!ride) {
+    const { data: pub } = await pubSvc().from("rides_ride_requests").select("*").eq("id", id)
+      .maybeSingle();
+    ride = (pub as Record<string, unknown> | null) ?? null;
+  }
+
+  if (!ride) return null;
+
+  if (!normalizeVerificationPin(ride.verification_pin)) {
+    const { data: pinRow } = await svc().from("ride_requests").select(
+      "verification_pin, pin_verified_at",
+    ).eq("id", id).maybeSingle();
+    if (pinRow) {
+      ride = { ...ride, ...pinRow };
+    }
+  }
+
+  return ride;
 }
 
 /** Hide verification PIN from driver clients; expose pending flag instead. */
@@ -1368,6 +1386,13 @@ app.get("/v1/requests/:id", async (c) => {
     riderPinStatuses.includes(String(rideOut.status))) {
     rideOut = await ensureRideVerificationPin(id, rideOut, settings);
     riderPin = normalizeVerificationPin(rideOut.verification_pin);
+  }
+  if (isRider && isPinFeatureEnabled(settings) && rideOut &&
+    riderPinStatuses.includes(String(rideOut.status)) && !riderPin) {
+    const { data: pinRow } = await svc().from("ride_requests").select("verification_pin").eq("id", id)
+      .maybeSingle();
+    riderPin = normalizeVerificationPin(pinRow?.verification_pin);
+    if (riderPin) rideOut = { ...rideOut, verification_pin: riderPin };
   }
 
   // #region agent log
