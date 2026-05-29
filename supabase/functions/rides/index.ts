@@ -42,6 +42,7 @@ import {
   aggregateDriverEarnings,
   getDriverActiveRideRequest,
   listDriverRideRequests,
+  loadDriverUserIdsWithActiveRides,
   type DriverEarningsPeriod,
 } from "../_shared/driverRideQueries.ts";
 import {
@@ -181,15 +182,32 @@ async function ensureRideVerificationPin(
   ride: Record<string, unknown>,
   settings: DispatchSettings,
 ): Promise<Record<string, unknown>> {
-  if (!isPinFeatureEnabled(settings) || ride.verification_pin) return ride;
+  if (!isPinFeatureEnabled(settings)) return ride;
   const activeStatuses = ["driver_assigned", "driver_en_route_pickup", "driver_arrived_pickup"];
   if (!activeStatuses.includes(String(ride.status))) return ride;
+
+  const existingPin = ride.verification_pin ? String(ride.verification_pin) : "";
+  if (/^\d{4}$/.test(existingPin)) return ride;
+
+  const fresh = await loadRideRequestById(rideId);
+  const freshPin = fresh?.verification_pin ? String(fresh.verification_pin) : "";
+  if (/^\d{4}$/.test(freshPin)) {
+    return { ...ride, verification_pin: freshPin };
+  }
+
   const pin = generatePin();
-  await patchRideRequest(rideId, {
+  const patched = await patchRideRequest(rideId, {
     verification_pin: pin,
     updated_at: new Date().toISOString(),
   });
-  return { ...ride, verification_pin: pin };
+  if (!patched) {
+    logLine({ event: "ensure_pin_patch_failed", ride_id: rideId });
+    return ride;
+  }
+
+  const after = await loadRideRequestById(rideId);
+  const savedPin = after?.verification_pin ? String(after.verification_pin) : pin;
+  return { ...ride, verification_pin: savedPin };
 }
 
 async function loadRideRequestByIdempotencyKey(key: string): Promise<Record<string, unknown> | null> {
@@ -495,6 +513,13 @@ async function expirePendingOffersForRide(rideId: string, nowIso: string): Promi
   ).lte("expires_at", nowIso);
 }
 
+async function supersedeAllPendingOffersForDriver(driverUserId: string): Promise<void> {
+  await svc().from("driver_offers").update({ status: "superseded" }).eq(
+    "driver_user_id",
+    driverUserId,
+  ).eq("status", "pending");
+}
+
 async function supersedePendingOffersForRide(
   rideId: string,
   exceptOfferId?: string,
@@ -753,12 +778,17 @@ async function runMatchingWave(
   }
 
   const declinedRows = (await loadDriverOffersForRide(rideId, false)).filter((row) =>
-    row.status === "declined" || row.status === "expired"
+    ["declined", "expired", "accepted", "superseded"].includes(String(row.status)),
   );
 
   const excluded = new Set(
     declinedRows.map((r) => r.driver_user_id as string),
   );
+  if (ride.assigned_driver_user_id) {
+    excluded.add(String(ride.assigned_driver_user_id));
+  }
+
+  const busyDrivers = await loadDriverUserIdsWithActiveRides(svc(), pubSvc());
 
   const eligibleIds = await getEligibleDriverUserIds(
     (locs ?? []).map((row) => row.user_id as string),
@@ -771,6 +801,7 @@ async function runMatchingWave(
   for (const row of locs ?? []) {
     const uid = row.user_id as string;
     if (excluded.has(uid)) continue;
+    if (busyDrivers.has(uid)) continue;
     if (!eligibleIds.has(uid)) continue;
     const rawBodySlug = (row as { body_type_slug?: string | null }).body_type_slug ?? null;
     // GPS rows written before slug support (or cleared by validation) are null — assume sedan so
@@ -1247,7 +1278,7 @@ app.get("/v1/requests/:id", async (c) => {
   let waitTimeInfo: Record<string, unknown> | null = null;
   let rideOut = fresh ?? ride;
 
-  if (rideOut && isRider) {
+  if (rideOut && isRider && rideOut.status === "driver_arrived_pickup") {
     rideOut = await ensureRideVerificationPin(id, rideOut, settings);
   }
 
@@ -1410,6 +1441,12 @@ app.get("/v1/drivers/offers", async (c) => {
   const nowIso = new Date().toISOString();
   await expireDriverPendingOffers(auth.user.id, nowIso);
 
+  const activeRide = await getDriverActiveRideRequest(svc(), pubSvc(), auth.user.id);
+  if (activeRide && !("error" in activeRide) && activeRide) {
+    await supersedeAllPendingOffersForDriver(auth.user.id);
+    return c.json({ offers: [] });
+  }
+
   const offers = await loadPendingDriverOffersForDriver(auth.user.id, nowIso);
 
   const rideIds = [...new Set(offers.map((o) => o.ride_request_id as string))];
@@ -1417,12 +1454,17 @@ app.get("/v1/drivers/offers", async (c) => {
   if (rideIds.length > 0) {
     const rides = await loadRideRequestsByIds(
       rideIds,
-      "id, pickup_address, dropoff_address, fare_estimate_minor, currency, distance_estimate_km, duration_estimate_minutes, vehicle_option, surge_multiplier",
+      "id, status, assigned_driver_user_id, pickup_address, dropoff_address, fare_estimate_minor, currency, distance_estimate_km, duration_estimate_minutes, vehicle_option, surge_multiplier",
     );
     ridesById = Object.fromEntries(rides.map((r) => [r.id as string, r]));
   }
 
-  const enriched = offers.map((o) => ({
+  const validOffers = offers.filter((o) => {
+    const rideRow = ridesById[o.ride_request_id as string];
+    return rideRow && String(rideRow.status) === "matching" && !rideRow.assigned_driver_user_id;
+  });
+
+  const enriched = validOffers.map((o) => ({
     ...o,
     ride: ridesById[o.ride_request_id as string] ?? null,
   }));
@@ -1454,6 +1496,7 @@ app.post("/v1/drivers/offers/:offerId/accept", async (c) => {
   await patchDriverOfferRow(offerId, { status: "accepted" });
 
   await supersedePendingOffersForRide(rideId, offerId);
+  await supersedeAllPendingOffersForDriver(auth.user.id);
 
   await patchRideRequest(rideId, {
     status: "driver_assigned",

@@ -27,7 +27,7 @@ export function RideDispatchPage() {
         </p>
       )}
 
-      {online && offers.length > 0 && (
+      {online && !activeRide && offers.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Incoming offers</h2>
           <ul className="space-y-2">

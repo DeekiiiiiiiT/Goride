@@ -80,7 +80,7 @@ export function RideDispatchHome() {
         </div>
       )}
 
-      {online && offers.length > 0 && (
+      {online && !activeRide && offers.length > 0 && (
         <section className="space-y-2 shrink-0">
           <h2 className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 px-0.5">
             Incoming offers

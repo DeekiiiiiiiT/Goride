@@ -150,6 +150,26 @@ const DRIVER_ACTIVE_RIDE_STATUSES = [
   "on_trip",
 ];
 
+/** Driver user ids with an in-progress trip (exclude from new offers). */
+export async function loadDriverUserIdsWithActiveRides(
+  ridesDb: SupabaseClient,
+  publicDb: SupabaseClient,
+): Promise<Set<string>> {
+  const ids = new Set<string>();
+  for (const [db, table] of [[ridesDb, "ride_requests"], [publicDb, "rides_ride_requests"]] as const) {
+    const { data } = await db
+      .from(table)
+      .select("assigned_driver_user_id")
+      .in("status", DRIVER_ACTIVE_RIDE_STATUSES)
+      .not("assigned_driver_user_id", "is", null);
+    for (const row of data ?? []) {
+      const uid = row.assigned_driver_user_id as string | null;
+      if (uid) ids.add(uid);
+    }
+  }
+  return ids;
+}
+
 async function getActiveRideFromTable(
   db: SupabaseClient,
   table: string,
