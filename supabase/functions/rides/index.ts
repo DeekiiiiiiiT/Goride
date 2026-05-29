@@ -579,6 +579,7 @@ function debugAgentLog(
   location: string,
   message: string,
   data: Record<string, unknown>,
+  persist = false,
 ) {
   const payload = {
     sessionId: "adf835",
@@ -589,6 +590,9 @@ function debugAgentLog(
     timestamp: Date.now(),
   };
   logLine({ event: "debug_agent", ...payload });
+  if (persist) {
+    void audit(null, undefined, "debug_agent", payload);
+  }
   fetch("http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae", {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "adf835" },
@@ -722,7 +726,10 @@ async function reconcileMatching(rideId: string, requestId?: string) {
   await expirePendingOffers(rideId);
 
   // #region agent log
-  debugAgentLog("E", "index.ts:reconcileMatching", "reconcile started", { rideId, requestId: requestId ?? null });
+  debugAgentLog("E", "index.ts:reconcileMatching", "reconcile started", {
+    rideId,
+    requestId: requestId ?? null,
+  }, true);
   // #endregion
 
   const dispatchSettings = await loadDispatchSettingsForMatching();
@@ -806,7 +813,7 @@ async function runMatchingWave(
   }
 
   const declinedRows = (await loadDriverOffersForRide(rideId, false)).filter((row) =>
-    ["declined", "expired", "accepted", "superseded"].includes(String(row.status)),
+    ["declined", "expired", "superseded"].includes(String(row.status)),
   );
 
   const excluded = new Set(
@@ -871,7 +878,7 @@ async function runMatchingWave(
     candidateCount: candidates.length,
     filteredOutBodyType,
     radiusKm,
-  });
+  }, true);
   // #endregion
 
   const locCount = (locs ?? []).length;
@@ -972,7 +979,7 @@ async function runMatchingWave(
     offersInserted,
     lastOfferErr: lastOfferErr ?? null,
     pickedDriverIds: picked.map((c) => c.user_id),
-  });
+  }, true);
   // #endregion
 
   try {
@@ -1500,10 +1507,9 @@ app.get("/v1/drivers/offers", async (c) => {
   const activeRideId = activeRide && !("error" in activeRide) && activeRide
     ? String(activeRide.id)
     : null;
-
-  if (activeRideId) {
-    return c.json({ offers: [] });
-  }
+  const activeRideStatus = activeRide && !("error" in activeRide) && activeRide
+    ? String(activeRide.status)
+    : null;
 
   const rideIds = [...new Set(offers.map((o) => o.ride_request_id as string))];
   let ridesById: Record<string, Record<string, unknown>> = {};
@@ -1530,8 +1536,10 @@ app.get("/v1/drivers/offers", async (c) => {
     driverId: auth.user.id,
     pendingCount: offers.length,
     activeRideId,
+    activeRideStatus,
     validCount: validOffers.length,
     returnedCount: enriched.length,
+    runId: "post-fix",
   });
   // #endregion
 
