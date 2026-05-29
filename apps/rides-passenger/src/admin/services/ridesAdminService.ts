@@ -649,6 +649,14 @@ export interface DispatchSettingsDto {
   gps_max_accuracy_m_for_arrival: number;
   no_show_auto_cancel_enabled: boolean;
   max_matching_duration_minutes: number;
+  wait_time_grace_minutes: number;
+  wait_time_rate_per_min_minor: number;
+  wait_time_charge_enabled: boolean;
+  wait_time_max_minutes: number;
+  pin_verification_enabled: boolean;
+  pin_verification_required_for_start: boolean;
+  toll_detection_enabled: boolean;
+  toll_geofence_radius_m: number;
   updated_at?: string;
   updated_by?: string | null;
 }

@@ -149,6 +149,10 @@ export async function getDriverDetail(
 
 export interface PlatformLedgerTripRow extends RideRequestRow {
   driver_display_name?: string | null;
+  driver_net_minor?: number | null;
+  platform_fee_minor?: number | null;
+  tip_minor?: number | null;
+  fare_final_breakdown?: RideRequestRow['fare_breakdown'];
   ledger_lines?: Array<{
     id: string;
     line_kind: string;

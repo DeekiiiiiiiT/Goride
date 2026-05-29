@@ -51,6 +51,14 @@ export interface FareBreakdown {
   rule_source?: 'database';
   location_key?: string;
   vehicle_type?: string;
+  /** Wait time fee charged after grace period (in minor units). */
+  wait_time_fee_minor?: number;
+  /** Billable wait time minutes (after grace period). */
+  wait_time_minutes?: number;
+  /** Actual tolls detected via geofence crossings. */
+  actual_tolls_minor?: number;
+  /** Adjustment from estimated to actual tolls. */
+  toll_adjustment_minor?: number;
 }
 
 export interface RideRequestRow {
@@ -72,6 +80,7 @@ export interface RideRequestRow {
   duration_estimate_minutes?: number | null;
   eta_pickup_seconds_estimate: number | null;
   fare_breakdown?: FareBreakdown | null;
+  fare_final_breakdown?: FareBreakdown | null;
   assigned_driver_user_id: string | null;
   idempotency_key: string | null;
   cancel_reason: string | null;
@@ -90,6 +99,12 @@ export interface RideRequestRow {
   last_driver_heading?: number | null;
   last_driver_location_at?: string | null;
   complete_suggested_at?: string | null;
+  wait_time_started_at?: string | null;
+  wait_time_fee_minor?: number | null;
+  actual_tolls_minor?: number | null;
+  verification_pin?: string | null;
+  pin_verified_at?: string | null;
+  dropoff_arrived_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -221,6 +236,10 @@ export interface DispatchAutomationSettings {
   no_show_cancel_minutes: number;
   gps_max_accuracy_m_for_arrival: number;
   no_show_auto_cancel_enabled: boolean;
+  wait_time_grace_minutes: number;
+  wait_time_rate_per_min_minor: number;
+  wait_time_charge_enabled: boolean;
+  wait_time_max_minutes: number;
 }
 
 export interface DriverPresenceBody {
@@ -235,6 +254,8 @@ export interface DriverPresenceBody {
 export interface DriverTransitionBody {
   status: RideRequestStatus;
   reason?: string;
+  /** 4-digit PIN for trip start verification (required when pin_verification_required is true). */
+  verification_pin?: string;
 }
 
 /** DB row + major-unit fields for Super Admin API responses. */

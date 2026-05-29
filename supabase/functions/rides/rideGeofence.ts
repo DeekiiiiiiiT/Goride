@@ -9,6 +9,12 @@ import {
   type ApplyTransitionDeps,
   type RideStatus,
 } from "./rideLifecycle.ts";
+import {
+  evaluateTollCrossings,
+  recordTollCrossings,
+  loadCrossedTollIds,
+  type TollCrossingRecord,
+} from "./fare/tollGeofence.ts";
 
 export interface LocationFix {
   lat: number;
@@ -23,6 +29,8 @@ export interface GeofenceEvalResult {
   completeSuggested?: boolean;
   distanceToPickupM?: number;
   distanceToDropoffM?: number;
+  tollsCrossed?: TollCrossingRecord[];
+  totalNewTollsMinor?: number;
 }
 
 const TELEPORT_THRESHOLD_M = 500;
@@ -164,6 +172,30 @@ export async function evaluateGeofenceTransitions(
     }
   }
 
+  if (settings.toll_detection_enabled && status === "on_trip") {
+    const crossedTollIds = await loadCrossedTollIds(db, rideId);
+    const tollResult = await evaluateTollCrossings(
+      db,
+      fix.lat,
+      fix.lng,
+      settings.toll_geofence_radius_m,
+      crossedTollIds,
+    );
+    if (tollResult.tollsCrossed.length > 0) {
+      const { recorded, total } = await recordTollCrossings(db, rideId, tollResult.tollsCrossed);
+      if (recorded > 0) {
+        result.tollsCrossed = tollResult.tollsCrossed;
+        result.totalNewTollsMinor = total;
+        
+        const currentTolls = Number(ride.actual_tolls_minor ?? 0);
+        await deps.patchRideRequest(rideId, {
+          actual_tolls_minor: currentTolls + total,
+          updated_at: new Date().toISOString(),
+        });
+      }
+    }
+  }
+
   if (
     settings.auto_complete_suggest_enabled &&
     status === "on_trip" &&
@@ -183,10 +215,14 @@ export async function evaluateGeofenceTransitions(
       if (!dwellStart) dwellStart = nowMs;
       const dwellSec = (nowMs - dwellStart) / 1000;
       if (dwellSec >= settings.arrival_dwell_seconds) {
-        await deps.patchRideRequest(rideId, {
+        const patchData: Record<string, unknown> = {
           complete_suggested_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-        });
+        };
+        if (!ride.dropoff_arrived_at) {
+          patchData.dropoff_arrived_at = new Date().toISOString();
+        }
+        await deps.patchRideRequest(rideId, patchData);
         result.completeSuggested = true;
       }
       await upsertLiveState(db, rideId, {

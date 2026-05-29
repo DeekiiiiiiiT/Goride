@@ -4,7 +4,8 @@ import { Session } from '@supabase/supabase-js';
 import { ChevronDown, ChevronRight, Loader2, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatMoneyMinor } from '@roam/types/rides';
-import { listPlatformLedgerTrips, type PlatformLedgerTripRow } from '../services/driverAdminService';
+import { TripLedgerDetailPanel } from '../components/TripLedgerDetailPanel';
+import { listPlatformLedgerTrips } from '../services/driverAdminService';
 
 interface OutletContext {
   session: Session;
@@ -64,7 +65,8 @@ export function TripLedgerPage() {
       <div>
         <h2 className="text-xl font-semibold text-white">Trip ledger</h2>
         <p className="text-sm text-slate-400 mt-1">
-          Roam platform trips with payment line breakdown ({total} total)
+          Roam platform trips — expand a row for full trip details and payment lines ({total}{' '}
+          total)
         </p>
       </div>
 
@@ -200,36 +202,7 @@ export function TripLedgerPage() {
                         {t.ledger_line_count ?? lines.length ?? 0}
                       </td>
                     </tr>
-                    {expanded && lines.length > 0 && (
-                      <tr className="bg-slate-900/40">
-                        <td colSpan={10} className="px-6 py-3">
-                          <table className="w-full text-xs">
-                            <thead>
-                              <tr className="text-slate-500 text-left">
-                                <th className="py-1 pr-4">Kind</th>
-                                <th className="py-1 pr-4">Description</th>
-                                <th className="py-1 pr-4 text-right">Paid to driver</th>
-                                <th className="py-1 text-right">Gross</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {lines.map((line) => (
-                                <tr key={line.id} className="text-slate-400">
-                                  <td className="py-1 pr-4">{line.line_kind}</td>
-                                  <td className="py-1 pr-4">{line.description}</td>
-                                  <td className="py-1 pr-4 text-right tabular-nums">
-                                    {formatMoneyMinor(line.paid_to_you_minor, t.currency)}
-                                  </td>
-                                  <td className="py-1 text-right tabular-nums">
-                                    {formatMoneyMinor(line.earnings_gross_minor, t.currency)}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </td>
-                      </tr>
-                    )}
+                    {expanded && <TripLedgerDetailPanel trip={t} colSpan={10} />}
                   </React.Fragment>
                 );
               })}

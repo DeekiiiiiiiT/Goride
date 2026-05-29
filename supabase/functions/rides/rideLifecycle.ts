@@ -4,6 +4,8 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { DispatchSettings } from "./fare/dispatchSettings.ts";
 import { gridCellKey } from "./fare/buildQuote.ts";
+import { calculateWaitTimeFee } from "./fare/waitTime.ts";
+import { verifyRidePin } from "./fare/pinVerification.ts";
 
 export type RideStatus =
   | "matching"
@@ -48,6 +50,18 @@ export interface ApplyTransitionParams {
   expectedFrom?: RideStatus;
   cancelReason?: string | null;
   cancelledBy?: "rider" | "driver" | "system";
+  /** Wait time settings for on_trip transition. */
+  waitTimeSettings?: {
+    graceMinutes: number;
+    ratePerMinMinor: number;
+    chargeEnabled: boolean;
+  };
+  /** PIN verification for on_trip transition. */
+  pinSettings?: {
+    enabled: boolean;
+    requiredForStart: boolean;
+    providedPin?: string;
+  };
 }
 
 export interface ApplyTransitionResult {
@@ -92,20 +106,67 @@ export async function applyRideTransition(
   }
 
   const nowIso = new Date().toISOString();
+  const nowMs = Date.now();
   const patch: Record<string, unknown> = {
     status: params.next,
     updated_at: nowIso,
     ...lifecycleTimestampPatch(params.next, nowIso),
   };
 
+  if (params.next === "on_trip" && params.pinSettings?.requiredForStart) {
+    const pinResult = verifyRidePin(
+      params.pinSettings.providedPin ?? "",
+      {
+        verification_pin: (ride.verification_pin as string | null) ?? null,
+        pin_verified_at: (ride.pin_verified_at as string | null) ?? null,
+      },
+    );
+    if (!pinResult.verified && pinResult.error !== "already_verified") {
+      return { ok: false, error: `pin_${pinResult.error ?? "invalid"}`, current };
+    }
+    if (pinResult.verified && pinResult.error !== "already_verified") {
+      patch.pin_verified_at = nowIso;
+    }
+  }
+
+  if (params.next === "on_trip" && params.waitTimeSettings?.chargeEnabled) {
+    const arrivedAt = ride.arrived_pickup_at as string | null;
+    if (arrivedAt) {
+      const waitResult = calculateWaitTimeFee({
+        arrivedPickupAt: arrivedAt,
+        tripStartedAt: nowIso,
+        graceMinutes: params.waitTimeSettings.graceMinutes,
+        ratePerMinMinor: params.waitTimeSettings.ratePerMinMinor,
+        surgeMultiplier: Number(ride.surge_multiplier ?? 1),
+        nowMs,
+      });
+      if (waitResult.feeMinor > 0) {
+        patch.wait_time_fee_minor = waitResult.feeMinor;
+        patch.wait_time_started_at = waitResult.graceExpiredAt;
+      }
+    }
+  }
+
   if (params.next === "completed") {
-    const fareMinor = Number(ride.fare_final_minor ?? ride.fare_estimate_minor);
+    const baseFareMinor = Number(ride.fare_estimate_minor ?? 0);
+    const waitTimeFeeMinor = Number(ride.wait_time_fee_minor ?? 0);
+    const actualTollsMinor = Number(ride.actual_tolls_minor ?? 0);
+    const estimatedTollsMinor = Number((ride.fare_breakdown as Record<string, unknown>)?.estimated_tolls_minor ?? 0);
+    const tollAdjustment = actualTollsMinor - estimatedTollsMinor;
+    const fareMinor = baseFareMinor + waitTimeFeeMinor + Math.max(0, tollAdjustment);
     if (!Number.isFinite(fareMinor) || fareMinor < 0) {
       return { ok: false, error: "invalid_fare", current };
     }
     patch.fare_final_minor = fareMinor;
     patch.completed_at = nowIso;
-    patch.fare_final_breakdown = ride.fare_breakdown ?? null;
+    
+    const breakdown = (ride.fare_breakdown ?? {}) as Record<string, unknown>;
+    patch.fare_final_breakdown = {
+      ...breakdown,
+      wait_time_fee_minor: waitTimeFeeMinor,
+      actual_tolls_minor: actualTollsMinor,
+      toll_adjustment_minor: tollAdjustment,
+    };
     patch.platform_fee_minor = 0;
     patch.tip_minor = 0;
     patch.driver_net_minor = fareMinor;

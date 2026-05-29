@@ -29,6 +29,14 @@ export type DispatchSettings = {
   gps_max_accuracy_m_for_arrival: number;
   no_show_auto_cancel_enabled: boolean;
   max_matching_duration_minutes: number;
+  wait_time_grace_minutes: number;
+  wait_time_rate_per_min_minor: number;
+  wait_time_charge_enabled: boolean;
+  wait_time_max_minutes: number;
+  pin_verification_enabled: boolean;
+  pin_verification_required_for_start: boolean;
+  toll_detection_enabled: boolean;
+  toll_geofence_radius_m: number;
   updated_at?: string;
   updated_by?: string | null;
 };
@@ -56,6 +64,14 @@ export const DEFAULT_DISPATCH_SETTINGS: DispatchSettings = {
   gps_max_accuracy_m_for_arrival: 50,
   no_show_auto_cancel_enabled: false,
   max_matching_duration_minutes: 15,
+  wait_time_grace_minutes: 2,
+  wait_time_rate_per_min_minor: 50,
+  wait_time_charge_enabled: false,
+  wait_time_max_minutes: 15,
+  pin_verification_enabled: false,
+  pin_verification_required_for_start: false,
+  toll_detection_enabled: false,
+  toll_geofence_radius_m: 100,
 };
 
 const CACHE_TTL_MS = 30_000;
@@ -166,6 +182,35 @@ export function rowToDispatchSettings(row: Record<string, unknown>): DispatchSet
           row.max_matching_duration_minutes ??
             DEFAULT_DISPATCH_SETTINGS.max_matching_duration_minutes,
         ),
+      ),
+    ),
+    wait_time_grace_minutes: Math.min(
+      10,
+      Math.max(
+        0,
+        Number(row.wait_time_grace_minutes ?? DEFAULT_DISPATCH_SETTINGS.wait_time_grace_minutes),
+      ),
+    ),
+    wait_time_rate_per_min_minor: Math.max(
+      0,
+      Number(row.wait_time_rate_per_min_minor ?? DEFAULT_DISPATCH_SETTINGS.wait_time_rate_per_min_minor),
+    ),
+    wait_time_charge_enabled: row.wait_time_charge_enabled === true,
+    wait_time_max_minutes: Math.min(
+      60,
+      Math.max(
+        1,
+        Number(row.wait_time_max_minutes ?? DEFAULT_DISPATCH_SETTINGS.wait_time_max_minutes),
+      ),
+    ),
+    pin_verification_enabled: row.pin_verification_enabled === true,
+    pin_verification_required_for_start: row.pin_verification_required_for_start === true,
+    toll_detection_enabled: row.toll_detection_enabled === true,
+    toll_geofence_radius_m: Math.min(
+      500,
+      Math.max(
+        50,
+        Number(row.toll_geofence_radius_m ?? DEFAULT_DISPATCH_SETTINGS.toll_geofence_radius_m),
       ),
     ),
     updated_at: typeof row.updated_at === "string" ? row.updated_at : undefined,

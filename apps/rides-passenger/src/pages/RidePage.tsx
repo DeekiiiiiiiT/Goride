@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Clock, AlertCircle } from 'lucide-react';
 import type { RideRequestStatus } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
 import {
@@ -64,6 +64,98 @@ function showLiveMap(status: RideRequestStatus | undefined): boolean {
 const RIDE_SYNC_MS = 30_000;
 const RIDE_MATCHING_SYNC_MS = 5_000;
 
+interface WaitTimeInfo {
+  wait_time_charge_enabled?: boolean;
+  wait_time_grace_remaining_seconds?: number;
+  wait_time_grace_expired?: boolean;
+  wait_time_current_fee_minor?: number;
+  wait_time_billable_minutes?: number;
+  wait_time_rate_per_min_minor?: number;
+}
+
+function formatSeconds(secs: number): string {
+  const mins = Math.floor(secs / 60);
+  const remainingSecs = Math.round(secs % 60);
+  return `${mins}:${remainingSecs.toString().padStart(2, '0')}`;
+}
+
+function RiderPinDisplay({ pin }: { pin: string }) {
+  return (
+    <div className="rounded-3xl bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/30 dark:to-slate-900 border border-emerald-200 dark:border-emerald-800 p-5 space-y-3">
+      <div className="flex items-center gap-2">
+        <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center">
+          <Clock className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+        </div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+            Your PIN
+          </p>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            Share this with your driver
+          </p>
+        </div>
+      </div>
+      <div className="flex justify-center gap-2">
+        {pin.split('').map((digit, i) => (
+          <span
+            key={i}
+            className="w-12 h-14 flex items-center justify-center text-2xl font-bold text-zinc-900 dark:text-white bg-white dark:bg-slate-800 rounded-xl border-2 border-emerald-300 dark:border-emerald-700 shadow-sm"
+          >
+            {digit}
+          </span>
+        ))}
+      </div>
+      <p className="text-xs text-center text-zinc-500 dark:text-zinc-400">
+        The driver will ask for this code before starting your trip
+      </p>
+    </div>
+  );
+}
+
+function RiderWaitTimeDisplay({ waitTime }: { waitTime: WaitTimeInfo }) {
+  const [remainingSecs, setRemainingSecs] = useState(waitTime.wait_time_grace_remaining_seconds ?? 0);
+  
+  useEffect(() => {
+    setRemainingSecs(waitTime.wait_time_grace_remaining_seconds ?? 0);
+  }, [waitTime.wait_time_grace_remaining_seconds]);
+  
+  useEffect(() => {
+    if (remainingSecs <= 0) return;
+    const interval = setInterval(() => {
+      setRemainingSecs(prev => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [remainingSecs > 0]);
+  
+  if (!waitTime.wait_time_charge_enabled) return null;
+  
+  if (waitTime.wait_time_grace_expired) {
+    return (
+      <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-amber-50 border border-amber-200">
+        <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-amber-800 font-medium">Wait time fee active</p>
+          <p className="text-xs text-amber-700">
+            Please meet your driver promptly. Current fee: {formatMoneyMinor(waitTime.wait_time_current_fee_minor ?? 0, 'JMD')}
+          </p>
+        </div>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-zinc-50 border border-zinc-200">
+      <Clock className="w-5 h-5 text-zinc-500 shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-zinc-700 font-medium">Driver waiting</p>
+        <p className="text-xs text-zinc-500">
+          Grace period: {formatSeconds(remainingSecs)} remaining
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function RidePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -84,6 +176,7 @@ export default function RidePage() {
   });
 
   const ride = data?.ride;
+  const waitTime = data?.wait_time as WaitTimeInfo | null | undefined;
 
   const { data: liveData } = useQuery({
     queryKey: ['ride-live', id],
@@ -232,6 +325,15 @@ export default function RidePage() {
                 </div>
               </div>
             </div>
+
+            {ride.verification_pin && !ride.pin_verified_at && 
+              ['driver_assigned', 'driver_en_route_pickup', 'driver_arrived_pickup'].includes(ride.status) && (
+              <RiderPinDisplay pin={ride.verification_pin} />
+            )}
+
+            {ride.status === 'driver_arrived_pickup' && waitTime && (
+              <RiderWaitTimeDisplay waitTime={waitTime} />
+            )}
 
             {isCancellable(ride.status) && (
               <button

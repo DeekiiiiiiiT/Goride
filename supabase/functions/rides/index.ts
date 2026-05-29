@@ -32,6 +32,8 @@ import {
   type DispatchSettings,
 } from "./fare/dispatchSettings.ts";
 import { isMatchingTimedOut } from "./fare/matchingHygiene.ts";
+import { getGraceRemainingSeconds, calculateWaitTimeFee } from "./fare/waitTime.ts";
+import { generatePin, verifyRidePin, isValidPinFormat } from "./fare/pinVerification.ts";
 import {
   getEligibleDriverUserIds,
   isDriverEligibleForDispatch,
@@ -1109,7 +1111,7 @@ app.post("/v1/requests", async (c) => {
     /* use defaults */
   }
 
-  const insertRow = {
+  const insertRow: Record<string, unknown> = {
     rider_user_id: auth.user.id,
     status: "matching" as RideStatus,
     pickup_lat,
@@ -1135,6 +1137,7 @@ app.post("/v1/requests", async (c) => {
     route_polyline_encoded: typeof body.route_polyline_encoded === "string"
       ? body.route_polyline_encoded
       : null,
+    verification_pin: bookDispatchSettings.pin_verification_enabled ? generatePin() : null,
   };
 
   let ride: Record<string, unknown> | null = null;
@@ -1190,7 +1193,33 @@ app.get("/v1/requests/:id", async (c) => {
   const fresh = await loadRideRequestById(id);
   const offers = await loadDriverOffersForRide(id);
 
-  return c.json({ ride: fresh, offers });
+  const settings = await loadDispatchSettingsForRides();
+  let waitTimeInfo: Record<string, unknown> | null = null;
+
+  if (fresh?.status === "driver_arrived_pickup" && fresh.arrived_pickup_at) {
+    const arrivedAt = String(fresh.arrived_pickup_at);
+    const graceRemaining = getGraceRemainingSeconds(
+      arrivedAt,
+      settings.wait_time_grace_minutes
+    );
+    const waitCalc = calculateWaitTimeFee({
+      arrivedPickupAt: arrivedAt,
+      tripStartedAt: null,
+      graceMinutes: settings.wait_time_grace_minutes,
+      ratePerMinMinor: settings.wait_time_rate_per_min_minor,
+      surgeMultiplier: Number(fresh.surge_multiplier ?? 1),
+    });
+    waitTimeInfo = {
+      wait_time_charge_enabled: settings.wait_time_charge_enabled,
+      wait_time_grace_remaining_seconds: graceRemaining,
+      wait_time_grace_expired: waitCalc.isGraceExpired,
+      wait_time_current_fee_minor: settings.wait_time_charge_enabled ? waitCalc.feeMinor : 0,
+      wait_time_billable_minutes: waitCalc.billableMinutes,
+      wait_time_rate_per_min_minor: settings.wait_time_rate_per_min_minor,
+    };
+  }
+
+  return c.json({ ride: fresh, offers, wait_time: waitTimeInfo });
 });
 
 app.post("/v1/requests/:id/cancel", async (c) => {
@@ -1619,6 +1648,8 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
     return c.json({ error: "invalid_transition", current, next }, 400);
   }
 
+  const settings = await loadDispatchSettingsForRides();
+
   const result = await applyRideTransition(transitionDeps(), {
     rideId: id,
     next,
@@ -1627,11 +1658,25 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
     expectedFrom: current,
     cancelReason: typeof body.reason === "string" ? body.reason : null,
     cancelledBy: next === "cancelled" ? "driver" : undefined,
+    waitTimeSettings: next === "on_trip" ? {
+      graceMinutes: settings.wait_time_grace_minutes,
+      ratePerMinMinor: settings.wait_time_rate_per_min_minor,
+      chargeEnabled: settings.wait_time_charge_enabled,
+    } : undefined,
+    pinSettings: next === "on_trip" ? {
+      enabled: settings.pin_verification_enabled,
+      requiredForStart: settings.pin_verification_required_for_start,
+      providedPin: typeof body.verification_pin === "string" ? body.verification_pin : undefined,
+    } : undefined,
   });
 
   if (!result.ok) {
     if (result.error === "invalid_fare") {
       return c.json({ error: "invalid_fare", message: "Cannot complete ride without a valid fare" }, 400);
+    }
+    if (result.error?.startsWith("pin_")) {
+      const pinError = result.error.replace("pin_", "");
+      return c.json({ error: result.error, message: `PIN verification failed: ${pinError}`, pin_required: true }, 400);
     }
     return c.json({ error: result.error ?? "transition_failed", current: result.current }, 400);
   }

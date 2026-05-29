@@ -1,6 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Loader2, Save } from 'lucide-react';
+import { HelpCircle, Loader2, Pencil, X } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@roam/ui';
 import type { DispatchSettingsDto } from '../services/ridesAdminService';
 import {
   getDispatchSettings,
@@ -8,6 +14,112 @@ import {
 } from '../services/ridesAdminService';
 
 const WRITE_ROLES = new Set(['platform_owner', 'superadmin', 'rides_admin']);
+
+type SectionId = 'matching' | 'presence' | 'bodyType' | 'rollout' | 'automation' | 'waitTime' | 'pinVerification' | 'tollDetection' | 'quotes';
+
+const SECTION_KEYS: Record<SectionId, (keyof DispatchSettingsDto)[]> = {
+  matching: [
+    'max_match_waves',
+    'wave_radius_km',
+    'max_offers_per_wave',
+    'max_matching_duration_minutes',
+    'default_driver_offer_timeout_seconds',
+  ],
+  presence: ['driver_location_max_age_minutes', 'require_body_type_for_offers'],
+  bodyType: ['body_type_filtering_enabled', 'body_type_tier_mode'],
+  rollout: ['independent_only_matching'],
+  automation: [
+    'trip_location_interval_seconds',
+    'pickup_geofence_radius_m',
+    'dropoff_geofence_radius_m',
+    'arrival_dwell_seconds',
+    'max_speed_mps_for_arrival',
+    'gps_max_accuracy_m_for_arrival',
+    'no_show_cancel_minutes',
+    'auto_en_route_on_accept',
+    'auto_arrive_enabled',
+    'auto_complete_suggest_enabled',
+    'no_show_auto_cancel_enabled',
+  ],
+  waitTime: [
+    'wait_time_grace_minutes',
+    'wait_time_rate_per_min_minor',
+    'wait_time_max_minutes',
+    'wait_time_charge_enabled',
+  ],
+  pinVerification: [
+    'pin_verification_enabled',
+    'pin_verification_required_for_start',
+  ],
+  tollDetection: [
+    'toll_detection_enabled',
+    'toll_geofence_radius_m',
+  ],
+  quotes: ['quote_driver_radius_km'],
+};
+
+const TOOLTIPS = {
+  max_match_waves:
+    'How many search rounds run per ride. After each wave finishes (offers expire or are declined), the system widens the search radius. When all waves are exhausted with no accept, the ride is cancelled as no drivers available.',
+  max_offers_per_wave:
+    'Maximum drivers pinged at once in each wave. Higher values notify more drivers but may feel spammy.',
+  max_matching_duration_minutes:
+    'Hard ceiling: if a ride is still matching after this many minutes, the system auto-cancels (matching timeout). Also used by the database hygiene job. Should be at or above your intended max rider wait time.',
+  default_driver_offer_timeout_seconds:
+    'Seconds each driver has to accept or decline an offer before it expires and matching can advance to the next driver or wave.',
+  wave_radius_km:
+    'Maximum distance from pickup (km) for drivers considered in each wave. Each wave should use a larger radius than the previous.',
+  driver_location_max_age_minutes:
+    'Driver GPS must be updated within this window to count as online for matching and fare quotes.',
+  require_body_type_for_offers:
+    'When on, drivers without a registered body type are excluded from offers. When off, they may still receive offers if body-type filtering is enabled.',
+  body_type_filtering_enabled:
+    'When on, only drivers whose vehicle body type matches the booked service (per Transport Solutions links) are offered the ride. When off, matching uses distance only.',
+  body_type_tier_mode:
+    'Expand adds lower-priority body types in later waves. Strict keeps only the highest-priority types for every wave.',
+  independent_only_matching:
+    'Beta gate: when on, only independent drivers receive passenger offers and can go online for Roam dispatch. Fleet drivers keep the legacy START TRIP flow.',
+  trip_location_interval_seconds:
+    'How often the driver app sends GPS updates during an active trip (geofence and live map).',
+  pickup_geofence_radius_m:
+    'Radius around pickup where the driver is considered arrived for auto-arrive and dwell timers.',
+  dropoff_geofence_radius_m:
+    'Radius around drop-off where complete-trip suggestions and drop-off geofence logic apply.',
+  arrival_dwell_seconds:
+    'Driver must remain inside the pickup geofence this long before auto-arrive or no-show logic can fire.',
+  max_speed_mps_for_arrival:
+    'Maximum speed (m/s) allowed when evaluating geofence arrival — filters GPS jitter while driving past the pin.',
+  gps_max_accuracy_m_for_arrival:
+    'GPS fix must be at least this accurate (meters) before auto-arrive is allowed.',
+  no_show_cancel_minutes:
+    'After driver arrives at pickup, minutes to wait before a no-show cancel is allowed (when auto no-show is enabled).',
+  auto_en_route_on_accept:
+    'Automatically move the ride to en route to pickup when a driver accepts, without a manual tap.',
+  auto_arrive_enabled:
+    'Automatically mark driver arrived at pickup when geofence + dwell rules are satisfied.',
+  auto_complete_suggest_enabled:
+    'Prompt or suggest completing the trip when the driver enters the drop-off geofence.',
+  no_show_auto_cancel_enabled:
+    'Automatically cancel the ride when the rider no-shows after dwell at pickup. Off by default until QA sign-off.',
+  quote_driver_radius_km:
+    'Radius around pickup used on the fare quote to find nearby drivers and show pickup ETA on vehicle cards.',
+  wait_time_grace_minutes:
+    'Minutes after driver arrival before wait time charges begin. Rider has this time to reach the pickup without extra fees.',
+  wait_time_rate_per_min_minor:
+    'Per-minute rate for wait time in JMD cents. This rate is multiplied by surge if active.',
+  wait_time_max_minutes:
+    'Maximum minutes a driver waits before the system may auto-cancel. Should be greater than grace period.',
+  wait_time_charge_enabled:
+    'Enable wait time billing. When on, riders are charged per-minute after the grace period expires.',
+  pin_verification_enabled:
+    'Enable PIN generation for rides. Each ride shows a 4-digit PIN to the rider that the driver must verify.',
+  pin_verification_required_for_start:
+    'Require PIN verification before trip can start. Driver must enter the correct PIN to start the trip.',
+  toll_detection_enabled:
+    'Enable real-time toll detection during trips. Tolls are detected via geofence and added to the final fare.',
+  toll_geofence_radius_m:
+    'Radius around toll plazas for geofence detection. Driver must pass within this distance for toll to be recorded.',
+} as const;
 
 interface DispatchSettingsFormProps {
   accessToken: string | undefined;
@@ -23,12 +135,140 @@ function formatUpdatedAt(iso?: string): string {
   }
 }
 
+function SettingLabel({
+  label,
+  tip,
+  variant = 'field',
+}: {
+  label: string;
+  tip: string;
+  variant?: 'field' | 'inline';
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span
+        className={
+          variant === 'field'
+            ? 'text-xs text-slate-400 uppercase tracking-wide'
+            : 'text-sm text-slate-300'
+        }
+      >
+        {label}
+      </span>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className="text-slate-500 hover:text-slate-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-emerald-500 rounded"
+            aria-label={`About ${label}`}
+          >
+            <HelpCircle className="w-3.5 h-3.5 shrink-0" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent
+          side="top"
+          className="max-w-xs bg-slate-800 text-slate-100 border border-slate-700 text-left leading-snug"
+        >
+          {tip}
+        </TooltipContent>
+      </Tooltip>
+    </span>
+  );
+}
+
+function sectionDisabled(canEdit: boolean, editing: boolean): boolean {
+  return !canEdit || !editing;
+}
+
+interface SettingsSectionProps {
+  title: string;
+  description: string;
+  canEdit: boolean;
+  isEditing: boolean;
+  isSaving: boolean;
+  onEdit: () => void;
+  onCancel: () => void;
+  onSave: () => void;
+  children: React.ReactNode;
+}
+
+function SettingsSection({
+  title,
+  description,
+  canEdit,
+  isEditing,
+  isSaving,
+  onEdit,
+  onCancel,
+  onSave,
+  children,
+}: SettingsSectionProps) {
+  return (
+    <section className="rounded-xl border border-slate-800 bg-slate-900/30 p-6 space-y-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h3 className="text-base font-medium text-white">{title}</h3>
+          <p className="text-sm text-slate-400 mt-1">{description}</p>
+        </div>
+        {canEdit && (
+          <div className="flex items-center gap-2 shrink-0">
+            {!isEditing ? (
+              <button
+                type="button"
+                onClick={onEdit}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-700 text-sm text-slate-200 hover:bg-slate-800"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                Edit
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  disabled={isSaving}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-700 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={onSave}
+                  disabled={isSaving}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-sm text-white font-medium disabled:opacity-50"
+                >
+                  {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                  Save
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 export function DispatchSettingsForm({ accessToken, role }: DispatchSettingsFormProps) {
   const canEdit = role ? WRITE_ROLES.has(role) : false;
 
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [savingSection, setSavingSection] = useState<SectionId | null>(null);
   const [form, setForm] = useState<DispatchSettingsDto | null>(null);
+  const [editing, setEditing] = useState<Record<SectionId, boolean>>({
+    matching: false,
+    presence: false,
+    bodyType: false,
+    rollout: false,
+    automation: false,
+    waitTime: false,
+    pinVerification: false,
+    tollDetection: false,
+    quotes: false,
+  });
+  const [snapshots, setSnapshots] = useState<Partial<Record<SectionId, Partial<DispatchSettingsDto>>>>({});
 
   const load = useCallback(async () => {
     if (!accessToken) return;
@@ -47,6 +287,24 @@ export function DispatchSettingsForm({ accessToken, role }: DispatchSettingsForm
     void load();
   }, [load]);
 
+  const startEdit = (section: SectionId) => {
+    if (!form) return;
+    const snap: Partial<DispatchSettingsDto> = {};
+    for (const key of SECTION_KEYS[section]) {
+      snap[key] = form[key];
+    }
+    setSnapshots((prev) => ({ ...prev, [section]: snap }));
+    setEditing((prev) => ({ ...prev, [section]: true }));
+  };
+
+  const cancelEdit = (section: SectionId) => {
+    const snap = snapshots[section];
+    if (snap && form) {
+      setForm({ ...form, ...snap });
+    }
+    setEditing((prev) => ({ ...prev, [section]: false }));
+  };
+
   const setWaveCount = (count: number) => {
     if (!form) return;
     const n = Math.min(5, Math.max(1, count));
@@ -64,17 +322,27 @@ export function DispatchSettingsForm({ accessToken, role }: DispatchSettingsForm
     setForm({ ...form, wave_radius_km: radii });
   };
 
-  const handleSave = async () => {
-    if (!accessToken || !form || !canEdit) return;
+  const buildSectionPatch = (section: SectionId): Partial<DispatchSettingsDto> => {
+    if (!form) return {};
+    const patch: Partial<DispatchSettingsDto> = {};
+    for (const key of SECTION_KEYS[section]) {
+      patch[key] = form[key];
+    }
+    if (section === 'matching') {
+      patch.wave_radius_km = form.wave_radius_km.slice(0, form.max_match_waves);
+    }
+    return patch;
+  };
 
+  const validateMatchingSection = (): boolean => {
+    if (!form) return false;
     const radii = form.wave_radius_km.slice(0, form.max_match_waves);
     for (let i = 1; i < radii.length; i++) {
       if (radii[i] <= radii[i - 1]) {
         toast.error('Wave radii must increase with each wave');
-        return;
+        return false;
       }
     }
-
     const aggressive =
       form.max_offers_per_wave > 10 ||
       radii.some((r, i) => i > 0 && r > (form.wave_radius_km[i - 1] ?? 0) * 2);
@@ -84,41 +352,25 @@ export function DispatchSettingsForm({ accessToken, role }: DispatchSettingsForm
         'These settings widen driver search or increase offers per wave. Save anyway?',
       )
     ) {
-      return;
+      return false;
     }
+    return true;
+  };
 
-    setSaving(true);
+  const handleSaveSection = async (section: SectionId) => {
+    if (!accessToken || !form || !canEdit) return;
+    if (section === 'matching' && !validateMatchingSection()) return;
+
+    setSavingSection(section);
     try {
-      const { settings } = await updateDispatchSettings(accessToken, {
-        max_match_waves: form.max_match_waves,
-        wave_radius_km: radii,
-        max_offers_per_wave: form.max_offers_per_wave,
-        default_driver_offer_timeout_seconds: form.default_driver_offer_timeout_seconds,
-        driver_location_max_age_minutes: form.driver_location_max_age_minutes,
-        quote_driver_radius_km: form.quote_driver_radius_km,
-        body_type_filtering_enabled: form.body_type_filtering_enabled,
-        body_type_tier_mode: form.body_type_tier_mode,
-        require_body_type_for_offers: form.require_body_type_for_offers,
-        independent_only_matching: form.independent_only_matching,
-        trip_location_interval_seconds: form.trip_location_interval_seconds,
-        pickup_geofence_radius_m: form.pickup_geofence_radius_m,
-        dropoff_geofence_radius_m: form.dropoff_geofence_radius_m,
-        arrival_dwell_seconds: form.arrival_dwell_seconds,
-        max_speed_mps_for_arrival: form.max_speed_mps_for_arrival,
-        auto_en_route_on_accept: form.auto_en_route_on_accept,
-        auto_arrive_enabled: form.auto_arrive_enabled,
-        auto_complete_suggest_enabled: form.auto_complete_suggest_enabled,
-        no_show_cancel_minutes: form.no_show_cancel_minutes,
-        gps_max_accuracy_m_for_arrival: form.gps_max_accuracy_m_for_arrival,
-        no_show_auto_cancel_enabled: form.no_show_auto_cancel_enabled,
-        max_matching_duration_minutes: form.max_matching_duration_minutes,
-      });
+      const { settings } = await updateDispatchSettings(accessToken, buildSectionPatch(section));
       setForm(settings);
-      toast.success('Dispatch settings saved');
+      setEditing((prev) => ({ ...prev, [section]: false }));
+      toast.success('Settings saved');
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Save failed');
     } finally {
-      setSaving(false);
+      setSavingSection(null);
     }
   };
 
@@ -134,426 +386,668 @@ export function DispatchSettingsForm({ accessToken, role }: DispatchSettingsForm
     return <p className="text-sm text-slate-400">Could not load dispatch settings.</p>;
   }
 
-  return (
-    <div className="space-y-8 max-w-2xl">
-      <section className="rounded-xl border border-slate-800 bg-slate-900/30 p-6 space-y-4">
-        <div>
-          <h3 className="text-base font-medium text-white">Dispatch and matching</h3>
-          <p className="text-sm text-slate-400 mt-1">
-            How far and how many times the system searches for drivers per ride.
-          </p>
-        </div>
+  const inputClass =
+    'w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60 disabled:cursor-not-allowed';
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+  return (
+    <TooltipProvider delayDuration={200}>
+      <div className="space-y-8 max-w-2xl">
+        <SettingsSection
+          title="Dispatch and matching"
+          description="How far and how many times the system searches for drivers per ride."
+          canEdit={canEdit}
+          isEditing={editing.matching}
+          isSaving={savingSection === 'matching'}
+          onEdit={() => startEdit('matching')}
+          onCancel={() => cancelEdit('matching')}
+          onSave={() => void handleSaveSection('matching')}
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <label className="block space-y-1.5">
+              <SettingLabel label="Max matching waves" tip={TOOLTIPS.max_match_waves} />
+              <input
+                type="number"
+                min={1}
+                max={5}
+                disabled={sectionDisabled(canEdit, editing.matching)}
+                value={form.max_match_waves}
+                onChange={(e) => setWaveCount(Number(e.target.value))}
+                className={inputClass}
+              />
+            </label>
+            <label className="block space-y-1.5">
+              <SettingLabel label="Offers per wave" tip={TOOLTIPS.max_offers_per_wave} />
+              <input
+                type="number"
+                min={1}
+                max={20}
+                disabled={sectionDisabled(canEdit, editing.matching)}
+                value={form.max_offers_per_wave}
+                onChange={(e) =>
+                  setForm({ ...form, max_offers_per_wave: Number(e.target.value) })
+                }
+                className={inputClass}
+              />
+            </label>
+            <label className="block space-y-1.5 sm:col-span-2">
+              <SettingLabel
+                label="Max matching duration (minutes)"
+                tip={TOOLTIPS.max_matching_duration_minutes}
+              />
+              <input
+                type="number"
+                min={2}
+                max={120}
+                disabled={sectionDisabled(canEdit, editing.matching)}
+                value={form.max_matching_duration_minutes}
+                onChange={(e) =>
+                  setForm({ ...form, max_matching_duration_minutes: Number(e.target.value) })
+                }
+                className={inputClass}
+              />
+            </label>
+            <label className="block space-y-1.5 sm:col-span-2">
+              <SettingLabel
+                label="Default offer timeout (seconds)"
+                tip={TOOLTIPS.default_driver_offer_timeout_seconds}
+              />
+              <input
+                type="number"
+                min={5}
+                max={120}
+                disabled={sectionDisabled(canEdit, editing.matching)}
+                value={form.default_driver_offer_timeout_seconds}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    default_driver_offer_timeout_seconds: Number(e.target.value),
+                  })
+                }
+                className={inputClass}
+              />
+            </label>
+          </div>
+
+          <div className="space-y-3">
+            <SettingLabel label="Wave search radius (km)" tip={TOOLTIPS.wave_radius_km} />
+            {form.wave_radius_km.slice(0, form.max_match_waves).map((km, i) => (
+              <label key={i} className="flex items-center gap-3">
+                <span className="text-sm text-slate-300 w-16">Wave {i + 1}</span>
+                <input
+                  type="number"
+                  min={0.5}
+                  step={0.5}
+                  disabled={sectionDisabled(canEdit, editing.matching)}
+                  value={km}
+                  onChange={(e) => setWaveRadius(i, Number(e.target.value))}
+                  className={`flex-1 ${inputClass}`}
+                />
+              </label>
+            ))}
+          </div>
+        </SettingsSection>
+
+        <SettingsSection
+          title="Driver presence"
+          description="When a driver's GPS is considered fresh enough for matching and quotes."
+          canEdit={canEdit}
+          isEditing={editing.presence}
+          isSaving={savingSection === 'presence'}
+          onEdit={() => startEdit('presence')}
+          onCancel={() => cancelEdit('presence')}
+          onSave={() => void handleSaveSection('presence')}
+        >
           <label className="block space-y-1.5">
-            <span className="text-xs text-slate-400 uppercase tracking-wide">Max matching waves</span>
+            <SettingLabel
+              label="Location max age (minutes)"
+              tip={TOOLTIPS.driver_location_max_age_minutes}
+            />
             <input
               type="number"
               min={1}
-              max={5}
-              disabled={!canEdit}
-              value={form.max_match_waves}
-              onChange={(e) => setWaveCount(Number(e.target.value))}
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60"
+              max={30}
+              disabled={sectionDisabled(canEdit, editing.presence)}
+              value={form.driver_location_max_age_minutes}
+              onChange={(e) =>
+                setForm({ ...form, driver_location_max_age_minutes: Number(e.target.value) })
+              }
+              className={inputClass}
             />
           </label>
+
+          <label
+            className={`flex items-start gap-3 ${sectionDisabled(canEdit, editing.presence) ? 'cursor-default' : 'cursor-pointer'}`}
+          >
+            <input
+              type="checkbox"
+              disabled={sectionDisabled(canEdit, editing.presence)}
+              checked={form.require_body_type_for_offers}
+              onChange={(e) =>
+                setForm({ ...form, require_body_type_for_offers: e.target.checked })
+              }
+              className="mt-1 rounded border-slate-600"
+            />
+            <span className="text-sm text-slate-300">
+              <SettingLabel
+                variant="inline"
+                label="Require body type on driver to receive offers"
+                tip={TOOLTIPS.require_body_type_for_offers}
+              />
+            </span>
+          </label>
+        </SettingsSection>
+
+        <SettingsSection
+          title="Body-type policy"
+          description="How service ↔ body type links affect matching (configured under Transport Solutions)."
+          canEdit={canEdit}
+          isEditing={editing.bodyType}
+          isSaving={savingSection === 'bodyType'}
+          onEdit={() => startEdit('bodyType')}
+          onCancel={() => cancelEdit('bodyType')}
+          onSave={() => void handleSaveSection('bodyType')}
+        >
+          <label
+            className={`flex items-start gap-3 ${sectionDisabled(canEdit, editing.bodyType) ? 'cursor-default' : 'cursor-pointer'}`}
+          >
+            <input
+              type="checkbox"
+              disabled={sectionDisabled(canEdit, editing.bodyType)}
+              checked={form.body_type_filtering_enabled}
+              onChange={(e) =>
+                setForm({ ...form, body_type_filtering_enabled: e.target.checked })
+              }
+              className="mt-1 rounded border-slate-600"
+            />
+            <span className="text-sm text-slate-300">
+              <SettingLabel
+                variant="inline"
+                label="Enable body-type filtering"
+                tip={TOOLTIPS.body_type_filtering_enabled}
+              />
+            </span>
+          </label>
+
           <label className="block space-y-1.5">
-            <span className="text-xs text-slate-400 uppercase tracking-wide">Offers per wave</span>
-            <input
-              type="number"
-              min={1}
-              max={20}
-              disabled={!canEdit}
-              value={form.max_offers_per_wave}
-              onChange={(e) =>
-                setForm({ ...form, max_offers_per_wave: Number(e.target.value) })
-              }
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60"
-            />
-          </label>
-          <label className="block space-y-1.5 sm:col-span-2">
-            <span className="text-xs text-slate-400 uppercase tracking-wide">
-              Max matching duration (minutes)
-            </span>
-            <input
-              type="number"
-              min={2}
-              max={120}
-              disabled={!canEdit}
-              value={form.max_matching_duration_minutes}
-              onChange={(e) =>
-                setForm({ ...form, max_matching_duration_minutes: Number(e.target.value) })
-              }
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60"
-            />
-            <p className="text-xs text-slate-500">
-              System auto-cancels rides still matching after this time (orphan backstop).
-            </p>
-          </label>
-          <label className="block space-y-1.5 sm:col-span-2">
-            <span className="text-xs text-slate-400 uppercase tracking-wide">
-              Default offer timeout (seconds)
-            </span>
-            <input
-              type="number"
-              min={5}
-              max={120}
-              disabled={!canEdit}
-              value={form.default_driver_offer_timeout_seconds}
+            <SettingLabel label="Tier expansion" tip={TOOLTIPS.body_type_tier_mode} />
+            <select
+              disabled={sectionDisabled(canEdit, editing.bodyType) || !form.body_type_filtering_enabled}
+              value={form.body_type_tier_mode}
               onChange={(e) =>
                 setForm({
                   ...form,
-                  default_driver_offer_timeout_seconds: Number(e.target.value),
+                  body_type_tier_mode: e.target.value as 'expand' | 'strict',
                 })
               }
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60"
-            />
+              className={inputClass}
+            >
+              <option value="expand">Expand — add lower-priority body types each wave</option>
+              <option value="strict">Strict — only highest-priority body types</option>
+            </select>
           </label>
-        </div>
+        </SettingsSection>
 
-        <div className="space-y-3">
-          <p className="text-xs text-slate-400 uppercase tracking-wide">Wave search radius (km)</p>
-          {form.wave_radius_km.slice(0, form.max_match_waves).map((km, i) => (
-            <label key={i} className="flex items-center gap-3">
-              <span className="text-sm text-slate-300 w-16">Wave {i + 1}</span>
+        <SettingsSection
+          title="Driver rollout"
+          description="Control which Roam Driver accounts participate in passenger dispatch during beta."
+          canEdit={canEdit}
+          isEditing={editing.rollout}
+          isSaving={savingSection === 'rollout'}
+          onEdit={() => startEdit('rollout')}
+          onCancel={() => cancelEdit('rollout')}
+          onSave={() => void handleSaveSection('rollout')}
+        >
+          <label
+            className={`flex items-start gap-3 ${sectionDisabled(canEdit, editing.rollout) ? 'cursor-default' : 'cursor-pointer'}`}
+          >
+            <input
+              type="checkbox"
+              disabled={sectionDisabled(canEdit, editing.rollout)}
+              checked={form.independent_only_matching}
+              onChange={(e) =>
+                setForm({ ...form, independent_only_matching: e.target.checked })
+              }
+              className="mt-1 rounded border-slate-600"
+            />
+            <span className="text-sm text-slate-300">
+              <SettingLabel
+                variant="inline"
+                label="Independent drivers only (beta)"
+                tip={TOOLTIPS.independent_only_matching}
+              />
+            </span>
+          </label>
+        </SettingsSection>
+
+        <SettingsSection
+          title="In-trip automation"
+          description="GPS geofencing and automatic status transitions. Toggle gradually in production."
+          canEdit={canEdit}
+          isEditing={editing.automation}
+          isSaving={savingSection === 'automation'}
+          onEdit={() => startEdit('automation')}
+          onCancel={() => cancelEdit('automation')}
+          onSave={() => void handleSaveSection('automation')}
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <label className="block space-y-1.5">
+              <SettingLabel
+                label="Location interval (sec)"
+                tip={TOOLTIPS.trip_location_interval_seconds}
+              />
               <input
                 type="number"
-                min={0.5}
-                step={0.5}
-                disabled={!canEdit}
-                value={km}
-                onChange={(e) => setWaveRadius(i, Number(e.target.value))}
-                className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60"
+                min={2}
+                max={30}
+                disabled={sectionDisabled(canEdit, editing.automation)}
+                value={form.trip_location_interval_seconds}
+                onChange={(e) =>
+                  setForm({ ...form, trip_location_interval_seconds: Number(e.target.value) })
+                }
+                className={inputClass}
               />
             </label>
-          ))}
-        </div>
-      </section>
+            <label className="block space-y-1.5">
+              <SettingLabel label="Pickup geofence (m)" tip={TOOLTIPS.pickup_geofence_radius_m} />
+              <input
+                type="number"
+                min={20}
+                max={500}
+                disabled={sectionDisabled(canEdit, editing.automation)}
+                value={form.pickup_geofence_radius_m}
+                onChange={(e) =>
+                  setForm({ ...form, pickup_geofence_radius_m: Number(e.target.value) })
+                }
+                className={inputClass}
+              />
+            </label>
+            <label className="block space-y-1.5">
+              <SettingLabel
+                label="Drop-off geofence (m)"
+                tip={TOOLTIPS.dropoff_geofence_radius_m}
+              />
+              <input
+                type="number"
+                min={20}
+                max={500}
+                disabled={sectionDisabled(canEdit, editing.automation)}
+                value={form.dropoff_geofence_radius_m}
+                onChange={(e) =>
+                  setForm({ ...form, dropoff_geofence_radius_m: Number(e.target.value) })
+                }
+                className={inputClass}
+              />
+            </label>
+            <label className="block space-y-1.5">
+              <SettingLabel label="Arrival dwell (sec)" tip={TOOLTIPS.arrival_dwell_seconds} />
+              <input
+                type="number"
+                min={0}
+                max={120}
+                disabled={sectionDisabled(canEdit, editing.automation)}
+                value={form.arrival_dwell_seconds}
+                onChange={(e) =>
+                  setForm({ ...form, arrival_dwell_seconds: Number(e.target.value) })
+                }
+                className={inputClass}
+              />
+            </label>
+            <label className="block space-y-1.5">
+              <SettingLabel
+                label="Max speed for arrive (m/s)"
+                tip={TOOLTIPS.max_speed_mps_for_arrival}
+              />
+              <input
+                type="number"
+                min={0}
+                max={20}
+                step={0.5}
+                disabled={sectionDisabled(canEdit, editing.automation)}
+                value={form.max_speed_mps_for_arrival}
+                onChange={(e) =>
+                  setForm({ ...form, max_speed_mps_for_arrival: Number(e.target.value) })
+                }
+                className={inputClass}
+              />
+            </label>
+            <label className="block space-y-1.5">
+              <SettingLabel label="GPS max accuracy (m)" tip={TOOLTIPS.gps_max_accuracy_m_for_arrival} />
+              <input
+                type="number"
+                min={10}
+                max={200}
+                disabled={sectionDisabled(canEdit, editing.automation)}
+                value={form.gps_max_accuracy_m_for_arrival}
+                onChange={(e) =>
+                  setForm({ ...form, gps_max_accuracy_m_for_arrival: Number(e.target.value) })
+                }
+                className={inputClass}
+              />
+            </label>
+            <label className="block space-y-1.5 sm:col-span-2">
+              <SettingLabel
+                label="No-show cancel after (min)"
+                tip={TOOLTIPS.no_show_cancel_minutes}
+              />
+              <input
+                type="number"
+                min={0}
+                max={60}
+                disabled={sectionDisabled(canEdit, editing.automation)}
+                value={form.no_show_cancel_minutes}
+                onChange={(e) =>
+                  setForm({ ...form, no_show_cancel_minutes: Number(e.target.value) })
+                }
+                className={inputClass}
+              />
+            </label>
+          </div>
 
-      <section className="rounded-xl border border-slate-800 bg-slate-900/30 p-6 space-y-4">
-        <div>
-          <h3 className="text-base font-medium text-white">Driver presence</h3>
-          <p className="text-sm text-slate-400 mt-1">
-            When a driver&apos;s GPS is considered fresh enough for matching and quotes.
-          </p>
-        </div>
-
-        <label className="block space-y-1.5">
-          <span className="text-xs text-slate-400 uppercase tracking-wide">
-            Location max age (minutes)
-          </span>
-          <input
-            type="number"
-            min={1}
-            max={30}
-            disabled={!canEdit}
-            value={form.driver_location_max_age_minutes}
-            onChange={(e) =>
-              setForm({ ...form, driver_location_max_age_minutes: Number(e.target.value) })
-            }
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60"
-          />
-        </label>
-
-        <label className="flex items-start gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            disabled={!canEdit}
-            checked={form.require_body_type_for_offers}
-            onChange={(e) =>
-              setForm({ ...form, require_body_type_for_offers: e.target.checked })
-            }
-            className="mt-1 rounded border-slate-600"
-          />
-          <span className="text-sm text-slate-300">
-            Require body type on driver to receive offers
-            <span className="block text-xs text-slate-500 mt-0.5">
-              When off, drivers without a body type can still be offered rides if filtering is on.
-            </span>
-          </span>
-        </label>
-      </section>
-
-      <section className="rounded-xl border border-slate-800 bg-slate-900/30 p-6 space-y-4">
-        <div>
-          <h3 className="text-base font-medium text-white">Body-type policy</h3>
-          <p className="text-sm text-slate-400 mt-1">
-            How service ↔ body type links affect matching (configured under Transport Solutions).
-          </p>
-        </div>
-
-        <label className="flex items-start gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            disabled={!canEdit}
-            checked={form.body_type_filtering_enabled}
-            onChange={(e) =>
-              setForm({ ...form, body_type_filtering_enabled: e.target.checked })
-            }
-            className="mt-1 rounded border-slate-600"
-          />
-          <span className="text-sm text-slate-300">
-            Enable body-type filtering
-            <span className="block text-xs text-slate-500 mt-0.5">
-              When off, matching uses distance only (ignores service body-type links).
-            </span>
-          </span>
-        </label>
-
-        <label className="block space-y-1.5">
-          <span className="text-xs text-slate-400 uppercase tracking-wide">Tier expansion</span>
-          <select
-            disabled={!canEdit || !form.body_type_filtering_enabled}
-            value={form.body_type_tier_mode}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                body_type_tier_mode: e.target.value as 'expand' | 'strict',
-              })
-            }
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60"
+          <label
+            className={`flex items-start gap-3 ${sectionDisabled(canEdit, editing.automation) ? 'cursor-default' : 'cursor-pointer'}`}
           >
-            <option value="expand">Expand — add lower-priority body types each wave</option>
-            <option value="strict">Strict — only highest-priority body types</option>
-          </select>
-        </label>
-      </section>
-
-      <section className="rounded-xl border border-slate-800 bg-slate-900/30 p-6 space-y-4">
-        <div>
-          <h3 className="text-base font-medium text-white">Driver rollout</h3>
-          <p className="text-sm text-slate-400 mt-1">
-            Control which Roam Driver accounts participate in passenger dispatch during beta.
-          </p>
-        </div>
-
-        <label className="flex items-start gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            disabled={!canEdit}
-            checked={form.independent_only_matching}
-            onChange={(e) =>
-              setForm({ ...form, independent_only_matching: e.target.checked })
-            }
-            className="mt-1 rounded border-slate-600"
-          />
-          <span className="text-sm text-slate-300">
-            Independent drivers only (beta)
-            <span className="block text-xs text-slate-500 mt-0.5">
-              When on, only independent drivers receive Roam passenger offers. Fleet drivers keep
-              the legacy START TRIP flow until this is turned off.
+            <input
+              type="checkbox"
+              disabled={sectionDisabled(canEdit, editing.automation)}
+              checked={form.auto_en_route_on_accept}
+              onChange={(e) => setForm({ ...form, auto_en_route_on_accept: e.target.checked })}
+              className="mt-1 rounded border-slate-600"
+            />
+            <span className="text-sm text-slate-300">
+              <SettingLabel
+                variant="inline"
+                label="Auto en route on accept"
+                tip={TOOLTIPS.auto_en_route_on_accept}
+              />
             </span>
-          </span>
-        </label>
-      </section>
+          </label>
+          <label
+            className={`flex items-start gap-3 ${sectionDisabled(canEdit, editing.automation) ? 'cursor-default' : 'cursor-pointer'}`}
+          >
+            <input
+              type="checkbox"
+              disabled={sectionDisabled(canEdit, editing.automation)}
+              checked={form.auto_arrive_enabled}
+              onChange={(e) => setForm({ ...form, auto_arrive_enabled: e.target.checked })}
+              className="mt-1 rounded border-slate-600"
+            />
+            <span className="text-sm text-slate-300">
+              <SettingLabel
+                variant="inline"
+                label="Auto arrive at pickup (geofence)"
+                tip={TOOLTIPS.auto_arrive_enabled}
+              />
+            </span>
+          </label>
+          <label
+            className={`flex items-start gap-3 ${sectionDisabled(canEdit, editing.automation) ? 'cursor-default' : 'cursor-pointer'}`}
+          >
+            <input
+              type="checkbox"
+              disabled={sectionDisabled(canEdit, editing.automation)}
+              checked={form.auto_complete_suggest_enabled}
+              onChange={(e) =>
+                setForm({ ...form, auto_complete_suggest_enabled: e.target.checked })
+              }
+              className="mt-1 rounded border-slate-600"
+            />
+            <span className="text-sm text-slate-300">
+              <SettingLabel
+                variant="inline"
+                label="Suggest complete at drop-off"
+                tip={TOOLTIPS.auto_complete_suggest_enabled}
+              />
+            </span>
+          </label>
+          <label
+            className={`flex items-start gap-3 ${sectionDisabled(canEdit, editing.automation) ? 'cursor-default' : 'cursor-pointer'}`}
+          >
+            <input
+              type="checkbox"
+              disabled={sectionDisabled(canEdit, editing.automation)}
+              checked={form.no_show_auto_cancel_enabled}
+              onChange={(e) =>
+                setForm({ ...form, no_show_auto_cancel_enabled: e.target.checked })
+              }
+              className="mt-1 rounded border-slate-600"
+            />
+            <span className="text-sm text-slate-300">
+              <SettingLabel
+                variant="inline"
+                label="Auto-cancel rider no-show (after dwell at pickup)"
+                tip={TOOLTIPS.no_show_auto_cancel_enabled}
+              />
+            </span>
+          </label>
+        </SettingsSection>
 
-      <section className="rounded-xl border border-slate-800 bg-slate-900/30 p-6 space-y-4">
-        <div>
-          <h3 className="text-base font-medium text-white">In-trip automation</h3>
-          <p className="text-sm text-slate-400 mt-1">
-            GPS geofencing and automatic status transitions. Toggle gradually in production.
-          </p>
-        </div>
+        <SettingsSection
+          title="Wait time billing"
+          description="Charge riders when they make drivers wait beyond a grace period at pickup."
+          canEdit={canEdit}
+          isEditing={editing.waitTime}
+          isSaving={savingSection === 'waitTime'}
+          onEdit={() => startEdit('waitTime')}
+          onCancel={() => cancelEdit('waitTime')}
+          onSave={() => void handleSaveSection('waitTime')}
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <label className="block space-y-1.5">
+              <SettingLabel
+                label="Grace period (minutes)"
+                tip={TOOLTIPS.wait_time_grace_minutes}
+              />
+              <input
+                type="number"
+                min={0}
+                max={10}
+                disabled={sectionDisabled(canEdit, editing.waitTime)}
+                value={form.wait_time_grace_minutes}
+                onChange={(e) =>
+                  setForm({ ...form, wait_time_grace_minutes: Number(e.target.value) })
+                }
+                className={inputClass}
+              />
+            </label>
+            <label className="block space-y-1.5">
+              <SettingLabel
+                label="Rate per minute (JMD cents)"
+                tip={TOOLTIPS.wait_time_rate_per_min_minor}
+              />
+              <input
+                type="number"
+                min={0}
+                disabled={sectionDisabled(canEdit, editing.waitTime)}
+                value={form.wait_time_rate_per_min_minor}
+                onChange={(e) =>
+                  setForm({ ...form, wait_time_rate_per_min_minor: Number(e.target.value) })
+                }
+                className={inputClass}
+              />
+            </label>
+            <label className="block space-y-1.5 sm:col-span-2">
+              <SettingLabel
+                label="Max wait before cancel (minutes)"
+                tip={TOOLTIPS.wait_time_max_minutes}
+              />
+              <input
+                type="number"
+                min={1}
+                max={60}
+                disabled={sectionDisabled(canEdit, editing.waitTime)}
+                value={form.wait_time_max_minutes}
+                onChange={(e) =>
+                  setForm({ ...form, wait_time_max_minutes: Number(e.target.value) })
+                }
+                className={inputClass}
+              />
+            </label>
+          </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <label className="block space-y-1.5">
-            <span className="text-xs text-slate-400 uppercase tracking-wide">Location interval (sec)</span>
+          <label
+            className={`flex items-start gap-3 ${sectionDisabled(canEdit, editing.waitTime) ? 'cursor-default' : 'cursor-pointer'}`}
+          >
             <input
-              type="number"
-              min={2}
-              max={30}
-              disabled={!canEdit}
-              value={form.trip_location_interval_seconds}
+              type="checkbox"
+              disabled={sectionDisabled(canEdit, editing.waitTime)}
+              checked={form.wait_time_charge_enabled}
               onChange={(e) =>
-                setForm({ ...form, trip_location_interval_seconds: Number(e.target.value) })
+                setForm({ ...form, wait_time_charge_enabled: e.target.checked })
               }
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60"
+              className="mt-1 rounded border-slate-600"
             />
+            <span className="text-sm text-slate-300">
+              <SettingLabel
+                variant="inline"
+                label="Enable wait time billing"
+                tip={TOOLTIPS.wait_time_charge_enabled}
+              />
+            </span>
           </label>
+        </SettingsSection>
+
+        <SettingsSection
+          title="PIN verification"
+          description="Require driver to verify rider identity with a 4-digit PIN before starting the trip."
+          canEdit={canEdit}
+          isEditing={editing.pinVerification}
+          isSaving={savingSection === 'pinVerification'}
+          onEdit={() => startEdit('pinVerification')}
+          onCancel={() => cancelEdit('pinVerification')}
+          onSave={() => void handleSaveSection('pinVerification')}
+        >
+          <label
+            className={`flex items-start gap-3 ${sectionDisabled(canEdit, editing.pinVerification) ? 'cursor-default' : 'cursor-pointer'}`}
+          >
+            <input
+              type="checkbox"
+              disabled={sectionDisabled(canEdit, editing.pinVerification)}
+              checked={form.pin_verification_enabled}
+              onChange={(e) =>
+                setForm({ ...form, pin_verification_enabled: e.target.checked })
+              }
+              className="mt-1 rounded border-slate-600"
+            />
+            <span className="text-sm text-slate-300">
+              <SettingLabel
+                variant="inline"
+                label="Enable PIN verification"
+                tip={TOOLTIPS.pin_verification_enabled}
+              />
+            </span>
+          </label>
+
+          <label
+            className={`flex items-start gap-3 ${sectionDisabled(canEdit, editing.pinVerification) || !form.pin_verification_enabled ? 'cursor-default' : 'cursor-pointer'}`}
+          >
+            <input
+              type="checkbox"
+              disabled={sectionDisabled(canEdit, editing.pinVerification) || !form.pin_verification_enabled}
+              checked={form.pin_verification_required_for_start}
+              onChange={(e) =>
+                setForm({ ...form, pin_verification_required_for_start: e.target.checked })
+              }
+              className="mt-1 rounded border-slate-600"
+            />
+            <span className="text-sm text-slate-300">
+              <SettingLabel
+                variant="inline"
+                label="Require PIN to start trip"
+                tip={TOOLTIPS.pin_verification_required_for_start}
+              />
+            </span>
+          </label>
+        </SettingsSection>
+
+        <SettingsSection
+          title="Toll detection"
+          description="Automatically detect and charge tolls when drivers pass through toll plazas during trips."
+          canEdit={canEdit}
+          isEditing={editing.tollDetection}
+          isSaving={savingSection === 'tollDetection'}
+          onEdit={() => startEdit('tollDetection')}
+          onCancel={() => cancelEdit('tollDetection')}
+          onSave={() => void handleSaveSection('tollDetection')}
+        >
+          <label
+            className={`flex items-start gap-3 ${sectionDisabled(canEdit, editing.tollDetection) ? 'cursor-default' : 'cursor-pointer'}`}
+          >
+            <input
+              type="checkbox"
+              disabled={sectionDisabled(canEdit, editing.tollDetection)}
+              checked={form.toll_detection_enabled}
+              onChange={(e) =>
+                setForm({ ...form, toll_detection_enabled: e.target.checked })
+              }
+              className="mt-1 rounded border-slate-600"
+            />
+            <span className="text-sm text-slate-300">
+              <SettingLabel
+                variant="inline"
+                label="Enable toll detection"
+                tip={TOOLTIPS.toll_detection_enabled}
+              />
+            </span>
+          </label>
+
           <label className="block space-y-1.5">
-            <span className="text-xs text-slate-400 uppercase tracking-wide">Pickup geofence (m)</span>
+            <SettingLabel
+              label="Toll geofence radius (meters)"
+              tip={TOOLTIPS.toll_geofence_radius_m}
+            />
             <input
               type="number"
-              min={20}
+              min={50}
               max={500}
-              disabled={!canEdit}
-              value={form.pickup_geofence_radius_m}
+              disabled={sectionDisabled(canEdit, editing.tollDetection) || !form.toll_detection_enabled}
+              value={form.toll_geofence_radius_m}
               onChange={(e) =>
-                setForm({ ...form, pickup_geofence_radius_m: Number(e.target.value) })
+                setForm({ ...form, toll_geofence_radius_m: Number(e.target.value) })
               }
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60"
+              className={inputClass}
             />
           </label>
+        </SettingsSection>
+
+        <SettingsSection
+          title="Quotes"
+          description="Radius used when estimating pickup ETA on the fare quote."
+          canEdit={canEdit}
+          isEditing={editing.quotes}
+          isSaving={savingSection === 'quotes'}
+          onEdit={() => startEdit('quotes')}
+          onCancel={() => cancelEdit('quotes')}
+          onSave={() => void handleSaveSection('quotes')}
+        >
           <label className="block space-y-1.5">
-            <span className="text-xs text-slate-400 uppercase tracking-wide">Drop-off geofence (m)</span>
-            <input
-              type="number"
-              min={20}
-              max={500}
-              disabled={!canEdit}
-              value={form.dropoff_geofence_radius_m}
-              onChange={(e) =>
-                setForm({ ...form, dropoff_geofence_radius_m: Number(e.target.value) })
-              }
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60"
+            <SettingLabel
+              label="Quote driver search radius (km)"
+              tip={TOOLTIPS.quote_driver_radius_km}
             />
-          </label>
-          <label className="block space-y-1.5">
-            <span className="text-xs text-slate-400 uppercase tracking-wide">Arrival dwell (sec)</span>
             <input
               type="number"
-              min={0}
-              max={120}
-              disabled={!canEdit}
-              value={form.arrival_dwell_seconds}
-              onChange={(e) =>
-                setForm({ ...form, arrival_dwell_seconds: Number(e.target.value) })
-              }
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60"
-            />
-          </label>
-          <label className="block space-y-1.5">
-            <span className="text-xs text-slate-400 uppercase tracking-wide">Max speed for arrive (m/s)</span>
-            <input
-              type="number"
-              min={0}
-              max={20}
+              min={1}
+              max={50}
               step={0.5}
-              disabled={!canEdit}
-              value={form.max_speed_mps_for_arrival}
+              disabled={sectionDisabled(canEdit, editing.quotes)}
+              value={form.quote_driver_radius_km}
               onChange={(e) =>
-                setForm({ ...form, max_speed_mps_for_arrival: Number(e.target.value) })
+                setForm({ ...form, quote_driver_radius_km: Number(e.target.value) })
               }
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60"
+              className={inputClass}
             />
           </label>
-          <label className="block space-y-1.5">
-            <span className="text-xs text-slate-400 uppercase tracking-wide">GPS max accuracy (m)</span>
-            <input
-              type="number"
-              min={10}
-              max={200}
-              disabled={!canEdit}
-              value={form.gps_max_accuracy_m_for_arrival}
-              onChange={(e) =>
-                setForm({ ...form, gps_max_accuracy_m_for_arrival: Number(e.target.value) })
-              }
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60"
-            />
-          </label>
-          <label className="block space-y-1.5 sm:col-span-2">
-            <span className="text-xs text-slate-400 uppercase tracking-wide">No-show cancel after (min)</span>
-            <input
-              type="number"
-              min={0}
-              max={60}
-              disabled={!canEdit}
-              value={form.no_show_cancel_minutes}
-              onChange={(e) =>
-                setForm({ ...form, no_show_cancel_minutes: Number(e.target.value) })
-              }
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60"
-            />
-          </label>
-        </div>
+        </SettingsSection>
 
-        <label className="flex items-start gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            disabled={!canEdit}
-            checked={form.auto_en_route_on_accept}
-            onChange={(e) => setForm({ ...form, auto_en_route_on_accept: e.target.checked })}
-            className="mt-1 rounded border-slate-600"
-          />
-          <span className="text-sm text-slate-300">Auto en route on accept</span>
-        </label>
-        <label className="flex items-start gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            disabled={!canEdit}
-            checked={form.auto_arrive_enabled}
-            onChange={(e) => setForm({ ...form, auto_arrive_enabled: e.target.checked })}
-            className="mt-1 rounded border-slate-600"
-          />
-          <span className="text-sm text-slate-300">Auto arrive at pickup (geofence)</span>
-        </label>
-        <label className="flex items-start gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            disabled={!canEdit}
-            checked={form.auto_complete_suggest_enabled}
-            onChange={(e) =>
-              setForm({ ...form, auto_complete_suggest_enabled: e.target.checked })
-            }
-            className="mt-1 rounded border-slate-600"
-          />
-          <span className="text-sm text-slate-300">Suggest complete at drop-off</span>
-        </label>
-        <label className="flex items-start gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            disabled={!canEdit}
-            checked={form.no_show_auto_cancel_enabled}
-            onChange={(e) =>
-              setForm({ ...form, no_show_auto_cancel_enabled: e.target.checked })
-            }
-            className="mt-1 rounded border-slate-600"
-          />
-          <span className="text-sm text-slate-300">
-            Auto-cancel rider no-show (after dwell at pickup)
-            <span className="block text-xs text-slate-500 mt-0.5">Off by default until QA sign-off.</span>
-          </span>
-        </label>
-      </section>
-
-      <section className="rounded-xl border border-slate-800 bg-slate-900/30 p-6 space-y-4">
-        <div>
-          <h3 className="text-base font-medium text-white">Quotes</h3>
-          <p className="text-sm text-slate-400 mt-1">
-            Radius used when estimating pickup ETA on the fare quote.
-          </p>
-        </div>
-
-        <label className="block space-y-1.5">
-          <span className="text-xs text-slate-400 uppercase tracking-wide">
-            Quote driver search radius (km)
-          </span>
-          <input
-            type="number"
-            min={1}
-            max={50}
-            step={0.5}
-            disabled={!canEdit}
-            value={form.quote_driver_radius_km}
-            onChange={(e) =>
-              setForm({ ...form, quote_driver_radius_km: Number(e.target.value) })
-            }
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white disabled:opacity-60"
-          />
-        </label>
-      </section>
-
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-2">
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-slate-500 pt-2">
           Last updated: {formatUpdatedAt(form.updated_at)}
           {!canEdit && (
             <span className="block mt-1 text-amber-500/90">
-              Read-only — rides_admin or higher required to save.
+              Read-only — rides_admin or higher required to edit.
             </span>
           )}
         </p>
-        {canEdit && (
-          <button
-            type="button"
-            onClick={() => void handleSave()}
-            disabled={saving}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium disabled:opacity-50"
-          >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            Save changes
-          </button>
-        )}
       </div>
-    </div>
+    </TooltipProvider>
   );
 }

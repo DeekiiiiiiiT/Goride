@@ -145,6 +145,9 @@ function parsePatch(
     numField("max_speed_mps_for_arrival", 0, 20),
     intField("no_show_cancel_minutes", 0, 60),
     intField("gps_max_accuracy_m_for_arrival", 10, 200),
+    intField("wait_time_grace_minutes", 0, 10),
+    intField("wait_time_rate_per_min_minor", 0, 10000),
+    intField("wait_time_max_minutes", 1, 60),
   ]) {
     if (check) return check;
   }
@@ -159,6 +162,13 @@ function parsePatch(
     patch.auto_complete_suggest_enabled = body.auto_complete_suggest_enabled === true;
   }
   boolField("no_show_auto_cancel_enabled");
+  boolField("wait_time_charge_enabled");
+  boolField("pin_verification_enabled");
+  boolField("pin_verification_required_for_start");
+  boolField("toll_detection_enabled");
+  
+  const tollRadiusCheck = intField("toll_geofence_radius_m", 50, 500);
+  if (tollRadiusCheck) return tollRadiusCheck;
 
   if (!Object.keys(patch).length) return { ok: false, error: "no_changes" };
 

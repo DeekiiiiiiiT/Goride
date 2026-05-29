@@ -20,7 +20,8 @@ export interface RideLedgerLineInsert {
 }
 
 function breakdownFromRide(ride: Record<string, unknown>, fareMinor: number): Record<string, number> {
-  const raw = ride.fare_breakdown ?? ride.fare_final_breakdown;
+  const raw = ride.fare_final_breakdown ?? ride.fare_breakdown;
+  const waitTimeFeeMinor = Number(ride.wait_time_fee_minor) || 0;
   if (raw && typeof raw === "object") {
     const b = raw as Record<string, unknown>;
     return {
@@ -30,9 +31,11 @@ function breakdownFromRide(ride: Record<string, unknown>, fareMinor: number): Re
       time_component_minor: Number(b.time_component_minor) || 0,
       after_surge_minor: Number(b.after_surge_minor) || fareMinor,
       estimated_tolls_minor: Number(b.estimated_tolls_minor) || 0,
+      wait_time_fee_minor: waitTimeFeeMinor,
+      actual_tolls_minor: Number(b.actual_tolls_minor) || 0,
     };
   }
-  return { after_surge_minor: fareMinor };
+  return { after_surge_minor: fareMinor, wait_time_fee_minor: waitTimeFeeMinor };
 }
 
 export function buildRideLedgerLineInserts(ride: Record<string, unknown>): RideLedgerLineInsert[] {
