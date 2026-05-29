@@ -46,9 +46,19 @@ export function useRideDispatch() {
   const knownOfferIds = useRef<Set<string>>(new Set());
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const { trackingError, gpsAccuracyM, isTracking } = useActiveRideTracking(activeRide);
   const { activeRide: recoveredRide, recoveryLoaded, setActiveRide: setRecoveredRide } =
     useActiveRideRecovery();
+
+  const syncActiveRide = useCallback(
+    (ride: RideRequestRow | null) => {
+      setActiveRide(ride);
+      setRecoveredRide(ride);
+      persistActiveRideId(ride?.id ?? null);
+    },
+    [setRecoveredRide],
+  );
+
+  const { trackingError, gpsAccuracyM, isTracking } = useActiveRideTracking(activeRide, syncActiveRide);
   const { permissions } = useDriverPermissionPolicy();
   const [permissionOnboardingOpen, setPermissionOnboardingOpen] = useState(false);
   const [locationGoOnlineBlocked, setLocationGoOnlineBlocked] = useState(false);
@@ -82,15 +92,6 @@ export function useRideDispatch() {
     setActiveRide(recoveredRide);
     setOnline(true);
   }, [recoveryLoaded, recoveredRide, activeRide]);
-
-  const syncActiveRide = useCallback(
-    (ride: RideRequestRow | null) => {
-      setActiveRide(ride);
-      setRecoveredRide(ride);
-      persistActiveRideId(ride?.id ?? null);
-    },
-    [setRecoveredRide],
-  );
 
   useEffect(() => {
     audioRef.current = new Audio(OFFER_SOUND_URL);

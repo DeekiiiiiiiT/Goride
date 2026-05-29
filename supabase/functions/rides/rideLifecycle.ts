@@ -5,7 +5,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { DispatchSettings } from "./fare/dispatchSettings.ts";
 import { gridCellKey } from "./fare/buildQuote.ts";
 import { calculateWaitTimeFee } from "./fare/waitTime.ts";
-import { verifyRidePin } from "./fare/pinVerification.ts";
+import { verifyRidePin, generatePin } from "./fare/pinVerification.ts";
 
 export type RideStatus =
   | "matching"
@@ -113,11 +113,20 @@ export async function applyRideTransition(
     ...lifecycleTimestampPatch(params.next, nowIso),
   };
 
+  if (
+    params.next === "driver_arrived_pickup" &&
+    (params.pinSettings?.enabled || params.pinSettings?.requiredForStart) &&
+    !ride.verification_pin
+  ) {
+    patch.verification_pin = generatePin();
+  }
+
   if (params.next === "on_trip" && params.pinSettings?.requiredForStart) {
     const pinResult = verifyRidePin(
       params.pinSettings.providedPin ?? "",
       {
-        verification_pin: (ride.verification_pin as string | null) ?? null,
+        verification_pin: ((patch.verification_pin as string | undefined) ??
+          (ride.verification_pin as string | null)) ?? null,
         pin_verified_at: (ride.pin_verified_at as string | null) ?? null,
       },
     );

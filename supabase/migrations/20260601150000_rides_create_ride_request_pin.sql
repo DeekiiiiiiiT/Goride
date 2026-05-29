@@ -1,5 +1,4 @@
--- Run in Supabase SQL editor if migration 20260601150000 was not applied via CLI.
--- Writable ride booking on hosted PostgREST (rides schema often not exposed to API).
+-- Persist verification_pin (and related fields) when booking via rides_create_ride_request RPC.
 
 CREATE OR REPLACE FUNCTION public.rides_create_ride_request(p_row JSONB)
 RETURNS JSONB

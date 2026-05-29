@@ -134,6 +134,10 @@ export async function evaluateGeofenceTransitions(
           actorUserId: driverUserId,
           source: "geofence",
           expectedFrom: "driver_en_route_pickup",
+          pinSettings: {
+            enabled: settings.pin_verification_enabled,
+            requiredForStart: settings.pin_verification_required_for_start,
+          },
         });
         if (tr.ok && !tr.skipped) {
           result.transitionApplied = "driver_arrived_pickup";

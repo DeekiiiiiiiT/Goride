@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -88,10 +88,10 @@ function RiderPinDisplay({ pin }: { pin: string }) {
         </div>
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
-            Your PIN
+            Your trip PIN
           </p>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Share this with your driver
+            Tell your driver this code to start the trip
           </p>
         </div>
       </div>
@@ -163,6 +163,7 @@ export default function RidePage() {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const prevStatusRef = useRef<RideRequestStatus | null>(null);
 
   const { data, error, refetch, isFetching } = useQuery({
     queryKey: ['ride', id],
@@ -188,6 +189,21 @@ export default function RidePage() {
   useEffect(() => {
     if (error) toast.error(error instanceof Error ? error.message : 'Failed to load ride');
   }, [error]);
+
+  useEffect(() => {
+    if (!ride) return;
+    if (
+      ride.status === 'driver_arrived_pickup' &&
+      prevStatusRef.current !== 'driver_arrived_pickup'
+    ) {
+      toast.success('Your driver has arrived', {
+        description: ride.verification_pin
+          ? 'Share your 4-digit PIN when they ask for it.'
+          : undefined,
+      });
+    }
+    prevStatusRef.current = ride.status;
+  }, [ride?.status, ride?.verification_pin]);
 
   useEffect(() => {
     if (!id) return;
@@ -326,8 +342,7 @@ export default function RidePage() {
               </div>
             </div>
 
-            {ride.verification_pin && !ride.pin_verified_at && 
-              ['driver_assigned', 'driver_en_route_pickup', 'driver_arrived_pickup'].includes(ride.status) && (
+            {ride.verification_pin && !ride.pin_verified_at && ride.status === 'driver_arrived_pickup' && (
               <RiderPinDisplay pin={ride.verification_pin} />
             )}
 

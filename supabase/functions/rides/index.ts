@@ -160,11 +160,36 @@ async function loadRideRequestById(id: string): Promise<Record<string, unknown> 
 }
 
 /** Hide verification PIN from driver clients; expose pending flag instead. */
-function sanitizeRideForDriver(ride: Record<string, unknown> | null): Record<string, unknown> | null {
+function sanitizeRideForDriver(
+  ride: Record<string, unknown> | null,
+  pinRequiredForStart = false,
+): Record<string, unknown> | null {
   if (!ride) return null;
-  const pinPending = Boolean(ride.verification_pin && !ride.pin_verified_at);
+  const pinPending = Boolean(
+    ride.verification_pin && !ride.pin_verified_at && pinRequiredForStart,
+  );
   const { verification_pin: _pin, ...rest } = ride;
   return { ...rest, pin_verification_pending: pinPending };
+}
+
+function isPinFeatureEnabled(settings: DispatchSettings): boolean {
+  return settings.pin_verification_enabled || settings.pin_verification_required_for_start;
+}
+
+async function ensureRideVerificationPin(
+  rideId: string,
+  ride: Record<string, unknown>,
+  settings: DispatchSettings,
+): Promise<Record<string, unknown>> {
+  if (!isPinFeatureEnabled(settings) || ride.verification_pin) return ride;
+  const activeStatuses = ["driver_assigned", "driver_en_route_pickup", "driver_arrived_pickup"];
+  if (!activeStatuses.includes(String(ride.status))) return ride;
+  const pin = generatePin();
+  await patchRideRequest(rideId, {
+    verification_pin: pin,
+    updated_at: new Date().toISOString(),
+  });
+  return { ...ride, verification_pin: pin };
 }
 
 async function loadRideRequestByIdempotencyKey(key: string): Promise<Record<string, unknown> | null> {
@@ -1145,13 +1170,16 @@ app.post("/v1/requests", async (c) => {
     route_polyline_encoded: typeof body.route_polyline_encoded === "string"
       ? body.route_polyline_encoded
       : null,
-    verification_pin: bookDispatchSettings.pin_verification_enabled ? generatePin() : null,
+    verification_pin: isPinFeatureEnabled(bookDispatchSettings) ? generatePin() : null,
   };
 
   let ride: Record<string, unknown> | null = null;
   const { data: rpcRide, error: rpcError } = await pubSvc().rpc("rides_create_ride_request", {
     p_row: insertRow,
   });
+  if (!rpcRide && rpcError) {
+    logLine({ event: "create_ride_rpc_failed", error: rpcError.message });
+  }
   if (!rpcError && rpcRide) {
     ride = rpcRide as Record<string, unknown>;
   } else {
@@ -1165,6 +1193,16 @@ app.post("/v1/requests", async (c) => {
       });
       return c.json({ error: "insert_failed" }, 500);
     }
+  }
+
+  const pinEnabled = isPinFeatureEnabled(bookDispatchSettings);
+  if (pinEnabled && !ride.verification_pin) {
+    const pin = generatePin();
+    await patchRideRequest(ride.id as string, {
+      verification_pin: pin,
+      updated_at: new Date().toISOString(),
+    });
+    ride = { ...ride, verification_pin: pin };
   }
 
   const reqId = crypto.randomUUID();
@@ -1193,7 +1231,9 @@ app.get("/v1/requests/:id", async (c) => {
   const id = c.req.param("id");
   const ride = await loadRideRequestById(id);
   if (!ride) return c.json({ error: "not_found" }, 404);
-  if (ride.rider_user_id !== auth.user.id && ride.assigned_driver_user_id !== auth.user.id) {
+  const isRider = ride.rider_user_id === auth.user.id;
+  const isDriver = ride.assigned_driver_user_id === auth.user.id;
+  if (!isRider && !isDriver) {
     return jsonEdgeForbidden(c, "forbidden");
   }
   const reqId = crypto.randomUUID();
@@ -1203,9 +1243,14 @@ app.get("/v1/requests/:id", async (c) => {
 
   const settings = await loadDispatchSettingsForRides();
   let waitTimeInfo: Record<string, unknown> | null = null;
+  let rideOut = fresh ?? ride;
 
-  if (fresh?.status === "driver_arrived_pickup" && fresh.arrived_pickup_at) {
-    const arrivedAt = String(fresh.arrived_pickup_at);
+  if (rideOut && isRider) {
+    rideOut = await ensureRideVerificationPin(id, rideOut, settings);
+  }
+
+  if (rideOut?.status === "driver_arrived_pickup" && rideOut.arrived_pickup_at) {
+    const arrivedAt = String(rideOut.arrived_pickup_at);
     const graceRemaining = getGraceRemainingSeconds(
       arrivedAt,
       settings.wait_time_grace_minutes
@@ -1215,7 +1260,7 @@ app.get("/v1/requests/:id", async (c) => {
       tripStartedAt: null,
       graceMinutes: settings.wait_time_grace_minutes,
       ratePerMinMinor: settings.wait_time_rate_per_min_minor,
-      surgeMultiplier: Number(fresh.surge_multiplier ?? 1),
+      surgeMultiplier: Number(rideOut.surge_multiplier ?? 1),
     });
     waitTimeInfo = {
       wait_time_charge_enabled: settings.wait_time_charge_enabled,
@@ -1227,7 +1272,13 @@ app.get("/v1/requests/:id", async (c) => {
     };
   }
 
-  return c.json({ ride: fresh, offers, wait_time: waitTimeInfo });
+  return c.json({
+    ride: isDriver && rideOut
+      ? sanitizeRideForDriver(rideOut, settings.pin_verification_required_for_start)
+      : rideOut,
+    offers,
+    wait_time: waitTimeInfo,
+  });
 });
 
 app.post("/v1/requests/:id/cancel", async (c) => {
@@ -1426,7 +1477,12 @@ app.post("/v1/drivers/offers/:offerId/accept", async (c) => {
     auth.user.id,
   );
 
-  return c.json({ ride: sanitizeRideForDriver((rideOut ?? freshRide) as Record<string, unknown>) });
+  return c.json({
+    ride: sanitizeRideForDriver(
+      (rideOut ?? freshRide) as Record<string, unknown>,
+      settings.pin_verification_required_for_start,
+    ),
+  });
 });
 
 app.post("/v1/drivers/offers/:offerId/decline", async (c) => {
@@ -1478,7 +1534,15 @@ app.get("/v1/drivers/me/active-ride", async (c) => {
     return c.json({ error: "active_ride_failed", message: result.error }, 500);
   }
 
-  return c.json({ ride: result ? sanitizeRideForDriver(result as Record<string, unknown>) : null });
+  const settings = await loadDispatchSettingsForRides();
+  return c.json({
+    ride: result
+      ? sanitizeRideForDriver(
+        result as Record<string, unknown>,
+        settings.pin_verification_required_for_start,
+      )
+      : null,
+  });
 });
 
 app.get("/v1/drivers/me/earnings", async (c) => {
@@ -1564,8 +1628,8 @@ app.post("/v1/drivers/ride-location", async (c) => {
   if (!ride) return c.json({ error: "not_found" }, 404);
 
   let geofenceResult = null;
+  const settings = await loadDispatchSettingsForRides();
   if (ingest && ingest.duplicate !== true) {
-    const settings = await loadDispatchSettingsForRides();
     geofenceResult = await evaluateGeofenceTransitions(
       svc(),
       transitionDeps(),
@@ -1585,7 +1649,7 @@ app.post("/v1/drivers/ride-location", async (c) => {
   const freshRide = await loadRideRequestById(rideId);
   return c.json({
     ok: true,
-    ride: sanitizeRideForDriver(freshRide),
+    ride: sanitizeRideForDriver(freshRide, settings.pin_verification_required_for_start),
     live: geofenceResult
       ? {
           distance_to_pickup_m: geofenceResult.distanceToPickupM,
@@ -1671,10 +1735,12 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
       ratePerMinMinor: settings.wait_time_rate_per_min_minor,
       chargeEnabled: settings.wait_time_charge_enabled,
     } : undefined,
-    pinSettings: next === "on_trip" ? {
+    pinSettings: (next === "on_trip" || next === "driver_arrived_pickup") ? {
       enabled: settings.pin_verification_enabled,
       requiredForStart: settings.pin_verification_required_for_start,
-      providedPin: typeof body.verification_pin === "string" ? body.verification_pin : undefined,
+      providedPin: next === "on_trip" && typeof body.verification_pin === "string"
+        ? body.verification_pin
+        : undefined,
     } : undefined,
   });
 
@@ -1690,7 +1756,12 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
   }
 
   logLine({ event: "driver_transition", ride_id: id, from: current, to: next, source: "manual" });
-  return c.json({ ride: sanitizeRideForDriver(result.ride as Record<string, unknown> | undefined ?? null) });
+  return c.json({
+    ride: sanitizeRideForDriver(
+      result.ride as Record<string, unknown> | undefined ?? null,
+      settings.pin_verification_required_for_start,
+    ),
+  });
 });
 
 app.post("/v1/internal/reconcile-matching", async (c) => {

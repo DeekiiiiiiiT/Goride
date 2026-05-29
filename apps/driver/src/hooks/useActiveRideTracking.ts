@@ -14,6 +14,7 @@ type TrackingState = {
 
 export function useActiveRideTracking(
   activeRide: RideRequestRow | null,
+  onRideUpdate?: (ride: RideRequestRow) => void,
   intervalSeconds = DEFAULT_INTERVAL_SEC,
 ): TrackingState {
   const [trackingError, setTrackingError] = useState<string | null>(null);
@@ -61,6 +62,7 @@ export function useActiveRideTracking(
         setTrackingError(null);
         if (result.ride) {
           rideIdRef.current = result.ride.id;
+          onRideUpdate?.(result.ride);
         }
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : 'Location upload failed';
@@ -74,7 +76,7 @@ export function useActiveRideTracking(
         }
       }
     },
-    [activeRide?.id],
+    [activeRide?.id, onRideUpdate],
   );
 
   const sendImmediateFix = useCallback(() => {
