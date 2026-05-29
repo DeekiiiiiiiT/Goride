@@ -13,12 +13,18 @@ export function generatePin(): string {
   return pin;
 }
 
+/** Normalize DB/API PIN values (CHAR columns may include padding). */
+export function normalizeVerificationPin(raw: unknown): string | null {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  return /^\d{4}$/.test(s) ? s : null;
+}
+
 /**
  * Validate that a PIN matches expected format (4 digits).
  */
 export function isValidPinFormat(pin: unknown): pin is string {
-  if (typeof pin !== 'string') return false;
-  return /^\d{4}$/.test(pin);
+  return normalizeVerificationPin(pin) != null;
 }
 
 /**
@@ -53,7 +59,8 @@ export function verifyRidePin(
     return { verified: true, error: 'already_verified' };
   }
   
-  if (!ride.verification_pin) {
+  const expectedPin = normalizeVerificationPin(ride.verification_pin);
+  if (!expectedPin) {
     return { verified: false, error: 'pin_not_set' };
   }
   
@@ -61,7 +68,7 @@ export function verifyRidePin(
     return { verified: false, error: 'invalid_format' };
   }
   
-  if (!verifyPin(providedPin, ride.verification_pin)) {
+  if (!verifyPin(providedPin, expectedPin)) {
     return { verified: false, error: 'pin_mismatch' };
   }
   

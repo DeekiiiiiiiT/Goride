@@ -33,7 +33,12 @@ import {
 } from "./fare/dispatchSettings.ts";
 import { isMatchingTimedOut } from "./fare/matchingHygiene.ts";
 import { getGraceRemainingSeconds, calculateWaitTimeFee } from "./fare/waitTime.ts";
-import { generatePin, verifyRidePin, isValidPinFormat } from "./fare/pinVerification.ts";
+import {
+  generatePin,
+  verifyRidePin,
+  isValidPinFormat,
+  normalizeVerificationPin,
+} from "./fare/pinVerification.ts";
 import {
   getEligibleDriverUserIds,
   isDriverEligibleForDispatch,
@@ -182,15 +187,15 @@ async function ensureRideVerificationPin(
   settings: DispatchSettings,
 ): Promise<Record<string, unknown>> {
   if (!isPinFeatureEnabled(settings)) return ride;
-  const activeStatuses = ["driver_assigned", "driver_en_route_pickup", "driver_arrived_pickup"];
-  if (!activeStatuses.includes(String(ride.status))) return ride;
+  const terminal = ["completed", "cancelled"];
+  if (terminal.includes(String(ride.status))) return ride;
 
-  const existingPin = ride.verification_pin ? String(ride.verification_pin) : "";
-  if (/^\d{4}$/.test(existingPin)) return ride;
+  const existingPin = normalizeVerificationPin(ride.verification_pin);
+  if (existingPin) return { ...ride, verification_pin: existingPin };
 
   const fresh = await loadRideRequestById(rideId);
-  const freshPin = fresh?.verification_pin ? String(fresh.verification_pin) : "";
-  if (/^\d{4}$/.test(freshPin)) {
+  const freshPin = normalizeVerificationPin(fresh?.verification_pin);
+  if (freshPin) {
     return { ...ride, verification_pin: freshPin };
   }
 
@@ -201,18 +206,27 @@ async function ensureRideVerificationPin(
   });
   if (!patched) {
     logLine({ event: "ensure_pin_patch_failed", ride_id: rideId });
-    return ride;
+    // Still return PIN to rider so they can share it with the driver.
+    const fallback = { ...ride, verification_pin: pin };
+    // #region agent log
+    debugAgentLog("PIN", "index.ts:ensureRideVerificationPin", "pin patch failed, returning in-memory pin", {
+      rideId,
+      status: ride.status,
+      hasPin: true,
+    }, true);
+    // #endregion
+    return fallback;
   }
 
   const after = await loadRideRequestById(rideId);
-  const savedPin = after?.verification_pin ? String(after.verification_pin) : pin;
+  const savedPin = normalizeVerificationPin(after?.verification_pin) ?? pin;
   const result = { ...ride, verification_pin: savedPin };
   // #region agent log
-  debugAgentLog("PIN", "index.ts:ensureRideVerificationPin", "pin generated", {
+  debugAgentLog("PIN", "index.ts:ensureRideVerificationPin", "pin ensured", {
     rideId,
     status: ride.status,
-    hasPin: /^\d{4}$/.test(savedPin),
-  }, !/^\d{4}$/.test(savedPin));
+    hasPin: Boolean(savedPin),
+  }, !savedPin);
   // #endregion
   return result;
 }
@@ -1320,7 +1334,10 @@ app.post("/v1/requests", async (c) => {
   }
 
   logLine({ event: "ride_created", ride_id: ride.id, request_id: reqId });
-  return c.json({ ride: rideOut });
+  return c.json({
+    ride: rideOut,
+    rider_pin: pinEnabled ? normalizeVerificationPin(rideOut.verification_pin) : null,
+  });
 });
 
 app.get("/v1/requests/:id", async (c) => {
@@ -1346,10 +1363,22 @@ app.get("/v1/requests/:id", async (c) => {
   let rideOut = fresh ?? ride;
 
   const riderPinStatuses = ["driver_assigned", "driver_en_route_pickup", "driver_arrived_pickup"];
+  let riderPin: string | null = null;
   if (rideOut && isRider && isPinFeatureEnabled(settings) &&
     riderPinStatuses.includes(String(rideOut.status))) {
     rideOut = await ensureRideVerificationPin(id, rideOut, settings);
+    riderPin = normalizeVerificationPin(rideOut.verification_pin);
   }
+
+  // #region agent log
+  if (isRider && rideOut?.status === "driver_arrived_pickup" && isPinFeatureEnabled(settings)) {
+    debugAgentLog("PIN", "index.ts:GET/requests", "rider arrived pin response", {
+      rideId: id,
+      riderPin,
+      ridePin: normalizeVerificationPin(rideOut?.verification_pin),
+    }, !riderPin);
+  }
+  // #endregion
 
   if (rideOut?.status === "driver_arrived_pickup" && rideOut.arrived_pickup_at) {
     const arrivedAt = String(rideOut.arrived_pickup_at);
@@ -1380,6 +1409,7 @@ app.get("/v1/requests/:id", async (c) => {
       : rideOut,
     offers,
     wait_time: waitTimeInfo,
+    rider_pin: isRider ? riderPin : null,
   });
 });
 

@@ -128,6 +128,8 @@ export async function ridesCreateRequest(body: CreateRideBody): Promise<{ ride: 
 export async function ridesGetRequest(id: string): Promise<{
   ride: RideRequestRow;
   offers: DriverOfferRow[];
+  wait_time?: Record<string, unknown> | null;
+  rider_pin?: string | null;
 }> {
   const res = await fetch(`${base}/v1/requests/${id}`, { headers: await ridesHeaders() });
   if (!res.ok) await parseRidesError(res);

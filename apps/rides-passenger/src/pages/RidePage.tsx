@@ -62,6 +62,13 @@ function showLiveMap(status: RideRequestStatus | undefined): boolean {
 }
 
 const RIDE_SYNC_MS = 5_000;
+const RIDE_ARRIVED_SYNC_MS = 2_000;
+
+function normalizeRiderPin(raw: unknown): string | null {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  return /^\d{4}$/.test(s) ? s : null;
+}
 
 interface WaitTimeInfo {
   wait_time_charge_enabled?: boolean;
@@ -179,6 +186,7 @@ export default function RidePage() {
     refetchInterval: (q) => {
       const st = q.state.data?.ride.status;
       if (!st || st === 'completed' || st === 'cancelled') return false;
+      if (st === 'driver_arrived_pickup') return RIDE_ARRIVED_SYNC_MS;
       return RIDE_SYNC_MS;
     },
   });
@@ -194,11 +202,9 @@ export default function RidePage() {
       return;
     }
     if (!RIDER_PIN_STATUSES.includes(ride.status)) return;
-    const pin = ride.verification_pin;
-    if (typeof pin === 'string' && /^\d{4}$/.test(pin)) {
-      setDisplayPin((prev) => prev ?? pin);
-    }
-  }, [ride?.verification_pin, ride?.status, ride?.pin_verified_at]);
+    const pin = normalizeRiderPin(data?.rider_pin ?? ride.verification_pin);
+    if (pin) setDisplayPin(pin);
+  }, [data?.rider_pin, ride?.verification_pin, ride?.status, ride?.pin_verified_at, ride]);
 
   const { data: liveData } = useQuery({
     queryKey: ['ride-live', id],
@@ -247,13 +253,8 @@ export default function RidePage() {
               (prev: { ride: RideRequestRow; offers: unknown[] } | undefined) => {
                 if (!prev) return prev;
                 const mergedRide = { ...prev.ride, ...row };
-                if (
-                  prev.ride.verification_pin &&
-                  typeof prev.ride.verification_pin === 'string' &&
-                  !row.verification_pin
-                ) {
-                  mergedRide.verification_pin = prev.ride.verification_pin;
-                }
+                const mergedPin = normalizeRiderPin(row.verification_pin ?? prev.ride.verification_pin);
+                if (mergedPin) mergedRide.verification_pin = mergedPin;
                 return { ...prev, ride: mergedRide };
               },
             );
@@ -389,8 +390,16 @@ export default function RidePage() {
               </div>
             </div>
 
-            {displayPin && RIDER_PIN_STATUSES.includes(ride.status) && !ride.pin_verified_at && (
-              <RiderPinDisplay pin={displayPin} />
+            {RIDER_PIN_STATUSES.includes(ride.status) && !ride.pin_verified_at && (
+              displayPin ? (
+                <RiderPinDisplay pin={displayPin} />
+              ) : ride.status === 'driver_arrived_pickup' ? (
+                <div className="rounded-3xl bg-emerald-50 border border-emerald-200 p-5 text-center space-y-2">
+                  <Loader2 className="w-6 h-6 text-emerald-600 animate-spin mx-auto" aria-hidden />
+                  <p className="text-sm font-medium text-emerald-900">Preparing your trip PIN…</p>
+                  <p className="text-xs text-emerald-700">Share this code with your driver when it appears</p>
+                </div>
+              ) : null
             )}
 
             {ride.status === 'driver_arrived_pickup' && waitTime && (
