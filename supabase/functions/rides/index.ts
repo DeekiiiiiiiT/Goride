@@ -1441,13 +1441,16 @@ app.get("/v1/drivers/offers", async (c) => {
   const nowIso = new Date().toISOString();
   await expireDriverPendingOffers(auth.user.id, nowIso);
 
+  const offers = await loadPendingDriverOffersForDriver(auth.user.id, nowIso);
+
   const activeRide = await getDriverActiveRideRequest(svc(), pubSvc(), auth.user.id);
-  if (activeRide && !("error" in activeRide) && activeRide) {
-    await supersedeAllPendingOffersForDriver(auth.user.id);
+  const activeRideId = activeRide && !("error" in activeRide) && activeRide
+    ? String(activeRide.id)
+    : null;
+
+  if (activeRideId) {
     return c.json({ offers: [] });
   }
-
-  const offers = await loadPendingDriverOffersForDriver(auth.user.id, nowIso);
 
   const rideIds = [...new Set(offers.map((o) => o.ride_request_id as string))];
   let ridesById: Record<string, Record<string, unknown>> = {};

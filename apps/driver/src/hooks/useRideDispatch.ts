@@ -46,7 +46,6 @@ export function useRideDispatch() {
   const lastCoords = useRef<{ lat: number; lng: number } | null>(null);
   const knownOfferIds = useRef<Set<string>>(new Set());
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const activeRideRef = useRef<RideRequestRow | null>(null);
 
   const { activeRide: recoveredRide, recoveryLoaded, setActiveRide: setRecoveredRide } =
     useActiveRideRecovery();
@@ -71,7 +70,6 @@ export function useRideDispatch() {
 
   const { trackingError, gpsAccuracyM, isTracking } = useActiveRideTracking(activeRide, syncActiveRide);
   const { permissions } = useDriverPermissionPolicy();
-  activeRideRef.current = activeRide;
   const [permissionOnboardingOpen, setPermissionOnboardingOpen] = useState(false);
   const [locationGoOnlineBlocked, setLocationGoOnlineBlocked] = useState(false);
 
@@ -177,10 +175,6 @@ export function useRideDispatch() {
   }, [effectiveBodyTypeSlug]);
 
   const refreshOffers = useCallback(async () => {
-    if (activeRideRef.current) {
-      setOffers([]);
-      return;
-    }
     try {
       const { offers: nextOffers } = await ridesDriverPendingOffers();
       const nextIds = new Set(nextOffers.map((o) => o.id));
@@ -209,10 +203,6 @@ export function useRideDispatch() {
       return false;
     }
   }, [syncActiveRide]);
-
-  useEffect(() => {
-    if (activeRide) setOffers([]);
-  }, [activeRide?.id]);
 
   useEffect(() => {
     if (!online) return;

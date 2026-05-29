@@ -150,18 +150,27 @@ const DRIVER_ACTIVE_RIDE_STATUSES = [
   "on_trip",
 ];
 
-/** Driver user ids with an in-progress trip (exclude from new offers). */
+/** Ignore stale in-progress rows left over from crashed/test sessions. */
+const ACTIVE_RIDE_MAX_AGE_MS = 4 * 60 * 60 * 1000;
+
+function activeRideFreshSinceIso(): string {
+  return new Date(Date.now() - ACTIVE_RIDE_MAX_AGE_MS).toISOString();
+}
+
+/** Driver user ids with a recent in-progress trip (exclude from new offers). */
 export async function loadDriverUserIdsWithActiveRides(
   ridesDb: SupabaseClient,
   publicDb: SupabaseClient,
 ): Promise<Set<string>> {
   const ids = new Set<string>();
+  const freshSince = activeRideFreshSinceIso();
   for (const [db, table] of [[ridesDb, "ride_requests"], [publicDb, "rides_ride_requests"]] as const) {
     const { data } = await db
       .from(table)
       .select("assigned_driver_user_id")
       .in("status", DRIVER_ACTIVE_RIDE_STATUSES)
-      .not("assigned_driver_user_id", "is", null);
+      .not("assigned_driver_user_id", "is", null)
+      .gte("updated_at", freshSince);
     for (const row of data ?? []) {
       const uid = row.assigned_driver_user_id as string | null;
       if (uid) ids.add(uid);
@@ -180,6 +189,7 @@ async function getActiveRideFromTable(
     .select("*")
     .eq("assigned_driver_user_id", driverUserId)
     .in("status", DRIVER_ACTIVE_RIDE_STATUSES)
+    .gte("updated_at", activeRideFreshSinceIso())
     .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
