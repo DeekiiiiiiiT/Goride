@@ -1,0 +1,295 @@
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
+import {
+  ArrowLeft,
+  Car,
+  ChevronRight,
+  CircleHelp,
+  CreditCard,
+  PlusCircle,
+  Smartphone,
+  Wallet,
+} from 'lucide-react';
+
+const PRIMARY = '#004ac6';
+const PRIMARY_CONTAINER = '#2563eb';
+const PRIMARY_FIXED = '#dbe1ff';
+const INVERSE_SURFACE = '#2d3133';
+const ON_SURFACE = '#191c1e';
+const ON_SURFACE_VARIANT = '#434655';
+const ON_PRIMARY = '#ffffff';
+const SURFACE_LOWEST = '#ffffff';
+const SURFACE_LOW = '#f2f4f6';
+const SURFACE_CONTAINER = '#eceef0';
+const SURFACE_CONTAINER_HIGH = '#e6e8ea';
+const SURFACE_VARIANT = '#e0e3e5';
+const SECONDARY = '#505f76';
+const SECONDARY_CONTAINER = '#d0e1fb';
+const OUTLINE = '#737686';
+const PAGE_BG = '#f7f9fb';
+const CARD_SHADOW = '0px 4px 20px rgba(0, 0, 0, 0.05)';
+
+const PROMO_BANNER_URL =
+  'https://lh3.googleusercontent.com/aida-public/AB6AXuD0UhK5VtLTpy4UHuvfJVFirezfOFH8aVxjOc4xktbQT5pwx1qbyTm-1WnbSsefL9Wi0oVIw8xkhGB-M23OqRkM8nzib-4ZdM6dNXqr697Y74RBMdSaNwcbD1T-KNqHDZLZthBKomvCPZGNz5SxlisRDu3A3Uq0dj1GhoL0wn6Bf9DgGZ6Z4R79Abe0tlHvDx4axkEXUEOIL1d1-6axQwvJ7qYZEZysz7DB_d8-FN_Aqsd_NrdFdklLYBgPoWE-swsr6v2WeuC7e5zq';
+
+const BALANCE = 42.5;
+
+const TRANSACTIONS = [
+  {
+    id: 'ride-downtown',
+    title: 'Ride to Downtown',
+    date: 'Oct 24, 2:30 PM',
+    amount: '-$18.20',
+    meta: 'COMPLETED',
+    positive: false,
+    icon: Car,
+    iconBg: SURFACE_CONTAINER_HIGH,
+    iconColor: ON_SURFACE_VARIANT,
+  },
+  {
+    id: 'topup',
+    title: 'Wallet Top-up',
+    date: 'Oct 22, 11:05 AM',
+    amount: '+$50.00',
+    meta: 'VIA APPLE PAY',
+    positive: true,
+    icon: Wallet,
+    iconBg: PRIMARY_FIXED,
+    iconColor: PRIMARY_CONTAINER,
+  },
+  {
+    id: 'ride-airport',
+    title: 'Airport Premier XL',
+    date: 'Oct 20, 9:15 AM',
+    amount: '-$34.50',
+    meta: 'COMPLETED',
+    positive: false,
+    icon: Car,
+    iconBg: SURFACE_CONTAINER_HIGH,
+    iconColor: ON_SURFACE_VARIANT,
+  },
+] as const;
+
+export default function WalletPage() {
+  const navigate = useNavigate();
+
+  const notifySoon = () => {
+    toast.message('Coming soon');
+  };
+
+  return (
+    <div
+      className="flex min-h-[100dvh] flex-col pb-28"
+      style={{ backgroundColor: PAGE_BG, color: ON_SURFACE }}
+    >
+      <header
+        className="sticky top-0 z-50 flex h-16 w-full items-center justify-between px-5 shadow-sm safe-t"
+        style={{ backgroundColor: SURFACE_LOWEST }}
+      >
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => navigate('/account')}
+            className="rounded-full p-2 transition-colors active:scale-95 hover:bg-[#f2f4f6]"
+            style={{ color: PRIMARY }}
+            aria-label="Back to account"
+          >
+            <ArrowLeft className="h-6 w-6" strokeWidth={2} aria-hidden />
+          </button>
+          <h1 className="text-xl font-semibold tracking-tight" style={{ color: PRIMARY }}>
+            Wallet
+          </h1>
+        </div>
+        <button
+          type="button"
+          onClick={notifySoon}
+          className="rounded-full p-2 transition-colors active:scale-95 hover:bg-[#f2f4f6]"
+          style={{ color: ON_SURFACE_VARIANT }}
+          aria-label="Wallet help"
+        >
+          <CircleHelp className="h-6 w-6" aria-hidden />
+        </button>
+      </header>
+
+      <main className="mx-auto w-full max-w-xl flex-1 space-y-6 px-4 py-6 safe-x">
+        <section
+          className="relative overflow-hidden rounded-[24px] p-6"
+          style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
+        >
+          <div className="relative z-10">
+            <p className="mb-1 text-xs font-bold uppercase tracking-wide" style={{ color: SECONDARY }}>
+              Current balance
+            </p>
+            <div className="flex items-baseline gap-1">
+              <span className="text-[30px] font-bold tracking-tight" style={{ color: PRIMARY }}>
+                ${BALANCE.toFixed(2)}
+              </span>
+              <span className="text-sm" style={{ color: SECONDARY }}>
+                USD
+              </span>
+            </div>
+            <div className="mt-8">
+              <button
+                type="button"
+                onClick={notifySoon}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl py-4 font-bold shadow-md transition-all active:scale-95"
+                style={{ backgroundColor: PRIMARY, color: ON_PRIMARY }}
+              >
+                <PlusCircle className="h-5 w-5" fill="currentColor" aria-hidden />
+                Add Funds
+              </button>
+            </div>
+          </div>
+          <div
+            className="absolute -right-12 -top-12 h-48 w-48 rounded-full opacity-30 blur-[80px]"
+            style={{ backgroundColor: PRIMARY_FIXED }}
+            aria-hidden
+          />
+        </section>
+
+        <section className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <h2 className="text-xl font-semibold tracking-tight" style={{ color: ON_SURFACE }}>
+              Payment Methods
+            </h2>
+            <button
+              type="button"
+              onClick={notifySoon}
+              className="text-xs font-bold tracking-wide hover:underline"
+              style={{ color: PRIMARY }}
+            >
+              MANAGE
+            </button>
+          </div>
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={notifySoon}
+              className="group flex w-full items-center justify-between rounded-[24px] p-4 text-left transition-colors hover:bg-[#f2f4f6]"
+              style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
+            >
+              <div className="flex items-center gap-4">
+                <div
+                  className="flex h-12 w-12 items-center justify-center rounded-xl"
+                  style={{ backgroundColor: ON_SURFACE }}
+                >
+                  <Smartphone className="h-6 w-6 text-white" aria-hidden />
+                </div>
+                <div>
+                  <p className="font-bold" style={{ color: ON_SURFACE }}>
+                    Apple Pay
+                  </p>
+                  <p className="text-sm" style={{ color: SECONDARY }}>
+                    Default method
+                  </p>
+                </div>
+              </div>
+              <ChevronRight className="h-5 w-5" style={{ color: OUTLINE }} aria-hidden />
+            </button>
+            <button
+              type="button"
+              onClick={notifySoon}
+              className="flex w-full items-center justify-between rounded-[24px] p-4 text-left transition-colors hover:bg-[#f2f4f6]"
+              style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
+            >
+              <div className="flex items-center gap-4">
+                <div
+                  className="flex h-12 w-12 items-center justify-center rounded-xl"
+                  style={{ backgroundColor: SECONDARY_CONTAINER }}
+                >
+                  <CreditCard className="h-6 w-6" style={{ color: PRIMARY }} aria-hidden />
+                </div>
+                <div>
+                  <p className="font-bold" style={{ color: ON_SURFACE }}>
+                    Visa ending in 1234
+                  </p>
+                  <p className="text-sm" style={{ color: SECONDARY }}>
+                    Expires 08/26
+                  </p>
+                </div>
+              </div>
+              <ChevronRight className="h-5 w-5" style={{ color: OUTLINE }} aria-hidden />
+            </button>
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <h2 className="px-1 text-xl font-semibold tracking-tight" style={{ color: ON_SURFACE }}>
+            Recent Transactions
+          </h2>
+          <div
+            className="overflow-hidden rounded-[24px]"
+            style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
+          >
+            {TRANSACTIONS.map((tx) => {
+              const Icon = tx.icon;
+              return (
+                <div
+                  key={tx.id}
+                  className="flex items-center justify-between p-4 transition-colors hover:bg-[#f7f9fb]"
+                >
+                  <div className="flex items-center gap-4">
+                    <div
+                      className="flex h-10 w-10 items-center justify-center rounded-full"
+                      style={{ backgroundColor: tx.iconBg }}
+                    >
+                      <Icon className="h-5 w-5" style={{ color: tx.iconColor }} aria-hidden />
+                    </div>
+                    <div>
+                      <p className="font-bold" style={{ color: ON_SURFACE }}>
+                        {tx.title}
+                      </p>
+                      <p className="text-sm" style={{ color: SECONDARY }}>
+                        {tx.date}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p
+                      className="font-bold"
+                      style={{ color: tx.positive ? PRIMARY : ON_SURFACE }}
+                    >
+                      {tx.amount}
+                    </p>
+                    <p className="text-[11px] font-semibold" style={{ color: SECONDARY }}>
+                      {tx.meta}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            onClick={notifySoon}
+            className="w-full rounded-xl py-4 font-bold transition-colors hover:bg-[#dbe1ff]/20"
+            style={{ color: PRIMARY }}
+          >
+            View Transaction History
+          </button>
+        </section>
+
+        <button
+          type="button"
+          onClick={notifySoon}
+          className="relative flex h-32 w-full items-center overflow-hidden rounded-[24px] p-6 text-left"
+          style={{ backgroundColor: INVERSE_SURFACE }}
+        >
+          <img
+            src={PROMO_BANNER_URL}
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover opacity-40 mix-blend-overlay"
+          />
+          <div className="relative z-10 min-w-0 flex-1">
+            <h3 className="text-xl font-bold text-white">Earn 5% Back</h3>
+            <p className="text-sm" style={{ color: SURFACE_VARIANT }}>
+              Top up $100 or more with Roam Rides Visa.
+            </p>
+          </div>
+          <ChevronRight className="relative z-10 ml-auto h-6 w-6 shrink-0 text-white" aria-hidden />
+        </button>
+      </main>
+    </div>
+  );
+}

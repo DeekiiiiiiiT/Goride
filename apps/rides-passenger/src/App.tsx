@@ -7,9 +7,23 @@ import {
   isRidesPassengerUiBlockedRole,
 } from '@roam/auth-client';
 import { PASSENGER_OAUTH_INTENT_KEY, PASSENGER_OAUTH_INTENT_VALUE } from './utils/passengerAuthSignup';
+import { PassengerShell } from './components/layout/PassengerShell';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import RidePage from './pages/RidePage';
+import ServicesPage from './pages/ServicesPage';
+import BookForSomeonePage from './pages/BookForSomeonePage';
+import CourierServicePage from './pages/CourierServicePage';
+import ScheduleRidePage from './pages/ScheduleRidePage';
+import EventBookingPage from './pages/EventBookingPage';
+import AccountPage from './pages/AccountPage';
+import GiftCardsPage from './pages/GiftCardsPage';
+import EmergencyAssistancePage from './pages/EmergencyAssistancePage';
+import PromoCodesPage from './pages/PromoCodesPage';
+import SupportCenterPage from './pages/SupportCenterPage';
+import TrustedContactsPage from './pages/TrustedContactsPage';
+import WalletPage from './pages/WalletPage';
+import AppSettingsPage from './pages/AppSettingsPage';
 import { WrongRidesSurfaceGate } from './components/auth/WrongRidesSurfaceGate';
 import { RidesAdminLayout } from './admin/RidesAdminLayout';
 import { RidesAdminDashboard } from './admin/pages/RidesAdminDashboard';
@@ -110,9 +124,23 @@ export default function App() {
       {/* Passenger app routes */}
       <Route path="/login" element={<LoginPage session={session} />} />
       <Route
-        path="/"
-        element={session ? <HomePage /> : <Navigate to="/login" replace />}
-      />
+        element={session ? <PassengerShell /> : <Navigate to="/login" replace />}
+      >
+        <Route path="/" element={<HomePage />} />
+        <Route path="/services" element={<ServicesPage />} />
+        <Route path="/services/book-for-someone" element={<BookForSomeonePage />} />
+        <Route path="/services/courier" element={<CourierServicePage />} />
+        <Route path="/services/schedule" element={<ScheduleRidePage />} />
+        <Route path="/services/event" element={<EventBookingPage />} />
+        <Route path="/account" element={<AccountPage />} />
+        <Route path="/account/gift-cards" element={<GiftCardsPage />} />
+        <Route path="/account/emergency-assistance" element={<EmergencyAssistancePage />} />
+        <Route path="/account/promo-codes" element={<PromoCodesPage />} />
+        <Route path="/account/support" element={<SupportCenterPage />} />
+        <Route path="/account/trusted-contacts" element={<TrustedContactsPage />} />
+        <Route path="/account/wallet" element={<WalletPage />} />
+        <Route path="/account/settings" element={<AppSettingsPage />} />
+      </Route>
       <Route
         path="/ride/:id"
         element={session ? <RidePage /> : <Navigate to="/login" replace />}

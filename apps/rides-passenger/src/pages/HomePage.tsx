@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { supabase } from '@roam/auth-client';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { CircleDot, Crosshair, LogOut, MapPin, Navigation } from 'lucide-react';
+import { CircleDot, Crosshair, MapPin, Navigation } from 'lucide-react';
 import type { FareQuoteResponse } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
 import { RoamPlaceField } from '@/components/RoamPlaceField';
@@ -139,12 +138,6 @@ export default function HomePage() {
     }
   }, []);
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    toast.success('Signed out');
-    navigate('/login');
-  };
-
   const fetchAllServiceQuotes = useCallback(async () => {
     if (!pickup || !dropoff || services.length === 0) return;
     setQuotesLoading(true);
@@ -277,7 +270,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-[100dvh] flex flex-col bg-zinc-100 text-zinc-900">
+    <div className="flex flex-1 flex-col min-h-[100dvh] bg-zinc-100 text-zinc-900">
       <PermissionOnboardingSheet
         surface="rider"
         permissions={permissions}
@@ -304,14 +297,6 @@ export default function HomePage() {
                 <p className="font-semibold text-sm tracking-tight truncate">Roam Rides</p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={signOut}
-              className="btn-touch shrink-0 flex h-10 w-10 items-center justify-center rounded-full bg-white/95 shadow-md border border-zinc-200/80 text-zinc-700 hover:bg-white touch-manipulation"
-              aria-label="Sign out"
-            >
-              <LogOut className="w-4 h-4" aria-hidden />
-            </button>
           </div>
         </header>
 
@@ -407,7 +392,7 @@ export default function HomePage() {
           </div>
 
           {/* Sticky footer CTA */}
-          <div className="shrink-0 border-t border-zinc-100 bg-white safe-x safe-b px-4 py-4 space-y-3">
+          <div className="shrink-0 border-t border-zinc-100 bg-white safe-x px-4 pt-4 pb-[calc(1rem+4rem+env(safe-area-inset-bottom,0px))] space-y-3">
             {quotesLoading && coordsReady && (
               <p className="text-sm text-zinc-500 text-center">Getting prices…</p>
             )}
@@ -432,14 +417,6 @@ export default function HomePage() {
                   : 'Request ride'}
             </button>
 
-            <div className="text-center">
-              <Link
-                to="/login"
-                className="text-xs font-medium text-emerald-700 hover:text-emerald-800 underline-offset-4 hover:underline"
-              >
-                Use a different account
-              </Link>
-            </div>
           </div>
         </div>
       </main>

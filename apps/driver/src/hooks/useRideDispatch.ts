@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '../utils/supabase/client';
 import type { DriverOfferWithRide, DriverTransitionBody, RideRequestRow } from '@roam/types/rides';
+import { isDriverActiveRideStatus } from '@roam/types/rides';
 import {
   ridesDriverAcceptOffer,
   ridesDriverDeclineOffer,
@@ -55,7 +56,7 @@ export function useRideDispatch() {
 
   const syncActiveRide = useCallback(
     (ride: RideRequestRow | null) => {
-      if (!ride) {
+      if (!ride || !isDriverActiveRideStatus(ride.status)) {
         setActiveRide(null);
         setActiveRideWaitTime(null);
         setRecoveredRide(null);
@@ -331,7 +332,12 @@ export function useRideDispatch() {
         },
         (payload) => {
           const row = payload.new as RideRequestRow;
-          if (row?.id) syncActiveRide(normalizeDriverRide(row));
+          if (!row?.id) return;
+          if (!isDriverActiveRideStatus(row.status)) {
+            syncActiveRide(null);
+            return;
+          }
+          syncActiveRide(normalizeDriverRide(row));
         },
       )
       .subscribe();
@@ -437,24 +443,26 @@ export function useRideDispatch() {
         body.verification_pin = verificationPin;
       }
       const { ride } = await ridesDriverTransition(activeRide.id, body);
-      syncActiveRide(ride);
-      if (status === 'on_trip') {
-        toast.success('Trip started');
-        openExternalNavigation({
-          lat: ride.dropoff_lat,
-          lng: ride.dropoff_lng,
-          address: ride.dropoff_address,
-        });
-      }
-      if (status === 'completed') {
+      if (status === 'completed' || status === 'cancelled') {
         syncActiveRide(null);
-        window.dispatchEvent(new Event('roam-driver-trip-completed'));
-        toast.success('Trip completed');
-      } else if (status === 'cancelled') {
-        syncActiveRide(null);
-        toast.message('Ride cancelled');
+        if (status === 'completed') {
+          window.dispatchEvent(new Event('roam-driver-trip-completed'));
+          toast.success('Trip completed');
+        } else {
+          toast.message('Ride cancelled');
+        }
       } else {
-        toast.success('Updated');
+        syncActiveRide(ride);
+        if (status === 'on_trip') {
+          toast.success('Trip started');
+          openExternalNavigation({
+            lat: ride.dropoff_lat,
+            lng: ride.dropoff_lng,
+            address: ride.dropoff_address,
+          });
+        } else {
+          toast.success('Updated');
+        }
       }
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Transition failed');
