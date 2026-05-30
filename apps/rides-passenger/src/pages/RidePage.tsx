@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ArrowLeft, Loader2, Clock, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Loader2, Clock } from 'lucide-react';
 import type { RideRequestStatus, RideRequestRow } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
 import {
@@ -74,9 +74,6 @@ interface WaitTimeInfo {
   wait_time_charge_enabled?: boolean;
   wait_time_grace_remaining_seconds?: number;
   wait_time_grace_expired?: boolean;
-  wait_time_current_fee_minor?: number;
-  wait_time_billable_minutes?: number;
-  wait_time_rate_per_min_minor?: number;
 }
 
 function formatSeconds(secs: number): string {
@@ -140,21 +137,8 @@ function RiderWaitTimeDisplay({ waitTime }: { waitTime: WaitTimeInfo }) {
   }, [remainingSecs > 0]);
   
   if (!waitTime.wait_time_charge_enabled) return null;
-  
-  if (waitTime.wait_time_grace_expired) {
-    return (
-      <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-amber-50 border border-amber-200">
-        <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm text-amber-800 font-medium">Wait time fee active</p>
-          <p className="text-xs text-amber-700">
-            Please meet your driver promptly. Current fee: {formatMoneyMinor(waitTime.wait_time_current_fee_minor ?? 0, 'JMD')}
-          </p>
-        </div>
-      </div>
-    );
-  }
-  
+  if (waitTime.wait_time_grace_expired || remainingSecs <= 0) return null;
+
   return (
     <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-zinc-50 border border-zinc-200">
       <Clock className="w-5 h-5 text-zinc-500 shrink-0" />

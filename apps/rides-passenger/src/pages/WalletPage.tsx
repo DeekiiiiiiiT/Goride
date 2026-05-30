@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
@@ -31,6 +31,7 @@ import {
   SURFACE_LOWEST,
   SURFACE_VARIANT,
 } from '@/lib/passengerTheme';
+import { AddFundsSheet } from '@/components/wallet/AddFundsSheet';
 
 const PROMO_BANNER_URL =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuD0UhK5VtLTpy4UHuvfJVFirezfOFH8aVxjOc4xktbQT5pwx1qbyTm-1WnbSsefL9Wi0oVIw8xkhGB-M23OqRkM8nzib-4ZdM6dNXqr697Y74RBMdSaNwcbD1T-KNqHDZLZthBKomvCPZGNz5SxlisRDu3A3Uq0dj1GhoL0wn6Bf9DgGZ6Z4R79Abe0tlHvDx4axkEXUEOIL1d1-6axQwvJ7qYZEZysz7DB_d8-FN_Aqsd_NrdFdklLYBgPoWE-swsr6v2WeuC7e5zq';
@@ -75,14 +76,16 @@ const TRANSACTIONS = [
 
 export default function WalletPage() {
   const navigate = useNavigate();
+  const [addFundsOpen, setAddFundsOpen] = useState(false);
 
   const notifySoon = () => {
     toast.message('Coming soon');
   };
 
   return (
+    <>
     <div
-      className="flex min-h-[100dvh] flex-col pb-28"
+      className={`flex min-h-[100dvh] flex-col pb-28 ${addFundsOpen ? 'blur-sm' : ''}`}
       style={{ backgroundColor: PAGE_BG, color: ON_SURFACE }}
     >
       <header
@@ -134,7 +137,7 @@ export default function WalletPage() {
             <div className="mt-8">
               <button
                 type="button"
-                onClick={notifySoon}
+                onClick={() => setAddFundsOpen(true)}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl py-4 font-bold shadow-md transition-all active:scale-95"
                 style={{ backgroundColor: PRIMARY, color: ON_PRIMARY }}
               >
@@ -157,7 +160,7 @@ export default function WalletPage() {
             </h2>
             <button
               type="button"
-              onClick={notifySoon}
+              onClick={() => navigate('/account/wallet/payment-methods')}
               className="text-xs font-bold tracking-wide hover:underline"
               style={{ color: PRIMARY }}
             >
@@ -292,6 +295,14 @@ export default function WalletPage() {
           <ChevronRight className="relative z-10 ml-auto h-6 w-6 shrink-0 text-white" aria-hidden />
         </button>
       </main>
+
     </div>
+
+      <AddFundsSheet
+        open={addFundsOpen}
+        onClose={() => setAddFundsOpen(false)}
+        balanceUsd={BALANCE}
+      />
+    </>
   );
 }

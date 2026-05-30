@@ -1,10 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-
-const CX = 140;
-const CY = 128;
-const R = 96;
-const MIN_ANGLE = 0;
-const MAX_ANGLE = Math.PI;
+import { Power } from 'lucide-react';
 
 type Props = {
   online: boolean;
@@ -13,164 +8,164 @@ type Props = {
   className?: string;
 };
 
+const THUMB_SIZE = 44;
+const TRACK_HEIGHT = 48;
+/** How far from the resting edge the thumb must move to toggle. */
+const OFFLINE_DRAG_RATIO = 0.48;
+const ONLINE_DRAG_RATIO = 0.52;
+
 function clamp01(n: number): number {
   return Math.min(1, Math.max(0, n));
 }
 
-function angleFromProgress(progress: number): number {
-  return MAX_ANGLE * (1 - clamp01(progress));
-}
-
-function progressFromAngle(angle: number): number {
-  return clamp01(1 - angle / MAX_ANGLE);
-}
-
-function pointOnArc(angle: number): { x: number; y: number } {
-  return {
-    x: CX + R * Math.cos(angle),
-    y: CY - R * Math.sin(angle),
-  };
-}
-
-function describeArc(startAngle: number, endAngle: number): string {
-  const start = pointOnArc(startAngle);
-  const end = pointOnArc(endAngle);
-  const large = endAngle - startAngle > Math.PI ? 1 : 0;
-  return `M ${start.x} ${start.y} A ${R} ${R} 0 ${large} 1 ${end.x} ${end.y}`;
-}
-
 export function OnlineGaugeSlider({ online, onToggle, disabled = false, className = '' }: Props) {
-  const svgRef = useRef<SVGSVGElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
-  const [progress, setProgress] = useState(online ? 1 : 0);
+  const dragOffsetRef = useRef(0);
+  const [dragOffset, setDragOffset] = useState(0);
+  const [dragging, setDragging] = useState(false);
+
   useEffect(() => {
-    if (!draggingRef.current) setProgress(online ? 1 : 0);
+    if (!draggingRef.current) {
+      dragOffsetRef.current = 0;
+      setDragOffset(0);
+    }
   }, [online]);
 
-  const angle = angleFromProgress(progress);
-  const thumb = pointOnArc(angle);
-  const activeArc = describeArc(MAX_ANGLE, angle);
-
-  const setFromClient = (clientX: number, clientY: number) => {
-    const rect = svgRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const x = clientX - rect.left - CX;
-    const y = CY - (clientY - rect.top);
-    let a = Math.atan2(y, x);
-    if (a < 0) a = 0;
-    if (a > MAX_ANGLE) a = MAX_ANGLE;
-    setProgress(progressFromAngle(a));
+  const maxTravel = () => {
+    const track = trackRef.current;
+    if (!track) return 200;
+    return Math.max(80, track.clientWidth - THUMB_SIZE - 8);
   };
 
-  const commit = () => {
+  const progressFromOffset = (offset: number) => clamp01(offset / maxTravel());
+
+  const offsetFromClientX = (clientX: number) => {
+    const rect = trackRef.current?.getBoundingClientRect();
+    if (!rect) return online ? maxTravel() : 0;
+    const raw = clientX - rect.left - THUMB_SIZE / 2 - 4;
+    return Math.min(maxTravel(), Math.max(0, raw));
+  };
+
+  const restingOffset = () => (online ? maxTravel() : 0);
+  const displayOffset = dragging ? dragOffset : restingOffset();
+  const progress = progressFromOffset(displayOffset);
+
+  const commit = (offset: number) => {
     draggingRef.current = false;
-    const shouldBeOnline = progress >= 0.55;
+    setDragging(false);
+    const p = progressFromOffset(offset);
+    const shouldBeOnline = online ? p > 1 - OFFLINE_DRAG_RATIO : p >= ONLINE_DRAG_RATIO;
     if (shouldBeOnline !== online) {
       onToggle();
       return;
     }
-    setProgress(online ? 1 : 0);
+    dragOffsetRef.current = 0;
+    setDragOffset(0);
   };
 
   const goOnlineDisabled = disabled && !online;
-  const label = online ? 'Slide left to go offline' : 'Slide right to go online';
+  const hint = online ? 'Slide left to go offline' : 'Slide right to go online';
+  const status = online ? 'You are online' : 'You are offline';
 
   return (
-    <div
-      className={`pointer-events-none ${className}`}
-      aria-hidden={false}
-    >
-      <div className="pointer-events-auto mx-auto w-full max-w-lg safe-x px-4">
+    <div className={className} aria-hidden={false}>
+      <div className="mx-auto w-full max-w-lg safe-x px-3">
         <div
-          className={`rounded-t-3xl border border-b-0 border-slate-200/90 bg-white/95 px-3 pt-2 pb-1 shadow-[0_-8px_30px_rgba(15,23,42,0.08)] backdrop-blur-md dark:border-slate-700/80 dark:bg-slate-900/95 dark:shadow-[0_-8px_30px_rgba(0,0,0,0.35)] ${
+          className={`rounded-2xl border border-slate-200/90 bg-white/95 px-3 py-2 shadow-[0_-4px_20px_rgba(15,23,42,0.06)] backdrop-blur-md dark:border-slate-700/80 dark:bg-slate-900/95 dark:shadow-[0_-4px_20px_rgba(0,0,0,0.3)] ${
             goOnlineDisabled ? 'opacity-60' : ''
           }`}
         >
-          <p className="text-center text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-0.5">
-            {label}
+          <p className="mb-1.5 text-center text-[10px] font-medium text-slate-500 dark:text-slate-400">
+            {hint}
           </p>
-          <svg
-            ref={svgRef}
-            viewBox="0 0 280 140"
-            className={`mx-auto block w-full max-w-[280px] touch-none select-none ${
-              goOnlineDisabled ? 'pointer-events-none' : 'cursor-pointer'
+          <div
+            ref={trackRef}
+            className={`relative mx-auto w-full max-w-md select-none touch-none rounded-xl ${
+              goOnlineDisabled ? 'pointer-events-none' : 'cursor-grab active:cursor-grabbing'
             }`}
+            style={{ height: TRACK_HEIGHT }}
             role="slider"
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={Math.round(progress * 100)}
-            aria-label={online ? 'Online — slide to go offline' : 'Offline — slide to go online'}
+            aria-label={online ? 'Online — slide left to go offline' : 'Offline — slide right to go online'}
             onPointerDown={(e) => {
               if (goOnlineDisabled) return;
               draggingRef.current = true;
-              svgRef.current?.setPointerCapture(e.pointerId);
-              setFromClient(e.clientX, e.clientY);
+              setDragging(true);
+              trackRef.current?.setPointerCapture(e.pointerId);
+              const offset = offsetFromClientX(e.clientX);
+              dragOffsetRef.current = offset;
+              setDragOffset(offset);
             }}
             onPointerMove={(e) => {
               if (!draggingRef.current || goOnlineDisabled) return;
-              setFromClient(e.clientX, e.clientY);
+              const offset = offsetFromClientX(e.clientX);
+              dragOffsetRef.current = offset;
+              setDragOffset(offset);
             }}
             onPointerUp={(e) => {
               if (!draggingRef.current) return;
               try {
-                svgRef.current?.releasePointerCapture(e.pointerId);
+                trackRef.current?.releasePointerCapture(e.pointerId);
               } catch {
                 /* ignore */
               }
-              commit();
+              commit(dragOffsetRef.current);
             }}
             onPointerCancel={(e) => {
               if (!draggingRef.current) return;
               try {
-                svgRef.current?.releasePointerCapture(e.pointerId);
+                trackRef.current?.releasePointerCapture(e.pointerId);
               } catch {
                 /* ignore */
               }
-              commit();
+              commit(dragOffsetRef.current);
             }}
           >
-            <path
-              d={describeArc(MAX_ANGLE, MIN_ANGLE)}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="10"
-              strokeLinecap="round"
-              className="text-slate-200 dark:text-slate-700"
+            <div
+              className={`absolute inset-0 rounded-xl ${
+                online || progress > 0.12
+                  ? 'bg-emerald-500/15 dark:bg-emerald-500/20'
+                  : 'bg-slate-100 dark:bg-slate-800'
+              }`}
             />
-            <path
-              d={activeArc}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="10"
-              strokeLinecap="round"
-              className={online || progress > 0.08 ? 'text-emerald-500' : 'text-slate-300 dark:text-slate-600'}
+            <div
+              className={`absolute inset-y-1 left-1 rounded-lg transition-[width] duration-150 ${
+                online || progress > 0.08 ? 'bg-emerald-500/35' : 'bg-slate-200/80 dark:bg-slate-700/80'
+              }`}
+              style={{
+                width: `calc(${Math.max(THUMB_SIZE, displayOffset + THUMB_SIZE)}px)`,
+                transition: dragging ? 'none' : undefined,
+              }}
             />
-            <circle
-              cx={thumb.x}
-              cy={thumb.y}
-              r={18}
-              className="fill-white stroke-emerald-600 shadow-sm dark:fill-slate-900 dark:stroke-emerald-400"
-              strokeWidth="3"
-            />
-            <circle
-              cx={thumb.x}
-              cy={thumb.y}
-              r={6}
-              className={online || progress > 0.5 ? 'fill-emerald-500' : 'fill-slate-400'}
-            />
-            <text x={36} y={132} className="fill-slate-400 text-[10px] font-semibold">
-              Offline
-            </text>
-            <text x={218} y={132} className="fill-slate-400 text-[10px] font-semibold">
-              Online
-            </text>
-          </svg>
+            <span className="pointer-events-none absolute inset-0 flex items-center justify-between px-3 text-[10px] font-semibold text-slate-400">
+              <span>Offline</span>
+              <span>Online</span>
+            </span>
+            <div
+              className={`absolute top-1 flex items-center justify-center rounded-lg border-2 shadow-sm ${
+                online || progress > 0.5
+                  ? 'border-emerald-600 bg-emerald-600 text-white dark:border-emerald-400 dark:bg-emerald-500'
+                  : 'border-slate-300 bg-white text-slate-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300'
+              }`}
+              style={{
+                width: THUMB_SIZE,
+                height: THUMB_SIZE - 8,
+                transform: `translateX(${displayOffset}px)`,
+                transition: dragging ? 'none' : 'transform 0.2s ease-out',
+              }}
+            >
+              <Power className="h-4 w-4 shrink-0" aria-hidden />
+            </div>
+          </div>
           <p
-            className={`text-center text-xs font-semibold -mt-1 pb-1 ${
+            className={`mt-1.5 text-center text-xs font-semibold ${
               online ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300'
             }`}
           >
-            {online ? 'You are online' : 'You are offline'}
+            {status}
           </p>
         </div>
       </div>

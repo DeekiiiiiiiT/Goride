@@ -13,11 +13,10 @@ export function CashPaymentCard({ ride }: CashPaymentCardProps) {
 
   const currency = ride.currency ?? 'JMD';
   const totalMinor = Number(ride.fare_final_minor ?? ride.fare_estimate_minor ?? 0);
-  const waitTimeFeeMinor = Number(ride.wait_time_fee_minor ?? 0);
   const actualTollsMinor = Number(ride.actual_tolls_minor ?? 0);
   const baseFareMinor = Number(ride.fare_estimate_minor ?? 0);
-  
-  const hasExtras = waitTimeFeeMinor > 0 || actualTollsMinor > 0;
+
+  const hasExtras = actualTollsMinor > 0;
 
   return (
     <div className="rounded-3xl bg-gradient-to-br from-emerald-50 to-white border border-emerald-200 p-5 space-y-4">
@@ -49,14 +48,6 @@ export function CashPaymentCard({ ride }: CashPaymentCardProps) {
               {formatMoneyMinor(baseFareMinor, currency)}
             </span>
           </div>
-          {waitTimeFeeMinor > 0 && (
-            <div className="flex justify-between text-sm">
-              <span className="text-zinc-500">Wait time</span>
-              <span className="text-amber-600 tabular-nums">
-                +{formatMoneyMinor(waitTimeFeeMinor, currency)}
-              </span>
-            </div>
-          )}
           {actualTollsMinor > 0 && (
             <div className="flex justify-between text-sm">
               <span className="text-zinc-500">Tolls</span>

@@ -44,7 +44,7 @@ html.dark {
   --home-pill-bg: rgba(255, 255, 255, 0.95);
   --home-card-bg: #f8f9fa;
   --home-card-border: rgba(188, 202, 190, 0.35);
-  --home-map-overlay: linear-gradient(to top, rgba(248, 249, 250, 0.55) 0%, transparent 55%);
+  --home-canvas-bg: #eef5f0;
   --home-font-display: 'Hanken Grotesk', system-ui, sans-serif;
   --home-font-label: 'JetBrains Mono', ui-monospace, monospace;
 }
@@ -73,12 +73,7 @@ html.dark .home-page {
   --home-pill-bg: rgba(18, 20, 19, 0.9);
   --home-card-bg: rgba(40, 42, 41, 0.35);
   --home-card-border: rgba(61, 74, 65, 0.25);
-  --home-map-overlay: linear-gradient(
-    to top,
-    rgba(18, 20, 19, 0.72) 0%,
-    rgba(18, 20, 19, 0.15) 45%,
-    transparent 70%
-  );
+  --home-canvas-bg: #121413;
 }
 
 .home-page {

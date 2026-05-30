@@ -26,7 +26,7 @@ export function RideDispatchPage() {
     <>
       <div
         className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 px-4 py-6 max-w-lg mx-auto space-y-6"
-        style={{ paddingBottom: 'calc(11rem + env(safe-area-inset-bottom, 0px))' }}
+        style={{ paddingBottom: 'calc(10.75rem + env(safe-area-inset-bottom, 0px))' }}
       >
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Passenger rides</h1>

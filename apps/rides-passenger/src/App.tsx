@@ -23,6 +23,7 @@ import PromoCodesPage from './pages/PromoCodesPage';
 import SupportCenterPage from './pages/SupportCenterPage';
 import TrustedContactsPage from './pages/TrustedContactsPage';
 import WalletPage from './pages/WalletPage';
+import ManagePaymentMethodsPage from './pages/ManagePaymentMethodsPage';
 import AppSettingsPage from './pages/AppSettingsPage';
 import { WrongRidesSurfaceGate } from './components/auth/WrongRidesSurfaceGate';
 import { RidesAdminLayout } from './admin/RidesAdminLayout';
@@ -139,6 +140,7 @@ export default function App() {
         <Route path="/account/support" element={<SupportCenterPage />} />
         <Route path="/account/trusted-contacts" element={<TrustedContactsPage />} />
         <Route path="/account/wallet" element={<WalletPage />} />
+        <Route path="/account/wallet/payment-methods" element={<ManagePaymentMethodsPage />} />
         <Route path="/account/settings" element={<AppSettingsPage />} />
       </Route>
       <Route

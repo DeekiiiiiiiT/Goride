@@ -14,11 +14,10 @@ export function CashCollectionCard({ ride, compact = false }: CashCollectionCard
 
   const currency = ride.currency ?? 'JMD';
   const totalMinor = Number(ride.fare_final_minor ?? ride.fare_estimate_minor ?? 0);
-  const waitTimeFeeMinor = Number(ride.wait_time_fee_minor ?? 0);
   const actualTollsMinor = Number(ride.actual_tolls_minor ?? 0);
   const baseFareMinor = Number(ride.fare_estimate_minor ?? 0);
-  
-  const hasExtras = waitTimeFeeMinor > 0 || actualTollsMinor > 0;
+
+  const hasExtras = actualTollsMinor > 0;
 
   return (
     <section
@@ -54,14 +53,6 @@ export function CashCollectionCard({ ride, compact = false }: CashCollectionCard
               {formatMoneyMinor(baseFareMinor, currency)}
             </span>
           </div>
-          {waitTimeFeeMinor > 0 && (
-            <div className="flex justify-between text-xs">
-              <span className="text-slate-500 dark:text-slate-400">Wait time</span>
-              <span className="text-amber-600 dark:text-amber-400 tabular-nums">
-                +{formatMoneyMinor(waitTimeFeeMinor, currency)}
-              </span>
-            </div>
-          )}
           {actualTollsMinor > 0 && (
             <div className="flex justify-between text-xs">
               <span className="text-slate-500 dark:text-slate-400">Tolls</span>

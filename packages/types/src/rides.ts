@@ -194,6 +194,7 @@ export interface CreateRideBody {
   idempotency_key?: string;
   driver_offer_timeout_seconds?: number;
   route_polyline_encoded?: string;
+  payment_method?: RidePaymentMethod;
 }
 
 export interface RideLocationUpdateBody {

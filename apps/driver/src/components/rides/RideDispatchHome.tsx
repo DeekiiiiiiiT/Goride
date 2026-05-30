@@ -6,9 +6,9 @@ import { ActiveRidePanel } from './ActiveRidePanel';
 import { OnlineGaugeSlider } from './OnlineGaugeSlider';
 import { PermissionOnboardingSheet } from '../PermissionOnboardingSheet';
 
-/** Space for fixed gauge + bottom nav (h-16) + safe area */
+/** Space for compact online slider (~6.5rem) + bottom nav (h-16) + safe area */
 const BOTTOM_CHROME_OFFSET =
-  'calc(11.5rem + env(safe-area-inset-bottom, 0px))';
+  'calc(10.75rem + env(safe-area-inset-bottom, 0px))';
 
 export function RideDispatchHome() {
   const {

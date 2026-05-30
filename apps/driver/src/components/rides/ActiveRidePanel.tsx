@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ExternalLink, Loader2, Clock, AlertCircle, ShieldCheck } from 'lucide-react';
+import { ExternalLink, Loader2, Clock, ShieldCheck } from 'lucide-react';
 import type { RideRequestRow } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
 import { openExternalNavigation } from '../../utils/rideNavigation';
@@ -12,9 +12,6 @@ interface WaitTimeInfo {
   wait_time_charge_enabled?: boolean;
   wait_time_grace_remaining_seconds?: number;
   wait_time_grace_expired?: boolean;
-  wait_time_current_fee_minor?: number;
-  wait_time_billable_minutes?: number;
-  wait_time_rate_per_min_minor?: number;
 }
 
 interface ActiveRidePanelProps {
@@ -60,21 +57,8 @@ function WaitTimeDisplay({ waitTime }: { waitTime: WaitTimeInfo }) {
   }, [remainingSecs > 0]);
   
   if (!waitTime.wait_time_charge_enabled) return null;
-  
-  if (waitTime.wait_time_grace_expired) {
-    return (
-      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800">
-        <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-        <div className="flex-1 min-w-0">
-          <p className="text-[11px] text-amber-700 dark:text-amber-300 font-medium">Wait time fee active</p>
-          <p className="text-xs text-amber-800 dark:text-amber-200 font-semibold tabular-nums">
-            +{formatMoneyMinor(waitTime.wait_time_current_fee_minor ?? 0, 'JMD')}
-          </p>
-        </div>
-      </div>
-    );
-  }
-  
+  if (waitTime.wait_time_grace_expired || remainingSecs <= 0) return null;
+
   return (
     <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800">
       <Clock className="w-4 h-4 text-slate-500 dark:text-slate-400 shrink-0" />

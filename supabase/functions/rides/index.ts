@@ -1303,6 +1303,11 @@ app.post("/v1/requests", async (c) => {
     verification_pin: isPinFeatureEnabled(bookDispatchSettings) ? generatePin() : null,
   };
 
+  const paymentMethod = body.payment_method;
+  if (paymentMethod === "cash" || paymentMethod === "card") {
+    insertRow.payment_method = paymentMethod;
+  }
+
   let ride: Record<string, unknown> | null = null;
   const { data: rpcRide, error: rpcError } = await pubSvc().rpc("rides_create_ride_request", {
     p_row: insertRow,

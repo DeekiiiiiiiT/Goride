@@ -4,18 +4,12 @@ import { toast } from 'sonner';
 import {
   ArrowRight,
   Crosshair,
-  Menu,
   Package,
   UserPlus,
 } from 'lucide-react';
 import { supabase } from '@roam/auth-client';
-import { useTheme } from '@/contexts/ThemeContext';
 import { useVisualViewport } from '@/hooks/useVisualViewport';
-import {
-  DEFAULT_PROFILE_AVATAR_URL,
-  HOME_MAP_DARK_URL,
-  HOME_MAP_LIGHT_URL,
-} from '@/lib/roamHomeAssets';
+import { DEFAULT_PROFILE_AVATAR_URL } from '@/lib/roamHomeAssets';
 import type { FareQuoteResponse } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
 import { RoamPlaceField } from '@/components/RoamPlaceField';
@@ -34,6 +28,13 @@ import {
   TransportOptionPicker,
   type ServiceQuoteDisplay,
 } from '@/components/TransportOptionPicker';
+import { TripPaymentMethodBar } from '@/components/TripPaymentMethodBar';
+import { TripPaymentMethodSheet } from '@/components/TripPaymentMethodSheet';
+import {
+  getDefaultPaymentMethodId,
+  getPaymentMethodById,
+  type TripPaymentMethodId,
+} from '@/lib/tripPaymentMethods';
 import { useRidesVehicleTypes } from '@/hooks/useRidesVehicleTypes';
 import { formatVehicleEtaLine } from '@/utils/formatRideEta';
 import { usePermissionPolicy } from '@/hooks/usePermissionPolicy';
@@ -55,11 +56,9 @@ const HOME_SUGGESTION_BTN =
 
 export default function HomePage() {
   const navigate = useNavigate();
-  const { resolvedTheme } = useTheme();
   const { keyboardInset, height: viewportHeight } = useVisualViewport();
   const keyboardOpen = keyboardInset > 48;
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const staticMapUrl = resolvedTheme === 'dark' ? HOME_MAP_DARK_URL : HOME_MAP_LIGHT_URL;
 
   useEffect(() => {
     if (keyboardOpen) {
@@ -106,6 +105,8 @@ export default function HomePage() {
 
   const [quotesLoading, setQuotesLoading] = useState(false);
   const [bookLoading, setBookLoading] = useState(false);
+  const [selectedPaymentId, setSelectedPaymentId] = useState<TripPaymentMethodId>(getDefaultPaymentMethodId);
+  const [paymentSheetOpen, setPaymentSheetOpen] = useState(false);
   const [quotesBySlug, setQuotesBySlug] = useState<Record<string, FareQuoteResponse>>({});
   const { permissions } = usePermissionPolicy('rider');
   const [onboardingOpen, setOnboardingOpen] = useState(false);
@@ -289,6 +290,7 @@ export default function HomePage() {
         quote_token: quote.quote_token,
         idempotency_key: crypto.randomUUID(),
         route_polyline_encoded: quote.route_polyline_encoded,
+        payment_method: selectedPayment.ridePaymentMethod,
       });
       toast.success('Searching for a driver…');
       navigate(`/ride/${ride.id}`);
@@ -311,6 +313,7 @@ export default function HomePage() {
     coordsReady && Boolean(quote?.quote_token) && !quotesLoading && !locationBlocked;
 
   const selectedService = services.find((s) => s.slug === vehicleOption);
+  const selectedPayment = getPaymentMethodById(selectedPaymentId);
 
   const quoteBySlug: Record<string, ServiceQuoteDisplay> = {};
   for (const s of services) {
@@ -370,23 +373,12 @@ export default function HomePage() {
         }}
       >
         <div className="mx-auto flex h-16 max-w-2xl items-center justify-between px-5">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => navigate('/account')}
-              className="rounded-full p-2 transition-colors active:scale-95 hover:opacity-80"
-              style={{ color: 'var(--home-primary)' }}
-              aria-label="Menu"
-            >
-              <Menu className="h-6 w-6" aria-hidden />
-            </button>
-            <span
-              className="home-display text-xl font-bold"
-              style={{ color: 'var(--home-primary)' }}
-            >
-              Roam
-            </span>
-          </div>
+          <span
+            className="home-display text-xl font-bold"
+            style={{ color: 'var(--home-primary)' }}
+          >
+            Roam
+          </span>
           <button
             type="button"
             onClick={() => navigate('/account')}
@@ -400,7 +392,10 @@ export default function HomePage() {
       </header>
 
       <main className="relative min-h-[100dvh] w-full pt-16 pb-[5.5rem]">
-        <div className="absolute inset-0 z-0">
+        <div
+          className="absolute inset-0 z-0"
+          style={{ backgroundColor: 'var(--home-canvas-bg)' }}
+        >
           {pickup && dropoff ? (
             <BookingHeroMap
               pickup={pickup}
@@ -408,14 +403,7 @@ export default function HomePage() {
               encodedPolyline={quote?.route_polyline_encoded}
               quoteLoading={quotesLoading && coordsReady && !hasQuotes}
             />
-          ) : (
-            <img
-              src={staticMapUrl}
-              alt=""
-              className="h-full w-full object-cover"
-            />
-          )}
-          <div className="pointer-events-none absolute inset-0" style={{ background: 'var(--home-map-overlay)' }} />
+          ) : null}
         </div>
 
         <div className="relative z-10 px-5 pt-4">
@@ -662,6 +650,13 @@ export default function HomePage() {
                 </p>
               )}
 
+              {coordsReady && (
+                <TripPaymentMethodBar
+                  method={selectedPayment}
+                  onPress={() => setPaymentSheetOpen(true)}
+                />
+              )}
+
               <button
                 type="button"
                 onClick={handleBook}
@@ -688,6 +683,13 @@ export default function HomePage() {
         accuracy={pickupAccuracy}
         onPickupChange={handlePickupChange}
         isLoading={initialGpsLoading}
+      />
+
+      <TripPaymentMethodSheet
+        open={paymentSheetOpen}
+        selectedId={selectedPaymentId}
+        onClose={() => setPaymentSheetOpen(false)}
+        onSelect={setSelectedPaymentId}
       />
     </div>
   );
