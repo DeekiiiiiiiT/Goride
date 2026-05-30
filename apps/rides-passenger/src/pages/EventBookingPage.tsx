@@ -3,20 +3,22 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ArrowLeft, ArrowRight, Bus, BusFront, Minus, Plus } from 'lucide-react';
 
-const PRIMARY = '#004ac6';
-const PRIMARY_CONTAINER = '#2563eb';
-const ON_SURFACE = '#191c1e';
-const ON_SURFACE_VARIANT = '#434655';
-const ON_PRIMARY = '#ffffff';
-const ON_PRIMARY_CONTAINER = '#eeefff';
-const ON_SECONDARY_CONTAINER = '#54647a';
-const ON_TERTIARY_FIXED_VARIANT = '#7d2d00';
-const SURFACE_LOW = '#f2f4f6';
-const SECONDARY = '#505f76';
-const SECONDARY_CONTAINER = '#d0e1fb';
-const TERTIARY_FIXED = '#ffdbcd';
-const PAGE_BG = '#f7f9fb';
-const CARD_SHADOW = '0px 4px 20px rgba(0, 0, 0, 0.05)';
+import {
+  CARD_SHADOW,
+  ON_PRIMARY,
+  ON_PRIMARY_CONTAINER,
+  ON_SECONDARY_CONTAINER,
+  ON_SURFACE,
+  ON_SURFACE_VARIANT,
+  ON_TERTIARY_FIXED_VARIANT,
+  PAGE_BG,
+  PRIMARY,
+  PRIMARY_CONTAINER,
+  SECONDARY,
+  SECONDARY_CONTAINER,
+  SURFACE_LOW,
+  TERTIARY_FIXED,
+} from '@/lib/passengerTheme';
 
 const HERO_IMAGE_URL =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuDhQ5Zee_xBm1kMrybLfHH-NM8-tcw6rDRADhLalu3Rt2YZPKH0pETGXyOk1mo9Ixp7s2p2WUrSPHn4ZCzOdHoaPCemiU4YSO6r-GkjNHwy8zV373b-ddJQzEnjThInyTAhpO3v8T_6e61DrPC4vI6h3sWo4l2Vr6OPTUxNc2b6_q6X8XImSaHx---S5eGwtj3O3mF7hrsMT8sB5zOBzevbbFtAxlJXLHJA9Lbtys2B_XU94ytlEg-HzU6XewUHK3mloNIIOmOmtEpt';
@@ -113,7 +115,7 @@ export default function EventBookingPage() {
         <button
           type="button"
           onClick={() => navigate('/services')}
-          className="rounded-full p-2 transition-colors active:scale-95 hover:bg-[#f2f4f6]"
+          className="rounded-full p-2 transition-colors active:scale-95 passenger-row-hover"
           style={{ color: PRIMARY }}
           aria-label="Back to services"
         >

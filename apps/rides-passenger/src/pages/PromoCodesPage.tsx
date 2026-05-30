@@ -12,24 +12,26 @@ import {
   BadgeCheck,
 } from 'lucide-react';
 
-const PRIMARY = '#004ac6';
-const PRIMARY_CONTAINER = '#2563eb';
-const PRIMARY_FIXED = '#dbe1ff';
-const ON_SURFACE = '#191c1e';
-const ON_SURFACE_VARIANT = '#434655';
-const ON_PRIMARY = '#ffffff';
-const ON_PRIMARY_CONTAINER = '#eeefff';
-const SURFACE_LOWEST = '#ffffff';
-const SURFACE_LOW = '#f2f4f6';
-const SURFACE_CONTAINER_HIGH = '#e6e8ea';
-const SECONDARY = '#505f76';
-const SECONDARY_CONTAINER = '#d0e1fb';
-const ON_SECONDARY_CONTAINER = '#54647a';
-const OUTLINE = '#737686';
-const TERTIARY = '#943700';
-const TERTIARY_FIXED = '#ffdbcd';
-const PAGE_BG = '#f7f9fb';
-const CARD_SHADOW = '0px 4px 20px rgba(0, 0, 0, 0.05)';
+import {
+  CARD_SHADOW,
+  ON_PRIMARY,
+  ON_PRIMARY_CONTAINER,
+  ON_SECONDARY_CONTAINER,
+  ON_SURFACE,
+  ON_SURFACE_VARIANT,
+  OUTLINE,
+  PAGE_BG,
+  PRIMARY,
+  PRIMARY_CONTAINER,
+  PRIMARY_FIXED,
+  SECONDARY,
+  SECONDARY_CONTAINER,
+  SURFACE_CONTAINER_HIGH,
+  SURFACE_LOW,
+  SURFACE_LOWEST,
+  TERTIARY,
+  TERTIARY_FIXED,
+} from '@/lib/passengerTheme';
 
 const ACTIVE_PROMOS = [
   {
@@ -141,7 +143,7 @@ export default function PromoCodesPage() {
         <button
           type="button"
           onClick={() => navigate('/account')}
-          className="flex h-10 w-10 items-center justify-center rounded-full transition-colors active:scale-95 hover:bg-[#f2f4f6]"
+          className="flex h-10 w-10 items-center justify-center rounded-full transition-colors active:scale-95 passenger-row-hover"
           style={{ color: PRIMARY }}
           aria-label="Back to account"
         >

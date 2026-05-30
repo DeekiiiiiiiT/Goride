@@ -15,18 +15,20 @@ import {
 import { supabase } from '@roam/auth-client';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
-const PRIMARY = '#004ac6';
-const ON_SURFACE = '#191c1e';
-const ON_SURFACE_VARIANT = '#434655';
-const SURFACE_LOWEST = '#ffffff';
-const SURFACE_LOW = '#f2f4f6';
-const SURFACE_CONTAINER = '#eceef0';
-const SECONDARY = '#505f76';
-const ERROR = '#ba1a1a';
-const OUTLINE_VARIANT = '#c3c6d7';
-const OUTLINE = '#737686';
-const PAGE_BG = '#F8FAFC';
-const CARD_SHADOW = '0px 4px 20px rgba(0, 0, 0, 0.05)';
+import {
+  CARD_SHADOW,
+  ERROR,
+  ON_SURFACE,
+  ON_SURFACE_VARIANT,
+  OUTLINE,
+  OUTLINE_VARIANT,
+  PAGE_BG,
+  PRIMARY,
+  SECONDARY,
+  SURFACE_CONTAINER,
+  SURFACE_LOW,
+  SURFACE_LOWEST,
+} from '@/lib/passengerTheme';
 
 function AccountListRow({
   icon,
@@ -43,7 +45,7 @@ function AccountListRow({
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center justify-between px-5 py-3 text-left transition-colors hover:bg-[#f2f4f6] active:opacity-80"
+      className="passenger-row-hover flex w-full items-center justify-between px-5 py-3 text-left transition-colors active:opacity-80"
     >
       <div className="flex items-center gap-3">
         <span className={iconClassName}>{icon}</span>
@@ -127,7 +129,7 @@ export default function AccountPage() {
         <button
           type="button"
           onClick={() => navigate('/')}
-          className="rounded-full p-2 transition-colors active:scale-95 hover:bg-[#e0e3e5]/50"
+          className="passenger-row-hover rounded-full p-2 transition-colors active:scale-95"
           style={{ color: PRIMARY }}
           aria-label="Back"
         >
@@ -193,7 +195,7 @@ export default function AccountPage() {
           <button
             type="button"
             onClick={() => navigate('/account/wallet')}
-            className="rounded-[20px] p-4 text-left transition-colors active:scale-[0.98] hover:bg-[#f2f4f6]"
+            className="passenger-row-hover rounded-[20px] p-4 text-left transition-colors active:scale-[0.98]"
             style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
           >
             <div className="mb-2 flex items-start justify-between">
@@ -252,7 +254,7 @@ export default function AccountPage() {
             <button
               type="button"
               onClick={() => navigate('/account/support')}
-              className="flex w-full items-center justify-between px-5 py-3 text-left transition-colors hover:bg-[#f2f4f6]"
+              className="passenger-row-hover flex w-full items-center justify-between px-5 py-3 text-left transition-colors"
             >
               <div className="flex items-center gap-3">
                 <CircleHelp className="h-5 w-5 shrink-0" style={{ color: ON_SURFACE_VARIANT }} />

@@ -12,23 +12,25 @@ import {
   Wallet,
 } from 'lucide-react';
 
-const PRIMARY = '#004ac6';
-const PRIMARY_CONTAINER = '#2563eb';
-const PRIMARY_FIXED = '#dbe1ff';
-const INVERSE_SURFACE = '#2d3133';
-const ON_SURFACE = '#191c1e';
-const ON_SURFACE_VARIANT = '#434655';
-const ON_PRIMARY = '#ffffff';
-const SURFACE_LOWEST = '#ffffff';
-const SURFACE_LOW = '#f2f4f6';
-const SURFACE_CONTAINER = '#eceef0';
-const SURFACE_CONTAINER_HIGH = '#e6e8ea';
-const SURFACE_VARIANT = '#e0e3e5';
-const SECONDARY = '#505f76';
-const SECONDARY_CONTAINER = '#d0e1fb';
-const OUTLINE = '#737686';
-const PAGE_BG = '#f7f9fb';
-const CARD_SHADOW = '0px 4px 20px rgba(0, 0, 0, 0.05)';
+import {
+  CARD_SHADOW,
+  INVERSE_SURFACE,
+  ON_PRIMARY,
+  ON_SURFACE,
+  ON_SURFACE_VARIANT,
+  OUTLINE,
+  PAGE_BG,
+  PRIMARY,
+  PRIMARY_CONTAINER,
+  PRIMARY_FIXED,
+  SECONDARY,
+  SECONDARY_CONTAINER,
+  SURFACE_CONTAINER,
+  SURFACE_CONTAINER_HIGH,
+  SURFACE_LOW,
+  SURFACE_LOWEST,
+  SURFACE_VARIANT,
+} from '@/lib/passengerTheme';
 
 const PROMO_BANNER_URL =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuD0UhK5VtLTpy4UHuvfJVFirezfOFH8aVxjOc4xktbQT5pwx1qbyTm-1WnbSsefL9Wi0oVIw8xkhGB-M23OqRkM8nzib-4ZdM6dNXqr697Y74RBMdSaNwcbD1T-KNqHDZLZthBKomvCPZGNz5SxlisRDu3A3Uq0dj1GhoL0wn6Bf9DgGZ6Z4R79Abe0tlHvDx4axkEXUEOIL1d1-6axQwvJ7qYZEZysz7DB_d8-FN_Aqsd_NrdFdklLYBgPoWE-swsr6v2WeuC7e5zq';
@@ -91,7 +93,7 @@ export default function WalletPage() {
           <button
             type="button"
             onClick={() => navigate('/account')}
-            className="rounded-full p-2 transition-colors active:scale-95 hover:bg-[#f2f4f6]"
+            className="rounded-full p-2 transition-colors active:scale-95 passenger-row-hover"
             style={{ color: PRIMARY }}
             aria-label="Back to account"
           >
@@ -104,7 +106,7 @@ export default function WalletPage() {
         <button
           type="button"
           onClick={notifySoon}
-          className="rounded-full p-2 transition-colors active:scale-95 hover:bg-[#f2f4f6]"
+          className="rounded-full p-2 transition-colors active:scale-95 passenger-row-hover"
           style={{ color: ON_SURFACE_VARIANT }}
           aria-label="Wallet help"
         >
@@ -166,7 +168,7 @@ export default function WalletPage() {
             <button
               type="button"
               onClick={notifySoon}
-              className="group flex w-full items-center justify-between rounded-[24px] p-4 text-left transition-colors hover:bg-[#f2f4f6]"
+              className="group flex w-full items-center justify-between rounded-[24px] p-4 text-left transition-colors passenger-row-hover"
               style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
             >
               <div className="flex items-center gap-4">
@@ -190,7 +192,7 @@ export default function WalletPage() {
             <button
               type="button"
               onClick={notifySoon}
-              className="flex w-full items-center justify-between rounded-[24px] p-4 text-left transition-colors hover:bg-[#f2f4f6]"
+              className="flex w-full items-center justify-between rounded-[24px] p-4 text-left transition-colors passenger-row-hover"
               style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
             >
               <div className="flex items-center gap-4">
@@ -227,7 +229,7 @@ export default function WalletPage() {
               return (
                 <div
                   key={tx.id}
-                  className="flex items-center justify-between p-4 transition-colors hover:bg-[#f7f9fb]"
+                  className="flex items-center justify-between p-4 transition-colors passenger-row-hover"
                 >
                   <div className="flex items-center gap-4">
                     <div
@@ -263,7 +265,7 @@ export default function WalletPage() {
           <button
             type="button"
             onClick={notifySoon}
-            className="w-full rounded-xl py-4 font-bold transition-colors hover:bg-[#dbe1ff]/20"
+            className="w-full rounded-xl py-4 font-bold transition-colors passenger-row-hover"
             style={{ color: PRIMARY }}
           >
             View Transaction History

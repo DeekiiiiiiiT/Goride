@@ -9,12 +9,13 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
-/** Matches services mockup palette */
-const NAVY = '#1A2B48';
-const MUTED = '#8E94A3';
-const PAGE_BG = '#F8F9FA';
-const BADGE_BG = '#ECEEF2';
-const BADGE_TEXT = '#6B7280';
+import {
+  BADGE_BG,
+  BADGE_TEXT,
+  NAVY,
+  SERVICES_MUTED as MUTED,
+  SERVICES_PAGE_BG as PAGE_BG,
+} from '@/lib/passengerTheme';
 
 type ServiceMenuItem = {
   id: string;
@@ -73,7 +74,7 @@ function ServiceMenuCard({
         type="button"
         onClick={onClick}
         disabled={!interactive}
-        className={`relative flex min-h-[10.75rem] w-full flex-col items-center rounded-2xl bg-white px-3 pb-5 pt-6 text-center shadow-[0_4px_16px_rgba(26,43,72,0.08)] ${
+        className={`services-menu-card relative flex min-h-[10.75rem] w-full flex-col items-center rounded-2xl px-3 pb-5 pt-6 text-center ${
           interactive ? 'touch-manipulation transition-transform active:scale-[0.98]' : ''
         }`}
         aria-disabled={!interactive}
@@ -112,7 +113,7 @@ export default function ServicesPage() {
       className="flex min-h-[100dvh] flex-col pb-[calc(4rem+env(safe-area-inset-bottom,0px))]"
       style={{ backgroundColor: PAGE_BG }}
     >
-      <header className="sticky top-0 z-10 border-b border-zinc-200/80 bg-white safe-t">
+      <header className="services-subheader sticky top-0 z-10 safe-t">
         <div className="mx-auto grid max-w-lg grid-cols-[3rem_1fr_3rem] items-center px-2 py-3.5">
           <button
             type="button"

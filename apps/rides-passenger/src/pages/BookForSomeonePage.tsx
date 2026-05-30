@@ -11,17 +11,19 @@ import {
   Users,
 } from 'lucide-react';
 
-const PRIMARY = '#004ac6';
-const PRIMARY_CONTAINER = '#2563eb';
-const ON_SURFACE = '#191c1e';
-const ON_SURFACE_VARIANT = '#434655';
-const ON_PRIMARY = '#ffffff';
-const SURFACE_LOWEST = '#ffffff';
-const SURFACE_LOW = '#f2f4f6';
-const SECONDARY = '#505f76';
-const SECONDARY_CONTAINER = '#d0e1fb';
-const PAGE_BG = '#f7f9fb';
-const CARD_SHADOW = '0px 4px 20px rgba(0, 0, 0, 0.05)';
+import {
+  CARD_SHADOW,
+  ON_PRIMARY,
+  ON_SURFACE,
+  ON_SURFACE_VARIANT,
+  PAGE_BG,
+  PRIMARY,
+  PRIMARY_CONTAINER,
+  SECONDARY,
+  SECONDARY_CONTAINER,
+  SURFACE_LOW,
+  SURFACE_LOWEST,
+} from '@/lib/passengerTheme';
 
 const LUXURY_IMAGE_URL =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuAzxB2Pf1UL6snmlfDl2E3bB5f5MOK6g0nP0yMKKhRiZ_sLBf52PLrFy_6MEg6hAngXTWZpY3xNx2J-OyvaN3kfQBfzbTaqrsFEpbv7UnZrl3VWehIu5DFwix93ZUTwMk114n5qDWAK6GadraBs9YRU9yl2seDoV2dlWGQxYoPYay3WDk0CWLT3PItyaoUA5g89thmN4ZG-gCg-MXP5KIaK63RlabKxhHSwfR8hFgCbBMWiNpkOIk9i2YaFJ4AxRj0JHCQ8zqFTQt9y';
@@ -123,7 +125,7 @@ export default function BookForSomeonePage() {
         <button
           type="button"
           onClick={() => navigate('/services')}
-          className="rounded-full p-2 transition-colors active:scale-95 hover:bg-[#f2f4f6]"
+          className="rounded-full p-2 transition-colors active:scale-95 passenger-row-hover"
           style={{ color: PRIMARY }}
           aria-label="Back to services"
         >

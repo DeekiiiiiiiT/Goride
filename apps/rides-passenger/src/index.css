@@ -6,6 +6,7 @@
 @import "../../../packages/admin-core/src/styles/rides-admin-login.css";
 @import "../../../packages/admin-core/src/styles/admin-portal.css";
 @import "./styles/home.css";
+@import "./styles/passenger-theme.css";
 
 :root {
   --font-sans: system-ui, -apple-system, "Segoe UI", "Inter", sans-serif;
@@ -68,8 +69,8 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #f4f4f5;
-  color: #18181b;
+  background-color: var(--passenger-page-bg, #f4f4f5);
+  color: var(--passenger-on-surface, #18181b);
   min-height: 100dvh;
 }
 

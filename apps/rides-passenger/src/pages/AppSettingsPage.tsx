@@ -23,22 +23,27 @@ import {
   SunDim,
 } from 'lucide-react';
 
-const PRIMARY = '#004ac6';
-const ON_SURFACE = '#191c1e';
-const ON_SURFACE_VARIANT = '#434655';
-const ON_PRIMARY_FIXED_VARIANT = '#003ea8';
-const ON_SECONDARY_FIXED_VARIANT = '#38485d';
-const ON_TERTIARY_FIXED_VARIANT = '#7d2d00';
-const SURFACE_LOWEST = '#ffffff';
-const SURFACE_LOW = '#f2f4f6';
-const SURFACE_CONTAINER_HIGH = '#e6e8ea';
-const SECONDARY = '#505f76';
-const SECONDARY_FIXED = '#d3e4fe';
-const PRIMARY_FIXED = '#dbe1ff';
-const TERTIARY_FIXED = '#ffdbcd';
-const OUTLINE = '#737686';
-const PAGE_BG = '#f7f9fb';
-const CARD_SHADOW = '0px 4px 20px rgba(0, 0, 0, 0.05)';
+import {
+  CARD_SHADOW,
+  HEADER_BG,
+  HIGHLIGHT_BG,
+  ON_PRIMARY_FIXED_VARIANT,
+  ON_SECONDARY_FIXED_VARIANT,
+  ON_SURFACE,
+  ON_SURFACE_VARIANT,
+  ON_TERTIARY_FIXED_VARIANT,
+  OUTLINE,
+  PAGE_BG,
+  PRIMARY,
+  PRIMARY_FIXED,
+  SECONDARY,
+  SECONDARY_FIXED,
+  SURFACE_CONTAINER_HIGH,
+  SURFACE_LOW,
+  SURFACE_LOWEST,
+  TERTIARY_FIXED,
+  TOGGLE_OFF,
+} from '@/lib/passengerTheme';
 
 function SectionHeader({
   icon,
@@ -77,7 +82,7 @@ function ToggleSwitch({
       aria-label={ariaLabel}
       onClick={() => onChange(!checked)}
       className="relative h-6 w-11 shrink-0 rounded-full transition-colors"
-      style={{ backgroundColor: checked ? PRIMARY : '#E2E8F0' }}
+      style={{ backgroundColor: checked ? PRIMARY : TOGGLE_OFF }}
     >
       <span
         className="absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform"
@@ -102,7 +107,7 @@ function BentoCard({
     <div
       className={`rounded-[24px] p-5 transition-all active:scale-[0.98] ${fullWidth ? 'col-span-2' : ''} ${className}`}
       style={{
-        backgroundColor: highlighted ? 'rgba(0, 74, 198, 0.02)' : SURFACE_LOWEST,
+        backgroundColor: highlighted ? HIGHLIGHT_BG : SURFACE_LOWEST,
         boxShadow: CARD_SHADOW,
       }}
     >
@@ -133,13 +138,13 @@ export default function AppSettingsPage() {
     >
       <header
         className="sticky top-0 z-50 flex h-16 w-full items-center px-4 backdrop-blur-md safe-t"
-        style={{ backgroundColor: 'rgba(247, 249, 251, 0.9)' }}
+        style={{ backgroundColor: HEADER_BG }}
       >
         <div className="flex w-full items-center gap-4">
           <button
             type="button"
             onClick={() => navigate('/account')}
-            className="rounded-full p-2 transition-colors active:opacity-70 hover:bg-[#f2f4f6]"
+            className="passenger-row-hover rounded-full p-2 transition-colors active:opacity-70"
             style={{ color: PRIMARY }}
             aria-label="Back to account"
           >
@@ -365,7 +370,7 @@ export default function AppSettingsPage() {
               <button
                 type="button"
                 onClick={notifySoon}
-                className="flex w-full items-center justify-between px-6 py-4 text-left transition-colors hover:bg-[#f2f4f6]"
+                className="passenger-row-hover flex w-full items-center justify-between px-6 py-4 text-left transition-colors"
               >
                 <span className="font-medium">Terms of Service</span>
                 <ExternalLink className="h-5 w-5" style={{ color: OUTLINE }} aria-hidden />
@@ -373,7 +378,7 @@ export default function AppSettingsPage() {
               <button
                 type="button"
                 onClick={notifySoon}
-                className="flex w-full items-center justify-between px-6 py-4 text-left transition-colors hover:bg-[#f2f4f6]"
+                className="passenger-row-hover flex w-full items-center justify-between px-6 py-4 text-left transition-colors"
               >
                 <span className="font-medium">Privacy Policy</span>
                 <ExternalLink className="h-5 w-5" style={{ color: OUTLINE }} aria-hidden />
@@ -381,7 +386,7 @@ export default function AppSettingsPage() {
               <button
                 type="button"
                 onClick={notifySoon}
-                className="flex w-full items-center justify-between px-6 py-4 text-left transition-colors hover:bg-[#f2f4f6]"
+                className="passenger-row-hover flex w-full items-center justify-between px-6 py-4 text-left transition-colors"
               >
                 <span className="font-medium">Software Licenses</span>
                 <ChevronRight className="h-5 w-5" style={{ color: OUTLINE }} aria-hidden />

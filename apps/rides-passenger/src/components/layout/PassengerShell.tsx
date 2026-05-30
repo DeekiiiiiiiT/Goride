@@ -9,7 +9,7 @@ export function PassengerShell() {
 
   return (
     <div
-      className={`flex min-h-[100dvh] flex-col ${isHome ? 'bg-[var(--home-bg,#f8f9fa)]' : 'bg-zinc-100 text-zinc-900'}`}
+      className={`flex min-h-[100dvh] flex-col ${isHome ? 'bg-[var(--home-bg,#f8f9fa)]' : 'bg-[var(--passenger-page-bg)] text-[var(--passenger-on-surface)]'}`}
     >
       <div className="flex min-h-0 flex-1 flex-col">
         <Outlet />

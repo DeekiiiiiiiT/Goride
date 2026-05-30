@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Loader2, MapPin, Navigation, X } from 'lucide-react';
+import { Loader2, MapPin, Navigation, Search, X } from 'lucide-react';
 import {
   type AddressResult,
   debounce,
@@ -32,6 +32,8 @@ type Props = {
   suggestionButtonClassName?: string;
   /** Portal suggestions so they sit above the mobile keyboard. */
   portalSuggestions?: boolean;
+  /** Decorative / affordance icon on the right (inside field padding). */
+  trailingIcon?: 'search';
 };
 
 function getVisibleViewportBounds() {
@@ -58,6 +60,7 @@ export function RoamPlaceField({
   suggestionsListClassName,
   suggestionButtonClassName,
   portalSuggestions = false,
+  trailingIcon,
 }: Props) {
   const [suggestions, setSuggestions] = useState<AddressResult[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -161,7 +164,21 @@ export function RoamPlaceField({
 
   const loading = isLoading || resolving || locationLoading;
   const showClear = clearable && value.trim().length > 0 && !loading;
-  const hasRightElements = showClear || loading || showLocationButton;
+  const showSearchIcon = trailingIcon === 'search' && !loading;
+  const rightIconCount =
+    (showClear ? 1 : 0) +
+    (showSearchIcon ? 1 : 0) +
+    (showLocationButton && onLocationClick ? 1 : 0) +
+    (loading ? 1 : 0);
+  const hasRightElements = rightIconCount > 0;
+  const isHomeInput = Boolean(inputClassName?.includes('home-place-input'));
+  const homePadClass =
+    isHomeInput && rightIconCount >= 2
+      ? 'home-place-input--pad-2'
+      : isHomeInput && rightIconCount === 1
+        ? 'home-place-input--pad-1'
+        : '';
+  const defaultPadClass = !isHomeInput && hasRightElements ? (rightIconCount >= 2 ? 'pr-24' : 'pr-16') : '';
 
   const handleSelect = async (s: AddressResult) => {
     const placeId = s.place_id;
@@ -183,8 +200,8 @@ export function RoamPlaceField({
   };
 
   const inputClasses = inputClassName
-    ? `input-touch ${inputClassName} ${hasRightElements ? 'pr-16' : ''}`
-    : `input-touch w-full rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 outline-none focus:border-emerald-500/55 focus:bg-white focus:ring-4 focus:ring-emerald-500/12 ${hasRightElements ? 'pr-16' : ''}`;
+    ? `input-touch ${inputClassName} ${homePadClass} ${defaultPadClass}`
+    : `input-touch w-full rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 outline-none focus:border-emerald-500/55 focus:bg-white focus:ring-4 focus:ring-emerald-500/12 ${defaultPadClass}`;
 
   const defaultListClass =
     'absolute z-50 mt-1 max-h-52 w-full overflow-y-auto rounded-2xl border border-zinc-200 bg-white py-1 shadow-lg';
@@ -210,7 +227,10 @@ export function RoamPlaceField({
             }
             onClick={() => void handleSelect(suggestion)}
           >
-            <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
+            <MapPin
+              className={`mt-0.5 h-4 w-4 shrink-0 ${suggestionButtonClassName?.includes('home-suggestion') ? 'home-suggestion-pin' : 'text-emerald-600'}`}
+              aria-hidden
+            />
             <span className="leading-snug">{suggestion.display_name}</span>
           </button>
         </li>
@@ -246,7 +266,7 @@ export function RoamPlaceField({
           }}
         />
         {hasRightElements && (
-          <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
+          <div className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
             {loading ? (
               <div className="pointer-events-none p-1 text-zinc-400">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -257,18 +277,34 @@ export function RoamPlaceField({
                   <button
                     type="button"
                     onClick={handleClear}
-                    className="rounded-full p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 touch-manipulation"
+                    className={`pointer-events-auto rounded-full p-1.5 touch-manipulation ${
+                      isHomeInput
+                        ? 'home-place-field-action'
+                        : 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600'
+                    }`}
                     aria-label="Clear address"
                   >
                     <X className="h-4 w-4" aria-hidden />
                   </button>
+                )}
+                {showSearchIcon && (
+                  <span
+                    className={`p-1.5 ${isHomeInput ? 'home-place-field-action' : 'text-zinc-400'}`}
+                    aria-hidden
+                  >
+                    <Search className="h-4 w-4" />
+                  </span>
                 )}
                 {showLocationButton && onLocationClick && (
                   <button
                     type="button"
                     onClick={onLocationClick}
                     disabled={locationLoading}
-                    className="rounded-full p-1.5 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 touch-manipulation disabled:opacity-50"
+                    className={`pointer-events-auto rounded-full p-1.5 touch-manipulation disabled:opacity-50 ${
+                      isHomeInput
+                        ? 'home-place-field-action'
+                        : 'text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700'
+                    }`}
                     aria-label="Use my location"
                   >
                     <Navigation className="h-4 w-4" aria-hidden />

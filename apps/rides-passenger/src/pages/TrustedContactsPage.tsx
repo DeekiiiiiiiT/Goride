@@ -11,25 +11,27 @@ import {
   UserPlus,
 } from 'lucide-react';
 
-const PRIMARY = '#004ac6';
-const PRIMARY_CONTAINER = '#2563eb';
-const ON_SURFACE = '#191c1e';
-const ON_SURFACE_VARIANT = '#434655';
-const ON_PRIMARY_CONTAINER = '#eeefff';
-const ON_SECONDARY_FIXED = '#0b1c30';
-const SURFACE_LOWEST = '#ffffff';
-const SURFACE_LOW = '#f2f4f6';
-const SURFACE_CONTAINER = '#eceef0';
-const SURFACE_CONTAINER_HIGH = '#e6e8ea';
-const SURFACE_CONTAINER_HIGHEST = '#e0e3e5';
-const SECONDARY = '#505f76';
-const SECONDARY_CONTAINER = '#d0e1fb';
-const SECONDARY_FIXED = '#d3e4fe';
-const OUTLINE = '#737686';
-const OUTLINE_VARIANT = '#c3c6d7';
-const ERROR = '#ba1a1a';
-const PAGE_BG = '#f7f9fb';
-const CARD_SHADOW = '0px 4px 20px rgba(0, 0, 0, 0.05)';
+import {
+  CARD_SHADOW,
+  ERROR,
+  ON_PRIMARY_CONTAINER,
+  ON_SECONDARY_FIXED,
+  ON_SURFACE,
+  ON_SURFACE_VARIANT,
+  OUTLINE,
+  OUTLINE_VARIANT,
+  PAGE_BG,
+  PRIMARY,
+  PRIMARY_CONTAINER,
+  SECONDARY,
+  SECONDARY_CONTAINER,
+  SECONDARY_FIXED,
+  SURFACE_CONTAINER,
+  SURFACE_CONTAINER_HIGH,
+  SURFACE_CONTAINER_HIGHEST,
+  SURFACE_LOW,
+  SURFACE_LOWEST,
+} from '@/lib/passengerTheme';
 const MAX_CONTACTS = 5;
 
 const SARAH_AVATAR_URL =
@@ -155,7 +157,7 @@ export default function TrustedContactsPage() {
         <button
           type="button"
           onClick={() => navigate('/account')}
-          className="rounded-full p-2 transition-colors active:scale-95 hover:bg-[#f2f4f6]"
+          className="rounded-full p-2 transition-colors active:scale-95 passenger-row-hover"
           style={{ color: PRIMARY }}
           aria-label="Back to account"
         >
@@ -242,7 +244,7 @@ export default function TrustedContactsPage() {
             {contacts.map((contact) => (
               <div
                 key={contact.id}
-                className="group flex items-center justify-between rounded-[24px] p-4 transition-colors duration-300 hover:bg-[#f2f4f6]"
+                className="group flex items-center justify-between rounded-[24px] p-4 transition-colors duration-300 passenger-row-hover"
                 style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
               >
                 <div className="flex min-w-0 items-center gap-4">
@@ -292,11 +294,11 @@ export default function TrustedContactsPage() {
             <button
               type="button"
               onClick={addContact}
-              className="group flex w-full flex-col items-center justify-center gap-2 rounded-[24px] border-2 border-dashed py-8 transition-all active:scale-[0.98] hover:border-[#004ac6] hover:bg-[#004ac6]/5"
+              className="group flex w-full flex-col items-center justify-center gap-2 rounded-[24px] border-2 border-dashed py-8 transition-all active:scale-[0.98] hover:border-[var(--passenger-primary)] hover:bg-[var(--passenger-highlight)]"
               style={{ borderColor: OUTLINE_VARIANT }}
             >
               <div
-                className="flex h-10 w-10 items-center justify-center rounded-full transition-colors group-hover:bg-[#004ac6] group-hover:text-white"
+                className="flex h-10 w-10 items-center justify-center rounded-full transition-colors group-hover:bg-[var(--passenger-primary)] group-hover:text-white"
                 style={{ backgroundColor: SURFACE_CONTAINER_HIGHEST, color: SECONDARY }}
               >
                 <UserPlus className="h-5 w-5" aria-hidden />

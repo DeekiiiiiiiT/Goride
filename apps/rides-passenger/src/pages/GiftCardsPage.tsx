@@ -10,15 +10,17 @@ import {
   Wallet,
 } from 'lucide-react';
 
-const PRIMARY = '#004ac6';
-const ON_SURFACE = '#191c1e';
-const ON_PRIMARY = '#ffffff';
-const SURFACE_LOWEST = '#ffffff';
-const SURFACE_LOW = '#f2f4f6';
-const SECONDARY = '#505f76';
-const PAGE_BG = '#f7f9fb';
-const CARD_SHADOW = '0px 4px 20px rgba(0, 0, 0, 0.05)';
-const CARD_SHADOW_STRONG = '0px 4px 20px rgba(0, 0, 0, 0.1)';
+import {
+  CARD_SHADOW,
+  CARD_SHADOW_STRONG,
+  ON_PRIMARY,
+  ON_SURFACE,
+  PAGE_BG,
+  PRIMARY,
+  SECONDARY,
+  SURFACE_LOW,
+  SURFACE_LOWEST,
+} from '@/lib/passengerTheme';
 
 const GIFT_BANNER_URL =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuAe7-ykiff6goxLKNI3mNzbXr79HAwcfVc6bUKjTEAqJxWV87mezWuGBJS-TpET5vI9FeD-IKzXpbRXU4E0xTdeZf3xLD_bhjjXG7Iuk6rX4BvR9ZsHyBVo8N9OMRUgGNMaM2urf7jmaJkQsOfrIxMvgION7bsGXeIoGC7b2GpzYGBlDFPoFbR4H8k-tG3GTrVoGrXgS6-4FROAhCe4XSpJrwMBhZJ7hVvSXZxvMjsbdTe4A8lU6z0c-4CYDWMzivMN-CpikSThGOM1';
@@ -63,7 +65,7 @@ function PresetCard({
     <button
       type="button"
       onClick={onSelect}
-      className="group relative flex flex-col items-center rounded-[24px] border p-6 text-center transition-all active:scale-95 hover:border-[#004ac6] hover:bg-[#2563eb]/5"
+      className="group relative flex flex-col items-center rounded-[24px] border p-6 text-center transition-all active:scale-95 hover:border-[var(--passenger-primary)] hover:bg-[var(--passenger-highlight)]"
       style={{
         backgroundColor: SURFACE_LOWEST,
         borderColor: SURFACE_LOW,
@@ -121,7 +123,7 @@ export default function GiftCardsPage() {
           <button
             type="button"
             onClick={() => navigate('/account')}
-            className="shrink-0 rounded-full p-2 transition-colors active:scale-95 hover:bg-[#f2f4f6]"
+            className="shrink-0 rounded-full p-2 transition-colors active:scale-95 passenger-row-hover"
             style={{ color: PRIMARY }}
             aria-label="Back to account"
           >
@@ -270,8 +272,8 @@ export default function GiftCardsPage() {
                 <button
                   type="button"
                   onClick={notifySoon}
-                  className="rounded-full bg-white px-4 py-2 text-xs font-bold tracking-wide shadow-lg transition-colors hover:bg-[#f7f9fb]"
-                  style={{ color: PRIMARY }}
+                  className="rounded-full px-4 py-2 text-xs font-bold tracking-wide shadow-lg transition-colors passenger-row-hover"
+                  style={{ backgroundColor: SURFACE_LOWEST, color: PRIMARY }}
                 >
                   LEARN MORE
                 </button>
@@ -329,7 +331,7 @@ export default function GiftCardsPage() {
             <button
               type="button"
               onClick={notifySoon}
-              className="w-full py-4 text-xs font-bold tracking-wide transition-colors hover:bg-[#f2f4f6]"
+              className="w-full py-4 text-xs font-bold tracking-wide transition-colors passenger-row-hover"
               style={{ color: PRIMARY }}
             >
               VIEW FULL HISTORY

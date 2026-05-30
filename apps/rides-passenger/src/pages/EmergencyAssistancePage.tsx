@@ -13,24 +13,26 @@ import {
   Users,
 } from 'lucide-react';
 
-const PRIMARY = '#004ac6';
-const ON_SURFACE = '#191c1e';
-const ON_SURFACE_VARIANT = '#434655';
-const ON_PRIMARY = '#ffffff';
-const ON_PRIMARY_CONTAINER = '#eeefff';
-const SURFACE_LOWEST = '#ffffff';
-const SURFACE_CONTAINER_HIGH = '#e6e8ea';
-const SURFACE_CONTAINER_HIGHEST = '#e0e3e5';
-const SECONDARY = '#505f76';
-const SECONDARY_CONTAINER = '#d0e1fb';
-const ON_SECONDARY_CONTAINER = '#54647a';
-const ON_SECONDARY_FIXED_VARIANT = '#38485d';
-const PRIMARY_CONTAINER = '#2563eb';
-const PRIMARY_FIXED = '#dbe1ff';
-const ERROR = '#ba1a1a';
-const OUTLINE = '#737686';
-const PAGE_BG = '#f7f9fb';
-const CARD_SHADOW = '0px 4px 20px rgba(0, 0, 0, 0.05)';
+import {
+  CARD_SHADOW,
+  ERROR,
+  ON_PRIMARY,
+  ON_PRIMARY_CONTAINER,
+  ON_SECONDARY_CONTAINER,
+  ON_SECONDARY_FIXED_VARIANT,
+  ON_SURFACE,
+  ON_SURFACE_VARIANT,
+  OUTLINE,
+  PAGE_BG,
+  PRIMARY,
+  PRIMARY_CONTAINER,
+  PRIMARY_FIXED,
+  SECONDARY,
+  SECONDARY_CONTAINER,
+  SURFACE_CONTAINER_HIGH,
+  SURFACE_CONTAINER_HIGHEST,
+  SURFACE_LOWEST,
+} from '@/lib/passengerTheme';
 
 const MAP_PREVIEW_URL =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuA_ruTf_tgm1exT9JHlE91QlxE8N-TYTvm97uM4wxH83MkymFofJWXN1L_NjFi_dEO2VyiHZ3KXDB6Wj18jCQAzzKH-SiKdLM5AYcBpVTbvyg_IOli3FRzBWllmQIV8Bs7Qo5jq5LHGUsYTmWHfD0K6ixKoFkAjqCQh-_Nfnt4OxTptf4LeYNmKolMqDsz3erzR3te9dDZlQhuES-13AdqHAxvKfVThF5V-c0ygvGL4AKKreKnE5UtRgrC-JM2lNtB4QqT--RYs7c_7';
@@ -71,11 +73,11 @@ function ToolkitRow({
     <button
       type="button"
       onClick={onClick}
-      className="group flex w-full items-center rounded-[24px] p-4 text-left transition-colors hover:bg-[#f2f4f6] active:scale-[0.99]"
+      className="group flex w-full items-center rounded-[24px] p-4 text-left transition-colors passenger-row-hover active:scale-[0.99]"
       style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
     >
       <div
-        className="mr-4 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors group-hover:bg-[#dbe1ff]"
+        className="mr-4 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors group-hover:bg-[var(--passenger-primary-fixed)]"
         style={{ backgroundColor: SURFACE_CONTAINER_HIGH }}
       >
         <Icon
@@ -137,7 +139,7 @@ export default function EmergencyAssistancePage() {
         <button
           type="button"
           onClick={() => navigate('/account')}
-          className="rounded-full p-2 transition-colors active:scale-95 hover:bg-[#f2f4f6]"
+          className="rounded-full p-2 transition-colors active:scale-95 passenger-row-hover"
           style={{ color: PRIMARY }}
           aria-label="Back to account"
         >
@@ -212,7 +214,7 @@ export default function EmergencyAssistancePage() {
           <button
             type="button"
             onClick={notifySoon}
-            className="flex flex-col items-center justify-center rounded-[24px] p-6 transition-colors active:scale-95 hover:bg-[#f2f4f6]"
+            className="flex flex-col items-center justify-center rounded-[24px] p-6 transition-colors active:scale-95 passenger-row-hover"
             style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
           >
             <div
@@ -231,7 +233,7 @@ export default function EmergencyAssistancePage() {
           <button
             type="button"
             onClick={notifySoon}
-            className="flex flex-col items-center justify-center rounded-[24px] p-6 transition-colors active:scale-95 hover:bg-[#f2f4f6]"
+            className="flex flex-col items-center justify-center rounded-[24px] p-6 transition-colors active:scale-95 passenger-row-hover"
             style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
           >
             <div

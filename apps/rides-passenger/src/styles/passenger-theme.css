@@ -1,0 +1,138 @@
+/* App-wide passenger tokens (account, settings, services sub-pages) */
+:root {
+  --passenger-page-bg: #f7f9fb;
+  --passenger-header-bg: rgba(247, 249, 251, 0.92);
+  --passenger-surface: #ffffff;
+  --passenger-surface-low: #f2f4f6;
+  --passenger-surface-dim: #d8dadc;
+  --passenger-surface-container: #eceef0;
+  --passenger-surface-container-high: #e6e8ea;
+  --passenger-surface-container-highest: #e0e3e5;
+  --passenger-surface-variant: #e0e3e5;
+  --passenger-on-surface: #191c1e;
+  --passenger-on-surface-variant: #434655;
+  --passenger-secondary: #505f76;
+  --passenger-primary: #004ac6;
+  --passenger-primary-container: #2563eb;
+  --passenger-primary-fixed: #dbe1ff;
+  --passenger-primary-fixed-dim: #b4c5ff;
+  --passenger-on-primary: #ffffff;
+  --passenger-on-primary-container: #eeefff;
+  --passenger-on-primary-fixed: #00174b;
+  --passenger-on-primary-fixed-variant: #003ea8;
+  --passenger-secondary-container: #d0e1fb;
+  --passenger-secondary-fixed: #d3e4fe;
+  --passenger-on-secondary-container: #54647a;
+  --passenger-on-secondary-fixed: #0b1c30;
+  --passenger-on-secondary-fixed-variant: #38485d;
+  --passenger-tertiary: #943700;
+  --passenger-tertiary-fixed: #ffdbcd;
+  --passenger-on-tertiary-fixed-variant: #7d2d00;
+  --passenger-outline: #737686;
+  --passenger-outline-variant: #c3c6d7;
+  --passenger-inverse-surface: #2d3133;
+  --passenger-error: #ba1a1a;
+  --passenger-card-shadow: 0px 4px 20px rgba(0, 0, 0, 0.05);
+  --passenger-card-shadow-strong: 0px 4px 20px rgba(0, 0, 0, 0.1);
+  --passenger-highlight: rgba(0, 74, 198, 0.04);
+  --passenger-row-hover: #f2f4f6;
+  --passenger-toggle-off: #e2e8f0;
+  --passenger-header-border: rgba(195, 198, 215, 0.45);
+
+  --services-page-bg: #f8f9fa;
+  --services-title: #1a2b48;
+  --services-muted: #8e94a3;
+  --services-card-bg: #ffffff;
+  --services-card-shadow: 0 4px 16px rgba(26, 43, 72, 0.08);
+  --services-header-bg: #ffffff;
+  --services-badge-bg: #eceef2;
+  --services-badge-text: #6b7280;
+}
+
+html.dark {
+  --passenger-page-bg: #121413;
+  --passenger-header-bg: rgba(18, 20, 19, 0.94);
+  --passenger-surface: #1e201f;
+  --passenger-surface-low: #282a29;
+  --passenger-surface-dim: #333534;
+  --passenger-surface-container: #282a29;
+  --passenger-surface-container-high: #333534;
+  --passenger-surface-container-highest: #3d403f;
+  --passenger-surface-variant: #333534;
+  --passenger-on-surface: #e2e3e0;
+  --passenger-on-surface-variant: #bccabe;
+  --passenger-secondary: #9aa39e;
+  --passenger-primary: #6b9fff;
+  --passenger-primary-container: #4d8fff;
+  --passenger-primary-fixed: #1a2d4d;
+  --passenger-primary-fixed-dim: #2a3f66;
+  --passenger-on-primary: #00174b;
+  --passenger-on-primary-container: #c8d8ff;
+  --passenger-on-primary-fixed: #dbe1ff;
+  --passenger-on-primary-fixed-variant: #9eb8ff;
+  --passenger-secondary-container: #2a3544;
+  --passenger-secondary-fixed: #1e2838;
+  --passenger-on-secondary-container: #b8c5d9;
+  --passenger-on-secondary-fixed: #d3e4fe;
+  --passenger-on-secondary-fixed-variant: #9eb0c8;
+  --passenger-tertiary: #ffb68a;
+  --passenger-tertiary-fixed: #4a3528;
+  --passenger-on-tertiary-fixed-variant: #ffcdb8;
+  --passenger-outline: #869489;
+  --passenger-outline-variant: #3d4a41;
+  --passenger-inverse-surface: #e2e3e0;
+  --passenger-error: #ffb4ab;
+  --passenger-card-shadow: 0px 4px 24px rgba(0, 0, 0, 0.35);
+  --passenger-card-shadow-strong: 0px 4px 28px rgba(0, 0, 0, 0.45);
+  --passenger-highlight: rgba(107, 159, 255, 0.1);
+  --passenger-row-hover: rgba(40, 42, 41, 0.85);
+  --passenger-toggle-off: #3d4a41;
+  --passenger-header-border: rgba(61, 74, 65, 0.5);
+
+  --services-page-bg: #121413;
+  --services-title: #e2e3e0;
+  --services-muted: #9aa39e;
+  --services-card-bg: #1e201f;
+  --services-card-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  --services-header-bg: rgba(18, 20, 19, 0.96);
+  --services-badge-bg: #333534;
+  --services-badge-text: #bccabe;
+
+  --background: #121413;
+  --foreground: #e2e3e0;
+  --card: #1e201f;
+  --card-foreground: #e2e3e0;
+  --popover: #1e201f;
+  --popover-foreground: #e2e3e0;
+  --primary: #59de9b;
+  --primary-foreground: #003921;
+  --secondary: #282a29;
+  --secondary-foreground: #e2e3e0;
+  --muted: #282a29;
+  --muted-foreground: #bccabe;
+  --accent: #282a29;
+  --accent-foreground: #e2e3e0;
+  --border: #3d4a41;
+  --input: #3d4a41;
+  --ring: #59de9b;
+}
+
+.passenger-row-hover:hover {
+  background-color: var(--passenger-row-hover);
+}
+
+.passenger-subheader {
+  background-color: var(--passenger-header-bg);
+  border-bottom: 1px solid var(--passenger-header-border);
+  color: var(--passenger-on-surface);
+}
+
+.services-subheader {
+  background-color: var(--services-header-bg);
+  border-bottom: 1px solid var(--passenger-header-border);
+}
+
+.services-menu-card {
+  background-color: var(--services-card-bg);
+  box-shadow: var(--services-card-shadow);
+}

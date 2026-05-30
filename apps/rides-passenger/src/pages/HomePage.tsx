@@ -6,7 +6,6 @@ import {
   Crosshair,
   Menu,
   Package,
-  Search,
   UserPlus,
 } from 'lucide-react';
 import { supabase } from '@roam/auth-client';
@@ -90,6 +89,8 @@ export default function HomePage() {
   const [pickupAccuracy, setPickupAccuracy] = useState<number | null>(null);
   const [pickupMapOpen, setPickupMapOpen] = useState(false);
   const [quickActionsHidden, setQuickActionsHidden] = useState(false);
+  /** Pickup was filled from device GPS (grey field until user edits pickup). */
+  const [pickupSetByDevice, setPickupSetByDevice] = useState(false);
   const { active: services } = useRidesVehicleTypes();
   const [vehicleOption, setVehicleOption] = useState<string>(DEFAULT_VEHICLE_OPTION);
   const serviceSlugs = useMemo(
@@ -149,7 +150,10 @@ export default function HomePage() {
         setPickupAccuracy(position.accuracyMeters);
         try {
           const address = await resolveAddressFromCoordinates(position.lat, position.lng);
-          if (!cancelled) setPickupAddress(address);
+          if (!cancelled) {
+            setPickupAddress(address);
+            setPickupSetByDevice(true);
+          }
         } catch {
           // Address fill optional on first load
         }
@@ -179,6 +183,7 @@ export default function HomePage() {
   }, []);
 
   const handlePickupChange = useCallback((location: PickupLocation) => {
+    setPickupSetByDevice(false);
     setPickupAddress(location.address);
     setPickup({ lat: location.lat, lng: location.lng });
     if (location.accuracyMeters != null) {
@@ -320,6 +325,26 @@ export default function HomePage() {
       tripMinutes: q?.eta_trip_minutes_estimate ?? null,
     };
   }
+
+  const emphasizeDestination =
+    pickupSetByDevice &&
+    Boolean(pickup) &&
+    !dropoffAddress.trim() &&
+    !initialGpsLoading;
+
+  const pickupInputClassName = [
+    'home-place-input',
+    emphasizeDestination ? 'home-place-input--pickup-settled' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const destinationInputClassName = [
+    'home-place-input',
+    emphasizeDestination
+      ? 'home-place-input--destination-prominent'
+      : 'home-place-input--destination',
+  ].join(' ');
 
   const locationPill =
     pickupAddress.trim() ||
@@ -488,50 +513,55 @@ export default function HomePage() {
                     showLocationButton
                     locationLoading={initialGpsLoading}
                     onLocationClick={() => setPickupMapOpen(true)}
-                    inputClassName="home-place-input"
+                    inputClassName={pickupInputClassName}
                     suggestionsListClassName={HOME_SUGGESTIONS}
                     suggestionButtonClassName={HOME_SUGGESTION_BTN}
                     portalSuggestions
                     onChangeText={(text) => {
-                      dismissQuickActions();
+                      setPickupSetByDevice(false);
+                      if (text.trim()) {
+                        dismissQuickActions();
+                      } else if (!dropoffAddress.trim()) {
+                        setQuickActionsHidden(false);
+                      }
                       setPickupAddress(text);
                       setPickup(null);
                       clearQuotes();
                     }}
                     onResolved={({ address, lat, lng }) => {
+                      setPickupSetByDevice(false);
                       dismissQuickActions();
                       setPickupAddress(address);
                       setPickup({ lat, lng });
                     }}
                   />
-                  <div className="relative">
-                    <RoamPlaceField
-                      hideLabel
-                      label="Destination"
-                      value={dropoffAddress}
-                      placeholder="Enter destination"
-                      inputClassName="home-place-input home-place-input--destination"
-                      suggestionsListClassName={HOME_SUGGESTIONS}
-                      suggestionButtonClassName={HOME_SUGGESTION_BTN}
-                      portalSuggestions
+                  <RoamPlaceField
+                    hideLabel
+                    label="Destination"
+                    value={dropoffAddress}
+                    placeholder="Enter destination"
+                    clearable
+                    trailingIcon="search"
+                    inputClassName={destinationInputClassName}
+                    suggestionsListClassName={HOME_SUGGESTIONS}
+                    suggestionButtonClassName={HOME_SUGGESTION_BTN}
+                    portalSuggestions
                       onChangeText={(text) => {
-                        dismissQuickActions();
+                        if (text.trim()) {
+                          dismissQuickActions();
+                        } else {
+                          setQuickActionsHidden(false);
+                        }
                         setDropoffAddress(text);
                         setDropoff(null);
                         clearQuotes();
                       }}
-                      onResolved={({ address, lat, lng }) => {
-                        dismissQuickActions();
-                        setDropoffAddress(address);
-                        setDropoff({ lat, lng });
-                      }}
-                    />
-                    <Search
-                      className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2"
-                      style={{ color: 'var(--home-outline)' }}
-                      aria-hidden
-                    />
-                  </div>
+                    onResolved={({ address, lat, lng }) => {
+                      dismissQuickActions();
+                      setDropoffAddress(address);
+                      setDropoff({ lat, lng });
+                    }}
+                  />
                 </div>
               </div>
 

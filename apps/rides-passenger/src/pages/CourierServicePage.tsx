@@ -3,23 +3,25 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ArrowLeft, Box, Flag, MapPin, Package } from 'lucide-react';
 
-const PRIMARY = '#004ac6';
-const PRIMARY_CONTAINER = '#2563eb';
-const PRIMARY_FIXED = '#dbe1ff';
-const PRIMARY_FIXED_DIM = '#b4c5ff';
-const ON_PRIMARY_FIXED = '#00174b';
-const ON_SURFACE = '#191c1e';
-const ON_SURFACE_VARIANT = '#434655';
-const ON_PRIMARY = '#ffffff';
-const ON_PRIMARY_FIXED_VARIANT = '#003ea8';
-const ON_SECONDARY_CONTAINER = '#54647a';
-const SURFACE_LOWEST = '#ffffff';
-const SURFACE_LOW = '#f2f4f6';
-const SURFACE_CONTAINER_HIGH = '#e6e8ea';
-const OUTLINE_VARIANT = '#c3c6d7';
-const ERROR = '#ba1a1a';
-const PAGE_BG = '#f7f9fb';
-const CARD_SHADOW = '0px 4px 20px rgba(0, 0, 0, 0.05)';
+import {
+  CARD_SHADOW,
+  ERROR,
+  ON_PRIMARY,
+  ON_PRIMARY_FIXED,
+  ON_PRIMARY_FIXED_VARIANT,
+  ON_SECONDARY_CONTAINER,
+  ON_SURFACE,
+  ON_SURFACE_VARIANT,
+  OUTLINE_VARIANT,
+  PAGE_BG,
+  PRIMARY,
+  PRIMARY_CONTAINER,
+  PRIMARY_FIXED,
+  PRIMARY_FIXED_DIM,
+  SURFACE_CONTAINER_HIGH,
+  SURFACE_LOW,
+  SURFACE_LOWEST,
+} from '@/lib/passengerTheme';
 
 const MAP_PREVIEW_URL =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuCTQHtpO8lskolVcg4AENYfX9MDvFjmK-bi3cxJKlEo9LkpwfhfYpnWXclBHBPJYoK6ct3JJkDOkQbQACPuwhJPlcqzzgHUCcxrDMsP3jVpZfBIzQJwxDTcIg10w0iJBexXUricikEUf027GcrezCN4AxAW_zIjP5f9LqBbE5cO067KBlaJVT1Oco8JYvXvnTvPiMd7hAAqhyCK4MbrmxwPVxMwrwlSFXsQCgve2NMpGE_p2E3qcqpq_siBR5PE68uxMsSkoMWkGXgl';
@@ -107,7 +109,7 @@ export default function CourierServicePage() {
         <button
           type="button"
           onClick={() => navigate('/services')}
-          className="rounded-full p-2 transition-colors active:scale-95 hover:bg-[#f2f4f6]"
+          className="rounded-full p-2 transition-colors active:scale-95 passenger-row-hover"
           style={{ color: PRIMARY }}
           aria-label="Back to services"
         >

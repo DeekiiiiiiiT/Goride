@@ -15,20 +15,22 @@ import {
   Ticket,
 } from 'lucide-react';
 
-const PRIMARY = '#004ac6';
-const PRIMARY_CONTAINER = '#2563eb';
-const PRIMARY_FIXED = '#dbe1ff';
-const ON_SURFACE = '#191c1e';
-const ON_PRIMARY = '#ffffff';
-const ON_SECONDARY_CONTAINER = '#54647a';
-const ON_TERTIARY_FIXED_VARIANT = '#7d2d00';
-const SURFACE_LOWEST = '#ffffff';
-const SECONDARY = '#505f76';
-const SECONDARY_CONTAINER = '#d0e1fb';
-const TERTIARY = '#943700';
-const OUTLINE = '#737686';
-const PAGE_BG = '#f7f9fb';
-const CARD_SHADOW = '0px 4px 20px rgba(0, 0, 0, 0.05)';
+import {
+  CARD_SHADOW,
+  ON_PRIMARY,
+  ON_SECONDARY_CONTAINER,
+  ON_SURFACE,
+  ON_TERTIARY_FIXED_VARIANT,
+  OUTLINE,
+  PAGE_BG,
+  PRIMARY,
+  PRIMARY_CONTAINER,
+  PRIMARY_FIXED,
+  SECONDARY,
+  SECONDARY_CONTAINER,
+  SURFACE_LOWEST,
+  TERTIARY,
+} from '@/lib/passengerTheme';
 
 const CATEGORIES = [
   {
@@ -167,7 +169,7 @@ export default function SupportCenterPage() {
         <button
           type="button"
           onClick={() => navigate('/account')}
-          className="rounded-full p-2 transition-colors active:scale-95 hover:bg-[#f2f4f6]"
+          className="rounded-full p-2 transition-colors active:scale-95 passenger-row-hover"
           style={{ color: PRIMARY }}
           aria-label="Back to account"
         >
@@ -250,7 +252,7 @@ export default function SupportCenterPage() {
             <button
               type="button"
               onClick={notifySoon}
-              className="flex items-center justify-center gap-3 self-start rounded-xl px-8 py-4 text-lg font-semibold shadow-xl transition-colors active:scale-95 hover:bg-[#dbe1ff]"
+              className="passenger-row-hover flex items-center justify-center gap-3 self-start rounded-xl px-8 py-4 text-lg font-semibold shadow-xl transition-colors active:scale-95"
               style={{ backgroundColor: SURFACE_LOWEST, color: PRIMARY }}
             >
               <MessageCircle className="h-6 w-6" aria-hidden />
@@ -278,7 +280,7 @@ export default function SupportCenterPage() {
                 key={title}
                 type="button"
                 onClick={notifySoon}
-                className="group flex w-full items-center justify-between rounded-2xl p-4 text-left transition-colors hover:bg-[#f2f4f6]"
+                className="group flex w-full items-center justify-between rounded-2xl p-4 text-left transition-colors passenger-row-hover"
               >
                 <div className="flex min-w-0 items-center gap-4">
                   <FileText className="h-5 w-5 shrink-0" style={{ color: OUTLINE }} aria-hidden />

@@ -3,20 +3,23 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ArrowLeft, ArrowRight, CircleDot, Clock, MapPin } from 'lucide-react';
 
-const PRIMARY = '#004ac6';
-const PRIMARY_FIXED_DIM = '#b4c5ff';
-const ON_SURFACE = '#191c1e';
-const ON_SURFACE_VARIANT = '#434655';
-const ON_PRIMARY = '#ffffff';
-const SECONDARY = '#505f76';
-const SECONDARY_CONTAINER = '#d0e1fb';
-const TERTIARY = '#943700';
-const SURFACE_LOWEST = '#ffffff';
-const SURFACE_LOW = '#f2f4f6';
-const SURFACE_DIM = '#d8dadc';
-const OUTLINE_VARIANT = '#c3c6d7';
-const PAGE_BG = '#f7f9fb';
-const CARD_SHADOW = '0px 4px 20px rgba(0, 0, 0, 0.05)';
+import {
+  CARD_SHADOW,
+  HEADER_BG,
+  ON_PRIMARY,
+  ON_SURFACE,
+  ON_SURFACE_VARIANT,
+  OUTLINE_VARIANT,
+  PAGE_BG,
+  PRIMARY,
+  PRIMARY_FIXED_DIM,
+  SECONDARY,
+  SECONDARY_CONTAINER,
+  SURFACE_DIM,
+  SURFACE_LOW,
+  SURFACE_LOWEST,
+  TERTIARY,
+} from '@/lib/passengerTheme';
 
 const VEHICLE_CLASSES = [
   {
@@ -100,7 +103,7 @@ export default function ScheduleRidePage() {
         <button
           type="button"
           onClick={() => navigate('/services')}
-          className="rounded-full p-2 transition-colors active:scale-95 hover:bg-[#f2f4f6]"
+          className="rounded-full p-2 transition-colors active:scale-95 passenger-row-hover"
           style={{ color: PRIMARY }}
           aria-label="Back to services"
         >
@@ -285,7 +288,7 @@ export default function ScheduleRidePage() {
       <footer
         className="fixed bottom-[4.5rem] left-0 z-40 w-full border-t p-4 backdrop-blur-md safe-x"
         style={{
-          backgroundColor: 'rgba(247, 249, 251, 0.85)',
+          backgroundColor: HEADER_BG,
           borderColor: `${OUTLINE_VARIANT}33`,
         }}
       >
