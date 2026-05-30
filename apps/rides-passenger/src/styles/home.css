@@ -142,3 +142,10 @@ html.dark .home-page {
 .home-suggestion-btn:hover {
   background: rgba(89, 222, 155, 0.12) !important;
 }
+
+html[data-keyboard-open='true'] .home-bottom-nav {
+  transform: translateY(100%);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}

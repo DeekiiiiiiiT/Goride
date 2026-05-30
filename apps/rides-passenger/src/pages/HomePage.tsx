@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@roam/auth-client';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useVisualViewport } from '@/hooks/useVisualViewport';
 import {
   DEFAULT_PROFILE_AVATAR_URL,
   HOME_MAP_DARK_URL,
@@ -49,15 +50,28 @@ import {
 } from '@roam/types';
 
 const HOME_SUGGESTIONS =
-  'home-suggestions absolute z-50 mt-1 max-h-52 w-full overflow-y-auto rounded-2xl border py-1 shadow-lg';
+  'home-suggestions overflow-y-auto rounded-2xl border py-1 shadow-lg';
 const HOME_SUGGESTION_BTN =
   'home-suggestion-btn flex w-full items-start gap-2 px-3 py-2.5 text-left text-sm disabled:opacity-50';
 
 export default function HomePage() {
   const navigate = useNavigate();
   const { resolvedTheme } = useTheme();
+  const { keyboardInset, height: viewportHeight } = useVisualViewport();
+  const keyboardOpen = keyboardInset > 48;
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const staticMapUrl = resolvedTheme === 'dark' ? HOME_MAP_DARK_URL : HOME_MAP_LIGHT_URL;
+
+  useEffect(() => {
+    if (keyboardOpen) {
+      document.documentElement.dataset.keyboardOpen = 'true';
+    } else {
+      delete document.documentElement.dataset.keyboardOpen;
+    }
+    return () => {
+      delete document.documentElement.dataset.keyboardOpen;
+    };
+  }, [keyboardOpen]);
 
   useEffect(() => {
     void supabase.auth.getUser().then(({ data }) => {
@@ -75,6 +89,7 @@ export default function HomePage() {
   const [dropoff, setDropoff] = useState<{ lat: number; lng: number } | null>(null);
   const [pickupAccuracy, setPickupAccuracy] = useState<number | null>(null);
   const [pickupMapOpen, setPickupMapOpen] = useState(false);
+  const [quickActionsHidden, setQuickActionsHidden] = useState(false);
   const { active: services } = useRidesVehicleTypes();
   const [vehicleOption, setVehicleOption] = useState<string>(DEFAULT_VEHICLE_OPTION);
   const serviceSlugs = useMemo(
@@ -282,6 +297,10 @@ export default function HomePage() {
     }
   };
 
+  const dismissQuickActions = useCallback(() => {
+    setQuickActionsHidden(true);
+  }, []);
+
   const surge = quote?.surge_multiplier ?? null;
   const canBook =
     coordsReady && Boolean(quote?.quote_token) && !quotesLoading && !locationBlocked;
@@ -409,8 +428,22 @@ export default function HomePage() {
           Adjust pin
         </button>
 
-        <div className="fixed bottom-[4.5rem] left-0 z-40 w-full px-4 safe-x">
-          <div className="home-glass-sheet mx-auto max-h-[min(78dvh,720px)] max-w-xl overflow-hidden rounded-3xl">
+        <div
+          className="fixed left-0 z-40 w-full px-4 safe-x transition-[bottom] duration-200 ease-out"
+          style={{
+            bottom: keyboardOpen
+              ? keyboardInset
+              : 'calc(4.5rem + env(safe-area-inset-bottom, 0px))',
+          }}
+        >
+          <div
+            className="home-glass-sheet mx-auto max-w-xl overflow-visible rounded-3xl"
+            style={{
+              maxHeight: keyboardOpen
+                ? Math.max(280, viewportHeight - 16)
+                : 'min(78dvh, 720px)',
+            }}
+          >
             <div className="flex justify-center py-3">
               <div
                 className="h-1.5 w-12 rounded-full"
@@ -458,12 +491,15 @@ export default function HomePage() {
                     inputClassName="home-place-input"
                     suggestionsListClassName={HOME_SUGGESTIONS}
                     suggestionButtonClassName={HOME_SUGGESTION_BTN}
+                    portalSuggestions
                     onChangeText={(text) => {
+                      dismissQuickActions();
                       setPickupAddress(text);
                       setPickup(null);
                       clearQuotes();
                     }}
                     onResolved={({ address, lat, lng }) => {
+                      dismissQuickActions();
                       setPickupAddress(address);
                       setPickup({ lat, lng });
                     }}
@@ -477,12 +513,15 @@ export default function HomePage() {
                       inputClassName="home-place-input home-place-input--destination"
                       suggestionsListClassName={HOME_SUGGESTIONS}
                       suggestionButtonClassName={HOME_SUGGESTION_BTN}
+                      portalSuggestions
                       onChangeText={(text) => {
+                        dismissQuickActions();
                         setDropoffAddress(text);
                         setDropoff(null);
                         clearQuotes();
                       }}
                       onResolved={({ address, lat, lng }) => {
+                        dismissQuickActions();
                         setDropoffAddress(address);
                         setDropoff({ lat, lng });
                       }}
@@ -496,11 +535,19 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <div className="mb-6 grid grid-cols-2 gap-3">
+              <div
+                className={`overflow-hidden transition-[max-height,opacity,margin] duration-300 ease-out ${
+                  quickActionsHidden
+                    ? 'pointer-events-none mb-0 max-h-0 opacity-0'
+                    : 'mb-6 max-h-40 opacity-100'
+                }`}
+                aria-hidden={quickActionsHidden}
+              >
+                <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
                   onClick={() => navigate('/services/book-for-someone')}
-                  className="flex flex-col items-start gap-3 rounded-2xl border p-4 text-left transition-all active:scale-[0.98]"
+                  className="flex min-h-[7.5rem] flex-col items-center justify-center gap-3 rounded-2xl border p-4 text-center transition-all active:scale-[0.98]"
                   style={{
                     backgroundColor: 'var(--home-card-bg)',
                     borderColor: 'var(--home-card-border)',
@@ -516,14 +563,12 @@ export default function HomePage() {
                       aria-hidden
                     />
                   </div>
-                  <div>
-                    <span className="block text-sm font-semibold">Pick up Someone</span>
-                  </div>
+                  <span className="text-sm font-semibold leading-tight">Pick up Someone</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => navigate('/services/courier')}
-                  className="flex flex-col items-start gap-3 rounded-2xl border p-4 text-left transition-all active:scale-[0.98]"
+                  className="flex min-h-[7.5rem] flex-col items-center justify-center gap-3 rounded-2xl border p-4 text-center transition-all active:scale-[0.98]"
                   style={{
                     backgroundColor: 'var(--home-card-bg)',
                     borderColor: 'var(--home-card-border)',
@@ -535,10 +580,9 @@ export default function HomePage() {
                   >
                     <Package className="h-5 w-5" style={{ color: 'var(--home-primary)' }} aria-hidden />
                   </div>
-                  <div>
-                    <span className="block text-sm font-semibold">Courier</span>
-                  </div>
+                  <span className="text-sm font-semibold leading-tight">Courier</span>
                 </button>
+                </div>
               </div>
 
               {surge != null && surge > 1 && (
