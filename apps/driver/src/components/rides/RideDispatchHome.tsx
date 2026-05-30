@@ -80,11 +80,8 @@ export function RideDispatchHome() {
         )}
 
         {online && !showActiveRide && offers.length > 0 && (
-          <section className="space-y-2 shrink-0">
-            <h2 className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 px-0.5">
-              Incoming offers
-            </h2>
-            <ul className="space-y-2">
+          <section className="flex flex-1 flex-col justify-center shrink-0 px-1 py-2">
+            <ul className="space-y-3 w-full max-w-md mx-auto">
               {offers.map((o) => (
                 <RideOfferCard key={o.id} offer={o} onAccept={accept} onDecline={decline} compact />
               ))}

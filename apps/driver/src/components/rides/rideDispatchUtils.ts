@@ -38,3 +38,17 @@ export function offerSecondsRemaining(expiresAt: string | null | undefined): num
   const ms = new Date(expiresAt).getTime() - Date.now();
   return Math.max(0, Math.ceil(ms / 1000));
 }
+
+const KM_TO_MI = 0.621371;
+
+/** Display distance in miles (matches common dispatch offer UIs). */
+export function formatOfferDistanceMi(km: number | null | undefined): string | null {
+  if (km == null || !Number.isFinite(km)) return null;
+  return `${(km * KM_TO_MI).toFixed(2)} mi`;
+}
+
+/** Rough drive time to pickup from straight-line km (urban ~35 km/h). */
+export function estimatePickupMinutes(distanceKm: number | null | undefined): number | null {
+  if (distanceKm == null || !Number.isFinite(distanceKm)) return null;
+  return Math.max(1, Math.round((distanceKm / 35) * 60));
+}

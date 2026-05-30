@@ -1,7 +1,13 @@
 import React, { useEffect, useState } from 'react';
+import { vehicleTypeLabel } from '@roam/business-config/ridesVehicleTypes';
 import type { DriverOfferWithRide } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
-import { offerSecondsRemaining } from './rideDispatchUtils';
+import { MapPin, Square, User } from 'lucide-react';
+import {
+  estimatePickupMinutes,
+  formatOfferDistanceMi,
+  offerSecondsRemaining,
+} from './rideDispatchUtils';
 
 interface RideOfferCardProps {
   offer: DriverOfferWithRide;
@@ -9,6 +15,8 @@ interface RideOfferCardProps {
   onDecline: (offer: DriverOfferWithRide) => void;
   compact?: boolean;
 }
+
+const OFFER_WINDOW_SEC = 15;
 
 export function RideOfferCard({ offer, onAccept, onDecline, compact = false }: RideOfferCardProps) {
   const [secondsLeft, setSecondsLeft] = useState(() => offerSecondsRemaining(offer.expires_at));
@@ -24,58 +32,101 @@ export function RideOfferCard({ offer, onAccept, onDecline, compact = false }: R
   }, [offer.expires_at, offer.id]);
 
   const expired = secondsLeft <= 0;
-  const progress = expired ? 0 : Math.min(100, (secondsLeft / 15) * 100);
+  const progress = expired ? 0 : Math.min(100, (secondsLeft / OFFER_WINDOW_SEC) * 100);
+  const ride = offer.ride;
+
+  const serviceLabel = ride ? vehicleTypeLabel(ride.vehicle_option) : 'Ride';
+  const fare =
+    ride != null
+      ? formatMoneyMinor(ride.fare_estimate_minor, ride.currency ?? 'JMD')
+      : '—';
+
+  const pickupMins = estimatePickupMinutes(offer.distance_km);
+  const pickupMi = formatOfferDistanceMi(offer.distance_km);
+  const pickupMeta =
+    pickupMins != null && pickupMi != null
+      ? `${pickupMins} min${pickupMins === 1 ? '' : 's'} (${pickupMi}) away`
+      : pickupMi != null
+        ? `${pickupMi} away`
+        : 'Pickup';
+
+  const tripMins = ride?.duration_estimate_minutes;
+  const tripMi = formatOfferDistanceMi(ride?.distance_estimate_km);
+  const tripMeta =
+    tripMins != null && tripMi != null
+      ? `${tripMins} min${tripMins === 1 ? '' : 's'} (${tripMi}) trip`
+      : tripMi != null
+        ? `${tripMi} trip`
+        : tripMins != null
+          ? `${tripMins} min${tripMins === 1 ? '' : 's'} trip`
+          : 'Trip';
 
   return (
     <li
-      className={`rounded-2xl border bg-white dark:bg-slate-900 flex flex-col gap-2 ${
-        compact
-          ? 'border-slate-200/80 dark:border-slate-700/80 p-3'
-          : 'border-slate-200 dark:border-slate-800 p-4'
-      } ${expired ? 'opacity-60' : ''}`}
+      className={`ride-offer-card ${compact ? 'ride-offer-card--compact' : ''} ${
+        expired ? 'ride-offer-card--expired' : ''
+      }`}
     >
-      <div className="space-y-2">
-        <OfferCountdownHeader secondsLeft={secondsLeft} expired={expired} compact={compact} />
-        <div className="h-1 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-          <div
-            className={`h-full transition-all duration-300 ${expired ? 'bg-slate-400' : 'bg-emerald-500'}`}
-            style={{ width: `${progress}%` }}
-          />
+      {expired ? <p className="ride-offer-card__expired-label">Offer expired</p> : null}
+
+      <div className="ride-offer-card__service-pill" aria-label={`Service: ${serviceLabel}`}>
+        <span className="ride-offer-card__service-main">
+          <User className="size-4 shrink-0" strokeWidth={2.25} aria-hidden />
+          {serviceLabel}
+        </span>
+        <span className="ride-offer-card__service-timer" aria-live="polite">
+          {expired ? '—' : `${secondsLeft}s`}
+        </span>
+      </div>
+
+      <div className="ride-offer-card__fare-block">
+        <p className="ride-offer-card__fare">{fare}</p>
+        {ride != null && ride.surge_multiplier > 1 ? (
+          <p className="ride-offer-card__surge">Surge ×{ride.surge_multiplier.toFixed(2)}</p>
+        ) : null}
+      </div>
+
+      <div className="ride-offer-card__progress" aria-hidden>
+        <div
+          className={`ride-offer-card__progress-fill ${expired ? 'ride-offer-card__progress-fill--expired' : ''}`}
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+
+      <div className="ride-offer-card__divider" aria-hidden />
+
+      <div className="ride-offer-card__route">
+        <div className="ride-offer-card__leg">
+          <div className="ride-offer-card__leg-icon-col">
+            <MapPin className="ride-offer-card__leg-icon size-4" strokeWidth={2} aria-hidden />
+            <span className="ride-offer-card__leg-line" aria-hidden />
+          </div>
+          <div className="ride-offer-card__leg-body">
+            <p className="ride-offer-card__leg-meta">{pickupMeta}</p>
+            <p className="ride-offer-card__leg-address">
+              {ride?.pickup_address?.trim() || 'Pickup location'}
+            </p>
+          </div>
+        </div>
+
+        <div className="ride-offer-card__leg">
+          <div className="ride-offer-card__leg-icon-col">
+            <Square className="ride-offer-card__leg-icon size-3.5" strokeWidth={2.25} aria-hidden />
+          </div>
+          <div className="ride-offer-card__leg-body">
+            <p className="ride-offer-card__leg-meta">{tripMeta}</p>
+            <p className="ride-offer-card__leg-address">
+              {ride?.dropoff_address?.trim() || 'Drop-off location'}
+            </p>
+          </div>
         </div>
       </div>
 
-      <div className={`text-slate-500 space-y-1 ${compact ? 'text-[11px]' : 'text-xs'}`}>
-        <p>
-          Wave {offer.wave} · {offer.distance_km != null ? `${offer.distance_km.toFixed(2)} km to pickup` : '—'}
-        </p>
-        {offer.ride && (
-          <>
-            <p className="text-slate-700 dark:text-slate-200 font-medium truncate">
-              {offer.ride.pickup_address ?? 'Pickup'} → {offer.ride.dropoff_address ?? 'Drop-off'}
-            </p>
-            <p
-              className={`font-semibold text-emerald-700 dark:text-emerald-400 tabular-nums ${
-                compact ? 'text-xs' : 'text-sm'
-              }`}
-            >
-              {formatMoneyMinor(offer.ride.fare_estimate_minor, offer.ride.currency ?? 'JMD')}
-              {offer.ride.surge_multiplier > 1 ? (
-                <span className="text-amber-700 dark:text-amber-400 font-normal ml-1">
-                  · surge ×{offer.ride.surge_multiplier.toFixed(2)}
-                </span>
-              ) : null}
-            </p>
-          </>
-        )}
-      </div>
-
-      <div className="flex gap-2">
+      <div className="ride-offer-card__actions">
         <button
           type="button"
           disabled={expired}
-          className={`flex-1 rounded-xl bg-emerald-600 text-white font-medium disabled:opacity-40 ${
-            compact ? 'py-2 text-xs' : 'py-2.5 text-sm'
-          }`}
+          className="ride-offer-card__accept"
           onClick={() => onAccept(offer)}
         >
           Accept
@@ -83,45 +134,12 @@ export function RideOfferCard({ offer, onAccept, onDecline, compact = false }: R
         <button
           type="button"
           disabled={expired}
-          className={`flex-1 rounded-xl border border-slate-300 dark:border-slate-600 disabled:opacity-40 ${
-            compact ? 'py-2 text-xs' : 'py-2.5 text-sm'
-          }`}
+          className="ride-offer-card__decline"
           onClick={() => onDecline(offer)}
         >
           Decline
         </button>
       </div>
     </li>
-  );
-}
-
-function OfferCountdownHeader({
-  secondsLeft,
-  expired,
-  compact,
-}: {
-  secondsLeft: number;
-  expired: boolean;
-  compact: boolean;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <span
-        className={`font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400 ${
-          compact ? 'text-[10px]' : 'text-xs'
-        }`}
-      >
-        {expired ? 'Offer expired' : 'Incoming ride'}
-      </span>
-      {!expired && (
-        <span
-          className={`tabular-nums font-medium text-slate-600 dark:text-slate-300 ${
-            compact ? 'text-xs' : 'text-sm'
-          }`}
-        >
-          {secondsLeft}s
-        </span>
-      )}
-    </div>
   );
 }

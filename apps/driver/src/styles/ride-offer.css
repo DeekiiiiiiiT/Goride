@@ -1,0 +1,237 @@
+/* Incoming trip offer — dark dispatch card (driver home) */
+.ride-offer-card {
+  --ride-offer-bg: #0a0a0a;
+  --ride-offer-fg: #ffffff;
+  --ride-offer-muted: rgba(255, 255, 255, 0.72);
+  --ride-offer-divider: rgba(255, 255, 255, 0.12);
+  --ride-offer-pill-muted: #6b6b6b;
+  --ride-offer-accept: #ffffff;
+  --ride-offer-accept-fg: #0a0a0a;
+
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 1.25rem 1.125rem 1rem;
+  border-radius: 1rem;
+  background: var(--ride-offer-bg);
+  color: var(--ride-offer-fg);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  list-style: none;
+}
+
+.ride-offer-card--expired {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.ride-offer-card--compact {
+  padding: 1rem 1rem 0.875rem;
+}
+
+.ride-offer-card__service-pill {
+  display: flex;
+  align-self: center;
+  align-items: stretch;
+  min-height: 2rem;
+  border-radius: 9999px;
+  overflow: hidden;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: 0.875rem;
+}
+
+.ride-offer-card--compact .ride-offer-card__service-pill {
+  min-height: 1.75rem;
+  font-size: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.ride-offer-card__service-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0 0.875rem 0 0.75rem;
+  background: #ffffff;
+  color: #0a0a0a;
+}
+
+.ride-offer-card__service-timer {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.75rem;
+  padding: 0 0.625rem;
+  background: var(--ride-offer-pill-muted);
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.ride-offer-card__fare-block {
+  text-align: center;
+  padding-bottom: 0.75rem;
+}
+
+.ride-offer-card__fare {
+  font-size: 2.75rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.ride-offer-card--compact .ride-offer-card__fare {
+  font-size: 2.25rem;
+}
+
+.ride-offer-card__surge {
+  margin-top: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #fbbf24;
+}
+
+.ride-offer-card__progress {
+  height: 2px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+  margin-bottom: 0.875rem;
+}
+
+.ride-offer-card__progress-fill {
+  height: 100%;
+  background: #ffffff;
+  transition: width 300ms ease;
+}
+
+.ride-offer-card__progress-fill--expired {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.ride-offer-card__divider {
+  height: 1px;
+  background: var(--ride-offer-divider);
+  margin-bottom: 1rem;
+}
+
+.ride-offer-card__route {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-bottom: 1rem;
+}
+
+.ride-offer-card__leg {
+  display: grid;
+  grid-template-columns: 1.25rem 1fr;
+  column-gap: 0.75rem;
+}
+
+.ride-offer-card__leg-icon-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 0.125rem;
+}
+
+.ride-offer-card__leg-icon {
+  flex-shrink: 0;
+  color: var(--ride-offer-fg);
+}
+
+.ride-offer-card__leg-line {
+  flex: 1;
+  width: 1px;
+  min-height: 1.25rem;
+  margin: 0.25rem 0;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.ride-offer-card__leg-body {
+  padding-bottom: 1rem;
+}
+
+.ride-offer-card__leg:last-child .ride-offer-card__leg-body {
+  padding-bottom: 0;
+}
+
+.ride-offer-card__leg-meta {
+  font-size: 0.8125rem;
+  color: var(--ride-offer-muted);
+  line-height: 1.35;
+  margin: 0 0 0.2rem;
+}
+
+.ride-offer-card--compact .ride-offer-card__leg-meta {
+  font-size: 0.75rem;
+}
+
+.ride-offer-card__leg-address {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: 1.35;
+  margin: 0;
+  word-break: break-word;
+}
+
+.ride-offer-card--compact .ride-offer-card__leg-address {
+  font-size: 0.875rem;
+}
+
+.ride-offer-card__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.ride-offer-card__accept {
+  flex: 1;
+  border: none;
+  border-radius: 0.75rem;
+  padding: 0.875rem 1rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  background: var(--ride-offer-accept);
+  color: var(--ride-offer-accept-fg);
+  cursor: pointer;
+}
+
+.ride-offer-card__accept:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ride-offer-card__decline {
+  flex: 1;
+  border-radius: 0.75rem;
+  padding: 0.875rem 1rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  background: transparent;
+  color: var(--ride-offer-muted);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+}
+
+.ride-offer-card__decline:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ride-offer-card--compact .ride-offer-card__accept,
+.ride-offer-card--compact .ride-offer-card__decline {
+  padding: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.ride-offer-card__expired-label {
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ride-offer-muted);
+  margin-bottom: 0.5rem;
+}

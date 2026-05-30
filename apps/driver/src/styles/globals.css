@@ -1,3 +1,5 @@
+@import './ride-offer.css';
+
 @custom-variant dark (&:is(.dark *));
 
 /* Light theme (default — html without .dark) */
