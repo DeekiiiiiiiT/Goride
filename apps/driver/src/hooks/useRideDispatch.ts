@@ -9,6 +9,7 @@ import {
   ridesDriverPendingOffers,
   ridesDriverPresence,
   ridesDriverTransition,
+  type DriverWaitTimeInfo,
 } from '../services/ridesDriverEdge';
 import { slugFromBodyLabel } from '../components/rides/rideDispatchUtils';
 import { useActiveRideTracking } from './useActiveRideTracking';
@@ -29,6 +30,7 @@ import {
 
 const OFFER_POLL_MS = 4000;
 const RIDE_SYNC_MS = 30_000;
+const RIDE_WAIT_SYNC_MS = 2_000;
 const OFFER_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3';
 
 const DEFAULT_BODY_TYPE_SLUG = 'sedan';
@@ -37,6 +39,7 @@ export function useRideDispatch() {
   const [online, setOnline] = useState(false);
   const [offers, setOffers] = useState<DriverOfferWithRide[]>([]);
   const [activeRide, setActiveRide] = useState<RideRequestRow | null>(null);
+  const [activeRideWaitTime, setActiveRideWaitTime] = useState<DriverWaitTimeInfo | null>(null);
   const [bodyTypeSlug, setBodyTypeSlug] = useState<string | null>(null);
   const [vehicleReady, setVehicleReady] = useState(false);
   const [presenceError, setPresenceError] = useState<string | null>(null);
@@ -54,6 +57,7 @@ export function useRideDispatch() {
     (ride: RideRequestRow | null) => {
       if (!ride) {
         setActiveRide(null);
+        setActiveRideWaitTime(null);
         setRecoveredRide(null);
         persistActiveRideId(null);
         return;
@@ -198,10 +202,12 @@ export function useRideDispatch() {
 
   const pollActiveRide = useCallback(async (id: string) => {
     try {
-      const { ride } = await ridesDriverGetRequest(id);
+      const { ride, wait_time } = await ridesDriverGetRequest(id);
       syncActiveRide(ride);
+      setActiveRideWaitTime(wait_time ?? null);
       if (ride.status === 'completed' || ride.status === 'cancelled') {
         syncActiveRide(null);
+        setActiveRideWaitTime(null);
         return false;
       }
       return true;
@@ -298,12 +304,17 @@ export function useRideDispatch() {
 
   useEffect(() => {
     if (!activeRide?.id) return;
+    const pollMs =
+      activeRide.status === 'driver_arrived_pickup' ||
+      (activeRide.status === 'driver_en_route_pickup' && activeRide.wait_time_started_at)
+        ? RIDE_WAIT_SYNC_MS
+        : RIDE_SYNC_MS;
     const t = window.setInterval(async () => {
       const keep = await pollActiveRide(activeRide.id);
       if (!keep) window.clearInterval(t);
-    }, RIDE_SYNC_MS);
+    }, pollMs);
     return () => clearInterval(t);
-  }, [activeRide?.id, pollActiveRide]);
+  }, [activeRide?.id, activeRide?.status, activeRide?.wait_time_started_at, pollActiveRide]);
 
   useEffect(() => {
     if (!activeRide?.id) return;
@@ -455,6 +466,7 @@ export function useRideDispatch() {
     online,
     offers,
     activeRide,
+    activeRideWaitTime,
     bodyTypeSlug: effectiveBodyTypeSlug,
     vehicleReady,
     presenceError,

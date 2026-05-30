@@ -8,6 +8,7 @@ export function RideDispatchPage() {
     online,
     offers,
     activeRide,
+    activeRideWaitTime,
     toggleOnline,
     accept,
     decline,
@@ -45,6 +46,7 @@ export function RideDispatchPage() {
           trackingError={trackingError}
           gpsAccuracyM={gpsAccuracyM}
           isTracking={isTracking}
+          waitTimeInfo={activeRideWaitTime}
         />
       )}
 

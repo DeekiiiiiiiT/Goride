@@ -10,6 +10,7 @@ export function RideDispatchHome() {
     online,
     offers,
     activeRide,
+    activeRideWaitTime,
     toggleOnline,
     accept,
     decline,
@@ -102,6 +103,7 @@ export function RideDispatchHome() {
             trackingError={trackingError}
             gpsAccuracyM={gpsAccuracyM}
             isTracking={isTracking}
+            waitTimeInfo={activeRideWaitTime}
           />
         </div>
       )}

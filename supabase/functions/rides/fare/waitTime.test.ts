@@ -7,6 +7,8 @@ import {
   isGracePeriodExpired,
   getGraceRemainingSeconds,
   formatWaitTimeFee,
+  getWaitTimeGraceAnchor,
+  buildWaitTimeInfo,
 } from "./waitTime.ts";
 
 Deno.test("calculateWaitTimeFee - within grace period", () => {
@@ -14,7 +16,7 @@ Deno.test("calculateWaitTimeFee - within grace period", () => {
   const tripStartAt = new Date("2026-01-15T10:01:30Z"); // 1.5 minutes later
   
   const result = calculateWaitTimeFee({
-    arrivedPickupAt: arrivedAt.toISOString(),
+    graceStartedAt: arrivedAt.toISOString(),
     tripStartedAt: tripStartAt.toISOString(),
     graceMinutes: 2,
     ratePerMinMinor: 50,
@@ -32,7 +34,7 @@ Deno.test("calculateWaitTimeFee - grace period expired", () => {
   const tripStartAt = new Date("2026-01-15T10:05:00Z"); // 5 minutes later
   
   const result = calculateWaitTimeFee({
-    arrivedPickupAt: arrivedAt.toISOString(),
+    graceStartedAt: arrivedAt.toISOString(),
     tripStartedAt: tripStartAt.toISOString(),
     graceMinutes: 2,
     ratePerMinMinor: 50,
@@ -50,7 +52,7 @@ Deno.test("calculateWaitTimeFee - with surge multiplier", () => {
   const tripStartAt = new Date("2026-01-15T10:05:00Z"); // 5 minutes later
   
   const result = calculateWaitTimeFee({
-    arrivedPickupAt: arrivedAt.toISOString(),
+    graceStartedAt: arrivedAt.toISOString(),
     tripStartedAt: tripStartAt.toISOString(),
     graceMinutes: 2,
     ratePerMinMinor: 50,
@@ -65,7 +67,7 @@ Deno.test("calculateWaitTimeFee - with live calculation (no trip started)", () =
   const arrivedAt = new Date(Date.now() - 3 * 60 * 1000); // 3 minutes ago
   
   const result = calculateWaitTimeFee({
-    arrivedPickupAt: arrivedAt.toISOString(),
+    graceStartedAt: arrivedAt.toISOString(),
     tripStartedAt: null,
     graceMinutes: 2,
     ratePerMinMinor: 50,
@@ -79,7 +81,7 @@ Deno.test("calculateWaitTimeFee - with live calculation (no trip started)", () =
 
 Deno.test("calculateWaitTimeFee - invalid arrival timestamp", () => {
   const result = calculateWaitTimeFee({
-    arrivedPickupAt: "invalid-date",
+    graceStartedAt: "invalid-date",
     tripStartedAt: null,
     graceMinutes: 2,
     ratePerMinMinor: 50,
@@ -96,7 +98,7 @@ Deno.test("calculateWaitTimeFee - zero rate", () => {
   const tripStartAt = new Date("2026-01-15T10:05:00Z");
   
   const result = calculateWaitTimeFee({
-    arrivedPickupAt: arrivedAt.toISOString(),
+    graceStartedAt: arrivedAt.toISOString(),
     tripStartedAt: tripStartAt.toISOString(),
     graceMinutes: 2,
     ratePerMinMinor: 0,
@@ -136,4 +138,24 @@ Deno.test("formatWaitTimeFee - formats currency", () => {
 Deno.test("formatWaitTimeFee - returns empty for zero", () => {
   assertEquals(formatWaitTimeFee(0, "JMD"), "");
   assertEquals(formatWaitTimeFee(-10, "JMD"), "");
+});
+
+Deno.test("getWaitTimeGraceAnchor prefers geofence start over arrived", () => {
+  const anchor = getWaitTimeGraceAnchor({
+    status: "driver_arrived_pickup",
+    wait_time_started_at: "2026-01-15T10:00:00Z",
+    arrived_pickup_at: "2026-01-15T10:00:20Z",
+  });
+  assertEquals(anchor, "2026-01-15T10:00:00Z");
+});
+
+Deno.test("buildWaitTimeInfo exposes grace countdown", () => {
+  const started = new Date(Date.now() - 30_000).toISOString();
+  const info = buildWaitTimeInfo(started, {
+    wait_time_charge_enabled: true,
+    wait_time_grace_minutes: 2,
+    wait_time_rate_per_min_minor: 50,
+  });
+  assertEquals(info.wait_time_grace_expired, false);
+  assertEquals(info.wait_time_grace_remaining_seconds > 80, true);
 });

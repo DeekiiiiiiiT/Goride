@@ -134,6 +134,42 @@ Deno.test("geofence: arrive after dwell inside pickup", async () => {
   assertEquals(result.transitionApplied, "driver_arrived_pickup");
 });
 
+Deno.test("geofence: sets wait_time_started_at on first pickup geofence entry", async () => {
+  const db = mockDb();
+  const deps = mockDeps();
+  let patchedGraceStart: string | null = null;
+  const basePatch = deps.patchRideRequest;
+  deps.patchRideRequest = async (id, patch) => {
+    if (patch.wait_time_started_at) patchedGraceStart = String(patch.wait_time_started_at);
+    return basePatch(id, patch);
+  };
+  const ride = {
+    id: "ride-1",
+    status: "driver_en_route_pickup",
+    pickup_lat: 18.0179,
+    pickup_lng: -76.8099,
+    dropoff_lat: 18.05,
+    dropoff_lng: -76.78,
+    fare_estimate_minor: 1000,
+  };
+  const result = await evaluateGeofenceTransitions(
+    db,
+    deps,
+    defaultSettings,
+    ride,
+    {
+      lat: 18.0179,
+      lng: -76.8099,
+      accuracyM: 10,
+      speedMps: 0,
+      recordedAt: new Date().toISOString(),
+    },
+    "driver-1",
+  );
+  assertEquals(result.transitionApplied, undefined);
+  assertEquals(patchedGraceStart != null, true);
+});
+
 Deno.test("geofence: exiting pickup resets dwell (no arrive)", async () => {
   const dwellStart = new Date(Date.now() - 20_000).toISOString();
   const db = mockDb({ pickup_dwell_started_at: dwellStart });

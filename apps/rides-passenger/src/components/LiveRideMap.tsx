@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { driverVehicleMarkerIcon, dropoffMarkerIcon, riderPickupMarkerIcon } from '@/lib/mapMarkerIcons';
 import { loadGoogleMapsApi } from '@/services/locationService';
 
 type LatLng = { lat: number; lng: number };
@@ -54,27 +55,15 @@ export function LiveRideMap({
             map,
             position: pickupLatLng,
             title: 'Pickup',
-            icon: {
-              path: google.maps.SymbolPath.CIRCLE,
-              scale: 8,
-              fillColor: '#059669',
-              fillOpacity: 1,
-              strokeColor: '#ffffff',
-              strokeWeight: 2,
-            },
+            icon: riderPickupMarkerIcon(),
+            zIndex: 2,
           }),
           new google.maps.Marker({
             map,
             position: dropoffLatLng,
             title: 'Drop-off',
-            icon: {
-              path: google.maps.SymbolPath.CIRCLE,
-              scale: 8,
-              fillColor: '#18181b',
-              fillOpacity: 1,
-              strokeColor: '#ffffff',
-              strokeWeight: 2,
-            },
+            icon: dropoffMarkerIcon(),
+            zIndex: 2,
           }),
         );
 
@@ -129,22 +118,12 @@ export function LiveRideMap({
         map,
         position: pos,
         title: 'Driver',
-        icon: {
-          path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-          scale: 5,
-          fillColor: '#2563eb',
-          fillOpacity: 1,
-          strokeColor: '#ffffff',
-          strokeWeight: 1.5,
-          rotation,
-        },
+        icon: driverVehicleMarkerIcon(rotation),
+        zIndex: 3,
       });
     } else {
       driverMarkerRef.current.setPosition(pos);
-      const icon = driverMarkerRef.current.getIcon();
-      if (typeof icon === 'object' && icon) {
-        driverMarkerRef.current.setIcon({ ...icon, rotation });
-      }
+      driverMarkerRef.current.setIcon(driverVehicleMarkerIcon(rotation));
     }
   }, [driverLocation?.lat, driverLocation?.lng, driverHeading, status]);
 

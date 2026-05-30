@@ -104,7 +104,7 @@ const TOOLTIPS = {
   quote_driver_radius_km:
     'Radius around pickup used on the fare quote to find nearby drivers and show pickup ETA on vehicle cards.',
   wait_time_grace_minutes:
-    'Minutes after driver arrival before wait time charges begin. Rider has this time to reach the pickup without extra fees.',
+    'Free wait time after the driver enters the pickup geofence. Billing starts once this period ends.',
   wait_time_rate_per_min_minor:
     'Per-minute rate for wait time in JMD cents. This rate is multiplied by surge if active.',
   wait_time_max_minutes:

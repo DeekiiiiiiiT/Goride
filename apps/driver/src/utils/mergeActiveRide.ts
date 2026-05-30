@@ -41,6 +41,7 @@ export function mergeDriverActiveRide(
     ...next,
     status: keepStatus,
     arrived_pickup_at: next.arrived_pickup_at ?? prev.arrived_pickup_at,
+    wait_time_started_at: next.wait_time_started_at ?? prev.wait_time_started_at,
     en_route_at: next.en_route_at ?? prev.en_route_at,
     trip_started_at: next.trip_started_at ?? prev.trip_started_at,
     pin_verified_at: next.pin_verified_at ?? prev.pin_verified_at,

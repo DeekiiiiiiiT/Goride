@@ -4,7 +4,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { DispatchSettings } from "./fare/dispatchSettings.ts";
 import { gridCellKey } from "./fare/buildQuote.ts";
-import { calculateWaitTimeFee } from "./fare/waitTime.ts";
+import { calculateWaitTimeFee, getWaitTimeGraceAnchor } from "./fare/waitTime.ts";
 import { verifyRidePin, generatePin } from "./fare/pinVerification.ts";
 
 export type RideStatus =
@@ -139,10 +139,10 @@ export async function applyRideTransition(
   }
 
   if (params.next === "on_trip" && params.waitTimeSettings?.chargeEnabled) {
-    const arrivedAt = ride.arrived_pickup_at as string | null;
-    if (arrivedAt) {
+    const graceStartedAt = getWaitTimeGraceAnchor(ride);
+    if (graceStartedAt) {
       const waitResult = calculateWaitTimeFee({
-        arrivedPickupAt: arrivedAt,
+        graceStartedAt,
         tripStartedAt: nowIso,
         graceMinutes: params.waitTimeSettings.graceMinutes,
         ratePerMinMinor: params.waitTimeSettings.ratePerMinMinor,
@@ -151,7 +151,6 @@ export async function applyRideTransition(
       });
       if (waitResult.feeMinor > 0) {
         patch.wait_time_fee_minor = waitResult.feeMinor;
-        patch.wait_time_started_at = waitResult.graceExpiredAt;
       }
     }
   }

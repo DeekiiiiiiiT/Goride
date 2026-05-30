@@ -216,6 +216,7 @@ export function ActiveRidePanel({
       <div className="flex flex-col gap-2 pt-1">
         {ride.status === 'driver_en_route_pickup' && (
           <>
+            {waitTimeInfo && <WaitTimeDisplay waitTime={waitTimeInfo} />}
             <p className="text-[11px] text-slate-500">Arrival detected automatically when you reach pickup.</p>
             <button
               type="button"

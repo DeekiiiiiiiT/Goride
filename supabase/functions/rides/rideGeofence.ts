@@ -125,7 +125,18 @@ export async function evaluateGeofenceTransitions(
       : null;
 
     if (inside.isInside) {
+      const isFirstEntry = !dwellStart;
       if (!dwellStart) dwellStart = nowMs;
+
+      if (isFirstEntry && !ride.wait_time_started_at) {
+        const graceStartedIso = new Date(dwellStart).toISOString();
+        await deps.patchRideRequest(rideId, {
+          wait_time_started_at: graceStartedIso,
+          updated_at: new Date().toISOString(),
+        });
+        ride.wait_time_started_at = graceStartedIso;
+      }
+
       const dwellSec = (nowMs - dwellStart) / 1000;
       if (dwellSec >= settings.arrival_dwell_seconds) {
         const tr = await applyRideTransition(deps, {

@@ -187,6 +187,7 @@ export default function RidePage() {
       const st = q.state.data?.ride.status;
       if (!st || st === 'completed' || st === 'cancelled') return false;
       if (st === 'driver_arrived_pickup') return RIDE_ARRIVED_SYNC_MS;
+      if (st === 'driver_en_route_pickup' && q.state.data?.wait_time) return RIDE_ARRIVED_SYNC_MS;
       return RIDE_SYNC_MS;
     },
   });
@@ -397,9 +398,8 @@ export default function RidePage() {
               </div>
             )}
 
-            {ride.status === 'driver_arrived_pickup' && waitTime && (
-              <RiderWaitTimeDisplay waitTime={waitTime} />
-            )}
+            {(ride.status === 'driver_arrived_pickup' || ride.status === 'driver_en_route_pickup') &&
+              waitTime && <RiderWaitTimeDisplay waitTime={waitTime} />}
 
             {isCancellable(ride.status) && (
               <button
@@ -460,13 +460,23 @@ export default function RidePage() {
       </main>
 
       <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
-        <AlertDialogContent className="rounded-3xl border-zinc-200 max-w-[calc(100%-2rem)] sm:max-w-md">
+        <AlertDialogContent
+          overlayClassName="bg-zinc-900/80 backdrop-blur-md"
+          className="rounded-3xl border border-zinc-200 bg-white shadow-2xl max-w-[calc(100%-2rem)] sm:max-w-md p-6"
+        >
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancel this ride?</AlertDialogTitle>
-            <AlertDialogDescription>{cancelCopy}</AlertDialogDescription>
+            <AlertDialogTitle className="text-xl font-semibold text-zinc-900">
+              Cancel this ride?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-base text-zinc-600 leading-relaxed">
+              {cancelCopy}
+            </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-2">
-            <AlertDialogCancel disabled={cancelling} className="rounded-2xl mt-0">
+          <AlertDialogFooter className="flex flex-col gap-3 sm:flex-col">
+            <AlertDialogCancel
+              disabled={cancelling}
+              className="btn-touch rounded-2xl mt-0 h-12 w-full border-2 border-zinc-200 bg-white text-base font-semibold text-zinc-900 hover:bg-zinc-50"
+            >
               Keep waiting
             </AlertDialogCancel>
             <AlertDialogAction
@@ -475,7 +485,7 @@ export default function RidePage() {
                 e.preventDefault();
                 void performCancel();
               }}
-              className="rounded-2xl bg-zinc-900 hover:bg-zinc-800"
+              className="btn-touch rounded-2xl h-12 w-full bg-red-600 text-base font-semibold text-white hover:bg-red-700 shadow-sm"
             >
               {cancelling ? 'Cancelling…' : 'Yes, cancel ride'}
             </AlertDialogAction>
@@ -484,15 +494,23 @@ export default function RidePage() {
       </AlertDialog>
 
       <AlertDialog open={leaveDialogOpen} onOpenChange={setLeaveDialogOpen}>
-        <AlertDialogContent className="rounded-3xl border-zinc-200 max-w-[calc(100%-2rem)] sm:max-w-md">
+        <AlertDialogContent
+          overlayClassName="bg-zinc-900/80 backdrop-blur-md"
+          className="rounded-3xl border border-zinc-200 bg-white shadow-2xl max-w-[calc(100%-2rem)] sm:max-w-md p-6"
+        >
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancel before leaving?</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogTitle className="text-xl font-semibold text-zinc-900">
+              Cancel before leaving?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-base text-zinc-600 leading-relaxed">
               This ride is still active. Going home without cancelling keeps it open for your driver.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-2">
-            <AlertDialogCancel disabled={cancelling} className="rounded-2xl mt-0">
+          <AlertDialogFooter className="flex flex-col gap-3 sm:flex-col">
+            <AlertDialogCancel
+              disabled={cancelling}
+              className="btn-touch rounded-2xl mt-0 h-12 w-full border-2 border-zinc-200 bg-white text-base font-semibold text-zinc-900 hover:bg-zinc-50"
+            >
               Keep ride
             </AlertDialogCancel>
             <AlertDialogAction
@@ -501,7 +519,7 @@ export default function RidePage() {
                 e.preventDefault();
                 void performCancel();
               }}
-              className="rounded-2xl bg-zinc-900 hover:bg-zinc-800"
+              className="btn-touch rounded-2xl h-12 w-full bg-red-600 text-base font-semibold text-white hover:bg-red-700 shadow-sm"
             >
               {cancelling ? 'Cancelling…' : 'Cancel ride & go home'}
             </AlertDialogAction>

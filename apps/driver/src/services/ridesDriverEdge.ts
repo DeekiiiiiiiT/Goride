@@ -79,9 +79,19 @@ export async function ridesDriverDeclineOffer(offerId: string): Promise<void> {
   if (!res.ok) throw new Error(await res.text());
 }
 
+export type DriverWaitTimeInfo = {
+  wait_time_charge_enabled?: boolean;
+  wait_time_grace_remaining_seconds?: number;
+  wait_time_grace_expired?: boolean;
+  wait_time_current_fee_minor?: number;
+  wait_time_billable_minutes?: number;
+  wait_time_rate_per_min_minor?: number;
+};
+
 export async function ridesDriverGetRequest(id: string): Promise<{
   ride: RideRequestRow;
   offers: DriverOfferWithRide[];
+  wait_time?: DriverWaitTimeInfo | null;
 }> {
   const res = await fetch(`${base}/v1/requests/${id}`, { headers: await ridesHeaders() });
   if (!res.ok) throw new Error(await res.text());

@@ -32,7 +32,11 @@ import {
   type DispatchSettings,
 } from "./fare/dispatchSettings.ts";
 import { isMatchingTimedOut } from "./fare/matchingHygiene.ts";
-import { getGraceRemainingSeconds, calculateWaitTimeFee } from "./fare/waitTime.ts";
+import {
+  buildWaitTimeInfo,
+  getWaitTimeGraceAnchor,
+  shouldExposePickupWaitTime,
+} from "./fare/waitTime.ts";
 import {
   generatePin,
   verifyRidePin,
@@ -1405,27 +1409,11 @@ app.get("/v1/requests/:id", async (c) => {
   }
   // #endregion
 
-  if (rideOut?.status === "driver_arrived_pickup" && rideOut.arrived_pickup_at) {
-    const arrivedAt = String(rideOut.arrived_pickup_at);
-    const graceRemaining = getGraceRemainingSeconds(
-      arrivedAt,
-      settings.wait_time_grace_minutes
-    );
-    const waitCalc = calculateWaitTimeFee({
-      arrivedPickupAt: arrivedAt,
-      tripStartedAt: null,
-      graceMinutes: settings.wait_time_grace_minutes,
-      ratePerMinMinor: settings.wait_time_rate_per_min_minor,
-      surgeMultiplier: Number(rideOut.surge_multiplier ?? 1),
+  const graceAnchor = rideOut ? getWaitTimeGraceAnchor(rideOut) : null;
+  if (graceAnchor && shouldExposePickupWaitTime(String(rideOut?.status))) {
+    waitTimeInfo = buildWaitTimeInfo(graceAnchor, settings, {
+      surgeMultiplier: Number(rideOut?.surge_multiplier ?? 1),
     });
-    waitTimeInfo = {
-      wait_time_charge_enabled: settings.wait_time_charge_enabled,
-      wait_time_grace_remaining_seconds: graceRemaining,
-      wait_time_grace_expired: waitCalc.isGraceExpired,
-      wait_time_current_fee_minor: settings.wait_time_charge_enabled ? waitCalc.feeMinor : 0,
-      wait_time_billable_minutes: waitCalc.billableMinutes,
-      wait_time_rate_per_min_minor: settings.wait_time_rate_per_min_minor,
-    };
   }
 
   return c.json({

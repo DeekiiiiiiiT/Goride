@@ -99,6 +99,7 @@ export interface RideRequestRow {
   last_driver_heading?: number | null;
   last_driver_location_at?: string | null;
   complete_suggested_at?: string | null;
+  /** When pickup wait-time grace started (driver entered pickup geofence). */
   wait_time_started_at?: string | null;
   wait_time_fee_minor?: number | null;
   actual_tolls_minor?: number | null;

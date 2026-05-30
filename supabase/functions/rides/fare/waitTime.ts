@@ -4,12 +4,78 @@
  */
 
 export interface WaitTimeCalcParams {
-  arrivedPickupAt: string;
+  /** ISO timestamp when the grace period started (pickup geofence entry). */
+  graceStartedAt: string;
   tripStartedAt: string | null;
   graceMinutes: number;
   ratePerMinMinor: number;
   surgeMultiplier: number;
   nowMs?: number;
+}
+
+/** @deprecated Use graceStartedAt */
+export type WaitTimeCalcParamsLegacy = WaitTimeCalcParams & { arrivedPickupAt: string };
+
+const PICKUP_WAIT_STATUSES = new Set([
+  "driver_en_route_pickup",
+  "driver_arrived_pickup",
+]);
+
+export function getWaitTimeGraceAnchor(ride: Record<string, unknown>): string | null {
+  const started = ride.wait_time_started_at;
+  if (started != null && String(started).trim()) return String(started);
+  const status = String(ride.status ?? "");
+  if (PICKUP_WAIT_STATUSES.has(status) || status === "on_trip") {
+    const arrived = ride.arrived_pickup_at;
+    if (arrived != null && String(arrived).trim()) return String(arrived);
+  }
+  return null;
+}
+
+export function shouldExposePickupWaitTime(status: string | undefined): boolean {
+  return Boolean(status && PICKUP_WAIT_STATUSES.has(status));
+}
+
+export interface WaitTimeInfoPayload {
+  wait_time_charge_enabled: boolean;
+  wait_time_grace_remaining_seconds: number;
+  wait_time_grace_expired: boolean;
+  wait_time_current_fee_minor: number;
+  wait_time_billable_minutes: number;
+  wait_time_rate_per_min_minor: number;
+}
+
+export function buildWaitTimeInfo(
+  graceStartedAt: string,
+  settings: {
+    wait_time_charge_enabled: boolean;
+    wait_time_grace_minutes: number;
+    wait_time_rate_per_min_minor: number;
+  },
+  options?: { tripStartedAt?: string | null; surgeMultiplier?: number; nowMs?: number },
+): WaitTimeInfoPayload {
+  const nowMs = options?.nowMs ?? Date.now();
+  const graceRemaining = getGraceRemainingSeconds(
+    graceStartedAt,
+    settings.wait_time_grace_minutes,
+    nowMs,
+  );
+  const waitCalc = calculateWaitTimeFee({
+    graceStartedAt,
+    tripStartedAt: options?.tripStartedAt ?? null,
+    graceMinutes: settings.wait_time_grace_minutes,
+    ratePerMinMinor: settings.wait_time_rate_per_min_minor,
+    surgeMultiplier: options?.surgeMultiplier ?? 1,
+    nowMs,
+  });
+  return {
+    wait_time_charge_enabled: settings.wait_time_charge_enabled,
+    wait_time_grace_remaining_seconds: graceRemaining,
+    wait_time_grace_expired: waitCalc.isGraceExpired,
+    wait_time_current_fee_minor: settings.wait_time_charge_enabled ? waitCalc.feeMinor : 0,
+    wait_time_billable_minutes: waitCalc.billableMinutes,
+    wait_time_rate_per_min_minor: settings.wait_time_rate_per_min_minor,
+  };
 }
 
 export interface WaitTimeCalcResult {
@@ -21,12 +87,18 @@ export interface WaitTimeCalcResult {
 }
 
 /**
- * Calculate the wait time fee based on arrival time, trip start time, and settings.
+ * Calculate the wait time fee based on grace start, trip start time, and settings.
  * Fee is calculated as: (totalWaitMinutes - graceMinutes) * ratePerMinMinor * surgeMultiplier
  */
-export function calculateWaitTimeFee(params: WaitTimeCalcParams): WaitTimeCalcResult {
+export function calculateWaitTimeFee(
+  params: WaitTimeCalcParams | (WaitTimeCalcParams & { arrivedPickupAt?: string }),
+): WaitTimeCalcResult {
   const nowMs = params.nowMs ?? Date.now();
-  const arrivedMs = Date.parse(params.arrivedPickupAt);
+  const graceStartedAt =
+    "graceStartedAt" in params && params.graceStartedAt
+      ? params.graceStartedAt
+      : (params as { arrivedPickupAt?: string }).arrivedPickupAt ?? "";
+  const arrivedMs = Date.parse(graceStartedAt);
   
   if (!Number.isFinite(arrivedMs)) {
     return {

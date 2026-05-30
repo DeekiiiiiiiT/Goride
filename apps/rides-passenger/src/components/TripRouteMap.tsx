@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { dropoffMarkerIcon, riderPickupMarkerIcon } from '@/lib/mapMarkerIcons';
 import { loadGoogleMapsApi } from '@/services/locationService';
 
 type LatLng = { lat: number; lng: number };
@@ -46,27 +47,13 @@ export function TripRouteMap({ pickup, dropoff, encodedPolyline, variant = 'card
             map,
             position: pickupLatLng,
             title: 'Pickup',
-            icon: {
-              path: google.maps.SymbolPath.CIRCLE,
-              scale: 8,
-              fillColor: '#059669',
-              fillOpacity: 1,
-              strokeColor: '#ffffff',
-              strokeWeight: 2,
-            },
+            icon: riderPickupMarkerIcon(),
           }),
           new google.maps.Marker({
             map,
             position: dropoffLatLng,
             title: 'Drop-off',
-            icon: {
-              path: google.maps.SymbolPath.CIRCLE,
-              scale: 8,
-              fillColor: '#18181b',
-              fillOpacity: 1,
-              strokeColor: '#ffffff',
-              strokeWeight: 2,
-            },
+            icon: dropoffMarkerIcon(),
           }),
         );
 
