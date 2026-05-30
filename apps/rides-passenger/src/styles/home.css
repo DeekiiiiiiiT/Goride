@@ -1,0 +1,144 @@
+/* Shared tokens for bottom nav — light default */
+:root {
+  --home-nav-active: #006d43;
+  --home-nav-inactive: #5d5e61;
+  --home-sheet-bg: #ffffff;
+  --home-sheet-border: rgba(188, 202, 190, 0.35);
+}
+
+html.dark {
+  --home-nav-active: #59de9b;
+  --home-nav-inactive: #bccabe;
+  --home-sheet-bg: #121413;
+  --home-sheet-border: rgba(61, 74, 65, 0.35);
+}
+
+/* Light mode — Stitch light home */
+.home-page {
+  --home-bg: #f8f9fa;
+  --home-surface: #f8f9fa;
+  --home-on-surface: #191c1d;
+  --home-on-surface-muted: #3d4a41;
+  --home-primary: #006d43;
+  --home-primary-bright: #59de9b;
+  --home-primary-container: #00a86b;
+  --home-on-primary: #ffffff;
+  --home-secondary: #5d5e61;
+  --home-secondary-container: #e2e2e5;
+  --home-tertiary-fixed: #d8e6e0;
+  --home-tertiary-dim: #bccac4;
+  --home-outline: #6d7a70;
+  --home-outline-variant: #bccabe;
+  --home-input-bg: #f3f4f5;
+  --home-input-bg-focus: #ffffff;
+  --home-sheet-bg: rgba(255, 255, 255, 0.96);
+  --home-sheet-border: rgba(188, 202, 190, 0.35);
+  --home-header-bg: rgba(248, 249, 250, 0.88);
+  --home-pill-bg: rgba(255, 255, 255, 0.95);
+  --home-card-bg: #f8f9fa;
+  --home-card-border: rgba(188, 202, 190, 0.35);
+  --home-map-overlay: linear-gradient(to top, rgba(248, 249, 250, 0.55) 0%, transparent 55%);
+  --home-font-display: 'Hanken Grotesk', system-ui, sans-serif;
+  --home-font-label: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+html.dark .home-page {
+  --home-bg: #121413;
+  --home-surface: #121413;
+  --home-on-surface: #e2e3e0;
+  --home-on-surface-muted: #bccabe;
+  --home-primary: #59de9b;
+  --home-primary-bright: #59de9b;
+  --home-primary-container: #00a86b;
+  --home-on-primary: #003921;
+  --home-secondary: #8ad6b5;
+  --home-secondary-container: #005c42;
+  --home-tertiary-fixed: #e5e2e1;
+  --home-tertiary-dim: #c8c6c5;
+  --home-outline: #869489;
+  --home-outline-variant: #3d4a41;
+  --home-input-bg: rgba(26, 28, 27, 0.5);
+  --home-input-bg-focus: rgba(40, 42, 41, 0.6);
+  --home-sheet-bg: rgba(30, 32, 31, 0.88);
+  --home-sheet-border: rgba(61, 74, 65, 0.35);
+  --home-header-bg: rgba(18, 20, 19, 0.82);
+  --home-pill-bg: rgba(18, 20, 19, 0.9);
+  --home-card-bg: rgba(40, 42, 41, 0.35);
+  --home-card-border: rgba(61, 74, 65, 0.25);
+  --home-map-overlay: linear-gradient(
+    to top,
+    rgba(18, 20, 19, 0.72) 0%,
+    rgba(18, 20, 19, 0.15) 45%,
+    transparent 70%
+  );
+}
+
+.home-page {
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: var(--home-bg);
+  color: var(--home-on-surface);
+}
+
+.home-display {
+  font-family: var(--home-font-display);
+}
+
+.home-label-caps {
+  font-family: var(--home-font-label);
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.05em;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.home-glass-sheet {
+  background: var(--home-sheet-bg);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--home-sheet-border);
+  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.18);
+}
+
+.home-place-input {
+  width: 100%;
+  min-height: 3.5rem;
+  border-radius: 1rem;
+  border: 1px solid var(--home-card-border);
+  background-color: var(--home-input-bg);
+  color: var(--home-on-surface);
+  padding-left: 1rem;
+  padding-right: 1rem;
+  font-size: 1rem;
+  line-height: 1.5;
+  outline: none;
+  transition: box-shadow 0.15s, border-color 0.15s, background-color 0.15s;
+}
+
+.home-place-input::placeholder {
+  opacity: 0.55;
+}
+
+.home-place-input:focus {
+  border-color: var(--home-primary);
+  background-color: var(--home-input-bg-focus);
+  box-shadow: 0 0 0 2px rgba(89, 222, 155, 0.18);
+}
+
+.home-place-input--destination {
+  border-color: var(--home-primary);
+}
+
+.home-suggestions {
+  border-color: var(--home-sheet-border) !important;
+  background: var(--home-sheet-bg) !important;
+  backdrop-filter: blur(12px);
+}
+
+.home-suggestion-btn {
+  color: var(--home-on-surface) !important;
+}
+
+.home-suggestion-btn:hover {
+  background: rgba(89, 222, 155, 0.12) !important;
+}

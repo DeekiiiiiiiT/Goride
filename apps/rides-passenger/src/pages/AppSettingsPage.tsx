@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { useTheme, type ThemeMode } from '@/contexts/ThemeContext';
 import {
   ArrowLeft,
   Bell,
@@ -38,8 +39,6 @@ const TERTIARY_FIXED = '#ffdbcd';
 const OUTLINE = '#737686';
 const PAGE_BG = '#f7f9fb';
 const CARD_SHADOW = '0px 4px 20px rgba(0, 0, 0, 0.05)';
-
-type ThemeMode = 'light' | 'dark' | 'auto';
 
 function SectionHeader({
   icon,
@@ -114,18 +113,18 @@ function BentoCard({
 
 export default function AppSettingsPage() {
   const navigate = useNavigate();
+  const { themeMode, setThemeMode } = useTheme();
   const [pushEnabled, setPushEnabled] = useState(true);
   const [emailEnabled, setEmailEnabled] = useState(false);
   const [smsEnabled, setSmsEnabled] = useState(true);
   const [dataSharing, setDataSharing] = useState(false);
-  const [themeMode, setThemeMode] = useState<ThemeMode>('light');
 
   const notifySoon = () => {
     toast.message('Coming soon');
   };
 
   const themeLabel =
-    themeMode === 'light' ? 'Light' : themeMode === 'dark' ? 'Dark' : 'System';
+    themeMode === 'light' ? 'Light' : themeMode === 'dark' ? 'Dark' : 'Auto';
 
   return (
     <div

@@ -25,6 +25,10 @@ type Props = {
   onLocationClick?: () => void;
   /** Is the location button in loading state. */
   locationLoading?: boolean;
+  hideLabel?: boolean;
+  inputClassName?: string;
+  suggestionsListClassName?: string;
+  suggestionButtonClassName?: string;
 };
 
 export function RoamPlaceField({
@@ -38,6 +42,10 @@ export function RoamPlaceField({
   showLocationButton = false,
   onLocationClick,
   locationLoading = false,
+  hideLabel = false,
+  inputClassName,
+  suggestionsListClassName,
+  suggestionButtonClassName,
 }: Props) {
   const [suggestions, setSuggestions] = useState<AddressResult[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -100,14 +108,20 @@ export function RoamPlaceField({
     }
   };
 
+  const inputClasses = inputClassName
+    ? `input-touch ${inputClassName} ${hasRightElements ? 'pr-16' : ''}`
+    : `input-touch w-full rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 outline-none focus:border-emerald-500/55 focus:bg-white focus:ring-4 focus:ring-emerald-500/12 ${hasRightElements ? 'pr-16' : ''}`;
+
   return (
-    <div className="block space-y-2">
-      <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 flex items-center gap-2">
-        {label}
-      </span>
+    <div className={hideLabel ? 'block' : 'block space-y-2'}>
+      {!hideLabel ? (
+        <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+          {label}
+        </span>
+      ) : null}
       <div className="relative" ref={wrapperRef}>
         <input
-          className={`input-touch w-full rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 outline-none focus:border-emerald-500/55 focus:bg-white focus:ring-4 focus:ring-emerald-500/12 ${hasRightElements ? 'pr-16' : ''}`}
+          className={inputClasses}
           value={value}
           placeholder={placeholder}
           autoComplete="off"
@@ -157,7 +171,10 @@ export function RoamPlaceField({
 
         {showSuggestions && suggestions.length > 0 && (
           <ul
-            className="absolute z-50 mt-1 max-h-52 w-full overflow-y-auto rounded-2xl border border-zinc-200 bg-white py-1 shadow-lg"
+            className={
+              suggestionsListClassName ??
+              'absolute z-50 mt-1 max-h-52 w-full overflow-y-auto rounded-2xl border border-zinc-200 bg-white py-1 shadow-lg'
+            }
             role="listbox"
           >
             {suggestions.map((suggestion, index) => (
@@ -165,7 +182,10 @@ export function RoamPlaceField({
                 <button
                   type="button"
                   disabled={!suggestion.place_id || resolving}
-                  className="flex w-full items-start gap-2 px-3 py-2.5 text-left text-sm text-zinc-800 hover:bg-emerald-50 disabled:opacity-50"
+                  className={
+                    suggestionButtonClassName ??
+                    'flex w-full items-start gap-2 px-3 py-2.5 text-left text-sm text-zinc-800 hover:bg-emerald-50 disabled:opacity-50'
+                  }
                   onClick={() => void handleSelect(suggestion)}
                 >
                   <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden />

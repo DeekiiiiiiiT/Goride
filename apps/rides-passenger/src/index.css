@@ -5,6 +5,7 @@
 @source '../../../packages/admin-core/src/**/*.{js,ts,jsx,tsx}';
 @import "../../../packages/admin-core/src/styles/rides-admin-login.css";
 @import "../../../packages/admin-core/src/styles/admin-portal.css";
+@import "./styles/home.css";
 
 :root {
   --font-sans: system-ui, -apple-system, "Segoe UI", "Inter", sans-serif;

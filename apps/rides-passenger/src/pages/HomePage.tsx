@@ -1,7 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { CircleDot, Crosshair, MapPin, Navigation } from 'lucide-react';
+import {
+  ArrowRight,
+  Crosshair,
+  Menu,
+  Package,
+  Search,
+  UserPlus,
+} from 'lucide-react';
+import { supabase } from '@roam/auth-client';
+import { useTheme } from '@/contexts/ThemeContext';
+import {
+  DEFAULT_PROFILE_AVATAR_URL,
+  HOME_MAP_DARK_URL,
+  HOME_MAP_LIGHT_URL,
+} from '@/lib/roamHomeAssets';
 import type { FareQuoteResponse } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
 import { RoamPlaceField } from '@/components/RoamPlaceField';
@@ -34,8 +48,27 @@ import {
   shouldShowOnboardingPrompt,
 } from '@roam/types';
 
+const HOME_SUGGESTIONS =
+  'home-suggestions absolute z-50 mt-1 max-h-52 w-full overflow-y-auto rounded-2xl border py-1 shadow-lg';
+const HOME_SUGGESTION_BTN =
+  'home-suggestion-btn flex w-full items-start gap-2 px-3 py-2.5 text-left text-sm disabled:opacity-50';
+
 export default function HomePage() {
   const navigate = useNavigate();
+  const { resolvedTheme } = useTheme();
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const staticMapUrl = resolvedTheme === 'dark' ? HOME_MAP_DARK_URL : HOME_MAP_LIGHT_URL;
+
+  useEffect(() => {
+    void supabase.auth.getUser().then(({ data }) => {
+      const user = data.user;
+      const url =
+        (user?.user_metadata?.avatar_url as string | undefined) ||
+        (user?.user_metadata?.picture as string | undefined) ||
+        null;
+      setAvatarUrl(url);
+    });
+  }, []);
   const [pickupAddress, setPickupAddress] = useState('');
   const [dropoffAddress, setDropoffAddress] = useState('');
   const [pickup, setPickup] = useState<{ lat: number; lng: number } | null>(null);
@@ -269,154 +302,307 @@ export default function HomePage() {
     };
   }
 
+  const locationPill =
+    pickupAddress.trim() ||
+    (initialGpsLoading ? 'Finding your location…' : 'Set pickup on map');
+
+  const profileSrc = avatarUrl ?? DEFAULT_PROFILE_AVATAR_URL;
+
   return (
-    <div className="flex flex-1 flex-col min-h-[100dvh] bg-zinc-100 text-zinc-900">
+    <div className="home-page relative flex min-h-[100dvh] flex-1 flex-col overflow-hidden">
       <PermissionOnboardingSheet
         surface="rider"
         permissions={permissions}
         open={onboardingOpen}
         onClose={() => setOnboardingOpen(false)}
       />
-      {/* Hero route map — top ~42% like Uber */}
-      <div className="relative h-[42dvh] min-h-[200px] max-h-[360px] w-full shrink-0">
-        <BookingHeroMap
-          pickup={pickup}
-          dropoff={dropoff}
-          encodedPolyline={quote?.route_polyline_encoded}
-          quoteLoading={quotesLoading && coordsReady && !hasQuotes}
-        />
 
-        {/* Floating header on map */}
-        <header className="absolute top-0 left-0 right-0 z-10 safe-t pointer-events-none">
-          <div className="max-w-lg mx-auto safe-x px-3 py-3 flex items-center justify-between gap-3 pointer-events-auto">
-            <div className="flex items-center gap-2.5 min-w-0 rounded-2xl bg-white/95 shadow-md border border-zinc-200/80 px-3 py-2 backdrop-blur-sm">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white">
-                <Navigation className="w-4 h-4" aria-hidden />
-              </div>
-              <div className="min-w-0">
-                <p className="font-semibold text-sm tracking-tight truncate">Roam Rides</p>
-              </div>
-            </div>
+      <header
+        className="fixed top-0 z-50 w-full border-b safe-t"
+        style={{
+          backgroundColor: 'var(--home-header-bg)',
+          borderColor: 'var(--home-sheet-border)',
+          backdropFilter: 'blur(12px)',
+        }}
+      >
+        <div className="mx-auto flex h-16 max-w-2xl items-center justify-between px-5">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigate('/account')}
+              className="rounded-full p-2 transition-colors active:scale-95 hover:opacity-80"
+              style={{ color: 'var(--home-primary)' }}
+              aria-label="Menu"
+            >
+              <Menu className="h-6 w-6" aria-hidden />
+            </button>
+            <span
+              className="home-display text-xl font-bold"
+              style={{ color: 'var(--home-primary)' }}
+            >
+              Roam
+            </span>
           </div>
-        </header>
+          <button
+            type="button"
+            onClick={() => navigate('/account')}
+            className="h-10 w-10 overflow-hidden rounded-full border-2 active:scale-95"
+            style={{ borderColor: 'color-mix(in srgb, var(--home-outline-variant) 50%, transparent)' }}
+            aria-label="Account"
+          >
+            <img src={profileSrc} alt="" className="h-full w-full object-cover" />
+          </button>
+        </div>
+      </header>
 
-        {/* Adjust pickup pin — always available */}
+      <main className="relative min-h-[100dvh] w-full pt-16 pb-[5.5rem]">
+        <div className="absolute inset-0 z-0">
+          {pickup && dropoff ? (
+            <BookingHeroMap
+              pickup={pickup}
+              dropoff={dropoff}
+              encodedPolyline={quote?.route_polyline_encoded}
+              quoteLoading={quotesLoading && coordsReady && !hasQuotes}
+            />
+          ) : (
+            <img
+              src={staticMapUrl}
+              alt=""
+              className="h-full w-full object-cover"
+            />
+          )}
+          <div className="pointer-events-none absolute inset-0" style={{ background: 'var(--home-map-overlay)' }} />
+        </div>
+
+        <div className="relative z-10 px-5 pt-4">
+          <div
+            className="inline-flex max-w-[min(100%,20rem)] items-center gap-2 rounded-full px-4 py-2 shadow-lg"
+            style={{
+              backgroundColor: 'var(--home-pill-bg)',
+              border: '1px solid var(--home-sheet-border)',
+              backdropFilter: 'blur(12px)',
+            }}
+          >
+            <Crosshair
+              className="h-5 w-5 shrink-0"
+              style={{ color: 'var(--home-primary)' }}
+              aria-hidden
+            />
+            <span className="truncate text-sm font-semibold" style={{ color: 'var(--home-on-surface)' }}>
+              {locationPill}
+            </span>
+          </div>
+        </div>
+
         <button
           type="button"
           onClick={() => setPickupMapOpen(true)}
-          className="absolute bottom-4 right-4 z-10 flex h-11 items-center gap-2 rounded-full bg-white px-4 shadow-lg border border-zinc-200/90 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 touch-manipulation active:scale-[0.98]"
-          aria-label="Adjust pickup location on map"
+          className="absolute bottom-[calc(5.5rem+min(42vh,520px))] right-4 z-20 flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold shadow-lg transition-transform active:scale-95"
+          style={{
+            backgroundColor: 'var(--home-pill-bg)',
+            color: 'var(--home-primary)',
+            border: '1px solid var(--home-sheet-border)',
+          }}
+          aria-label="Adjust pickup on map"
         >
           <Crosshair className="h-4 w-4" aria-hidden />
-          <span>Adjust pin</span>
+          Adjust pin
         </button>
-      </div>
 
-      {/* Bottom sheet — addresses, services, book */}
-      <main className="flex-1 flex flex-col min-h-0 -mt-4 relative z-20 max-w-lg mx-auto w-full">
-        <div className="flex-1 flex flex-col min-h-0 rounded-t-3xl bg-white shadow-[0_-8px_30px_rgba(0,0,0,0.08)] ring-1 ring-zinc-200/80 overflow-hidden">
-          <div className="shrink-0 flex justify-center pt-3 pb-1">
-            <div className="h-1 w-10 rounded-full bg-zinc-300" aria-hidden />
-          </div>
-
-          <div className="flex-1 overflow-y-auto safe-x px-4 pb-4 space-y-4">
-            <div className="space-y-3 pt-1">
-              <RoamPlaceField
-                label={
-                  <>
-                    <MapPin className="w-4 h-4 text-emerald-600" aria-hidden />
-                    Pickup
-                  </>
-                }
-                value={pickupAddress}
-                placeholder="Pickup location"
-                clearable
-                showLocationButton
-                locationLoading={initialGpsLoading}
-                onLocationClick={() => setPickupMapOpen(true)}
-                onChangeText={(text) => {
-                  setPickupAddress(text);
-              setPickup(null);
-              clearQuotes();
-            }}
-                onResolved={({ address, lat, lng }) => {
-                  setPickupAddress(address);
-                  setPickup({ lat, lng });
-                }}
-              />
-
-              <RoamPlaceField
-                label={
-                  <>
-                    <CircleDot className="w-4 h-4 text-emerald-600" aria-hidden />
-                    Drop-off
-                  </>
-                }
-                value={dropoffAddress}
-                placeholder="Where to?"
-                onChangeText={(text) => {
-                  setDropoffAddress(text);
-              setDropoff(null);
-              clearQuotes();
-            }}
-                onResolved={({ address, lat, lng }) => {
-                  setDropoffAddress(address);
-                  setDropoff({ lat, lng });
-                }}
+        <div className="fixed bottom-[4.5rem] left-0 z-40 w-full px-4 safe-x">
+          <div className="home-glass-sheet mx-auto max-h-[min(78dvh,720px)] max-w-xl overflow-hidden rounded-3xl">
+            <div className="flex justify-center py-3">
+              <div
+                className="h-1.5 w-12 rounded-full"
+                style={{ backgroundColor: 'color-mix(in srgb, var(--home-outline-variant) 45%, transparent)' }}
+                aria-hidden
               />
             </div>
 
-            {surge != null && surge > 1 && (
-              <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-2xl px-4 py-2">
-                Demand is high — surge <strong className="tabular-nums">×{surge.toFixed(2)}</strong>
-              </p>
-            )}
+            <div className="max-h-[min(72dvh,680px)] overflow-y-auto px-5 pb-6 pt-1">
+              <h1
+                className="home-display mb-6 text-[30px] font-bold leading-tight tracking-tight"
+                style={{ color: 'var(--home-on-surface)' }}
+              >
+                Where to?
+              </h1>
 
-            {coordsReady && (
-              <div className="space-y-2 pt-1 border-t border-zinc-100">
-                <TransportOptionPicker
-                  vehicles={[]}
-                  services={services}
-                  selected={vehicleOption}
-                  onSelect={setVehicleOption}
-                  quoteBySlug={quoteBySlug}
-                />
+              <div className="relative mb-6">
+                <div className="absolute bottom-7 left-1 top-7 flex w-2.5 flex-col items-center">
+                  <div
+                    className="h-2.5 w-2.5 shrink-0 rounded-full shadow-sm"
+                    style={{
+                      backgroundColor: 'var(--home-primary)',
+                      boxShadow: '0 0 0 4px color-mix(in srgb, var(--home-primary) 25%, transparent)',
+                    }}
+                  />
+                  <div
+                    className="my-1 w-0.5 flex-1"
+                    style={{ backgroundColor: 'color-mix(in srgb, var(--home-outline-variant) 35%, transparent)' }}
+                  />
+                  <div
+                    className="h-2.5 w-2.5 shrink-0"
+                    style={{ backgroundColor: 'var(--home-on-surface)' }}
+                  />
+                </div>
+                <div className="space-y-3 pl-10">
+                  <RoamPlaceField
+                    hideLabel
+                    label="Pickup"
+                    value={pickupAddress}
+                    placeholder="Current location"
+                    clearable
+                    showLocationButton
+                    locationLoading={initialGpsLoading}
+                    onLocationClick={() => setPickupMapOpen(true)}
+                    inputClassName="home-place-input"
+                    suggestionsListClassName={HOME_SUGGESTIONS}
+                    suggestionButtonClassName={HOME_SUGGESTION_BTN}
+                    onChangeText={(text) => {
+                      setPickupAddress(text);
+                      setPickup(null);
+                      clearQuotes();
+                    }}
+                    onResolved={({ address, lat, lng }) => {
+                      setPickupAddress(address);
+                      setPickup({ lat, lng });
+                    }}
+                  />
+                  <div className="relative">
+                    <RoamPlaceField
+                      hideLabel
+                      label="Destination"
+                      value={dropoffAddress}
+                      placeholder="Enter destination"
+                      inputClassName="home-place-input home-place-input--destination"
+                      suggestionsListClassName={HOME_SUGGESTIONS}
+                      suggestionButtonClassName={HOME_SUGGESTION_BTN}
+                      onChangeText={(text) => {
+                        setDropoffAddress(text);
+                        setDropoff(null);
+                        clearQuotes();
+                      }}
+                      onResolved={({ address, lat, lng }) => {
+                        setDropoffAddress(address);
+                        setDropoff({ lat, lng });
+                      }}
+                    />
+                    <Search
+                      className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2"
+                      style={{ color: 'var(--home-outline)' }}
+                      aria-hidden
+                    />
+                  </div>
+                </div>
               </div>
-            )}
 
-            {!coordsReady && services.length > 0 && (
-              <p className="text-sm text-zinc-500 text-center py-2">
-                Enter pickup and destination to see ride options
-              </p>
-            )}
-          </div>
+              <div className="mb-6 grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => navigate('/services/book-for-someone')}
+                  className="flex flex-col items-start gap-3 rounded-2xl border p-4 text-left transition-all active:scale-[0.98]"
+                  style={{
+                    backgroundColor: 'var(--home-card-bg)',
+                    borderColor: 'var(--home-card-border)',
+                  }}
+                >
+                  <div
+                    className="flex h-10 w-10 items-center justify-center rounded-xl"
+                    style={{ backgroundColor: 'var(--home-secondary-container)' }}
+                  >
+                    <UserPlus
+                      className="h-5 w-5"
+                      style={{ color: 'var(--home-on-secondary-container, #636467)' }}
+                      aria-hidden
+                    />
+                  </div>
+                  <div>
+                    <span className="block text-sm font-semibold">Pick up Someone</span>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate('/services/courier')}
+                  className="flex flex-col items-start gap-3 rounded-2xl border p-4 text-left transition-all active:scale-[0.98]"
+                  style={{
+                    backgroundColor: 'var(--home-card-bg)',
+                    borderColor: 'var(--home-card-border)',
+                  }}
+                >
+                  <div
+                    className="flex h-10 w-10 items-center justify-center rounded-xl"
+                    style={{ backgroundColor: 'var(--home-tertiary-dim)' }}
+                  >
+                    <Package className="h-5 w-5" style={{ color: 'var(--home-primary)' }} aria-hidden />
+                  </div>
+                  <div>
+                    <span className="block text-sm font-semibold">Courier</span>
+                  </div>
+                </button>
+              </div>
 
-          {/* Sticky footer CTA */}
-          <div className="shrink-0 border-t border-zinc-100 bg-white safe-x px-4 pt-4 pb-[calc(1rem+4rem+env(safe-area-inset-bottom,0px))] space-y-3">
-            {quotesLoading && coordsReady && (
-              <p className="text-sm text-zinc-500 text-center">Getting prices…</p>
-            )}
+              {surge != null && surge > 1 && (
+                <p
+                  className="mb-4 rounded-2xl border px-4 py-2 text-sm"
+                  style={{
+                    color: 'var(--home-on-surface)',
+                    borderColor: 'var(--home-card-border)',
+                    backgroundColor: 'color-mix(in srgb, var(--home-primary) 8%, transparent)',
+                  }}
+                >
+                  Demand is high — surge{' '}
+                  <strong className="tabular-nums">×{surge.toFixed(2)}</strong>
+                </p>
+              )}
 
-            {locationBlocked && (
-              <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-2xl px-4 py-2 text-center">
-                Location is required to book. Tap Allow when prompted, or enable location for this
-                site in browser settings.
-              </p>
-            )}
+              {coordsReady && (
+                <div className="mb-4 space-y-2 border-t pt-4" style={{ borderColor: 'var(--home-card-border)' }}>
+                  <TransportOptionPicker
+                    vehicles={[]}
+                    services={services}
+                    selected={vehicleOption}
+                    onSelect={setVehicleOption}
+                    quoteBySlug={quoteBySlug}
+                  />
+                </div>
+              )}
 
-            <button
-              type="button"
-              onClick={handleBook}
-              disabled={bookLoading || !canBook}
-              className="btn-touch w-full rounded-2xl bg-emerald-600 text-white text-base font-semibold py-4 shadow-lg shadow-emerald-600/25 hover:bg-emerald-700 disabled:opacity-50 touch-manipulation active:scale-[0.99]"
-            >
-              {bookLoading
-                ? 'Requesting…'
-                : selectedService
-                  ? `Request ${selectedService.label}`
-                  : 'Request ride'}
-            </button>
+              {!coordsReady && services.length > 0 && (
+                <p className="mb-4 text-center text-sm" style={{ color: 'var(--home-on-surface-muted)' }}>
+                  Enter pickup and destination to see ride options
+                </p>
+              )}
 
+              {quotesLoading && coordsReady && (
+                <p className="mb-3 text-center text-sm" style={{ color: 'var(--home-on-surface-muted)' }}>
+                  Getting prices…
+                </p>
+              )}
+
+              {locationBlocked && (
+                <p
+                  className="mb-3 rounded-2xl border px-4 py-2 text-center text-sm"
+                  style={{ borderColor: 'var(--home-card-border)', color: 'var(--home-on-surface)' }}
+                >
+                  Location is required to book. Allow location access in your browser to continue.
+                </p>
+              )}
+
+              <button
+                type="button"
+                onClick={handleBook}
+                disabled={bookLoading || !canBook}
+                className="btn-touch flex h-14 w-full items-center justify-center gap-2 rounded-2xl text-lg font-semibold shadow-lg transition-all active:scale-[0.97] disabled:opacity-50"
+                style={{
+                  backgroundColor: 'var(--home-primary)',
+                  color: 'var(--home-on-primary)',
+                  boxShadow: '0 8px 24px color-mix(in srgb, var(--home-primary) 35%, transparent)',
+                }}
+              >
+                {bookLoading ? 'Booking…' : "Let's Roam"}
+                <ArrowRight className="h-5 w-5" aria-hidden />
+              </button>
+            </div>
           </div>
         </div>
       </main>

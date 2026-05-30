@@ -2,8 +2,8 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { Home, LayoutGrid, User } from 'lucide-react';
 
-const NAV_ACTIVE = '#004ac6';
-const NAV_INACTIVE = '#505f76';
+const NAV_ACTIVE = 'var(--home-nav-active, #006d43)';
+const NAV_INACTIVE = 'var(--home-nav-inactive, #5d5e61)';
 
 const NAV_ITEMS = [
   { to: '/', label: 'Home', icon: Home, end: true },
@@ -14,7 +14,11 @@ const NAV_ITEMS = [
 export function PassengerBottomNav() {
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 flex h-[4.5rem] items-center justify-around rounded-t-xl border-t border-[#c3c6d7]/30 bg-white pb-safe shadow-[0px_-4px_20px_rgba(0,0,0,0.05)] safe-b safe-x"
+      className="home-bottom-nav fixed bottom-0 left-0 right-0 z-50 flex h-[4.5rem] items-center justify-around border-t pb-safe shadow-[0px_-4px_20px_rgba(0,0,0,0.08)] safe-b safe-x"
+      style={{
+        backgroundColor: 'var(--home-sheet-bg, #ffffff)',
+        borderColor: 'var(--home-sheet-border, rgba(188, 202, 190, 0.35))',
+      }}
       aria-label="Main"
     >
       <div className="mx-auto flex w-full max-w-xl items-center justify-around">
@@ -30,7 +34,7 @@ export function PassengerBottomNav() {
                 <Icon
                   className="h-5 w-5"
                   strokeWidth={2}
-                  fill={isActive && to === '/account' ? NAV_ACTIVE : 'none'}
+                  fill={isActive ? NAV_ACTIVE : 'none'}
                   style={{ color: isActive ? NAV_ACTIVE : NAV_INACTIVE }}
                   aria-hidden
                 />
