@@ -36,6 +36,7 @@ import {
   buildWaitTimeInfo,
   getWaitTimeGraceAnchor,
   shouldExposePickupWaitTime,
+  shouldExposeRiderPin,
 } from "./fare/waitTime.ts";
 import {
   generatePin,
@@ -197,6 +198,13 @@ function sanitizeRideForDriver(
   );
   const { verification_pin: _pin, ...rest } = ride;
   return { ...rest, pin_verification_pending: pinPending };
+}
+
+/** Never send raw verification_pin to rider; use rider_pin when geofence allows. */
+function sanitizeRideForRider(ride: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (!ride) return null;
+  const { verification_pin: _pin, ...rest } = ride;
+  return rest;
 }
 
 function isPinFeatureEnabled(settings: DispatchSettings): boolean {
@@ -1363,7 +1371,10 @@ app.post("/v1/requests", async (c) => {
   logLine({ event: "ride_created", ride_id: ride.id, request_id: reqId });
   return c.json({
     ride: rideOut,
-    rider_pin: pinEnabled ? normalizeVerificationPin(rideOut.verification_pin) : null,
+    rider_pin:
+      pinEnabled && rideOut && shouldExposeRiderPin(rideOut)
+        ? normalizeVerificationPin(rideOut.verification_pin)
+        : null,
   });
 });
 
@@ -1389,19 +1400,20 @@ app.get("/v1/requests/:id", async (c) => {
   let waitTimeInfo: Record<string, unknown> | null = null;
   let rideOut = fresh ?? ride;
 
-  const riderPinStatuses = ["driver_assigned", "driver_en_route_pickup", "driver_arrived_pickup"];
+  const pinPrepStatuses = ["driver_assigned", "driver_en_route_pickup", "driver_arrived_pickup"];
   let riderPin: string | null = null;
   if (rideOut && isRider && isPinFeatureEnabled(settings) &&
-    riderPinStatuses.includes(String(rideOut.status))) {
+    pinPrepStatuses.includes(String(rideOut.status))) {
     rideOut = await ensureRideVerificationPin(id, rideOut, settings);
-    riderPin = normalizeVerificationPin(rideOut.verification_pin);
   }
-  if (isRider && isPinFeatureEnabled(settings) && rideOut &&
-    riderPinStatuses.includes(String(rideOut.status)) && !riderPin) {
-    const { data: pinRow } = await svc().from("ride_requests").select("verification_pin").eq("id", id)
-      .maybeSingle();
-    riderPin = normalizeVerificationPin(pinRow?.verification_pin);
-    if (riderPin) rideOut = { ...rideOut, verification_pin: riderPin };
+  if (rideOut && isRider && isPinFeatureEnabled(settings) && shouldExposeRiderPin(rideOut)) {
+    riderPin = normalizeVerificationPin(rideOut.verification_pin);
+    if (!riderPin) {
+      const { data: pinRow } = await svc().from("ride_requests").select("verification_pin").eq("id", id)
+        .maybeSingle();
+      riderPin = normalizeVerificationPin(pinRow?.verification_pin);
+      if (riderPin) rideOut = { ...rideOut, verification_pin: riderPin };
+    }
   }
 
   // #region agent log
@@ -1409,7 +1421,7 @@ app.get("/v1/requests/:id", async (c) => {
     debugAgentLog("PIN", "index.ts:GET/requests", "rider arrived pin response", {
       rideId: id,
       riderPin,
-      ridePin: normalizeVerificationPin(rideOut?.verification_pin),
+      exposePin: shouldExposeRiderPin(rideOut),
     }, !riderPin);
   }
   // #endregion
@@ -1424,7 +1436,9 @@ app.get("/v1/requests/:id", async (c) => {
   return c.json({
     ride: isDriver && rideOut
       ? sanitizeRideForDriver(rideOut, settings.pin_verification_required_for_start)
-      : rideOut,
+      : isRider
+        ? sanitizeRideForRider(rideOut)
+        : rideOut,
     offers,
     wait_time: waitTimeInfo,
     rider_pin: isRider ? riderPin : null,

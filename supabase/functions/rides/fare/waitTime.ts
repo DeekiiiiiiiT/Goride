@@ -36,6 +36,20 @@ export function shouldExposePickupWaitTime(status: string | undefined): boolean 
   return Boolean(status && PICKUP_WAIT_STATUSES.has(status));
 }
 
+/** Rider may see verification PIN only after pickup geofence entry or official arrival. */
+export function shouldExposeRiderPin(ride: Record<string, unknown>): boolean {
+  if (ride.pin_verified_at != null && String(ride.pin_verified_at).trim()) {
+    return false;
+  }
+  const status = String(ride.status ?? "");
+  if (status === "driver_arrived_pickup") return true;
+  if (status === "driver_en_route_pickup") {
+    const started = ride.wait_time_started_at;
+    return started != null && String(started).trim() !== "";
+  }
+  return false;
+}
+
 export interface WaitTimeInfoPayload {
   wait_time_charge_enabled: boolean;
   wait_time_grace_remaining_seconds: number;

@@ -9,6 +9,7 @@ import {
   formatWaitTimeFee,
   getWaitTimeGraceAnchor,
   buildWaitTimeInfo,
+  shouldExposeRiderPin,
 } from "./waitTime.ts";
 
 Deno.test("calculateWaitTimeFee - within grace period", () => {
@@ -147,6 +148,35 @@ Deno.test("getWaitTimeGraceAnchor prefers geofence start over arrived", () => {
     arrived_pickup_at: "2026-01-15T10:00:20Z",
   });
   assertEquals(anchor, "2026-01-15T10:00:00Z");
+});
+
+Deno.test("shouldExposeRiderPin — hidden before pickup geofence", () => {
+  assertEquals(
+    shouldExposeRiderPin({ status: "driver_en_route_pickup", wait_time_started_at: null }),
+    false,
+  );
+  assertEquals(shouldExposeRiderPin({ status: "driver_assigned" }), false);
+});
+
+Deno.test("shouldExposeRiderPin — visible inside pickup geofence", () => {
+  assertEquals(
+    shouldExposeRiderPin({
+      status: "driver_en_route_pickup",
+      wait_time_started_at: "2026-01-15T10:00:00Z",
+    }),
+    true,
+  );
+  assertEquals(shouldExposeRiderPin({ status: "driver_arrived_pickup" }), true);
+});
+
+Deno.test("shouldExposeRiderPin — hidden after verified", () => {
+  assertEquals(
+    shouldExposeRiderPin({
+      status: "driver_arrived_pickup",
+      pin_verified_at: "2026-01-15T10:05:00Z",
+    }),
+    false,
+  );
 });
 
 Deno.test("buildWaitTimeInfo exposes grace countdown", () => {

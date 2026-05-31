@@ -11,6 +11,10 @@ type Props = {
   driverLocation?: LatLng | null;
   driverHeading?: number | null;
   statusLabel?: string;
+  /** Full-bleed map behind bottom sheet (live ride screen). */
+  variant?: 'default' | 'live';
+  /** Extra bottom padding when fitting bounds (px). */
+  sheetInsetPx?: number;
 };
 
 export function LiveRideMap({
@@ -20,7 +24,10 @@ export function LiveRideMap({
   driverLocation,
   driverHeading,
   statusLabel,
+  variant = 'default',
+  sheetInsetPx = 280,
 }: Props) {
+  const isLive = variant === 'live';
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const driverMarkerRef = useRef<google.maps.Marker | null>(null);
@@ -41,7 +48,7 @@ export function LiveRideMap({
 
         const map = new Map(containerRef.current, {
           disableDefaultUI: true,
-          zoomControl: true,
+          zoomControl: !isLive,
           gestureHandling: 'cooperative',
           clickableIcons: false,
         });
@@ -76,14 +83,21 @@ export function LiveRideMap({
           polyline = new google.maps.Polyline({
             map,
             path,
-            strokeColor: '#059669',
-            strokeOpacity: 0.85,
-            strokeWeight: 4,
+            strokeColor: isLive ? '#2563eb' : '#059669',
+            strokeOpacity: isLive ? 0.9 : 0.85,
+            strokeWeight: isLive ? 5 : 4,
           });
           for (const p of path) bounds.extend(p);
         }
 
-        map.fitBounds(bounds, { top: 48, right: 28, bottom: 28, left: 28 });
+        if (driverLocation) {
+          bounds.extend(new google.maps.LatLng(driverLocation.lat, driverLocation.lng));
+        }
+
+        const fitPadding = isLive
+          ? { top: 72, right: 32, bottom: sheetInsetPx, left: 32 }
+          : { top: 48, right: 28, bottom: 28, left: 28 };
+        map.fitBounds(bounds, fitPadding);
         if (!cancelled) setStatus('ready');
       } catch {
         if (!cancelled) setStatus('error');
@@ -98,7 +112,27 @@ export function LiveRideMap({
       driverMarkerRef.current = null;
       mapRef.current = null;
     };
-  }, [pickup.lat, pickup.lng, dropoff.lat, dropoff.lng, encodedPolyline]);
+  }, [pickup.lat, pickup.lng, dropoff.lat, dropoff.lng, encodedPolyline, isLive, sheetInsetPx]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || status !== 'ready' || !isLive || !driverLocation) return;
+    const bounds = new google.maps.LatLngBounds();
+    bounds.extend(new google.maps.LatLng(pickup.lat, pickup.lng));
+    bounds.extend(new google.maps.LatLng(dropoff.lat, dropoff.lng));
+    bounds.extend(new google.maps.LatLng(driverLocation.lat, driverLocation.lng));
+    map.fitBounds(bounds, { top: 72, right: 32, bottom: sheetInsetPx, left: 32 });
+  }, [
+    driverLocation?.lat,
+    driverLocation?.lng,
+    status,
+    isLive,
+    sheetInsetPx,
+    pickup.lat,
+    pickup.lng,
+    dropoff.lat,
+    dropoff.lng,
+  ]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -130,7 +164,11 @@ export function LiveRideMap({
   if (status === 'error') {
     return (
       <div
-        className="h-[38dvh] min-h-[180px] w-full flex items-center justify-center bg-zinc-100 text-sm text-zinc-500 rounded-b-3xl"
+        className={
+          isLive
+            ? 'live-ride-map__fallback'
+            : 'h-[38dvh] min-h-[180px] w-full flex items-center justify-center bg-zinc-100 text-sm text-zinc-500 rounded-b-3xl'
+        }
         role="img"
         aria-label="Live map unavailable"
       >
@@ -140,16 +178,33 @@ export function LiveRideMap({
   }
 
   return (
-    <div className="relative h-[38dvh] min-h-[180px] w-full overflow-hidden rounded-b-3xl">
+    <div
+      className={
+        isLive
+          ? 'absolute inset-0 overflow-hidden'
+          : 'relative h-[38dvh] min-h-[180px] w-full overflow-hidden rounded-b-3xl'
+      }
+    >
       {status === 'loading' && (
-        <div className="absolute inset-0 z-10 bg-zinc-100 animate-pulse" aria-hidden />
+        <div
+          className={
+            isLive
+              ? 'live-ride-map__shimmer'
+              : 'absolute inset-0 z-10 bg-zinc-100 animate-pulse'
+          }
+          aria-hidden
+        />
       )}
-      {statusLabel && (
+      {!isLive && statusLabel && (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 rounded-full bg-white/95 px-4 py-1.5 text-xs font-semibold text-zinc-800 shadow-md border border-zinc-200/80">
           {statusLabel}
         </div>
       )}
-      <div ref={containerRef} className="h-full w-full" aria-label="Live ride map" />
+      <div
+        ref={containerRef}
+        className={isLive ? 'live-ride-map__canvas' : 'h-full w-full'}
+        aria-label="Live ride map"
+      />
     </div>
   );
 }

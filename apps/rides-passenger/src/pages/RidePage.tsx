@@ -4,7 +4,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ArrowLeft, Loader2, Clock } from 'lucide-react';
 import type { RideRequestStatus, RideRequestRow } from '@roam/types/rides';
-import { formatMoneyMinor } from '@roam/types/rides';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,7 +15,8 @@ import {
   AlertDialogTitle,
 } from '@roam/ui';
 import { supabase } from '@roam/auth-client';
-import { LiveRideMap } from '@/components/LiveRideMap';
+import { LiveRideView } from '@/components/LiveRideView';
+import { TripSummaryView } from '@/components/TripSummaryView';
 import { ridesCancelRequest, ridesGetLive, ridesGetRequest } from '@/services/ridesEdge';
 
 function statusLabel(s: RideRequestStatus): string {
@@ -61,14 +61,24 @@ function showLiveMap(status: RideRequestStatus | undefined): boolean {
   return Boolean(status && LIVE_MAP_STATUSES.includes(status));
 }
 
+function getCancelCopy(status: RideRequestStatus | undefined): string {
+  if (status === 'driver_en_route_pickup') {
+    return 'Your driver is already on the way. Cancelling now may affect their earnings.';
+  }
+  if (status === 'matching') {
+    return 'Your driver search will stop and this booking will be marked as cancelled.';
+  }
+  return 'This ride will be cancelled. You can book again from home.';
+}
+
 const RIDE_SYNC_MS = 5_000;
 const RIDE_ARRIVED_SYNC_MS = 2_000;
 
-function normalizeRiderPin(raw: unknown): string | null {
-  if (raw == null) return null;
-  const s = String(raw).trim();
-  return /^\d{4}$/.test(s) ? s : null;
-}
+import {
+  isRiderPinTripPhase,
+  resolveRiderPinDisplay,
+  shouldShowRiderPin,
+} from '@/lib/riderPin';
 
 interface WaitTimeInfo {
   wait_time_charge_enabled?: boolean;
@@ -81,12 +91,6 @@ function formatSeconds(secs: number): string {
   const remainingSecs = Math.round(secs % 60);
   return `${mins}:${remainingSecs.toString().padStart(2, '0')}`;
 }
-
-const RIDER_PIN_STATUSES: RideRequestRow['status'][] = [
-  'driver_assigned',
-  'driver_en_route_pickup',
-  'driver_arrived_pickup',
-];
 
 function RiderPinDisplay({ pin }: { pin: string }) {
   return (
@@ -171,7 +175,10 @@ export default function RidePage() {
       const st = q.state.data?.ride.status;
       if (!st || st === 'completed' || st === 'cancelled') return false;
       if (st === 'driver_arrived_pickup') return RIDE_ARRIVED_SYNC_MS;
-      if (st === 'driver_en_route_pickup' && q.state.data?.wait_time) return RIDE_ARRIVED_SYNC_MS;
+      if (st === 'driver_en_route_pickup') {
+        const r = q.state.data?.ride;
+        if (q.state.data?.wait_time || r?.wait_time_started_at) return RIDE_ARRIVED_SYNC_MS;
+      }
       return RIDE_SYNC_MS;
     },
   });
@@ -180,10 +187,18 @@ export default function RidePage() {
   const waitTime = data?.wait_time as WaitTimeInfo | null | undefined;
 
   const riderPin = useMemo(() => {
-    if (!ride || ride.pin_verified_at) return null;
-    if (!RIDER_PIN_STATUSES.includes(ride.status)) return null;
-    return normalizeRiderPin(data?.rider_pin ?? ride.verification_pin);
-  }, [data?.rider_pin, ride?.verification_pin, ride?.status, ride?.pin_verified_at, ride]);
+    if (!ride) return null;
+    return resolveRiderPinDisplay(ride, data?.rider_pin);
+  }, [data?.rider_pin, ride]);
+
+  const pinAwaitingPickup =
+    ride != null &&
+    isRiderPinTripPhase(ride.status) &&
+    !ride.pin_verified_at &&
+    !shouldShowRiderPin(ride);
+
+  const pinLoadingAtPickup =
+    ride != null && shouldShowRiderPin(ride) && !riderPin && !ride.pin_verified_at;
 
   const { data: liveData } = useQuery({
     queryKey: ['ride-live', id],
@@ -205,7 +220,7 @@ export default function RidePage() {
       toast.success('Your driver has arrived', {
         description: riderPin
           ? 'Share your 4-digit PIN when they ask for it.'
-          : undefined,
+          : 'Your trip PIN will appear when they reach the pickup point.',
       });
     }
     prevStatusRef.current = ride.status;
@@ -232,11 +247,8 @@ export default function RidePage() {
               (prev: { ride: RideRequestRow; offers: unknown[]; rider_pin?: string | null } | undefined) => {
                 if (!prev) return prev;
                 const mergedRide = { ...prev.ride, ...row };
-                const mergedPin = normalizeRiderPin(
-                  row.verification_pin ?? prev.rider_pin ?? prev.ride.verification_pin,
-                );
-                if (mergedPin) mergedRide.verification_pin = mergedPin;
-                return { ...prev, ride: mergedRide, rider_pin: mergedPin ?? prev.rider_pin ?? null };
+                const mergedPin = resolveRiderPinDisplay(mergedRide, prev.rider_pin);
+                return { ...prev, ride: mergedRide, rider_pin: mergedPin };
               },
             );
           }
@@ -296,12 +308,40 @@ export default function RidePage() {
 
   if (!id) return null;
 
-  const cancelCopy =
-    ride?.status === 'driver_en_route_pickup'
-      ? 'Your driver is already on the way. Cancelling now may affect their earnings.'
-      : ride?.status === 'matching'
-        ? 'Your driver search will stop and this booking will be marked as cancelled.'
-        : 'This ride will be cancelled. You can book again from home.';
+  if (ride?.status === 'completed') {
+    return <TripSummaryView ride={ride} />;
+  }
+
+  const useLiveRideLayout = ride && showLiveMap(ride.status);
+
+  if (useLiveRideLayout) {
+    return (
+      <>
+        <LiveRideView
+          ride={ride}
+          driverLocation={driverLocation}
+          driverHeading={liveData?.driver_location?.heading ?? ride.last_driver_heading ?? null}
+          riderPin={riderPin}
+          waitTime={waitTime}
+          isFetching={isFetching}
+          onBack={handleBack}
+          onCancelTrip={() => setCancelDialogOpen(true)}
+          cancelling={cancelling}
+        />
+        <RidePageDialogs
+          cancelDialogOpen={cancelDialogOpen}
+          setCancelDialogOpen={setCancelDialogOpen}
+          leaveDialogOpen={leaveDialogOpen}
+          setLeaveDialogOpen={setLeaveDialogOpen}
+          cancelling={cancelling}
+          cancelCopy={getCancelCopy(ride.status)}
+          onConfirmCancel={() => void performCancel()}
+        />
+      </>
+    );
+  }
+
+  const cancelCopy = getCancelCopy(ride?.status);
 
   return (
     <div className="min-h-[100dvh] flex flex-col bg-zinc-100">
@@ -327,17 +367,6 @@ export default function RidePage() {
           )}
         </div>
       </header>
-
-      {ride && showLiveMap(ride.status) && (
-        <LiveRideMap
-          pickup={{ lat: ride.pickup_lat, lng: ride.pickup_lng }}
-          dropoff={{ lat: ride.dropoff_lat, lng: ride.dropoff_lng }}
-          encodedPolyline={ride.route_polyline_encoded}
-          driverLocation={driverLocation}
-          driverHeading={liveData?.driver_location?.heading ?? ride.last_driver_heading ?? null}
-          statusLabel={statusLabel(ride.status)}
-        />
-      )}
 
       <main className="flex-1 max-w-lg mx-auto w-full safe-x safe-b px-4 py-6 space-y-5">
         {!ride ? (
@@ -371,11 +400,15 @@ export default function RidePage() {
               </div>
             </div>
 
-            {riderPin && !ride.pin_verified_at && (
-              <RiderPinDisplay pin={riderPin} />
+            {riderPin && <RiderPinDisplay pin={riderPin} />}
+
+            {pinAwaitingPickup && (
+              <p className="text-sm text-center text-zinc-500 px-2 leading-relaxed">
+                Your trip PIN will appear when your driver reaches the pickup location.
+              </p>
             )}
 
-            {ride.status === 'driver_arrived_pickup' && !riderPin && !ride.pin_verified_at && (
+            {pinLoadingAtPickup && (
               <div className="rounded-3xl bg-emerald-50 border border-emerald-200 p-5 text-center space-y-2">
                 <Loader2 className="w-6 h-6 text-emerald-600 animate-spin mx-auto" aria-hidden />
                 <p className="text-sm font-medium text-emerald-900">Loading your trip PIN…</p>
@@ -402,29 +435,6 @@ export default function RidePage() {
               </p>
             )}
 
-            {ride.status === 'completed' && (
-              <div className="rounded-3xl bg-white border border-emerald-100 p-5 sm:p-6 shadow-xl shadow-emerald-900/10 space-y-4 bg-gradient-to-b from-emerald-50/50 to-white">
-                <div className="text-xs font-semibold uppercase tracking-wider text-emerald-800">
-                  Receipt
-                </div>
-                <div className="flex justify-between items-baseline gap-4">
-                  <span className="text-base text-zinc-600">Total</span>
-                  <span className="text-2xl font-bold tabular-nums text-zinc-900">
-                    {formatMoneyMinor(
-                      ride.fare_final_minor ?? ride.fare_estimate_minor,
-                      ride.currency ?? 'JMD',
-                    )}
-                  </span>
-                </div>
-                <Link
-                  to="/"
-                  className="btn-touch flex items-center justify-center w-full rounded-2xl bg-emerald-600 text-white text-base font-semibold hover:bg-emerald-700 shadow-md shadow-emerald-600/20"
-                >
-                  Book another ride
-                </Link>
-              </div>
-            )}
-
             {ride.status === 'cancelled' && (
               <div className="rounded-3xl bg-white border border-zinc-200 p-6 text-center space-y-4 shadow-lg shadow-zinc-900/5">
                 <p className="text-zinc-700 text-base leading-relaxed">
@@ -443,6 +453,38 @@ export default function RidePage() {
         )}
       </main>
 
+      <RidePageDialogs
+        cancelDialogOpen={cancelDialogOpen}
+        setCancelDialogOpen={setCancelDialogOpen}
+        leaveDialogOpen={leaveDialogOpen}
+        setLeaveDialogOpen={setLeaveDialogOpen}
+        cancelling={cancelling}
+        cancelCopy={cancelCopy}
+        onConfirmCancel={() => void performCancel()}
+      />
+    </div>
+  );
+}
+
+function RidePageDialogs({
+  cancelDialogOpen,
+  setCancelDialogOpen,
+  leaveDialogOpen,
+  setLeaveDialogOpen,
+  cancelling,
+  cancelCopy,
+  onConfirmCancel,
+}: {
+  cancelDialogOpen: boolean;
+  setCancelDialogOpen: (open: boolean) => void;
+  leaveDialogOpen: boolean;
+  setLeaveDialogOpen: (open: boolean) => void;
+  cancelling: boolean;
+  cancelCopy: string;
+  onConfirmCancel: () => void;
+}) {
+  return (
+    <>
       <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
         <AlertDialogContent
           overlayClassName="bg-zinc-900/80 backdrop-blur-md"
@@ -467,7 +509,7 @@ export default function RidePage() {
               disabled={cancelling}
               onClick={(e) => {
                 e.preventDefault();
-                void performCancel();
+                onConfirmCancel();
               }}
               className="btn-touch rounded-2xl h-12 w-full bg-red-600 text-base font-semibold text-white hover:bg-red-700 shadow-sm"
             >
@@ -501,7 +543,7 @@ export default function RidePage() {
               disabled={cancelling}
               onClick={(e) => {
                 e.preventDefault();
-                void performCancel();
+                onConfirmCancel();
               }}
               className="btn-touch rounded-2xl h-12 w-full bg-red-600 text-base font-semibold text-white hover:bg-red-700 shadow-sm"
             >
@@ -510,6 +552,6 @@ export default function RidePage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   );
 }
