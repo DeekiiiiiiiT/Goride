@@ -1,4 +1,6 @@
 @import './ride-offer.css';
+@import './trip-request-overlay.css';
+@import './en-route-pickup.css';
 
 @custom-variant dark (&:is(.dark *));
 

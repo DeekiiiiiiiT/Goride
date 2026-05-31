@@ -1,7 +1,6 @@
 import React from 'react';
 import { isDriverActiveRideStatus } from '@roam/types/rides';
 import { useRideDispatchContext } from '../../contexts/RideDispatchContext';
-import { RideOfferCard } from './RideOfferCard';
 import { ActiveRidePanel } from './ActiveRidePanel';
 import { OnlineGaugeSlider } from './OnlineGaugeSlider';
 import { PermissionOnboardingSheet } from '../PermissionOnboardingSheet';
@@ -18,8 +17,6 @@ export function RideDispatchHome({ embedded = false }: Props) {
     activeRide,
     activeRideWaitTime,
     toggleOnline,
-    accept,
-    decline,
     advance,
     vehicleReady,
     presenceError,
@@ -33,6 +30,11 @@ export function RideDispatchHome({ embedded = false }: Props) {
   } = useRideDispatchContext();
 
   const showActiveRide = activeRide && isDriverActiveRideStatus(activeRide.status);
+  const enRouteToPickup =
+    showActiveRide &&
+    (activeRide.status === 'driver_assigned' || activeRide.status === 'driver_en_route_pickup');
+  const onTrip = showActiveRide && activeRide.status === 'on_trip';
+  const showActiveRidePanel = showActiveRide && !enRouteToPickup && !onTrip;
   const showWaiting = online && offers.length === 0 && !showActiveRide;
   const goOnlineDisabled = (!vehicleReady && !online) || (locationGoOnlineBlocked && !online);
 
@@ -87,22 +89,7 @@ export function RideDispatchHome({ embedded = false }: Props) {
           </div>
         )}
 
-        {online && !showActiveRide && offers.length > 0 && (
-          <section className={`space-y-2 shrink-0 ${embedded ? '' : 'flex flex-1 flex-col justify-center px-1 py-2'}`}>
-            {!embedded && (
-              <h2 className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 px-0.5">
-                Incoming offers
-              </h2>
-            )}
-            <ul className={`space-y-2 ${embedded ? '' : 'space-y-3 w-full max-w-md mx-auto'}`}>
-              {offers.map((o) => (
-                <RideOfferCard key={o.id} offer={o} onAccept={accept} onDecline={decline} compact />
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {showActiveRide && (
+        {showActiveRidePanel && (
           <div className="shrink-0">
             <ActiveRidePanel
               ride={activeRide}

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ArrowLeft, Loader2, Clock } from 'lucide-react';
@@ -16,6 +16,7 @@ import {
 } from '@roam/ui';
 import { supabase } from '@roam/auth-client';
 import { LiveRideView } from '@/components/LiveRideView';
+import { RideCancelledView } from '@/components/RideCancelledView';
 import { TripInProgressView } from '@/components/TripInProgressView';
 import { TripSummaryView } from '@/components/TripSummaryView';
 import { ridesCancelRequest, ridesGetLive, ridesGetRequest } from '@/services/ridesEdge';
@@ -327,6 +328,10 @@ export default function RidePage() {
     return <TripSummaryView ride={ride} />;
   }
 
+  if (ride?.status === 'cancelled') {
+    return <RideCancelledView ride={ride} />;
+  }
+
   if (ride && isTripInProgress(ride.status)) {
     return (
       <TripInProgressView
@@ -453,20 +458,6 @@ export default function RidePage() {
               </button>
             )}
 
-            {ride.status === 'cancelled' && (
-              <div className="rounded-3xl bg-white border border-zinc-200 p-6 text-center space-y-4 shadow-lg shadow-zinc-900/5">
-                <p className="text-zinc-700 text-base leading-relaxed">
-                  This ride was cancelled
-                  {ride.cancel_reason ? `: ${ride.cancel_reason}` : '.'}
-                </p>
-                <Link
-                  to="/"
-                  className="btn-touch inline-flex items-center justify-center w-full rounded-2xl bg-zinc-900 text-white text-base font-semibold hover:bg-zinc-800"
-                >
-                  Back to home
-                </Link>
-              </div>
-            )}
           </>
         )}
       </main>

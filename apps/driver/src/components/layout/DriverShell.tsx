@@ -45,6 +45,9 @@ import { IndependentExpenses } from '../independent/IndependentExpenses';
 import { TaxCenter } from '../independent/TaxCenter';
 import { InsuranceCenter } from '../independent/InsuranceCenter';
 import { RideDispatchPage } from '../rides/RideDispatchPage';
+import { DriverTripRequestOverlay } from '../rides/DriverTripRequestOverlay';
+import { DriverEnRouteOverlay } from '../rides/DriverEnRouteOverlay';
+import { DriverOnTripOverlay } from '../rides/DriverOnTripOverlay';
 
 export function DriverShell({ forcePassengerRides = false }: { forcePassengerRides?: boolean }) {
   const { mode, isFleetDriver, isIndependentDriver, fleet, loading } = useDriver();
@@ -499,5 +502,14 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
     </div>
   );
 
-  return isIndependentDriver ? <RideDispatchProvider>{shell}</RideDispatchProvider> : shell;
+  return isIndependentDriver ? (
+    <RideDispatchProvider>
+      {shell}
+      <DriverTripRequestOverlay />
+      <DriverEnRouteOverlay />
+      <DriverOnTripOverlay />
+    </RideDispatchProvider>
+  ) : (
+    shell
+  );
 }

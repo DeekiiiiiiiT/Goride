@@ -23,6 +23,7 @@ interface LeafletMapProps {
   startMarker?: { lat: number; lon: number } | null;
   endMarker?: { lat: number; lon: number } | null;
   height?: string;
+  routeColor?: string;
 }
 
 export function LeafletMap({
@@ -31,6 +32,7 @@ export function LeafletMap({
   currentLocation,
   startMarker,
   endMarker,
+  routeColor = '#4f46e5',
 }: LeafletMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -94,7 +96,7 @@ export function LeafletMap({
 
     if (route && route.length > 1) {
       const positions = route.map(p => [p.lat, p.lon] as [number, number]);
-      routeLayerRef.current = L.polyline(positions, { color: '#4f46e5', weight: 4, opacity: 0.8 }).addTo(map);
+      routeLayerRef.current = L.polyline(positions, { color: routeColor, weight: 4, opacity: 0.8 }).addTo(map);
 
       const bounds = L.latLngBounds(positions);
       if (bounds.isValid()) {
@@ -138,7 +140,7 @@ export function LeafletMap({
     }
 
     requestAnimationFrame(() => map.invalidateSize());
-  }, [route, currentLocation, startMarker, endMarker, isMounted]);
+  }, [route, currentLocation, startMarker, endMarker, routeColor, isMounted]);
 
   if (!isMounted) {
     return (

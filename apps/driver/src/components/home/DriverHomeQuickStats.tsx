@@ -1,10 +1,12 @@
 import React from 'react';
 import { ArrowLeftRight, CreditCard, Loader2, Star } from 'lucide-react';
 import { cn } from '@roam/ui';
+import type { DriverEarningsSummary } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
-import { useIndependentEarnings } from '../../hooks/useIndependentEarnings';
 
 type Props = {
+  data: DriverEarningsSummary | null;
+  loading: boolean;
   rating?: number | null;
 };
 
@@ -29,8 +31,7 @@ function amountSizeClass(amount: string): string {
   return 'text-xl';
 }
 
-export function DriverHomeQuickStats({ rating }: Props) {
-  const { data, loading } = useIndependentEarnings('today');
+export function DriverHomeQuickStats({ data, loading, rating }: Props) {
   const hasRating = rating != null && Number.isFinite(rating);
 
   const earningsAmount =

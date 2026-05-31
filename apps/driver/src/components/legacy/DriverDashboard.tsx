@@ -465,7 +465,7 @@ export function DriverDashboard({ onNavigate }: DriverDashboardProps = {}) {
   };
 
   if (isIndependentDriver) {
-    return <DriverMintHome onNavigate={onNavigate ?? (() => {})} />;
+    return <DriverMintHome />;
   }
 
   return (

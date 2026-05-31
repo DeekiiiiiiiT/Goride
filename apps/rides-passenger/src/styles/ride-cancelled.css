@@ -1,0 +1,302 @@
+/* Ride cancelled — passenger status screen */
+.ride-cancelled-page {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--passenger-page-bg);
+  color: var(--passenger-on-surface);
+}
+
+.ride-cancelled-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 4rem;
+  padding-left: max(1.25rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1.25rem, env(safe-area-inset-right, 0px));
+  padding-top: env(safe-area-inset-top, 0px);
+  background: var(--passenger-page-bg);
+}
+
+.ride-cancelled-header__title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--passenger-on-surface);
+}
+
+.ride-cancelled-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: none;
+  background: transparent;
+  color: var(--passenger-on-surface);
+  border-radius: 9999px;
+  touch-action: manipulation;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.ride-cancelled-icon-btn:active {
+  transform: scale(0.95);
+  opacity: 0.85;
+}
+
+.ride-cancelled-main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem max(1.25rem, env(safe-area-inset-left, 0px)) 8.5rem
+    max(1.25rem, env(safe-area-inset-right, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 32rem;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+}
+
+.ride-cancelled-status-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.75rem;
+  padding: 1.25rem 1.25rem 1rem;
+  border-radius: 1.5rem;
+  background: var(--passenger-surface);
+  border: 1px solid rgba(195, 198, 215, 0.35);
+  box-shadow: var(--passenger-card-shadow);
+}
+
+.ride-cancelled-status-card__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 4rem;
+  height: 4rem;
+  border-radius: 9999px;
+  background: rgba(255, 218, 214, 0.45);
+  color: var(--passenger-error);
+}
+
+.ride-cancelled-status-card__title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--passenger-on-surface);
+}
+
+.ride-cancelled-status-card__id {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--passenger-on-surface-variant);
+}
+
+.ride-cancelled-status-card__badge {
+  margin-top: 0.25rem;
+  padding: 0.375rem 1rem;
+  border-radius: 9999px;
+  background: rgba(255, 218, 214, 0.35);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--passenger-error);
+}
+
+.ride-cancelled-section-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--passenger-on-surface-variant);
+}
+
+.ride-cancelled-summary-card {
+  border-radius: 1.5rem;
+  overflow: hidden;
+  background: var(--passenger-surface);
+  border: 1px solid rgba(195, 198, 215, 0.35);
+  box-shadow: var(--passenger-card-shadow);
+}
+
+.ride-cancelled-summary-card .trip-summary-map {
+  height: 10rem;
+  border-radius: 0;
+}
+
+.ride-cancelled-route {
+  padding: 1.25rem;
+}
+
+.ride-cancelled-route__timeline {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.ride-cancelled-route__line {
+  position: absolute;
+  left: 0.6875rem;
+  top: 1.25rem;
+  bottom: 1.25rem;
+  width: 2px;
+  border-left: 2px dashed rgba(115, 118, 134, 0.35);
+}
+
+.ride-cancelled-route__stop {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.ride-cancelled-route__marker {
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-top: 0.125rem;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ride-cancelled-route__marker--pickup {
+  background: var(--passenger-primary);
+}
+
+.ride-cancelled-route__marker--pickup-inner {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: var(--passenger-on-primary);
+}
+
+.ride-cancelled-route__marker--dropoff {
+  background: var(--passenger-surface-container);
+  border: 2px solid var(--passenger-primary);
+}
+
+.ride-cancelled-route__marker--dropoff-inner {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: var(--passenger-primary);
+}
+
+.ride-cancelled-route__label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--passenger-on-surface-variant);
+}
+
+.ride-cancelled-route__address {
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--passenger-on-surface);
+}
+
+.ride-cancelled-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.ride-cancelled-action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  border-radius: 1.25rem;
+  border: 1px solid rgba(195, 198, 215, 0.45);
+  background: var(--passenger-surface);
+  color: var(--passenger-on-surface-variant);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  touch-action: manipulation;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.ride-cancelled-action-btn:active {
+  transform: scale(0.98);
+  background: var(--passenger-surface-low);
+}
+
+.ride-cancelled-footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  padding: 1rem max(1.25rem, env(safe-area-inset-left, 0px))
+    max(1rem, env(safe-area-inset-bottom, 0px)) max(1.25rem, env(safe-area-inset-right, 0px));
+  background: rgba(247, 249, 251, 0.92);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid rgba(195, 198, 215, 0.35);
+}
+
+.ride-cancelled-footer__inner {
+  max-width: 32rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ride-cancelled-footer__primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 3.5rem;
+  border: none;
+  border-radius: 0.75rem;
+  background: var(--passenger-primary);
+  color: var(--passenger-on-primary);
+  font-size: 1rem;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(0, 74, 198, 0.25);
+  touch-action: manipulation;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.ride-cancelled-footer__primary:active {
+  transform: scale(0.98);
+}
+
+.ride-cancelled-footer__secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 3.5rem;
+  border: none;
+  border-radius: 0.75rem;
+  background: var(--passenger-surface-low);
+  color: var(--passenger-on-surface-variant);
+  font-size: 1rem;
+  font-weight: 600;
+  touch-action: manipulation;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.ride-cancelled-footer__secondary:active {
+  transform: scale(0.98);
+}
