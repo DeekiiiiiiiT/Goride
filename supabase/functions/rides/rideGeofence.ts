@@ -108,16 +108,30 @@ export async function evaluateGeofenceTransitions(
     distanceToDropoffM: distDropoff,
   };
 
-  const pickupArriveEligible =
+  const pickupStatusActive =
+    status === "driver_en_route_pickup" || status === "driver_assigned";
+
+  const pickupArriveStrict =
     settings.auto_arrive_enabled &&
-    (status === "driver_en_route_pickup" || status === "driver_assigned") &&
+    pickupStatusActive &&
     accuracyOk(fix.accuracyM, settings.gps_max_accuracy_m_for_arrival) &&
     speedOk(fix.speedMps, settings.max_speed_mps_for_arrival);
 
-  if (pickupArriveEligible) {
+  const dwellInProgress = Boolean(ride.wait_time_started_at) ||
+    Boolean(live.pickup_dwell_started_at);
+
+  /** After pickup zone entry, keep counting dwell even if speed/accuracy briefly fail. */
+  const pickupDwellContinue =
+    settings.auto_arrive_enabled &&
+    status === "driver_en_route_pickup" &&
+    dwellInProgress;
+
+  const pickupGeofenceActive = pickupArriveStrict || pickupDwellContinue;
+
+  if (pickupGeofenceActive) {
     let arriveStatus = status;
 
-    if (arriveStatus === "driver_assigned") {
+    if (arriveStatus === "driver_assigned" && pickupArriveStrict) {
       const enRouteTr = await applyRideTransition(deps, {
         rideId,
         next: "driver_en_route_pickup",
@@ -133,21 +147,34 @@ export async function evaluateGeofenceTransitions(
       }
     }
 
+    const accuracyForInside = pickupDwellContinue && !pickupArriveStrict
+      ? Math.min(fix.accuracyM ?? 0, settings.gps_max_accuracy_m_for_arrival)
+      : (fix.accuracyM ?? 0);
+
     const inside = isInsideGeofence(
       point,
       pickup,
       settings.pickup_geofence_radius_m,
-      fix.accuracyM ?? 0,
+      accuracyForInside,
     );
     let dwellStart = live.pickup_dwell_started_at
       ? Date.parse(String(live.pickup_dwell_started_at))
       : null;
+    if (!dwellStart && ride.wait_time_started_at) {
+      dwellStart = Date.parse(String(ride.wait_time_started_at));
+    }
 
-    if (inside.isInside && arriveStatus === "driver_en_route_pickup") {
-      const isFirstEntry = !dwellStart;
-      if (!dwellStart) dwellStart = nowMs;
+    const canEnterDwell =
+      arriveStatus === "driver_en_route_pickup" &&
+      inside.isInside &&
+      (pickupArriveStrict || pickupDwellContinue);
 
-      if (isFirstEntry && !ride.wait_time_started_at) {
+    if (canEnterDwell) {
+      const hadDwellStart = dwellStart != null && Number.isFinite(dwellStart);
+      const isFirstEntry = !hadDwellStart;
+      if (!hadDwellStart) dwellStart = nowMs;
+
+      if (isFirstEntry && !ride.wait_time_started_at && pickupArriveStrict) {
         const graceStartedIso = new Date(dwellStart).toISOString();
         await deps.patchRideRequest(rideId, {
           wait_time_started_at: graceStartedIso,
@@ -193,13 +220,13 @@ export async function evaluateGeofenceTransitions(
         last_speed_mps: fix.speedMps ?? null,
         last_accuracy_m: fix.accuracyM ?? null,
       });
-    } else {
+    } else if (arriveStatus === "driver_en_route_pickup") {
       const clearDwell =
-        !inside.isInside && inside.distanceM > inside.effectiveRadiusM * 1.25;
+        !inside.isInside && inside.distanceM > inside.effectiveRadiusM * 1.75;
       await upsertLiveState(db, rideId, {
         pickup_dwell_started_at: clearDwell
           ? null
-          : dwellStart
+          : dwellStart && Number.isFinite(dwellStart)
           ? new Date(dwellStart).toISOString()
           : null,
         distance_to_target_m: inside.distanceM,

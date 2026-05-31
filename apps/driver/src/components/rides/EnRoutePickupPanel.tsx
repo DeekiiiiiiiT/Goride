@@ -6,7 +6,6 @@ import {
   MapPin,
   MessageCircle,
   Phone,
-  Star,
   User,
   XCircle,
 } from 'lucide-react';
@@ -19,6 +18,7 @@ import { pickupArrivalLabel } from './rideGeofenceClient';
 import type { DriverRideLocationLive } from '../../services/ridesDriverEdge';
 import { GracePeriodCountdown, isGracePeriodActive } from './GracePeriodCountdown';
 import { DriverRideChatWrap } from './DriverRideChatWrap';
+import { PickupArrivalCountdown } from './PickupArrivalCountdown';
 
 const CANCEL_REASONS = [
   { value: 'rider_no_show', label: 'Rider no-show' },
@@ -121,7 +121,7 @@ export function EnRoutePickupPanel({
     <DriverRideChatWrap ride={ride}>
       {(openChat) => (
     <div className="flex h-full min-h-0 flex-col bg-[#f7f9fb] dark:bg-slate-950">
-      <div className="relative h-[42vh] min-h-[200px] shrink-0">
+      <div className="relative h-[30vh] min-h-[130px] max-h-[180px] shrink-0">
         <div className="en-route-map-tiles absolute inset-0">
           {pickupValid ? (
             <LeafletMap
@@ -142,124 +142,107 @@ export function EnRoutePickupPanel({
           )}
         </div>
         <div className="en-route-map-gradient pointer-events-none absolute inset-0" aria-hidden />
-        <div className="pointer-events-none absolute left-4 top-4 flex flex-col gap-1">
-          <p className="text-xs font-bold uppercase tracking-widest text-white drop-shadow-md">En route</p>
-          <span className="pointer-events-auto rounded-full bg-white/90 px-2 py-1 shadow-md backdrop-blur-sm">
+        <div className="pointer-events-none absolute left-3 top-3 flex flex-col gap-1">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-white drop-shadow-md">En route</p>
+          <span className="pointer-events-auto scale-90 origin-top-left rounded-full bg-white/90 px-2 py-0.5 shadow-md backdrop-blur-sm">
             <DriverGpsBadge accuracyMeters={gpsAccuracyM ?? null} />
           </span>
         </div>
       </div>
 
-      <div className="relative z-10 -mt-8 flex min-h-0 flex-1 flex-col overflow-y-auto rounded-t-[32px] bg-[#f7f9fb] px-5 pb-6 pt-8 shadow-[0_-10px_30px_rgba(0,0,0,0.06)] dark:bg-slate-950">
-        <div className="mx-auto mb-6 h-1.5 w-12 rounded-full bg-slate-300 dark:bg-slate-600" aria-hidden />
+      <div className="relative z-10 -mt-6 flex min-h-0 flex-1 flex-col rounded-t-[28px] bg-[#f7f9fb] shadow-[0_-8px_24px_rgba(0,0,0,0.06)] dark:bg-slate-950">
+        <div className="mx-auto mt-3 mb-2 h-1 w-10 shrink-0 rounded-full bg-slate-300 dark:bg-slate-600" aria-hidden />
 
-        {trackingError ? (
-          <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
-            {trackingError}
-          </p>
-        ) : null}
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-2">
+          {trackingError ? (
+            <p className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+              {trackingError}
+            </p>
+          ) : null}
 
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-4">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-blue-100 shadow-md dark:bg-blue-950/50">
-              <User className="h-8 w-8 text-blue-700 dark:text-blue-300" aria-hidden />
+          <div className="mb-3 flex items-center gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-100 dark:bg-blue-950/50">
+              <User className="h-5 w-5 text-blue-700 dark:text-blue-300" aria-hidden />
             </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="truncate text-base font-semibold text-slate-900 dark:text-white">Passenger</h2>
+              <p className="text-xs text-slate-500">Rider trip</p>
+            </div>
+            <div className="shrink-0 text-right">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Arrival</p>
+              <p className="text-base font-semibold text-[#00C4B4]">{arrival.primary}</p>
+            </div>
+          </div>
+
+          <div className="mb-3 flex items-start gap-3 rounded-xl bg-slate-100 p-3 dark:bg-slate-800/80">
+            <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#004ac6] dark:text-blue-400" aria-hidden />
             <div className="min-w-0">
-              <h2 className="truncate text-xl font-semibold text-slate-900 dark:text-white">Passenger</h2>
-              <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
-                <Star className="h-4 w-4 fill-amber-400 text-amber-400" aria-hidden />
-                <span className="text-sm">Rider trip</span>
-              </div>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Pickup</p>
+              <p className="text-sm font-semibold leading-snug text-slate-900 dark:text-white">{pickupAddress}</p>
             </div>
           </div>
-          <div className="shrink-0 text-right">
-            <p className="mb-1 text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-              Arrival
+
+          <GracePeriodCountdown
+            waitTimeInfo={waitTimeInfo}
+            graceStartedAt={ride.wait_time_started_at}
+          />
+
+          {atPickupZone ? (
+            <PickupArrivalCountdown waitTimeStartedAt={ride.wait_time_started_at} />
+          ) : !graceActive ? (
+            <p className="mb-2 text-center text-[11px] text-slate-500 dark:text-slate-400">
+              Arrival confirms automatically at the pickup point.
             </p>
-            <p className="text-xl font-semibold text-[#00C4B4]">{arrival.primary}</p>
-            {arrival.secondary ? (
-              <p className="mt-0.5 max-w-[9rem] text-right text-[11px] text-slate-500 dark:text-slate-400">
-                {arrival.secondary}
-              </p>
-            ) : null}
+          ) : null}
+
+          <div className="mb-3 grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={openChat}
+              className="flex flex-col items-center justify-center gap-0.5 rounded-xl bg-slate-200/80 py-2.5 text-slate-600 active:scale-95 dark:bg-slate-800 dark:text-slate-300"
+            >
+              <MessageCircle className="h-4 w-4" aria-hidden />
+              <span className="text-[11px] font-semibold">Message</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => toast.message('Calling coming soon')}
+              className="flex flex-col items-center justify-center gap-0.5 rounded-xl bg-slate-200/80 py-2.5 text-slate-600 active:scale-95 dark:bg-slate-800 dark:text-slate-300"
+            >
+              <Phone className="h-4 w-4" aria-hidden />
+              <span className="text-[11px] font-semibold">Call</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCancelOpen(true)}
+              className="flex flex-col items-center justify-center gap-0.5 rounded-xl bg-red-50 py-2.5 text-red-800 active:scale-95 dark:bg-red-950/40 dark:text-red-300"
+            >
+              <XCircle className="h-4 w-4" aria-hidden />
+              <span className="text-[11px] font-semibold">Cancel</span>
+            </button>
           </div>
         </div>
 
-        <div className="mb-4 flex items-start gap-4 rounded-2xl bg-slate-100 p-4 dark:bg-slate-800/80">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-950/60">
-            <MapPin className="h-5 w-5 text-[#004ac6] dark:text-blue-400" aria-hidden />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-              Pickup address
-            </p>
-            <p className="text-base font-semibold text-slate-900 dark:text-white">{pickupAddress}</p>
-          </div>
-        </div>
-
-        <GracePeriodCountdown
-          waitTimeInfo={waitTimeInfo}
-          graceStartedAt={ride.wait_time_started_at}
-        />
-
-        {!graceActive ? (
-          atPickupZone ? (
-            <p className="mb-4 text-center text-xs font-medium text-emerald-700 dark:text-emerald-400">
-              You&apos;re in the pickup zone. Arrival should confirm in a few seconds — use
-              &quot;I&apos;ve arrived&quot; if it doesn&apos;t.
-            </p>
-          ) : (
-            <p className="mb-4 text-center text-xs text-slate-500 dark:text-slate-400">
-              Arrival is detected automatically when you reach the pickup point.
-            </p>
-          )
-        ) : null}
-
-        <div className="mb-4 grid grid-cols-3 gap-3">
+        <div className="shrink-0 border-t border-slate-200/80 bg-[#f7f9fb] px-4 py-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] dark:border-slate-800 dark:bg-slate-950">
           <button
             type="button"
-            onClick={openChat}
-            className="flex flex-col items-center justify-center gap-1 rounded-2xl bg-slate-200/80 py-3 text-slate-600 transition-transform active:scale-95 dark:bg-slate-800 dark:text-slate-300"
+            disabled={advancing}
+            onClick={() => void runAdvance('driver_arrived_pickup')}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#00C4B4] py-3.5 text-base font-bold uppercase tracking-wide text-white shadow-lg shadow-[#00C4B4]/20 transition-transform active:scale-[0.98] disabled:opacity-60"
           >
-            <MessageCircle className="h-5 w-5" aria-hidden />
-            <span className="text-sm font-semibold">Message</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => toast.message('Calling coming soon')}
-            className="flex flex-col items-center justify-center gap-1 rounded-2xl bg-slate-200/80 py-3 text-slate-600 transition-transform active:scale-95 dark:bg-slate-800 dark:text-slate-300"
-          >
-            <Phone className="h-5 w-5" aria-hidden />
-            <span className="text-sm font-semibold">Call</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setCancelOpen(true)}
-            className="flex flex-col items-center justify-center gap-1 rounded-2xl bg-red-50 py-3 text-red-800 transition-transform active:scale-95 dark:bg-red-950/40 dark:text-red-300"
-          >
-            <XCircle className="h-5 w-5" aria-hidden />
-            <span className="text-sm font-semibold">Cancel</span>
+            {advancing ? (
+              <>
+                <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
+                Updating…
+              </>
+            ) : (
+              <>
+                <Car className="h-5 w-5" aria-hidden />
+                I&apos;ve arrived
+              </>
+            )}
           </button>
         </div>
-
-        <button
-          type="button"
-          disabled={advancing}
-          onClick={() => void runAdvance('driver_arrived_pickup')}
-          className="mb-2 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#00C4B4] py-4 text-lg font-bold uppercase tracking-wider text-white shadow-lg shadow-[#00C4B4]/20 transition-transform active:scale-[0.98] disabled:opacity-60"
-        >
-          {advancing ? (
-            <>
-              <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
-              Updating…
-            </>
-          ) : (
-            <>
-              <Car className="h-5 w-5" aria-hidden />
-              I&apos;ve arrived
-            </>
-          )}
-        </button>
       </div>
 
       {cancelOpen ? (

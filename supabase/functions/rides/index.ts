@@ -1807,7 +1807,12 @@ app.post("/v1/drivers/ride-location", async (c) => {
 
   let geofenceResult = null;
   const settings = await loadDispatchSettingsForRides();
-  if (ingest && ingest.duplicate !== true) {
+  const isDuplicateIngest = Boolean(ingest && ingest.duplicate === true);
+  const dwellHeartbeat =
+    isDuplicateIngest &&
+    ride.status === "driver_en_route_pickup" &&
+    Boolean(ride.wait_time_started_at);
+  if ((ingest && !isDuplicateIngest) || dwellHeartbeat) {
     geofenceResult = await evaluateGeofenceTransitions(
       svc(),
       transitionDeps(),
