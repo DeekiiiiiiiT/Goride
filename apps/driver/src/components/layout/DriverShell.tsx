@@ -1,9 +1,23 @@
 import React, { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { useDriver } from '../../contexts/DriverContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { RideDispatchProvider } from '../../contexts/RideDispatchContext';
 import { getBottomNavItems, getNavigationItems } from '../../config/navigation';
-import { Menu, X, ChevronRight, LogOut, Car, Building2 } from 'lucide-react';
+import {
+  Menu,
+  X,
+  ChevronRight,
+  LogOut,
+  Car,
+  Building2,
+  RefreshCw,
+  Banknote,
+  Bell,
+  User,
+} from 'lucide-react';
 import { ThemeToggleButton } from './ThemeToggleButton';
+import { cn } from '@roam/ui';
 import { AnnouncementBanner } from './AnnouncementBanner';
 import { OfflineStatusIndicator } from '../offline/OfflineStatusIndicator';
 import { NotificationCenter } from '../notifications/NotificationCenter';
@@ -12,6 +26,7 @@ import { DriverDashboard } from '../legacy/DriverDashboard';
 import { DriverEarnings } from '../legacy/DriverEarnings';
 import { DriverTrips } from '../legacy/DriverTrips';
 import { IndependentEarningsPage } from '../independent/IndependentEarningsPage';
+import { IndependentProfilePage } from '../independent/IndependentProfilePage';
 import { IndependentTripsPage } from '../independent/IndependentTripsPage';
 import { DriverProfile } from '../legacy/DriverProfile';
 import { DriverExpenses } from '../legacy/DriverExpenses';
@@ -45,6 +60,31 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
 
   const checkInModalOpen = isFleetDriver && (needsCheckIn || checkInOpen);
   const checkInForced = isFleetDriver && needsCheckIn;
+  const mintHomeLayout = isIndependentDriver && currentPage === 'dashboard';
+  const mintEarningsLayout = isIndependentDriver && currentPage === 'earnings';
+  const mintTripsLayout = isIndependentDriver && currentPage === 'trips';
+  const mintProfileLayout = isIndependentDriver && currentPage === 'profile';
+  const mintUtilityLayout =
+    isIndependentDriver &&
+    (currentPage === 'vehicle' ||
+      currentPage === 'expenses' ||
+      currentPage === 'tax' ||
+      currentPage === 'insurance');
+  const mintDriverLayout =
+    mintHomeLayout ||
+    mintEarningsLayout ||
+    mintTripsLayout ||
+    mintProfileLayout ||
+    mintUtilityLayout;
+
+  const avatarUrl =
+    (user?.user_metadata?.avatar_url as string | undefined) ||
+    (user?.user_metadata?.picture as string | undefined) ||
+    null;
+  const profileInitial =
+    user?.user_metadata?.name?.[0]?.toUpperCase() ||
+    user?.email?.[0]?.toUpperCase() ||
+    'D';
 
   useEffect(() => {
     if (currentPage !== 'checkin' || !isFleetDriver) return;
@@ -89,7 +129,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <DriverDashboard />;
+        return <DriverDashboard onNavigate={setCurrentPage} />;
       case 'passenger-rides':
         return <RideDispatchPage />;
       case 'earnings':
@@ -97,7 +137,11 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
       case 'trips':
         return isIndependentDriver ? <IndependentTripsPage /> : <DriverTrips />;
       case 'profile':
-        return <DriverProfile onNavigate={setCurrentPage} onLogout={handleSignOut} />;
+        return isIndependentDriver ? (
+          <IndependentProfilePage onNavigate={setCurrentPage} />
+        ) : (
+          <DriverProfile onNavigate={setCurrentPage} onLogout={handleSignOut} />
+        );
 
       case 'equipment':
         return isFleetDriver ? <DriverEquipment onBack={() => setCurrentPage('dashboard')} /> : null;
@@ -140,71 +184,210 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
     }
   };
 
-  return (
-    <div className="flex min-h-dvh flex-col overflow-x-hidden bg-gradient-to-br from-slate-100 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+  const shell = (
+    <div
+      className={cn(
+        'flex min-h-dvh flex-col overflow-x-hidden',
+        mintDriverLayout
+          ? 'bg-[#f7f9fb] dark:bg-slate-950'
+          : 'bg-gradient-to-br from-slate-100 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900',
+      )}
+    >
       <AnnouncementBanner />
 
-      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 safe-t backdrop-blur-lg dark:border-slate-800 dark:bg-slate-900/80">
+      <header
+        className={cn(
+          'sticky top-0 z-40 border-b safe-t backdrop-blur-lg',
+          mintDriverLayout
+            ? 'border-slate-200/90 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900'
+            : 'border-slate-200 bg-white/90 dark:border-slate-800 dark:bg-slate-900/80',
+        )}
+      >
         <div className="mx-auto flex h-14 max-w-lg items-center justify-between gap-3 safe-x sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
-          <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setMenuOpen(true)}
-              className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800"
-              aria-label="Open menu"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-            <ThemeToggleButton />
-          </div>
-
-          <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:gap-3">
-            {isFleetDriver && (
+          <div className="flex min-w-0 items-center gap-3">
+            {!mintTripsLayout && !mintProfileLayout && (
+              <button
+                type="button"
+                onClick={() => setMenuOpen(true)}
+                className="rounded-lg p-2 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+                aria-label="Open menu"
+              >
+                <Menu className="h-6 w-6" />
+              </button>
+            )}
+            {mintTripsLayout || mintProfileLayout ? (
               <>
-                <OfflineStatusIndicator />
-                <NotificationCenter />
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage('profile')}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-blue-100 shadow-sm dark:border-slate-800 dark:bg-blue-950/40"
+                  aria-label="Profile"
+                >
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="text-sm font-bold text-blue-800 dark:text-blue-300">{profileInitial}</span>
+                  )}
+                </button>
+                <h1 className="text-xl font-bold tracking-tight text-[#004ac6] dark:text-blue-400">Roam</h1>
+              </>
+            ) : mintEarningsLayout || mintUtilityLayout ? (
+              <h1 className="text-xl font-bold tracking-tight text-[#004ac6] dark:text-blue-400">Roam</h1>
+            ) : mintHomeLayout ? (
+              <h1 className="text-xl font-bold text-emerald-600 dark:text-emerald-400">Roam Driver</h1>
+            ) : (
+              <>
+                <ThemeToggleButton />
+                <h1 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white sm:hidden">
+                  Roam Driver
+                </h1>
               </>
             )}
-            <div className="min-w-0 text-right">
-              <h1 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white">Roam Driver</h1>
-              {isFleetDriver && fleet && (
-                <div className="flex items-center justify-end gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
-                  <Building2 className="w-3 h-3 shrink-0" />
-                  <span className="truncate max-w-[120px] sm:max-w-[200px] md:max-w-md">{fleet.name}</span>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-3">
+            {mintTripsLayout || mintProfileLayout ? (
+              <button
+                type="button"
+                onClick={() => toast.message('Notifications coming soon')}
+                className="flex h-10 w-10 items-center justify-center rounded-full text-[#004ac6] transition-colors hover:bg-slate-100 active:scale-95 dark:text-blue-400 dark:hover:bg-slate-800"
+                aria-label="Notifications"
+              >
+                <Bell className="h-5 w-5" />
+              </button>
+            ) : mintDriverLayout ? (
+              <>
+                {mintEarningsLayout && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      window.dispatchEvent(new Event('roam-driver-earnings-refresh'))
+                    }
+                    className="rounded-full p-2 text-slate-500 transition-colors hover:bg-slate-100 active:scale-95 dark:text-slate-400 dark:hover:bg-slate-800"
+                    aria-label="Refresh earnings"
+                  >
+                    <RefreshCw className="h-5 w-5" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage('profile')}
+                  className={cn(
+                    'h-10 w-10 overflow-hidden rounded-full border-2 object-cover',
+                    mintEarningsLayout
+                      ? 'border-emerald-500 dark:border-emerald-400'
+                      : 'border-slate-200 dark:border-slate-700',
+                  )}
+                  aria-label="Profile"
+                >
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center bg-emerald-100 text-sm font-bold text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                      {profileInitial}
+                    </span>
+                  )}
+                </button>
+              </>
+            ) : (
+              <>
+                {isFleetDriver && (
+                  <>
+                    <OfflineStatusIndicator />
+                    <NotificationCenter />
+                  </>
+                )}
+                <div className="min-w-0 text-right hidden sm:block">
+                  <h1 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white">Roam Driver</h1>
+                  {isFleetDriver && fleet && (
+                    <div className="flex items-center justify-end gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+                      <Building2 className="w-3 h-3 shrink-0" />
+                      <span className="truncate max-w-[120px] sm:max-w-[200px] md:max-w-md">{fleet.name}</span>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-            <div className="w-8 h-8 shrink-0 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-sm">
-              <Car className="w-4 h-4 text-white" />
-            </div>
+                <div className="w-8 h-8 shrink-0 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-sm">
+                  <Car className="w-4 h-4 text-white" />
+                </div>
+              </>
+            )}
           </div>
         </div>
       </header>
 
       <main className="flex-1 overflow-x-hidden overflow-y-auto pb-[var(--driver-bottom-nav-total)]">
-        <div className="mx-auto w-full min-w-0 max-w-lg safe-x py-4 sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
+        <div
+          className={cn(
+            'mx-auto w-full min-w-0 max-w-lg safe-x sm:max-w-2xl md:max-w-3xl lg:max-w-4xl',
+            mintDriverLayout ? 'py-6' : 'py-4',
+          )}
+        >
           {renderPage()}
         </div>
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 safe-b backdrop-blur-lg dark:border-slate-800 dark:bg-slate-900/95">
-        <div className="mx-auto flex h-16 max-w-lg items-center justify-around safe-x sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
+      <nav
+        className={cn(
+          'fixed bottom-0 left-0 right-0 z-40 border-t safe-b backdrop-blur-lg',
+          mintDriverLayout
+            ? 'border-slate-200/90 bg-white dark:border-slate-800 dark:bg-slate-900'
+            : 'border-slate-200 bg-white/95 dark:border-slate-800 dark:bg-slate-900/95',
+        )}
+      >
+        <div className="mx-auto flex h-[4.5rem] max-w-lg items-center justify-between safe-x sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
           {bottomNavItems.map((item) => {
-            const Icon = item.icon;
+            const Icon =
+              item.id === 'earnings' && mintDriverLayout
+                ? Banknote
+                : item.id === 'profile' && mintProfileLayout && currentPage === 'profile'
+                  ? User
+                  : item.icon;
             const isActive = currentPage === item.id;
+            const activeColor =
+              isActive && mintTripsLayout && item.id === 'trips'
+                ? 'text-[#004ac6] dark:text-blue-400'
+                : isActive && mintProfileLayout && item.id === 'profile'
+                  ? 'text-[#004ac6] dark:text-blue-400'
+                  : isActive && mintEarningsLayout && item.id === 'earnings'
+                    ? 'text-[#004ac6] dark:text-blue-400'
+                    : isActive
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : 'text-slate-500 dark:text-slate-400';
             return (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => setCurrentPage(item.id)}
-                className={`flex flex-col items-center gap-1 px-4 py-2 rounded-lg transition-colors ${
-                  isActive
-                    ? 'text-emerald-600 dark:text-emerald-400'
-                    : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
-                }`}
+                className={cn(
+                  'flex flex-1 flex-col items-center gap-1 py-2 transition-colors hover:text-slate-800 dark:hover:text-slate-200',
+                  activeColor,
+                )}
               >
-                <Icon className="w-5 h-5" strokeWidth={isActive ? 2.25 : 2} />
-                <span className="text-[11px] font-semibold tracking-wide">{item.label}</span>
+                <div
+                  className={cn(
+                    'p-3 transition-colors',
+                    isActive &&
+                      mintDriverLayout &&
+                      (item.id === 'trips' && mintTripsLayout
+                        ? 'rounded-2xl bg-blue-100 px-6 dark:bg-blue-950/40'
+                        : item.id === 'profile' && mintProfileLayout
+                          ? 'rounded-2xl bg-blue-100 px-6 dark:bg-blue-950/40'
+                          : item.id === 'earnings' && mintEarningsLayout
+                            ? 'rounded-2xl bg-blue-500/10 px-6'
+                            : item.id === 'dashboard'
+                              ? 'rounded-2xl bg-emerald-500/10 px-6'
+                              : ''),
+                  )}
+                >
+                  <Icon
+                    className={cn(
+                      'w-6 h-6',
+                      isActive && mintProfileLayout && item.id === 'profile' && 'fill-current',
+                    )}
+                    strokeWidth={isActive ? 2.25 : 2}
+                  />
+                </div>
+                <span className="text-[11px] font-bold tracking-wide">{item.label}</span>
               </button>
             );
           })}
@@ -307,4 +490,6 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
       )}
     </div>
   );
+
+  return isIndependentDriver ? <RideDispatchProvider>{shell}</RideDispatchProvider> : shell;
 }

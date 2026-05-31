@@ -1,137 +1,157 @@
 import React from 'react';
-import { Car, Plus, Calendar, AlertCircle, CheckCircle, Edit } from 'lucide-react';
+import { AlertCircle, Car, CheckCircle, Edit, Plus } from 'lucide-react';
+import { cn } from '@roam/ui';
+
+const cardClass =
+  'rounded-2xl border border-slate-200 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.05)] dark:border-slate-700 dark:bg-slate-900';
 
 export function MyVehicle() {
   const hasVehicle = false;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">My Vehicle</h1>
-        <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded-full">
-          Independent
-        </span>
-      </div>
+      <h1 className="text-xl font-bold text-slate-900 dark:text-white">My Vehicle</h1>
 
       {!hasVehicle ? (
-        <div className="bg-slate-800/50 rounded-xl p-8 border border-slate-700/50 text-center">
-          <div className="w-16 h-16 rounded-full bg-slate-700 flex items-center justify-center mx-auto mb-4">
-            <Car className="w-8 h-8 text-slate-500" />
+        <div className={cn(cardClass, 'p-8 text-center')}>
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+            <Car className="h-8 w-8 text-slate-400 dark:text-slate-500" />
           </div>
-          <h3 className="text-lg font-semibold text-white mb-2">Add Your Vehicle</h3>
-          <p className="text-slate-400 text-sm mb-6 max-w-xs mx-auto">
+          <h3 className="mb-2 text-lg font-semibold text-slate-900 dark:text-white">Add Your Vehicle</h3>
+          <p className="mx-auto mb-6 max-w-xs text-sm text-slate-600 dark:text-slate-400">
             Add your vehicle information to track maintenance, expenses, and platform approvals.
           </p>
-          <button className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-white font-medium rounded-lg transition-colors mx-auto">
-            <Plus className="w-4 h-4" />
+          <button
+            type="button"
+            className="mx-auto inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+          >
+            <Plus className="h-4 w-4" />
             Add Vehicle
           </button>
         </div>
       ) : (
         <>
-          <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-            <div className="flex items-start justify-between mb-4">
+          <div className={cn(cardClass, 'p-5')}>
+            <div className="mb-4 flex items-start justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
-                  <Car className="w-6 h-6 text-emerald-400" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-950/50">
+                  <Car className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
                 </div>
                 <div>
-                  <p className="text-white font-medium">2022 Toyota Camry</p>
-                  <p className="text-slate-400 text-sm">ABC-1234</p>
+                  <p className="font-semibold text-slate-900 dark:text-white">2022 Toyota Camry</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">ABC-1234</p>
                 </div>
               </div>
-              <button className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors">
-                <Edit className="w-4 h-4" />
+              <button
+                type="button"
+                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                aria-label="Edit vehicle"
+              >
+                <Edit className="h-4 w-4" />
               </button>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <div className="bg-slate-900/50 rounded-lg p-3">
-                <p className="text-slate-500 text-xs mb-1">Ownership</p>
-                <p className="text-white text-sm">Owned</p>
+              <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800/80">
+                <p className="mb-1 text-xs text-slate-500 dark:text-slate-400">Ownership</p>
+                <p className="text-sm font-medium text-slate-900 dark:text-white">Owned</p>
               </div>
-              <div className="bg-slate-900/50 rounded-lg p-3">
-                <p className="text-slate-500 text-xs mb-1">Mileage</p>
-                <p className="text-white text-sm">45,000 mi</p>
+              <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800/80">
+                <p className="mb-1 text-xs text-slate-500 dark:text-slate-400">Mileage</p>
+                <p className="text-sm font-medium text-slate-900 dark:text-white">45,000 mi</p>
               </div>
             </div>
           </div>
 
-          <div className="space-y-2">
-            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider px-1">
+          <section>
+            <h2 className="mb-3 px-1 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Platform Status
             </h2>
-            <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 divide-y divide-slate-700/50">
+            <div className={cn(cardClass, 'divide-y divide-slate-100 overflow-hidden dark:divide-slate-800')}>
               <PlatformStatus platform="Uber" status="approved" />
               <PlatformStatus platform="Lyft" status="pending" />
               <PlatformStatus platform="Bolt" status="not_submitted" />
             </div>
-          </div>
+          </section>
 
-          <div className="space-y-2">
-            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider px-1">
+          <section>
+            <h2 className="mb-3 px-1 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Documents
             </h2>
-            <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 divide-y divide-slate-700/50">
+            <div className={cn(cardClass, 'divide-y divide-slate-100 overflow-hidden dark:divide-slate-800')}>
               <DocumentItem label="Registration" expires="Dec 2026" status="valid" />
               <DocumentItem label="Insurance" expires="Jun 2026" status="expiring" />
               <DocumentItem label="Inspection" expires="Mar 2026" status="expired" />
             </div>
-          </div>
+          </section>
         </>
       )}
     </div>
   );
 }
 
-interface PlatformStatusProps {
+function PlatformStatus({
+  platform,
+  status,
+}: {
   platform: string;
   status: 'approved' | 'pending' | 'not_submitted' | 'rejected';
-}
-
-function PlatformStatus({ platform, status }: PlatformStatusProps) {
+}) {
   const statusConfig = {
-    approved: { label: 'Approved', color: 'text-emerald-400', bg: 'bg-emerald-500/20' },
-    pending: { label: 'Pending', color: 'text-amber-400', bg: 'bg-amber-500/20' },
-    not_submitted: { label: 'Not Submitted', color: 'text-slate-400', bg: 'bg-slate-500/20' },
-    rejected: { label: 'Rejected', color: 'text-red-400', bg: 'bg-red-500/20' },
+    approved: {
+      label: 'Approved',
+      className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-400',
+    },
+    pending: {
+      label: 'Pending',
+      className: 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-400',
+    },
+    not_submitted: {
+      label: 'Not Submitted',
+      className: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+    },
+    rejected: {
+      label: 'Rejected',
+      className: 'bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-400',
+    },
   };
 
   const config = statusConfig[status];
 
   return (
     <div className="flex items-center justify-between px-4 py-3">
-      <span className="text-white text-sm">{platform}</span>
-      <span className={`text-xs px-2 py-1 rounded-full ${config.bg} ${config.color}`}>
+      <span className="text-sm font-medium text-slate-900 dark:text-white">{platform}</span>
+      <span className={cn('rounded-full px-2 py-1 text-xs font-semibold', config.className)}>
         {config.label}
       </span>
     </div>
   );
 }
 
-interface DocumentItemProps {
+function DocumentItem({
+  label,
+  expires,
+  status,
+}: {
   label: string;
   expires: string;
   status: 'valid' | 'expiring' | 'expired';
-}
-
-function DocumentItem({ label, expires, status }: DocumentItemProps) {
-  const statusConfig = {
-    valid: { icon: CheckCircle, color: 'text-emerald-400' },
-    expiring: { icon: AlertCircle, color: 'text-amber-400' },
-    expired: { icon: AlertCircle, color: 'text-red-400' },
-  };
-
-  const config = statusConfig[status];
-  const Icon = config.icon;
+}) {
+  const Icon = status === 'valid' ? CheckCircle : AlertCircle;
+  const color =
+    status === 'valid'
+      ? 'text-emerald-600 dark:text-emerald-400'
+      : status === 'expiring'
+        ? 'text-amber-500'
+        : 'text-red-500';
 
   return (
     <div className="flex items-center justify-between px-4 py-3">
       <div>
-        <p className="text-white text-sm">{label}</p>
-        <p className="text-slate-500 text-xs">Expires: {expires}</p>
+        <p className="text-sm font-medium text-slate-900 dark:text-white">{label}</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">Expires: {expires}</p>
       </div>
-      <Icon className={`w-5 h-5 ${config.color}`} />
+      <Icon className={cn('h-5 w-5', color)} />
     </div>
   );
 }

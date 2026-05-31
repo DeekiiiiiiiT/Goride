@@ -170,7 +170,17 @@ export default function HomePage() {
   }, [coordsReady, setTripPickerActive]);
 
   const handleTripPickerBack = useCallback(() => {
+    if (quoteDebounceRef.current) {
+      clearTimeout(quoteDebounceRef.current);
+      quoteDebounceRef.current = null;
+    }
+    setDropoffAddress('');
+    setDropoff(null);
+    setDestinationChosen(false);
     setRouteExpanded(true);
+    setQuickActionsHidden(false);
+    setQuotesBySlug({});
+    setQuotesLoading(false);
   }, []);
 
   const quote = vehicleOption ? quotesBySlug[vehicleOption] ?? null : null;
@@ -856,12 +866,6 @@ export default function HomePage() {
                   quoteBySlug={quoteBySlug}
                 />
               </div>
-            )}
-
-            {!coordsReady && services.length > 0 && (
-              <p className="px-5 pb-4 text-center text-sm" style={{ color: 'var(--home-on-surface-muted)' }}>
-                Enter pickup and destination to see ride options
-              </p>
             )}
           </div>
         </div>

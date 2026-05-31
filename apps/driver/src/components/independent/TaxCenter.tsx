@@ -1,61 +1,65 @@
 import React from 'react';
-import { FileText, Download, Calendar, DollarSign, TrendingUp, AlertCircle } from 'lucide-react';
+import { AlertCircle, Calendar, Download, FileText, TrendingUp } from 'lucide-react';
+import { cn } from '@roam/ui';
+
+const cardClass =
+  'rounded-2xl border border-slate-200 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.05)] dark:border-slate-700 dark:bg-slate-900';
 
 export function TaxCenter() {
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">Tax Center</h1>
-        <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded-full">
-          Independent
-        </span>
-      </div>
+      <h1 className="text-xl font-bold text-slate-900 dark:text-white">Tax Center</h1>
 
-      <div className="bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-2xl p-4 border border-indigo-500/30">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-12 h-12 rounded-xl bg-indigo-500/20 flex items-center justify-center">
-            <FileText className="w-6 h-6 text-indigo-400" />
+      <div
+        className={cn(
+          cardClass,
+          'border-indigo-200 bg-gradient-to-br from-indigo-50 to-violet-50 p-5 dark:from-indigo-950/40 dark:to-violet-950/30 dark:border-indigo-900',
+        )}
+      >
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 dark:bg-indigo-950/60">
+            <FileText className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
           </div>
           <div>
-            <p className="text-indigo-300 font-medium">2026 Tax Summary</p>
-            <p className="text-indigo-400/70 text-sm">Year to Date</p>
+            <p className="font-semibold text-slate-900 dark:text-white">2026 Tax Summary</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Year to date</p>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <p className="text-indigo-400/70 text-xs mb-1">Total Income</p>
-            <p className="text-xl font-bold text-white">$0.00</p>
+            <p className="mb-1 text-xs text-slate-500 dark:text-slate-400">Total Income</p>
+            <p className="text-xl font-bold tabular-nums text-slate-900 dark:text-white">$0.00</p>
           </div>
           <div>
-            <p className="text-indigo-400/70 text-xs mb-1">Total Deductions</p>
-            <p className="text-xl font-bold text-white">$0.00</p>
+            <p className="mb-1 text-xs text-slate-500 dark:text-slate-400">Total Deductions</p>
+            <p className="text-xl font-bold tabular-nums text-slate-900 dark:text-white">$0.00</p>
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-          <div className="flex items-center gap-2 text-slate-400 text-xs mb-2">
-            <TrendingUp className="w-3 h-3" />
+        <div className={cn(cardClass, 'p-4')}>
+          <div className="mb-2 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <TrendingUp className="h-3.5 w-3.5" />
             <span>Est. Tax Liability</span>
           </div>
-          <p className="text-xl font-bold text-white">$0.00</p>
+          <p className="text-xl font-bold tabular-nums text-slate-900 dark:text-white">$0.00</p>
         </div>
-        <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-          <div className="flex items-center gap-2 text-slate-400 text-xs mb-2">
-            <Calendar className="w-3 h-3" />
+        <div className={cn(cardClass, 'p-4')}>
+          <div className="mb-2 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <Calendar className="h-3.5 w-3.5" />
             <span>Quarters Filed</span>
           </div>
-          <p className="text-xl font-bold text-white">0/4</p>
+          <p className="text-xl font-bold text-slate-900 dark:text-white">0/4</p>
         </div>
       </div>
 
-      <div className="space-y-2">
-        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider px-1">
+      <section>
+        <h2 className="mb-3 px-1 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
           Deduction Categories
         </h2>
-        <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 divide-y divide-slate-700/50">
+        <div className={cn(cardClass, 'divide-y divide-slate-100 overflow-hidden dark:divide-slate-800')}>
           <DeductionRow label="Mileage Deduction" amount="$0.00" rate="$0.67/mi" />
           <DeductionRow label="Gas Expenses" amount="$0.00" />
           <DeductionRow label="Car Wash" amount="$0.00" />
@@ -63,36 +67,48 @@ export function TaxCenter() {
           <DeductionRow label="Tolls" amount="$0.00" />
           <DeductionRow label="Maintenance" amount="$0.00" />
         </div>
-      </div>
+      </section>
 
-      <div className="space-y-2">
-        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider px-1">
+      <section>
+        <h2 className="mb-3 px-1 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
           Tax Documents
         </h2>
-        <div className="space-y-2">
-          <button className="w-full flex items-center gap-3 bg-slate-800/50 rounded-xl p-4 border border-slate-700/50 hover:bg-slate-700/30 transition-colors">
-            <Download className="w-5 h-5 text-emerald-400" />
-            <div className="flex-1 text-left">
-              <p className="text-white text-sm">Export Annual Summary</p>
-              <p className="text-slate-500 text-xs">PDF report for tax filing</p>
+        <div className="space-y-3">
+          <button
+            type="button"
+            className={cn(
+              cardClass,
+              'flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/80',
+            )}
+          >
+            <Download className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">Export Annual Summary</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">PDF report for tax filing</p>
             </div>
           </button>
-          <button className="w-full flex items-center gap-3 bg-slate-800/50 rounded-xl p-4 border border-slate-700/50 hover:bg-slate-700/30 transition-colors">
-            <Download className="w-5 h-5 text-emerald-400" />
-            <div className="flex-1 text-left">
-              <p className="text-white text-sm">Export Expense Report</p>
-              <p className="text-slate-500 text-xs">CSV for your accountant</p>
+          <button
+            type="button"
+            className={cn(
+              cardClass,
+              'flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/80',
+            )}
+          >
+            <Download className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">Export Expense Report</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">CSV for your accountant</p>
             </div>
           </button>
         </div>
-      </div>
+      </section>
 
-      <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-950/30">
         <div className="flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
           <div>
-            <p className="text-amber-300 font-medium text-sm">Tax Reminder</p>
-            <p className="text-amber-400/70 text-xs mt-1">
+            <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">Tax Reminder</p>
+            <p className="mt-1 text-xs text-amber-800/80 dark:text-amber-300/80">
               Consult a tax professional for personalized advice. This is for tracking purposes only.
             </p>
           </div>
@@ -102,20 +118,14 @@ export function TaxCenter() {
   );
 }
 
-interface DeductionRowProps {
-  label: string;
-  amount: string;
-  rate?: string;
-}
-
-function DeductionRow({ label, amount, rate }: DeductionRowProps) {
+function DeductionRow({ label, amount, rate }: { label: string; amount: string; rate?: string }) {
   return (
     <div className="flex items-center justify-between px-4 py-3">
       <div>
-        <p className="text-slate-300 text-sm">{label}</p>
-        {rate && <p className="text-slate-500 text-xs">{rate}</p>}
+        <p className="text-sm font-medium text-slate-900 dark:text-white">{label}</p>
+        {rate && <p className="text-xs text-slate-500 dark:text-slate-400">{rate}</p>}
       </div>
-      <span className="text-white font-medium">{amount}</span>
+      <span className="text-sm font-semibold tabular-nums text-slate-900 dark:text-white">{amount}</span>
     </div>
   );
 }

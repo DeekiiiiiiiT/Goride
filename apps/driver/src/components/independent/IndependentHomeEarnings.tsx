@@ -61,10 +61,6 @@ export function IndependentHomeEarnings() {
           {formatMoneyMinor(data?.cash_minor ?? 0, data?.currency ?? 'JMD')}
         </p>
       )}
-
-      <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">
-        Card earnings — coming soon
-      </p>
     </section>
   );
 }

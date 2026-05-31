@@ -19,7 +19,7 @@ import { ServiceRequestForm } from './ServiceRequestForm';
 import { ManualTripForm } from '../trips/ManualTripForm';
 import { TripFareDialog, type TripFareInitialData } from '../trips/TripFareDialog';
 import { TripTimer } from '../trips/TripTimer';
-import { RideDispatchHome } from '../rides/RideDispatchHome';
+import { DriverMintHome } from '../home/DriverMintHome';
 import { useDriver } from '../../contexts/DriverContext';
 import { createManualTrip, ManualTripInput } from '../../utils/tripFactory';
 import { useAuth } from '../../contexts/AuthContext';
@@ -37,11 +37,14 @@ import { TierCalculations } from '../../utils/tierCalculations';
 import { generateMonthlyProjection } from '../tiers/quota-utils';
 import { format, isSameWeek } from "date-fns";
 import { DriverOverview } from './DriverOverview';
-import { IndependentHomeEarnings } from '../independent/IndependentHomeEarnings';
 import { formatSafeDate, formatSafeTime } from '../../utils/timeUtils';
 import { resolveMissingTripAddresses } from '../../utils/addressResolver';
 import { getDriverPortalTripEarnings } from '../../utils/tripEarnings';
-export function DriverDashboard() {
+type DriverDashboardProps = {
+  onNavigate?: (page: string) => void;
+};
+
+export function DriverDashboard({ onNavigate }: DriverDashboardProps = {}) {
   const { user } = useAuth();
   const { isIndependentDriver } = useDriver();
   const { driverRecord, loading: driverLoading } = useCurrentDriver();
@@ -461,6 +464,10 @@ export function DriverDashboard() {
       }
   };
 
+  if (isIndependentDriver) {
+    return <DriverMintHome onNavigate={onNavigate ?? (() => {})} />;
+  }
+
   return (
     <div className="relative flex min-h-0 flex-col gap-6 pb-2">
       {loading && !hasLoadedDashboardRef.current && (
@@ -476,10 +483,7 @@ export function DriverDashboard() {
             : 'flex min-h-[calc(100dvh-10.5rem-env(safe-area-inset-bottom,0px))] flex-col gap-6'
         }
       >
-            {isIndependentDriver ? (
-              <IndependentHomeEarnings />
-            ) : (
-              <DriverOverview
+            <DriverOverview
                 className="shrink-0"
                 tierState={tierState}
                 metrics={metrics}
@@ -495,14 +499,8 @@ export function DriverDashboard() {
                 onAction={handleAction}
                 flaggedCount={flaggedCount}
               />
-            )}
-            
-            {/* Phase 3 fleet rollout: replace TripTimer with RideDispatchHome for all drivers when independent_only_matching is off */}
-            {isIndependentDriver ? (
-              <RideDispatchHome />
-            ) : (
-              <TripTimer onComplete={handleTripComplete} />
-            )}
+
+            <TripTimer onComplete={handleTripComplete} />
       </div>
 
       <FuelLogForm 

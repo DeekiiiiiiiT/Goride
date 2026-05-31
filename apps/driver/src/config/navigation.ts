@@ -50,14 +50,11 @@ const independentOnlyNavItems: NavItem[] = [
 ];
 
 export function getNavigationItems(mode: DriverMode): NavItem[] {
-  const items = mode === 'fleet'
-    ? [...commonNavItems, ...fleetOnlyNavItems]
-    : [...commonNavItems, ...independentOnlyNavItems];
-
   if (mode === 'independent') {
-    return items.filter((item) => item.id !== 'passenger-rides');
+    // Bottom nav covers Home, Earnings, Trips, and Profile for independent drivers.
+    return independentOnlyNavItems;
   }
-  return items;
+  return [...commonNavItems, ...fleetOnlyNavItems];
 }
 
 export function getBottomNavItems(): NavItem[] {

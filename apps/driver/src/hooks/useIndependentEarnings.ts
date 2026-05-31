@@ -27,8 +27,13 @@ export function useIndependentEarnings(period: DriverEarningsPeriod) {
 
   useEffect(() => {
     const onTripCompleted = () => void refresh();
+    const onEarningsRefresh = () => void refresh();
     window.addEventListener('roam-driver-trip-completed', onTripCompleted);
-    return () => window.removeEventListener('roam-driver-trip-completed', onTripCompleted);
+    window.addEventListener('roam-driver-earnings-refresh', onEarningsRefresh);
+    return () => {
+      window.removeEventListener('roam-driver-trip-completed', onTripCompleted);
+      window.removeEventListener('roam-driver-earnings-refresh', onEarningsRefresh);
+    };
   }, [refresh]);
 
   return { data, loading, error, refresh };

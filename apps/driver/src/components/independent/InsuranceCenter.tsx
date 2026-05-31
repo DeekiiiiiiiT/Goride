@@ -1,96 +1,105 @@
 import React from 'react';
-import { Shield, AlertCircle, CheckCircle, Calendar, Upload, Phone, ChevronRight } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle,
+  ChevronRight,
+  Phone,
+  Shield,
+  Upload,
+} from 'lucide-react';
+import { cn } from '@roam/ui';
+
+const cardClass =
+  'rounded-2xl border border-slate-200 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.05)] dark:border-slate-700 dark:bg-slate-900';
 
 export function InsuranceCenter() {
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">Insurance</h1>
-        <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded-full">
-          Independent
-        </span>
-      </div>
+      <h1 className="text-xl font-bold text-slate-900 dark:text-white">Insurance</h1>
 
-      <div className="bg-gradient-to-br from-blue-500/20 to-cyan-500/20 rounded-2xl p-4 border border-blue-500/30">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center">
-            <Shield className="w-6 h-6 text-blue-400" />
+      <div
+        className={cn(
+          cardClass,
+          'border-sky-200 bg-gradient-to-br from-sky-50 to-cyan-50 p-5 dark:from-sky-950/40 dark:to-cyan-950/30',
+        )}
+      >
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-sky-100 dark:bg-sky-950/60">
+            <Shield className="h-6 w-6 text-sky-600 dark:text-sky-400" />
           </div>
-          <div className="flex-1">
-            <p className="text-blue-300 font-medium">Insurance Status</p>
-            <p className="text-blue-400/70 text-sm">No policy on file</p>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-slate-900 dark:text-white">Insurance Status</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">No policy on file</p>
           </div>
-          <AlertCircle className="w-6 h-6 text-amber-400" />
+          <AlertCircle className="h-6 w-6 shrink-0 text-amber-500" />
         </div>
 
-        <button className="w-full py-2.5 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/50 text-blue-300 font-medium rounded-lg transition-colors flex items-center justify-center gap-2">
-          <Upload className="w-4 h-4" />
+        <button
+          type="button"
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-sky-200 bg-white py-2.5 text-sm font-semibold text-sky-700 transition-colors hover:bg-sky-50 dark:border-sky-800 dark:bg-slate-900 dark:text-sky-400 dark:hover:bg-slate-800"
+        >
+          <Upload className="h-4 w-4" />
           Upload Policy
         </button>
       </div>
 
-      <div className="space-y-2">
-        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider px-1">
+      <section>
+        <h2 className="mb-3 px-1 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
           Rideshare Coverage
         </h2>
-        <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 divide-y divide-slate-700/50">
-          <CoverageItem
-            platform="Uber"
-            status="unknown"
-            description="Add Uber rideshare endorsement"
-          />
-          <CoverageItem
-            platform="Lyft"
-            status="unknown"
-            description="Add Lyft rideshare endorsement"
-          />
+        <div className={cn(cardClass, 'divide-y divide-slate-100 overflow-hidden dark:divide-slate-800')}>
+          <CoverageItem platform="Uber" description="Add Uber rideshare endorsement" status="unknown" />
+          <CoverageItem platform="Lyft" description="Add Lyft rideshare endorsement" status="unknown" />
         </div>
-      </div>
+      </section>
 
-      <div className="space-y-2">
-        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider px-1">
+      <section>
+        <h2 className="mb-3 px-1 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
           Required Documents
         </h2>
-        <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 divide-y divide-slate-700/50">
+        <div className={cn(cardClass, 'divide-y divide-slate-100 overflow-hidden dark:divide-slate-800')}>
           <DocumentItem label="Insurance Card" status="missing" />
           <DocumentItem label="Policy Declaration" status="missing" />
           <DocumentItem label="Rideshare Endorsement" status="missing" />
         </div>
-      </div>
+      </section>
 
-      <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-        <h3 className="text-white font-medium mb-3">Minimum Requirements</h3>
-        <ul className="space-y-2 text-sm text-slate-400">
+      <div className={cn(cardClass, 'p-4')}>
+        <h3 className="mb-3 font-semibold text-slate-900 dark:text-white">Minimum Requirements</h3>
+        <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-400">
           <li className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
             Liability: $50,000/$100,000/$25,000
           </li>
           <li className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            Comprehensive & Collision recommended
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            Comprehensive &amp; Collision recommended
           </li>
           <li className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
             Rideshare endorsement required
           </li>
         </ul>
       </div>
 
-      <button className="w-full flex items-center gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 hover:bg-emerald-500/20 transition-colors">
-        <Phone className="w-5 h-5 text-emerald-400" />
-        <div className="flex-1 text-left">
-          <p className="text-emerald-300 font-medium">Get Insurance Quote</p>
-          <p className="text-emerald-400/70 text-sm">Compare rideshare-friendly options</p>
+      <button
+        type="button"
+        className="flex w-full items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-left transition-colors hover:bg-emerald-100 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/50"
+      >
+        <Phone className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-emerald-900 dark:text-emerald-200">Get Insurance Quote</p>
+          <p className="text-sm text-emerald-800/80 dark:text-emerald-400/80">Compare rideshare-friendly options</p>
         </div>
-        <ChevronRight className="w-5 h-5 text-emerald-400" />
+        <ChevronRight className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
       </button>
 
-      <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-950/30">
         <div className="flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
           <div>
-            <p className="text-amber-300 font-medium text-sm">Insurance Requirement</p>
-            <p className="text-amber-400/70 text-xs mt-1">
+            <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">Insurance Requirement</p>
+            <p className="mt-1 text-xs text-amber-800/80 dark:text-amber-300/80">
               All rideshare platforms require proof of insurance with rideshare endorsement.
             </p>
           </div>
@@ -100,51 +109,46 @@ export function InsuranceCenter() {
   );
 }
 
-interface CoverageItemProps {
+function CoverageItem({
+  platform,
+  description,
+  status,
+}: {
   platform: string;
-  status: 'covered' | 'not_covered' | 'unknown';
   description: string;
-}
-
-function CoverageItem({ platform, status, description }: CoverageItemProps) {
-  const statusConfig = {
-    covered: { icon: CheckCircle, color: 'text-emerald-400' },
-    not_covered: { icon: AlertCircle, color: 'text-red-400' },
-    unknown: { icon: AlertCircle, color: 'text-amber-400' },
-  };
-
-  const config = statusConfig[status];
-  const Icon = config.icon;
+  status: 'covered' | 'not_covered' | 'unknown';
+}) {
+  const Icon =
+    status === 'covered' ? CheckCircle : AlertCircle;
+  const color =
+    status === 'covered'
+      ? 'text-emerald-600 dark:text-emerald-400'
+      : status === 'not_covered'
+        ? 'text-red-500'
+        : 'text-amber-500';
 
   return (
     <div className="flex items-center gap-3 px-4 py-3">
-      <Icon className={`w-5 h-5 ${config.color}`} />
-      <div className="flex-1">
-        <p className="text-white text-sm">{platform}</p>
-        <p className="text-slate-500 text-xs">{description}</p>
+      <Icon className={cn('h-5 w-5 shrink-0', color)} />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-slate-900 dark:text-white">{platform}</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">{description}</p>
       </div>
     </div>
   );
 }
 
-interface DocumentItemProps {
-  label: string;
-  status: 'uploaded' | 'missing' | 'expired';
-}
-
-function DocumentItem({ label, status }: DocumentItemProps) {
-  const statusConfig = {
-    uploaded: { label: 'Uploaded', color: 'text-emerald-400', bg: 'bg-emerald-500/20' },
-    missing: { label: 'Missing', color: 'text-amber-400', bg: 'bg-amber-500/20' },
-    expired: { label: 'Expired', color: 'text-red-400', bg: 'bg-red-500/20' },
-  };
-
-  const config = statusConfig[status];
+function DocumentItem({ label, status }: { label: string; status: 'uploaded' | 'missing' | 'expired' }) {
+  const config = {
+    uploaded: { label: 'Uploaded', className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-400' },
+    missing: { label: 'Missing', className: 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-400' },
+    expired: { label: 'Expired', className: 'bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-400' },
+  }[status];
 
   return (
     <div className="flex items-center justify-between px-4 py-3">
-      <span className="text-slate-300 text-sm">{label}</span>
-      <span className={`text-xs px-2 py-1 rounded-full ${config.bg} ${config.color}`}>
+      <span className="text-sm text-slate-900 dark:text-white">{label}</span>
+      <span className={cn('rounded-full px-2 py-1 text-xs font-semibold', config.className)}>
         {config.label}
       </span>
     </div>

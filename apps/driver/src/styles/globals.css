@@ -183,6 +183,15 @@ html.dark body {
   pointer-events: none;
 }
 
+.driver-map-pattern {
+  background-image: radial-gradient(rgb(209 213 219 / 0.9) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.dark .driver-map-pattern {
+  background-image: radial-gradient(rgb(71 85 105 / 0.5) 1px, transparent 1px);
+}
+
 /* Inputs: 16px+ avoids iOS zoom on focus */
 .input-touch {
   font-size: 1rem;

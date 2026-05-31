@@ -1,96 +1,97 @@
 import React from 'react';
-import { Receipt, Plus, Fuel, Car, Wrench, DollarSign, ChevronRight } from 'lucide-react';
+import { Car, ChevronRight, DollarSign, Fuel, Plus, Receipt, Wrench } from 'lucide-react';
+import { cn } from '@roam/ui';
+
+const cardClass =
+  'rounded-2xl border border-slate-200 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.05)] dark:border-slate-700 dark:bg-slate-900';
 
 export function IndependentExpenses() {
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">Expenses</h1>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-white text-sm font-medium rounded-lg transition-colors">
-          <Plus className="w-4 h-4" />
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-xl font-bold text-slate-900 dark:text-white">Expenses</h1>
+        <button
+          type="button"
+          className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+        >
+          <Plus className="h-4 w-4" />
           Add Expense
         </button>
       </div>
 
-      <div className="bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-2xl p-4 border border-purple-500/30">
-        <p className="text-purple-300 text-sm mb-1">This Month's Expenses</p>
-        <p className="text-3xl font-bold text-white">$0.00</p>
-        <p className="text-purple-400/70 text-sm mt-2">0 expenses recorded</p>
+      <div
+        className={cn(
+          cardClass,
+          'border-violet-200 bg-gradient-to-br from-violet-50 to-fuchsia-50 p-5 dark:from-violet-950/40 dark:to-fuchsia-950/30',
+        )}
+      >
+        <p className="text-sm text-slate-600 dark:text-slate-400">This month&apos;s expenses</p>
+        <p className="mt-1 text-3xl font-bold tabular-nums text-slate-900 dark:text-white">$0.00</p>
+        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">0 expenses recorded</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <ExpenseCategory
-          icon={<Fuel className="w-5 h-5" />}
-          label="Gas"
-          amount="$0.00"
-          color="text-amber-400"
-          bg="bg-amber-500/20"
-        />
-        <ExpenseCategory
-          icon={<Car className="w-5 h-5" />}
-          label="Car Wash"
-          amount="$0.00"
-          color="text-blue-400"
-          bg="bg-blue-500/20"
-        />
-        <ExpenseCategory
-          icon={<Wrench className="w-5 h-5" />}
-          label="Maintenance"
-          amount="$0.00"
-          color="text-emerald-400"
-          bg="bg-emerald-500/20"
-        />
-        <ExpenseCategory
-          icon={<DollarSign className="w-5 h-5" />}
-          label="Other"
-          amount="$0.00"
-          color="text-purple-400"
-          bg="bg-purple-500/20"
-        />
+        <ExpenseCategory icon={<Fuel className="h-5 w-5" />} label="Gas" amount="$0.00" tone="amber" />
+        <ExpenseCategory icon={<Car className="h-5 w-5" />} label="Car Wash" amount="$0.00" tone="blue" />
+        <ExpenseCategory icon={<Wrench className="h-5 w-5" />} label="Maintenance" amount="$0.00" tone="emerald" />
+        <ExpenseCategory icon={<DollarSign className="h-5 w-5" />} label="Other" amount="$0.00" tone="violet" />
       </div>
 
-      <div className="space-y-2">
-        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider px-1">
+      <section>
+        <h2 className="mb-3 px-1 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
           Recent Expenses
         </h2>
-        <div className="bg-slate-800/50 rounded-xl p-8 border border-slate-700/50 text-center">
-          <Receipt className="w-8 h-8 text-slate-600 mx-auto mb-3" />
-          <p className="text-slate-400 text-sm">No expenses recorded yet</p>
-          <p className="text-slate-500 text-xs mt-1">
+        <div className={cn(cardClass, 'p-8 text-center')}>
+          <Receipt className="mx-auto mb-3 h-8 w-8 text-slate-300 dark:text-slate-600" />
+          <p className="text-sm text-slate-600 dark:text-slate-400">No expenses recorded yet</p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
             Track your driving expenses for tax deductions
           </p>
         </div>
-      </div>
+      </section>
 
-      <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-white font-medium">Export for Taxes</p>
-            <p className="text-slate-400 text-sm">Download expense report</p>
-          </div>
-          <ChevronRight className="w-5 h-5 text-slate-500" />
+      <button
+        type="button"
+        className={cn(
+          cardClass,
+          'flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/80',
+        )}
+      >
+        <div>
+          <p className="font-semibold text-slate-900 dark:text-white">Export for Taxes</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Download expense report</p>
         </div>
-      </div>
+        <ChevronRight className="h-5 w-5 text-slate-400" />
+      </button>
     </div>
   );
 }
 
-interface ExpenseCategoryProps {
+function ExpenseCategory({
+  icon,
+  label,
+  amount,
+  tone,
+}: {
   icon: React.ReactNode;
   label: string;
   amount: string;
-  color: string;
-  bg: string;
-}
+  tone: 'amber' | 'blue' | 'emerald' | 'violet';
+}) {
+  const tones = {
+    amber: 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400',
+    blue: 'bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400',
+    emerald: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400',
+    violet: 'bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-400',
+  };
 
-function ExpenseCategory({ icon, label, amount, color, bg }: ExpenseCategoryProps) {
   return (
-    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-      <div className={`w-10 h-10 rounded-lg ${bg} flex items-center justify-center ${color} mb-2`}>
+    <div className={cn(cardClass, 'p-4')}>
+      <div className={cn('mb-2 flex h-10 w-10 items-center justify-center rounded-lg', tones[tone])}>
         {icon}
       </div>
-      <p className="text-lg font-bold text-white">{amount}</p>
-      <p className="text-xs text-slate-400">{label}</p>
+      <p className="text-lg font-bold tabular-nums text-slate-900 dark:text-white">{amount}</p>
+      <p className="text-xs text-slate-500 dark:text-slate-400">{label}</p>
     </div>
   );
 }

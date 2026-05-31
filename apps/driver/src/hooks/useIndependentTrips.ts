@@ -34,8 +34,13 @@ export function useIndependentTrips(enabled = true) {
 
   useEffect(() => {
     const onTripCompleted = () => void refresh(false);
+    const onTripsRefresh = () => void refresh(false);
     window.addEventListener('roam-driver-trip-completed', onTripCompleted);
-    return () => window.removeEventListener('roam-driver-trip-completed', onTripCompleted);
+    window.addEventListener('roam-driver-trips-refresh', onTripsRefresh);
+    return () => {
+      window.removeEventListener('roam-driver-trip-completed', onTripCompleted);
+      window.removeEventListener('roam-driver-trips-refresh', onTripsRefresh);
+    };
   }, [refresh]);
 
   const loadAll = useCallback(() => refresh(true), [refresh]);
