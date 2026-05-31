@@ -1,20 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import {
-  AlertCircle,
-  AlertTriangle,
   BadgeCheck,
   Car,
-  CheckCircle2,
   ChevronRight,
-  ClipboardCheck,
   FileText,
-  IdCard,
   Loader2,
-  Shield,
   Star,
   User,
-  Wrench,
 } from 'lucide-react';
 import {
   Button,
@@ -30,8 +23,9 @@ import {
 } from '@roam/ui';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
-import { getDocStatus, useDriverProfileExtras, type DocStatus } from '../../hooks/useDriverProfileExtras';
+import { useDriverProfileExtras } from '../../hooks/useDriverProfileExtras';
 import { api } from '../../services/api';
+import { buildProfileDocuments, documentsSummary } from './profileDocuments';
 
 type Props = {
   onNavigate: (page: string) => void;
@@ -66,10 +60,11 @@ export function IndependentProfilePage({ onNavigate }: Props) {
   const statusLabel = (driverRecord?.status as string) || 'Active';
   const isActive = statusLabel.toLowerCase() === 'active';
 
-  const licenseStatus = getDocStatus(driverRecord?.licenseExpiry as string | undefined);
-  const insuranceStatus = getDocStatus(vehicle?.insuranceExpiry as string | undefined);
-  const fitnessStatus = getDocStatus(vehicle?.fitnessExpiry as string | undefined);
-  const regStatus = getDocStatus(vehicle?.registrationExpiry as string | undefined);
+  const documents = useMemo(
+    () => buildProfileDocuments(driverRecord, vehicle),
+    [driverRecord, vehicle],
+  );
+  const docSummary = documentsSummary(documents);
 
   const vehicleTitle = vehicle
     ? `${vehicle.year ?? ''} ${vehicle.make ?? ''} ${vehicle.model ?? ''}`.trim() || 'Assigned vehicle'
@@ -81,17 +76,16 @@ export function IndependentProfilePage({ onNavigate }: Props) {
   const loading = driverLoading || extrasLoading;
 
   return (
-    <div className="flex flex-col gap-8">
-      <section className={cn(cardClass, 'flex flex-col items-center p-8 text-center')}>
+    <div className="flex flex-col gap-5">
+      <section className={cn(cardClass, 'px-4 py-5 text-center')}>
         {loading ? (
-          <div className="flex flex-col items-center gap-4 py-8">
-            <Loader2 className="h-10 w-10 animate-spin text-[#004ac6]" />
-            <p className="text-sm text-slate-500">Loading profile…</p>
+          <div className="flex items-center justify-center py-4">
+            <Loader2 className="h-8 w-8 animate-spin text-[#004ac6]" />
           </div>
         ) : (
-          <>
-            <div className="relative mb-6">
-              <div className="flex h-28 w-28 items-center justify-center overflow-hidden rounded-full border-4 border-white bg-slate-100 text-3xl font-bold text-[#004ac6] shadow-md dark:border-slate-800 dark:bg-slate-800">
+          <div className="flex flex-col items-center">
+            <div className="relative mb-3">
+              <div className="flex h-[4.5rem] w-[4.5rem] items-center justify-center overflow-hidden rounded-full border-2 border-white bg-slate-100 text-base font-bold text-[#004ac6] shadow-sm dark:border-slate-800 dark:bg-slate-800">
                 {avatarUrl ? (
                   <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
                 ) : (
@@ -100,110 +94,93 @@ export function IndependentProfilePage({ onNavigate }: Props) {
               </div>
               {isActive && (
                 <div
-                  className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-emerald-500 text-white dark:border-slate-900"
+                  className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-emerald-500 text-white dark:border-slate-900"
                   aria-hidden
                 >
-                  <BadgeCheck className="h-4 w-4" />
+                  <BadgeCheck className="h-3 w-3" />
                 </div>
               )}
             </div>
-            <h1 className="mb-1 text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+            <h1 className="max-w-full px-1 text-sm font-bold leading-snug tracking-wide text-slate-900 dark:text-white">
               {name.toUpperCase()}
             </h1>
-            <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">ID: {idShort}</p>
-            <div className="flex flex-wrap items-center justify-center gap-3">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-4 py-1 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
-                <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" aria-hidden />
+            <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">ID: {idShort}</p>
+            <div className="mt-2.5 flex flex-wrap items-center justify-center gap-2">
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
                 {statusLabel}
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-4 py-1 text-[11px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" aria-hidden />
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                <Star className="h-3 w-3 fill-amber-400 text-amber-400" aria-hidden />
                 {rating} Rating
               </span>
             </div>
-          </>
+          </div>
         )}
       </section>
 
       <section>
-        <h2 className="mb-4 px-1 text-lg font-semibold text-slate-900 dark:text-white">Documents</h2>
-        <div className={cn(cardClass, 'divide-y divide-slate-100 overflow-hidden dark:divide-slate-800')}>
-          <DocumentRow
-            icon={<IdCard className="h-6 w-6 text-[#004ac6]" />}
-            label="Driver's License"
-            status={licenseStatus.status}
-            subtitle={licenseStatus.text}
-          />
-          <DocumentRow
-            icon={<Shield className="h-6 w-6 text-[#004ac6]" />}
-            label="Vehicle Insurance"
-            status={insuranceStatus.status}
-            subtitle={insuranceStatus.text}
-          />
-          <DocumentRow
-            icon={<Wrench className="h-6 w-6 text-[#004ac6]" />}
-            label="Vehicle Inspection (Fitness)"
-            status={fitnessStatus.status}
-            subtitle={fitnessStatus.text}
-          />
-          <DocumentRow
-            icon={<FileText className="h-6 w-6 text-[#004ac6]" />}
-            label="Vehicle Registration"
-            status={regStatus.status}
-            subtitle={regStatus.text}
-          />
-          <DocumentRow
-            icon={<ClipboardCheck className="h-6 w-6 text-[#004ac6]" />}
-            label="Background Check"
-            status="valid"
-            subtitle="Valid"
-          />
-        </div>
+        <h2 className="mb-3 px-1 text-sm font-semibold text-slate-900 dark:text-white">Documents</h2>
+        <button
+          type="button"
+          onClick={() => onNavigate('documents')}
+          className={cn(
+            cardClass,
+            'flex w-full items-center justify-between p-5 text-left transition-colors hover:bg-slate-50 active:scale-[0.99] dark:hover:bg-slate-800/80',
+          )}
+        >
+          <div className="flex min-w-0 items-center gap-4">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-100/80 dark:bg-blue-950/40">
+              <FileText className="h-6 w-6 text-[#004ac6]" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold text-slate-900 dark:text-white">Documents</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{docSummary}</p>
+            </div>
+          </div>
+          <ChevronRight className="h-5 w-5 shrink-0 text-slate-400" />
+        </button>
       </section>
 
       <section>
-        <h2 className="mb-4 px-1 text-lg font-semibold text-slate-900 dark:text-white">Vehicle</h2>
+        <h2 className="mb-3 px-1 text-sm font-semibold text-slate-900 dark:text-white">Vehicle</h2>
         <button
           type="button"
           onClick={() => onNavigate('vehicle')}
           className={cn(
             cardClass,
-            'flex w-full items-center justify-between p-6 text-left transition-colors hover:bg-slate-50 active:scale-[0.99] dark:hover:bg-slate-800/80',
+            'flex w-full items-center justify-between p-5 text-left transition-colors hover:bg-slate-50 active:scale-[0.99] dark:hover:bg-slate-800/80',
           )}
         >
           <div className="flex items-center gap-4">
-            <div className="flex h-16 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
+            <div className="flex h-14 w-[4.5rem] shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
               {vehicle?.image ? (
-                <img
-                  src={String(vehicle.image)}
-                  alt=""
-                  className="h-full w-full object-cover"
-                />
+                <img src={String(vehicle.image)} alt="" className="h-full w-full object-cover" />
               ) : (
-                <Car className="h-8 w-8 text-slate-300" />
+                <Car className="h-7 w-7 text-slate-300" />
               )}
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="font-bold text-slate-900 dark:text-white">{vehicleTitle}</p>
               <p className="text-sm text-slate-500 dark:text-slate-400">{vehicleSubtitle}</p>
             </div>
           </div>
-          <ChevronRight className="h-5 w-5 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
+          <ChevronRight className="h-5 w-5 shrink-0 text-slate-400" />
         </button>
       </section>
 
       <section>
-        <h2 className="mb-4 px-1 text-lg font-semibold text-slate-900 dark:text-white">Settings</h2>
+        <h2 className="mb-3 px-1 text-sm font-semibold text-slate-900 dark:text-white">Settings</h2>
         <button
           type="button"
           onClick={() => setPersonalOpen(true)}
           className={cn(
             cardClass,
-            'flex w-full items-center justify-between p-6 text-left transition-colors hover:bg-slate-50 active:scale-[0.99] dark:hover:bg-slate-800/80',
+            'flex w-full items-center justify-between p-5 text-left transition-colors hover:bg-slate-50 active:scale-[0.99] dark:hover:bg-slate-800/80',
           )}
         >
           <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800">
               <User className="h-6 w-6 text-slate-500" />
             </div>
             <p className="font-semibold text-slate-900 dark:text-white">Personal Information</p>
@@ -220,50 +197,6 @@ export function IndependentProfilePage({ onNavigate }: Props) {
         phone={(driverRecord?.phone as string) || '—'}
         driverId={idShort}
       />
-    </div>
-  );
-}
-
-function DocumentRow({
-  icon,
-  label,
-  status,
-  subtitle,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  status: DocStatus;
-  subtitle: string;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 p-6 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50">
-      <div className="flex min-w-0 items-center gap-4">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-100/80 dark:bg-blue-950/40">
-          {icon}
-        </div>
-        <div className="min-w-0">
-          <p className="font-semibold text-slate-900 dark:text-white">{label}</p>
-          <p
-            className={cn(
-              'text-sm',
-              status === 'error'
-                ? 'text-red-600 dark:text-red-400'
-                : status === 'warning'
-                  ? 'text-amber-600 dark:text-amber-400'
-                  : 'text-slate-500 dark:text-slate-400',
-            )}
-          >
-            {subtitle}
-          </p>
-        </div>
-      </div>
-      {status === 'valid' ? (
-        <CheckCircle2 className="h-6 w-6 shrink-0 fill-emerald-500 text-emerald-500" />
-      ) : status === 'warning' ? (
-        <AlertTriangle className="h-6 w-6 shrink-0 text-amber-500" />
-      ) : (
-        <AlertCircle className="h-6 w-6 shrink-0 text-red-500" />
-      )}
     </div>
   );
 }

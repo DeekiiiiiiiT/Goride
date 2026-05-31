@@ -6,7 +6,6 @@ import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { RideDispatchHome } from '../rides/RideDispatchHome';
 import { DriverHomeEarningsHero } from './DriverHomeEarningsHero';
 import { DriverHomeQuickStats } from './DriverHomeQuickStats';
-import { DriverHomeDemandCard } from './DriverHomeDemandCard';
 import { DriverOnlineMiniToggle } from './DriverOnlineMiniToggle';
 
 type Props = {
@@ -63,9 +62,8 @@ export function DriverMintHome({ onNavigate }: Props) {
       <div className="px-4">
         <div className="-mt-4 rounded-[2.5rem] border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
           <DriverHomeQuickStats rating={rating} />
-          <DriverHomeDemandCard online={online} />
 
-          <div className="flex flex-col items-center gap-3">
+          <div className="mt-6 flex flex-col items-center gap-3">
             <DriverOnlineMiniToggle online={online} onToggle={toggleOnline} />
             <p className="text-center text-xs text-slate-400 dark:text-slate-500">
               {online

@@ -27,6 +27,7 @@ import { DriverEarnings } from '../legacy/DriverEarnings';
 import { DriverTrips } from '../legacy/DriverTrips';
 import { IndependentEarningsPage } from '../independent/IndependentEarningsPage';
 import { IndependentProfilePage } from '../independent/IndependentProfilePage';
+import { IndependentProfileDocumentsPage } from '../independent/IndependentProfileDocumentsPage';
 import { IndependentTripsPage } from '../independent/IndependentTripsPage';
 import { DriverProfile } from '../legacy/DriverProfile';
 import { DriverExpenses } from '../legacy/DriverExpenses';
@@ -69,13 +70,16 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
     (currentPage === 'vehicle' ||
       currentPage === 'expenses' ||
       currentPage === 'tax' ||
-      currentPage === 'insurance');
+      currentPage === 'insurance' ||
+      currentPage === 'documents');
   const mintDriverLayout =
     mintHomeLayout ||
     mintEarningsLayout ||
     mintTripsLayout ||
     mintProfileLayout ||
     mintUtilityLayout;
+  const profileFlowActive =
+    currentPage === 'profile' || (isIndependentDriver && currentPage === 'documents');
 
   const avatarUrl =
     (user?.user_metadata?.avatar_url as string | undefined) ||
@@ -142,6 +146,10 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
         ) : (
           <DriverProfile onNavigate={setCurrentPage} onLogout={handleSignOut} />
         );
+      case 'documents':
+        return isIndependentDriver ? (
+          <IndependentProfileDocumentsPage onBack={() => setCurrentPage('profile')} />
+        ) : null;
 
       case 'equipment':
         return isFleetDriver ? <DriverEquipment onBack={() => setCurrentPage('dashboard')} /> : null;
@@ -339,14 +347,14 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
             const Icon =
               item.id === 'earnings' && mintDriverLayout
                 ? Banknote
-                : item.id === 'profile' && mintProfileLayout && currentPage === 'profile'
+                : item.id === 'profile' && profileFlowActive && mintDriverLayout
                   ? User
                   : item.icon;
-            const isActive = currentPage === item.id;
+            const isActive = item.id === 'profile' ? profileFlowActive : currentPage === item.id;
             const activeColor =
               isActive && mintTripsLayout && item.id === 'trips'
                 ? 'text-[#004ac6] dark:text-blue-400'
-                : isActive && mintProfileLayout && item.id === 'profile'
+                : isActive && profileFlowActive && item.id === 'profile'
                   ? 'text-[#004ac6] dark:text-blue-400'
                   : isActive && mintEarningsLayout && item.id === 'earnings'
                     ? 'text-[#004ac6] dark:text-blue-400'
@@ -370,7 +378,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
                       mintDriverLayout &&
                       (item.id === 'trips' && mintTripsLayout
                         ? 'rounded-2xl bg-blue-100 px-6 dark:bg-blue-950/40'
-                        : item.id === 'profile' && mintProfileLayout
+                        : item.id === 'profile' && profileFlowActive
                           ? 'rounded-2xl bg-blue-100 px-6 dark:bg-blue-950/40'
                           : item.id === 'earnings' && mintEarningsLayout
                             ? 'rounded-2xl bg-blue-500/10 px-6'
@@ -382,7 +390,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
                   <Icon
                     className={cn(
                       'w-6 h-6',
-                      isActive && mintProfileLayout && item.id === 'profile' && 'fill-current',
+                      isActive && profileFlowActive && item.id === 'profile' && 'fill-current',
                     )}
                     strokeWidth={isActive ? 2.25 : 2}
                   />

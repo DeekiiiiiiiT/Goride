@@ -3,7 +3,6 @@ import { toast } from 'sonner';
 import {
   Calendar as CalendarIcon,
   Loader2,
-  RefreshCw,
   Search,
 } from 'lucide-react';
 import {
@@ -23,7 +22,7 @@ import { TripHistoryCard } from '../trips/TripHistoryCard';
 import { tripWhen } from '../trips/tripDetailsUtils';
 
 export function IndependentTripsPage() {
-  const { trips, loading, error, refresh, loadAll, total } = useIndependentTrips();
+  const { trips, loading, error, loadAll, total } = useIndependentTrips();
   const [searchTerm, setSearchTerm] = useState('');
   const [date, setDate] = useState<DateRange | undefined>(undefined);
   const [hasFetchedAll, setHasFetchedAll] = useState(false);
@@ -60,7 +59,6 @@ export function IndependentTripsPage() {
     setFilteredTrips(filtered);
   }, [searchTerm, date, trips]);
 
-  const handleRefresh = () => void refresh(false);
   const handleViewAll = () => {
     void loadAll().then(() => {
       setHasFetchedAll(true);
@@ -69,7 +67,7 @@ export function IndependentTripsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center gap-3">
         <div className="relative flex-1">
           <Search
@@ -112,19 +110,10 @@ export function IndependentTripsPage() {
             )}
           </PopoverContent>
         </Popover>
-        <button
-          type="button"
-          onClick={handleRefresh}
-          disabled={loading}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-blue-600 shadow-[0_4px_20px_rgba(0,0,0,0.05)] transition-colors hover:bg-slate-50 active:scale-95 disabled:opacity-50 dark:bg-slate-900 dark:text-blue-400"
-          aria-label="Refresh trips"
-        >
-          <RefreshCw className={cn('h-5 w-5', loading && 'animate-spin')} />
-        </button>
       </div>
 
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Trip history</h2>
+        <h2 className="text-base font-semibold text-slate-900 dark:text-white">Trip history</h2>
         <span className="text-sm text-slate-500 dark:text-slate-400">Showing last 30 days</span>
       </div>
 
@@ -143,7 +132,7 @@ export function IndependentTripsPage() {
           <p className="text-sm text-slate-500 dark:text-slate-400">No trips found for this period.</p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-2.5">
           {filteredTrips.map((trip, index) => (
             <TripHistoryCard
               key={trip.id}

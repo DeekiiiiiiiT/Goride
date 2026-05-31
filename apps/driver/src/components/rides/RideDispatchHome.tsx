@@ -68,19 +68,6 @@ export function RideDispatchHome({ embedded = false }: Props) {
           </p>
         )}
 
-        {embedded && showWaiting && (
-          <div className="flex flex-col items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-center dark:border-slate-700 dark:bg-slate-800/50">
-            <span className="relative flex h-3 w-3">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-              <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500" />
-            </span>
-            <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Waiting for ride requests</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs">
-              Stay on this screen. You will be notified when a passenger books nearby.
-            </p>
-          </div>
-        )}
-
         {!embedded && !online && !locationGoOnlineBlocked && !showActiveRide && (
           <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4 shrink-0">
             Slide the gauge below to receive Roam ride requests from passengers nearby.
