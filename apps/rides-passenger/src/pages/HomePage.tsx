@@ -429,7 +429,7 @@ export default function HomePage() {
         <button
           type="button"
           onClick={() => setPickupMapOpen(true)}
-          className="absolute bottom-[calc(5.5rem+min(42vh,520px))] right-4 z-20 flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold shadow-lg transition-transform active:scale-95"
+          className="absolute bottom-[calc(5.5rem+min(36vh,400px))] right-4 z-20 flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold shadow-lg transition-transform active:scale-95"
           style={{
             backgroundColor: 'var(--home-pill-bg)',
             color: 'var(--home-primary)',
@@ -450,14 +450,16 @@ export default function HomePage() {
           }}
         >
           <div
-            className="home-glass-sheet mx-auto max-w-xl overflow-visible rounded-3xl"
-            style={{
-              maxHeight: keyboardOpen
-                ? Math.max(280, viewportHeight - 16)
-                : 'min(78dvh, 720px)',
-            }}
+            className={`home-glass-sheet home-booking-sheet mx-auto max-w-xl overflow-hidden rounded-3xl ${
+              keyboardOpen ? 'home-booking-sheet--keyboard' : ''
+            }`}
+            style={
+              keyboardOpen
+                ? { maxHeight: Math.max(280, viewportHeight - keyboardInset - 24) }
+                : undefined
+            }
           >
-            <div className="flex justify-center py-3">
+            <div className="flex shrink-0 justify-center py-3">
               <div
                 className="h-1.5 w-12 rounded-full"
                 style={{ backgroundColor: 'color-mix(in srgb, var(--home-outline-variant) 45%, transparent)' }}
@@ -465,7 +467,7 @@ export default function HomePage() {
               />
             </div>
 
-            <div className="max-h-[min(72dvh,680px)] overflow-y-auto px-5 pb-6 pt-1">
+            <div className="home-booking-sheet__top px-5 pb-3 pt-1">
               <h1
                 className="home-display mb-6 text-[30px] font-bold leading-tight tracking-tight"
                 style={{ color: 'var(--home-on-surface)' }}
@@ -605,7 +607,7 @@ export default function HomePage() {
 
               {surge != null && surge > 1 && (
                 <p
-                  className="mb-4 rounded-2xl border px-4 py-2 text-sm"
+                  className="mb-3 rounded-2xl border px-4 py-2 text-sm"
                   style={{
                     color: 'var(--home-on-surface)',
                     borderColor: 'var(--home-card-border)',
@@ -616,31 +618,36 @@ export default function HomePage() {
                   <strong className="tabular-nums">×{surge.toFixed(2)}</strong>
                 </p>
               )}
+            </div>
 
-              {coordsReady && (
-                <div className="mb-4 space-y-2 border-t pt-4" style={{ borderColor: 'var(--home-card-border)' }}>
-                  <TransportOptionPicker
-                    vehicles={[]}
-                    services={services}
-                    selected={vehicleOption}
-                    onSelect={setVehicleOption}
-                    quoteBySlug={quoteBySlug}
-                  />
-                </div>
-              )}
+            {coordsReady && (
+              <div
+                className="home-booking-sheet__services px-5"
+                aria-label="Ride services"
+                role="region"
+              >
+                {quotesLoading && (
+                  <p className="mb-2 text-center text-sm" style={{ color: 'var(--home-on-surface-muted)' }}>
+                    Getting prices…
+                  </p>
+                )}
+                <TransportOptionPicker
+                  vehicles={[]}
+                  services={services}
+                  selected={vehicleOption}
+                  onSelect={setVehicleOption}
+                  quoteBySlug={quoteBySlug}
+                />
+              </div>
+            )}
 
-              {!coordsReady && services.length > 0 && (
-                <p className="mb-4 text-center text-sm" style={{ color: 'var(--home-on-surface-muted)' }}>
-                  Enter pickup and destination to see ride options
-                </p>
-              )}
+            {!coordsReady && services.length > 0 && (
+              <p className="px-5 pb-2 text-center text-sm" style={{ color: 'var(--home-on-surface-muted)' }}>
+                Enter pickup and destination to see ride options
+              </p>
+            )}
 
-              {quotesLoading && coordsReady && (
-                <p className="mb-3 text-center text-sm" style={{ color: 'var(--home-on-surface-muted)' }}>
-                  Getting prices…
-                </p>
-              )}
-
+            <div className="home-booking-sheet__footer px-5 pb-6">
               {locationBlocked && (
                 <p
                   className="mb-3 rounded-2xl border px-4 py-2 text-center text-sm"
@@ -661,7 +668,9 @@ export default function HomePage() {
                 type="button"
                 onClick={handleBook}
                 disabled={bookLoading || !canBook}
-                className="btn-touch flex h-14 w-full items-center justify-center gap-2 rounded-2xl text-lg font-semibold shadow-lg transition-all active:scale-[0.97] disabled:opacity-50"
+                className={`btn-touch flex h-14 w-full items-center justify-center gap-2 rounded-2xl text-lg font-semibold shadow-lg transition-all active:scale-[0.97] disabled:opacity-50 ${
+                  coordsReady ? 'mt-4' : ''
+                }`}
                 style={{
                   backgroundColor: 'var(--home-primary)',
                   color: 'var(--home-on-primary)',

@@ -103,6 +103,54 @@ html.dark .home-page {
   box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.18);
 }
 
+/* Booking sheet: pin fields + footer; only services list scrolls */
+.home-booking-sheet {
+  display: flex;
+  flex-direction: column;
+  max-height: min(56dvh, 520px);
+}
+
+.home-booking-sheet--keyboard {
+  max-height: none;
+}
+
+.home-booking-sheet--keyboard .home-booking-sheet__services {
+  max-height: none;
+}
+
+.home-booking-sheet__top {
+  flex-shrink: 0;
+}
+
+.home-booking-sheet__services {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: min(240px, 34dvh);
+  margin-top: 0.25rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--home-outline-variant) 55%, transparent) transparent;
+}
+
+.home-booking-sheet__services::-webkit-scrollbar {
+  width: 5px;
+}
+
+.home-booking-sheet__services::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--home-outline-variant) 50%, transparent);
+}
+
+.home-booking-sheet__footer {
+  flex-shrink: 0;
+  padding-top: 0.75rem;
+  margin-top: 0.25rem;
+  border-top: 1px solid var(--home-card-border);
+}
+
 .home-place-input {
   width: 100%;
   min-height: 3.5rem;
