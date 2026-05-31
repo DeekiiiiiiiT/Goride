@@ -4,6 +4,7 @@ import type { RidesVehicleTypeDto } from '@/types/vehicleTypes';
 import { vehicleCapacityDisplay } from '@/types/vehicleTypes';
 
 type Variant = 'admin' | 'rider';
+export type Density = 'default' | 'compact';
 
 export type ServiceQuoteDisplay = {
   fareLabel: string | null;
@@ -19,11 +20,32 @@ type Props = {
   selected: string;
   onSelect: (slug: string) => void;
   variant?: Variant;
+  density?: Density;
   /** @deprecated Use quoteBySlug for per-service fares */
   selectedEtaLine?: string | null;
   /** Per-service fare + ETA (Uber-style, shown on every row). */
   quoteBySlug?: Record<string, ServiceQuoteDisplay>;
 };
+
+function buildCompactMetaLine(
+  v: RidesVehicleTypeDto,
+  quote?: ServiceQuoteDisplay,
+): string {
+  const cap = vehicleCapacityDisplay(v);
+  const tripMin =
+    quote?.tripMinutes != null ? `~${Math.round(quote.tripMinutes)} min` : null;
+  const eta = quote?.etaLine?.trim() || null;
+  const timePart = tripMin ?? eta;
+  return [cap, timePart].filter(Boolean).join(' · ');
+}
+
+function selectedDetailLine(v: RidesVehicleTypeDto): string | null {
+  const tag = v.tagline?.trim();
+  if (tag) return tag;
+  const desc = v.description?.trim();
+  if (!desc) return null;
+  return desc.length <= 72 ? desc : `${desc.slice(0, 71)}…`;
+}
 
 function OptionCard({
   v,
@@ -108,56 +130,110 @@ function OptionCard({
   );
 }
 
+function CompactOptionCard({
+  v,
+  active,
+  onSelect,
+  quote,
+}: {
+  v: RidesVehicleTypeDto;
+  active: boolean;
+  onSelect: () => void;
+  quote?: ServiceQuoteDisplay;
+}) {
+  const metaLine = buildCompactMetaLine(v, quote);
+  const detail = active ? selectedDetailLine(v) : null;
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`home-service-row w-full touch-manipulation text-left ${active ? 'home-service-row--active' : ''}`}
+    >
+      {active && <span className="home-service-row__accent" aria-hidden />}
+      <div className="home-service-row__body min-w-0 flex-1">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="home-service-row__label truncate">{v.label}</span>
+          <div className="shrink-0 text-right pl-2">
+            {quote?.loading ? (
+              <Loader2
+                className="h-4 w-4 animate-spin"
+                style={{ color: 'var(--home-on-surface-muted)' }}
+                aria-label="Loading fare"
+              />
+            ) : quote?.unavailable ? (
+              <span className="home-service-row__price-muted">—</span>
+            ) : quote?.fareLabel ? (
+              <span className="home-service-row__price tabular-nums">{quote.fareLabel}</span>
+            ) : (
+              <span className="home-service-row__price-muted">—</span>
+            )}
+          </div>
+        </div>
+        {metaLine && (
+          <p className="home-service-row__meta truncate tabular-nums">{metaLine}</p>
+        )}
+        {detail && <p className="home-service-row__detail truncate">{detail}</p>}
+      </div>
+    </button>
+  );
+}
+
 export function TransportOptionPicker({
   vehicles,
   services,
   selected,
   onSelect,
   variant = 'rider',
+  density = 'default',
   selectedEtaLine,
   quoteBySlug,
 }: Props) {
+  const isCompact = density === 'compact' && variant === 'rider';
   const sectionTitle =
     variant === 'admin'
       ? 'text-xs font-semibold uppercase tracking-wide text-slate-500'
       : 'text-xs font-semibold uppercase tracking-wide text-zinc-500';
+  const listGap = isCompact ? 'home-service-list' : 'space-y-2';
+  const rootGap = isCompact ? '' : 'space-y-4';
+
+  const renderCard = (v: RidesVehicleTypeDto) => {
+    if (isCompact) {
+      return (
+        <CompactOptionCard
+          key={v.slug}
+          v={v}
+          active={selected === v.slug}
+          onSelect={() => onSelect(v.slug)}
+          quote={quoteBySlug?.[v.slug]}
+        />
+      );
+    }
+    return (
+      <OptionCard
+        key={v.slug}
+        v={v}
+        active={selected === v.slug}
+        onSelect={() => onSelect(v.slug)}
+        variant={variant}
+        etaLine={selected === v.slug ? selectedEtaLine : null}
+        quote={quoteBySlug?.[v.slug]}
+      />
+    );
+  };
 
   return (
-    <div className="space-y-4">
+    <div className={rootGap}>
       {vehicles.length > 0 && (
-        <div className="space-y-2">
-          <p className={sectionTitle}>Vehicle types</p>
-          <div className="space-y-2">
-            {vehicles.map((v) => (
-              <OptionCard
-                key={v.slug}
-                v={v}
-                active={selected === v.slug}
-                onSelect={() => onSelect(v.slug)}
-                variant={variant}
-                etaLine={selected === v.slug ? selectedEtaLine : null}
-                quote={quoteBySlug?.[v.slug]}
-              />
-            ))}
-          </div>
+        <div className={isCompact ? listGap : 'space-y-2'}>
+          {!isCompact && <p className={sectionTitle}>Vehicle types</p>}
+          <div className={listGap}>{vehicles.map(renderCard)}</div>
         </div>
       )}
       {services.length > 0 && (
-        <div className="space-y-2">
-          <p className={sectionTitle}>Services</p>
-          <div className="space-y-2">
-            {services.map((v) => (
-              <OptionCard
-                key={v.slug}
-                v={v}
-                active={selected === v.slug}
-                onSelect={() => onSelect(v.slug)}
-                variant={variant}
-                etaLine={selected === v.slug ? selectedEtaLine : null}
-                quote={quoteBySlug?.[v.slug]}
-              />
-            ))}
-          </div>
+        <div className={isCompact ? listGap : 'space-y-2'}>
+          {!isCompact && <p className={sectionTitle}>Services</p>}
+          <div className={listGap}>{services.map(renderCard)}</div>
         </div>
       )}
     </div>

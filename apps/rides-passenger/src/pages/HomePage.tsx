@@ -37,7 +37,7 @@ import {
   type TripPaymentMethodId,
 } from '@/lib/tripPaymentMethods';
 import { useRidesVehicleTypes } from '@/hooks/useRidesVehicleTypes';
-import { formatVehicleEtaLine } from '@/utils/formatRideEta';
+import { formatVehicleEtaLineCompact } from '@/utils/formatRideEta';
 import { usePermissionPolicy } from '@/hooks/usePermissionPolicy';
 import { PermissionOnboardingSheet } from '@/components/PermissionOnboardingSheet';
 import {
@@ -340,7 +340,7 @@ export default function HomePage() {
       fareLabel: q
         ? formatMoneyMinor(q.fare_estimate_minor, q.currency)
         : null,
-      etaLine: q ? formatVehicleEtaLine(q) : null,
+      etaLine: q ? formatVehicleEtaLineCompact(q) : null,
       tripMinutes: q?.eta_trip_minutes_estimate ?? null,
     };
   }
@@ -460,7 +460,7 @@ export default function HomePage() {
           className="absolute right-4 z-20 flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold shadow-lg transition-transform active:scale-95"
           style={{
             bottom: coordsReady
-              ? 'calc(var(--home-nav-h) + var(--home-booking-actions-h) + min(52dvh, 500px) + env(safe-area-inset-bottom, 0px) + 0.5rem)'
+              ? 'calc(var(--home-nav-h) + var(--home-booking-actions-h) + min(58dvh, 520px) + env(safe-area-inset-bottom, 0px) + 0.5rem)'
               : 'calc(var(--home-nav-h) + var(--home-booking-actions-h) + min(38dvh, 360px) + env(safe-area-inset-bottom, 0px) + 0.5rem)',
             backgroundColor: 'var(--home-pill-bg)',
             color: 'var(--home-primary)',
@@ -531,7 +531,9 @@ export default function HomePage() {
                 : undefined
             }
           >
-            <div className="flex shrink-0 justify-center py-3">
+            <div
+              className={`flex shrink-0 justify-center ${coordsReady && !keyboardOpen ? 'py-2' : 'py-3'}`}
+            >
               <div
                 className="h-1.5 w-12 rounded-full"
                 style={{ backgroundColor: 'color-mix(in srgb, var(--home-outline-variant) 45%, transparent)' }}
@@ -541,12 +543,7 @@ export default function HomePage() {
 
             <div className="home-booking-sheet__top px-5 pb-3 pt-1">
               {showCompactRoute ? (
-                <div className="mb-3">
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <p className="home-label-caps" style={{ color: 'var(--home-on-surface-muted)' }}>
-                      Your trip
-                    </p>
-                  </div>
+                <div className="mb-2">
                   <button
                     type="button"
                     className="home-route-summary touch-manipulation"
@@ -779,6 +776,7 @@ export default function HomePage() {
                   services={services}
                   selected={vehicleOption}
                   onSelect={setVehicleOption}
+                  density="compact"
                   quoteBySlug={quoteBySlug}
                 />
               </div>

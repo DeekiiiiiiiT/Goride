@@ -31,3 +31,15 @@ export function formatVehicleEtaLine(
   }
   return `${formatPickupEta(quote.pickup_eta_minutes_estimate)} · ${formatArrivalTime(quote.eta_arrival_at)}`;
 }
+
+/** Short ETA for dense service rows on Home (pickup wait only). */
+export function formatVehicleEtaLineCompact(
+  quote: {
+    drivers_available?: boolean;
+    pickup_eta_minutes_estimate?: number;
+  } | null,
+): string | null {
+  if (!quote?.drivers_available) return null;
+  if (quote.pickup_eta_minutes_estimate == null) return null;
+  return formatPickupEta(quote.pickup_eta_minutes_estimate);
+}
