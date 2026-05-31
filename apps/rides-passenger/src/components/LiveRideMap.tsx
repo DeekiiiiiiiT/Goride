@@ -12,7 +12,7 @@ type Props = {
   driverHeading?: number | null;
   statusLabel?: string;
   /** Full-bleed map behind bottom sheet (live ride screen). */
-  variant?: 'default' | 'live';
+  variant?: 'default' | 'live' | 'trip';
   /** Extra bottom padding when fitting bounds (px). */
   sheetInsetPx?: number;
 };
@@ -27,7 +27,8 @@ export function LiveRideMap({
   variant = 'default',
   sheetInsetPx = 280,
 }: Props) {
-  const isLive = variant === 'live';
+  const isLive = variant === 'live' || variant === 'trip';
+  const isTrip = variant === 'trip';
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const driverMarkerRef = useRef<google.maps.Marker | null>(null);
@@ -84,8 +85,8 @@ export function LiveRideMap({
             map,
             path,
             strokeColor: isLive ? '#2563eb' : '#059669',
-            strokeOpacity: isLive ? 0.9 : 0.85,
-            strokeWeight: isLive ? 5 : 4,
+            strokeOpacity: isTrip ? 0.88 : isLive ? 0.9 : 0.85,
+            strokeWeight: isTrip ? 6 : isLive ? 5 : 4,
           });
           for (const p of path) bounds.extend(p);
         }
@@ -95,7 +96,12 @@ export function LiveRideMap({
         }
 
         const fitPadding = isLive
-          ? { top: 72, right: 32, bottom: sheetInsetPx, left: 32 }
+          ? {
+              top: isTrip ? 88 : 72,
+              right: 32,
+              bottom: sheetInsetPx,
+              left: 32,
+            }
           : { top: 48, right: 28, bottom: 28, left: 28 };
         map.fitBounds(bounds, fitPadding);
         if (!cancelled) setStatus('ready');
@@ -112,7 +118,7 @@ export function LiveRideMap({
       driverMarkerRef.current = null;
       mapRef.current = null;
     };
-  }, [pickup.lat, pickup.lng, dropoff.lat, dropoff.lng, encodedPolyline, isLive, sheetInsetPx]);
+  }, [pickup.lat, pickup.lng, dropoff.lat, dropoff.lng, encodedPolyline, isLive, isTrip, sheetInsetPx]);
 
   useEffect(() => {
     const map = mapRef.current;

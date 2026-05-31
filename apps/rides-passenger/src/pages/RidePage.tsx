@@ -16,6 +16,7 @@ import {
 } from '@roam/ui';
 import { supabase } from '@roam/auth-client';
 import { LiveRideView } from '@/components/LiveRideView';
+import { TripInProgressView } from '@/components/TripInProgressView';
 import { TripSummaryView } from '@/components/TripSummaryView';
 import { ridesCancelRequest, ridesGetLive, ridesGetRequest } from '@/services/ridesEdge';
 
@@ -46,19 +47,33 @@ const CANCELLABLE_STATUSES: RideRequestStatus[] = [
   'driver_en_route_pickup',
 ];
 
-const LIVE_MAP_STATUSES: RideRequestStatus[] = [
+const PICKUP_LIVE_STATUSES: RideRequestStatus[] = [
   'driver_assigned',
   'driver_en_route_pickup',
   'driver_arrived_pickup',
-  'on_trip',
+];
+
+const TRIP_IN_PROGRESS_STATUSES: RideRequestStatus[] = ['on_trip'];
+
+const LIVE_TRACKING_STATUSES: RideRequestStatus[] = [
+  ...PICKUP_LIVE_STATUSES,
+  ...TRIP_IN_PROGRESS_STATUSES,
 ];
 
 function isCancellable(status: RideRequestStatus | undefined): boolean {
   return Boolean(status && CANCELLABLE_STATUSES.includes(status));
 }
 
-function showLiveMap(status: RideRequestStatus | undefined): boolean {
-  return Boolean(status && LIVE_MAP_STATUSES.includes(status));
+function isPickupLive(status: RideRequestStatus | undefined): boolean {
+  return Boolean(status && PICKUP_LIVE_STATUSES.includes(status));
+}
+
+function isTripInProgress(status: RideRequestStatus | undefined): boolean {
+  return Boolean(status && TRIP_IN_PROGRESS_STATUSES.includes(status));
+}
+
+function showLiveTracking(status: RideRequestStatus | undefined): boolean {
+  return Boolean(status && LIVE_TRACKING_STATUSES.includes(status));
 }
 
 function getCancelCopy(status: RideRequestStatus | undefined): string {
@@ -174,7 +189,7 @@ export default function RidePage() {
     refetchInterval: (q) => {
       const st = q.state.data?.ride.status;
       if (!st || st === 'completed' || st === 'cancelled') return false;
-      if (st === 'driver_arrived_pickup') return RIDE_ARRIVED_SYNC_MS;
+      if (st === 'driver_arrived_pickup' || st === 'on_trip') return RIDE_ARRIVED_SYNC_MS;
       if (st === 'driver_en_route_pickup') {
         const r = q.state.data?.ride;
         if (q.state.data?.wait_time || r?.wait_time_started_at) return RIDE_ARRIVED_SYNC_MS;
@@ -202,7 +217,7 @@ export default function RidePage() {
 
   const { data: liveData } = useQuery({
     queryKey: ['ride-live', id],
-    enabled: Boolean(id && ride && showLiveMap(ride.status)),
+    enabled: Boolean(id && ride && showLiveTracking(ride.status)),
     queryFn: () => ridesGetLive(id!),
     refetchInterval: RIDE_SYNC_MS,
   });
@@ -312,9 +327,18 @@ export default function RidePage() {
     return <TripSummaryView ride={ride} />;
   }
 
-  const useLiveRideLayout = ride && showLiveMap(ride.status);
+  if (ride && isTripInProgress(ride.status)) {
+    return (
+      <TripInProgressView
+        ride={ride}
+        driverLocation={driverLocation}
+        driverHeading={liveData?.driver_location?.heading ?? ride.last_driver_heading ?? null}
+        onBack={() => navigate('/')}
+      />
+    );
+  }
 
-  if (useLiveRideLayout) {
+  if (ride && isPickupLive(ride.status)) {
     return (
       <>
         <LiveRideView
@@ -427,12 +451,6 @@ export default function RidePage() {
               >
                 {ride.status === 'matching' ? 'Cancel search' : 'Cancel ride'}
               </button>
-            )}
-
-            {ride.status === 'on_trip' && (
-              <p className="text-sm text-zinc-500 text-center px-2">
-                Need to stop the trip? Contact Roam support — in-trip cancellation is disabled for safety.
-              </p>
             )}
 
             {ride.status === 'cancelled' && (

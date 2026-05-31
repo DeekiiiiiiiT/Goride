@@ -59,13 +59,6 @@ export function liveRideStatusHeadline(status: RideRequestStatus, ride: RideRequ
     }
     case 'driver_arrived_pickup':
       return 'Your driver has arrived';
-    case 'on_trip': {
-      const mins = ride.duration_estimate_minutes;
-      if (mins != null && mins > 0) {
-        return `${Math.round(mins)} min trip to destination`;
-      }
-      return 'On the way to your destination';
-    }
     default:
       return 'Your ride';
   }
@@ -244,12 +237,6 @@ export function LiveRideView({
 
             {(ride.status === 'driver_arrived_pickup' || ride.status === 'driver_en_route_pickup') &&
               waitTime && <RiderWaitTimeRow waitTime={waitTime} />}
-
-            {ride.status === 'on_trip' && (
-              <p className="live-ride-note">
-                Need help during your trip? Use Safety or contact Roam support.
-              </p>
-            )}
 
             {cancellable ? (
               <button

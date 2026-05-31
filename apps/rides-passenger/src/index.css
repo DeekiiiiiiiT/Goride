@@ -9,6 +9,7 @@
 @import "./styles/passenger-theme.css";
 @import "./styles/trip-summary.css";
 @import "./styles/live-ride.css";
+@import "./styles/trip-in-progress.css";
 
 :root {
   --font-sans: system-ui, -apple-system, "Segoe UI", "Inter", sans-serif;
