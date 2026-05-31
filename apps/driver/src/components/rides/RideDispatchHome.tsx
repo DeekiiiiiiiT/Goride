@@ -5,10 +5,7 @@ import { RideOfferCard } from './RideOfferCard';
 import { ActiveRidePanel } from './ActiveRidePanel';
 import { OnlineGaugeSlider } from './OnlineGaugeSlider';
 import { PermissionOnboardingSheet } from '../PermissionOnboardingSheet';
-
-/** Space for compact online slider (~6.5rem) + bottom nav (h-16) + safe area */
-const BOTTOM_CHROME_OFFSET =
-  'calc(10.75rem + env(safe-area-inset-bottom, 0px))';
+import { shouldRetractOnlineSlider } from './rideDispatchUtils';
 
 export function RideDispatchHome() {
   const {
@@ -34,12 +31,14 @@ export function RideDispatchHome() {
   const showActiveRide = activeRide && isDriverActiveRideStatus(activeRide.status);
   const showWaiting = online && offers.length === 0 && !showActiveRide;
   const goOnlineDisabled = (!vehicleReady && !online) || (locationGoOnlineBlocked && !online);
+  const retractSlider = shouldRetractOnlineSlider(!!showActiveRide, offers.length);
 
   return (
     <>
       <div
-        className="flex flex-1 flex-col gap-4 min-h-0"
-        style={{ paddingBottom: BOTTOM_CHROME_OFFSET }}
+        className={`flex flex-1 flex-col gap-4 min-h-0 ${
+          retractSlider ? 'driver-scroll-pad-nav-only' : 'driver-scroll-pad-for-slider'
+        }`}
       >
         <PermissionOnboardingSheet
           permissions={permissions}
@@ -104,12 +103,14 @@ export function RideDispatchHome() {
         )}
       </div>
 
-      <OnlineGaugeSlider
-        online={online}
-        onToggle={toggleOnline}
-        disabled={goOnlineDisabled}
-        className="fixed left-0 right-0 z-30 bottom-[calc(4rem+env(safe-area-inset-bottom,0px))]"
-      />
+      <div
+        className={`fixed left-0 right-0 z-[45] driver-online-slider-anchor transition-all duration-300 ease-out ${
+          retractSlider ? 'driver-online-slider-retract' : ''
+        }`}
+        aria-hidden={retractSlider}
+      >
+        <OnlineGaugeSlider online={online} onToggle={toggleOnline} disabled={goOnlineDisabled} />
+      </div>
     </>
   );
 }

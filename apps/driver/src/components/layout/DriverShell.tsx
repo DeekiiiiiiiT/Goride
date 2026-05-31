@@ -181,7 +181,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
         </div>
       </header>
 
-      <main className="flex-1 overflow-x-hidden overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom,0px))]">
+      <main className="flex-1 overflow-x-hidden overflow-y-auto pb-[var(--driver-bottom-nav-total)]">
         <div className="mx-auto w-full min-w-0 max-w-lg safe-x py-4 sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
           {renderPage()}
         </div>

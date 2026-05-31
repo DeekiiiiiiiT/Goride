@@ -52,3 +52,8 @@ export function estimatePickupMinutes(distanceKm: number | null | undefined): nu
   if (distanceKm == null || !Number.isFinite(distanceKm)) return null;
   return Math.max(1, Math.round((distanceKm / 35) * 60));
 }
+
+/** Retract the go-online slider during incoming offers or an active trip. */
+export function shouldRetractOnlineSlider(showActiveRide: boolean, offerCount: number): boolean {
+  return showActiveRide || offerCount > 0;
+}

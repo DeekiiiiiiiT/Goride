@@ -4,6 +4,7 @@ import { useRideDispatch } from '../../hooks/useRideDispatch';
 import { RideOfferCard } from './RideOfferCard';
 import { ActiveRidePanel } from './ActiveRidePanel';
 import { OnlineGaugeSlider } from './OnlineGaugeSlider';
+import { shouldRetractOnlineSlider } from './rideDispatchUtils';
 
 export function RideDispatchPage() {
   const {
@@ -21,12 +22,14 @@ export function RideDispatchPage() {
   } = useRideDispatch();
 
   const showActiveRide = activeRide && isDriverActiveRideStatus(activeRide.status);
+  const retractSlider = shouldRetractOnlineSlider(!!showActiveRide, offers.length);
 
   return (
     <>
       <div
-        className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 px-4 py-6 max-w-lg mx-auto space-y-6"
-        style={{ paddingBottom: 'calc(10.75rem + env(safe-area-inset-bottom, 0px))' }}
+        className={`min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 px-4 py-6 max-w-lg mx-auto space-y-6 ${
+          retractSlider ? 'driver-scroll-pad-nav-only' : 'driver-scroll-pad-for-slider'
+        }`}
       >
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Passenger rides</h1>
@@ -68,11 +71,14 @@ export function RideDispatchPage() {
         )}
       </div>
 
-      <OnlineGaugeSlider
-        online={online}
-        onToggle={toggleOnline}
-        className="fixed left-0 right-0 z-30 bottom-[env(safe-area-inset-bottom,0px)]"
-      />
+      <div
+        className={`fixed left-0 right-0 z-[45] driver-online-slider-anchor transition-all duration-300 ease-out ${
+          retractSlider ? 'driver-online-slider-retract' : ''
+        }`}
+        aria-hidden={retractSlider}
+      >
+        <OnlineGaugeSlider online={online} onToggle={toggleOnline} />
+      </div>
     </>
   );
 }

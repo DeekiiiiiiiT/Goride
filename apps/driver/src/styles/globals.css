@@ -152,6 +152,37 @@ html.dark body {
   padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
 }
 
+/* Bottom nav (h-16) + .safe-b padding — keep fixed chrome aligned with DriverShell nav */
+:root {
+  --driver-bottom-nav-total: calc(4rem + max(1rem, env(safe-area-inset-bottom, 0px)));
+  --driver-online-slider-height: 7.75rem;
+  --driver-online-slider-gap: 0.375rem;
+  --driver-online-slider-bottom: calc(
+    var(--driver-bottom-nav-total) + var(--driver-online-slider-gap)
+  );
+  --driver-scroll-pad-above-slider: calc(
+    var(--driver-online-slider-height) + var(--driver-online-slider-bottom)
+  );
+}
+
+.driver-online-slider-anchor {
+  bottom: var(--driver-online-slider-bottom);
+}
+
+.driver-scroll-pad-for-slider {
+  padding-bottom: var(--driver-scroll-pad-above-slider);
+}
+
+.driver-scroll-pad-nav-only {
+  padding-bottom: var(--driver-bottom-nav-total);
+}
+
+.driver-online-slider-retract {
+  transform: translateY(calc(100% + 1.5rem));
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* Inputs: 16px+ avoids iOS zoom on focus */
 .input-touch {
   font-size: 1rem;
