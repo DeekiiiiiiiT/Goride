@@ -15,6 +15,9 @@ import { cn } from '@roam/ui';
 import type { RoutePoint } from '../../types/tripSession';
 import { LeafletMap } from '../maps/LeafletMap';
 import { DriverGpsBadge } from './DriverGpsBadge';
+import { pickupArrivalLabel } from './rideGeofenceClient';
+import type { DriverRideLocationLive } from '../../services/ridesDriverEdge';
+import { GracePeriodCountdown, isGracePeriodActive } from './GracePeriodCountdown';
 
 const CANCEL_REASONS = [
   { value: 'rider_no_show', label: 'Rider no-show' },
@@ -39,13 +42,8 @@ type Props = {
   trackingError?: string | null;
   gpsAccuracyM?: number | null;
   waitTimeInfo?: WaitTimeInfo | null;
+  rideLocationLive?: DriverRideLocationLive | null;
 };
-
-function formatArrivalEta(seconds: number | null | undefined): string {
-  if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) return 'Arriving soon';
-  const mins = Math.max(1, Math.ceil(seconds / 60));
-  return `${mins} min away`;
-}
 
 function shortAddress(address: string | null | undefined): string {
   const trimmed = address?.trim();
@@ -61,12 +59,15 @@ export function EnRoutePickupPanel({
   trackingError,
   gpsAccuracyM,
   waitTimeInfo,
+  rideLocationLive,
 }: Props) {
   const [advancing, setAdvancing] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState(CANCEL_REASONS[0].value);
 
-  const arrivalLabel = formatArrivalEta(ride.eta_pickup_seconds_estimate);
+  const arrival = pickupArrivalLabel(ride, rideLocationLive?.distance_to_pickup_m);
+  const atPickupZone = Boolean(ride.wait_time_started_at);
+  const graceActive = isGracePeriodActive(waitTimeInfo, ride.wait_time_started_at);
   const pickupAddress = shortAddress(ride.pickup_address);
 
   const mapRoute = useMemo((): RoutePoint[] => {
@@ -171,17 +172,23 @@ export function EnRoutePickupPanel({
           </div>
         </div>
 
-        {waitTimeInfo?.wait_time_charge_enabled &&
-        !waitTimeInfo.wait_time_grace_expired &&
-        (waitTimeInfo.wait_time_grace_remaining_seconds ?? 0) > 0 ? (
-          <p className="mb-4 text-center text-xs text-slate-500 dark:text-slate-400">
-            Grace period active — wait time may apply after timer ends.
-          </p>
-        ) : (
-          <p className="mb-4 text-center text-xs text-slate-500 dark:text-slate-400">
-            Arrival is detected automatically when you reach the pickup point.
-          </p>
-        )}
+        <GracePeriodCountdown
+          waitTimeInfo={waitTimeInfo}
+          graceStartedAt={ride.wait_time_started_at}
+        />
+
+        {!graceActive ? (
+          atPickupZone ? (
+            <p className="mb-4 text-center text-xs font-medium text-emerald-700 dark:text-emerald-400">
+              You&apos;re in the pickup zone. Arrival should confirm in a few seconds — use
+              &quot;I&apos;ve arrived&quot; if it doesn&apos;t.
+            </p>
+          ) : (
+            <p className="mb-4 text-center text-xs text-slate-500 dark:text-slate-400">
+              Arrival is detected automatically when you reach the pickup point.
+            </p>
+          )
+        ) : null}
 
         <div className="mb-4 grid grid-cols-3 gap-3">
           <button

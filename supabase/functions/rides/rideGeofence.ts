@@ -108,12 +108,31 @@ export async function evaluateGeofenceTransitions(
     distanceToDropoffM: distDropoff,
   };
 
-  if (
+  const pickupArriveEligible =
     settings.auto_arrive_enabled &&
-    status === "driver_en_route_pickup" &&
+    (status === "driver_en_route_pickup" || status === "driver_assigned") &&
     accuracyOk(fix.accuracyM, settings.gps_max_accuracy_m_for_arrival) &&
-    speedOk(fix.speedMps, settings.max_speed_mps_for_arrival)
-  ) {
+    speedOk(fix.speedMps, settings.max_speed_mps_for_arrival);
+
+  if (pickupArriveEligible) {
+    let arriveStatus = status;
+
+    if (arriveStatus === "driver_assigned") {
+      const enRouteTr = await applyRideTransition(deps, {
+        rideId,
+        next: "driver_en_route_pickup",
+        actorUserId: driverUserId,
+        source: "geofence",
+        expectedFrom: "driver_assigned",
+      });
+      if (enRouteTr.ok && !enRouteTr.skipped) {
+        arriveStatus = "driver_en_route_pickup";
+        ride.status = arriveStatus;
+      } else {
+        return result;
+      }
+    }
+
     const inside = isInsideGeofence(
       point,
       pickup,
@@ -124,7 +143,7 @@ export async function evaluateGeofenceTransitions(
       ? Date.parse(String(live.pickup_dwell_started_at))
       : null;
 
-    if (inside.isInside) {
+    if (inside.isInside && arriveStatus === "driver_en_route_pickup") {
       const isFirstEntry = !dwellStart;
       if (!dwellStart) dwellStart = nowMs;
 
@@ -175,8 +194,14 @@ export async function evaluateGeofenceTransitions(
         last_accuracy_m: fix.accuracyM ?? null,
       });
     } else {
+      const clearDwell =
+        !inside.isInside && inside.distanceM > inside.effectiveRadiusM * 1.25;
       await upsertLiveState(db, rideId, {
-        pickup_dwell_started_at: null,
+        pickup_dwell_started_at: clearDwell
+          ? null
+          : dwellStart
+          ? new Date(dwellStart).toISOString()
+          : null,
         distance_to_target_m: inside.distanceM,
         target: "pickup",
         last_lat: fix.lat,

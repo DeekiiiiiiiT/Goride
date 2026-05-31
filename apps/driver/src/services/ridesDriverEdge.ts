@@ -120,9 +120,16 @@ export async function ridesDriverTransition(id: string, body: DriverTransitionBo
   return res.json();
 }
 
+export type DriverRideLocationLive = {
+  distance_to_pickup_m?: number;
+  distance_to_dropoff_m?: number;
+  transition_applied?: RideRequestRow['status'] | null;
+  complete_suggested?: boolean;
+};
+
 export async function ridesDriverPostRideLocation(
   body: RideLocationUpdateBody,
-): Promise<{ ok: boolean; ride?: RideRequestRow }> {
+): Promise<{ ok: boolean; ride?: RideRequestRow; live?: DriverRideLocationLive }> {
   const res = await fetch(`${base}/v1/drivers/ride-location`, {
     method: 'POST',
     headers: await ridesHeaders(),

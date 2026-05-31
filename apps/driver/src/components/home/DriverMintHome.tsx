@@ -17,7 +17,8 @@ export function DriverMintHome() {
   const enRouteToPickup =
     activeRide?.status === 'driver_assigned' || activeRide?.status === 'driver_en_route_pickup';
   const onTrip = activeRide?.status === 'on_trip';
-  const tripFlowActive = enRouteToPickup || onTrip;
+  const arrivedAtPickup = activeRide?.status === 'driver_arrived_pickup';
+  const tripFlowActive = enRouteToPickup || onTrip || arrivedAtPickup;
   const rating =
     typeof driverRecord?.rating === 'number'
       ? driverRecord.rating

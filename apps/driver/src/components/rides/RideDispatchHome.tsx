@@ -34,7 +34,8 @@ export function RideDispatchHome({ embedded = false }: Props) {
     showActiveRide &&
     (activeRide.status === 'driver_assigned' || activeRide.status === 'driver_en_route_pickup');
   const onTrip = showActiveRide && activeRide.status === 'on_trip';
-  const showActiveRidePanel = showActiveRide && !enRouteToPickup && !onTrip;
+  const arrivedAtPickup = showActiveRide && activeRide.status === 'driver_arrived_pickup';
+  const showActiveRidePanel = showActiveRide && !enRouteToPickup && !onTrip && !arrivedAtPickup;
   const showWaiting = online && offers.length === 0 && !showActiveRide;
   const goOnlineDisabled = (!vehicleReady && !online) || (locationGoOnlineBlocked && !online);
 

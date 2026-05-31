@@ -11,6 +11,7 @@ import {
   ridesDriverPresence,
   ridesDriverTransition,
   type DriverWaitTimeInfo,
+  type DriverRideLocationLive,
 } from '../services/ridesDriverEdge';
 import { slugFromBodyLabel } from '../components/rides/rideDispatchUtils';
 import { useActiveRideTracking } from './useActiveRideTracking';
@@ -44,6 +45,7 @@ export function useRideDispatch() {
   const [bodyTypeSlug, setBodyTypeSlug] = useState<string | null>(null);
   const [vehicleReady, setVehicleReady] = useState(false);
   const [presenceError, setPresenceError] = useState<string | null>(null);
+  const [rideLocationLive, setRideLocationLive] = useState<DriverRideLocationLive | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
 
   const watchId = useRef<number | null>(null);
@@ -59,6 +61,7 @@ export function useRideDispatch() {
       if (!ride || !isDriverActiveRideStatus(ride.status)) {
         setActiveRide(null);
         setActiveRideWaitTime(null);
+        setRideLocationLive(null);
         setRecoveredRide(null);
         persistActiveRideId(null);
         return;
@@ -73,7 +76,11 @@ export function useRideDispatch() {
     [setRecoveredRide],
   );
 
-  const { trackingError, gpsAccuracyM, isTracking } = useActiveRideTracking(activeRide, syncActiveRide);
+  const { trackingError, gpsAccuracyM, isTracking } = useActiveRideTracking(
+    activeRide,
+    syncActiveRide,
+    setRideLocationLive,
+  );
   const { permissions } = useDriverPermissionPolicy();
   const [permissionOnboardingOpen, setPermissionOnboardingOpen] = useState(false);
   const [locationGoOnlineBlocked, setLocationGoOnlineBlocked] = useState(false);
@@ -307,7 +314,7 @@ export function useRideDispatch() {
     if (!activeRide?.id) return;
     const pollMs =
       activeRide.status === 'driver_arrived_pickup' ||
-      (activeRide.status === 'driver_en_route_pickup' && activeRide.wait_time_started_at)
+      activeRide.status === 'driver_en_route_pickup'
         ? RIDE_WAIT_SYNC_MS
         : RIDE_SYNC_MS;
     const t = window.setInterval(async () => {
@@ -481,6 +488,7 @@ export function useRideDispatch() {
     trackingError,
     gpsAccuracyM,
     isTracking,
+    rideLocationLive,
     goOnline,
     goOffline,
     toggleOnline,

@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RideRequestRow } from '@roam/types/rides';
-import { ridesDriverPostRideLocation } from '../services/ridesDriverEdge';
+import {
+  ridesDriverPostRideLocation,
+  type DriverRideLocationLive,
+} from '../services/ridesDriverEdge';
 import { isRideLocationTrackingStatus, nextClientSeq } from '../utils/rideLocationSeq';
 
 const DEFAULT_INTERVAL_SEC = 4;
@@ -15,6 +18,7 @@ type TrackingState = {
 export function useActiveRideTracking(
   activeRide: RideRequestRow | null,
   onRideUpdate?: (ride: RideRequestRow) => void,
+  onLiveUpdate?: (live: DriverRideLocationLive | null) => void,
   intervalSeconds = DEFAULT_INTERVAL_SEC,
 ): TrackingState {
   const [trackingError, setTrackingError] = useState<string | null>(null);
@@ -60,6 +64,7 @@ export function useActiveRideTracking(
         });
         backoffMsRef.current = 0;
         setTrackingError(null);
+        onLiveUpdate?.(result.live ?? null);
         if (result.ride) {
           rideIdRef.current = result.ride.id;
           onRideUpdate?.(result.ride);
@@ -76,7 +81,7 @@ export function useActiveRideTracking(
         }
       }
     },
-    [activeRide?.id, onRideUpdate],
+    [activeRide?.id, onRideUpdate, onLiveUpdate],
   );
 
   const sendImmediateFix = useCallback(() => {
