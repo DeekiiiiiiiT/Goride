@@ -45,6 +45,10 @@ type Props = {
   rideLocationLive?: DriverRideLocationLive | null;
 };
 
+function isValidCoord(lat: number, lng: number): boolean {
+  return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+}
+
 function shortAddress(address: string | null | undefined): string {
   const trimmed = address?.trim();
   if (!trimmed) return 'Pickup location';
@@ -69,16 +73,23 @@ export function EnRoutePickupPanel({
   const atPickupZone = Boolean(ride.wait_time_started_at);
   const graceActive = isGracePeriodActive(waitTimeInfo, ride.wait_time_started_at);
   const pickupAddress = shortAddress(ride.pickup_address);
+  const pickupValid = isValidCoord(ride.pickup_lat, ride.pickup_lng);
 
   const mapRoute = useMemo((): RoutePoint[] => {
+    if (!pickupValid) return [];
     const now = Date.now();
     const points: RoutePoint[] = [];
-    if (ride.last_driver_lat != null && ride.last_driver_lng != null) {
+    if (
+      ride.last_driver_lat != null &&
+      ride.last_driver_lng != null &&
+      isValidCoord(ride.last_driver_lat, ride.last_driver_lng)
+    ) {
       points.push({ lat: ride.last_driver_lat, lon: ride.last_driver_lng, timestamp: now });
     }
     points.push({ lat: ride.pickup_lat, lon: ride.pickup_lng, timestamp: now });
     return points;
   }, [
+    pickupValid,
     ride.last_driver_lat,
     ride.last_driver_lng,
     ride.pickup_lat,
@@ -109,17 +120,23 @@ export function EnRoutePickupPanel({
     <div className="flex h-full min-h-0 flex-col bg-[#f7f9fb] dark:bg-slate-950">
       <div className="relative h-[42vh] min-h-[200px] shrink-0">
         <div className="en-route-map-tiles absolute inset-0">
-          <LeafletMap
-            height="100%"
-            routeColor="#00C4B4"
-            route={mapRoute.length > 1 ? mapRoute : []}
-            startMarker={
-              mapRoute.length > 0
-                ? { lat: mapRoute[0].lat, lon: mapRoute[0].lon }
-                : { lat: ride.pickup_lat, lon: ride.pickup_lng }
-            }
-            endMarker={{ lat: ride.pickup_lat, lon: ride.pickup_lng }}
-          />
+          {pickupValid ? (
+            <LeafletMap
+              height="100%"
+              routeColor="#00C4B4"
+              route={mapRoute.length > 1 ? mapRoute : []}
+              startMarker={
+                mapRoute.length > 0
+                  ? { lat: mapRoute[0].lat, lon: mapRoute[0].lon }
+                  : { lat: ride.pickup_lat, lon: ride.pickup_lng }
+              }
+              endMarker={{ lat: ride.pickup_lat, lon: ride.pickup_lng }}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center bg-slate-200 dark:bg-slate-800">
+              <p className="text-sm text-slate-500">Map unavailable</p>
+            </div>
+          )}
         </div>
         <div className="en-route-map-gradient pointer-events-none absolute inset-0" aria-hidden />
         <div className="pointer-events-none absolute left-4 top-4 flex flex-col gap-1">
@@ -156,7 +173,12 @@ export function EnRoutePickupPanel({
             <p className="mb-1 text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
               Arrival
             </p>
-            <p className="text-xl font-semibold text-[#00C4B4]">{arrivalLabel}</p>
+            <p className="text-xl font-semibold text-[#00C4B4]">{arrival.primary}</p>
+            {arrival.secondary ? (
+              <p className="mt-0.5 max-w-[9rem] text-right text-[11px] text-slate-500 dark:text-slate-400">
+                {arrival.secondary}
+              </p>
+            ) : null}
           </div>
         </div>
 
