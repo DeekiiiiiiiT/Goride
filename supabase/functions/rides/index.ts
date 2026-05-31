@@ -2032,7 +2032,7 @@ app.post("/v1/internal/reconcile-active-rides", async (c) => {
 });
 
 registerRideChatRoutes(app, {
-  svc,
+  messageDb: pubSvc,
   loadRideRequestById,
   requireUser,
   audit,

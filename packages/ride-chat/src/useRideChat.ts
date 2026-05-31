@@ -3,9 +3,16 @@ import type { RideMessageDto } from '@roam/types/rides';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { RideChatApi } from './types';
 
+const POLL_MS = 2500;
+
 function mergeMessage(list: RideMessageDto[], incoming: RideMessageDto): RideMessageDto[] {
   if (list.some((m) => m.id === incoming.id)) return list;
   return [...list, incoming];
+}
+
+function isRealtimeSchemaError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err ?? '');
+  return msg.includes('schema must be one of') || msg.includes('Invalid schema');
 }
 
 export function useRideChat(opts: {
@@ -20,6 +27,7 @@ export function useRideChat(opts: {
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const pollOnlyRef = useRef(false);
 
   const refresh = useCallback(async () => {
     if (!rideId || !enabled) return;
@@ -37,11 +45,22 @@ export function useRideChat(opts: {
 
   useEffect(() => {
     if (!open || !enabled || !rideId) return;
+    pollOnlyRef.current = false;
     void refresh();
   }, [open, enabled, rideId, refresh]);
 
   useEffect(() => {
     if (!open || !enabled || !rideId) return;
+
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+    const startPolling = () => {
+      if (pollTimer != null) return;
+      pollOnlyRef.current = true;
+      pollTimer = setInterval(() => {
+        void refresh();
+      }, POLL_MS);
+    };
 
     const channel = supabase
       .channel(`ride-chat-${rideId}`)
@@ -49,7 +68,7 @@ export function useRideChat(opts: {
         'postgres_changes',
         {
           event: 'INSERT',
-          schema: 'rides',
+          schema: 'public',
           table: 'ride_messages',
           filter: `ride_request_id=eq.${rideId}`,
         },
@@ -60,12 +79,21 @@ export function useRideChat(opts: {
           }
         },
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') return;
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || err) {
+          if (!isRealtimeSchemaError(err)) {
+            console.warn('ride chat realtime unavailable, using polling', err);
+          }
+          startPolling();
+        }
+      });
 
     return () => {
+      if (pollTimer != null) clearInterval(pollTimer);
       void supabase.removeChannel(channel);
     };
-  }, [open, enabled, rideId, supabase]);
+  }, [open, enabled, rideId, supabase, refresh]);
 
   const send = useCallback(
     async (body: string) => {
@@ -76,6 +104,9 @@ export function useRideChat(opts: {
       try {
         const res = await api.sendMessage(rideId, { body: trimmed });
         setMessages((prev) => mergeMessage(prev, res.message));
+        if (pollOnlyRef.current) {
+          void refresh();
+        }
         return true;
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : 'Could not send message');
@@ -84,7 +115,7 @@ export function useRideChat(opts: {
         setSending(false);
       }
     },
-    [api, enabled, rideId],
+    [api, enabled, rideId, refresh],
   );
 
   return { messages, loading, sending, error, send, refresh };

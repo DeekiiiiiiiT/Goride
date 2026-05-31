@@ -31,7 +31,8 @@ export function toRideMessageDto(row: Record<string, unknown>): RideMessageRow {
 }
 
 type RideChatDeps = {
-  svc: () => SupabaseClient;
+  /** public schema — required for hosted Realtime (rides schema not exposed). */
+  messageDb: () => SupabaseClient;
   loadRideRequestById: (id: string) => Promise<Record<string, unknown> | null>;
   requireUser: (authHeader: string | undefined) => Promise<
     { user: { id: string } } | { error: string; status: 401 }
@@ -85,7 +86,7 @@ export function registerRideChatRoutes(app: Hono, deps: RideChatDeps) {
       : DEFAULT_LIMIT;
     const before = c.req.query("before")?.trim();
 
-    let query = deps.svc()
+    let query = deps.messageDb()
       .from("ride_messages")
       .select("id, ride_request_id, sender_user_id, sender_role, body, created_at")
       .eq("ride_request_id", rideId)
@@ -134,7 +135,7 @@ export function registerRideChatRoutes(app: Hono, deps: RideChatDeps) {
 
     const senderRole = access.isRider ? "rider" : "driver";
 
-    const { data: inserted, error } = await deps.svc()
+    const { data: inserted, error } = await deps.messageDb()
       .from("ride_messages")
       .insert({
         ride_request_id: rideId,

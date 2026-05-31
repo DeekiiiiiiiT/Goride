@@ -4,7 +4,9 @@ In-app text messaging between rider and assigned driver during active trip statu
 
 ## Deploy
 
-1. Apply migration `supabase/migrations/20260603120000_ride_messages.sql` in Supabase SQL (or `supabase db push`).
+1. Apply migrations in order:
+   - `supabase/migrations/20260603120000_ride_messages.sql`
+   - `supabase/migrations/20260603140000_ride_messages_public_realtime.sql` (moves chat to `public` for hosted Realtime)
 2. Deploy edge function: `pnpm deploy:rides` from repo root.
 
 ## API (rides edge)
@@ -18,4 +20,4 @@ Returns `403` with `chat_not_available` when the ride is not in an active status
 
 Shared UI: `@roam/ride-chat` (`RideChatHost`, `RideChatSheet`).
 
-Realtime: `postgres_changes` on `rides.ride_messages` filtered by `ride_request_id`.
+Realtime: `postgres_changes` on `public.ride_messages` filtered by `ride_request_id` (hosted projects do not expose the `rides` schema to Realtime).
