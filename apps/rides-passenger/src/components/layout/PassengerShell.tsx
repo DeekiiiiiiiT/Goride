@@ -1,11 +1,12 @@
 import React from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
+import { HomeTripPickerProvider, useHomeTripPicker } from '@/contexts/HomeTripPickerContext';
 import { PassengerBottomNav } from './PassengerBottomNav';
 
-/** Authenticated rider shell: tab content + fixed bottom navigation. */
-export function PassengerShell() {
+function PassengerShellInner() {
   const { pathname } = useLocation();
   const isHome = pathname === '/';
+  const { tripPickerActive } = useHomeTripPicker();
 
   return (
     <div
@@ -14,7 +15,16 @@ export function PassengerShell() {
       <div className="flex min-h-0 flex-1 flex-col">
         <Outlet />
       </div>
-      <PassengerBottomNav />
+      {!tripPickerActive && <PassengerBottomNav />}
     </div>
+  );
+}
+
+/** Authenticated rider shell: tab content + fixed bottom navigation. */
+export function PassengerShell() {
+  return (
+    <HomeTripPickerProvider>
+      <PassengerShellInner />
+    </HomeTripPickerProvider>
   );
 }

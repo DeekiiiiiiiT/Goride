@@ -2,12 +2,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
+  ArrowLeft,
   ArrowRight,
   Crosshair,
   Package,
   Pencil,
   UserPlus,
 } from 'lucide-react';
+import { useHomeTripPicker } from '@/contexts/HomeTripPickerContext';
 import { supabase } from '@roam/auth-client';
 import { useVisualViewport } from '@/hooks/useVisualViewport';
 import { DEFAULT_PROFILE_AVATAR_URL } from '@/lib/roamHomeAssets';
@@ -63,6 +65,7 @@ function truncateRouteLabel(text: string, maxLen = 44): string {
 
 export default function HomePage() {
   const navigate = useNavigate();
+  const { setTripPickerActive } = useHomeTripPicker();
   const { keyboardInset, height: viewportHeight } = useVisualViewport();
   const keyboardOpen = keyboardInset > 48;
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -160,6 +163,15 @@ export default function HomePage() {
   const showRouteMap = coordsReady;
   const hasSelectedService = services.some((s) => s.slug === vehicleOption);
   const showBookCta = coordsReady && hasSelectedService;
+
+  useEffect(() => {
+    setTripPickerActive(coordsReady);
+    return () => setTripPickerActive(false);
+  }, [coordsReady, setTripPickerActive]);
+
+  const handleTripPickerBack = useCallback(() => {
+    setRouteExpanded(true);
+  }, []);
 
   const quote = vehicleOption ? quotesBySlug[vehicleOption] ?? null : null;
   const hasQuotes = Object.keys(quotesBySlug).length > 0;
@@ -377,11 +389,15 @@ export default function HomePage() {
 
   const bookingActionsBottom = keyboardOpen
     ? keyboardInset
-    : 'calc(var(--home-nav-h) + env(safe-area-inset-bottom, 0px))';
+    : coordsReady
+      ? 'env(safe-area-inset-bottom, 0px)'
+      : 'calc(var(--home-nav-h) + env(safe-area-inset-bottom, 0px))';
 
   const sheetBottom = keyboardOpen
     ? keyboardInset
-    : 'calc(var(--home-nav-h) + var(--home-booking-actions-h) + env(safe-area-inset-bottom, 0px))';
+    : coordsReady
+      ? 'calc(var(--home-booking-actions-h) + env(safe-area-inset-bottom, 0px))'
+      : 'calc(var(--home-nav-h) + var(--home-booking-actions-h) + env(safe-area-inset-bottom, 0px))';
 
   const keyboardSheetHeight = keyboardOpen
     ? Math.max(280, viewportHeight - keyboardInset - (coordsReady ? 168 : 88))
@@ -396,7 +412,7 @@ export default function HomePage() {
   return (
     <div
       className={`home-page relative flex min-h-[100dvh] flex-1 flex-col overflow-hidden ${
-        coordsReady ? 'home-page--booking-ready' : ''
+        coordsReady ? 'home-page--booking-ready home-page--trip-picker' : ''
       } ${showBookCta ? 'home-page--has-book-cta' : ''}`}
       style={homePageStyle}
     >
@@ -407,37 +423,39 @@ export default function HomePage() {
         onClose={() => setOnboardingOpen(false)}
       />
 
-      <header
-        className="fixed top-0 z-50 w-full border-b safe-t"
-        style={{
-          backgroundColor: 'var(--home-header-bg)',
-          borderColor: 'var(--home-sheet-border)',
-          backdropFilter: 'blur(12px)',
-        }}
-      >
-        <div className="mx-auto flex h-16 max-w-2xl items-center justify-between px-5">
-          <span
-            className="home-display text-xl font-bold"
-            style={{ color: 'var(--home-primary)' }}
-          >
-            Roam
-          </span>
-          <button
-            type="button"
-            onClick={() => navigate('/account')}
-            className="h-10 w-10 overflow-hidden rounded-full border-2 active:scale-95"
-            style={{ borderColor: 'color-mix(in srgb, var(--home-outline-variant) 50%, transparent)' }}
-            aria-label="Account"
-          >
-            <img src={profileSrc} alt="" className="h-full w-full object-cover" />
-          </button>
-        </div>
-      </header>
+      {!showRouteMap && (
+        <header
+          className="home-header fixed top-0 z-50 w-full border-b safe-t"
+          style={{
+            backgroundColor: 'var(--home-header-bg)',
+            borderColor: 'var(--home-sheet-border)',
+            backdropFilter: 'blur(12px)',
+          }}
+        >
+          <div className="mx-auto flex h-16 max-w-2xl items-center justify-between px-5">
+            <span
+              className="home-display text-xl font-bold"
+              style={{ color: 'var(--home-primary)' }}
+            >
+              Roam
+            </span>
+            <button
+              type="button"
+              onClick={() => navigate('/account')}
+              className="h-10 w-10 overflow-hidden rounded-full border-2 active:scale-95"
+              style={{ borderColor: 'color-mix(in srgb, var(--home-outline-variant) 50%, transparent)' }}
+              aria-label="Account"
+            >
+              <img src={profileSrc} alt="" className="h-full w-full object-cover" />
+            </button>
+          </div>
+        </header>
+      )}
 
       <div className="home-booking-backdrop" aria-hidden />
 
       {showRouteMap && pickup && dropoff && (
-        <div className="home-map-stage">
+        <div className="home-map-stage home-map-stage--trip-picker">
           <BookingHeroMap
             pickup={pickup}
             dropoff={dropoff}
@@ -445,25 +463,14 @@ export default function HomePage() {
             quoteLoading={quotesLoading && !hasQuotes}
           />
 
-          <div className="home-map-stage__chrome px-5 pt-3">
-            <div
-              className="inline-flex max-w-[min(100%,20rem)] items-center gap-2 rounded-full px-4 py-2 shadow-lg"
-              style={{
-                backgroundColor: 'var(--home-pill-bg)',
-                border: '1px solid var(--home-sheet-border)',
-                backdropFilter: 'blur(12px)',
-              }}
-            >
-              <Crosshair
-                className="h-5 w-5 shrink-0"
-                style={{ color: 'var(--home-primary)' }}
-                aria-hidden
-              />
-              <span className="truncate text-sm font-semibold" style={{ color: 'var(--home-on-surface)' }}>
-                {locationPill}
-              </span>
-            </div>
-          </div>
+          <button
+            type="button"
+            onClick={handleTripPickerBack}
+            className="home-map-stage__back flex h-11 w-11 items-center justify-center rounded-full shadow-lg transition-transform active:scale-95"
+            aria-label="Back to edit trip"
+          >
+            <ArrowLeft className="h-5 w-5" strokeWidth={2.25} aria-hidden />
+          </button>
 
           <button
             type="button"

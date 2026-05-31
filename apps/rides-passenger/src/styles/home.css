@@ -92,6 +92,20 @@ html.dark .home-page {
   color: var(--home-on-surface);
 }
 
+/* Trip picker: full-width map, no app header / bottom nav chrome */
+.home-page--trip-picker {
+  --home-header-h: 0px;
+  --home-nav-h: 0px;
+}
+
+.home-page--trip-picker.home-page--booking-ready {
+  --home-header-map-chrome: 0px;
+  --home-booking-sheet-fill: calc(
+    100dvh - var(--home-booking-actions-h) - env(safe-area-inset-bottom, 0px) - 0.5rem
+  );
+  --home-booking-sheet-max: min(58dvh, max(18rem, var(--home-booking-sheet-fill)), 560px);
+}
+
 /* Route map only in the band above the booking sheet */
 .home-map-stage {
   position: fixed;
@@ -102,6 +116,21 @@ html.dark .home-page {
   bottom: var(--home-booking-stack-h);
   overflow: hidden;
   background-color: var(--home-canvas-bg);
+}
+
+.home-map-stage--trip-picker {
+  top: env(safe-area-inset-top, 0px);
+  z-index: 6;
+}
+
+.home-map-stage__back {
+  position: absolute;
+  left: 1rem;
+  top: 0.75rem;
+  z-index: 15;
+  border: 1px solid color-mix(in srgb, var(--home-on-surface) 12%, transparent);
+  background: var(--home-panel-solid);
+  color: var(--home-on-surface);
 }
 
 .home-map-stage__chrome {
