@@ -3,6 +3,7 @@
 @source './**/*.{js,ts,jsx,tsx}';
 @source '../../../packages/ui/src/**/*.{js,ts,jsx,tsx}';
 @source '../../../packages/admin-core/src/**/*.{js,ts,jsx,tsx}';
+@source '../../../packages/ride-chat/src/**/*.{js,ts,jsx,tsx}';
 @import "../../../packages/admin-core/src/styles/rides-admin-login.css";
 @import "../../../packages/admin-core/src/styles/admin-portal.css";
 @import "./styles/home.css";

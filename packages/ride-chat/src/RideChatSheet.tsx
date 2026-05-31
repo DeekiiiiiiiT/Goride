@@ -68,16 +68,27 @@ export function RideChatSheet({
 
   if (!open) return null;
 
+  const isDriver = variant === 'driver';
+
   return createPortal(
     <div className="ride-chat-portal" role="presentation">
       <button
         type="button"
-        className="fixed inset-0 z-[220] bg-black/50"
+        className="fixed inset-0 z-[300] bg-black/50"
         aria-label="Close chat"
         onClick={() => onOpenChange(false)}
       />
       <div
-        className="fixed inset-x-0 bottom-0 z-[230] mx-auto flex h-[min(85dvh,640px)] max-w-lg flex-col rounded-t-3xl bg-white shadow-2xl dark:bg-slate-900"
+        className="fixed inset-x-0 z-[310] mx-auto flex w-full max-w-lg flex-col rounded-t-3xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+        style={{
+          bottom: isDriver ? 'var(--driver-bottom-nav-total, 0px)' : 0,
+          maxHeight: isDriver
+            ? 'min(78dvh, calc(100dvh - var(--driver-bottom-nav-total, 4rem) - 1rem))'
+            : 'min(85dvh, 640px)',
+          height: isDriver
+            ? 'min(78dvh, calc(100dvh - var(--driver-bottom-nav-total, 4rem) - 1rem))'
+            : 'min(85dvh, 640px)',
+        }}
         role="dialog"
         aria-labelledby="ride-chat-title"
         aria-modal="true"
