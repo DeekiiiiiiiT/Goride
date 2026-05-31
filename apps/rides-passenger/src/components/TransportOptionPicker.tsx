@@ -142,7 +142,7 @@ function CompactOptionCard({
   quote?: ServiceQuoteDisplay;
 }) {
   const metaLine = buildCompactMetaLine(v, quote);
-  const detail = active ? selectedDetailLine(v) : null;
+  const detail = selectedDetailLine(v);
 
   return (
     <button
@@ -173,7 +173,7 @@ function CompactOptionCard({
         {metaLine && (
           <p className="home-service-row__meta truncate tabular-nums">{metaLine}</p>
         )}
-        {detail && <p className="home-service-row__detail truncate">{detail}</p>}
+        {detail && <p className="home-service-row__detail line-clamp-2">{detail}</p>}
       </div>
     </button>
   );
@@ -194,8 +194,10 @@ export function TransportOptionPicker({
     variant === 'admin'
       ? 'text-xs font-semibold uppercase tracking-wide text-slate-500'
       : 'text-xs font-semibold uppercase tracking-wide text-zinc-500';
-  const listGap = isCompact ? 'home-service-list' : 'space-y-2';
-  const rootGap = isCompact ? '' : 'space-y-4';
+  const listGap = isCompact ? 'home-service-list home-service-list--fill' : 'space-y-2';
+  const listManyClass =
+    isCompact && services.length >= 4 ? ' home-service-list--many' : '';
+  const rootGap = isCompact ? 'flex min-h-0 flex-1 flex-col' : 'space-y-4';
 
   const renderCard = (v: RidesVehicleTypeDto) => {
     if (isCompact) {
@@ -231,9 +233,18 @@ export function TransportOptionPicker({
         </div>
       )}
       {services.length > 0 && (
-        <div className={isCompact ? listGap : 'space-y-2'}>
+        <div className={isCompact ? 'flex min-h-0 min-w-0 flex-1 flex-col' : 'space-y-2'}>
           {!isCompact && <p className={sectionTitle}>Services</p>}
-          <div className={listGap}>{services.map(renderCard)}</div>
+          <div
+            className={`${listGap}${listManyClass}`}
+            style={
+              isCompact
+                ? ({ '--home-service-count': services.length } as React.CSSProperties)
+                : undefined
+            }
+          >
+            {services.map(renderCard)}
+          </div>
         </div>
       )}
     </div>

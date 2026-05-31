@@ -11,10 +11,21 @@ type Props = {
   variant?: 'card' | 'hero';
 };
 
+const HERO_FIT_PADDING = { top: 52, right: 36, bottom: 72, left: 36 };
+const CARD_FIT_PADDING = { top: 28, right: 28, bottom: 28, left: 28 };
+
 export function TripRouteMap({ pickup, dropoff, encodedPolyline, variant = 'card' }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
+  const boundsRef = useRef<google.maps.LatLngBounds | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const isHero = variant === 'hero';
+  const fitPadding = isHero ? HERO_FIT_PADDING : CARD_FIT_PADDING;
+
+  const fitRoute = (map: google.maps.Map) => {
+    if (!boundsRef.current) return;
+    map.fitBounds(boundsRef.current, fitPadding);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -82,7 +93,8 @@ export function TripRouteMap({ pickup, dropoff, encodedPolyline, variant = 'card
           });
         }
 
-        map.fitBounds(bounds, { top: 28, right: 28, bottom: 28, left: 28 });
+        boundsRef.current = bounds;
+        fitRoute(map);
         if (!cancelled) setStatus('ready');
       } catch {
         if (!cancelled) setStatus('error');
@@ -94,10 +106,28 @@ export function TripRouteMap({ pickup, dropoff, encodedPolyline, variant = 'card
       for (const m of markers) m.setMap(null);
       polyline?.setMap(null);
       mapRef.current = null;
+      boundsRef.current = null;
     };
-  }, [pickup.lat, pickup.lng, dropoff.lat, dropoff.lng, encodedPolyline]);
+  }, [pickup.lat, pickup.lng, dropoff.lat, dropoff.lng, encodedPolyline, isHero]);
 
-  const isHero = variant === 'hero';
+  useEffect(() => {
+    if (!isHero || status !== 'ready' || !containerRef.current || !mapRef.current) return;
+    const map = mapRef.current;
+    const node = containerRef.current;
+
+    const ro = new ResizeObserver(() => {
+      google.maps.event.trigger(map, 'resize');
+      fitRoute(map);
+    });
+    ro.observe(node);
+
+    return () => ro.disconnect();
+  }, [isHero, status]);
+
+  useEffect(() => {
+    if (status !== 'ready' || !mapRef.current) return;
+    fitRoute(mapRef.current);
+  }, [status, pickup.lat, pickup.lng, dropoff.lat, dropoff.lng, encodedPolyline, isHero]);
 
   if (status === 'error') {
     return (

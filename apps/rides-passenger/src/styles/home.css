@@ -50,6 +50,7 @@ html.dark {
 }
 
 html.dark .home-page {
+  --home-panel-solid: #121413;
   --home-bg: #121413;
   --home-surface: #121413;
   --home-on-surface: #e2e3e0;
@@ -77,12 +78,59 @@ html.dark .home-page {
 }
 
 .home-page {
+  --home-header-h: 4rem;
   --home-nav-h: 4.5rem;
-  --home-booking-actions-h: 5.5rem;
+  --home-booking-actions-h: 0px;
   --home-booking-sheet-max: min(46dvh, 420px);
+  --home-panel-solid: #ffffff;
+  --home-booking-stack-h: calc(
+    var(--home-nav-h) + var(--home-booking-actions-h) + var(--home-booking-sheet-max) +
+      env(safe-area-inset-bottom, 0px)
+  );
   font-family: 'Inter', system-ui, sans-serif;
   background-color: var(--home-bg);
   color: var(--home-on-surface);
+}
+
+/* Route map only in the band above the booking sheet */
+.home-map-stage {
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  top: calc(var(--home-header-h) + env(safe-area-inset-top, 0px));
+  bottom: var(--home-booking-stack-h);
+  overflow: hidden;
+  background-color: var(--home-canvas-bg);
+}
+
+.home-map-stage__chrome {
+  position: relative;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.home-map-stage__chrome > * {
+  pointer-events: auto;
+}
+
+.home-map-stage__adjust-pin {
+  position: absolute;
+  right: 1rem;
+  bottom: 0.75rem;
+  z-index: 12;
+}
+
+/* Opaque panel under sheet + actions — no map bleed-through */
+.home-booking-backdrop {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  height: var(--home-booking-stack-h);
+  background-color: var(--home-panel-solid);
+  pointer-events: none;
 }
 
 .home-display {
@@ -106,10 +154,23 @@ html.dark .home-page {
   box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.18);
 }
 
+.home-booking-sheet.home-glass-sheet {
+  background-color: var(--home-panel-solid);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 /* Home booking layout: sheet + fixed actions above bottom nav */
+.home-page--has-book-cta {
+  --home-booking-actions-h: 5.5rem;
+}
+
+.home-page--booking-ready.home-page--has-book-cta {
+  --home-booking-actions-h: 9.25rem;
+}
+
 .home-page--booking-ready {
   --home-header-map-chrome: 5.75rem;
-  --home-booking-actions-h: 9.25rem;
   --home-booking-sheet-fill: calc(
     100dvh - var(--home-header-map-chrome) - var(--home-nav-h) - var(--home-booking-actions-h) -
       env(safe-area-inset-bottom, 0px) - 0.5rem
@@ -133,10 +194,8 @@ html.dark .home-page {
   padding-right: max(1rem, env(safe-area-inset-right, 0px));
   padding-top: 0.5rem;
   padding-bottom: 0.5rem;
-  background: var(--home-sheet-bg);
+  background-color: var(--home-panel-solid);
   border-top: 1px solid var(--home-sheet-border);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
   box-shadow: 0 -6px 28px rgba(0, 0, 0, 0.1);
 }
 
@@ -242,7 +301,9 @@ html.dark .home-page {
 }
 
 .home-booking-sheet__services {
+  display: flex;
   flex: 1 1 0;
+  flex-direction: column;
   min-height: 0;
   margin-top: 0.125rem;
   padding-bottom: 0.25rem;
@@ -254,20 +315,36 @@ html.dark .home-page {
   scrollbar-color: color-mix(in srgb, var(--home-outline-variant) 55%, transparent) transparent;
 }
 
-/* Compact service rows — Roam green selection, ~52–64px per row */
+/* Compact service rows — flex to fill sheet; scroll when 4+ tiers */
 .home-service-list {
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
 }
 
+.home-service-list--fill {
+  flex: 1 1 auto;
+  min-height: 100%;
+  width: 100%;
+}
+
+.home-service-list--fill .home-service-row {
+  flex: 1 1 0;
+  min-height: 4.5rem;
+}
+
+.home-service-list--fill.home-service-list--many .home-service-row {
+  flex: 0 0 auto;
+  max-height: calc((100% - (var(--home-service-count, 4) - 1) * 0.375rem) / 3.7);
+}
+
 .home-service-row {
   position: relative;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 0.5rem;
   width: 100%;
-  padding: 0.5rem 0.625rem;
+  padding: 0.625rem 0.75rem;
   border-radius: 0.75rem;
   border: 1px solid var(--home-card-border);
   background: var(--home-card-bg);
@@ -275,6 +352,15 @@ html.dark .home-page {
     border-color 0.15s ease,
     background-color 0.15s ease,
     box-shadow 0.15s ease;
+}
+
+.home-service-row__body {
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .home-service-row:not(.home-service-row--active) {
