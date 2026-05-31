@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Loader2, MapPin, ShieldCheck, Star, User } from 'lucide-react';
+import { Loader2, MapPin, MessageCircle, ShieldCheck, Star, User } from 'lucide-react';
 import type { RideRequestRow } from '@roam/types/rides';
 import type { RoutePoint } from '../../types/tripSession';
 import { LeafletMap } from '../maps/LeafletMap';
 import { RiderPinEntry } from './RiderPinEntry';
 import { SwipeToStart } from './SwipeToStart';
 import { GracePeriodCountdown, isGracePeriodActive } from './GracePeriodCountdown';
+import { DriverRideChatWrap } from './DriverRideChatWrap';
 
 type WaitTimeInfo = {
   wait_time_charge_enabled?: boolean;
@@ -68,6 +69,8 @@ export function ArrivedPickupPanel({ ride, onAdvance, trackingError, waitTimeInf
   };
 
   return (
+    <DriverRideChatWrap ride={ride}>
+      {(openChat) => (
     <div className="flex h-full min-h-0 flex-col bg-[#f7f9fb] dark:bg-slate-950">
       <div className="relative h-[36vh] min-h-[180px] shrink-0">
         <div className="en-route-map-tiles absolute inset-0">
@@ -95,17 +98,26 @@ export function ArrivedPickupPanel({ ride, onAdvance, trackingError, waitTimeInf
           </p>
         ) : null}
 
-        <div className="mb-6 flex items-center gap-4">
+        <div className="mb-4 flex items-center gap-4">
           <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-950/50">
             <User className="h-7 w-7 text-blue-700 dark:text-blue-300" aria-hidden />
           </div>
-          <div>
+          <div className="min-w-0 flex-1">
             <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Passenger</h2>
             <div className="flex items-center gap-1 text-sm text-slate-500">
-              <MapPin className="h-4 w-4" aria-hidden />
+              <MapPin className="h-4 w-4 shrink-0" aria-hidden />
               {shortAddress(ride.pickup_address)}
             </div>
           </div>
+          <button
+            type="button"
+            onClick={openChat}
+            className="flex shrink-0 flex-col items-center gap-1 rounded-2xl bg-slate-100 px-3 py-2 transition-transform active:scale-95 dark:bg-slate-800"
+            aria-label="Message passenger"
+          >
+            <MessageCircle className="h-5 w-5 text-[#004ac6]" aria-hidden />
+            <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Message</span>
+          </button>
         </div>
 
         {pinRequired ? (
@@ -148,5 +160,7 @@ export function ArrivedPickupPanel({ ride, onAdvance, trackingError, waitTimeInf
         ) : null}
       </div>
     </div>
+      )}
+    </DriverRideChatWrap>
   );
 }

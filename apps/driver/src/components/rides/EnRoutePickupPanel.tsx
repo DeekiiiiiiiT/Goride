@@ -18,6 +18,7 @@ import { DriverGpsBadge } from './DriverGpsBadge';
 import { pickupArrivalLabel } from './rideGeofenceClient';
 import type { DriverRideLocationLive } from '../../services/ridesDriverEdge';
 import { GracePeriodCountdown, isGracePeriodActive } from './GracePeriodCountdown';
+import { DriverRideChatWrap } from './DriverRideChatWrap';
 
 const CANCEL_REASONS = [
   { value: 'rider_no_show', label: 'Rider no-show' },
@@ -117,6 +118,8 @@ export function EnRoutePickupPanel({
   }, [cancelOpen]);
 
   return (
+    <DriverRideChatWrap ride={ride}>
+      {(openChat) => (
     <div className="flex h-full min-h-0 flex-col bg-[#f7f9fb] dark:bg-slate-950">
       <div className="relative h-[42vh] min-h-[200px] shrink-0">
         <div className="en-route-map-tiles absolute inset-0">
@@ -215,7 +218,7 @@ export function EnRoutePickupPanel({
         <div className="mb-4 grid grid-cols-3 gap-3">
           <button
             type="button"
-            onClick={() => toast.message('Messaging coming soon')}
+            onClick={openChat}
             className="flex flex-col items-center justify-center gap-1 rounded-2xl bg-slate-200/80 py-3 text-slate-600 transition-transform active:scale-95 dark:bg-slate-800 dark:text-slate-300"
           >
             <MessageCircle className="h-5 w-5" aria-hidden />
@@ -304,5 +307,7 @@ export function EnRoutePickupPanel({
         </div>
       ) : null}
     </div>
+      )}
+    </DriverRideChatWrap>
   );
 }

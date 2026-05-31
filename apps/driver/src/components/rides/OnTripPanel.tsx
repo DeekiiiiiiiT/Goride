@@ -19,6 +19,7 @@ import { formatOfferDistanceMi } from './rideDispatchUtils';
 import { RIDE_CANCEL_REASONS } from './rideCancelReasons';
 import { RideCancelSheet } from './RideCancelSheet';
 import { canCompleteTrip, isInsideDropoffGeofence } from './rideGeofenceClient';
+import { DriverRideChatWrap } from './DriverRideChatWrap';
 
 type Props = {
   ride: RideRequestRow;
@@ -121,6 +122,8 @@ export function OnTripPanel({ ride, onAdvance, trackingError, gpsAccuracyM }: Pr
   };
 
   return (
+    <DriverRideChatWrap ride={ride}>
+      {(openChat) => (
     <div className="relative flex h-full min-h-0 flex-col bg-[#f7f9fb] dark:bg-slate-950">
       <div className="relative h-[46vh] min-h-[220px] shrink-0">
         <div className="en-route-map-tiles absolute inset-0">
@@ -206,7 +209,7 @@ export function OnTripPanel({ ride, onAdvance, trackingError, gpsAccuracyM }: Pr
             </button>
             <button
               type="button"
-              onClick={() => toast.message('Messaging coming soon')}
+              onClick={openChat}
               className="flex flex-col items-center gap-2 transition-transform active:scale-90"
             >
               <span className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-200/90 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
@@ -298,5 +301,7 @@ export function OnTripPanel({ ride, onAdvance, trackingError, gpsAccuracyM }: Pr
         onConfirm={() => void runAdvance('cancelled', cancelReason)}
       />
     </div>
+      )}
+    </DriverRideChatWrap>
   );
 }

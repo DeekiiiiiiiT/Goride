@@ -5,7 +5,6 @@ import {
   Circle,
   HelpCircle,
   MapPin,
-  MessageCircle,
   Star,
   User,
   X,
@@ -139,14 +138,6 @@ export function TripDetailsSheet({ trip, open, onOpenChange }: Props) {
                   </div>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => toast.message('Rider chat is not available yet')}
-                className="rounded-full bg-white p-2 shadow-sm transition-shadow hover:shadow-md dark:bg-slate-900"
-                aria-label="Message rider"
-              >
-                <MessageCircle className="h-5 w-5 text-[#004ac6]" />
-              </button>
             </div>
 
             <div className="mb-8">

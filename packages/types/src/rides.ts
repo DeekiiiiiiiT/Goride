@@ -24,6 +24,34 @@ export function isDriverActiveRideStatus(status: RideRequestStatus | string): bo
   return (DRIVER_ACTIVE_RIDE_STATUSES as readonly string[]).includes(status);
 }
 
+/** P2P in-app chat is available only during active driver–rider trip phases. */
+export function isRideChatEnabled(status: RideRequestStatus | string): boolean {
+  return isDriverActiveRideStatus(status);
+}
+
+export type RideMessageSenderRole = 'rider' | 'driver';
+
+export interface RideMessageDto {
+  id: string;
+  ride_request_id: string;
+  sender_user_id: string;
+  sender_role: RideMessageSenderRole;
+  body: string;
+  created_at: string;
+}
+
+export interface RideMessagesResponse {
+  messages: RideMessageDto[];
+}
+
+export interface SendRideMessageBody {
+  body: string;
+}
+
+export interface SendRideMessageResponse {
+  message: RideMessageDto;
+}
+
 export type DriverOfferStatus = 'pending' | 'accepted' | 'declined' | 'expired' | 'superseded';
 
 export type RidePaymentMethod = 'cash' | 'card';

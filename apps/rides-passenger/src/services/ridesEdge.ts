@@ -5,7 +5,11 @@ import type {
   DriverOfferRow,
   FareQuoteResponse,
   RideLiveResponse,
+  RideMessageDto,
+  RideMessagesResponse,
   RideRequestRow,
+  SendRideMessageBody,
+  SendRideMessageResponse,
 } from '@roam/types/rides';
 import type { RidesVehicleTypeDto } from '@/types/vehicleTypes';
 
@@ -48,6 +52,9 @@ function throwRidesErrorBody(body: RidesErrorBody, status: number, rawText: stri
   }
   if (body.error === 'not_found') {
     throw new Error('Ride not found. It may still be syncing — go back and try again.');
+  }
+  if (body.error === 'chat_not_available') {
+    throw new Error('Chat is only available during an active trip.');
   }
   if (body.error === 'update_failed') {
     throw new Error(
@@ -151,3 +158,33 @@ export async function ridesCancelRequest(id: string, reason?: string): Promise<{
   if (!res.ok) await parseRidesError(res);
   return res.json();
 }
+
+export async function ridesListMessages(
+  rideId: string,
+  opts?: { limit?: number; before?: string },
+): Promise<RideMessagesResponse> {
+  const params = new URLSearchParams();
+  if (opts?.limit != null) params.set('limit', String(opts.limit));
+  if (opts?.before) params.set('before', opts.before);
+  const qs = params.toString();
+  const res = await fetch(`${base}/v1/requests/${rideId}/messages${qs ? `?${qs}` : ''}`, {
+    headers: await ridesHeaders(),
+  });
+  if (!res.ok) await parseRidesError(res);
+  return res.json();
+}
+
+export async function ridesSendMessage(
+  rideId: string,
+  body: SendRideMessageBody,
+): Promise<SendRideMessageResponse> {
+  const res = await fetch(`${base}/v1/requests/${rideId}/messages`, {
+    method: 'POST',
+    headers: await ridesHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await parseRidesError(res);
+  return res.json();
+}
+
+export type { RideMessageDto };

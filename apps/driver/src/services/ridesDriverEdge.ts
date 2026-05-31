@@ -9,7 +9,11 @@ import type {
   DriverPresenceBody,
   DriverTransitionBody,
   RideLocationUpdateBody,
+  RideMessageDto,
+  RideMessagesResponse,
   RideRequestRow,
+  SendRideMessageBody,
+  SendRideMessageResponse,
 } from '@roam/types/rides';
 
 async function ridesHeaders(): Promise<HeadersInit> {
@@ -165,3 +169,47 @@ export async function ridesDriverMyEarnings(
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
+
+async function parseDriverRidesError(res: Response): Promise<never> {
+  const text = await res.text();
+  try {
+    const body = JSON.parse(text) as { error?: string; message?: string };
+    if (body.error === 'chat_not_available') {
+      throw new Error('Chat is only available during an active trip.');
+    }
+    throw new Error(body.message ?? body.error ?? text);
+  } catch (e) {
+    if (e instanceof Error && e.message !== text) throw e;
+    throw new Error(text || `Request failed (HTTP ${res.status})`);
+  }
+}
+
+export async function ridesDriverListMessages(
+  rideId: string,
+  opts?: { limit?: number; before?: string },
+): Promise<RideMessagesResponse> {
+  const params = new URLSearchParams();
+  if (opts?.limit != null) params.set('limit', String(opts.limit));
+  if (opts?.before) params.set('before', opts.before);
+  const qs = params.toString();
+  const res = await fetch(`${base}/v1/requests/${rideId}/messages${qs ? `?${qs}` : ''}`, {
+    headers: await ridesHeaders(),
+  });
+  if (!res.ok) await parseDriverRidesError(res);
+  return res.json();
+}
+
+export async function ridesDriverSendMessage(
+  rideId: string,
+  body: SendRideMessageBody,
+): Promise<SendRideMessageResponse> {
+  const res = await fetch(`${base}/v1/requests/${rideId}/messages`, {
+    method: 'POST',
+    headers: await ridesHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await parseDriverRidesError(res);
+  return res.json();
+}
+
+export type { RideMessageDto };

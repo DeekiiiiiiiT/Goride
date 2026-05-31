@@ -67,6 +67,7 @@ import {
 import { evaluateGeofenceTransitions, cleanupRideLiveState } from "./rideGeofence.ts";
 import { loadAppPermissionPolicy, policyDto } from "../_shared/appPermissionPolicy.ts";
 import type { AppPermissionSurface } from "../_shared/appPermissionCatalog.ts";
+import { registerRideChatRoutes } from "./rideChat.ts";
 
 /** Match Supabase path prefix: .../functions/v1/rides/<route> → /rides/<route> */
 const app = new Hono().basePath("/rides");
@@ -2023,6 +2024,13 @@ app.post("/v1/internal/reconcile-active-rides", async (c) => {
 
   logLine({ event: "reconcile_active_rides", rides: rideIds.length, noShowCancelled, staleAlerts });
   return c.json({ ok: true, rides: rideIds.length, no_show_cancelled: noShowCancelled, stale_alerts: staleAlerts });
+});
+
+registerRideChatRoutes(app, {
+  svc,
+  loadRideRequestById,
+  requireUser,
+  audit,
 });
 
 registerAdminRoutes(app, { logLine });

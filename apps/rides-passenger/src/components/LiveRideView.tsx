@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { vehicleTypeLabel } from '@roam/business-config/ridesVehicleTypes';
 import type { RideRequestRow, RideRequestStatus } from '@roam/types/rides';
 import { LiveRideMap } from '@/components/LiveRideMap';
+import { RiderRideChatWrap } from '@/components/RiderRideChatWrap';
 import { formatShortAddress } from '@/lib/formatRideAddress';
 import { isRiderPinTripPhase, shouldShowRiderPin } from '@/lib/riderPin';
 
@@ -116,6 +117,8 @@ export function LiveRideView({
   };
 
   return (
+    <RiderRideChatWrap ride={ride}>
+      {(openChat) => (
     <div className="live-ride-page">
       <header className="live-ride-topbar">
         <button type="button" className="live-ride-topbar__btn" onClick={onBack} aria-label="Go back">
@@ -184,7 +187,7 @@ export function LiveRideView({
             </div>
 
             <div className="live-ride-actions" role="group" aria-label="Contact and safety">
-              <button type="button" className="live-ride-action" onClick={() => comingSoon('Message')}>
+              <button type="button" className="live-ride-action" onClick={openChat}>
                 <span className="live-ride-action__circle">
                   <MessageCircle className="size-6" strokeWidth={2} />
                 </span>
@@ -252,5 +255,7 @@ export function LiveRideView({
         </section>
       </main>
     </div>
+      )}
+    </RiderRideChatWrap>
   );
 }

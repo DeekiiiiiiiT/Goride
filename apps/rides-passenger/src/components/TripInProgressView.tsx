@@ -13,6 +13,7 @@ import { vehicleTypeLabel } from '@roam/business-config/ridesVehicleTypes';
 import type { RideRequestRow } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
 import { LiveRideMap } from '@/components/LiveRideMap';
+import { RiderRideChatWrap } from '@/components/RiderRideChatWrap';
 import { formatShortAddress } from '@/lib/formatRideAddress';
 
 type LatLng = { lat: number; lng: number };
@@ -69,6 +70,8 @@ export function TripInProgressView({ ride, driverLocation, driverHeading, onBack
   };
 
   return (
+    <RiderRideChatWrap ride={ride}>
+      {(openChat) => (
     <div className="trip-progress-page">
       <header className="trip-progress-header">
         <button type="button" className="trip-progress-header__btn" onClick={onBack} aria-label="Go back">
@@ -126,7 +129,7 @@ export function TripInProgressView({ ride, driverLocation, driverHeading, onBack
           </div>
 
           <div className="trip-progress-actions" role="group" aria-label="Trip actions">
-            <button type="button" className="trip-progress-action" onClick={() => comingSoon('Message')}>
+            <button type="button" className="trip-progress-action" onClick={openChat}>
               <span className="trip-progress-action__circle">
                 <MessageCircle className="size-6" strokeWidth={2} />
               </span>
@@ -179,5 +182,7 @@ export function TripInProgressView({ ride, driverLocation, driverHeading, onBack
         </section>
       </main>
     </div>
+      )}
+    </RiderRideChatWrap>
   );
 }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { ExternalLink, Loader2, Clock, ShieldCheck } from 'lucide-react';
+import { ExternalLink, Loader2, Clock, ShieldCheck, MessageCircle } from 'lucide-react';
 import type { RideRequestRow } from '@roam/types/rides';
+import { isRideChatEnabled } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
 import { openExternalNavigation } from '../../utils/rideNavigation';
 import { statusTitle } from './rideDispatchUtils';
@@ -8,6 +9,7 @@ import { canCompleteTrip } from './rideGeofenceClient';
 import { SwipeToStart } from './SwipeToStart';
 import { DriverGpsBadge } from './DriverGpsBadge';
 import { PinEntryModal } from './PinEntryModal';
+import { DriverRideChatWrap } from './DriverRideChatWrap';
 
 interface WaitTimeInfo {
   wait_time_charge_enabled?: boolean;
@@ -156,6 +158,8 @@ export function ActiveRidePanel({
   };
 
   return (
+    <DriverRideChatWrap ride={ride}>
+      {(openChat) => (
     <section
       className={`rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-3 ${
         compact ? 'p-3' : 'p-4'
@@ -199,6 +203,17 @@ export function ActiveRidePanel({
       </p>
 
       <div className="flex flex-col gap-2 pt-1">
+        {isRideChatEnabled(ride.status) && (
+          <button
+            type="button"
+            onClick={openChat}
+            className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-medium inline-flex items-center justify-center gap-1.5"
+          >
+            <MessageCircle className="w-3.5 h-3.5" aria-hidden />
+            Message passenger
+          </button>
+        )}
+
         {ride.status === 'driver_en_route_pickup' && (
           <>
             {waitTimeInfo && <WaitTimeDisplay waitTime={waitTimeInfo} />}
@@ -323,5 +338,7 @@ export function ActiveRidePanel({
         error={pinError}
       />
     </section>
+      )}
+    </DriverRideChatWrap>
   );
 }

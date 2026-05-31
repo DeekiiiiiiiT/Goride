@@ -407,6 +407,9 @@ importers:
       '@roam/business-config':
         specifier: workspace:*
         version: link:../../packages/business-config
+      '@roam/ride-chat':
+        specifier: workspace:*
+        version: link:../../packages/ride-chat
       '@roam/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -923,6 +926,9 @@ importers:
       '@roam/business-config':
         specifier: workspace:*
         version: link:../../packages/business-config
+      '@roam/ride-chat':
+        specifier: workspace:*
+        version: link:../../packages/ride-chat
       '@roam/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -1051,6 +1057,27 @@ importers:
       '@roam/types':
         specifier: workspace:*
         version: link:../types
+
+  packages/ride-chat:
+    dependencies:
+      '@roam/types':
+        specifier: workspace:*
+        version: link:../types
+      '@supabase/supabase-js':
+        specifier: ^2
+        version: 2.105.4
+      lucide-react:
+        specifier: ^0.487.0
+        version: 0.487.0(react@18.3.1)
+      react:
+        specifier: ^18.0.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.0.0
+        version: 18.3.1(react@18.3.1)
+      sonner:
+        specifier: ^2.0.3
+        version: 2.0.7(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
 
   packages/types: {}
 
