@@ -77,6 +77,9 @@ html.dark .home-page {
 }
 
 .home-page {
+  --home-nav-h: 4.5rem;
+  --home-booking-actions-h: 5.5rem;
+  --home-booking-sheet-max: min(46dvh, 420px);
   font-family: 'Inter', system-ui, sans-serif;
   background-color: var(--home-bg);
   color: var(--home-on-surface);
@@ -103,11 +106,46 @@ html.dark .home-page {
   box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.18);
 }
 
-/* Booking sheet: pin fields + footer; only services list scrolls */
+/* Home booking layout: sheet + fixed actions above bottom nav */
+.home-page--booking-ready {
+  --home-booking-actions-h: 10rem;
+  --home-booking-sheet-max: min(62dvh, 580px);
+}
+
+.home-booking-anchor {
+  bottom: calc(
+    var(--home-nav-h) + var(--home-booking-actions-h) + env(safe-area-inset-bottom, 0px)
+  );
+}
+
+.home-booking-actions {
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 45;
+  bottom: calc(var(--home-nav-h) + env(safe-area-inset-bottom, 0px));
+  padding-left: max(1rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1rem, env(safe-area-inset-right, 0px));
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  background: var(--home-sheet-bg);
+  border-top: 1px solid var(--home-sheet-border);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 -6px 28px rgba(0, 0, 0, 0.1);
+}
+
+.home-booking-actions__inner {
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 36rem;
+}
+
+/* Booking sheet: route + scrollable services (CTA lives in .home-booking-actions) */
 .home-booking-sheet {
   display: flex;
   flex-direction: column;
-  max-height: min(56dvh, 520px);
+  max-height: var(--home-booking-sheet-max);
 }
 
 .home-booking-sheet--keyboard {
@@ -115,6 +153,7 @@ html.dark .home-page {
 }
 
 .home-booking-sheet--keyboard .home-booking-sheet__services {
+  min-height: 8rem;
   max-height: none;
 }
 
@@ -122,10 +161,75 @@ html.dark .home-page {
   flex-shrink: 0;
 }
 
+.home-route-summary {
+  display: flex;
+  align-items: stretch;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 1rem;
+  border: 1px solid var(--home-card-border);
+  background: var(--home-card-bg);
+  text-align: left;
+  transition: transform 0.15s ease;
+}
+
+.home-route-summary:active {
+  transform: scale(0.99);
+}
+
+.home-route-summary__dots {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 0.35rem;
+  padding-bottom: 0.35rem;
+  width: 0.625rem;
+  flex-shrink: 0;
+}
+
+.home-route-summary__line {
+  flex: 1;
+  width: 2px;
+  margin: 0.2rem 0;
+  background: color-mix(in srgb, var(--home-outline-variant) 40%, transparent);
+}
+
+.home-route-summary__addresses {
+  min-width: 0;
+  flex: 1;
+}
+
+.home-route-summary__row {
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--home-on-surface);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-route-summary__row + .home-route-summary__row {
+  margin-top: 0.5rem;
+  font-weight: 500;
+  color: var(--home-on-surface-muted);
+}
+
+.home-route-summary__edit {
+  flex-shrink: 0;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--home-primary);
+}
+
 .home-booking-sheet__services {
-  flex: 1 1 auto;
-  min-height: 0;
-  max-height: min(240px, 34dvh);
+  flex: 1 1 0;
+  min-height: min(11.5rem, 22dvh);
   margin-top: 0.25rem;
   overflow-x: hidden;
   overflow-y: auto;
@@ -135,6 +239,10 @@ html.dark .home-page {
   scrollbar-color: color-mix(in srgb, var(--home-outline-variant) 55%, transparent) transparent;
 }
 
+.home-booking-sheet--quotes .home-booking-sheet__services {
+  min-height: min(13.5rem, 28dvh);
+}
+
 .home-booking-sheet__services::-webkit-scrollbar {
   width: 5px;
 }
@@ -142,13 +250,6 @@ html.dark .home-page {
 .home-booking-sheet__services::-webkit-scrollbar-thumb {
   border-radius: 9999px;
   background: color-mix(in srgb, var(--home-outline-variant) 50%, transparent);
-}
-
-.home-booking-sheet__footer {
-  flex-shrink: 0;
-  padding-top: 0.75rem;
-  margin-top: 0.25rem;
-  border-top: 1px solid var(--home-card-border);
 }
 
 .home-place-input {
@@ -243,7 +344,8 @@ html.dark .home-page {
   color: var(--home-suggestion-pin);
 }
 
-html[data-keyboard-open='true'] .home-bottom-nav {
+html[data-keyboard-open='true'] .home-bottom-nav,
+html[data-keyboard-open='true'] .home-booking-actions {
   transform: translateY(100%);
   opacity: 0;
   pointer-events: none;

@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Crosshair,
   Package,
+  Pencil,
   UserPlus,
 } from 'lucide-react';
 import { supabase } from '@roam/auth-client';
@@ -54,6 +55,12 @@ const HOME_SUGGESTIONS =
 const HOME_SUGGESTION_BTN =
   'home-suggestion-btn flex w-full items-start gap-2 px-3 py-2.5 text-left text-sm disabled:opacity-50';
 
+function truncateRouteLabel(text: string, maxLen = 44): string {
+  const t = text.trim();
+  if (t.length <= maxLen) return t;
+  return `${t.slice(0, maxLen - 1)}…`;
+}
+
 export default function HomePage() {
   const navigate = useNavigate();
   const { keyboardInset, height: viewportHeight } = useVisualViewport();
@@ -88,6 +95,8 @@ export default function HomePage() {
   const [pickupAccuracy, setPickupAccuracy] = useState<number | null>(null);
   const [pickupMapOpen, setPickupMapOpen] = useState(false);
   const [quickActionsHidden, setQuickActionsHidden] = useState(false);
+  /** Full address fields vs compact trip summary when pickup + dropoff are set. */
+  const [routeExpanded, setRouteExpanded] = useState(true);
   /** Pickup was filled from device GPS (grey field until user edits pickup). */
   const [pickupSetByDevice, setPickupSetByDevice] = useState(false);
   const { active: services } = useRidesVehicleTypes();
@@ -137,6 +146,13 @@ export default function HomePage() {
   const [initialGpsLoading, setInitialGpsLoading] = useState(true);
 
   const coordsReady = pickup && dropoff;
+  const showCompactRoute = coordsReady && !routeExpanded;
+
+  useEffect(() => {
+    if (coordsReady) setRouteExpanded(false);
+    else setRouteExpanded(true);
+  }, [coordsReady]);
+
   const quote = vehicleOption ? quotesBySlug[vehicleOption] ?? null : null;
   const hasQuotes = Object.keys(quotesBySlug).length > 0;
 
@@ -355,8 +371,20 @@ export default function HomePage() {
 
   const profileSrc = avatarUrl ?? DEFAULT_PROFILE_AVATAR_URL;
 
+  const bookingActionsBottom = keyboardOpen
+    ? keyboardInset
+    : 'calc(var(--home-nav-h) + env(safe-area-inset-bottom, 0px))';
+
+  const sheetBottom = keyboardOpen
+    ? keyboardInset
+    : 'calc(var(--home-nav-h) + var(--home-booking-actions-h) + env(safe-area-inset-bottom, 0px))';
+
   return (
-    <div className="home-page relative flex min-h-[100dvh] flex-1 flex-col overflow-hidden">
+    <div
+      className={`home-page relative flex min-h-[100dvh] flex-1 flex-col overflow-hidden ${
+        coordsReady ? 'home-page--booking-ready' : ''
+      }`}
+    >
       <PermissionOnboardingSheet
         surface="rider"
         permissions={permissions}
@@ -429,8 +457,11 @@ export default function HomePage() {
         <button
           type="button"
           onClick={() => setPickupMapOpen(true)}
-          className="absolute bottom-[calc(5.5rem+min(36vh,400px))] right-4 z-20 flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold shadow-lg transition-transform active:scale-95"
+          className="absolute right-4 z-20 flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold shadow-lg transition-transform active:scale-95"
           style={{
+            bottom: coordsReady
+              ? 'calc(var(--home-nav-h) + var(--home-booking-actions-h) + min(52dvh, 500px) + env(safe-area-inset-bottom, 0px) + 0.5rem)'
+              : 'calc(var(--home-nav-h) + var(--home-booking-actions-h) + min(38dvh, 360px) + env(safe-area-inset-bottom, 0px) + 0.5rem)',
             backgroundColor: 'var(--home-pill-bg)',
             color: 'var(--home-primary)',
             border: '1px solid var(--home-sheet-border)',
@@ -442,20 +473,61 @@ export default function HomePage() {
         </button>
 
         <div
-          className="fixed left-0 z-40 w-full px-4 safe-x transition-[bottom] duration-200 ease-out"
-          style={{
-            bottom: keyboardOpen
-              ? keyboardInset
-              : 'calc(4.5rem + env(safe-area-inset-bottom, 0px))',
-          }}
+          className="home-booking-actions safe-x transition-[bottom] duration-200 ease-out"
+          style={{ bottom: bookingActionsBottom }}
+        >
+          <div className="home-booking-actions__inner px-1">
+            {locationBlocked && (
+              <p
+                className="mb-3 rounded-2xl border px-4 py-2 text-center text-sm"
+                style={{ borderColor: 'var(--home-card-border)', color: 'var(--home-on-surface)' }}
+              >
+                Location is required to book. Allow location access in your browser to continue.
+              </p>
+            )}
+
+            {coordsReady && (
+              <TripPaymentMethodBar
+                method={selectedPayment}
+                onPress={() => setPaymentSheetOpen(true)}
+              />
+            )}
+
+            <button
+              type="button"
+              onClick={handleBook}
+              disabled={bookLoading || !canBook}
+              className={`btn-touch flex h-14 w-full items-center justify-center gap-2 rounded-2xl text-lg font-semibold shadow-lg transition-all active:scale-[0.97] disabled:opacity-50 ${
+                coordsReady ? 'mt-3' : ''
+              }`}
+              style={{
+                backgroundColor: 'var(--home-primary)',
+                color: 'var(--home-on-primary)',
+                boxShadow: '0 8px 24px color-mix(in srgb, var(--home-primary) 35%, transparent)',
+              }}
+            >
+              {bookLoading ? 'Booking…' : "Let's Roam"}
+              <ArrowRight className="h-5 w-5" aria-hidden />
+            </button>
+          </div>
+        </div>
+
+        <div
+          className="home-booking-anchor fixed left-0 z-40 w-full px-4 safe-x transition-[bottom] duration-200 ease-out"
+          style={{ bottom: sheetBottom }}
         >
           <div
             className={`home-glass-sheet home-booking-sheet mx-auto max-w-xl overflow-hidden rounded-3xl ${
               keyboardOpen ? 'home-booking-sheet--keyboard' : ''
-            }`}
+            } ${coordsReady ? 'home-booking-sheet--quotes' : ''}`}
             style={
               keyboardOpen
-                ? { maxHeight: Math.max(280, viewportHeight - keyboardInset - 24) }
+                ? {
+                    maxHeight: Math.max(
+                      280,
+                      viewportHeight - keyboardInset - (coordsReady ? 168 : 88),
+                    ),
+                  }
                 : undefined
             }
           >
@@ -468,12 +540,67 @@ export default function HomePage() {
             </div>
 
             <div className="home-booking-sheet__top px-5 pb-3 pt-1">
-              <h1
-                className="home-display mb-6 text-[30px] font-bold leading-tight tracking-tight"
-                style={{ color: 'var(--home-on-surface)' }}
-              >
-                Where to?
-              </h1>
+              {showCompactRoute ? (
+                <div className="mb-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="home-label-caps" style={{ color: 'var(--home-on-surface-muted)' }}>
+                      Your trip
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="home-route-summary touch-manipulation"
+                    onClick={() => setRouteExpanded(true)}
+                    aria-label="Edit pickup and destination"
+                  >
+                    <div className="home-route-summary__dots" aria-hidden>
+                      <div
+                        className="h-2 w-2 shrink-0 rounded-full"
+                        style={{
+                          backgroundColor: 'var(--home-primary)',
+                          boxShadow: '0 0 0 3px color-mix(in srgb, var(--home-primary) 22%, transparent)',
+                        }}
+                      />
+                      <div className="home-route-summary__line" />
+                      <div
+                        className="h-2 w-2 shrink-0"
+                        style={{ backgroundColor: 'var(--home-on-surface)' }}
+                      />
+                    </div>
+                    <div className="home-route-summary__addresses">
+                      <p className="home-route-summary__row">
+                        {truncateRouteLabel(pickupAddress || 'Pickup')}
+                      </p>
+                      <p className="home-route-summary__row">
+                        {truncateRouteLabel(dropoffAddress || 'Destination')}
+                      </p>
+                    </div>
+                    <span className="home-route-summary__edit">
+                      <Pencil className="h-3.5 w-3.5" aria-hidden />
+                      Edit
+                    </span>
+                  </button>
+                </div>
+              ) : (
+                <>
+              <div className="mb-4 flex items-end justify-between gap-3">
+                <h1
+                  className="home-display text-[30px] font-bold leading-tight tracking-tight"
+                  style={{ color: 'var(--home-on-surface)' }}
+                >
+                  Where to?
+                </h1>
+                {coordsReady && routeExpanded && (
+                  <button
+                    type="button"
+                    onClick={() => setRouteExpanded(false)}
+                    className="shrink-0 pb-1 text-sm font-semibold touch-manipulation"
+                    style={{ color: 'var(--home-primary)' }}
+                  >
+                    Done
+                  </button>
+                )}
+              </div>
 
               <div className="relative mb-6">
                 <div className="absolute bottom-7 left-1 top-7 flex w-2.5 flex-col items-center">
@@ -618,6 +745,22 @@ export default function HomePage() {
                   <strong className="tabular-nums">×{surge.toFixed(2)}</strong>
                 </p>
               )}
+                </>
+              )}
+
+              {showCompactRoute && surge != null && surge > 1 && (
+                <p
+                  className="mb-3 rounded-2xl border px-4 py-2 text-sm"
+                  style={{
+                    color: 'var(--home-on-surface)',
+                    borderColor: 'var(--home-card-border)',
+                    backgroundColor: 'color-mix(in srgb, var(--home-primary) 8%, transparent)',
+                  }}
+                >
+                  Demand is high — surge{' '}
+                  <strong className="tabular-nums">×{surge.toFixed(2)}</strong>
+                </p>
+              )}
             </div>
 
             {coordsReady && (
@@ -642,45 +785,10 @@ export default function HomePage() {
             )}
 
             {!coordsReady && services.length > 0 && (
-              <p className="px-5 pb-2 text-center text-sm" style={{ color: 'var(--home-on-surface-muted)' }}>
+              <p className="px-5 pb-4 text-center text-sm" style={{ color: 'var(--home-on-surface-muted)' }}>
                 Enter pickup and destination to see ride options
               </p>
             )}
-
-            <div className="home-booking-sheet__footer px-5 pb-6">
-              {locationBlocked && (
-                <p
-                  className="mb-3 rounded-2xl border px-4 py-2 text-center text-sm"
-                  style={{ borderColor: 'var(--home-card-border)', color: 'var(--home-on-surface)' }}
-                >
-                  Location is required to book. Allow location access in your browser to continue.
-                </p>
-              )}
-
-              {coordsReady && (
-                <TripPaymentMethodBar
-                  method={selectedPayment}
-                  onPress={() => setPaymentSheetOpen(true)}
-                />
-              )}
-
-              <button
-                type="button"
-                onClick={handleBook}
-                disabled={bookLoading || !canBook}
-                className={`btn-touch flex h-14 w-full items-center justify-center gap-2 rounded-2xl text-lg font-semibold shadow-lg transition-all active:scale-[0.97] disabled:opacity-50 ${
-                  coordsReady ? 'mt-4' : ''
-                }`}
-                style={{
-                  backgroundColor: 'var(--home-primary)',
-                  color: 'var(--home-on-primary)',
-                  boxShadow: '0 8px 24px color-mix(in srgb, var(--home-primary) 35%, transparent)',
-                }}
-              >
-                {bookLoading ? 'Booking…' : "Let's Roam"}
-                <ArrowRight className="h-5 w-5" aria-hidden />
-              </button>
-            </div>
           </div>
         </div>
       </main>
