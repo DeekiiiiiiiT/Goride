@@ -1,5 +1,5 @@
 import React from 'react';
-import { RideChatHost } from '@roam/ride-chat';
+import { RideChatHost, type RideChatContext } from '@roam/ride-chat';
 import type { RideRequestRow } from '@roam/types/rides';
 import { useAuth } from '../../contexts/AuthContext';
 import { ridesDriverListMessages, ridesDriverSendMessage } from '../../services/ridesDriverEdge';
@@ -12,7 +12,7 @@ const driverChatApi = {
 
 type Props = {
   ride: RideRequestRow;
-  children: (openChat: () => void) => React.ReactNode;
+  children: (openChat: () => void, ctx: RideChatContext) => React.ReactNode;
 };
 
 export function DriverRideChatWrap({ ride, children }: Props) {

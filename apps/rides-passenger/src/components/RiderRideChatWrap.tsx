@@ -1,6 +1,6 @@
 import React from 'react';
 import { supabase } from '@roam/auth-client';
-import { RideChatHost } from '@roam/ride-chat';
+import { RideChatHost, type RideChatContext } from '@roam/ride-chat';
 import type { RideRequestRow } from '@roam/types/rides';
 import { ridesListMessages, ridesSendMessage } from '@/services/ridesEdge';
 
@@ -11,7 +11,7 @@ const riderChatApi = {
 
 type Props = {
   ride: RideRequestRow;
-  children: (openChat: () => void) => React.ReactNode;
+  children: (openChat: () => void, ctx: RideChatContext) => React.ReactNode;
 };
 
 export function RiderRideChatWrap({ ride, children }: Props) {

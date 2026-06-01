@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { vehicleTypeLabel } from '@roam/business-config/ridesVehicleTypes';
 import type { RideRequestRow, RideRequestStatus } from '@roam/types/rides';
 import { LiveRideMap } from '@/components/LiveRideMap';
+import { RideChatUnreadDot } from '@roam/ride-chat';
 import { RiderRideChatWrap } from '@/components/RiderRideChatWrap';
 import { formatShortAddress } from '@/lib/formatRideAddress';
 import { isRiderPinTripPhase, shouldShowRiderPin } from '@/lib/riderPin';
@@ -118,7 +119,7 @@ export function LiveRideView({
 
   return (
     <RiderRideChatWrap ride={ride}>
-      {(openChat) => (
+      {(openChat, { unreadCount }) => (
     <div className="live-ride-page">
       <header className="live-ride-topbar">
         <button type="button" className="live-ride-topbar__btn" onClick={onBack} aria-label="Go back">
@@ -187,9 +188,15 @@ export function LiveRideView({
             </div>
 
             <div className="live-ride-actions" role="group" aria-label="Contact and safety">
-              <button type="button" className="live-ride-action" onClick={openChat}>
-                <span className="live-ride-action__circle">
+              <button
+                type="button"
+                className="live-ride-action"
+                onClick={openChat}
+                aria-label={unreadCount > 0 ? `Message, ${unreadCount} unread` : 'Message driver'}
+              >
+                <span className="live-ride-action__circle relative">
                   <MessageCircle className="size-6" strokeWidth={2} />
+                  <RideChatUnreadDot show={unreadCount > 0} className="right-1 top-1" />
                 </span>
                 <span className="live-ride-action__label">Message</span>
               </button>

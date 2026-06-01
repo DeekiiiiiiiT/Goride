@@ -17,6 +17,7 @@ import { DriverGpsBadge } from './DriverGpsBadge';
 import { pickupArrivalLabel } from './rideGeofenceClient';
 import type { DriverRideLocationLive } from '../../services/ridesDriverEdge';
 import { GracePeriodCountdown, isGracePeriodActive } from './GracePeriodCountdown';
+import { RideChatUnreadDot } from '@roam/ride-chat';
 import { DriverRideChatWrap } from './DriverRideChatWrap';
 import { PickupArrivalCountdown } from './PickupArrivalCountdown';
 
@@ -119,7 +120,7 @@ export function EnRoutePickupPanel({
 
   return (
     <DriverRideChatWrap ride={ride}>
-      {(openChat) => (
+      {(openChat, { unreadCount }) => (
     <div className="flex h-full min-h-0 flex-col bg-[#f7f9fb] dark:bg-slate-950">
       <div className="relative h-[30vh] min-h-[130px] max-h-[180px] shrink-0">
         <div className="en-route-map-tiles absolute inset-0">
@@ -199,9 +200,13 @@ export function EnRoutePickupPanel({
             <button
               type="button"
               onClick={openChat}
-              className="flex flex-col items-center justify-center gap-0.5 rounded-xl bg-slate-200/80 py-2.5 text-slate-600 active:scale-95 dark:bg-slate-800 dark:text-slate-300"
+              className="relative flex flex-col items-center justify-center gap-0.5 rounded-xl bg-slate-200/80 py-2.5 text-slate-600 active:scale-95 dark:bg-slate-800 dark:text-slate-300"
+              aria-label={unreadCount > 0 ? `Message, ${unreadCount} unread` : 'Message passenger'}
             >
-              <MessageCircle className="h-4 w-4" aria-hidden />
+              <span className="relative inline-flex">
+                <MessageCircle className="h-4 w-4" aria-hidden />
+                <RideChatUnreadDot show={unreadCount > 0} className="-right-1 -top-1" />
+              </span>
               <span className="text-[11px] font-semibold">Message</span>
             </button>
             <button

@@ -16,16 +16,8 @@ export type RideChatApi = {
 
 export type RideChatVariant = 'rider' | 'driver';
 
-export type RideChatSheetProps = {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  rideId: string;
-  enabled: boolean;
-  currentUserId: string | null | undefined;
-  peerLabel: string;
-  variant: RideChatVariant;
-  api: RideChatApi;
-  supabase: SupabaseClient;
+export type RideChatContext = {
+  unreadCount: number;
 };
 
 export type { RideMessageDto };

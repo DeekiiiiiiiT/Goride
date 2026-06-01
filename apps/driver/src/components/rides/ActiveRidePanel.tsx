@@ -9,6 +9,7 @@ import { canCompleteTrip } from './rideGeofenceClient';
 import { SwipeToStart } from './SwipeToStart';
 import { DriverGpsBadge } from './DriverGpsBadge';
 import { PinEntryModal } from './PinEntryModal';
+import { RideChatUnreadDot } from '@roam/ride-chat';
 import { DriverRideChatWrap } from './DriverRideChatWrap';
 
 interface WaitTimeInfo {
@@ -159,7 +160,7 @@ export function ActiveRidePanel({
 
   return (
     <DriverRideChatWrap ride={ride}>
-      {(openChat) => (
+      {(openChat, { unreadCount }) => (
     <section
       className={`rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-3 ${
         compact ? 'p-3' : 'p-4'
@@ -207,9 +208,13 @@ export function ActiveRidePanel({
           <button
             type="button"
             onClick={openChat}
-            className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-medium inline-flex items-center justify-center gap-1.5"
+            className="relative rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-medium inline-flex items-center justify-center gap-1.5"
+            aria-label={unreadCount > 0 ? `Message passenger, ${unreadCount} unread` : 'Message passenger'}
           >
-            <MessageCircle className="w-3.5 h-3.5" aria-hidden />
+            <span className="relative inline-flex">
+              <MessageCircle className="w-3.5 h-3.5" aria-hidden />
+              <RideChatUnreadDot show={unreadCount > 0} className="-right-1.5 -top-1.5" />
+            </span>
             Message passenger
           </button>
         )}

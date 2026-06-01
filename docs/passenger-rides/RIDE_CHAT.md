@@ -22,3 +22,14 @@ Returns `403` with `chat_not_available` when the ride is not in an active status
 Shared UI: `@roam/ride-chat` (`RideChatHost`, `RideChatSheet`).
 
 Realtime: `postgres_changes` on `public.ride_messages` filtered by `ride_request_id` (hosted projects do not expose the `rides` schema to Realtime).
+
+## Notifications (client)
+
+During an active trip, `@roam/ride-chat` listens for new messages even when the sheet is closed:
+
+- **Unread dot** on the Message button (red badge on the icon).
+- **Soft tone + short vibration** on new peer messages (debounced ~4s).
+- **Rider:** brief toast with message preview.
+- **Driver:** no popup toast (tone + dot only, to avoid distraction while driving).
+
+Unread state is cleared when the chat sheet is opened. Last-read position is stored in `sessionStorage` per ride.

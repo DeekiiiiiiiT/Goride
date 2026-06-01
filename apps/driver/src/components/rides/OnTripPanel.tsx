@@ -18,6 +18,7 @@ import { formatOfferDistanceMi } from './rideDispatchUtils';
 import { RIDE_CANCEL_REASONS } from './rideCancelReasons';
 import { RideCancelSheet } from './RideCancelSheet';
 import { canCompleteTrip } from './rideGeofenceClient';
+import { RideChatUnreadDot } from '@roam/ride-chat';
 import { DriverRideChatWrap } from './DriverRideChatWrap';
 
 type Props = {
@@ -120,7 +121,7 @@ export function OnTripPanel({ ride, onAdvance, trackingError }: Props) {
 
   return (
     <DriverRideChatWrap ride={ride}>
-      {(openChat) => (
+      {(openChat, { unreadCount }) => (
     <div className="flex h-full min-h-0 flex-col bg-[#f7f9fb] dark:bg-slate-950">
       <div className="relative h-[30vh] min-h-[130px] max-h-[180px] shrink-0">
         <div className="en-route-map-tiles absolute inset-0">
@@ -190,9 +191,11 @@ export function OnTripPanel({ ride, onAdvance, trackingError }: Props) {
               type="button"
               onClick={openChat}
               className="flex flex-col items-center gap-0.5 active:scale-95"
+              aria-label={unreadCount > 0 ? `Message, ${unreadCount} unread` : 'Message passenger'}
             >
-              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-200/90 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              <span className="relative flex h-11 w-11 items-center justify-center rounded-full bg-slate-200/90 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                 <MessageCircle className="h-5 w-5" aria-hidden />
+                <RideChatUnreadDot show={unreadCount > 0} className="right-1 top-1" />
               </span>
               <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Message</span>
             </button>

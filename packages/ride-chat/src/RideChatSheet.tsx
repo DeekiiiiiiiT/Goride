@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Loader2, Send, X } from 'lucide-react';
-import { useRideChat } from './useRideChat';
-import type { RideChatSheetProps } from './types';
+import type { UseRideChatResult } from './useRideChat';
+import type { RideChatVariant } from './types';
 
 const MAX_LEN = 500;
 
@@ -16,26 +16,28 @@ function formatTime(iso: string): string {
   }
 }
 
+type Props = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  peerLabel: string;
+  variant: RideChatVariant;
+  enabled: boolean;
+  currentUserId: string | null | undefined;
+  chat: UseRideChatResult;
+};
+
 export function RideChatSheet({
   open,
   onOpenChange,
-  rideId,
-  enabled,
-  currentUserId,
   peerLabel,
   variant,
-  api,
-  supabase,
-}: RideChatSheetProps) {
+  enabled,
+  currentUserId,
+  chat,
+}: Props) {
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { messages, loading, sending, error, send } = useRideChat({
-    rideId,
-    enabled,
-    open,
-    api,
-    supabase,
-  });
+  const { messages, loading, sending, error, send } = chat;
 
   useEffect(() => {
     if (!open) setDraft('');
