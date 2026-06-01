@@ -1,6 +1,7 @@
 @import './ride-offer.css';
 @import './trip-request-overlay.css';
 @import './en-route-pickup.css';
+@import './driver-trip-shell.css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -124,6 +125,7 @@
 
 html {
   font-size: var(--font-size);
+  -webkit-text-size-adjust: 100%;
 }
 
 html:not(.dark) body {

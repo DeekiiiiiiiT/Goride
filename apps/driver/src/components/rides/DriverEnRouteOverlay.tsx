@@ -1,8 +1,9 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { createPortal } from 'react-dom';
 import type { RideRequestRow } from '@roam/types/rides';
 import { isDriverActiveRideStatus } from '@roam/types/rides';
 import { useRideDispatchContext } from '../../contexts/RideDispatchContext';
+import { DriverTripFullscreenShell } from './DriverTripFullscreenShell';
 import { EnRoutePickupPanel } from './EnRoutePickupPanel';
 
 function isEnRouteToPickup(status: RideRequestRow['status']): boolean {
@@ -14,29 +15,16 @@ export function DriverEnRouteOverlay() {
   const { activeRide, advance, trackingError, gpsAccuracyM, activeRideWaitTime, rideLocationLive } =
     useRideDispatchContext();
 
-  const show =
+  const show = Boolean(
     activeRide &&
-    isDriverActiveRideStatus(activeRide.status) &&
-    isEnRouteToPickup(activeRide.status);
-
-  useEffect(() => {
-    if (!show) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [show, activeRide?.id]);
+      isDriverActiveRideStatus(activeRide.status) &&
+      isEnRouteToPickup(activeRide.status),
+  );
 
   if (!show || !activeRide) return null;
 
-  return createPortal(
-    <div
-      className="fixed inset-x-0 top-14 z-[150] flex flex-col bg-[#f7f9fb] dark:bg-slate-950"
-      style={{ bottom: 'var(--driver-bottom-nav-total)' }}
-      role="region"
-      aria-label="En route to pickup"
-    >
+  return (
+    <DriverTripFullscreenShell show={show} rideKey={activeRide.id} ariaLabel="En route to pickup">
       <EnRoutePickupPanel
         ride={activeRide}
         onAdvance={advance}
@@ -45,7 +33,6 @@ export function DriverEnRouteOverlay() {
         waitTimeInfo={activeRideWaitTime}
         rideLocationLive={rideLocationLive}
       />
-    </div>,
-    document.body,
+    </DriverTripFullscreenShell>
   );
 }

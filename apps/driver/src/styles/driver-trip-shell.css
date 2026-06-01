@@ -1,0 +1,22 @@
+/* Full-screen active-trip UI — matches rider live-ride shell pattern */
+
+.driver-trip-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  background: #f7f9fb;
+}
+
+.dark .driver-trip-screen {
+  background: #020617;
+}
+
+/* Trip overlays hide bottom nav; chat + sheets use safe area only */
+html.driver-active-trip {
+  --driver-bottom-nav-total: max(0.75rem, env(safe-area-inset-bottom, 0px));
+}

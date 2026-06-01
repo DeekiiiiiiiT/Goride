@@ -83,7 +83,7 @@ export function RiderPinEntry({ onSubmit, error, disabled = false }: Props) {
             onKeyDown={(e) => handleKeyDown(i, e)}
             onPaste={handlePaste}
             disabled={disabled || submitting}
-            className="h-14 w-14 rounded-xl border-2 border-slate-200 bg-white text-center text-2xl font-bold text-slate-900 outline-none transition-colors focus:border-[#2DD4BF] focus:ring-2 focus:ring-[#2DD4BF]/25 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            className="h-14 w-14 rounded-xl border-2 border-slate-200 bg-white text-center text-2xl font-bold text-slate-900 outline-none transition-colors focus:border-[#2DD4BF] focus:ring-2 focus:ring-[#2DD4BF]/25 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-white input-touch touch-manipulation"
             aria-label={`PIN digit ${i + 1}`}
           />
         ))}
@@ -95,7 +95,7 @@ export function RiderPinEntry({ onSubmit, error, disabled = false }: Props) {
         type="button"
         disabled={!pinComplete || submitting || disabled}
         onClick={() => void handleSubmit()}
-        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#2DD4BF] py-4 text-lg font-bold text-slate-900 shadow-lg transition-transform active:scale-[0.98] disabled:opacity-50"
+        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#2DD4BF] py-4 text-lg font-bold text-slate-900 shadow-lg transition-transform active:scale-[0.98] disabled:opacity-50 btn-touch touch-manipulation"
       >
         {submitting ? (
           <>

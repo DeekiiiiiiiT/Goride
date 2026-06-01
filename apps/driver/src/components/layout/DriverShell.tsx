@@ -199,7 +199,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
   const shell = (
     <div
       className={cn(
-        'flex min-h-dvh flex-col overflow-x-hidden',
+        'flex min-h-[100dvh] flex-col overflow-x-hidden',
         mintDriverLayout
           ? 'bg-[#f7f9fb] dark:bg-slate-950'
           : 'bg-gradient-to-br from-slate-100 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900',
@@ -371,7 +371,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
                 type="button"
                 onClick={() => setCurrentPage(item.id)}
                 className={cn(
-                  'flex flex-1 flex-col items-center gap-1 py-2 transition-colors hover:text-slate-800 dark:hover:text-slate-200',
+                  'flex flex-1 flex-col items-center gap-1 py-2 transition-colors hover:text-slate-800 dark:hover:text-slate-200 touch-manipulation',
                   activeColor,
                 )}
               >

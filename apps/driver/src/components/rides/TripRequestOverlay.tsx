@@ -81,7 +81,7 @@ export function TripRequestOverlay({ offer, queueHint, onAccept, onDecline }: Pr
         role="dialog"
         aria-modal="true"
         aria-labelledby="trip-request-title"
-        className="fixed bottom-0 left-0 right-0 z-[210] mx-auto flex max-w-xl flex-col gap-6 rounded-t-2xl bg-white p-6 shadow-2xl dark:bg-slate-900"
+        className="fixed bottom-0 left-0 right-0 z-[210] mx-auto flex max-w-xl flex-col gap-6 rounded-t-2xl bg-white p-6 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] shadow-2xl safe-x dark:bg-slate-900"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">

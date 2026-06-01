@@ -1,35 +1,27 @@
-import React, { useEffect } from 'react';
-import { createPortal } from 'react-dom';
+import React from 'react';
 import { isDriverActiveRideStatus } from '@roam/types/rides';
 import { useRideDispatchContext } from '../../contexts/RideDispatchContext';
 import { ArrivedPickupPanel } from './ArrivedPickupPanel';
+import { DriverTripFullscreenShell } from './DriverTripFullscreenShell';
 
 /** Arrived-at-pickup UI with PIN entry — shown above all driver tabs. */
 export function DriverArrivedPickupOverlay() {
   const { activeRide, advance, trackingError, activeRideWaitTime } = useRideDispatchContext();
 
-  const show =
+  const show = Boolean(
     activeRide &&
-    isDriverActiveRideStatus(activeRide.status) &&
-    activeRide.status === 'driver_arrived_pickup';
-
-  useEffect(() => {
-    if (!show) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [show, activeRide?.id]);
+      isDriverActiveRideStatus(activeRide.status) &&
+      activeRide.status === 'driver_arrived_pickup',
+  );
 
   if (!show || !activeRide) return null;
 
-  return createPortal(
-    <div
-      className="fixed inset-x-0 top-14 z-[155] flex flex-col bg-[#f7f9fb] dark:bg-slate-950"
-      style={{ bottom: 'var(--driver-bottom-nav-total)' }}
-      role="region"
-      aria-label="Arrived at pickup"
+  return (
+    <DriverTripFullscreenShell
+      show={show}
+      rideKey={activeRide.id}
+      ariaLabel="Arrived at pickup"
+      zIndex={155}
     >
       <ArrivedPickupPanel
         ride={activeRide}
@@ -37,7 +29,6 @@ export function DriverArrivedPickupOverlay() {
         trackingError={trackingError}
         waitTimeInfo={activeRideWaitTime}
       />
-    </div>,
-    document.body,
+    </DriverTripFullscreenShell>
   );
 }
