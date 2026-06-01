@@ -1,5 +1,5 @@
--- Hosted Supabase Realtime only exposes schemas like public, delivery, payments (not rides).
--- Store trip chat in public.ride_messages so clients can subscribe without schema errors.
+-- Run once in Supabase Dashboard → SQL Editor (production).
+-- Fixes: "Could not find the table 'public.ride_messages' in the schema cache"
 
 CREATE TABLE IF NOT EXISTS public.ride_messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -13,7 +13,6 @@ CREATE TABLE IF NOT EXISTS public.ride_messages (
 CREATE INDEX IF NOT EXISTS ride_messages_public_ride_created_idx
   ON public.ride_messages (ride_request_id, created_at ASC);
 
--- Copy any rows created in rides schema before this migration
 DO $$
 BEGIN
   IF EXISTS (
@@ -28,8 +27,6 @@ BEGIN
     DROP TABLE rides.ride_messages;
   END IF;
 END $$;
-
-COMMENT ON TABLE public.ride_messages IS 'P2P rider–driver chat (public schema for Realtime + RLS).';
 
 ALTER TABLE public.ride_messages ENABLE ROW LEVEL SECURITY;
 
@@ -64,3 +61,8 @@ BEGIN
 END $$;
 
 NOTIFY pgrst, 'reload schema';
+
+-- Verify (should return one row each):
+-- SELECT to_regclass('public.ride_messages');
+-- SELECT grantee, privilege_type FROM information_schema.role_table_grants
+--   WHERE table_schema = 'public' AND table_name = 'ride_messages' AND grantee = 'service_role';

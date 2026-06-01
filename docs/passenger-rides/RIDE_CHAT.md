@@ -7,7 +7,8 @@ In-app text messaging between rider and assigned driver during active trip statu
 1. Apply migrations in order:
    - `supabase/migrations/20260603120000_ride_messages.sql`
    - `supabase/migrations/20260603140000_ride_messages_public_realtime.sql` (moves chat to `public` for hosted Realtime)
-2. Deploy edge function: `pnpm deploy:rides` from repo root.
+2. **Production:** if chat shows `Could not find the table 'public.ride_messages'`, run `supabase/scripts/ride_messages_public_fix.sql` in Supabase SQL Editor, then confirm `SELECT to_regclass('public.ride_messages');` is not null.
+3. Deploy edge function: `pnpm deploy:rides` from repo root.
 
 ## API (rides edge)
 
