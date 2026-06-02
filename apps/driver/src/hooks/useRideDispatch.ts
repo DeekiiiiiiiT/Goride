@@ -18,7 +18,11 @@ import { useActiveRideTracking } from './useActiveRideTracking';
 import { openExternalNavigation } from '../utils/rideNavigation';
 import { useDriverPermissionPolicy } from './usePermissionPolicy';
 import { useActiveRideRecovery } from '../contexts/ActiveRideRecoveryContext';
-import { persistActiveRideId } from '../utils/driverActiveRideSession';
+import {
+  persistActiveRideId,
+  persistActiveRideSnapshot,
+} from '../utils/driverActiveRideSession';
+import { ROAM_RECONNECTED_EVENT } from '../utils/networkReconnect';
 import { mergeDriverActiveRide, normalizeDriverRide } from '../utils/mergeActiveRide';
 import {
   checkGeolocationGranted,
@@ -53,8 +57,12 @@ export function useRideDispatch() {
   const knownOfferIds = useRef<Set<string>>(new Set());
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const { activeRide: recoveredRide, recoveryLoaded, setActiveRide: setRecoveredRide } =
-    useActiveRideRecovery();
+  const {
+    activeRide: recoveredRide,
+    recoveryLoaded,
+    setActiveRide: setRecoveredRide,
+    refreshActiveRide,
+  } = useActiveRideRecovery();
 
   const syncActiveRide = useCallback(
     (ride: RideRequestRow | null) => {
@@ -64,12 +72,14 @@ export function useRideDispatch() {
         setRideLocationLive(null);
         setRecoveredRide(null);
         persistActiveRideId(null);
+        persistActiveRideSnapshot(null);
         return;
       }
       setActiveRide((prev) => {
         const next = mergeDriverActiveRide(prev, ride);
         setRecoveredRide(next);
         persistActiveRideId(next.id);
+        persistActiveRideSnapshot(next);
         return next;
       });
     },
@@ -189,9 +199,6 @@ export function useRideDispatch() {
   const refreshOffers = useCallback(async () => {
     try {
       const { offers: nextOffers } = await ridesDriverPendingOffers();
-      // #region agent log
-      fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'adf835'},body:JSON.stringify({sessionId:'adf835',hypothesisId:'C-F',location:'useRideDispatch.ts:refreshOffers',message:'driver polled offers',data:{count:nextOffers.length,online,hasActiveRide:Boolean(activeRide?.id),activeRideStatus:activeRide?.status??null},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       const nextIds = new Set(nextOffers.map((o) => o.id));
       const hasNew = nextOffers.some((o) => !knownOfferIds.current.has(o.id));
       knownOfferIds.current = nextIds;
@@ -200,10 +207,7 @@ export function useRideDispatch() {
         audioRef.current.play().catch(() => {});
         if (navigator.vibrate) navigator.vibrate(200);
       }
-    } catch (e: unknown) {
-      // #region agent log
-      fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'adf835'},body:JSON.stringify({sessionId:'adf835',hypothesisId:'F',location:'useRideDispatch.ts:refreshOffers:catch',message:'offers poll failed',data:{error:e instanceof Error?e.message:'unknown'},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
+    } catch {
       /* offline / unauthorized handled elsewhere */
     }
   }, [online, activeRide?.id, activeRide?.status]);
@@ -223,6 +227,18 @@ export function useRideDispatch() {
       return false;
     }
   }, [syncActiveRide]);
+
+  useEffect(() => {
+    const onReconnected = () => {
+      if (activeRide?.id) {
+        void pollActiveRide(activeRide.id);
+      } else {
+        void refreshActiveRide();
+      }
+    };
+    window.addEventListener(ROAM_RECONNECTED_EVENT, onReconnected);
+    return () => window.removeEventListener(ROAM_RECONNECTED_EVENT, onReconnected);
+  }, [activeRide?.id, pollActiveRide, refreshActiveRide]);
 
   useEffect(() => {
     if (!online) return;
@@ -317,6 +333,7 @@ export function useRideDispatch() {
       activeRide.status === 'driver_en_route_pickup'
         ? RIDE_WAIT_SYNC_MS
         : RIDE_SYNC_MS;
+    void pollActiveRide(activeRide.id);
     const t = window.setInterval(async () => {
       const keep = await pollActiveRide(activeRide.id);
       if (!keep) window.clearInterval(t);

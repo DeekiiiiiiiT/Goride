@@ -1,20 +1,35 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import {
+  dispatchRoamOffline,
+  dispatchRoamReconnected,
+  dispatchResetErrorBoundary,
+} from '../utils/networkReconnect';
 
 export function useNetworkStatus(delay = 2000) {
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const wasOnlineRef = useRef(isOnline);
 
   useEffect(() => {
-    let timeoutId: any;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
     const handleOnline = () => {
-        // Debounce online event to ensure stability before triggering syncs
-        timeoutId = setTimeout(() => setIsOnline(true), delay);
+      timeoutId = setTimeout(() => {
+        setIsOnline(true);
+        if (!wasOnlineRef.current) {
+          dispatchRoamReconnected();
+          dispatchResetErrorBoundary();
+        }
+        wasOnlineRef.current = true;
+      }, delay);
     };
 
     const handleOffline = () => {
-        // Immediate offline status to prevent failed requests
-        clearTimeout(timeoutId);
-        setIsOnline(false);
+      if (timeoutId) clearTimeout(timeoutId);
+      setIsOnline(false);
+      if (wasOnlineRef.current) {
+        dispatchRoamOffline();
+      }
+      wasOnlineRef.current = false;
     };
 
     window.addEventListener('online', handleOnline);
@@ -23,7 +38,7 @@ export function useNetworkStatus(delay = 2000) {
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
-      clearTimeout(timeoutId);
+      if (timeoutId) clearTimeout(timeoutId);
     };
   }, [delay]);
 

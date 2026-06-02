@@ -20,6 +20,13 @@ import { RideCancelledView } from '@/components/RideCancelledView';
 import { TripInProgressView } from '@/components/TripInProgressView';
 import { TripSummaryView } from '@/components/TripSummaryView';
 import { ridesCancelRequest, ridesGetLive, ridesGetRequest } from '@/services/ridesEdge';
+import { RiderConnectionBanner } from '@/components/RiderConnectionBanner';
+import { useRiderOnline } from '@/hooks/useRiderOnline';
+import {
+  clearRiderRideCache,
+  persistRiderRideCache,
+  readRiderRideCache,
+} from '@/utils/riderActiveRideSession';
 
 function statusLabel(s: RideRequestStatus): string {
   switch (s) {
@@ -180,11 +187,17 @@ export default function RidePage() {
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const prevStatusRef = useRef<RideRequestStatus | null>(null);
+  const { isOnline, justReconnected } = useRiderOnline();
 
   const { data, error, refetch, isFetching } = useQuery({
     queryKey: ['ride', id],
     enabled: Boolean(id),
-    queryFn: () => ridesGetRequest(id!),
+    queryFn: async () => {
+      const res = await ridesGetRequest(id!);
+      persistRiderRideCache(id!, res);
+      return res;
+    },
+    placeholderData: () => (id ? readRiderRideCache(id) : undefined),
     staleTime: 0,
     refetchOnWindowFocus: true,
     refetchInterval: (q) => {
@@ -224,8 +237,27 @@ export default function RidePage() {
   });
 
   useEffect(() => {
-    if (error) toast.error(error instanceof Error ? error.message : 'Failed to load ride');
-  }, [error]);
+    if (error && !data?.ride) {
+      toast.error(error instanceof Error ? error.message : 'Failed to load ride');
+    }
+  }, [error, data?.ride]);
+
+  useEffect(() => {
+    if (!isOnline) return;
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void refetch();
+    };
+    void refetch();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [isOnline, justReconnected, refetch]);
+
+  useEffect(() => {
+    if (!id || !ride) return;
+    if (ride.status === 'completed' || ride.status === 'cancelled') {
+      clearRiderRideCache(id);
+    }
+  }, [id, ride?.status]);
 
   useEffect(() => {
     if (!ride) return;
@@ -332,20 +364,28 @@ export default function RidePage() {
     return <RideCancelledView ride={ride} />;
   }
 
+  const connectionBanner = (
+    <RiderConnectionBanner isOnline={isOnline} reconnecting={justReconnected} />
+  );
+
   if (ride && isTripInProgress(ride.status)) {
     return (
-      <TripInProgressView
-        ride={ride}
-        driverLocation={driverLocation}
-        driverHeading={liveData?.driver_location?.heading ?? ride.last_driver_heading ?? null}
-        onBack={() => navigate('/')}
-      />
+      <>
+        {connectionBanner}
+        <TripInProgressView
+          ride={ride}
+          driverLocation={driverLocation}
+          driverHeading={liveData?.driver_location?.heading ?? ride.last_driver_heading ?? null}
+          onBack={() => navigate('/')}
+        />
+      </>
     );
   }
 
   if (ride && isPickupLive(ride.status)) {
     return (
       <>
+        {connectionBanner}
         <LiveRideView
           ride={ride}
           driverLocation={driverLocation}
