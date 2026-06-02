@@ -14,6 +14,7 @@ import type { RideRequestRow } from '@roam/types/rides';
 import type { RoutePoint } from '../../types/tripSession';
 import { openExternalNavigation } from '../../utils/rideNavigation';
 import { LeafletMap } from '../maps/LeafletMap';
+import { isValidMapCoord, toRoutePoint } from '../../utils/mapCoords';
 import { formatOfferDistanceMi } from './rideDispatchUtils';
 import { RIDE_CANCEL_REASONS } from './rideCancelReasons';
 import { RideCancelSheet } from './RideCancelSheet';
@@ -69,10 +70,10 @@ export function OnTripPanel({ ride, onAdvance, trackingError }: Props) {
   const mapRoute = useMemo((): RoutePoint[] => {
     const now = Date.now();
     const points: RoutePoint[] = [];
-    if (ride.last_driver_lat != null && ride.last_driver_lng != null) {
-      points.push({ lat: ride.last_driver_lat, lon: ride.last_driver_lng, timestamp: now });
-    }
-    points.push({ lat: ride.dropoff_lat, lon: ride.dropoff_lng, timestamp: now });
+    const driverPt = toRoutePoint(ride.last_driver_lat, ride.last_driver_lng, now);
+    const dropPt = toRoutePoint(ride.dropoff_lat, ride.dropoff_lng, now);
+    if (driverPt) points.push(driverPt);
+    if (dropPt) points.push(dropPt);
     return points;
   }, [
     ride.last_driver_lat,
@@ -113,11 +114,14 @@ export function OnTripPanel({ ride, onAdvance, trackingError }: Props) {
     return () => window.removeEventListener('keydown', onKey);
   }, [cancelOpen]);
 
-  const navTarget = {
-    lat: ride.dropoff_lat,
-    lng: ride.dropoff_lng,
-    address: ride.dropoff_address,
-  };
+  const dropoffValid = isValidMapCoord(ride.dropoff_lat, ride.dropoff_lng);
+  const navTarget = dropoffValid
+    ? {
+        lat: ride.dropoff_lat,
+        lng: ride.dropoff_lng,
+        address: ride.dropoff_address,
+      }
+    : null;
 
   return (
     <DriverRideChatWrap ride={ride}>
@@ -132,9 +136,13 @@ export function OnTripPanel({ ride, onAdvance, trackingError }: Props) {
             startMarker={
               mapRoute.length > 0
                 ? { lat: mapRoute[0].lat, lon: mapRoute[0].lon }
-                : { lat: ride.dropoff_lat, lon: ride.dropoff_lng }
+                : dropoffValid
+                  ? { lat: ride.dropoff_lat, lon: ride.dropoff_lng }
+                  : null
             }
-            endMarker={{ lat: ride.dropoff_lat, lon: ride.dropoff_lng }}
+            endMarker={
+              dropoffValid ? { lat: ride.dropoff_lat, lon: ride.dropoff_lng } : null
+            }
           />
         </div>
         <div className="en-route-map-gradient pointer-events-none absolute inset-0" aria-hidden />
@@ -179,8 +187,9 @@ export function OnTripPanel({ ride, onAdvance, trackingError }: Props) {
           <div className="grid grid-cols-4 gap-2">
             <button
               type="button"
-              onClick={() => openExternalNavigation(navTarget)}
-              className="flex flex-col items-center gap-0.5 active:scale-95"
+              disabled={!navTarget}
+              onClick={() => navTarget && openExternalNavigation(navTarget)}
+              className="flex flex-col items-center gap-0.5 active:scale-95 disabled:opacity-40"
             >
               <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-200/90 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                 <Navigation className="h-5 w-5" aria-hidden />

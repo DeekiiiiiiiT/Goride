@@ -222,6 +222,33 @@ export async function listRidesDashboardView(
   return res.json();
 }
 
+/** Ops: force-cancel a stuck active ride (clears driver on-trip in admin). */
+export async function adminForceCancelRide(
+  accessToken: string,
+  rideId: string,
+  reason?: string,
+): Promise<{ ride: RideRequestRow; skipped?: boolean }> {
+  const res = await adminFetch(accessToken, `${RIDES_BASE}/admin/rides/${rideId}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: reason ?? 'admin_force_cancel' }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+/** Ops: mark an on_trip ride completed (e.g. passenger dropped off but driver offline). */
+export async function adminForceCompleteRide(
+  accessToken: string,
+  rideId: string,
+): Promise<{ ride: RideRequestRow; skipped?: boolean }> {
+  const res = await adminFetch(accessToken, `${RIDES_BASE}/admin/rides/${rideId}/complete`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
 export type CommandoBodyTypeFacet = {
   body_type: string;
   seating_capacity: number | null;

@@ -4,7 +4,11 @@ import { Session } from '@supabase/supabase-js';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import type { RideRequestRow } from '@roam/types/rides';
-import { listRidesDashboardView } from '../services/ridesAdminService';
+import {
+  adminForceCancelRide,
+  adminForceCompleteRide,
+  listRidesDashboardView,
+} from '../services/ridesAdminService';
 
 interface OutletContext {
   session: Session;
@@ -35,11 +39,18 @@ function statusBadge(status: RideRequestRow['status']): string {
   }
 }
 
+function isStaleGps(iso: string | null | undefined, thresholdMs = 15 * 60_000): boolean {
+  if (!iso) return true;
+  const ms = Date.now() - Date.parse(iso);
+  return !Number.isFinite(ms) || ms >= thresholdMs;
+}
+
 export function RideOperationsPage() {
   const { session, role } = useOutletContext<OutletContext>();
   const [rides, setRides] = useState<RideRequestRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [actingId, setActingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!session.access_token) return;
@@ -61,13 +72,58 @@ export function RideOperationsPage() {
     return () => clearInterval(t);
   }, [load]);
 
+  const runCancel = async (ride: RideRequestRow) => {
+    const stale = isStaleGps(ride.last_driver_location_at);
+    const msg = stale
+      ? `Cancel ride ${ride.id.slice(0, 8)}…? Driver GPS is stale — this will clear the stuck trip.`
+      : `Cancel ride ${ride.id.slice(0, 8)}…?`;
+    if (!window.confirm(msg)) return;
+
+    setActingId(ride.id);
+    try {
+      await adminForceCancelRide(session.access_token, ride.id, 'admin_stuck_trip');
+      toast.success('Ride cancelled');
+      await load();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Cancel failed');
+    } finally {
+      setActingId(null);
+    }
+  };
+
+  const runComplete = async (ride: RideRequestRow) => {
+    if (ride.status !== 'on_trip') {
+      toast.error('Force complete is only for rides that are on trip');
+      return;
+    }
+    if (
+      !window.confirm(
+        `Mark ride ${ride.id.slice(0, 8)}… completed? Use only if the passenger was dropped off.`,
+      )
+    ) {
+      return;
+    }
+
+    setActingId(ride.id);
+    try {
+      await adminForceCompleteRide(session.access_token, ride.id);
+      toast.success('Ride marked completed');
+      await load();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Complete failed');
+    } finally {
+      setActingId(null);
+    }
+  };
+
   return (
     <div className="space-y-6 text-slate-200">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold text-white">Ride Operations</h2>
           <p className="text-sm text-slate-400 mt-1">
-            Active rides with last driver GPS and lifecycle status.
+            Active rides with last driver GPS and lifecycle status. Use actions to clear stuck trips
+            when the driver lost connection.
           </p>
         </div>
         <button
@@ -104,32 +160,61 @@ export function RideOperationsPage() {
                   <th className="px-4 py-3 font-medium">Last GPS</th>
                   <th className="px-4 py-3 font-medium">Pickup</th>
                   <th className="px-4 py-3 font-medium">Flags</th>
+                  <th className="px-4 py-3 font-medium text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {rides.map((ride) => (
-                  <tr key={ride.id} className="border-b border-slate-800/80 hover:bg-slate-900/30">
-                    <td className="px-4 py-3 font-mono text-xs text-slate-400">
-                      {ride.id.slice(0, 8)}…
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${statusBadge(ride.status)}`}
-                      >
-                        {ride.status.replace(/_/g, ' ')}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-slate-300">
-                      {formatGpsAge(ride.last_driver_location_at)}
-                    </td>
-                    <td className="px-4 py-3 text-slate-400 max-w-[200px] truncate">
-                      {ride.pickup_address ?? '—'}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-500">
-                      {ride.complete_suggested_at ? 'Complete suggested' : '—'}
-                    </td>
-                  </tr>
-                ))}
+                {rides.map((ride) => {
+                  const stale = isStaleGps(ride.last_driver_location_at);
+                  const busy = actingId === ride.id;
+                  return (
+                    <tr key={ride.id} className="border-b border-slate-800/80 hover:bg-slate-900/30">
+                      <td className="px-4 py-3 font-mono text-xs text-slate-400">
+                        {ride.id.slice(0, 8)}…
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${statusBadge(ride.status)}`}
+                        >
+                          {ride.status.replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={stale ? 'text-amber-400' : 'text-slate-300'}>
+                          {formatGpsAge(ride.last_driver_location_at)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-400 max-w-[200px] truncate">
+                        {ride.pickup_address ?? '—'}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-500">
+                        {ride.complete_suggested_at ? 'Complete suggested' : stale ? 'Stale GPS' : '—'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap justify-end gap-2">
+                          {ride.status === 'on_trip' ? (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void runComplete(ride)}
+                              className="rounded-md border border-emerald-700/60 px-2.5 py-1 text-xs text-emerald-300 hover:bg-emerald-950/40 disabled:opacity-50"
+                            >
+                              Complete
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void runCancel(ride)}
+                            className="rounded-md border border-red-800/60 px-2.5 py-1 text-xs text-red-300 hover:bg-red-950/40 disabled:opacity-50"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

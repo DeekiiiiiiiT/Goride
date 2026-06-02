@@ -3,12 +3,13 @@ import type { RideRequestRow } from '@roam/types/rides';
 import { ridesDriverActiveRide, ridesDriverGetRequest } from '../services/ridesDriverEdge';
 import {
   isDriverActiveRideStatus,
+  isActiveTripUiSuppressed,
   persistActiveRideId,
   persistActiveRideSnapshot,
   readPersistedActiveRideId,
   readPersistedActiveRideSnapshot,
 } from '../utils/driverActiveRideSession';
-import { ROAM_RECONNECTED_EVENT } from '../utils/networkReconnect';
+import { ROAM_EXIT_TRIP_UI_EVENT, ROAM_RECONNECTED_EVENT } from '../utils/networkReconnect';
 
 type ActiveRideRecoveryContextValue = {
   activeRide: RideRequestRow | null;
@@ -27,6 +28,10 @@ const ActiveRideRecoveryContext = createContext<ActiveRideRecoveryContextValue>(
 });
 
 async function fetchActiveRideFromServer(): Promise<RideRequestRow | null> {
+  if (isActiveTripUiSuppressed()) {
+    return null;
+  }
+
   const cachedId = readPersistedActiveRideId();
   if (cachedId) {
     try {
@@ -85,7 +90,12 @@ export function ActiveRideRecoveryProvider({ children }: { children: React.React
     void (async () => {
       try {
         const snapshot = readPersistedActiveRideSnapshot();
-        if (snapshot && isDriverActiveRideStatus(snapshot.status) && !cancelled) {
+        if (
+          snapshot &&
+          isDriverActiveRideStatus(snapshot.status) &&
+          !isActiveTripUiSuppressed() &&
+          !cancelled
+        ) {
           setActiveRideState(snapshot);
         }
 
@@ -107,8 +117,17 @@ export function ActiveRideRecoveryProvider({ children }: { children: React.React
     const onReconnected = () => {
       void refreshActiveRide();
     };
+    const onExitTripUi = () => {
+      setActiveRideState(null);
+      persistActiveRideId(null);
+      persistActiveRideSnapshot(null);
+    };
     window.addEventListener(ROAM_RECONNECTED_EVENT, onReconnected);
-    return () => window.removeEventListener(ROAM_RECONNECTED_EVENT, onReconnected);
+    window.addEventListener(ROAM_EXIT_TRIP_UI_EVENT, onExitTripUi);
+    return () => {
+      window.removeEventListener(ROAM_RECONNECTED_EVENT, onReconnected);
+      window.removeEventListener(ROAM_EXIT_TRIP_UI_EVENT, onExitTripUi);
+    };
   }, [refreshActiveRide]);
 
   return (

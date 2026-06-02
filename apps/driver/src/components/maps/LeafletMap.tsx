@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import type { RoutePoint } from '../../types/tripSession';
+import { isValidMapCoord } from '../../utils/mapCoords';
 
 const fixLeafletIcon = () => {
   if (typeof window === 'undefined') return;
@@ -94,8 +95,10 @@ export function LeafletMap({
     if (endMarkerRef.current) endMarkerRef.current.remove();
     if (currentMarkerRef.current) currentMarkerRef.current.remove();
 
-    if (route && route.length > 1) {
-      const positions = route.map(p => [p.lat, p.lon] as [number, number]);
+    const validRoute = (route ?? []).filter((p) => isValidMapCoord(p.lat, p.lon));
+
+    if (validRoute.length > 1) {
+      const positions = validRoute.map((p) => [p.lat, p.lon] as [number, number]);
       routeLayerRef.current = L.polyline(positions, { color: routeColor, weight: 4, opacity: 0.8 }).addTo(map);
 
       const bounds = L.latLngBounds(positions);
@@ -105,10 +108,10 @@ export function LeafletMap({
     }
 
     let startPos: [number, number] | null = null;
-    if (startMarker) {
+    if (startMarker && isValidMapCoord(startMarker.lat, startMarker.lon)) {
       startPos = [startMarker.lat, startMarker.lon];
-    } else if (route && route.length > 0) {
-      startPos = [route[0].lat, route[0].lon];
+    } else if (validRoute.length > 0) {
+      startPos = [validRoute[0].lat, validRoute[0].lon];
     }
 
     if (startPos) {
@@ -116,10 +119,10 @@ export function LeafletMap({
     }
 
     let endPos: [number, number] | null = null;
-    if (endMarker) {
+    if (endMarker && isValidMapCoord(endMarker.lat, endMarker.lon)) {
       endPos = [endMarker.lat, endMarker.lon];
-    } else if (route && route.length > 1 && !currentLocation) {
-      const last = route[route.length - 1];
+    } else if (validRoute.length > 1 && !currentLocation) {
+      const last = validRoute[validRoute.length - 1];
       endPos = [last.lat, last.lon];
     }
 
@@ -127,16 +130,17 @@ export function LeafletMap({
       endMarkerRef.current = L.marker(endPos).addTo(map).bindPopup('End');
     }
 
-    if (currentLocation) {
+    if (currentLocation && isValidMapCoord(currentLocation.lat, currentLocation.lon)) {
       currentMarkerRef.current = L.marker([currentLocation.lat, currentLocation.lon])
         .addTo(map)
         .bindPopup('Current Location');
 
-      if (!route || route.length <= 1) {
+      if (validRoute.length <= 1) {
         map.setView([currentLocation.lat, currentLocation.lon], 15);
       }
-    } else if (!route || route.length === 0) {
+    } else if (validRoute.length === 0) {
       if (startPos) map.setView(startPos, 15);
+      else if (endPos) map.setView(endPos, 15);
     }
 
     requestAnimationFrame(() => map.invalidateSize());

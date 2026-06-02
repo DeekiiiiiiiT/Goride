@@ -5,6 +5,7 @@ import {
   ROAM_RESET_ERROR_BOUNDARY_EVENT,
 } from '../../utils/networkReconnect';
 import { readPersistedActiveRideId } from '../../utils/driverActiveRideSession';
+import { dispatchExitTripUi } from '../../utils/networkReconnect';
 
 interface Props {
   children: ReactNode;
@@ -70,6 +71,18 @@ export class AppErrorBoundary extends Component<Props, State> {
             >
               Try again
             </button>
+            {hasActiveTrip ? (
+              <button
+                type="button"
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 touch-manipulation dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                onClick={() => {
+                  dispatchExitTripUi();
+                  this.reset();
+                }}
+              >
+                Go to home screen
+              </button>
+            ) : null}
             <button
               type="button"
               className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 touch-manipulation dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"

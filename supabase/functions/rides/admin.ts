@@ -25,6 +25,7 @@ import { registerDispatchSettingsAdminRoutes } from "./admin/dispatchSettings.ts
 import { registerAppPermissionAdminRoutes } from "./admin/appPermissions.ts";
 import { registerDashboardStatsRoutes } from "./admin/dashboardStats.ts";
 import { registerDashboardListRoutes } from "./admin/dashboardLists.ts";
+import { registerRideOperationsAdminRoutes } from "./admin/rideOperations.ts";
 import { registerPlatformLedgerAdminRoutes } from "./admin/platformLedger.ts";
 
 export type RidesAdminDb = Awaited<ReturnType<typeof getRidesAdminDb>>;
@@ -647,6 +648,7 @@ export function registerAdminRoutes(
 
   registerDashboardStatsRoutes(admin, ridesDbOrResponse);
   registerDashboardListRoutes(admin, ridesDbOrResponse);
+  registerRideOperationsAdminRoutes(admin, ridesDbOrResponse, adminAudit);
 
   registerPlatformLedgerAdminRoutes(admin);
 

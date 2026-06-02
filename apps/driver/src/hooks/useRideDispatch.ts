@@ -19,10 +19,16 @@ import { openExternalNavigation } from '../utils/rideNavigation';
 import { useDriverPermissionPolicy } from './usePermissionPolicy';
 import { useActiveRideRecovery } from '../contexts/ActiveRideRecoveryContext';
 import {
+  clearSuppressActiveTripUi,
   persistActiveRideId,
   persistActiveRideSnapshot,
+  suppressActiveTripUi,
 } from '../utils/driverActiveRideSession';
-import { ROAM_RECONNECTED_EVENT } from '../utils/networkReconnect';
+import {
+  dispatchResetErrorBoundary,
+  ROAM_EXIT_TRIP_UI_EVENT,
+  ROAM_RECONNECTED_EVENT,
+} from '../utils/networkReconnect';
 import { mergeDriverActiveRide, normalizeDriverRide } from '../utils/mergeActiveRide';
 import {
   checkGeolocationGranted,
@@ -73,8 +79,10 @@ export function useRideDispatch() {
         setRecoveredRide(null);
         persistActiveRideId(null);
         persistActiveRideSnapshot(null);
+        clearSuppressActiveTripUi();
         return;
       }
+      clearSuppressActiveTripUi();
       setActiveRide((prev) => {
         const next = mergeDriverActiveRide(prev, ride);
         setRecoveredRide(next);
@@ -124,6 +132,16 @@ export function useRideDispatch() {
     setActiveRide(recoveredRide);
     setOnline(true);
   }, [recoveryLoaded, recoveredRide, activeRide]);
+
+  useEffect(() => {
+    const onExitTripUi = () => {
+      suppressActiveTripUi();
+      syncActiveRide(null);
+      dispatchResetErrorBoundary();
+    };
+    window.addEventListener(ROAM_EXIT_TRIP_UI_EVENT, onExitTripUi);
+    return () => window.removeEventListener(ROAM_EXIT_TRIP_UI_EVENT, onExitTripUi);
+  }, [syncActiveRide]);
 
   useEffect(() => {
     audioRef.current = new Audio(OFFER_SOUND_URL);
