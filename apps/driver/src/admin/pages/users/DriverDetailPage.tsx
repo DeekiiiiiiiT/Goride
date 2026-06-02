@@ -17,6 +17,7 @@ import {
   resetDriverPassword,
   deleteDriver,
 } from '../../services/driverAdminService';
+import { useAdminConfirm } from '../../contexts/AdminConfirmContext';
 
 type Tab = 'overview' | 'trips' | 'compliance';
 type ModalType = 'suspend' | 'deactivate' | 'delete' | null;
@@ -51,6 +52,7 @@ function LiveBadge({ status }: { status: DriverLiveStatus }) {
 export function DriverDetailPage() {
   const { userId } = useParams<{ userId: string }>();
   const { session } = useOutletContext<OutletContext>();
+  const { confirm } = useAdminConfirm();
   const navigate = useNavigate();
   const token = session.access_token;
 
@@ -167,7 +169,14 @@ export function DriverDetailPage() {
 
   const doSignOut = async () => {
     if (!token || !userId) return;
-    if (!window.confirm('Sign out this driver from all devices?')) return;
+    const ok = await confirm({
+      title: 'Sign out driver?',
+      description:
+        'Sign out this driver from all devices. They will need to sign in again on the driver app.',
+      confirmLabel: 'Sign out',
+      variant: 'danger',
+    });
+    if (!ok) return;
     setActionLoading(true);
     try {
       await signOutDriver(token, userId);

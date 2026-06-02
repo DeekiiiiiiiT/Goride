@@ -18,6 +18,7 @@ import {
   reactivateDriver,
   signOutDriver,
 } from '../../services/driverAdminService';
+import { useAdminConfirm } from '../../contexts/AdminConfirmContext';
 
 const PAGE_SIZE = 50;
 
@@ -164,6 +165,7 @@ type ModalType = 'suspend' | 'deactivate' | null;
 export function DriversListPage() {
   const navigate = useNavigate();
   const { session } = useOutletContext<OutletContext>();
+  const { confirm } = useAdminConfirm();
   const accessToken = session.access_token;
 
   const [drivers, setDrivers] = useState<DriverDirectoryRow[]>([]);
@@ -335,7 +337,14 @@ export function DriversListPage() {
 
   const doSignOut = async (driver: DriverDirectoryRow) => {
     if (!accessToken) return;
-    if (!window.confirm(`Sign out ${driver.display_name || driver.email || 'this driver'} from all devices?`)) return;
+    const name = driver.display_name || driver.email || 'this driver';
+    const ok = await confirm({
+      title: 'Sign out driver?',
+      description: `Sign out ${name} from all devices. They will need to sign in again on the driver app.`,
+      confirmLabel: 'Sign out',
+      variant: 'danger',
+    });
+    if (!ok) return;
     setActionLoading(true);
     try {
       await signOutDriver(accessToken, driver.user_id);

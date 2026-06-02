@@ -16,6 +16,7 @@ import {
   type SupportCancelReasonCode,
   type SupportRideRow,
 } from '../services/supportService';
+import { useAdminConfirm } from '../contexts/AdminConfirmContext';
 
 interface OutletContext {
   session: Session;
@@ -78,6 +79,7 @@ function auditSummary(event: RideAuditEvent): string {
 
 export function SupportToolsPage() {
   const { session } = useOutletContext<OutletContext>();
+  const { confirm } = useAdminConfirm();
   const token = session.access_token;
 
   const [stuckRides, setStuckRides] = useState<SupportRideRow[]>([]);
@@ -175,13 +177,22 @@ export function SupportToolsPage() {
   const handleCancel = async () => {
     if (!selectedRide) return;
     const label = SUPPORT_CANCEL_REASONS.find((r) => r.value === cancelCode)?.label ?? cancelCode;
-    if (
-      !window.confirm(
-        `Cancel ride ${selectedRide.id.slice(0, 8)}…?\nReason: ${label}\nThis clears driver on-trip in admin.`,
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: 'Cancel this ride?',
+      description: (
+        <>
+          <p>
+            Ride{' '}
+            <span className="font-mono text-slate-300">{selectedRide.id.slice(0, 8)}…</span> will be
+            cancelled with reason: <span className="text-slate-300">{label}</span>.
+          </p>
+          <p className="mt-2">This clears the driver&apos;s on-trip status in admin.</p>
+        </>
+      ),
+      confirmLabel: 'Cancel ride',
+      variant: 'danger',
+    });
+    if (!ok) return;
     setActing(true);
     try {
       const { ride } = await forceCancelRide(token, selectedRide.id, {
@@ -203,13 +214,19 @@ export function SupportToolsPage() {
 
   const handleComplete = async () => {
     if (!selectedRide || selectedRide.status !== 'on_trip') return;
-    if (
-      !window.confirm(
-        `Mark ride ${selectedRide.id.slice(0, 8)}… completed?\nOnly use if the passenger was dropped off.`,
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: 'Mark trip completed?',
+      description: (
+        <>
+          Mark ride{' '}
+          <span className="font-mono text-slate-300">{selectedRide.id.slice(0, 8)}…</span> as
+          completed. Only do this if the passenger was dropped off.
+        </>
+      ),
+      confirmLabel: 'Mark completed',
+      variant: 'default',
+    });
+    if (!ok) return;
     setActing(true);
     try {
       const { ride } = await forceCompleteRide(token, selectedRide.id);

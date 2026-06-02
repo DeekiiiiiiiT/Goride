@@ -30,6 +30,7 @@ import { DriverDetailPage } from './pages/users/DriverDetailPage';
 import { TripLedgerPage } from './pages/TripLedgerPage';
 import { DriverAppPermissionsPage } from './pages/AppPermissionsPage';
 import { SupportToolsPage } from './pages/SupportToolsPage';
+import { AdminConfirmProvider } from './contexts/AdminConfirmContext';
 
 const NAV_ITEMS = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -249,18 +250,20 @@ export function DriverAdminPortal() {
   }
 
   return (
-    <Routes>
-      <Route element={<AdminLayoutShell session={session} />}>
-        <Route index element={<DriverAdminDashboard />} />
-        <Route path="users" element={<DriversListPage />} />
-        <Route path="users/:userId" element={<DriverDetailPage />} />
-        <Route path="ledger" element={<TripLedgerPage />} />
-        <Route path="presence" element={<DriverPresenceManager />} />
-        <Route path="offers" element={<OfferMonitor />} />
-        <Route path="compliance" element={<ComplianceManager />} />
-        <Route path="permissions" element={<DriverAppPermissionsPage />} />
-        <Route path="support" element={<SupportToolsPage />} />
-      </Route>
-    </Routes>
+    <AdminConfirmProvider>
+      <Routes>
+        <Route element={<AdminLayoutShell session={session} />}>
+          <Route index element={<DriverAdminDashboard />} />
+          <Route path="users" element={<DriversListPage />} />
+          <Route path="users/:userId" element={<DriverDetailPage />} />
+          <Route path="ledger" element={<TripLedgerPage />} />
+          <Route path="presence" element={<DriverPresenceManager />} />
+          <Route path="offers" element={<OfferMonitor />} />
+          <Route path="compliance" element={<ComplianceManager />} />
+          <Route path="permissions" element={<DriverAppPermissionsPage />} />
+          <Route path="support" element={<SupportToolsPage />} />
+        </Route>
+      </Routes>
+    </AdminConfirmProvider>
   );
 }
