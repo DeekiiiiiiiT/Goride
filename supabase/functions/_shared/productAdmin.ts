@@ -87,6 +87,60 @@ export async function requireProductAdmin(
   };
 }
 
+type AdminContext = {
+  req: { header: (n: string) => string | undefined };
+  json: (b: unknown, s?: number) => Response;
+};
+
+/**
+ * Verify admin access for any of the given products (e.g. driver + rides support tools).
+ */
+export async function requireProductAdminAny(
+  c: AdminContext,
+  products: ProductKey[],
+): Promise<ProductAdminUser | Response> {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return c.json({ error: "Unauthorized: missing Authorization header" }, 401);
+  }
+
+  const { data: { user }, error } = await authClient(authHeader).auth.getUser();
+  if (error || !user) {
+    return c.json({ error: "Unauthorized: invalid token" }, 401);
+  }
+
+  const roles = getJwtRoles(user);
+  let matched: string | undefined;
+  for (const product of products) {
+    const allowed = PRODUCT_ADMIN_ROLES[product];
+    matched = roles.find((r) => allowed.has(r));
+    if (matched) break;
+  }
+
+  if (!matched) {
+    const allowedRoles = [
+      ...new Set(products.flatMap((p) => Array.from(PRODUCT_ADMIN_ROLES[p]))),
+    ];
+    return c.json(
+      {
+        error: "Forbidden",
+        message: `Admin role required (${products.join(" or ")})`,
+        currentRole: jwtPrimaryRole(user) || "(none)",
+        allowedRoles,
+      },
+      403,
+    );
+  }
+
+  return {
+    id: user.id,
+    email: user.email || "",
+    role: matched,
+    roles,
+    isPlatformRole: PLATFORM_ROLES.has(matched),
+  };
+}
+
 /**
  * Check if a role has access to a specific product admin.
  */

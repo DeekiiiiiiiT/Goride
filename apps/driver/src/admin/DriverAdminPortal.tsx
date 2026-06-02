@@ -29,6 +29,7 @@ import { DriversListPage } from './pages/users/DriversListPage';
 import { DriverDetailPage } from './pages/users/DriverDetailPage';
 import { TripLedgerPage } from './pages/TripLedgerPage';
 import { DriverAppPermissionsPage } from './pages/AppPermissionsPage';
+import { SupportToolsPage } from './pages/SupportToolsPage';
 
 const NAV_ITEMS = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -40,15 +41,6 @@ const NAV_ITEMS = [
   { path: '/permissions', label: 'App Permissions', icon: Shield, end: false },
   { path: '/support', label: 'Support Tools', icon: HeadphonesIcon, end: false },
 ];
-
-function SupportStub() {
-  return (
-    <div className="text-slate-400">
-      <h2 className="text-xl font-semibold text-white mb-4">Support Tools</h2>
-      <p>Driver support tools coming soon.</p>
-    </div>
-  );
-}
 
 function AdminLayoutShell({ session }: { session: Session }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -267,7 +259,7 @@ export function DriverAdminPortal() {
         <Route path="offers" element={<OfferMonitor />} />
         <Route path="compliance" element={<ComplianceManager />} />
         <Route path="permissions" element={<DriverAppPermissionsPage />} />
-        <Route path="support" element={<SupportStub />} />
+        <Route path="support" element={<SupportToolsPage />} />
       </Route>
     </Routes>
   );

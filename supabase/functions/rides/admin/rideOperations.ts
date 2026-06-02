@@ -1,9 +1,9 @@
 /**
- * Admin force-cancel / force-complete for stuck active rides.
+ * Admin force-cancel / force-complete for stuck active rides + support lookup.
  */
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
-import { requireProductAdmin } from "../../_shared/productAdmin.ts";
+import { requireProductAdminAny, type ProductKey } from "../../_shared/productAdmin.ts";
 import type { RidesAdminTables } from "../../_shared/ridesAdminDb.ts";
 import {
   finalizeRideLedgerFields,
@@ -14,6 +14,8 @@ import { gridCellKey } from "../fare/buildQuote.ts";
 import { cleanupRideLiveState } from "../rideGeofence.ts";
 import { applyRideTransition, type ApplyTransitionDeps, type RideStatus } from "../rideLifecycle.ts";
 
+const SUPPORT_PRODUCTS: ProductKey[] = ["rides", "driver"];
+
 const ACTIVE_STATUSES: RideStatus[] = [
   "matching",
   "driver_assigned",
@@ -21,6 +23,9 @@ const ACTIVE_STATUSES: RideStatus[] = [
   "driver_arrived_pickup",
   "on_trip",
 ];
+
+const STUCK_TRIPS_LIMIT = 50;
+const AUDIT_LIMIT = 50;
 
 type RidesDbOrResponse = (
   c: { json: (body: unknown, status?: number) => Response },
@@ -160,20 +165,153 @@ function isActiveStatus(status: unknown): boolean {
   return ACTIVE_STATUSES.includes(status as RideStatus);
 }
 
+function parseSupportReason(body: Record<string, unknown>): {
+  reason: string;
+  support_reason_code: string | null;
+  support_note: string | null;
+} {
+  const code = typeof body.support_reason_code === "string"
+    ? body.support_reason_code.trim()
+    : "";
+  const note = typeof body.support_note === "string" ? body.support_note.trim() : "";
+  const legacyReason = typeof body.reason === "string" ? body.reason.trim() : "";
+  const parts = [code, note, legacyReason].filter(Boolean);
+  const reason = parts.length > 0 ? parts.join(" — ") : "admin_force_cancel";
+  return {
+    reason,
+    support_reason_code: code || null,
+    support_note: note || null,
+  };
+}
+
+async function enrichDriverNames(
+  rides: Record<string, unknown>[],
+): Promise<Record<string, unknown>[]> {
+  const driverIds = [
+    ...new Set(
+      rides
+        .map((r) => r.assigned_driver_user_id as string | null)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  if (driverIds.length === 0) return rides;
+
+  const driverMeta: Record<string, { display_name: string | null; email: string | null }> = {};
+
+  const { data: profiles } = await pubSvc().from("driver_profiles")
+    .select("user_id, display_name, first_name, last_name")
+    .in("user_id", driverIds);
+
+  for (const p of profiles ?? []) {
+    const uid = p.user_id as string;
+    const name = (p.display_name as string | null) ||
+      [p.first_name, p.last_name].filter(Boolean).join(" ") ||
+      null;
+    driverMeta[uid] = { display_name: name, email: null };
+  }
+
+  for (const uid of driverIds) {
+    if (driverMeta[uid]?.email != null) continue;
+    try {
+      const { data } = await pubSvc().auth.admin.getUserById(uid);
+      if (data?.user?.email) {
+        driverMeta[uid] = {
+          display_name: driverMeta[uid]?.display_name ?? null,
+          email: data.user.email,
+        };
+      }
+    } catch {
+      /* optional */
+    }
+  }
+
+  return rides.map((r) => {
+    const uid = r.assigned_driver_user_id as string | null;
+    if (!uid || !driverMeta[uid]) return r;
+    return {
+      ...r,
+      driver_display_name: driverMeta[uid].display_name,
+      driver_email: driverMeta[uid].email,
+    };
+  });
+}
+
 export function registerRideOperationsAdminRoutes(
   admin: Hono,
   ridesDbOrResponse: RidesDbOrResponse,
   adminAudit: AdminAuditFn,
 ) {
-  admin.post("/rides/:id/cancel", async (c) => {
-    const adminUser = await requireProductAdmin(c, "rides");
+  admin.get("/support/stuck-trips", async (c) => {
+    const adminUser = await requireProductAdminAny(c, SUPPORT_PRODUCTS);
+    if (adminUser instanceof Response) return adminUser;
+
+    const resolved = await ridesDbOrResponse(c);
+    if (resolved instanceof Response) return resolved;
+    const { db, tables } = resolved;
+
+    const staleMinutes = Math.min(
+      24 * 60,
+      Math.max(1, Number(c.req.query("stale_minutes") ?? 15)),
+    );
+    const staleMs = staleMinutes * 60_000;
+
+    const { data, error } = await db.from(tables.ride_requests)
+      .select("*")
+      .in("status", [...ACTIVE_STATUSES])
+      .order("updated_at", { ascending: false })
+      .limit(100);
+
+    if (error) return c.json({ error: "list_failed", message: error.message }, 500);
+
+    const stuck = ((data ?? []) as Record<string, unknown>[]).filter((row) => {
+      const at = row.last_driver_location_at as string | null | undefined;
+      if (!at) return true;
+      const age = Date.now() - Date.parse(at);
+      return !Number.isFinite(age) || age >= staleMs;
+    }).slice(0, STUCK_TRIPS_LIMIT);
+
+    const rides = await enrichDriverNames(stuck);
+    return c.json({ rides, stale_minutes: staleMinutes });
+  });
+
+  admin.get("/rides/:id/audit", async (c) => {
+    const adminUser = await requireProductAdminAny(c, SUPPORT_PRODUCTS);
     if (adminUser instanceof Response) return adminUser;
 
     const rideId = c.req.param("id");
-    const body = await c.req.json().catch(() => ({}));
-    const reason = typeof body.reason === "string" && body.reason.trim()
-      ? body.reason.trim()
-      : "admin_force_cancel";
+    const resolved = await ridesDbOrResponse(c);
+    if (resolved instanceof Response) return resolved;
+    const { db, tables } = resolved;
+
+    const { data, error } = await db.from(tables.audit_events)
+      .select("id, event_type, payload, actor_user_id, created_at, ride_request_id")
+      .eq("ride_request_id", rideId)
+      .order("created_at", { ascending: false })
+      .limit(AUDIT_LIMIT);
+
+    if (error) return c.json({ error: "audit_failed", message: error.message }, 500);
+    return c.json({ events: data ?? [] });
+  });
+
+  admin.get("/rides/:id", async (c) => {
+    const adminUser = await requireProductAdminAny(c, SUPPORT_PRODUCTS);
+    if (adminUser instanceof Response) return adminUser;
+
+    const rideId = c.req.param("id");
+    const ride = await loadRideRequestById(rideId);
+    if (!ride) return c.json({ error: "not_found" }, 404);
+
+    const [enriched] = await enrichDriverNames([ride]);
+    return c.json({ ride: enriched });
+  });
+
+  admin.post("/rides/:id/cancel", async (c) => {
+    const adminUser = await requireProductAdminAny(c, SUPPORT_PRODUCTS);
+    if (adminUser instanceof Response) return adminUser;
+
+    const rideId = c.req.param("id");
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const { reason, support_reason_code, support_note } = parseSupportReason(body);
 
     const ride = await loadRideRequestById(rideId);
     if (!ride) return c.json({ error: "not_found" }, 404);
@@ -199,19 +337,25 @@ export function registerRideOperationsAdminRoutes(
       await adminAudit(resolved.db, resolved.tables, adminUser.id, "admin_ride_force_cancel", {
         ride_id: rideId,
         reason,
+        support_reason_code,
+        support_note,
         from_status: status,
       });
     }
 
     const fresh = await loadRideRequestById(rideId);
-    return c.json({ ride: fresh });
+    const [enriched] = await enrichDriverNames([fresh ?? ride]);
+    return c.json({ ride: enriched });
   });
 
   admin.post("/rides/:id/complete", async (c) => {
-    const adminUser = await requireProductAdmin(c, "rides");
+    const adminUser = await requireProductAdminAny(c, SUPPORT_PRODUCTS);
     if (adminUser instanceof Response) return adminUser;
 
     const rideId = c.req.param("id");
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const { support_reason_code, support_note } = parseSupportReason(body);
+
     const ride = await loadRideRequestById(rideId);
     if (!ride) return c.json({ error: "not_found" }, 404);
 
@@ -242,9 +386,13 @@ export function registerRideOperationsAdminRoutes(
       await adminAudit(resolved.db, resolved.tables, adminUser.id, "admin_ride_force_complete", {
         ride_id: rideId,
         from_status: status,
+        support_reason_code,
+        support_note,
       });
     }
 
-    return c.json({ ride: result.ride ?? await loadRideRequestById(rideId) });
+    const fresh = result.ride ?? await loadRideRequestById(rideId);
+    const [enriched] = await enrichDriverNames([fresh ?? ride]);
+    return c.json({ ride: enriched });
   });
 }
