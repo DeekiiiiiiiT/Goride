@@ -12,6 +12,7 @@
 @import "./styles/live-ride.css";
 @import "./styles/trip-in-progress.css";
 @import "./styles/ride-cancelled.css";
+@import "./styles/splash.css";
 
 :root {
   --font-sans: system-ui, -apple-system, "Segoe UI", "Inter", sans-serif;

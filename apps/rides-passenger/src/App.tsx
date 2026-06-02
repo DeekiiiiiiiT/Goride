@@ -40,12 +40,21 @@ import { RideOperationsPage } from './admin/pages/RideOperationsPage';
 import { TripLedgerPage } from './admin/pages/TripLedgerPage';
 import { RidersListPage } from './admin/pages/users/RidersListPage';
 import { RiderDetailPage } from './admin/pages/users/RiderDetailPage';
+import { SplashScreen } from './components/layout/SplashScreen';
+
+const SPLASH_MIN_MS = 2000;
 
 export default function App() {
   const location = useLocation();
   const isAdminPath = location.pathname.startsWith('/admin');
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [splashMinElapsed, setSplashMinElapsed] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSplashMinElapsed(true), SPLASH_MIN_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
@@ -73,15 +82,8 @@ export default function App() {
     })();
   }, [session?.user?.id, isAdminPath]);
 
-  if (loading) {
-    return (
-      <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-zinc-100 safe-x safe-t safe-b gap-4">
-        <div className="h-12 w-12 rounded-2xl bg-emerald-600 shadow-lg shadow-emerald-600/25 flex items-center justify-center">
-          <div className="h-6 w-6 rounded-full border-2 border-white border-t-transparent animate-spin" />
-        </div>
-        <p className="text-sm font-medium text-zinc-600">Loading Roam Rides…</p>
-      </div>
-    );
+  if (loading || !splashMinElapsed) {
+    return <SplashScreen />;
   }
 
   if (session?.user && !isAdminPath && isRidesPassengerUiBlockedRole(session.user)) {
