@@ -3,4 +3,5 @@
 @source '../../../packages/admin-core/src/**/*.{js,ts,jsx,tsx}';
 @source '../../../packages/ride-chat/src/**/*.{js,ts,jsx,tsx}';
 @import './styles/globals.css';
+@import './styles/driver-splash.css';
 @import '../../../packages/admin-core/src/styles/admin-portal.css';

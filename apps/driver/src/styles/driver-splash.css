@@ -1,0 +1,497 @@
+.driver-splash {
+  --driver-splash-primary: #006d43;
+  --driver-splash-accent: #00a86b;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 100dvh;
+  font-family: 'Hanken Grotesk', system-ui, sans-serif;
+  overflow: hidden;
+  color: #ffffff;
+}
+
+.driver-splash__bg-wrap {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  transform: scale(1.05);
+  animation: driver-splash-bg-pulse 8s ease-in-out infinite;
+}
+
+.driver-splash__bg-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.driver-splash__vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, transparent 0%, rgba(0, 0, 0, 0.4) 100%);
+}
+
+.driver-splash__gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.4), transparent, rgba(0, 0, 0, 0.8));
+}
+
+.driver-splash__header {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: max(3rem, env(safe-area-inset-top, 0px) + 1.5rem) 24px 0;
+  padding-left: max(24px, env(safe-area-inset-left, 0px));
+  padding-right: max(24px, env(safe-area-inset-right, 0px));
+}
+
+.driver-splash__status-label {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--driver-splash-primary);
+}
+
+.driver-splash__status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.driver-splash__status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--driver-splash-accent);
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.driver-splash__status-text {
+  margin: 0;
+  font-size: 16px;
+  line-height: 24px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.driver-splash__version {
+  padding: 4px 12px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.driver-splash__brand {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 0 24px;
+  margin-top: -5rem;
+}
+
+.driver-splash__edition-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.driver-splash__edition-line {
+  width: 3rem;
+  height: 2px;
+  background: var(--driver-splash-primary);
+}
+
+.driver-splash__edition-label {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: var(--driver-splash-primary);
+}
+
+.driver-splash__title {
+  margin: 0 0 8px;
+  font-size: clamp(2.25rem, 9vw, 3rem);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+}
+
+.driver-splash__tagline {
+  margin: 0 0 32px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--driver-splash-primary);
+  text-shadow: 0 0 15px rgba(0, 168, 107, 0.4);
+}
+
+.driver-splash__divider {
+  width: 1px;
+  height: 2.5rem;
+  background: linear-gradient(to bottom, var(--driver-splash-primary), transparent);
+}
+
+.driver-splash__panel {
+  position: relative;
+  z-index: 20;
+  width: 100%;
+  padding: 32px 24px max(48px, env(safe-area-inset-bottom, 0px) + 1rem);
+  padding-left: max(24px, env(safe-area-inset-left, 0px));
+  padding-right: max(24px, env(safe-area-inset-right, 0px));
+  border-radius: 2.5rem 2.5rem 0 0;
+  background: rgba(26, 26, 26, 0.75);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.driver-splash__panel-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  max-width: 28rem;
+  margin: 0 auto;
+}
+
+.driver-splash__value-prop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.driver-splash__headline {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 32px;
+  color: #ffffff;
+}
+
+.driver-splash__subtext {
+  margin: 0;
+  max-width: 280px;
+  font-size: 16px;
+  line-height: 24px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.driver-splash__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.driver-splash__btn-primary {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px;
+  border-radius: 1rem;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: #1a1a1a;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #ffffff;
+  cursor: pointer;
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.driver-splash__btn-primary:hover:not(:disabled) {
+  background: #000000;
+}
+
+.driver-splash__btn-primary:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.driver-splash__btn-primary:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.driver-splash__btn-secondary {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  border-radius: 1rem;
+  border: 1px solid color-mix(in srgb, var(--driver-splash-primary) 20%, transparent);
+  background: #ffffff;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--driver-splash-primary);
+  cursor: pointer;
+  box-shadow: 0 0 20px rgba(0, 168, 107, 0.15);
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.driver-splash__btn-secondary:hover {
+  background: #f5f3f3;
+}
+
+.driver-splash__btn-secondary:active {
+  transform: scale(0.98);
+}
+
+.driver-splash__or-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+}
+
+.driver-splash__or-line {
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.driver-splash__or-text {
+  padding: 0 16px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.driver-splash__footer-links {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+  margin-top: 16px;
+}
+
+.driver-splash__footer-link {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.4);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.driver-splash__footer-link:hover {
+  color: #ffffff;
+}
+
+.driver-splash__btn-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(0, 168, 107, 0.1);
+  border-top-color: var(--driver-splash-accent);
+  border-radius: 50%;
+  animation: driver-splash-spin 1s linear infinite;
+}
+
+.driver-splash__loading-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 0 8px;
+}
+
+.driver-splash__loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 3px solid rgba(0, 168, 107, 0.1);
+  border-top-color: var(--driver-splash-accent);
+  border-radius: 50%;
+  animation: driver-splash-spin 1s linear infinite;
+}
+
+.driver-splash__loading-text {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.driver-splash__auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.driver-splash__back-btn {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.driver-splash__back-btn:hover {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.driver-splash__error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.1);
+  font-size: 14px;
+  color: #fecaca;
+}
+
+.driver-splash__field label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.driver-splash__input-wrap {
+  position: relative;
+}
+
+.driver-splash__input-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.driver-splash__input {
+  width: 100%;
+  padding: 10px 12px 10px 40px;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: #ffffff;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.driver-splash__input::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.driver-splash__input:focus {
+  border-color: var(--driver-splash-accent);
+  box-shadow: 0 0 0 2px rgba(0, 168, 107, 0.25);
+}
+
+.driver-splash__input--password {
+  padding-right: 40px;
+}
+
+.driver-splash__toggle-password {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 0;
+  border: none;
+  background: none;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+}
+
+.driver-splash__toggle-password:hover {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.driver-splash__link-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--driver-splash-accent);
+  cursor: pointer;
+  text-align: center;
+}
+
+.driver-splash__link-btn:hover {
+  text-decoration: underline;
+}
+
+.driver-splash__terms {
+  margin: 0;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+@keyframes driver-splash-bg-pulse {
+  0%,
+  100% {
+    transform: scale(1.05);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+@keyframes driver-splash-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

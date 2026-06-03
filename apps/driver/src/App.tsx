@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { DriverProvider, useDriver } from './contexts/DriverContext';
@@ -13,6 +13,9 @@ import { ActiveRideRecoveryProvider, useActiveRideRecovery } from './contexts/Ac
 import { needsGoogleExtendedSignup } from './utils/googleDriverSignup';
 import { BrowserRouter } from 'react-router-dom';
 import { DriverAdminPortal } from './admin/DriverAdminPortal';
+import { DriverSplashScreen } from './components/layout/DriverSplashScreen';
+
+const SPLASH_MIN_MS = 2000;
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -26,14 +29,7 @@ const queryClient = new QueryClient({
 });
 
 function AuthLoadingScreen() {
-  return (
-    <div className="flex h-screen items-center justify-center bg-slate-100 text-slate-900 dark:bg-slate-900 dark:text-slate-100">
-      <div className="flex flex-col items-center gap-4">
-        <div className="h-12 w-12 animate-spin rounded-full border-4 border-emerald-600 border-t-transparent dark:border-emerald-500" />
-        <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Loading...</p>
-      </div>
-    </div>
-  );
+  return <DriverSplashScreen mode="loading" />;
 }
 
 function AuthenticatedDriverRouteInner() {
@@ -74,8 +70,14 @@ function AuthenticatedDriverRoute() {
 
 function AppContent() {
   const { user, loading } = useAuth();
+  const [splashMinElapsed, setSplashMinElapsed] = useState(false);
 
-  if (loading) {
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSplashMinElapsed(true), SPLASH_MIN_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  if (loading || !splashMinElapsed) {
     return <AuthLoadingScreen />;
   }
 
@@ -91,7 +93,6 @@ function AppContent() {
 }
 
 export default function App() {
-  // Check if we're on the admin path
   if (window.location.pathname.startsWith('/admin')) {
     return (
       <BrowserRouter basename="/admin">

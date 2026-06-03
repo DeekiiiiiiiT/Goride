@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { Car, Loader2, AlertCircle, Mail, Lock, Eye, EyeOff, HelpCircle } from 'lucide-react';
+import { AlertCircle, Loader2, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../../utils/supabase/client';
-import { ThemeToggleButton } from '../layout/ThemeToggleButton';
 import { DriverPhoneAuthWizard } from './DriverPhoneAuthWizard';
 import { DriverEmailSignupForm, GoogleSignupButton } from './DriverEmailSignupForm';
 import { DriverEmailConfirmScreen } from './DriverEmailConfirmScreen';
+import { DriverSplashScreen } from '../layout/DriverSplashScreen';
+
+type AuthView = 'welcome' | 'login' | 'signup';
 
 export function DriverLoginPage() {
-  const [mainView, setMainView] = useState<'login' | 'signup'>('login');
+  const [view, setView] = useState<AuthView>('welcome');
   const [signupSubView, setSignupSubView] = useState<'main' | 'email' | 'confirm-email'>('main');
   const [pendingConfirmEmail, setPendingConfirmEmail] = useState('');
   const [loginMethod, setLoginMethod] = useState<'email' | 'phone'>('email');
@@ -16,6 +18,14 @@ export function DriverLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const resetToWelcome = () => {
+    setView('welcome');
+    setSignupSubView('main');
+    setPendingConfirmEmail('');
+    setLoginMethod('email');
+    setError(null);
+  };
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,196 +42,198 @@ export function DriverLoginPage() {
     }
   };
 
-  return (
-    <div className="flex min-h-screen flex-col bg-gradient-to-br from-slate-100 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
-      <div className="flex items-start justify-between px-4 pt-4">
-        <a
-          href="mailto:support@roam.app"
-          className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200/80 bg-emerald-50/90 px-3 py-1.5 text-xs font-semibold text-emerald-800 shadow-sm dark:border-emerald-500/30 dark:bg-emerald-950/40 dark:text-emerald-200"
-        >
-          <HelpCircle className="h-3.5 w-3.5" />
-          Contact support
-        </a>
-        <ThemeToggleButton />
-      </div>
+  if (view === 'welcome') {
+    return (
+      <DriverSplashScreen
+        onSignIn={() => {
+          setView('login');
+          setError(null);
+        }}
+        onBecomeDriver={() => {
+          setView('signup');
+          setSignupSubView('main');
+          setError(null);
+        }}
+      />
+    );
+  }
 
-      <div className="-mt-4 flex flex-1 flex-col items-center justify-center px-4 pb-12">
-        <div className="w-full max-w-sm">
-          <div className="mb-8 text-center">
-            <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/25">
-              <Car className="h-8 w-8 text-white" />
-            </div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Roam Driver</h1>
-            <p className="mt-2 text-sm font-medium text-slate-600 dark:text-slate-300">
-              {mainView === 'login'
-                ? loginMethod === 'email'
-                  ? 'Sign in with Google, email, or phone.'
-                  : 'Sign in with your phone'
-                : signupSubView === 'confirm-email'
-                  ? 'Confirm your email'
-                  : 'Create your driver account'}
-            </p>
+  const panelTitle =
+    view === 'login'
+      ? loginMethod === 'email'
+        ? 'Sign In to Dashboard'
+        : 'Sign in with phone'
+      : signupSubView === 'confirm-email'
+        ? 'Confirm your email'
+        : signupSubView === 'email'
+          ? 'Create your account'
+          : 'Become a Driver';
+
+  const panelSubtext =
+    view === 'login'
+      ? loginMethod === 'email'
+        ? 'Sign in with Google, email, or phone.'
+        : 'Enter the code sent to your phone.'
+      : signupSubView === 'confirm-email'
+        ? 'Check your inbox for a confirmation link.'
+        : 'Join the Roam driver network across the Caribbean.';
+
+  return (
+    <DriverSplashScreen
+      panel={
+        <>
+          <button type="button" className="driver-splash__back-btn" onClick={resetToWelcome}>
+            ← Back
+          </button>
+
+          <div className="driver-splash__value-prop">
+            <h2 className="driver-splash__headline">{panelTitle}</h2>
+            <p className="driver-splash__subtext">{panelSubtext}</p>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-xl backdrop-blur-sm dark:border-slate-700/60 dark:bg-slate-800/60">
-            {error && (
-              <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-medium text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
-                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>{error}</span>
-              </div>
-            )}
+          {error && (
+            <div className="driver-splash__error">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
 
-            {mainView === 'signup' && signupSubView === 'confirm-email' && (
-              <DriverEmailConfirmScreen
-                email={pendingConfirmEmail}
-                onBack={() => {
+          {view === 'signup' && signupSubView === 'confirm-email' && (
+            <DriverEmailConfirmScreen
+              email={pendingConfirmEmail}
+              onBack={() => {
+                setSignupSubView('email');
+                setError(null);
+              }}
+              onSignIn={() => {
+                setView('login');
+                setSignupSubView('main');
+                setPendingConfirmEmail('');
+                setError(null);
+              }}
+            />
+          )}
+
+          {view === 'signup' && signupSubView === 'email' && (
+            <DriverEmailSignupForm
+              onBack={() => {
+                setSignupSubView('main');
+                setError(null);
+              }}
+              onConfirmationRequired={confirmedEmail => {
+                setPendingConfirmEmail(confirmedEmail);
+                setSignupSubView('confirm-email');
+                setError(null);
+              }}
+            />
+          )}
+
+          {view === 'signup' && signupSubView === 'main' && (
+            <div className="driver-splash__auth-form">
+              <GoogleSignupButton onError={msg => setError(msg || null)} />
+              <p className="driver-splash__terms">
+                By continuing with Google, you agree to our Terms of Service and Privacy Policy.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
                   setSignupSubView('email');
-                  setError(null);
                 }}
-                onSignIn={() => {
-                  setMainView('login');
-                  setSignupSubView('main');
-                  setPendingConfirmEmail('');
-                  setError(null);
-                }}
-              />
-            )}
-
-            {mainView === 'signup' && signupSubView === 'email' && (
-              <DriverEmailSignupForm
-                onBack={() => {
-                  setSignupSubView('main');
-                  setError(null);
-                }}
-                onConfirmationRequired={confirmedEmail => {
-                  setPendingConfirmEmail(confirmedEmail);
-                  setSignupSubView('confirm-email');
-                  setError(null);
-                }}
-              />
-            )}
-
-            {mainView === 'signup' && signupSubView === 'main' && (
-              <div className="space-y-4">
-                <GoogleSignupButton onError={msg => setError(msg || null)} />
-                <p className="text-center text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                  By continuing with Google, you agree to our Terms of Service and Privacy Policy.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setError(null);
-                    setSignupSubView('email');
-                  }}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-slate-50 py-3 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-900/50 dark:text-slate-100 dark:hover:bg-slate-800/80"
-                >
-                  <Mail className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                  Continue with email
-                </button>
-                <div className="relative py-1">
-                  <div className="absolute inset-0 flex items-center" aria-hidden>
-                    <span className="w-full border-t border-slate-200 dark:border-slate-600" />
-                  </div>
-                  <div className="relative flex justify-center text-xs font-medium uppercase tracking-wide text-slate-400">
-                    <span className="bg-white/90 px-2 dark:bg-slate-800/60">or phone</span>
-                  </div>
-                </div>
-                <DriverPhoneAuthWizard
-                  shouldCreateUser
-                  requireTerms
-                  onVerified={() => {
-                    setError(null);
-                  }}
-                  onCancel={() => {
-                    setMainView('login');
-                    setSignupSubView('main');
-                    setError(null);
-                  }}
-                />
+                className="driver-splash__btn-secondary"
+              >
+                Continue with email
+              </button>
+              <div className="driver-splash__or-row">
+                <div className="driver-splash__or-line" aria-hidden />
+                <span className="driver-splash__or-text">or phone</span>
+                <div className="driver-splash__or-line" aria-hidden />
               </div>
-            )}
+              <DriverPhoneAuthWizard
+                shouldCreateUser
+                requireTerms
+                onVerified={() => setError(null)}
+                onCancel={resetToWelcome}
+              />
+            </div>
+          )}
 
-            {mainView === 'login' && loginMethod === 'email' && (
-              <>
-                <GoogleSignupButton variant="login" onError={msg => setError(msg || null)} />
-                <div className="relative py-3">
-                  <div className="absolute inset-0 flex items-center" aria-hidden>
-                    <span className="w-full border-t border-slate-200 dark:border-slate-600" />
-                  </div>
-                  <div className="relative flex justify-center text-xs font-medium uppercase tracking-wide text-slate-400">
-                    <span className="bg-white/90 px-2 dark:bg-slate-800/60">or email</span>
+          {view === 'login' && loginMethod === 'email' && (
+            <div className="driver-splash__auth-form">
+              <GoogleSignupButton variant="login" onError={msg => setError(msg || null)} />
+              <div className="driver-splash__or-row">
+                <div className="driver-splash__or-line" aria-hidden />
+                <span className="driver-splash__or-text">or email</span>
+                <div className="driver-splash__or-line" aria-hidden />
+              </div>
+              <form onSubmit={e => void handleEmailLogin(e)} className="driver-splash__auth-form">
+                <div className="driver-splash__field">
+                  <label htmlFor="driver-email">Email</label>
+                  <div className="driver-splash__input-wrap">
+                    <Mail className="driver-splash__input-icon" />
+                    <input
+                      id="driver-email"
+                      type="email"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      placeholder="driver@email.com"
+                      required
+                      className="driver-splash__input"
+                    />
                   </div>
                 </div>
-                <form onSubmit={e => void handleEmailLogin(e)} className="space-y-4">
-                  <div>
-                    <label className="mb-1.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">Email</label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500 dark:text-slate-400" />
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={e => setEmail(e.target.value)}
-                        placeholder="driver@email.com"
-                        required
-                        className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-10 pr-3 text-sm font-medium text-slate-900 placeholder-slate-500 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-slate-600 dark:bg-slate-900/70 dark:text-white dark:placeholder-slate-400"
-                      />
-                    </div>
+
+                <div className="driver-splash__field">
+                  <label htmlFor="driver-password">Password</label>
+                  <div className="driver-splash__input-wrap">
+                    <Lock className="driver-splash__input-icon" />
+                    <input
+                      id="driver-password"
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      placeholder="Enter your password"
+                      required
+                      className="driver-splash__input driver-splash__input--password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="driver-splash__toggle-password"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
                   </div>
-
-                  <div>
-                    <label className="mb-1.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">Password</label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500 dark:text-slate-400" />
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={password}
-                        onChange={e => setPassword(e.target.value)}
-                        placeholder="Enter your password"
-                        required
-                        className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-10 pr-10 text-sm font-medium text-slate-900 placeholder-slate-500 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-slate-600 dark:bg-slate-900/70 dark:text-white dark:placeholder-slate-400"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100"
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={isLoading}
-                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 transition-all hover:from-emerald-500 hover:to-teal-500 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Signing in…
-                      </>
-                    ) : (
-                      'Sign In'
-                    )}
-                  </button>
-                </form>
-
-                <div className="mt-4 text-center">
-                  <button
-                    type="button"
-                    className="text-sm font-semibold text-emerald-700 hover:underline dark:text-emerald-400"
-                    onClick={() => {
-                      setLoginMethod('phone');
-                      setError(null);
-                    }}
-                  >
-                    Sign in with phone instead
-                  </button>
                 </div>
-              </>
-            )}
 
-            {mainView === 'login' && loginMethod === 'phone' && (
+                <button type="submit" disabled={isLoading} className="driver-splash__btn-primary">
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Signing in…
+                    </>
+                  ) : (
+                    'Sign In'
+                  )}
+                </button>
+              </form>
+
+              <button
+                type="button"
+                className="driver-splash__link-btn"
+                onClick={() => {
+                  setLoginMethod('phone');
+                  setError(null);
+                }}
+              >
+                Sign in with phone instead
+              </button>
+            </div>
+          )}
+
+          {view === 'login' && loginMethod === 'phone' && (
+            <div className="driver-splash__auth-form">
               <DriverPhoneAuthWizard
                 shouldCreateUser={false}
                 requireTerms={false}
@@ -231,42 +243,42 @@ export function DriverLoginPage() {
                   setError(null);
                 }}
               />
-            )}
-          </div>
+            </div>
+          )}
 
-          <div className="mt-6 border-t border-slate-200 pt-4 text-center dark:border-slate-700/60">
-            {mainView === 'login' ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setMainView('signup');
-                  setSignupSubView('main');
-                  setError(null);
-                }}
-                className="text-sm font-semibold text-slate-700 transition-colors hover:text-emerald-700 dark:text-slate-300 dark:hover:text-emerald-400"
-              >
-                Don&apos;t have an account? Sign up
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  setMainView('login');
-                  setSignupSubView('main');
-                  setError(null);
-                }}
-                className="text-sm font-semibold text-slate-700 transition-colors hover:text-emerald-700 dark:text-slate-300 dark:hover:text-emerald-400"
-              >
-                Already have an account? Sign in
-              </button>
-            )}
-          </div>
+          {view === 'login' && (
+            <button
+              type="button"
+              className="driver-splash__link-btn"
+              onClick={() => {
+                setView('signup');
+                setSignupSubView('main');
+                setError(null);
+              }}
+            >
+              Don&apos;t have an account? Sign up
+            </button>
+          )}
 
-          <p className="mt-6 text-center text-xs font-medium leading-relaxed text-slate-600 dark:text-slate-400">
+          {view === 'signup' && signupSubView === 'main' && (
+            <button
+              type="button"
+              className="driver-splash__link-btn"
+              onClick={() => {
+                setView('login');
+                setSignupSubView('main');
+                setError(null);
+              }}
+            >
+              Already have an account? Sign in
+            </button>
+          )}
+
+          <p className="driver-splash__terms">
             By continuing, you agree to our Terms of Service and Privacy Policy
           </p>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    />
   );
 }
