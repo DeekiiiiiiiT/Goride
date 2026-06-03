@@ -1,6 +1,7 @@
 import React from 'react';
 import { MapPin } from 'lucide-react';
 import { ROAM_LEGAL } from '@roam/business-config/legalUrls';
+import { isNativeCapacitorPlatform } from '@roam/types';
 import { acceptDriverBackgroundLocationDisclosure } from '../utils/driverLocationDisclosure';
 
 type Props = {
@@ -70,7 +71,9 @@ export function DriverBackgroundLocationDisclosure({ open, onAccept, onDecline }
             onClick={handleAccept}
             className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white"
           >
-            I understand — continue
+            {isNativeCapacitorPlatform()
+              ? 'Continue — allow location'
+              : 'I understand — continue'}
           </button>
           <button
             type="button"

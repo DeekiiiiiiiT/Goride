@@ -446,6 +446,9 @@ importers:
       '@types/leaflet':
         specifier: ^1.9.21
         version: 1.9.21
+      capacitor-native-settings:
+        specifier: ^7.0.2
+        version: 7.0.2(@capacitor/core@7.6.5)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -2866,6 +2869,11 @@ packages:
 
   caniuse-lite@1.0.30001792:
     resolution: {integrity: sha512-hVLMUZFgR4JJ6ACt1uEESvQN1/dBVqPAKY0hgrV70eN3391K6juAfTjKZLKvOMsx8PxA7gsY1/tLMMTcfFLLpw==}
+
+  capacitor-native-settings@7.0.2:
+    resolution: {integrity: sha512-s6xsLW0mJ6tywPgGtPXMgfDGTH5UqdSry1ZRlqh9T124IEIuPQyA35zpBaCywfHkmDKEZYdBik3/8Mdncjbniw==}
+    peerDependencies:
+      '@capacitor/core': '>=7.0.0'
 
   chai@5.3.3:
     resolution: {integrity: sha512-4zNhdJD/iOjSH0A05ea+Ke6MU5mmpQcbQsSOkgdaUMJ9zTlDTD/GYlwohmIE2u0gaxHYiVHEn1Fw9mZ/ktJWgw==}
@@ -5522,6 +5530,10 @@ snapshots:
       function-bind: 1.1.2
 
   caniuse-lite@1.0.30001792: {}
+
+  capacitor-native-settings@7.0.2(@capacitor/core@7.6.5):
+    dependencies:
+      '@capacitor/core': 7.6.5
 
   chai@5.3.3:
     dependencies:

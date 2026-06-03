@@ -28,6 +28,7 @@ export function RideDispatchHome({ embedded = false }: Props) {
     permissionOnboardingOpen,
     setPermissionOnboardingOpen,
     locationGoOnlineBlocked,
+    openLocationSettings,
   } = useRideDispatchContext();
 
   const showActiveRide = activeRide && isDriverActiveRideStatus(activeRide.status);
@@ -69,16 +70,27 @@ export function RideDispatchHome({ embedded = false }: Props) {
           <div className="shrink-0 space-y-2 rounded-xl bg-amber-50 px-3 py-3 text-center dark:bg-amber-950/40">
             <p className="text-sm text-amber-800 dark:text-amber-300">
               {isNativeCapacitorPlatform()
-                ? 'Location is required to go online and receive ride requests.'
+                ? 'Location is required to go online. Allow precise location — ideally “Allow all the time” on Android.'
                 : 'Location permission is required to go online. Use Allow above or enable location in your browser settings.'}
             </p>
-            <button
-              type="button"
-              className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white"
-              onClick={() => void toggleOnline()}
-            >
-              Allow location & go online
-            </button>
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
+              <button
+                type="button"
+                className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white"
+                onClick={() => void toggleOnline()}
+              >
+                {isNativeCapacitorPlatform() ? 'Allow location & go online' : 'Allow location & go online'}
+              </button>
+              {isNativeCapacitorPlatform() && (
+                <button
+                  type="button"
+                  className="rounded-lg border border-amber-300 px-4 py-2 text-sm font-medium text-amber-900 dark:border-amber-700 dark:text-amber-200"
+                  onClick={() => void openLocationSettings()}
+                >
+                  Open location settings
+                </button>
+              )}
+            </div>
           </div>
         )}
 
