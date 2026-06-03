@@ -1127,7 +1127,14 @@ importers:
         specifier: ^2.0.3
         version: 2.0.7(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
 
-  packages/types: {}
+  packages/types:
+    dependencies:
+      '@capacitor/core':
+        specifier: ^7.6.5
+        version: 7.6.5
+      '@capacitor/geolocation':
+        specifier: ^7.1.8
+        version: 7.1.8(@capacitor/core@7.6.5)
 
   packages/ui:
     dependencies:

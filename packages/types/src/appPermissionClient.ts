@@ -6,11 +6,43 @@ import type {
 
 export type PermissionGrantState = 'granted' | 'denied' | 'prompt' | 'unsupported';
 
+export function isNativeCapacitorPlatform(): boolean {
+  if (typeof window === 'undefined') return false;
+  const cap = (window as Window & { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+  return cap?.isNativePlatform?.() === true;
+}
+
+async function getNativeGeolocation() {
+  if (!isNativeCapacitorPlatform()) return null;
+  try {
+    const { Geolocation } = await import('@capacitor/geolocation');
+    return Geolocation;
+  } catch {
+    return null;
+  }
+}
+
+function mapCapPermission(location: string | undefined): PermissionGrantState {
+  if (location === 'granted' || location === 'limited') return 'granted';
+  if (location === 'denied') return 'denied';
+  return 'prompt';
+}
+
 export function isWebApplicable(platform: AppPermissionPolicyRow['platform']): boolean {
   return platform === 'web' || platform === 'both';
 }
 
 export async function checkGeolocationGranted(): Promise<PermissionGrantState> {
+  const Geo = await getNativeGeolocation();
+  if (Geo) {
+    try {
+      const perm = await Geo.checkPermissions();
+      return mapCapPermission(perm.location);
+    } catch {
+      return 'prompt';
+    }
+  }
+
   if (typeof navigator === 'undefined' || !navigator.geolocation) return 'unsupported';
   if (!navigator.permissions?.query) {
     return 'prompt';
@@ -32,7 +64,24 @@ export async function checkNotificationGranted(): Promise<PermissionGrantState> 
   return 'prompt';
 }
 
-export function requestGeolocationPermission(): Promise<PermissionGrantState> {
+export async function requestGeolocationPermission(): Promise<PermissionGrantState> {
+  const Geo = await getNativeGeolocation();
+  if (Geo) {
+    try {
+      const perm = await Geo.requestPermissions();
+      const mapped = mapCapPermission(perm.location);
+      if (mapped !== 'granted') return mapped;
+      try {
+        await Geo.getCurrentPosition({ enableHighAccuracy: true, timeout: 15000 });
+      } catch {
+        /* Permission granted; GPS fix may still be warming up. */
+      }
+      return 'granted';
+    } catch {
+      return 'denied';
+    }
+  }
+
   return new Promise((resolve) => {
     if (!navigator.geolocation) {
       resolve('unsupported');

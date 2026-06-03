@@ -1,5 +1,6 @@
 import React from 'react';
 import { isDriverActiveRideStatus } from '@roam/types/rides';
+import { isNativeCapacitorPlatform } from '@roam/types';
 import { useRideDispatchContext } from '../../contexts/RideDispatchContext';
 import { ActiveRidePanel } from './ActiveRidePanel';
 import { OnlineGaugeSlider } from './OnlineGaugeSlider';
@@ -37,7 +38,7 @@ export function RideDispatchHome({ embedded = false }: Props) {
   const arrivedAtPickup = showActiveRide && activeRide.status === 'driver_arrived_pickup';
   const showActiveRidePanel = showActiveRide && !enRouteToPickup && !onTrip && !arrivedAtPickup;
   const showWaiting = online && offers.length === 0 && !showActiveRide;
-  const goOnlineDisabled = (!vehicleReady && !online) || (locationGoOnlineBlocked && !online);
+  const goOnlineDisabled = !vehicleReady && !online;
 
   return (
     <>
@@ -65,10 +66,20 @@ export function RideDispatchHome({ embedded = false }: Props) {
         )}
 
         {!online && locationGoOnlineBlocked && (
-          <p className="text-sm text-amber-700 dark:text-amber-400 text-center px-2 bg-amber-50 dark:bg-amber-950/40 rounded-xl py-3 shrink-0">
-            Location permission is required to go online. Use Allow above or enable location for this
-            site in browser settings.
-          </p>
+          <div className="shrink-0 space-y-2 rounded-xl bg-amber-50 px-3 py-3 text-center dark:bg-amber-950/40">
+            <p className="text-sm text-amber-800 dark:text-amber-300">
+              {isNativeCapacitorPlatform()
+                ? 'Location is required to go online and receive ride requests.'
+                : 'Location permission is required to go online. Use Allow above or enable location in your browser settings.'}
+            </p>
+            <button
+              type="button"
+              className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white"
+              onClick={() => void toggleOnline()}
+            >
+              Allow location & go online
+            </button>
+          </div>
         )}
 
         {!embedded && !online && !locationGoOnlineBlocked && !showActiveRide && (

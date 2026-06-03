@@ -33,6 +33,7 @@ import { mergeDriverActiveRide, normalizeDriverRide } from '../utils/mergeActive
 import {
   checkGeolocationGranted,
   isBlockedByPolicy,
+  isNativeCapacitorPlatform,
   isWebApplicable,
   permissionKeyToGrantChecker,
   readOnboardingDismissed,
@@ -127,6 +128,32 @@ export function useRideDispatch() {
         isBlockedByPolicy(permissions, 'location_precise_while_using', geo),
       );
     })();
+  }, [permissions]);
+
+  useEffect(() => {
+    if (!isNativeCapacitorPlatform()) return;
+    let cancelled = false;
+    let removeListener: (() => void) | undefined;
+
+    void (async () => {
+      const { App } = await import('@capacitor/app');
+      const handle = await App.addListener('appStateChange', ({ isActive }) => {
+        if (!isActive || cancelled) return;
+        void (async () => {
+          const geo = await checkGeolocationGranted();
+          if (cancelled) return;
+          setLocationGoOnlineBlocked(
+            isBlockedByPolicy(permissions, 'location_precise_while_using', geo),
+          );
+        })();
+      });
+      removeListener = () => void handle.remove();
+    })();
+
+    return () => {
+      cancelled = true;
+      removeListener?.();
+    };
   }, [permissions]);
 
   useEffect(() => {
@@ -413,19 +440,21 @@ export function useRideDispatch() {
       toast.message('Loading your profile… try again in a moment.');
       return;
     }
-    if (!navigator.geolocation) {
+    if (!navigator.geolocation && !isNativeCapacitorPlatform()) {
       toast.error('Location is not available on this device.');
       return;
     }
-    const geo = await checkGeolocationGranted();
+
+    let geo = await checkGeolocationGranted();
     if (isBlockedByPolicy(permissions, 'location_precise_while_using', geo)) {
-      toast.error('Enable location to go online for passenger rides.');
-      const next = await requestGeolocationPermission();
-      setLocationGoOnlineBlocked(
-        isBlockedByPolicy(permissions, 'location_precise_while_using', next),
-      );
-      return;
+      geo = await requestGeolocationPermission();
+      if (isBlockedByPolicy(permissions, 'location_precise_while_using', geo)) {
+        toast.error('Location is required to go online. Tap Allow when your phone asks.');
+        setLocationGoOnlineBlocked(true);
+        return;
+      }
     }
+
     setLocationGoOnlineBlocked(false);
     setPresenceError(null);
     setOnline(true);
