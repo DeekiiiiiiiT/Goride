@@ -135,36 +135,6 @@ export function useRideDispatch() {
   }, [permissions]);
 
   useEffect(() => {
-    if (!isNativeCapacitorPlatform()) return;
-    let cancelled = false;
-    let removeListener: (() => void) | undefined;
-
-    void (async () => {
-      const { App } = await import('@capacitor/app');
-      const handle = await App.addListener('appStateChange', ({ isActive }) => {
-        if (!isActive || cancelled) return;
-        void (async () => {
-          const geo = await checkGeolocationGranted();
-          if (cancelled) return;
-          setLocationGoOnlineBlocked(
-            isBlockedByPolicy(permissions, 'location_precise_while_using', geo),
-          );
-          if (pendingGoOnlineAfterSettings.current && geo === 'granted') {
-            pendingGoOnlineAfterSettings.current = false;
-            await goOnline();
-          }
-        })();
-      });
-      removeListener = () => void handle.remove();
-    })();
-
-    return () => {
-      cancelled = true;
-      removeListener?.();
-    };
-  }, [permissions, goOnline]);
-
-  useEffect(() => {
     if (!recoveryLoaded || !recoveredRide || activeRide) return;
     setActiveRide(recoveredRide);
     setOnline(true);
@@ -509,11 +479,13 @@ export function useRideDispatch() {
 
     const access = await promptDriverLocationAccess();
     if (access === 'denied_needs_settings') {
+      pendingGoOnlineAfterSettings.current = true;
       toast.message('Enable location for Roam Driver (Allow all the time), then return and tap go online.');
       setLocationGoOnlineBlocked(true);
       return;
     }
     if (access === 'gps_off') {
+      pendingGoOnlineAfterSettings.current = true;
       toast.message('Turn on GPS on your phone, then return and tap go online.');
       setLocationGoOnlineBlocked(true);
       return;
@@ -526,8 +498,39 @@ export function useRideDispatch() {
 
     setLocationGoOnlineBlocked(false);
     setPresenceError(null);
+    pendingGoOnlineAfterSettings.current = false;
     setOnline(true);
   }, [vehicleReady]);
+
+  useEffect(() => {
+    if (!isNativeCapacitorPlatform()) return;
+    let cancelled = false;
+    let removeListener: (() => void) | undefined;
+
+    void (async () => {
+      const { App } = await import('@capacitor/app');
+      const handle = await App.addListener('appStateChange', ({ isActive }) => {
+        if (!isActive || cancelled) return;
+        void (async () => {
+          const geo = await checkGeolocationGranted();
+          if (cancelled) return;
+          setLocationGoOnlineBlocked(
+            isBlockedByPolicy(permissions, 'location_precise_while_using', geo),
+          );
+          if (pendingGoOnlineAfterSettings.current && geo === 'granted') {
+            pendingGoOnlineAfterSettings.current = false;
+            await goOnline();
+          }
+        })();
+      });
+      removeListener = () => void handle.remove();
+    })();
+
+    return () => {
+      cancelled = true;
+      removeListener?.();
+    };
+  }, [permissions, goOnline]);
 
   const goOffline = useCallback(async () => {
     clearGeoWatch();
