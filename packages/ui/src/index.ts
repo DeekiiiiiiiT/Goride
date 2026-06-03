@@ -25,6 +25,7 @@ export * from './hover-card';
 export * from './input-otp';
 export * from './input';
 export * from './label';
+export * from './legal-links';
 export * from './LocationInput';
 export * from './menubar';
 export * from './navigation-menu';

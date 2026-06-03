@@ -1,6 +1,6 @@
 import React from 'react';
 import { isDriverActiveRideStatus } from '@roam/types/rides';
-import { useRideDispatch } from '../../hooks/useRideDispatch';
+import { useRideDispatchContext } from '../../contexts/RideDispatchContext';
 import { RideOfferCard } from './RideOfferCard';
 import { ActiveRidePanel } from './ActiveRidePanel';
 import { OnlineGaugeSlider } from './OnlineGaugeSlider';
@@ -19,7 +19,7 @@ export function RideDispatchPage() {
     trackingError,
     gpsAccuracyM,
     isTracking,
-  } = useRideDispatch();
+  } = useRideDispatchContext();
 
   const showActiveRide = activeRide && isDriverActiveRideStatus(activeRide.status);
   const retractSlider = shouldRetractOnlineSlider(!!showActiveRide, offers.length);

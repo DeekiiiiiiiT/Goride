@@ -39,6 +39,7 @@ import {
   requestGeolocationPermission,
   shouldShowOnboardingPrompt,
 } from '@roam/types';
+import { hasAcceptedDriverBackgroundLocationDisclosure } from '../utils/driverLocationDisclosure';
 
 const OFFER_POLL_MS = 4000;
 const RIDE_SYNC_MS = 30_000;
@@ -101,6 +102,7 @@ export function useRideDispatch() {
   );
   const { permissions } = useDriverPermissionPolicy();
   const [permissionOnboardingOpen, setPermissionOnboardingOpen] = useState(false);
+  const [locationDisclosureOpen, setLocationDisclosureOpen] = useState(false);
   const [locationGoOnlineBlocked, setLocationGoOnlineBlocked] = useState(false);
 
   useEffect(() => {
@@ -437,13 +439,26 @@ export function useRideDispatch() {
     knownOfferIds.current.clear();
   }, [clearGeoWatch, postOfflinePresence]);
 
+  const confirmLocationDisclosure = useCallback(() => {
+    setLocationDisclosureOpen(false);
+    void goOnline();
+  }, [goOnline]);
+
+  const attemptGoOnline = useCallback(() => {
+    if (!hasAcceptedDriverBackgroundLocationDisclosure()) {
+      setLocationDisclosureOpen(true);
+      return;
+    }
+    void goOnline();
+  }, [goOnline]);
+
   const toggleOnline = useCallback(() => {
     if (online) {
       void goOffline();
     } else {
-      void goOnline();
+      attemptGoOnline();
     }
-  }, [online, goOffline, goOnline]);
+  }, [online, goOffline, attemptGoOnline]);
 
   const accept = useCallback(
     async (offer: DriverOfferWithRide) => {
@@ -534,6 +549,9 @@ export function useRideDispatch() {
     permissions,
     permissionOnboardingOpen,
     setPermissionOnboardingOpen,
+    locationDisclosureOpen,
+    setLocationDisclosureOpen,
+    confirmLocationDisclosure,
     locationGoOnlineBlocked,
   };
 }

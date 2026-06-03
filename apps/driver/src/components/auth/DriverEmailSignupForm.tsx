@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Loader2, Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { LegalPolicyAcceptanceLabel } from '@roam/ui';
 import { supabase } from '../../utils/supabase/client';
 import { DRIVER_OAUTH_INTENT_KEY, DRIVER_OAUTH_INTENT_VALUE } from '../../utils/driverAuthSignup';
 
@@ -144,9 +145,7 @@ export function DriverEmailSignupForm({ onBack, onConfirmationRequired }: Driver
             className="mt-1 size-4 shrink-0 cursor-pointer rounded border-slate-300 disabled:opacity-50"
           />
           <label htmlFor="driver-email-signup-terms" className="cursor-pointer leading-snug">
-            I have read and accept the{' '}
-            <span className="font-semibold text-emerald-700 dark:text-emerald-400">Privacy Policy</span> and{' '}
-            <span className="font-semibold text-emerald-700 dark:text-emerald-400">Terms &amp; Conditions</span>.
+            <LegalPolicyAcceptanceLabel privacyClassName="font-semibold text-emerald-700 dark:text-emerald-400" termsClassName="font-semibold text-emerald-700 dark:text-emerald-400" />
           </label>
         </div>
 

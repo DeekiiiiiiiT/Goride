@@ -8,6 +8,7 @@ import { createPortal } from 'react-dom';
 import { Button } from '@roam/ui';
 import { Input } from '@roam/ui';
 import { Label } from '@roam/ui';
+import { LegalPolicyAcceptanceLabel } from '@roam/ui';
 import { Loader2, MessageCircle, Smartphone, X } from 'lucide-react';
 import { supabase } from '../../utils/supabase/client';
 import { DriverPhoneCountryInput } from './DriverPhoneCountryInput';
@@ -271,9 +272,7 @@ export function DriverPhoneAuthWizard({
             className="mt-1 size-4 shrink-0 cursor-pointer rounded border-slate-300"
           />
           <label htmlFor="driver-signup-terms" className="cursor-pointer leading-snug">
-            I have read and accept the{' '}
-            <span className="font-semibold text-emerald-700 dark:text-emerald-400">Privacy Policy</span> and{' '}
-            <span className="font-semibold text-emerald-700 dark:text-emerald-400">Terms &amp; Conditions</span>.
+            <LegalPolicyAcceptanceLabel privacyClassName="font-semibold text-emerald-700 dark:text-emerald-400" termsClassName="font-semibold text-emerald-700 dark:text-emerald-400" />
           </label>
         </div>
       )}

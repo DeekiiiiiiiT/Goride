@@ -10,6 +10,8 @@ import {
   shouldShowOnboardingPrompt,
   type PermissionGrantState,
 } from '@roam/types';
+import { hasAcceptedDriverBackgroundLocationDisclosure } from '../utils/driverLocationDisclosure';
+import { DriverBackgroundLocationDisclosure } from './DriverBackgroundLocationDisclosure';
 
 type Props = {
   permissions: AppPermissionPolicyRow[];
@@ -20,6 +22,8 @@ type Props = {
 export function PermissionOnboardingSheet({ permissions, open, onClose }: Props) {
   const surface = 'driver' as const;
   const [grantStates, setGrantStates] = useState<Record<string, PermissionGrantState>>({});
+  const [locationDisclosureOpen, setLocationDisclosureOpen] = useState(false);
+  const [pendingLocationKey, setPendingLocationKey] = useState<string | null>(null);
 
   const webItems = useMemo(() => {
     return permissions.filter(
@@ -55,9 +59,24 @@ export function PermissionOnboardingSheet({ permissions, open, onClose }: Props)
   if (!open) return null;
 
   const requestForKey = async (key: string) => {
+    if (key.startsWith('location') && !hasAcceptedDriverBackgroundLocationDisclosure()) {
+      setPendingLocationKey(key);
+      setLocationDisclosureOpen(true);
+      return;
+    }
     let state: PermissionGrantState = 'unsupported';
     if (key.startsWith('location')) state = await requestGeolocationPermission();
     else if (key === 'notifications') state = await requestNotificationPermission();
+    setGrantStates((prev) => ({ ...prev, [key]: state }));
+    if (state === 'granted') markOnboardingDismissed(surface, key);
+  };
+
+  const completePendingLocationRequest = async () => {
+    const key = pendingLocationKey;
+    setPendingLocationKey(null);
+    setLocationDisclosureOpen(false);
+    if (!key) return;
+    const state = await requestGeolocationPermission();
     setGrantStates((prev) => ({ ...prev, [key]: state }));
     if (state === 'granted') markOnboardingDismissed(surface, key);
   };
@@ -68,6 +87,15 @@ export function PermissionOnboardingSheet({ permissions, open, onClose }: Props)
   };
 
   return (
+    <>
+      <DriverBackgroundLocationDisclosure
+        open={locationDisclosureOpen}
+        onAccept={() => void completePendingLocationRequest()}
+        onDecline={() => {
+          setLocationDisclosureOpen(false);
+          setPendingLocationKey(null);
+        }}
+      />
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4">
       <div className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 p-5 shadow-xl space-y-4 max-h-[85vh] overflow-y-auto">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
@@ -126,5 +154,6 @@ export function PermissionOnboardingSheet({ permissions, open, onClose }: Props)
         </button>
       </div>
     </div>
+    </>
   );
 }

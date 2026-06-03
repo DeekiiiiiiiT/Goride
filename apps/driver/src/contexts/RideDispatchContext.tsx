@@ -1,5 +1,6 @@
 import React, { createContext, useContext, type ReactNode } from 'react';
 import { useRideDispatch } from '../hooks/useRideDispatch';
+import { DriverBackgroundLocationDisclosure } from '../components/DriverBackgroundLocationDisclosure';
 
 type RideDispatchValue = ReturnType<typeof useRideDispatch>;
 
@@ -8,7 +9,14 @@ const RideDispatchContext = createContext<RideDispatchValue | null>(null);
 export function RideDispatchProvider({ children }: { children: ReactNode }) {
   const value = useRideDispatch();
   return (
-    <RideDispatchContext.Provider value={value}>{children}</RideDispatchContext.Provider>
+    <RideDispatchContext.Provider value={value}>
+      <DriverBackgroundLocationDisclosure
+        open={value.locationDisclosureOpen}
+        onAccept={value.confirmLocationDisclosure}
+        onDecline={() => value.setLocationDisclosureOpen(false)}
+      />
+      {children}
+    </RideDispatchContext.Provider>
   );
 }
 

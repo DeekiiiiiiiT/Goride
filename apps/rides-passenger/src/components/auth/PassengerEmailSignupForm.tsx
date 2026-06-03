@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Loader2, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '@roam/auth-client';
+import { LegalPolicyAcceptanceLabel } from '@roam/ui';
 import { PASSENGER_OAUTH_INTENT_KEY, PASSENGER_OAUTH_INTENT_VALUE } from '../../utils/passengerAuthSignup';
 
 interface PassengerEmailSignupFormProps {
@@ -143,9 +144,7 @@ export function PassengerEmailSignupForm({ onBack }: PassengerEmailSignupFormPro
             className="mt-1 size-4 shrink-0 cursor-pointer rounded border-white/40 bg-white/10 disabled:opacity-50"
           />
           <label htmlFor="passenger-email-signup-terms" className="cursor-pointer leading-snug">
-            I have read and accept the{' '}
-            <span className="font-semibold text-emerald-200">Privacy Policy</span> and{' '}
-            <span className="font-semibold text-emerald-200">Terms &amp; Conditions</span>.
+            <LegalPolicyAcceptanceLabel privacyClassName="font-semibold text-emerald-200" termsClassName="font-semibold text-emerald-200" />
           </label>
         </div>
 

@@ -4,6 +4,7 @@ import { Session } from '@supabase/supabase-js';
 import { supabase } from '@roam/auth-client';
 import { toast } from 'sonner';
 import { AlertCircle, Car, Loader2, Mail, Eye, EyeOff } from 'lucide-react';
+import { LegalPolicyLinks } from '@roam/ui';
 import {
   PassengerEmailSignupForm,
   PassengerGoogleSignupButton,
@@ -94,7 +95,14 @@ export default function LoginPage({ session }: { session: Session | null }) {
               <div className="flex w-full flex-col gap-7">
                 <PassengerGoogleSignupButton onError={msg => setError(msg || null)} />
                 <p className="text-center text-xs leading-relaxed text-white/65">
-                  By continuing with Google, you agree to our Terms of Service and Privacy Policy.
+                  <LegalPolicyLinks
+                    variant="sentence"
+                    order="terms-first"
+                    beforePrivacy="By continuing with Google, you agree to our "
+                    privacyClassName="underline underline-offset-2"
+                    termsClassName="underline underline-offset-2"
+                  />
+                  .
                 </p>
                 <button
                   type="button"
@@ -257,9 +265,14 @@ export default function LoginPage({ session }: { session: Session | null }) {
               Already have an account? Sign in
             </button>
           )}
-          <p className="text-[11px] font-medium tracking-wide text-white/45">
-            © {year} Roam · By continuing, you agree to our Terms of Service and Privacy Policy
-          </p>
+          <LegalPolicyLinks
+            variant="sentence"
+            order="terms-first"
+            className="text-[11px] font-medium tracking-wide text-white/45"
+            beforePrivacy={`© ${year} Roam · By continuing, you agree to our `}
+            privacyClassName="underline underline-offset-2 hover:text-white/70"
+            termsClassName="underline underline-offset-2 hover:text-white/70"
+          />
         </div>
       </div>
     </div>

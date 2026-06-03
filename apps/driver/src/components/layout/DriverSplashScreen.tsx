@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { ROAM_LEGAL } from '@roam/business-config/legalUrls';
 
 const SPLASH_BG = '/images/splash-driver.png';
 const APP_VERSION = 'v0.1.0-DRV';
@@ -111,14 +112,27 @@ export function DriverSplashScreen({
             </div>
 
             <div className="driver-splash__footer-links">
-              <a className="driver-splash__footer-link" href="mailto:support@roam.app">
+              <a
+                className="driver-splash__footer-link"
+                href={`mailto:${ROAM_LEGAL.supportEmail}?subject=${encodeURIComponent('Help Center')}`}
+              >
                 Help Center
               </a>
-              <a className="driver-splash__footer-link" href="mailto:support@roam.app?subject=Safety%20Portal">
-                Safety Portal
+              <a
+                className="driver-splash__footer-link"
+                href={ROAM_LEGAL.privacyPolicyUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Privacy Policy
               </a>
-              <a className="driver-splash__footer-link" href="mailto:support@roam.app?subject=Partnership%20Terms">
-                Partnership Terms
+              <a
+                className="driver-splash__footer-link"
+                href={ROAM_LEGAL.termsOfServiceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Terms of Service
               </a>
             </div>
           </div>

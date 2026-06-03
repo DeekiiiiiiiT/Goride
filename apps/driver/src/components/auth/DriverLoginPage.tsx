@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AlertCircle, Loader2, Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { LegalPolicyLinks } from '@roam/ui';
 import { supabase } from '../../utils/supabase/client';
 import { DriverPhoneAuthWizard } from './DriverPhoneAuthWizard';
 import { DriverEmailSignupForm, GoogleSignupButton } from './DriverEmailSignupForm';
@@ -131,9 +132,15 @@ export function DriverLoginPage() {
           {view === 'signup' && signupSubView === 'main' && (
             <div className="driver-splash__auth-form">
               <GoogleSignupButton onError={msg => setError(msg || null)} />
-              <p className="driver-splash__terms">
-                By continuing with Google, you agree to our Terms of Service and Privacy Policy.
-              </p>
+              <LegalPolicyLinks
+                variant="sentence"
+                order="terms-first"
+                className="driver-splash__terms"
+                beforePrivacy="By continuing with Google, you agree to our "
+                privacyClassName="underline underline-offset-2"
+                termsClassName="underline underline-offset-2"
+              />
+              .
               <button
                 type="button"
                 onClick={() => {
@@ -274,9 +281,14 @@ export function DriverLoginPage() {
             </button>
           )}
 
-          <p className="driver-splash__terms">
-            By continuing, you agree to our Terms of Service and Privacy Policy
-          </p>
+          <LegalPolicyLinks
+            variant="sentence"
+            order="terms-first"
+            className="driver-splash__terms"
+            beforePrivacy="By continuing, you agree to our "
+            privacyClassName="underline underline-offset-2"
+            termsClassName="underline underline-offset-2"
+          />
         </>
       }
     />

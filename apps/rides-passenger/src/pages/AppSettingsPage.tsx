@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { ROAM_LEGAL, accountDeletionMailto } from '@roam/business-config/legalUrls';
+import { openLegalDocument } from '@roam/ui';
 import { useTheme, type ThemeMode } from '@/contexts/ThemeContext';
 import {
   ArrowLeft,
@@ -369,7 +371,7 @@ export default function AppSettingsPage() {
             >
               <button
                 type="button"
-                onClick={notifySoon}
+                onClick={() => openLegalDocument(ROAM_LEGAL.termsOfServiceUrl)}
                 className="passenger-row-hover flex w-full items-center justify-between px-6 py-4 text-left transition-colors"
               >
                 <span className="font-medium">Terms of Service</span>
@@ -377,12 +379,19 @@ export default function AppSettingsPage() {
               </button>
               <button
                 type="button"
-                onClick={notifySoon}
+                onClick={() => openLegalDocument(ROAM_LEGAL.privacyPolicyUrl)}
                 className="passenger-row-hover flex w-full items-center justify-between px-6 py-4 text-left transition-colors"
               >
                 <span className="font-medium">Privacy Policy</span>
                 <ExternalLink className="h-5 w-5" style={{ color: OUTLINE }} aria-hidden />
               </button>
+              <a
+                href={accountDeletionMailto()}
+                className="passenger-row-hover flex w-full items-center justify-between px-6 py-4 text-left transition-colors"
+              >
+                <span className="font-medium">Request account deletion</span>
+                <ExternalLink className="h-5 w-5" style={{ color: OUTLINE }} aria-hidden />
+              </a>
               <button
                 type="button"
                 onClick={notifySoon}

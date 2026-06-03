@@ -1167,6 +1167,9 @@ importers:
       '@roam/api-client':
         specifier: workspace:*
         version: link:../api-client
+      '@roam/business-config':
+        specifier: workspace:*
+        version: link:../business-config
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
