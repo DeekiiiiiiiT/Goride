@@ -22,6 +22,10 @@
     "deploy:payments": "npx supabase functions deploy payments --use-api --project-ref csfllzzastacofsvcdsc",
     "dev:rides-passenger": "pnpm --filter @roam/rides-passenger dev",
     "build:rides-passenger": "pnpm --filter @roam/rides-passenger build",
+    "cap:driver:sync": "pnpm --filter @roam/driver cap:sync",
+    "cap:driver:android": "pnpm --filter @roam/driver cap:open:android",
+    "cap:rides:sync": "pnpm --filter @roam/rides-passenger cap:sync",
+    "cap:rides:android": "pnpm --filter @roam/rides-passenger cap:open:android",
     "deploy:rides": "npx supabase functions deploy rides --use-api --project-ref csfllzzastacofsvcdsc"
   },
   "devDependencies": {

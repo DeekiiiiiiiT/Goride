@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Roam Driver</string>
+    <string name="title_activity_main">Roam Driver</string>
+    <string name="package_name">co.roamenterprise.driver</string>
+    <string name="custom_url_scheme">co.roamenterprise.driver</string>
+</resources>

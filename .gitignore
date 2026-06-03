@@ -1,3 +1,20 @@
 node_modules
 build
 dist
+
+# Capacitor / Android (driver)
+apps/driver/android/.gradle/
+apps/driver/android/app/build/
+apps/driver/android/build/
+apps/driver/android/local.properties
+apps/driver/android/.idea/
+apps/driver/android/capacitor-cordova-android-plugins/build/
+
+# Capacitor / Android (rides-passenger)
+apps/rides-passenger/android/.gradle/
+apps/rides-passenger/android/app/build/
+apps/rides-passenger/android/build/
+apps/rides-passenger/android/local.properties
+apps/rides-passenger/android/.idea/
+apps/rides-passenger/android/capacitor-cordova-android-plugins/build/
+**/.DS_Store
