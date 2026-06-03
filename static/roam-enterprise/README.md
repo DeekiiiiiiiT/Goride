@@ -1,6 +1,9 @@
 # Deploy legal pages to roamenterprise.co
 
-Static files for Google Play and in-app legal links live in this folder.
+**Primary deploy path:** `apps/enterprise/public/privacy/` and `terms/` — copied from this folder.  
+`roamenterprise.co` is served by the Vercel project **goride-enterprise**. Push to GitHub `main` to redeploy.
+
+Static copies in this folder are the source; enterprise `public/` is what Vercel builds.
 
 | URL | Upload this file |
 |-----|------------------|
