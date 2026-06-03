@@ -55,13 +55,16 @@ First-time Play setup also needs: privacy URL, Data safety, store listing, conte
 - Manifest declares fine/coarse/background location + foreground service types
 - Declare the same in Play Console **Data safety** and **App content → Location permissions**
 
-## Google / phone sign-in on device
+## Google / email sign-in on device
 
-Supabase OAuth redirect URLs must include your native callback, e.g. add in Supabase Auth settings:
+Supabase **Redirect URLs** must include (Authentication → URL Configuration):
 
-- `co.roamenterprise.driver://login` (or your chosen scheme path)
+- `https://roamdriver.co/`
+- `co.roamenterprise.driver://login`
 
-Test sign-in on a real device after adding redirects. Email/phone OTP may work without OAuth changes.
+Email signup and Google OAuth from the Play app use the custom scheme above — **not** `https://localhost` (Capacitor’s internal origin). After auth, the app receives the callback via `appUrlOpen` and completes the Supabase session.
+
+Test on a real device: sign up with email → confirm link should reopen **Roam Driver**, not roamdash.co.
 
 ## Live reload (optional dev)
 

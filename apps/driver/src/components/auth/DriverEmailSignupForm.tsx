@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Loader2, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { LegalPolicyAcceptanceLabel } from '@roam/ui';
 import { supabase } from '../../utils/supabase/client';
+import { getDriverAuthRedirectUrl } from '../../utils/driverAuthRedirect';
+import { isNativeCapacitorPlatform } from '@roam/types';
 import { DRIVER_OAUTH_INTENT_KEY, DRIVER_OAUTH_INTENT_VALUE } from '../../utils/driverAuthSignup';
 
 interface DriverEmailSignupFormProps {
@@ -38,7 +40,7 @@ export function DriverEmailSignupForm({ onBack, onConfirmationRequired }: Driver
     }
     setLoading(true);
     try {
-      const redirect = `${window.location.origin}/`;
+      const redirect = getDriverAuthRedirectUrl();
       const { data, error: signErr } = await supabase.auth.signUp({
         email: email.trim(),
         password,
@@ -217,15 +219,21 @@ export function GoogleSignupButton({
     setLoading(true);
     try {
       sessionStorage.setItem(DRIVER_OAUTH_INTENT_KEY, DRIVER_OAUTH_INTENT_VALUE);
-      const redirectTo = `${window.location.origin}/`;
-      const { error } = await supabase.auth.signInWithOAuth({
+      const redirectTo = getDriverAuthRedirectUrl();
+      const native = isNativeCapacitorPlatform();
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo,
+          skipBrowserRedirect: native,
           queryParams: { prompt: 'select_account' },
         },
       });
       if (error) throw error;
+      if (native && data?.url) {
+        const { Browser } = await import('@capacitor/browser');
+        await Browser.open({ url: data.url });
+      }
     } catch (err: unknown) {
       sessionStorage.removeItem(DRIVER_OAUTH_INTENT_KEY);
       onError(

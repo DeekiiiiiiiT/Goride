@@ -451,7 +451,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
               })}
             </div>
 
-            <div className="p-4 border-t border-slate-200 dark:border-slate-800">
+            <div className="shrink-0 border-t border-slate-200 px-4 pt-4 safe-x safe-b-drawer dark:border-slate-800">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-800 text-sm font-bold dark:bg-emerald-500/20 dark:text-emerald-300">
                   {user?.email?.[0]?.toUpperCase() || 'D'}
@@ -479,7 +479,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
               <button
                 type="button"
                 onClick={handleSignOut}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg transition-colors text-sm font-semibold dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200"
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 min-h-12 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg transition-colors text-sm font-semibold touch-manipulation dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200"
               >
                 <LogOut className="w-4 h-4" />
                 Sign Out

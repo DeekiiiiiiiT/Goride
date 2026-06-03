@@ -77,7 +77,7 @@ export function DriverLoginPage() {
         : 'Enter the code sent to your phone.'
       : signupSubView === 'confirm-email'
         ? 'Check your inbox for a confirmation link.'
-        : 'Join the Roam driver network across the Caribbean.';
+        : null;
 
   return (
     <DriverSplashScreen
@@ -89,7 +89,7 @@ export function DriverLoginPage() {
 
           <div className="driver-splash__value-prop">
             <h2 className="driver-splash__headline">{panelTitle}</h2>
-            <p className="driver-splash__subtext">{panelSubtext}</p>
+            {panelSubtext && <p className="driver-splash__subtext">{panelSubtext}</p>}
           </div>
 
           {error && (
