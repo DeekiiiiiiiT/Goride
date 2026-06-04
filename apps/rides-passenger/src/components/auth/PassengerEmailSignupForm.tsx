@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Loader2, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '@roam/auth-client';
 import { LegalPolicyAcceptanceLabel } from '@roam/ui';
+import { getPassengerAuthRedirectUrl } from '../../utils/passengerAuthRedirect';
+import { isNativeCapacitorPlatform } from '@roam/types';
 import { PASSENGER_OAUTH_INTENT_KEY, PASSENGER_OAUTH_INTENT_VALUE } from '../../utils/passengerAuthSignup';
 
 interface PassengerEmailSignupFormProps {
@@ -36,7 +38,7 @@ export function PassengerEmailSignupForm({ onBack }: PassengerEmailSignupFormPro
     }
     setLoading(true);
     try {
-      const redirect = `${window.location.origin}/login`;
+      const redirect = getPassengerAuthRedirectUrl();
       const { data, error: signErr } = await supabase.auth.signUp({
         email: email.trim(),
         password,
@@ -216,15 +218,21 @@ export function PassengerGoogleSignupButton({
     setLoading(true);
     try {
       sessionStorage.setItem(PASSENGER_OAUTH_INTENT_KEY, PASSENGER_OAUTH_INTENT_VALUE);
-      const redirectTo = `${window.location.origin}/login`;
-      const { error } = await supabase.auth.signInWithOAuth({
+      const redirectTo = getPassengerAuthRedirectUrl();
+      const native = isNativeCapacitorPlatform();
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo,
+          skipBrowserRedirect: native,
           queryParams: { prompt: 'select_account' },
         },
       });
       if (error) throw error;
+      if (native && data?.url) {
+        const { Browser } = await import('@capacitor/browser');
+        await Browser.open({ url: data.url });
+      }
     } catch (err: unknown) {
       sessionStorage.removeItem(PASSENGER_OAUTH_INTENT_KEY);
       onError(
