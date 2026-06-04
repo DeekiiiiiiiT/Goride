@@ -4,7 +4,10 @@ Use **roam-s.co/admin → Play Store** to track checklist progress and AAB uploa
 
 ## Deploy (once)
 
-1. Apply migration `20260602120000_rides_play_store_launch.sql` (`supabase db push` or SQL Editor).
+1. Apply migrations:
+   - `20260602120000_rides_play_store_launch.sql`
+   - `20260603120000_rides_data_safety_state.sql`
+   (`supabase db push` or SQL Editor).
 2. Deploy the `rides` Edge function (includes `/admin/play-store` routes).
 3. Deploy `@roam/rides-passenger` to roam-s.co.
 
@@ -42,6 +45,15 @@ Provision accounts: `node scripts/provision-play-review-accounts.mjs`
 3. Confirm home loads and you can start a ride request flow.
 4. Email/OAuth signup: confirmation must return to app via `co.roamenterprise.rides://login`.
 
-## Data safety
+## Data safety (admin CSV sync)
 
-Roam Rides: **foreground location only** — do not declare background location. See admin **Data safety** tab or `packages/play-store-launch/src/ridesDataSafetySummary.ts`.
+Roam Rides: **foreground location only** — do not declare background location.
+
+**Admin → Play Store → Data safety** mirrors Google Play Console:
+
+1. **Import from CSV** — paste your Play Console export (`data_safety_export.csv`) or use **Load Rides template** for the golden fixture.
+2. Edit checkboxes in the questionnaire and per-type modals; review the **Store listing preview**.
+3. **Save changes**, then **Export to CSV**.
+4. In Play Console → Data safety → **Import from CSV** to apply the same answers.
+
+Spec: [DATA_SAFETY_CSV_SPEC.md](./DATA_SAFETY_CSV_SPEC.md). Golden fixture: `packages/play-store-launch/fixtures/rides-data-safety.golden.csv`.

@@ -2,22 +2,23 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Session, User } from '@supabase/supabase-js';
 import { toast } from 'sonner';
-import {
-  PlayStoreLaunchPage as PlayStoreLaunchView,
-  RIDES_DATA_SAFETY_SUMMARY,
-} from '@roam/play-store-launch';
+import { PlayStoreLaunchPage as PlayStoreLaunchView } from '@roam/play-store-launch';
 import type {
   PlayStoreChecklistPatch,
   PlayStoreLaunchPayload,
   PlayStoreReleaseInput,
 } from '@roam/play-store-launch';
+import type { DataSafetyState } from '@roam/play-store-launch';
 import { canWriteAppPermissionPolicy } from '@roam/admin-core';
 import {
   addPlayStoreRelease,
   deletePlayStoreRelease,
+  exportPlayStoreDataSafetyCsv,
   getPlayStoreLaunch,
+  importPlayStoreDataSafetyCsv,
   patchPlayStoreChecklist,
   savePlayStoreDataSafetyNotes,
+  savePlayStoreDataSafetyRows,
 } from '../services/playStoreLaunchService';
 
 interface OutletContext {
@@ -79,6 +80,55 @@ export function PlayStoreLaunchPage() {
     }
   };
 
+  const onImportDataSafetyCsv = async (csv: string, dryRun?: boolean) => {
+    if (!session.access_token || !canEdit) return {};
+    setSaving(true);
+    try {
+      const result = await importPlayStoreDataSafetyCsv(session.access_token, csv, dryRun);
+      if (!dryRun && result.payload) {
+        setData((prev) => (prev ? { ...prev, ...result.payload } : null));
+        toast.success('Data safety CSV imported');
+      }
+      return { diff: result.diff, issues: result.issues };
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Import failed');
+      return {};
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onExportDataSafetyCsv = async () => {
+    if (!session.access_token) return;
+    setSaving(true);
+    try {
+      await exportPlayStoreDataSafetyCsv(session.access_token);
+      toast.success('CSV exported');
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Export failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onSaveDataSafetyRows = async (state: DataSafetyState, expectedUpdatedAt?: string | null) => {
+    if (!session.access_token || !canEdit) return;
+    setSaving(true);
+    try {
+      const partial = await savePlayStoreDataSafetyRows(
+        session.access_token,
+        state,
+        expectedUpdatedAt,
+      );
+      setData((prev) => (prev ? { ...prev, ...partial } : null));
+      toast.success('Data safety saved');
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const onAddRelease = async (input: PlayStoreReleaseInput) => {
     if (!session.access_token || !canEdit) return;
     setSaving(true);
@@ -110,16 +160,17 @@ export function PlayStoreLaunchPage() {
   return (
     <PlayStoreLaunchView
       data={data}
-      dataSafetySummary={RIDES_DATA_SAFETY_SUMMARY}
-      dataSafetyIntro={
-        'Use this when filling Policy → App content → Data safety. Roam Rides uses foreground location only (no background location).'
-      }
+      dataSafetyTemplateUrl="/data-safety/rides-template.csv"
+      dataSafetyIntro="Use this when filling Policy → App content → Data safety. Roam Rides uses foreground location only (no background location)."
       loading={loading}
       canEdit={canEdit}
       saving={saving}
       onRefresh={() => void load()}
       onPatchChecklist={onPatchChecklist}
       onSaveDataSafetyNotes={onSaveDataSafetyNotes}
+      onImportDataSafetyCsv={onImportDataSafetyCsv}
+      onExportDataSafetyCsv={onExportDataSafetyCsv}
+      onSaveDataSafetyRows={onSaveDataSafetyRows}
       onAddRelease={onAddRelease}
       onDeleteRelease={onDeleteRelease}
     />

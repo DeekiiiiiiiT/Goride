@@ -4,6 +4,17 @@
 import type { Context, Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { requireProductAdmin } from "../../_shared/productAdmin.ts";
 import type { RidesAdminTables } from "../../_shared/ridesAdminDb.ts";
+import {
+  computeImportDiff,
+  hasBlockingIssues,
+  mergeImportWithTemplate,
+  normalizeDataSafetyRows,
+  parseDataSafetyCsv,
+  serializeDataSafetyCsv,
+  sha256Hex,
+  validateDataSafetyState,
+  type DataSafetyState,
+} from "../../_shared/dataSafetyCsv.ts";
 
 const WRITE_ROLES = new Set(["platform_owner", "superadmin", "rides_admin"]);
 
@@ -37,6 +48,15 @@ function normalizeChecklist(raw: unknown): ChecklistState {
   return out;
 }
 
+function stateFromDbRow(raw: unknown, templateVersion: string | null): DataSafetyState | null {
+  const rows = normalizeDataSafetyRows(raw);
+  if (!rows) return null;
+  return { rows, ...(templateVersion ? { templateVersion } : {}) };
+}
+
+function launchDataSafetySelect =
+  "checklist, data_safety_notes, data_safety_rows, data_safety_imported_at, data_safety_source_hash, data_safety_template_version, updated_at, updated_by";
+
 export function registerPlayStoreLaunchAdminRoutes(
   admin: Hono,
   ridesDbOrResponse: (
@@ -56,7 +76,7 @@ export function registerPlayStoreLaunchAdminRoutes(
 
     const { data: launchRow, error: launchErr } = await db
       .from(tables.play_store_launch)
-      .select("checklist, data_safety_notes")
+      .select(launchDataSafetySelect)
       .eq("id", 1)
       .maybeSingle();
 
@@ -78,6 +98,12 @@ export function registerPlayStoreLaunchAdminRoutes(
     return c.json({
       checklist: normalizeChecklist(launchRow?.checklist ?? {}),
       data_safety_notes: launchRow?.data_safety_notes ?? null,
+      data_safety_rows: launchRow?.data_safety_rows ?? null,
+      data_safety_imported_at: launchRow?.data_safety_imported_at ?? null,
+      data_safety_source_hash: launchRow?.data_safety_source_hash ?? null,
+      data_safety_template_version: launchRow?.data_safety_template_version ?? null,
+      updated_at: launchRow?.updated_at ?? null,
+      updated_by: launchRow?.updated_by ?? null,
       releases: releases ?? [],
     });
   });
@@ -216,5 +242,206 @@ export function registerPlayStoreLaunchAdminRoutes(
     }
 
     return c.json({ ok: true });
+  });
+
+  admin.put("/play-store/data-safety", async (c) => {
+    const adminUser = await requireProductAdmin(c, "rides");
+    if (adminUser instanceof Response) return adminUser;
+    if (!canWrite(adminUser.role)) {
+      return c.json({ error: "forbidden", message: "rides_admin role required" }, 403);
+    }
+
+    const body = await c.req.json().catch(() => ({})) as {
+      rows?: unknown;
+      templateVersion?: string;
+      expectedUpdatedAt?: string;
+    };
+
+    const resolved = await ridesDbOrResponse(c);
+    if (resolved instanceof Response) return resolved;
+    const { db, tables } = resolved;
+
+    const { data: existing } = await db
+      .from(tables.play_store_launch)
+      .select(launchDataSafetySelect)
+      .eq("id", 1)
+      .maybeSingle();
+
+    if (
+      typeof body.expectedUpdatedAt === "string" &&
+      existing?.updated_at &&
+      body.expectedUpdatedAt !== existing.updated_at
+    ) {
+      return c.json({ error: "conflict", message: "Data safety was updated elsewhere." }, 409);
+    }
+
+    const rows = normalizeDataSafetyRows({ rows: body.rows });
+    if (!rows) {
+      return c.json({ error: "invalid_rows", message: "rows array required" }, 400);
+    }
+
+    const state: DataSafetyState = {
+      rows,
+      ...(typeof body.templateVersion === "string" ? { templateVersion: body.templateVersion } : {}),
+    };
+    const issues = validateDataSafetyState(state);
+    if (hasBlockingIssues(issues)) {
+      return c.json({ error: "validation_failed", issues }, 400);
+    }
+
+    const { data, error } = await db
+      .from(tables.play_store_launch)
+      .update({
+        data_safety_rows: { rows: state.rows, templateVersion: state.templateVersion ?? null },
+        data_safety_template_version: state.templateVersion ?? existing?.data_safety_template_version ?? null,
+        updated_at: new Date().toISOString(),
+        updated_by: adminUser.id,
+      })
+      .eq("id", 1)
+      .select(launchDataSafetySelect)
+      .single();
+
+    if (error) {
+      return c.json({ error: "update_failed", message: error.message }, 500);
+    }
+
+    return c.json({
+      data_safety_rows: data.data_safety_rows,
+      data_safety_template_version: data.data_safety_template_version,
+      updated_at: data.updated_at,
+      updated_by: data.updated_by,
+      issues,
+    });
+  });
+
+  admin.post("/play-store/data-safety/import", async (c) => {
+    const adminUser = await requireProductAdmin(c, "rides");
+    if (adminUser instanceof Response) return adminUser;
+    if (!canWrite(adminUser.role)) {
+      return c.json({ error: "forbidden", message: "rides_admin role required" }, 403);
+    }
+
+    const contentType = c.req.header("content-type") ?? "";
+    let csvText = "";
+    let dryRun = false;
+    let templateVersion: string | undefined;
+
+    if (contentType.includes("text/csv")) {
+      csvText = await c.req.text();
+    } else {
+      const body = await c.req.json().catch(() => ({})) as {
+        csv?: string;
+        dryRun?: boolean;
+        templateVersion?: string;
+      };
+      csvText = String(body.csv ?? "");
+      dryRun = body.dryRun === true;
+      templateVersion = typeof body.templateVersion === "string" ? body.templateVersion : undefined;
+    }
+
+    if (!csvText.trim()) {
+      return c.json({ error: "csv_required" }, 400);
+    }
+
+    let imported: DataSafetyState;
+    try {
+      imported = parseDataSafetyCsv(csvText);
+    } catch (e) {
+      return c.json({
+        error: "parse_failed",
+        message: e instanceof Error ? e.message : "Invalid CSV",
+      }, 400);
+    }
+
+    if (templateVersion) imported.templateVersion = templateVersion;
+
+    const resolved = await ridesDbOrResponse(c);
+    if (resolved instanceof Response) return resolved;
+    const { db, tables } = resolved;
+
+    const { data: existing } = await db
+      .from(tables.play_store_launch)
+      .select(launchDataSafetySelect)
+      .eq("id", 1)
+      .maybeSingle();
+
+    const previous = stateFromDbRow(
+      existing?.data_safety_rows,
+      existing?.data_safety_template_version ?? null,
+    );
+    const template = previous ?? imported;
+    const merged = mergeImportWithTemplate(template, imported);
+    const issues = validateDataSafetyState(merged);
+    const diff = computeImportDiff(previous, merged);
+
+    if (dryRun) {
+      return c.json({ diff, issues, rowCount: merged.rows.length });
+    }
+
+    if (hasBlockingIssues(issues)) {
+      return c.json({ error: "validation_failed", issues, diff }, 400);
+    }
+
+    const sourceHash = await sha256Hex(csvText);
+
+    const { data, error } = await db
+      .from(tables.play_store_launch)
+      .update({
+        data_safety_rows: { rows: merged.rows, templateVersion: merged.templateVersion ?? null },
+        data_safety_imported_at: new Date().toISOString(),
+        data_safety_source_hash: sourceHash,
+        data_safety_template_version: merged.templateVersion ?? existing?.data_safety_template_version ?? null,
+        updated_at: new Date().toISOString(),
+        updated_by: adminUser.id,
+      })
+      .eq("id", 1)
+      .select(launchDataSafetySelect)
+      .single();
+
+    if (error) {
+      return c.json({ error: "import_failed", message: error.message }, 500);
+    }
+
+    return c.json({
+      data_safety_rows: data.data_safety_rows,
+      data_safety_imported_at: data.data_safety_imported_at,
+      data_safety_source_hash: data.data_safety_source_hash,
+      data_safety_template_version: data.data_safety_template_version,
+      updated_at: data.updated_at,
+      diff,
+      issues,
+    });
+  });
+
+  admin.get("/play-store/data-safety/export", async (c) => {
+    const adminUser = await requireProductAdmin(c, "rides");
+    if (adminUser instanceof Response) return adminUser;
+
+    const resolved = await ridesDbOrResponse(c);
+    if (resolved instanceof Response) return resolved;
+    const { db, tables } = resolved;
+
+    const { data: existing, error } = await db
+      .from(tables.play_store_launch)
+      .select("data_safety_rows")
+      .eq("id", 1)
+      .maybeSingle();
+
+    if (error) {
+      return c.json({ error: "load_failed", message: error.message }, 500);
+    }
+
+    const state = stateFromDbRow(existing?.data_safety_rows, null);
+    if (!state) {
+      return c.json({ error: "no_data", message: "Import data safety CSV first." }, 404);
+    }
+
+    const csv = serializeDataSafetyCsv(state);
+    return new Response(csv, {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": 'attachment; filename="data_safety_export.csv"',
+      },
+    });
   });
 }

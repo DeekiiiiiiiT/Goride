@@ -2,6 +2,9 @@
   "name": "@roam/play-store-launch",
   "version": "0.1.0",
   "private": true,
+  "scripts": {
+    "test": "vitest run"
+  },
   "main": "src/index.ts",
   "types": "src/index.ts",
   "exports": {
@@ -16,5 +19,8 @@
     "@roam/business-config": "workspace:*",
     "lucide-react": "^0.487.0",
     "clsx": "*"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
   }
 }

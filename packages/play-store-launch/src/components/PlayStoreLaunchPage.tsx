@@ -10,19 +10,22 @@ import {
   Trash2,
 } from 'lucide-react';
 import { PLAY_STORE_GROUP_LABELS } from '../catalogGroups';
-import type { DataSafetyBullet } from '../ridesDataSafetySummary';
 import type {
+  DataSafetyImportDiffPayload,
+  DataSafetyRowsPayload,
   PlayStoreChecklistPatch,
   PlayStoreChecklistStatus,
   PlayStoreLaunchPayload,
   PlayStoreReleaseInput,
 } from '../types';
+import type { DataSafetyState, DataSafetyValidationIssue } from '../dataSafety/types';
+import { DataSafetyPanel } from './DataSafetyPanel';
 
 type TabId = 'checklist' | 'releases' | 'data_safety';
 
 export interface PlayStoreLaunchPageProps {
   data: PlayStoreLaunchPayload | null;
-  dataSafetySummary: DataSafetyBullet[];
+  dataSafetyTemplateUrl?: string;
   dataSafetyIntro?: string;
   loading: boolean;
   canEdit: boolean;
@@ -30,6 +33,15 @@ export interface PlayStoreLaunchPageProps {
   onRefresh: () => void;
   onPatchChecklist: (patches: PlayStoreChecklistPatch[]) => Promise<void>;
   onSaveDataSafetyNotes: (notes: string) => Promise<void>;
+  onImportDataSafetyCsv: (
+    csv: string,
+    dryRun?: boolean,
+  ) => Promise<{ diff?: DataSafetyImportDiffPayload; issues?: DataSafetyValidationIssue[] }>;
+  onExportDataSafetyCsv: () => Promise<void>;
+  onSaveDataSafetyRows: (
+    state: DataSafetyState,
+    expectedUpdatedAt?: string | null,
+  ) => Promise<void>;
   onAddRelease: (input: PlayStoreReleaseInput) => Promise<void>;
   onDeleteRelease: (id: string) => Promise<void>;
 }
@@ -46,7 +58,7 @@ async function copyText(text: string) {
 
 export function PlayStoreLaunchPage({
   data,
-  dataSafetySummary,
+  dataSafetyTemplateUrl,
   dataSafetyIntro,
   loading,
   canEdit,
@@ -54,11 +66,13 @@ export function PlayStoreLaunchPage({
   onRefresh,
   onPatchChecklist,
   onSaveDataSafetyNotes,
+  onImportDataSafetyCsv,
+  onExportDataSafetyCsv,
+  onSaveDataSafetyRows,
   onAddRelease,
   onDeleteRelease,
 }: PlayStoreLaunchPageProps) {
   const [tab, setTab] = useState<TabId>('checklist');
-  const [dataSafetyDraft, setDataSafetyDraft] = useState('');
   const [releaseForm, setReleaseForm] = useState<PlayStoreReleaseInput>({
     version_name: '',
     version_code: 1,
@@ -66,12 +80,6 @@ export function PlayStoreLaunchPage({
     uploaded_at: new Date().toISOString().slice(0, 10),
     notes: '',
   });
-
-  React.useEffect(() => {
-    if (data?.data_safety_notes != null) {
-      setDataSafetyDraft(data.data_safety_notes);
-    }
-  }, [data?.data_safety_notes]);
 
   React.useEffect(() => {
     if (data?.meta) {
@@ -458,49 +466,23 @@ export function PlayStoreLaunchPage({
       )}
 
       {tab === 'data_safety' && (
-        <div className="space-y-6 max-w-3xl">
-          <p className="text-sm text-slate-400">
-            {dataSafetyIntro ?? (
-              <>
-                Use this when filling{' '}
-                <strong className="text-slate-300">Policy → App content → Data safety</strong>.
-              </>
-            )}
-          </p>
-          <ul className="space-y-4">
-            {dataSafetySummary.map((block) => (
-              <li key={block.category} className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
-                <h4 className="text-sm font-semibold text-emerald-400/90">{block.category}</h4>
-                <ul className="mt-2 list-disc pl-5 text-sm text-slate-300 space-y-1">
-                  {block.items.map((line) => (
-                    <li key={line}>{line}</li>
-                  ))}
-                </ul>
-              </li>
-            ))}
-          </ul>
-          <div>
-            <label className="block text-sm font-medium text-slate-300">Your notes</label>
-            <textarea
-              value={dataSafetyDraft}
-              onChange={(e) => setDataSafetyDraft(e.target.value)}
-              readOnly={!canEdit}
-              rows={4}
-              className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm disabled:opacity-60"
-              placeholder="e.g. last reviewed Jun 2026"
-            />
-            {canEdit && (
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => void onSaveDataSafetyNotes(dataSafetyDraft)}
-                className="mt-2 rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium hover:bg-slate-600 disabled:opacity-50"
-              >
-                Save notes
-              </button>
-            )}
-          </div>
-        </div>
+        <DataSafetyPanel
+          rowsPayload={data.data_safety_rows}
+          privacyPolicyUrl={data.meta.privacyPolicyUrl}
+          templateUrl={dataSafetyTemplateUrl}
+          templateLoadLabel={dataSafetyTemplateUrl?.includes('driver') ? 'Driver template' : 'Rides template'}
+          templateVersion={data.data_safety_template_version ?? undefined}
+          importedAt={data.data_safety_imported_at}
+          updatedAt={data.updated_at}
+          canEdit={canEdit}
+          saving={saving}
+          intro={dataSafetyIntro}
+          onImportCsv={onImportDataSafetyCsv}
+          onExportCsv={onExportDataSafetyCsv}
+          onSaveRows={onSaveDataSafetyRows}
+          notes={data.data_safety_notes ?? ''}
+          onSaveNotes={onSaveDataSafetyNotes}
+        />
       )}
 
       {!canEdit && (
