@@ -54,7 +54,7 @@ function stateFromDbRow(raw: unknown, templateVersion: string | null): DataSafet
   return { rows, ...(templateVersion ? { templateVersion } : {}) };
 }
 
-function launchDataSafetySelect =
+const launchDataSafetySelect =
   "checklist, data_safety_notes, data_safety_rows, data_safety_imported_at, data_safety_source_hash, data_safety_template_version, updated_at, updated_by";
 
 export function registerPlayStoreLaunchAdminRoutes(
