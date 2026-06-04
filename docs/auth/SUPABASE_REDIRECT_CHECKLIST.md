@@ -18,6 +18,7 @@ Include **scheme + host + port + path** where your apps handle the post-auth lan
 | Enterprise Super Admin | `http://localhost:3001/` | `https://roamenterprise.co/admin` (deploy `@roam/admin` here) |
 | Driver | `http://localhost:3002/` | `https://roamdriver.co/` |
 | Driver (Android app) | — | `co.roamenterprise.driver://login` |
+| Driver admin tracker | — | Same URLs; see `docs/legal/PLAY_STORE_DRIVER_LAUNCH.md` |
 | Dash customer | `http://localhost:5174/` | `https://roamdash.co/` (or customer subdomain) |
 | Dash merchant | `http://localhost:5175/` | `https://partner.roamdash.co/` (if used) |
 | Rides passenger | `http://localhost:5180/login` | `https://roam-s.co/login` |

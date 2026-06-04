@@ -40,6 +40,7 @@
     "@radix-ui/react-tabs": "^1.1.3",
     "@radix-ui/react-tooltip": "^1.1.8",
     "@roam/admin-core": "workspace:*",
+    "@roam/play-store-launch": "workspace:*",
     "@roam/api-client": "workspace:*",
     "@roam/auth-client": "workspace:*",
     "@roam/business-config": "workspace:*",

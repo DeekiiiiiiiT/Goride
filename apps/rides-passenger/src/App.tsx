@@ -36,6 +36,7 @@ import { TransportSolutionKindPage } from './admin/pages/TransportSolutionKindPa
 import { SurgePage } from './admin/pages/SurgePage';
 import { ControlPanelPage } from './admin/pages/ControlPanelPage';
 import { AppPermissionsPage } from './admin/pages/AppPermissionsPage';
+import { PlayStoreLaunchPage } from './admin/pages/PlayStoreLaunchPage';
 import { RideOperationsPage } from './admin/pages/RideOperationsPage';
 import { TripLedgerPage } from './admin/pages/TripLedgerPage';
 import { RidersListPage } from './admin/pages/users/RidersListPage';
@@ -120,6 +121,7 @@ export default function App() {
         <Route path="surge" element={<SurgePage />} />
         <Route path="control-panel" element={<ControlPanelPage />} />
         <Route path="app-permissions" element={<AppPermissionsPage />} />
+        <Route path="play-store" element={<PlayStoreLaunchPage />} />
         <Route path="ledger" element={<TripLedgerPage />} />
         <Route path="rides" element={<RideOperationsPage />} />
       </Route>

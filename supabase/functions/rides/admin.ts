@@ -27,6 +27,7 @@ import { registerDashboardStatsRoutes } from "./admin/dashboardStats.ts";
 import { registerDashboardListRoutes } from "./admin/dashboardLists.ts";
 import { registerRideOperationsAdminRoutes } from "./admin/rideOperations.ts";
 import { registerPlatformLedgerAdminRoutes } from "./admin/platformLedger.ts";
+import { registerPlayStoreLaunchAdminRoutes } from "./admin/playStoreLaunch.ts";
 
 export type RidesAdminDb = Awaited<ReturnType<typeof getRidesAdminDb>>;
 
@@ -651,6 +652,8 @@ export function registerAdminRoutes(
   registerRideOperationsAdminRoutes(admin, ridesDbOrResponse, adminAudit);
 
   registerPlatformLedgerAdminRoutes(admin);
+
+  registerPlayStoreLaunchAdminRoutes(admin, ridesDbOrResponse);
 
   app.route("/admin", admin);
 }

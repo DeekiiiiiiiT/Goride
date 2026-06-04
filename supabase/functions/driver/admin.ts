@@ -6,6 +6,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireProductAdmin } from "../_shared/productAdmin.ts";
 import { getDriverAdminDb } from "../_shared/driverAdminDb.ts";
 import { registerDriverUserAdminRoutes } from "./admin/drivers.ts";
+import { registerDriverPlayStoreLaunchRoutes } from "./admin/playStoreLaunch.ts";
 
 interface Deps {
   svc: () => SupabaseClient;
@@ -31,6 +32,7 @@ export function registerDriverAdminRoutes(app: Hono, _deps: Deps) {
   });
 
   registerDriverUserAdminRoutes(admin);
+  registerDriverPlayStoreLaunchRoutes(admin);
 
   admin.get("/stats", async (c) => {
     const resolved = await getDriverAdminDb();

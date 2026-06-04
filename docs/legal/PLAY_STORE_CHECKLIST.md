@@ -1,5 +1,10 @@
 # Google Play — privacy & legal checklist
 
+**Launch trackers (admin):**
+
+- Roam Rides: roam-s.co/admin → **Play Store** — [`PLAY_STORE_RIDES_LAUNCH.md`](PLAY_STORE_RIDES_LAUNCH.md)
+- Roam Driver: roamdriver.co/admin → **Play Store** — [`PLAY_STORE_DRIVER_LAUNCH.md`](PLAY_STORE_DRIVER_LAUNCH.md)
+
 ## Your action required (cannot be done from code)
 
 ### 1. Deploy legal pages to roamenterprise.co

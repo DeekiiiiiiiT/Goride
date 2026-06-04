@@ -18,6 +18,7 @@ import {
   ShieldAlert,
   ExternalLink,
   Shield,
+  Store,
 } from 'lucide-react';
 import { RidesAdminLoginForm } from './components/RidesAdminLoginForm';
 
@@ -29,6 +30,7 @@ const NAV_ITEMS = [
   { id: 'surge', path: '/admin/surge', label: 'Surge Pricing', icon: TrendingUp },
   { id: 'control-panel', path: '/admin/control-panel', label: 'Control Panel', icon: SlidersHorizontal },
   { id: 'app-permissions', path: '/admin/app-permissions', label: 'App Permissions', icon: Shield },
+  { id: 'play-store', path: '/admin/play-store', label: 'Play Store', icon: Store },
   { id: 'rides', path: '/admin/rides', label: 'Ride Operations', icon: Car },
 ];
 

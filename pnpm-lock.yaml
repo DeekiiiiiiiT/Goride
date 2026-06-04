@@ -431,6 +431,9 @@ importers:
       '@roam/business-config':
         specifier: workspace:*
         version: link:../../packages/business-config
+      '@roam/play-store-launch':
+        specifier: workspace:*
+        version: link:../../packages/play-store-launch
       '@roam/ride-chat':
         specifier: workspace:*
         version: link:../../packages/ride-chat
@@ -980,6 +983,9 @@ importers:
       '@roam/business-config':
         specifier: workspace:*
         version: link:../../packages/business-config
+      '@roam/play-store-launch':
+        specifier: workspace:*
+        version: link:../../packages/play-store-launch
       '@roam/ride-chat':
         specifier: workspace:*
         version: link:../../packages/ride-chat
@@ -1114,6 +1120,24 @@ importers:
       '@roam/types':
         specifier: workspace:*
         version: link:../types
+
+  packages/play-store-launch:
+    dependencies:
+      '@roam/business-config':
+        specifier: workspace:*
+        version: link:../business-config
+      clsx:
+        specifier: '*'
+        version: 2.1.1
+      lucide-react:
+        specifier: ^0.487.0
+        version: 0.487.0(react@18.3.1)
+      react:
+        specifier: ^18.0.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.0.0
+        version: 18.3.1(react@18.3.1)
 
   packages/ride-chat:
     dependencies:

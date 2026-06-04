@@ -18,6 +18,8 @@ export type RidesAdminTables = {
   rider_directory_stats: string;
   ride_requests: string;
   app_permission_policy: string;
+  play_store_launch: string;
+  play_store_releases: string;
 };
 
 type Resolved = {
@@ -37,6 +39,8 @@ const RIDES_NATIVE: RidesAdminTables = {
   rider_directory_stats: "rider_directory_stats",
   ride_requests: "ride_requests",
   app_permission_policy: "app_permission_policy",
+  play_store_launch: "play_store_launch",
+  play_store_releases: "play_store_releases",
 };
 
 const PUBLIC_VIEWS: RidesAdminTables = {
@@ -51,6 +55,8 @@ const PUBLIC_VIEWS: RidesAdminTables = {
   rider_directory_stats: "rides_rider_directory_stats",
   ride_requests: "rides_ride_requests",
   app_permission_policy: "rides_app_permission_policy",
+  play_store_launch: "rides_play_store_launch",
+  play_store_releases: "rides_play_store_releases",
 };
 
 let resolved: Resolved | null = null;

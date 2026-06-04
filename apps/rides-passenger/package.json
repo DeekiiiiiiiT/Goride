@@ -22,6 +22,7 @@
     "@capacitor/splash-screen": "^7.0.5",
     "@capacitor/status-bar": "^7.0.6",
     "@roam/admin-core": "workspace:*",
+    "@roam/play-store-launch": "workspace:*",
     "@roam/api-client": "workspace:*",
     "@roam/auth-client": "workspace:*",
     "@roam/business-config": "workspace:*",

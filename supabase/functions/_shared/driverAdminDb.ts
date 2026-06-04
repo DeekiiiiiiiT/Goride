@@ -10,6 +10,8 @@ export type DriverAdminTables = {
   driver_locations: string;
   driver_offers: string;
   ride_requests: string;
+  play_store_launch: string;
+  play_store_releases: string;
 };
 
 type Resolved = {
@@ -24,6 +26,8 @@ const PUBLIC_TABLES: DriverAdminTables = {
   driver_locations: "rides_driver_locations",
   driver_offers: "rides_driver_offers",
   ride_requests: "rides_ride_requests",
+  play_store_launch: "driver_play_store_launch",
+  play_store_releases: "driver_play_store_releases",
 };
 
 const RIDES_NATIVE: DriverAdminTables = {
@@ -32,6 +36,8 @@ const RIDES_NATIVE: DriverAdminTables = {
   driver_locations: "driver_locations",
   driver_offers: "driver_offers",
   ride_requests: "ride_requests",
+  play_store_launch: "driver_play_store_launch",
+  play_store_releases: "driver_play_store_releases",
 };
 
 let resolved: Resolved | null = null;
