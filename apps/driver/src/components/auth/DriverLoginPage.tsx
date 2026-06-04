@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AlertCircle, Loader2, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { LegalPolicyLinks } from '@roam/ui';
 import { supabase } from '../../utils/supabase/client';
+import { ENABLE_PHONE_AUTH } from '../../utils/driverAuthSignup';
 import { DriverPhoneAuthWizard } from './DriverPhoneAuthWizard';
 import { DriverEmailSignupForm, GoogleSignupButton } from './DriverEmailSignupForm';
 import { DriverEmailConfirmScreen } from './DriverEmailConfirmScreen';
@@ -61,9 +62,9 @@ export function DriverLoginPage() {
 
   const panelTitle =
     view === 'login'
-      ? loginMethod === 'email'
-        ? 'Sign In to Dashboard'
-        : 'Sign in with phone'
+      ? ENABLE_PHONE_AUTH && loginMethod === 'phone'
+        ? 'Sign in with phone'
+        : 'Sign In to Dashboard'
       : signupSubView === 'confirm-email'
         ? 'Confirm your email'
         : signupSubView === 'email'
@@ -72,9 +73,11 @@ export function DriverLoginPage() {
 
   const panelSubtext =
     view === 'login'
-      ? loginMethod === 'email'
-        ? 'Sign in with Google, email, or phone.'
-        : 'Enter the code sent to your phone.'
+      ? ENABLE_PHONE_AUTH && loginMethod === 'phone'
+        ? 'Enter the code sent to your phone.'
+        : ENABLE_PHONE_AUTH
+          ? 'Sign in with Google, email, or phone.'
+          : 'Sign in with Google or email.'
       : signupSubView === 'confirm-email'
         ? 'Check your inbox for a confirmation link.'
         : null;
@@ -151,17 +154,21 @@ export function DriverLoginPage() {
               >
                 Continue with email
               </button>
-              <div className="driver-splash__or-row">
-                <div className="driver-splash__or-line" aria-hidden />
-                <span className="driver-splash__or-text">or phone</span>
-                <div className="driver-splash__or-line" aria-hidden />
-              </div>
-              <DriverPhoneAuthWizard
-                shouldCreateUser
-                requireTerms
-                onVerified={() => setError(null)}
-                onCancel={resetToWelcome}
-              />
+              {ENABLE_PHONE_AUTH && (
+                <>
+                  <div className="driver-splash__or-row">
+                    <div className="driver-splash__or-line" aria-hidden />
+                    <span className="driver-splash__or-text">or phone</span>
+                    <div className="driver-splash__or-line" aria-hidden />
+                  </div>
+                  <DriverPhoneAuthWizard
+                    shouldCreateUser
+                    requireTerms
+                    onVerified={() => setError(null)}
+                    onCancel={resetToWelcome}
+                  />
+                </>
+              )}
             </div>
           )}
 
@@ -226,20 +233,22 @@ export function DriverLoginPage() {
                 </button>
               </form>
 
-              <button
-                type="button"
-                className="driver-splash__link-btn"
-                onClick={() => {
-                  setLoginMethod('phone');
-                  setError(null);
-                }}
-              >
-                Sign in with phone instead
-              </button>
+              {ENABLE_PHONE_AUTH && (
+                <button
+                  type="button"
+                  className="driver-splash__link-btn"
+                  onClick={() => {
+                    setLoginMethod('phone');
+                    setError(null);
+                  }}
+                >
+                  Sign in with phone instead
+                </button>
+              )}
             </div>
           )}
 
-          {view === 'login' && loginMethod === 'phone' && (
+          {ENABLE_PHONE_AUTH && view === 'login' && loginMethod === 'phone' && (
             <div className="driver-splash__auth-form">
               <DriverPhoneAuthWizard
                 shouldCreateUser={false}

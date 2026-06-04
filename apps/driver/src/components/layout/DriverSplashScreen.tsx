@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { ROAM_LEGAL } from '@roam/business-config/legalUrls';
 
 const SPLASH_BG = '/images/splash-driver.png';
+const APP_VERSION = 'v0.1.0-DRV';
 
 type DriverSplashScreenProps = {
   mode?: 'loading' | 'welcome';
@@ -42,10 +43,23 @@ export function DriverSplashScreen({
         <div className="driver-splash__gradient" />
       </div>
 
-      <div className="driver-splash__brand">
-        <h1 className="driver-splash__title">Roam</h1>
-        <p className="driver-splash__tagline">Premium Transit</p>
-        <div className="driver-splash__divider" aria-hidden />
+      <div className="driver-splash__header">
+        <div>
+          <p className="driver-splash__status-label">Status</p>
+          <div className="driver-splash__status-row">
+            <div className="driver-splash__status-dot" aria-hidden />
+            <p className="driver-splash__status-text">Online in Kingston</p>
+          </div>
+        </div>
+        <div className="driver-splash__version">{APP_VERSION}</div>
+      </div>
+
+      <div className="driver-splash__hero">
+        <div className="driver-splash__brand">
+          <h1 className="driver-splash__title">Roam</h1>
+          <p className="driver-splash__tagline">Premium Transit</p>
+          <div className="driver-splash__divider" aria-hidden />
+        </div>
       </div>
 
       <div className="driver-splash__panel">
@@ -61,7 +75,7 @@ export function DriverSplashScreen({
             <div className="driver-splash__value-prop">
               <h2 className="driver-splash__headline">Elevate Your Drive</h2>
               <p className="driver-splash__subtext">
-                Access high-tier bookings and elite urban professional clientele.
+                Access high-tier bookings and elite urban professional clientele across the Caribbean.
               </p>
             </div>
 

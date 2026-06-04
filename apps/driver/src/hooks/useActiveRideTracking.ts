@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RideRequestRow } from '@roam/types/rides';
+import { isNativeCapacitorPlatform } from '@roam/types';
 import {
   ridesDriverPostRideLocation,
   type DriverRideLocationLive,
@@ -15,11 +16,30 @@ type TrackingState = {
   isTracking: boolean;
 };
 
+type GeoCoords = {
+  latitude: number;
+  longitude: number;
+  accuracy: number | null;
+  heading: number | null;
+  speed: number | null;
+};
+
+function positionToCoords(position: GeolocationPosition): GeoCoords {
+  return {
+    latitude: position.coords.latitude,
+    longitude: position.coords.longitude,
+    accuracy: position.coords.accuracy ?? null,
+    heading: position.coords.heading ?? null,
+    speed: position.coords.speed ?? null,
+  };
+}
+
 export function useActiveRideTracking(
   activeRide: RideRequestRow | null,
   onRideUpdate?: (ride: RideRequestRow) => void,
   onLiveUpdate?: (live: DriverRideLocationLive | null) => void,
   intervalSeconds = DEFAULT_INTERVAL_SEC,
+  onRideInactive?: () => void,
 ): TrackingState {
   const [trackingError, setTrackingError] = useState<string | null>(null);
   const [gpsAccuracyM, setGpsAccuracyM] = useState<number | null>(null);
@@ -29,7 +49,9 @@ export function useActiveRideTracking(
   const rideIdRef = useRef<string | null>(null);
   const backoffMsRef = useRef(0);
   const timerRef = useRef<number | null>(null);
-  const watchIdRef = useRef<number | null>(null);
+  const watchIdRef = useRef<string | number | null>(null);
+  const onRideInactiveRef = useRef(onRideInactive);
+  onRideInactiveRef.current = onRideInactive;
 
   const clearTimer = useCallback(() => {
     if (timerRef.current != null) {
@@ -39,14 +61,22 @@ export function useActiveRideTracking(
   }, []);
 
   const clearWatch = useCallback(() => {
-    if (watchIdRef.current != null && navigator.geolocation) {
-      navigator.geolocation.clearWatch(watchIdRef.current);
-      watchIdRef.current = null;
+    if (watchIdRef.current == null) return;
+    const id = watchIdRef.current;
+    watchIdRef.current = null;
+    if (isNativeCapacitorPlatform()) {
+      void import('@capacitor/geolocation').then(({ Geolocation }) =>
+        Geolocation.clearWatch({ id: String(id) }),
+      );
+      return;
+    }
+    if (navigator.geolocation) {
+      navigator.geolocation.clearWatch(id as number);
     }
   }, []);
 
   const postFix = useCallback(
-    async (coords: GeolocationCoordinates) => {
+    async (coords: GeoCoords) => {
       if (!activeRide?.id) return;
       clientSeqRef.current = nextClientSeq(clientSeqRef.current);
       setGpsAccuracyM(coords.accuracy ?? null);
@@ -57,7 +87,9 @@ export function useActiveRideTracking(
           lat: coords.latitude,
           lng: coords.longitude,
           heading_degrees: Number.isFinite(coords.heading) ? coords.heading : undefined,
-          speed_mps: Number.isFinite(coords.speed) && coords.speed >= 0 ? coords.speed : undefined,
+          speed_mps: Number.isFinite(coords.speed) && coords.speed != null && coords.speed >= 0
+            ? coords.speed
+            : undefined,
           accuracy_m: coords.accuracy ?? undefined,
           recorded_at: new Date().toISOString(),
           client_seq: clientSeqRef.current,
@@ -68,6 +100,9 @@ export function useActiveRideTracking(
         if (result.ride) {
           rideIdRef.current = result.ride.id;
           onRideUpdate?.(result.ride);
+          if (!isRideLocationTrackingStatus(result.ride.status)) {
+            onRideInactiveRef.current?.();
+          }
         }
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : 'Location upload failed';
@@ -76,6 +111,9 @@ export function useActiveRideTracking(
             MAX_BACKOFF_MS,
             backoffMsRef.current ? backoffMsRef.current * 2 : 2000,
           );
+        } else if (message.includes('ride_not_active')) {
+          setTrackingError(null);
+          onRideInactiveRef.current?.();
         } else {
           setTrackingError('GPS updates paused — check connection and permissions');
         }
@@ -85,9 +123,24 @@ export function useActiveRideTracking(
   );
 
   const sendImmediateFix = useCallback(() => {
-    if (!navigator.geolocation || !activeRide?.id) return;
+    if (!activeRide?.id) return;
+
+    if (isNativeCapacitorPlatform()) {
+      void import('@capacitor/geolocation').then(({ Geolocation }) => {
+        void Geolocation.getCurrentPosition({
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: 15000,
+        })
+          .then((position) => void postFix(positionToCoords(position as GeolocationPosition)))
+          .catch(() => setTrackingError('Could not read GPS — enable location for Roam Driver'));
+      });
+      return;
+    }
+
+    if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
-      (pos) => void postFix(pos.coords),
+      (pos) => void postFix(positionToCoords(pos)),
       () => setTrackingError('Could not read GPS — enable location for this site'),
       { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 },
     );
@@ -106,7 +159,7 @@ export function useActiveRideTracking(
       activeRide?.id && isRideLocationTrackingStatus(activeRide.status),
     );
 
-    if (!shouldTrack || !navigator.geolocation) {
+    if (!shouldTrack || (!navigator.geolocation && !isNativeCapacitorPlatform())) {
       clearTimer();
       clearWatch();
       setIsTracking(false);
@@ -128,20 +181,39 @@ export function useActiveRideTracking(
     };
     scheduleNext();
 
-    watchIdRef.current = navigator.geolocation.watchPosition(
-      (pos) => void postFix(pos.coords),
-      () => setTrackingError('Location permission needed during active trips'),
-      { enableHighAccuracy: true, maximumAge: intervalMs, timeout: 15000 },
-    );
+    let cancelled = false;
+
+    if (isNativeCapacitorPlatform()) {
+      void import('@capacitor/geolocation').then(({ Geolocation }) => {
+        if (cancelled) return;
+        void Geolocation.watchPosition(
+          { enableHighAccuracy: true, maximumAge: intervalMs, timeout: 15000 },
+          (position, err) => {
+            if (err || !position) return;
+            void postFix(positionToCoords(position as GeolocationPosition));
+          },
+        ).then((id) => {
+          if (!cancelled) watchIdRef.current = id;
+        });
+      });
+    } else {
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        (pos) => void postFix(positionToCoords(pos)),
+        () => setTrackingError('Location permission needed during active trips'),
+        { enableHighAccuracy: true, maximumAge: intervalMs, timeout: 15000 },
+      );
+    }
 
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
         sendImmediateFix();
+        onRideInactiveRef.current?.();
       }
     };
     document.addEventListener('visibilitychange', onVisible);
 
     return () => {
+      cancelled = true;
       clearTimer();
       clearWatch();
       document.removeEventListener('visibilitychange', onVisible);

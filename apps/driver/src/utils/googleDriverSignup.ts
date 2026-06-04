@@ -3,8 +3,11 @@ import type { DriverProfile } from '../contexts/DriverContext';
 
 /** After demographics saved (row exists, phone step next). */
 export const GOOGLE_ONBOARDING_PHONE = 'g_phone';
-/** Phone verified; archetype + fleet CTA next. */
+/** Phone saved (verified when SMS is enabled); archetype + fleet CTA next. */
 export const GOOGLE_ONBOARDING_ARCHETYPE = 'g_archetype';
+
+/** Set true once Supabase SMS / phone auth is configured to require OTP on signup. */
+export const REQUIRE_PHONE_SMS_VERIFICATION = false;
 
 export function userHasGoogleIdentity(user: User | null): boolean {
   if (!user?.identities?.length) return false;

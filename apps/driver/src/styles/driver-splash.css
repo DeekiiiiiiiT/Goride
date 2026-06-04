@@ -6,8 +6,8 @@
   z-index: 9999;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: space-between;
+  align-items: stretch;
+  justify-content: flex-start;
   min-height: 100dvh;
   font-family: 'Hanken Grotesk', system-ui, sans-serif;
   overflow: hidden;
@@ -97,39 +97,23 @@
   color: rgba(255, 255, 255, 0.8);
 }
 
-.driver-splash__brand {
+.driver-splash__hero {
   position: relative;
   z-index: 10;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 0 24px 16px;
+  pointer-events: none;
+}
+
+.driver-splash__brand {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 0 24px;
-  margin-top: -5rem;
-}
-
-.driver-splash__edition-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.driver-splash__edition-line {
-  width: 3rem;
-  height: 2px;
-  background: var(--driver-splash-primary);
-}
-
-.driver-splash__edition-label {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 20px;
-  letter-spacing: 0.4em;
-  text-transform: uppercase;
-  color: var(--driver-splash-primary);
 }
 
 .driver-splash__title {
@@ -161,7 +145,9 @@
 .driver-splash__panel {
   position: relative;
   z-index: 20;
+  flex-shrink: 0;
   width: 100%;
+  margin-top: auto;
   padding: 32px 24px max(48px, env(safe-area-inset-bottom, 0px) + 1rem);
   padding-left: max(24px, env(safe-area-inset-left, 0px));
   padding-right: max(24px, env(safe-area-inset-right, 0px));

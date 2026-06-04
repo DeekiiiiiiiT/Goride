@@ -100,11 +100,6 @@ export function useRideDispatch() {
     [setRecoveredRide],
   );
 
-  const { trackingError, gpsAccuracyM, isTracking } = useActiveRideTracking(
-    activeRide,
-    syncActiveRide,
-    setRideLocationLive,
-  );
   const { permissions } = useDriverPermissionPolicy();
   const [permissionOnboardingOpen, setPermissionOnboardingOpen] = useState(false);
   const [locationDisclosureOpen, setLocationDisclosureOpen] = useState(false);
@@ -243,21 +238,39 @@ export function useRideDispatch() {
     }
   }, [online, activeRide?.id, activeRide?.status]);
 
-  const pollActiveRide = useCallback(async (id: string) => {
+  type PollResult = 'active' | 'terminal' | 'error';
+
+  const pollActiveRide = useCallback(async (id: string): Promise<PollResult> => {
     try {
       const { ride, wait_time } = await ridesDriverGetRequest(id);
-      syncActiveRide(ride);
       setActiveRideWaitTime(wait_time ?? null);
       if (ride.status === 'completed' || ride.status === 'cancelled') {
         syncActiveRide(null);
         setActiveRideWaitTime(null);
-        return false;
+        if (ride.status === 'cancelled') {
+          toast.message('Ride cancelled');
+        }
+        return 'terminal';
       }
-      return true;
+      syncActiveRide(ride);
+      return 'active';
     } catch {
-      return false;
+      return 'error';
     }
   }, [syncActiveRide]);
+
+  const refreshActiveRideFromServer = useCallback(async () => {
+    if (!activeRide?.id) return;
+    await pollActiveRide(activeRide.id);
+  }, [activeRide?.id, pollActiveRide]);
+
+  const { trackingError, gpsAccuracyM, isTracking } = useActiveRideTracking(
+    activeRide,
+    syncActiveRide,
+    setRideLocationLive,
+    undefined,
+    refreshActiveRideFromServer,
+  );
 
   useEffect(() => {
     const onReconnected = () => {
@@ -414,8 +427,8 @@ export function useRideDispatch() {
         : RIDE_SYNC_MS;
     void pollActiveRide(activeRide.id);
     const t = window.setInterval(async () => {
-      const keep = await pollActiveRide(activeRide.id);
-      if (!keep) window.clearInterval(t);
+      const result = await pollActiveRide(activeRide.id);
+      if (result === 'terminal') window.clearInterval(t);
     }, pollMs);
     return () => clearInterval(t);
   }, [activeRide?.id, activeRide?.status, activeRide?.wait_time_started_at, pollActiveRide]);
@@ -511,6 +524,9 @@ export function useRideDispatch() {
       const { App } = await import('@capacitor/app');
       const handle = await App.addListener('appStateChange', ({ isActive }) => {
         if (!isActive || cancelled) return;
+        if (activeRide?.id) {
+          void pollActiveRide(activeRide.id);
+        }
         void (async () => {
           const geo = await checkGeolocationGranted();
           if (cancelled) return;
@@ -530,7 +546,7 @@ export function useRideDispatch() {
       cancelled = true;
       removeListener?.();
     };
-  }, [permissions, goOnline]);
+  }, [permissions, goOnline, activeRide?.id, pollActiveRide]);
 
   const goOffline = useCallback(async () => {
     clearGeoWatch();
@@ -627,10 +643,14 @@ export function useRideDispatch() {
         }
       }
     } catch (e: unknown) {
+      if (activeRide?.id) {
+        const result = await pollActiveRide(activeRide.id);
+        if (result === 'terminal') return;
+      }
       toast.error(e instanceof Error ? e.message : 'Transition failed');
       throw e;
     }
-  }, [activeRide, syncActiveRide]);
+  }, [activeRide, syncActiveRide, pollActiveRide]);
 
   return {
     online,

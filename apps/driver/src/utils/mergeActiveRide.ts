@@ -34,6 +34,10 @@ export function mergeDriverActiveRide(
   const next = normalizeDriverRide(incoming);
   if (!prev || prev.id !== next.id) return next;
 
+  if (next.status === 'cancelled' || next.status === 'completed') {
+    return next;
+  }
+
   const keepStatus = statusRank(prev.status) > statusRank(next.status) ? prev.status : next.status;
 
   return normalizeDriverRide({

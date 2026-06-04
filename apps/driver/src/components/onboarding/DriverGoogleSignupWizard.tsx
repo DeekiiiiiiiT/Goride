@@ -23,6 +23,7 @@ import { api } from '../../services/api';
 import {
   GOOGLE_ONBOARDING_ARCHETYPE,
   GOOGLE_ONBOARDING_PHONE,
+  REQUIRE_PHONE_SMS_VERIFICATION,
   defaultRoamFleetSignupUrl,
 } from '../../utils/googleDriverSignup';
 
@@ -190,11 +191,33 @@ export function DriverGoogleSignupWizard() {
 
   const handlePhoneContinue = async () => {
     setError(null);
+    if (!user) return;
+
+    setLoading(true);
     try {
       const phone = toE164ForCountry(selectedCountry, nationalDigits);
-      await sendPhoneChangeOtp(phone);
+
+      if (REQUIRE_PHONE_SMS_VERIFICATION) {
+        await sendPhoneChangeOtp(phone);
+        return;
+      }
+
+      const { error: upErr } = await supabase
+        .from('driver_profiles')
+        .update({
+          phone,
+          onboarding_step: GOOGLE_ONBOARDING_ARCHETYPE,
+        })
+        .eq('user_id', user.id);
+      if (upErr) throw upErr;
+
+      setE164Target(phone);
+      setUi('celebrate');
+      await refreshProfile();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Invalid phone number.');
+      setError(getAuthErrorMessage(err, 'Could not save your phone number.'));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -307,7 +330,7 @@ export function DriverGoogleSignupWizard() {
             </div>
             <h1 className="text-xl font-bold text-slate-900 dark:text-white">You&apos;re almost there</h1>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              Your phone is verified. Next, tell us how you plan to use Roam Driver.
+              Your phone number is saved. Next, tell us how you plan to use Roam Driver.
             </p>
             <Button type="button" className="mt-6 w-full bg-gradient-to-r from-emerald-600 to-teal-600" onClick={() => setUi('archetype')}>
               Continue
@@ -508,8 +531,10 @@ export function DriverGoogleSignupWizard() {
         <div className="flex flex-1 flex-col items-center px-4 pb-12 pt-6">
           <div className="w-full max-w-sm space-y-4 rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-xl dark:border-slate-700/60 dark:bg-slate-800/60">
             <div className="text-center">
-              <h1 className="text-xl font-bold text-slate-900 dark:text-white">Verify your phone</h1>
-              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">We&apos;ll send a code by SMS to confirm your number.</p>
+              <h1 className="text-xl font-bold text-slate-900 dark:text-white">Your phone number</h1>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                We&apos;ll use this to reach you about rides. SMS verification can be added later.
+              </p>
             </div>
             {error && (
               <div className="whitespace-pre-line rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
@@ -531,10 +556,10 @@ export function DriverGoogleSignupWizard() {
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Sending…
+                  Saving…
                 </>
               ) : (
-                'Send SMS code'
+                'Continue'
               )}
             </Button>
           </div>
