@@ -5,12 +5,15 @@ import { LegalPolicyAcceptanceLabel } from '@roam/ui';
 import { getPassengerAuthRedirectUrl } from '../../utils/passengerAuthRedirect';
 import { isNativeCapacitorPlatform } from '@roam/types';
 import { PASSENGER_OAUTH_INTENT_KEY, PASSENGER_OAUTH_INTENT_VALUE } from '../../utils/passengerAuthSignup';
+import { formatEmailAuthError } from '../../utils/supabaseAuthErrors';
 
 interface PassengerEmailSignupFormProps {
   onBack: () => void;
+  /** Called when Supabase requires email confirmation (no session yet). */
+  onConfirmationRequired: (email: string) => void;
 }
 
-export function PassengerEmailSignupForm({ onBack }: PassengerEmailSignupFormProps) {
+export function PassengerEmailSignupForm({ onBack, onConfirmationRequired }: PassengerEmailSignupFormProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -18,12 +21,10 @@ export function PassengerEmailSignupForm({ onBack }: PassengerEmailSignupFormPro
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setInfo(null);
     if (!termsAccepted) {
       setError('Please accept the Terms and Privacy Policy to continue.');
       return;
@@ -48,13 +49,18 @@ export function PassengerEmailSignupForm({ onBack }: PassengerEmailSignupFormPro
         },
       });
       if (signErr) throw signErr;
+      const trimmedEmail = email.trim();
       if (data.session) {
-        setInfo('Account created. You are signed in.');
-      } else {
-        setInfo('Check your email for a confirmation link to finish signing up.');
+        return;
       }
+      if (data.user && (!data.user.identities || data.user.identities.length === 0)) {
+        setError('An account with this email already exists. Try signing in, or use “Resend” after signing up if you still need to confirm.');
+        return;
+      }
+      onConfirmationRequired(trimmedEmail);
+      return;
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not create account.');
+      setError(formatEmailAuthError(err, 'Could not create account.'));
     } finally {
       setLoading(false);
     }
@@ -65,11 +71,6 @@ export function PassengerEmailSignupForm({ onBack }: PassengerEmailSignupFormPro
       {error && (
         <div className="rounded-xl border border-red-300/50 bg-red-500/15 px-3 py-2 text-sm font-medium text-white">
           {error}
-        </div>
-      )}
-      {info && (
-        <div className="rounded-xl border border-emerald-300/40 bg-emerald-500/15 px-3 py-2 text-sm font-medium text-white">
-          {info}
         </div>
       )}
 
@@ -86,8 +87,7 @@ export function PassengerEmailSignupForm({ onBack }: PassengerEmailSignupFormPro
             placeholder="you@example.com"
             required
             autoComplete="email"
-            disabled={Boolean(info)}
-            className="input-touch w-full rounded-xl border border-white/35 bg-white/90 px-4 text-zinc-900 placeholder:text-zinc-400 outline-none focus:bg-white focus:ring-[3px] focus:ring-white/40 disabled:opacity-60"
+            className="input-touch w-full rounded-xl border border-white/35 bg-white/90 px-4 text-zinc-900 placeholder:text-zinc-400 outline-none focus:bg-white focus:ring-[3px] focus:ring-white/40"
           />
         </div>
 
@@ -105,8 +105,7 @@ export function PassengerEmailSignupForm({ onBack }: PassengerEmailSignupFormPro
               required
               minLength={6}
               autoComplete="new-password"
-              disabled={Boolean(info)}
-              className="input-touch w-full rounded-xl border border-white/35 bg-white/90 px-4 pr-11 text-zinc-900 placeholder:text-zinc-400 outline-none focus:bg-white focus:ring-[3px] focus:ring-white/40 disabled:opacity-60"
+              className="input-touch w-full rounded-xl border border-white/35 bg-white/90 px-4 pr-11 text-zinc-900 placeholder:text-zinc-400 outline-none focus:bg-white focus:ring-[3px] focus:ring-white/40"
             />
             <button
               type="button"
@@ -131,8 +130,7 @@ export function PassengerEmailSignupForm({ onBack }: PassengerEmailSignupFormPro
             placeholder="Repeat password"
             required
             autoComplete="new-password"
-            disabled={Boolean(info)}
-            className="input-touch w-full rounded-xl border border-white/35 bg-white/90 px-4 text-zinc-900 placeholder:text-zinc-400 outline-none focus:bg-white focus:ring-[3px] focus:ring-white/40 disabled:opacity-60"
+            className="input-touch w-full rounded-xl border border-white/35 bg-white/90 px-4 text-zinc-900 placeholder:text-zinc-400 outline-none focus:bg-white focus:ring-[3px] focus:ring-white/40"
           />
         </div>
 
@@ -142,8 +140,7 @@ export function PassengerEmailSignupForm({ onBack }: PassengerEmailSignupFormPro
             type="checkbox"
             checked={termsAccepted}
             onChange={e => setTermsAccepted(e.target.checked)}
-            disabled={Boolean(info)}
-            className="mt-1 size-4 shrink-0 cursor-pointer rounded border-white/40 bg-white/10 disabled:opacity-50"
+            className="mt-1 size-4 shrink-0 cursor-pointer rounded border-white/40 bg-white/10"
           />
           <label htmlFor="passenger-email-signup-terms" className="cursor-pointer leading-snug">
             <LegalPolicyAcceptanceLabel privacyClassName="font-semibold text-emerald-200" termsClassName="font-semibold text-emerald-200" />
@@ -152,7 +149,7 @@ export function PassengerEmailSignupForm({ onBack }: PassengerEmailSignupFormPro
 
         <button
           type="submit"
-          disabled={loading || Boolean(info)}
+          disabled={loading}
           className="btn-touch w-full rounded-xl bg-gradient-to-b from-emerald-400 to-emerald-600 text-[15px] font-semibold text-white shadow-[0_12px_28px_-8px_rgba(0,0,0,0.35)] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading ? (

@@ -9,11 +9,13 @@ import {
   PassengerEmailSignupForm,
   PassengerGoogleSignupButton,
 } from '../components/auth/PassengerEmailSignupForm';
+import { PassengerEmailConfirmScreen } from '../components/auth/PassengerEmailConfirmScreen';
 import { PassengerPhoneAuthWizard } from '../components/auth/PassengerPhoneAuthWizard';
 
 export default function LoginPage({ session }: { session: Session | null }) {
   const [mainView, setMainView] = useState<'login' | 'signup'>('login');
-  const [signupSubView, setSignupSubView] = useState<'main' | 'email'>('main');
+  const [signupSubView, setSignupSubView] = useState<'main' | 'email' | 'confirm-email'>('main');
+  const [pendingConfirmEmail, setPendingConfirmEmail] = useState('');
   const [loginMethod, setLoginMethod] = useState<'email' | 'phone'>('email');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -69,7 +71,9 @@ export default function LoginPage({ session }: { session: Session | null }) {
               ? loginMethod === 'email'
                 ? 'Sign in with Google, email, or phone.'
                 : 'Enter your phone—we’ll send a verification code.'
-              : 'Create your rider account.'}
+              : signupSubView === 'confirm-email'
+                ? 'Check your inbox for a confirmation link.'
+                : 'Create your rider account.'}
           </p>
         </header>
 
@@ -82,10 +86,31 @@ export default function LoginPage({ session }: { session: Session | null }) {
               </div>
             )}
 
+            {mainView === 'signup' && signupSubView === 'confirm-email' && (
+              <PassengerEmailConfirmScreen
+                email={pendingConfirmEmail}
+                onBack={() => {
+                  setSignupSubView('email');
+                  setError(null);
+                }}
+                onSignIn={() => {
+                  setMainView('login');
+                  setSignupSubView('main');
+                  setPendingConfirmEmail('');
+                  setError(null);
+                }}
+              />
+            )}
+
             {mainView === 'signup' && signupSubView === 'email' && (
               <PassengerEmailSignupForm
                 onBack={() => {
                   setSignupSubView('main');
+                  setError(null);
+                }}
+                onConfirmationRequired={confirmedEmail => {
+                  setPendingConfirmEmail(confirmedEmail);
+                  setSignupSubView('confirm-email');
                   setError(null);
                 }}
               />
@@ -246,6 +271,7 @@ export default function LoginPage({ session }: { session: Session | null }) {
               onClick={() => {
                 setMainView('signup');
                 setSignupSubView('main');
+                setPendingConfirmEmail('');
                 setError(null);
               }}
               className="text-sm font-semibold text-white/90 hover:text-white"
@@ -258,6 +284,7 @@ export default function LoginPage({ session }: { session: Session | null }) {
               onClick={() => {
                 setMainView('login');
                 setSignupSubView('main');
+                setPendingConfirmEmail('');
                 setError(null);
               }}
               className="text-sm font-semibold text-white/90 hover:text-white"

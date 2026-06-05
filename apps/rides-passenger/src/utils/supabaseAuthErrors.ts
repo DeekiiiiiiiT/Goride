@@ -58,3 +58,26 @@ export function formatPhoneAuthError(message: string): string {
 
   return t;
 }
+
+export function formatEmailAuthError(err: unknown, fallback: string): string {
+  const t = getAuthErrorMessage(err, fallback);
+  const lower = t.toLowerCase();
+
+  if (lower.includes('rate limit') || lower.includes('too many requests')) {
+    return 'Too many emails sent. Wait a few minutes, then try again.';
+  }
+
+  if (lower.includes('already registered') || lower.includes('user already registered')) {
+    return 'An account with this email already exists. Try signing in instead.';
+  }
+
+  if (lower.includes('email address invalid') || lower.includes('invalid email')) {
+    return 'That email address looks invalid. Check for typos and try again.';
+  }
+
+  if (lower.includes('smtp') || lower.includes('email provider')) {
+    return 'We could not send email right now. Try again shortly or use Google sign-up instead.';
+  }
+
+  return t;
+}
