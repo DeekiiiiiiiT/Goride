@@ -5,6 +5,7 @@ import {
   CalendarDays,
   Clock,
   Package,
+  Tag,
   UserPlus,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -32,6 +33,13 @@ const SERVICE_MENU: ServiceMenuItem[] = [
     description: 'Friend, child, or family member',
     icon: UserPlus,
     iconWrapClassName: 'bg-[#E8F1FC] text-[#4A7FD4]',
+  },
+  {
+    id: 'roam-tag',
+    title: 'Roam Tag',
+    description: 'Ask someone to book for you',
+    icon: Tag,
+    iconWrapClassName: 'bg-[#E8F1FC] text-[#004AC6]',
   },
   {
     id: 'courier',
@@ -145,6 +153,8 @@ export default function ServicesPage() {
                 onClick={
                   item.id === 'book-for-other'
                     ? () => navigate('/services/book-for-someone')
+                    : item.id === 'roam-tag'
+                      ? () => navigate('/services/roam-tag')
                     : item.id === 'courier'
                       ? () => navigate('/services/courier')
                       : item.id === 'schedule'

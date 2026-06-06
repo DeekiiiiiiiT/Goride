@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   ArrowLeft,
@@ -11,9 +12,10 @@ import {
   UserPlus,
 } from 'lucide-react';
 
+import type { RiderContactRow } from '@roam/types/riderContacts';
+import { contactsList, contactsUpdate } from '@/services/contactsEdge';
 import {
   CARD_SHADOW,
-  ERROR,
   ON_PRIMARY_CONTAINER,
   ON_SECONDARY_FIXED,
   ON_SURFACE,
@@ -24,43 +26,20 @@ import {
   PRIMARY,
   PRIMARY_CONTAINER,
   SECONDARY,
-  SECONDARY_CONTAINER,
   SECONDARY_FIXED,
   SURFACE_CONTAINER,
   SURFACE_CONTAINER_HIGH,
   SURFACE_CONTAINER_HIGHEST,
-  SURFACE_LOW,
   SURFACE_LOWEST,
 } from '@/lib/passengerTheme';
+
 const MAX_CONTACTS = 5;
 
-const SARAH_AVATAR_URL =
-  'https://lh3.googleusercontent.com/aida-public/AB6AXuB7nCNJC75ul4rqwV8rkRVBA6LpUkrnQL2OfI3Tcvok-agAUfSwc0p2lHR0IaPWyn3dfbVZsdFO05SjIw2-ChqKSEiwHml4u8RaQfIgiyt5SoFThn-fCdeIUuMkHG14L3gfjyqc_chgkRk3EextaoOOO7Y4_oARPDhVpOJugR8LrZ4ygqXZJs_adw_VxtlvTSd_VtxpOebnqLGnUoJkAXTAEIokps9F0pd6OdUqKYWYxupD1Gx-HubUH6Cph8rBDDPNLOoUemdYF3aD';
-
-type TrustedContact = {
-  id: string;
-  name: string;
-  phone: string;
-  avatarUrl?: string;
-  initials?: string;
-  online?: boolean;
-};
-
-const INITIAL_CONTACTS: TrustedContact[] = [
-  {
-    id: 'sarah',
-    name: 'Sarah Jenkins',
-    phone: '+1 (555) 012-3456',
-    avatarUrl: SARAH_AVATAR_URL,
-    online: true,
-  },
-  {
-    id: 'marcus',
-    name: 'Marcus Johnson',
-    phone: '+1 (555) 987-6543',
-    initials: 'MJ',
-  },
-];
+function contactInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
 
 function PreferenceToggle({
   checked,
@@ -123,18 +102,34 @@ function PreferenceToggle({
 
 export default function TrustedContactsPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [shareAllTrips, setShareAllTrips] = useState(true);
   const [nightTripsOnly, setNightTripsOnly] = useState(false);
-  const [contacts, setContacts] = useState<TrustedContact[]>(INITIAL_CONTACTS);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['trusted-contacts'],
+    queryFn: () => contactsList({ trusted_for_safety: true }),
+  });
+
+  const contacts = data?.contacts ?? [];
 
   const contactCountLabel = useMemo(
     () => `${contacts.length} of ${MAX_CONTACTS}`,
     [contacts.length],
   );
 
-  const removeContact = (id: string) => {
-    setContacts((prev) => prev.filter((c) => c.id !== id));
-    toast.message('Contact removed');
+  const removeContact = async (contact: RiderContactRow) => {
+    setRemovingId(contact.id);
+    try {
+      await contactsUpdate(contact.id, { trusted_for_safety: false });
+      await queryClient.invalidateQueries({ queryKey: ['trusted-contacts'] });
+      toast.message(`${contact.display_name} removed from trusted contacts`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not update contact');
+    } finally {
+      setRemovingId(null);
+    }
   };
 
   const addContact = () => {
@@ -142,7 +137,7 @@ export default function TrustedContactsPage() {
       toast.error(`You can add up to ${MAX_CONTACTS} trusted contacts.`);
       return;
     }
-    toast.message('Coming soon');
+    navigate('/account/contacts');
   };
 
   return (
@@ -241,50 +236,52 @@ export default function TrustedContactsPage() {
           </div>
 
           <div className="space-y-3">
+            {isLoading ? (
+              <p className="px-2 text-sm" style={{ color: ON_SURFACE_VARIANT }}>
+                Loading contacts…
+              </p>
+            ) : null}
+
+            {!isLoading && contacts.length === 0 ? (
+              <p className="px-2 text-sm" style={{ color: ON_SURFACE_VARIANT }}>
+                No trusted contacts yet. Add someone from Roam Contacts and mark them as trusted for
+                safety.
+              </p>
+            ) : null}
+
             {contacts.map((contact) => (
               <div
                 key={contact.id}
                 className="group flex items-center justify-between rounded-[24px] p-4 transition-colors duration-300 passenger-row-hover"
                 style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
               >
-                <div className="flex min-w-0 items-center gap-4">
-                  {contact.avatarUrl ? (
-                    <div className="relative shrink-0">
-                      <img
-                        src={contact.avatarUrl}
-                        alt=""
-                        className="h-14 w-14 rounded-full object-cover"
-                      />
-                      {contact.online ? (
-                        <span
-                          className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full border-2 border-white bg-green-500"
-                          aria-hidden
-                        />
-                      ) : null}
-                    </div>
-                  ) : (
-                    <div
-                      className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-xl font-bold"
-                      style={{ backgroundColor: SECONDARY_FIXED, color: ON_SECONDARY_FIXED }}
-                    >
-                      {contact.initials}
-                    </div>
-                  )}
-                  <div className="min-w-0">
-                    <p className="font-bold" style={{ color: ON_SURFACE }}>
-                      {contact.name}
-                    </p>
-                    <p className="text-sm tracking-wide" style={{ color: SECONDARY }}>
-                      {contact.phone}
-                    </p>
-                  </div>
-                </div>
                 <button
                   type="button"
-                  onClick={() => removeContact(contact.id)}
-                  className="rounded-full p-2 transition-colors active:scale-90 hover:text-[#ba1a1a]"
+                  onClick={() => navigate(`/account/contacts/${contact.id}`)}
+                  className="flex min-w-0 flex-1 items-center gap-4 text-left"
+                >
+                  <div
+                    className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-xl font-bold"
+                    style={{ backgroundColor: SECONDARY_FIXED, color: ON_SECONDARY_FIXED }}
+                  >
+                    {contactInitials(contact.display_name)}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold" style={{ color: ON_SURFACE }}>
+                      {contact.display_name}
+                    </p>
+                    <p className="text-sm tracking-wide" style={{ color: SECONDARY }}>
+                      {contact.phone_e164}
+                    </p>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void removeContact(contact)}
+                  disabled={removingId === contact.id}
+                  className="rounded-full p-2 transition-colors active:scale-90 hover:text-[#ba1a1a] disabled:opacity-50"
                   style={{ color: OUTLINE }}
-                  aria-label={`Remove ${contact.name}`}
+                  aria-label={`Remove ${contact.display_name}`}
                 >
                   <Trash2 className="h-5 w-5" aria-hidden />
                 </button>
@@ -307,7 +304,7 @@ export default function TrustedContactsPage() {
                 className="font-semibold transition-colors group-hover:text-[#004ac6]"
                 style={{ color: SECONDARY }}
               >
-                Add New Contact
+                Add from Roam Contacts
               </span>
             </button>
           </div>
@@ -319,8 +316,8 @@ export default function TrustedContactsPage() {
         >
           <Info className="h-5 w-5 shrink-0" style={{ color: PRIMARY }} aria-hidden />
           <p className="text-sm italic leading-relaxed" style={{ color: ON_SURFACE_VARIANT }}>
-            Contacts will receive an SMS with a link to your live trip map whenever you start a ride.
-            No app download is required for them to track your progress.
+            Trusted contacts are managed in Roam Contacts. Mark someone as trusted for safety on
+            their contact page to share live trip updates with them.
           </p>
         </section>
       </main>

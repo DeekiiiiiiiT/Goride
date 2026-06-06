@@ -72,7 +72,9 @@ export function RideOfferCard({ offer, onAccept, onDecline, compact = false }: R
       <div className="ride-offer-card__service-pill" aria-label={`Service: ${serviceLabel}`}>
         <span className="ride-offer-card__service-main">
           <User className="size-4 shrink-0" strokeWidth={2.25} aria-hidden />
-          {serviceLabel}
+          {ride?.guest_passenger_name?.trim()
+            ? `${ride.guest_passenger_name.trim()} · ${serviceLabel}`
+            : serviceLabel}
         </span>
         <span className="ride-offer-card__service-timer" aria-live="polite">
           {expired ? '—' : `${secondsLeft}s`}

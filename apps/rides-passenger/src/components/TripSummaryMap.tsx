@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { isNativeCapacitorPlatform } from '@roam/types';
 import { dropoffMarkerIcon, riderPickupMarkerIcon } from '@/lib/mapMarkerIcons';
 import { loadGoogleMapsApi } from '@/services/locationService';
+import { LeafletRouteMap } from '@/components/maps/LeafletRouteMap';
 
 type LatLng = { lat: number; lng: number };
 
@@ -11,7 +13,27 @@ type Props = {
 };
 
 /** Static route map for the completed-trip summary screen. */
-export function TripSummaryMap({ pickup, dropoff, encodedPolyline }: Props) {
+export function TripSummaryMap(props: Props) {
+  if (isNativeCapacitorPlatform()) {
+    return (
+      <div className="trip-summary-map">
+        <LeafletRouteMap
+          pickup={props.pickup}
+          dropoff={props.dropoff}
+          encodedPolyline={props.encodedPolyline}
+          variant="summary"
+          interactive={false}
+          className="trip-summary-map__canvas h-full w-full"
+          fallbackClassName="trip-summary-map trip-summary-map--fallback"
+        />
+        <div className="trip-summary-map__gradient" aria-hidden />
+      </div>
+    );
+  }
+  return <GoogleTripSummaryMap {...props} />;
+}
+
+function GoogleTripSummaryMap({ pickup, dropoff, encodedPolyline }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 

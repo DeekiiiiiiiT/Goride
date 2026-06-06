@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ArrowLeft, Loader2, Clock } from 'lucide-react';
+import { ArrowLeft, Loader2, Clock, Share2 } from 'lucide-react';
 import type { RideRequestStatus, RideRequestRow } from '@roam/types/rides';
 import {
   AlertDialog,
@@ -20,6 +20,7 @@ import { RideCancelledView } from '@/components/RideCancelledView';
 import { TripInProgressView } from '@/components/TripInProgressView';
 import { TripSummaryView } from '@/components/TripSummaryView';
 import { ridesCancelRequest, ridesGetLive, ridesGetRequest } from '@/services/ridesEdge';
+import { createPassengerInvite } from '@/services/contactsEdge';
 import { RiderConnectionBanner } from '@/components/RiderConnectionBanner';
 import { useRiderOnline } from '@/hooks/useRiderOnline';
 import {
@@ -186,6 +187,7 @@ export default function RidePage() {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [sharingInvite, setSharingInvite] = useState(false);
   const prevStatusRef = useRef<RideRequestStatus | null>(null);
   const { isOnline, justReconnected } = useRiderOnline();
 
@@ -214,6 +216,38 @@ export default function RidePage() {
 
   const ride = data?.ride;
   const waitTime = data?.wait_time as WaitTimeInfo | null | undefined;
+  const canChat = data?.can_chat !== false;
+  const isBooker = data?.participant_role === 'booker';
+  const canShareWithPassenger =
+    Boolean(
+      ride &&
+        isBooker &&
+        ride.guest_passenger_phone &&
+        !ride.passenger_user_id &&
+        ride.status !== 'completed' &&
+        ride.status !== 'cancelled',
+    );
+
+  const shareWithPassenger = async () => {
+    if (!id || sharingInvite) return;
+    setSharingInvite(true);
+    try {
+      const { invite } = await createPassengerInvite(id);
+      const url = invite.url;
+      if (typeof navigator.share === 'function') {
+        await navigator.share({ title: 'Your Roam ride', url });
+        toast.success('Invite shared');
+      } else {
+        await navigator.clipboard.writeText(url);
+        toast.success('Invite link copied');
+      }
+    } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') return;
+      toast.error(e instanceof Error ? e.message : 'Could not create invite');
+    } finally {
+      setSharingInvite(false);
+    }
+  };
 
   const riderPin = useMemo(() => {
     if (!ride) return null;
@@ -377,6 +411,7 @@ export default function RidePage() {
           driverLocation={driverLocation}
           driverHeading={liveData?.driver_location?.heading ?? ride.last_driver_heading ?? null}
           onBack={() => navigate('/')}
+          canChat={canChat}
         />
       </>
     );
@@ -396,6 +431,7 @@ export default function RidePage() {
           onBack={handleBack}
           onCancelTrip={() => setCancelDialogOpen(true)}
           cancelling={cancelling}
+          canChat={canChat}
         />
         <RidePageDialogs
           cancelDialogOpen={cancelDialogOpen}
@@ -486,6 +522,18 @@ export default function RidePage() {
 
             {(ride.status === 'driver_arrived_pickup' || ride.status === 'driver_en_route_pickup') &&
               waitTime && <RiderWaitTimeDisplay waitTime={waitTime} />}
+
+            {canShareWithPassenger && (
+              <button
+                type="button"
+                onClick={() => void shareWithPassenger()}
+                disabled={sharingInvite}
+                className="btn-touch flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 text-base font-semibold text-emerald-900 hover:bg-emerald-100 touch-manipulation active:scale-[0.99] disabled:opacity-60"
+              >
+                <Share2 className="h-5 w-5" aria-hidden />
+                {sharingInvite ? 'Creating link…' : 'Share with passenger'}
+              </button>
+            )}
 
             {isCancellable(ride.status) && (
               <button

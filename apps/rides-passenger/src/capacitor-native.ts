@@ -1,8 +1,11 @@
 import { Capacitor } from '@capacitor/core';
 import { handlePassengerAuthCallbackUrl } from './utils/passengerAuthCallback';
 import { isPassengerAuthCallbackUrl } from './utils/passengerAuthRedirect';
+import { navigateFromAppUrl } from './utils/nativeNavigation';
 
-async function finishNativeAuthFromUrl(url: string): Promise<void> {
+async function handleIncomingAppUrl(url: string): Promise<void> {
+  if (navigateFromAppUrl(url)) return;
+
   if (!isPassengerAuthCallbackUrl(url)) return;
   const handled = await handlePassengerAuthCallbackUrl(url);
   if (!handled) return;
@@ -21,11 +24,11 @@ export async function initCapacitorNative(): Promise<void> {
 
   const launch = await App.getLaunchUrl();
   if (launch?.url) {
-    await finishNativeAuthFromUrl(launch.url);
+    await handleIncomingAppUrl(launch.url);
   }
 
   await App.addListener('appUrlOpen', ({ url }) => {
-    void finishNativeAuthFromUrl(url);
+    void handleIncomingAppUrl(url);
   });
 
   const { StatusBar, Style } = await import('@capacitor/status-bar');

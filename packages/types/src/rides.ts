@@ -136,6 +136,18 @@ export interface RideRequestRow {
   /** True when driver must collect rider PIN before starting (driver API only). */
   pin_verification_pending?: boolean;
   dropoff_arrived_at?: string | null;
+  /** When booked for someone else — guest display name. */
+  guest_passenger_name?: string | null;
+  /** E.164 phone for SMS updates to the guest passenger. */
+  guest_passenger_phone?: string | null;
+  /** @deprecated Use rider_contacts.relation instead */
+  booking_purpose?: 'guest' | 'family' | 'business' | null;
+  /** Account user ID of the person actually riding (delegated booking). */
+  passenger_user_id?: string | null;
+  /** Roam Contact used when booking for someone else. */
+  rider_contact_id?: string | null;
+  /** Set when ride originated from a Roam Tag booking request. */
+  booking_request_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -183,6 +195,7 @@ export interface DriverOfferRideSummary {
   duration_estimate_minutes?: number | null;
   vehicle_option: string;
   surge_multiplier: number;
+  guest_passenger_name?: string | null;
 }
 
 export interface DriverOfferWithRide extends DriverOfferRow {
@@ -223,6 +236,11 @@ export interface CreateRideBody {
   driver_offer_timeout_seconds?: number;
   route_polyline_encoded?: string;
   payment_method?: RidePaymentMethod;
+  guest_passenger_name?: string;
+  guest_passenger_phone?: string;
+  rider_contact_id?: string;
+  passenger_user_id?: string;
+  booking_request_id?: string;
 }
 
 export interface RideLocationUpdateBody {

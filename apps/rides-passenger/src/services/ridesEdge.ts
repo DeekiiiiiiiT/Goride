@@ -14,10 +14,14 @@ import type {
 import type { RidesVehicleTypeDto } from '@/types/vehicleTypes';
 
 async function ridesHeaders(): Promise<HeadersInit> {
-  const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token ?? publicAnonKey;
+  const { data: { user } } = await supabase.auth.getUser();
+  let token = user ? (await supabase.auth.getSession()).data.session?.access_token : null;
+  if (!token) {
+    const refreshed = await supabase.auth.refreshSession();
+    token = refreshed.data.session?.access_token ?? null;
+  }
   return {
-    Authorization: `Bearer ${token}`,
+    Authorization: `Bearer ${token ?? publicAnonKey}`,
     apikey: publicAnonKey,
     'Content-Type': 'application/json',
   };
@@ -47,8 +51,17 @@ function throwRidesErrorBody(body: RidesErrorBody, status: number, rawText: stri
   if (body.error === 'quote_stale') {
     throw new Error('Price expired — tap Fare estimate to refresh.');
   }
+  if (body.error === 'Unauthorized' || status === 401) {
+    throw new Error('Session expired — sign in again to book.');
+  }
+  if (body.error === 'rider_account_restricted') {
+    throw new Error('Your account cannot book rides right now. Contact support.');
+  }
   if (body.error === 'insert_failed') {
     throw new Error('Could not start your trip. Please try again in a moment.');
+  }
+  if (body.error === 'invalid_guest_passenger') {
+    throw new Error('Enter the recipient’s name and phone number to book for someone else.');
   }
   if (body.error === 'not_found') {
     throw new Error('Ride not found. It may still be syncing — go back and try again.');
@@ -137,6 +150,8 @@ export async function ridesGetRequest(id: string): Promise<{
   offers: DriverOfferRow[];
   wait_time?: Record<string, unknown> | null;
   rider_pin?: string | null;
+  can_chat?: boolean;
+  participant_role?: 'booker' | 'passenger' | 'driver' | 'none';
 }> {
   const res = await fetch(`${base}/v1/requests/${id}`, { headers: await ridesHeaders() });
   if (!res.ok) await parseRidesError(res);

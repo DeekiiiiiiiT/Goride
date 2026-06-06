@@ -218,6 +218,11 @@ export default function AccountPage() {
         <div className="space-y-3">
           <GroupCard title="Safety & Settings">
             <AccountListRow
+              icon={<Contact className="h-5 w-5" style={{ color: PRIMARY }} />}
+              label="Roam Contacts"
+              onClick={() => navigate('/account/contacts')}
+            />
+            <AccountListRow
               icon={<Contact className="h-5 w-5" style={{ color: ON_SURFACE_VARIANT }} />}
               label="Trusted Contacts"
               onClick={() => navigate('/account/trusted-contacts')}

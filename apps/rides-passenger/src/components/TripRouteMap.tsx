@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { isNativeCapacitorPlatform } from '@roam/types';
 import { dropoffMarkerIcon, riderPickupMarkerIcon } from '@/lib/mapMarkerIcons';
 import { loadGoogleMapsApi } from '@/services/locationService';
+import { LeafletRouteMap } from '@/components/maps/LeafletRouteMap';
 
 type LatLng = { lat: number; lng: number };
 
@@ -14,7 +16,28 @@ type Props = {
 const HERO_FIT_PADDING = { top: 52, right: 36, bottom: 72, left: 36 };
 const CARD_FIT_PADDING = { top: 28, right: 28, bottom: 28, left: 28 };
 
-export function TripRouteMap({ pickup, dropoff, encodedPolyline, variant = 'card' }: Props) {
+export function TripRouteMap(props: Props) {
+  if (isNativeCapacitorPlatform()) {
+    const isHero = props.variant === 'hero';
+    return (
+      <LeafletRouteMap
+        pickup={props.pickup}
+        dropoff={props.dropoff}
+        encodedPolyline={props.encodedPolyline}
+        variant={isHero ? 'hero' : 'card'}
+        className={isHero ? 'h-full w-full' : 'h-48 w-full rounded-2xl'}
+        fallbackClassName={
+          isHero
+            ? 'flex h-full w-full items-center justify-center bg-zinc-100 text-sm text-zinc-500'
+            : 'h-48 rounded-2xl border border-zinc-200 bg-zinc-50 flex items-center justify-center text-sm text-zinc-500'
+        }
+      />
+    );
+  }
+  return <GoogleTripRouteMap {...props} />;
+}
+
+function GoogleTripRouteMap({ pickup, dropoff, encodedPolyline, variant = 'card' }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const boundsRef = useRef<google.maps.LatLngBounds | null>(null);

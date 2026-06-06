@@ -36,6 +36,7 @@ type Props = {
   onBack: () => void;
   onCancelTrip: () => void;
   cancelling?: boolean;
+  canChat?: boolean;
 };
 
 const DEFAULT_DRIVER_PHOTO =
@@ -100,6 +101,7 @@ export function LiveRideView({
   onBack,
   onCancelTrip,
   cancelling,
+  canChat = true,
 }: Props) {
   const headline = liveRideStatusHeadline(ride.status, ride);
   const pickupShort = formatShortAddress(ride.pickup_address);
@@ -188,6 +190,7 @@ export function LiveRideView({
             </div>
 
             <div className="live-ride-actions" role="group" aria-label="Contact and safety">
+              {canChat ? (
               <button
                 type="button"
                 className="live-ride-action"
@@ -200,6 +203,7 @@ export function LiveRideView({
                 </span>
                 <span className="live-ride-action__label">Message</span>
               </button>
+              ) : null}
               <button type="button" className="live-ride-action" onClick={() => comingSoon('Call')}>
                 <span className="live-ride-action__circle">
                   <Phone className="size-6" strokeWidth={2} />

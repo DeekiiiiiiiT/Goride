@@ -2,6 +2,12 @@ import type { Context } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { jsonEdgeForbidden } from "../_shared/authEdge.ts";
+import {
+  canChatOnRide,
+  getRideParticipantRole,
+  phonesMatch,
+} from "./rideAccess.ts";
+import { sendRideNotification } from "./rideNotifications.ts";
 
 export const RIDE_CHAT_ACTIVE_STATUSES = [
   "driver_assigned",
@@ -31,7 +37,6 @@ export function toRideMessageDto(row: Record<string, unknown>): RideMessageRow {
 }
 
 type RideChatDeps = {
-  /** public schema — required for hosted Realtime (rides schema not exposed). */
   messageDb: () => SupabaseClient;
   loadRideRequestById: (id: string) => Promise<Record<string, unknown> | null>;
   requireUser: (authHeader: string | undefined) => Promise<
@@ -48,17 +53,21 @@ type RideChatDeps = {
 function assertRideChatAccess(
   ride: Record<string, unknown>,
   userId: string,
-): { ok: true; isRider: boolean; isDriver: boolean } | { ok: false; error: string; status: number } {
-  const isRider = ride.rider_user_id === userId;
-  const isDriver = ride.assigned_driver_user_id === userId;
-  if (!isRider && !isDriver) {
+): { ok: true; senderRole: "rider" | "driver" } | { ok: false; error: string; status: number } {
+  if (!canChatOnRide(ride, userId)) {
+    const role = getRideParticipantRole(ride, userId);
+    if (role === "booker") {
+      return { ok: false, error: "chat_booker_read_only", status: 403 };
+    }
     return { ok: false, error: "forbidden", status: 403 };
   }
   const status = String(ride.status ?? "");
   if (!RIDE_CHAT_ACTIVE_STATUSES.includes(status as typeof RIDE_CHAT_ACTIVE_STATUSES[number])) {
     return { ok: false, error: "chat_not_available", status: 403 };
   }
-  return { ok: true, isRider, isDriver };
+  const participantRole = getRideParticipantRole(ride, userId);
+  const senderRole = participantRole === "driver" ? "driver" : "rider";
+  return { ok: true, senderRole };
 }
 
 const MAX_BODY_LEN = 500;
@@ -73,6 +82,12 @@ export function registerRideChatRoutes(app: Hono, deps: RideChatDeps) {
     const rideId = c.req.param("id");
     const ride = await deps.loadRideRequestById(rideId);
     if (!ride) return c.json({ error: "not_found" }, 404);
+
+    const participantRole = getRideParticipantRole(ride, auth.user.id);
+    if (participantRole === "none") return jsonEdgeForbidden(c, "forbidden");
+    if (participantRole === "booker") {
+      return c.json({ error: "chat_booker_read_only", messages: [] }, 403);
+    }
 
     const access = assertRideChatAccess(ride, auth.user.id);
     if (!access.ok) {
@@ -119,7 +134,9 @@ export function registerRideChatRoutes(app: Hono, deps: RideChatDeps) {
 
     const access = assertRideChatAccess(ride, auth.user.id);
     if (!access.ok) {
-      if (access.error === "forbidden") return jsonEdgeForbidden(c, "forbidden");
+      if (access.error === "forbidden" || access.error === "chat_booker_read_only") {
+        return jsonEdgeForbidden(c, access.error);
+      }
       return c.json({ error: access.error }, access.status);
     }
 
@@ -133,14 +150,12 @@ export function registerRideChatRoutes(app: Hono, deps: RideChatDeps) {
       }, 400);
     }
 
-    const senderRole = access.isRider ? "rider" : "driver";
-
     const { data: inserted, error } = await deps.messageDb()
       .from("ride_messages")
       .insert({
         ride_request_id: rideId,
         sender_user_id: auth.user.id,
-        sender_role: senderRole,
+        sender_role: access.senderRole,
         body: rawBody,
       })
       .select("id, ride_request_id, sender_user_id, sender_role, body, created_at")
@@ -154,10 +169,13 @@ export function registerRideChatRoutes(app: Hono, deps: RideChatDeps) {
     }
 
     await deps.audit(rideId, auth.user.id, "ride_message_sent", {
-      sender_role: senderRole,
+      sender_role: access.senderRole,
       message_id: inserted.id,
     });
 
     return c.json({ message: toRideMessageDto(inserted as Record<string, unknown>) });
   });
 }
+
+// Re-export for passengerInvites (avoid duplicate import in index)
+export { phonesMatch };

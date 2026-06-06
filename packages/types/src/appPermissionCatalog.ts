@@ -128,6 +128,7 @@ const RIDER_PERMISSIONS: AppPermissionDefinition[] = [
     surface: 'rider',
     platform: 'both',
     tier: 'feature_optional',
+    osHints: { android: ['READ_CONTACTS'], ios: ['Contacts'] },
   },
   {
     key: 'motion_activity',

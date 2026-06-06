@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '@roam/auth-client';
 import { toast } from 'sonner';
@@ -13,6 +13,11 @@ import { PassengerEmailConfirmScreen } from '../components/auth/PassengerEmailCo
 import { PassengerPhoneAuthWizard } from '../components/auth/PassengerPhoneAuthWizard';
 
 export default function LoginPage({ session }: { session: Session | null }) {
+  const [searchParams] = useSearchParams();
+  const returnTo = searchParams.get('return');
+  const safeReturn =
+    returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/';
+
   const [mainView, setMainView] = useState<'login' | 'signup'>('login');
   const [signupSubView, setSignupSubView] = useState<'main' | 'email' | 'confirm-email'>('main');
   const [pendingConfirmEmail, setPendingConfirmEmail] = useState('');
@@ -23,7 +28,7 @@ export default function LoginPage({ session }: { session: Session | null }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (session) return <Navigate to="/" replace />;
+  if (session) return <Navigate to={safeReturn} replace />;
 
   const year = new Date().getFullYear();
 

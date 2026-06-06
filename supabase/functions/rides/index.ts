@@ -69,6 +69,15 @@ import { loadAppPermissionPolicy, policyDto } from "../_shared/appPermissionPoli
 import type { AppPermissionSurface } from "../_shared/appPermissionCatalog.ts";
 import { registerRideChatRoutes } from "./rideChat.ts";
 import { autocompletePlaces, fetchPlaceDetails, isPlacesConfigured, reverseGeocodeCoordinates } from "./fare/places.ts";
+import { registerContactsRoutes } from "./contacts.ts";
+import { registerPassengerInviteRoutes } from "./passengerInvites.ts";
+import { registerBookingRequestRoutes, markBookingRequestBooked } from "./bookingRequests.ts";
+import {
+  canAccessRide,
+  getRideParticipantRole,
+  shouldExposePinToUser,
+} from "./rideAccess.ts";
+import { notifyPassengerOfRideEvent } from "./rideNotifications.ts";
 
 /** Match Supabase path prefix: .../functions/v1/rides/<route> → /rides/<route> */
 const app = new Hono().basePath("/rides");
@@ -1387,6 +1396,58 @@ app.post("/v1/requests", async (c) => {
     insertRow.payment_method = paymentMethod;
   }
 
+  const guestPassengerName = typeof body.guest_passenger_name === "string"
+    ? body.guest_passenger_name.trim()
+    : "";
+  const guestPassengerPhone = typeof body.guest_passenger_phone === "string"
+    ? body.guest_passenger_phone.trim()
+    : "";
+  const bookingPurpose = typeof body.booking_purpose === "string"
+    ? body.booking_purpose.trim()
+    : "";
+  if (guestPassengerName || guestPassengerPhone) {
+    if (!guestPassengerName || !guestPassengerPhone) {
+      return c.json({ error: "invalid_guest_passenger" }, 400);
+    }
+    if (bookingPurpose && !["guest", "family", "business"].includes(bookingPurpose)) {
+      return c.json({ error: "invalid_booking_purpose" }, 400);
+    }
+    insertRow.guest_passenger_name = guestPassengerName;
+    insertRow.guest_passenger_phone = guestPassengerPhone;
+    if (bookingPurpose) insertRow.booking_purpose = bookingPurpose;
+  }
+
+  const riderContactId = typeof body.rider_contact_id === "string" ? body.rider_contact_id : null;
+  if (riderContactId) {
+    const { data: contact } = await db.from("rider_contacts").select("id, linked_user_id")
+      .eq("id", riderContactId).eq("owner_user_id", auth.user.id).maybeSingle();
+    if (!contact) return c.json({ error: "invalid_rider_contact" }, 400);
+    insertRow.rider_contact_id = riderContactId;
+    if (contact.linked_user_id) {
+      insertRow.passenger_user_id = contact.linked_user_id;
+    }
+  }
+
+  const bookingRequestId = typeof body.booking_request_id === "string" ? body.booking_request_id : null;
+  if (bookingRequestId) {
+    const { data: br } = await db.from("booking_requests").select(
+      "id, status, claimed_by_user_id, requester_user_id, requester_name, requester_phone",
+    )
+      .eq("id", bookingRequestId).eq("claimed_by_user_id", auth.user.id).maybeSingle();
+    if (!br || br.status !== "claimed") return c.json({ error: "invalid_booking_request" }, 400);
+    insertRow.booking_request_id = bookingRequestId;
+    if (br.requester_user_id) insertRow.passenger_user_id = br.requester_user_id;
+    if (!insertRow.guest_passenger_name) {
+      insertRow.guest_passenger_name = br.requester_name;
+      insertRow.guest_passenger_phone = br.requester_phone;
+    }
+  }
+
+  const explicitPassengerId = typeof body.passenger_user_id === "string" ? body.passenger_user_id : null;
+  if (explicitPassengerId && !insertRow.passenger_user_id) {
+    insertRow.passenger_user_id = explicitPassengerId;
+  }
+
   let ride: Record<string, unknown> | null = null;
   const { data: rpcRide, error: rpcError } = await pubSvc().rpc("rides_create_ride_request", {
     p_row: insertRow,
@@ -1433,6 +1494,10 @@ app.post("/v1/requests", async (c) => {
   await runMatchingWave(ride.id, ride, 1, reqId);
   await reconcileMatching(ride.id as string, reqId);
 
+  if (bookingRequestId) {
+    await markBookingRequestBooked(db, bookingRequestId, ride.id as string);
+  }
+
   const freshRide = await loadRideRequestById(ride.id as string);
   let rideOut = freshRide ?? ride;
   if (pinEnabled && rideOut) {
@@ -1455,9 +1520,11 @@ app.get("/v1/requests/:id", async (c) => {
   const id = c.req.param("id");
   const ride = await loadRideRequestById(id);
   if (!ride) return c.json({ error: "not_found" }, 404);
-  const isRider = ride.rider_user_id === auth.user.id;
-  const isDriver = ride.assigned_driver_user_id === auth.user.id;
-  if (!isRider && !isDriver) {
+  const participantRole = getRideParticipantRole(ride, auth.user.id);
+  const isDriver = participantRole === "driver";
+  const isBooker = participantRole === "booker";
+  const isPassenger = participantRole === "passenger";
+  if (participantRole === "none") {
     return jsonEdgeForbidden(c, "forbidden");
   }
   const reqId = crypto.randomUUID();
@@ -1473,11 +1540,14 @@ app.get("/v1/requests/:id", async (c) => {
 
   const pinPrepStatuses = ["driver_assigned", "driver_en_route_pickup", "driver_arrived_pickup"];
   let riderPin: string | null = null;
-  if (rideOut && isRider && isPinFeatureEnabled(settings) &&
+  const pinEligible = isBooker || isPassenger;
+  if (rideOut && pinEligible && isPinFeatureEnabled(settings) &&
     pinPrepStatuses.includes(String(rideOut.status))) {
     rideOut = await ensureRideVerificationPin(id, rideOut, settings);
   }
-  if (rideOut && isRider && isPinFeatureEnabled(settings) && shouldExposeRiderPin(rideOut)) {
+  const exposePin = rideOut && shouldExposePinToUser(rideOut, auth.user.id) &&
+    shouldExposeRiderPin(rideOut);
+  if (rideOut && pinEligible && isPinFeatureEnabled(settings) && exposePin) {
     riderPin = normalizeVerificationPin(rideOut.verification_pin);
     if (!riderPin) {
       const { data: pinRow } = await svc().from("ride_requests").select("verification_pin").eq("id", id)
@@ -1488,7 +1558,7 @@ app.get("/v1/requests/:id", async (c) => {
   }
 
   // #region agent log
-  if (isRider && rideOut?.status === "driver_arrived_pickup" && isPinFeatureEnabled(settings)) {
+  if (pinEligible && rideOut?.status === "driver_arrived_pickup" && isPinFeatureEnabled(settings)) {
     debugAgentLog("PIN", "index.ts:GET/requests", "rider arrived pin response", {
       rideId: id,
       riderPin,
@@ -1507,12 +1577,14 @@ app.get("/v1/requests/:id", async (c) => {
   return c.json({
     ride: isDriver && rideOut
       ? sanitizeRideForDriver(rideOut, settings.pin_verification_required_for_start)
-      : isRider
+      : isBooker || isPassenger
         ? sanitizeRideForRider(rideOut)
         : rideOut,
     offers,
     wait_time: waitTimeInfo,
-    rider_pin: isRider ? riderPin : null,
+    rider_pin: pinEligible ? riderPin : null,
+    participant_role: participantRole,
+    can_chat: isPassenger || isDriver,
   });
 });
 
@@ -1650,7 +1722,7 @@ app.get("/v1/drivers/offers", async (c) => {
   if (rideIds.length > 0) {
     const rides = await loadRideRequestsByIds(
       rideIds,
-      "id, status, assigned_driver_user_id, pickup_address, dropoff_address, fare_estimate_minor, currency, distance_estimate_km, duration_estimate_minutes, vehicle_option, surge_multiplier",
+      "id, status, assigned_driver_user_id, pickup_address, dropoff_address, fare_estimate_minor, currency, distance_estimate_km, duration_estimate_minutes, vehicle_option, surge_multiplier, guest_passenger_name",
     );
     ridesById = Object.fromEntries(rides.map((r) => [r.id as string, r]));
   }
@@ -1716,6 +1788,10 @@ app.post("/v1/drivers/offers/:offerId/accept", async (c) => {
 
   await audit(rideId, auth.user.id, "offer_accepted", { offer_id: offerId });
   logLine({ event: "offer_accepted", ride_id: rideId, driver_id: auth.user.id });
+
+  void notifyPassengerOfRideEvent(db, freshRide, "driver_assigned").catch((e) =>
+    console.warn("[rides] passenger SMS driver_assigned failed:", e)
+  );
 
   const settings = await loadDispatchSettingsForRides();
   const rideOut = await maybeAutoEnRouteOnAccept(
@@ -1923,9 +1999,11 @@ app.get("/v1/requests/:id/live", async (c) => {
   if (!ride) return c.json({ error: "not_found" }, 404);
 
   const role = ridesUserSurfaceRole(auth.user);
-  const isRider = ride.rider_user_id === auth.user.id;
-  const isDriver = ride.assigned_driver_user_id === auth.user.id;
-  if (!isRider && !isDriver && role !== "admin") {
+  const participantRole = getRideParticipantRole(ride, auth.user.id);
+  const isDriver = participantRole === "driver";
+  const isBooker = participantRole === "booker";
+  const isPassenger = participantRole === "passenger";
+  if (participantRole === "none" && role !== "admin") {
     return jsonEdgeForbidden(c, "forbidden");
   }
 
@@ -2009,6 +2087,13 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
   }
 
   logLine({ event: "driver_transition", ride_id: id, from: current, to: next, source: "manual" });
+
+  if (next === "driver_arrived_pickup" && result.ride) {
+    void notifyPassengerOfRideEvent(svc(), result.ride as Record<string, unknown>, "driver_arrived").catch((e) =>
+      console.warn("[rides] passenger SMS driver_arrived failed:", e)
+    );
+  }
+
   return c.json({
     ride: sanitizeRideForDriver(
       result.ride as Record<string, unknown> | undefined ?? null,
@@ -2107,6 +2192,15 @@ registerRideChatRoutes(app, {
   requireUser,
   audit,
 });
+
+registerContactsRoutes(app, { svc, requireUser, audit });
+registerPassengerInviteRoutes(app, {
+  svc,
+  requireUser,
+  loadRideRequestById,
+  audit,
+});
+registerBookingRequestRoutes(app, { svc, requireUser, audit });
 
 registerAdminRoutes(app, { logLine });
 

@@ -22,6 +22,11 @@ import EmergencyAssistancePage from './pages/EmergencyAssistancePage';
 import PromoCodesPage from './pages/PromoCodesPage';
 import SupportCenterPage from './pages/SupportCenterPage';
 import TrustedContactsPage from './pages/TrustedContactsPage';
+import ContactsPage from './pages/ContactsPage';
+import ContactDetailPage from './pages/ContactDetailPage';
+import PassengerInviteLandingPage from './pages/PassengerInviteLandingPage';
+import RoamTagPage from './pages/RoamTagPage';
+import RoamTagClaimPage from './pages/RoamTagClaimPage';
 import WalletPage from './pages/WalletPage';
 import ManagePaymentMethodsPage from './pages/ManagePaymentMethodsPage';
 import AppSettingsPage from './pages/AppSettingsPage';
@@ -126,6 +131,10 @@ export default function App() {
         <Route path="rides" element={<RideOperationsPage />} />
       </Route>
 
+      {/* Public delegated-booking entry (signup gate) */}
+      <Route path="/ride/join/:token" element={<PassengerInviteLandingPage />} />
+      <Route path="/tag/:token" element={<RoamTagClaimPage />} />
+
       {/* Passenger app routes */}
       <Route path="/login" element={<LoginPage session={session} />} />
       <Route
@@ -137,12 +146,15 @@ export default function App() {
         <Route path="/services/courier" element={<CourierServicePage />} />
         <Route path="/services/schedule" element={<ScheduleRidePage />} />
         <Route path="/services/event" element={<EventBookingPage />} />
+        <Route path="/services/roam-tag" element={<RoamTagPage />} />
         <Route path="/account" element={<AccountPage />} />
         <Route path="/account/gift-cards" element={<GiftCardsPage />} />
         <Route path="/account/emergency-assistance" element={<EmergencyAssistancePage />} />
         <Route path="/account/promo-codes" element={<PromoCodesPage />} />
         <Route path="/account/support" element={<SupportCenterPage />} />
         <Route path="/account/trusted-contacts" element={<TrustedContactsPage />} />
+        <Route path="/account/contacts" element={<ContactsPage />} />
+        <Route path="/account/contacts/:id" element={<ContactDetailPage />} />
         <Route path="/account/wallet" element={<WalletPage />} />
         <Route path="/account/wallet/payment-methods" element={<ManagePaymentMethodsPage />} />
         <Route path="/account/settings" element={<AppSettingsPage />} />

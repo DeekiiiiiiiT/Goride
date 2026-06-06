@@ -24,6 +24,7 @@ type Props = {
   driverLocation: LatLng | null;
   driverHeading: number | null;
   onBack: () => void;
+  canChat?: boolean;
 };
 
 const DEFAULT_DRIVER_PHOTO =
@@ -38,7 +39,7 @@ export function tripArrivalHeadline(ride: RideRequestRow): string {
   return 'Trip in progress';
 }
 
-export function TripInProgressView({ ride, driverLocation, driverHeading, onBack }: Props) {
+export function TripInProgressView({ ride, driverLocation, driverHeading, onBack, canChat = true }: Props) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const headline = tripArrivalHeadline(ride);
   const destShort = formatShortAddress(ride.dropoff_address, 3);
@@ -130,6 +131,7 @@ export function TripInProgressView({ ride, driverLocation, driverHeading, onBack
           </div>
 
           <div className="trip-progress-actions" role="group" aria-label="Trip actions">
+            {canChat ? (
             <button
               type="button"
               className="trip-progress-action"
@@ -142,6 +144,7 @@ export function TripInProgressView({ ride, driverLocation, driverHeading, onBack
               </span>
               <span className="trip-progress-action__label">Message</span>
             </button>
+            ) : null}
             <button type="button" className="trip-progress-action" onClick={() => void handleShareTrip()}>
               <span className="trip-progress-action__circle">
                 <Share2 className="size-6" strokeWidth={2} />

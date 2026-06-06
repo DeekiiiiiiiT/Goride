@@ -33,7 +33,7 @@ const RIDER: AppPermissionDefinition[] = [
   { key: "microphone_in_app_call", label: "Microphone (in-app call)", description: "Voice calls to driver.", surface: "rider", platform: "both", tier: "feature_optional" },
   { key: "phone_in_app_call", label: "Phone (in-app call)", description: "Dialer integration (native).", surface: "rider", platform: "native", tier: "feature_optional" },
   { key: "camera_profile", label: "Camera (profile)", description: "Profile photo.", surface: "rider", platform: "both", tier: "feature_optional" },
-  { key: "contacts_split_fare", label: "Contacts", description: "Split fare and invites.", surface: "rider", platform: "both", tier: "feature_optional" },
+  { key: "contacts_split_fare", label: "Contacts", description: "Split fare and invites.", surface: "rider", platform: "both", tier: "feature_optional", osHints: { android: ["READ_CONTACTS"], ios: ["Contacts"] } },
   { key: "motion_activity", label: "Motion & activity", description: "Movement signals (native).", surface: "rider", platform: "native", tier: "feature_optional" },
   { key: "app_tracking", label: "App tracking (ATT)", description: "iOS analytics consent.", surface: "rider", platform: "native", tier: "feature_optional" },
 ];

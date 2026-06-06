@@ -1,16 +1,17 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { ArrowLeft, ArrowRight, Search } from 'lucide-react';
+import { supabase } from '@roam/auth-client';
+import type { RiderContactRow } from '@roam/types/riderContacts';
+import { contactsList } from '@/services/contactsEdge';
+import { relationLabel } from '@/components/contacts/ContactRelationPicker';
 import {
-  ArrowLeft,
-  ArrowRight,
-  Briefcase,
-  CheckCircle2,
-  Contact,
-  UserRound,
-  Users,
-} from 'lucide-react';
-
+  buildGuestPhoneE164,
+  formatGuestPhoneDisplay,
+  isValidGuestPhone,
+  persistGuestRecipientDraft,
+} from '@/lib/guestRecipientBooking';
 import {
   CARD_SHADOW,
   ON_PRIMARY,
@@ -20,250 +21,204 @@ import {
   PRIMARY,
   PRIMARY_CONTAINER,
   SECONDARY,
-  SECONDARY_CONTAINER,
   SURFACE_LOW,
   SURFACE_LOWEST,
 } from '@/lib/passengerTheme';
 
-const LUXURY_IMAGE_URL =
-  'https://lh3.googleusercontent.com/aida-public/AB6AXuAzxB2Pf1UL6snmlfDl2E3bB5f5MOK6g0nP0yMKKhRiZ_sLBf52PLrFy_6MEg6hAngXTWZpY3xNx2J-OyvaN3kfQBfzbTaqrsFEpbv7UnZrl3VWehIu5DFwix93ZUTwMk114n5qDWAK6GadraBs9YRU9yl2seDoV2dlWGQxYoPYay3WDk0CWLT3PItyaoUA5g89thmN4ZG-gCg-MXP5KIaK63RlabKxhHSwfR8hFgCbBMWiNpkOIk9i2YaFJ4AxRj0JHCQ8zqFTQt9y';
-
-const BOOKING_PURPOSES = [
-  {
-    id: 'guest' as const,
-    title: 'Guest',
-    description: 'Private travel',
-    icon: UserRound,
-  },
-  {
-    id: 'family' as const,
-    title: 'Family',
-    description: 'Loved ones',
-    icon: Users,
-  },
-  {
-    id: 'business' as const,
-    title: 'Business',
-    description: 'Client/Staff',
-    icon: Briefcase,
-  },
-];
-
-type BookingPurpose = (typeof BOOKING_PURPOSES)[number]['id'];
-
-function PurposeOption({
-  title,
-  description,
-  icon: Icon,
-  selected,
-  onSelect,
-}: {
-  title: string;
-  description: string;
-  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className="group relative flex w-full items-center gap-4 rounded-[24px] p-5 text-left transition-all active:scale-[0.99] sm:flex-col sm:items-start"
-      style={{
-        backgroundColor: SURFACE_LOWEST,
-        boxShadow: CARD_SHADOW,
-        borderWidth: 2,
-        borderStyle: 'solid',
-        borderColor: selected ? PRIMARY : 'transparent',
-      }}
-    >
-      <div
-        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl"
-        style={{ backgroundColor: SECONDARY_CONTAINER }}
-      >
-        <Icon className="h-6 w-6" style={{ color: PRIMARY }} aria-hidden />
-      </div>
-      <div>
-        <p className="text-lg font-semibold" style={{ color: ON_SURFACE }}>
-          {title}
-        </p>
-        <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-          {description}
-        </p>
-      </div>
-      <CheckCircle2
-        className={`absolute right-4 top-4 h-6 w-6 transition-opacity ${selected ? 'opacity-100' : 'opacity-0'}`}
-        style={{ color: PRIMARY }}
-        fill={selected ? PRIMARY : 'none'}
-        stroke={selected ? ON_PRIMARY : PRIMARY}
-        aria-hidden
-      />
-    </button>
-  );
-}
-
 export default function BookForSomeonePage() {
   const navigate = useNavigate();
+  const [contacts, setContacts] = useState<RiderContactRow[]>([]);
+  const [query, setQuery] = useState('');
+  const [manual, setManual] = useState(false);
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
-  const [purpose, setPurpose] = useState<BookingPurpose>('family');
+  const [selected, setSelected] = useState<RiderContactRow | null>(null);
+  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
 
-  const handleContinue = () => {
-    if (!fullName.trim() || !phone.trim()) {
-      toast.error('Enter the recipient’s name and phone number.');
+  useEffect(() => {
+    void contactsList().then((r) => setContacts(r.contacts)).catch(() => {});
+  }, []);
+
+  const filtered = contacts.filter((c) => {
+    if (!query.trim()) return true;
+    const q = query.toLowerCase();
+    return c.display_name.toLowerCase().includes(q) || c.phone_e164.includes(q);
+  });
+
+  const handleContinue = async () => {
+    let draftName = fullName.trim();
+    let draftPhone = phone.replace(/\D/g, '');
+    let contactId: string | undefined;
+    let pickupPreset: GuestRecipientDraftPickup | undefined;
+    let placeId: string | undefined;
+
+    if (selected && !manual) {
+      draftName = selected.display_name;
+      draftPhone = selected.phone_e164.replace(/\D/g, '').slice(-10);
+      contactId = selected.id;
+      if (selectedPlaceId) {
+        const place = selected.places?.find((p) => p.id === selectedPlaceId);
+        if (place) {
+          placeId = place.id;
+          pickupPreset = {
+            label: place.label,
+            address: place.address,
+            lat: place.lat,
+            lng: place.lng,
+          };
+        }
+      }
+    }
+
+    if (!draftName || !draftPhone) {
+      toast.error('Select a contact or enter recipient details.');
       return;
     }
-    toast.message('Booking for someone else is coming soon.');
+    if (!isValidGuestPhone(draftPhone)) {
+      toast.error('Enter a valid 10-digit phone number.');
+      return;
+    }
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error('Sign in to book a ride for someone else.');
+      navigate('/login');
+      return;
+    }
+
+    persistGuestRecipientDraft({
+      fullName: draftName,
+      phone: draftPhone.length > 10 ? draftPhone.slice(-10) : draftPhone,
+      countryCode: '+1',
+      contactId,
+      selectedPlaceId: placeId,
+      pickupPreset,
+    });
+    toast.success(`Booking for ${draftName}. Choose pickup and destination.`);
+    navigate('/');
+  };
+
+  type GuestRecipientDraftPickup = {
+    label: string;
+    address: string;
+    lat: number;
+    lng: number;
   };
 
   return (
-    <div
-      className="flex min-h-[100dvh] flex-col pb-28"
-      style={{ backgroundColor: PAGE_BG, color: ON_SURFACE }}
-    >
-      <header className="sticky top-0 z-50 flex h-16 w-full items-center bg-[#f7f9fb] px-4 safe-t">
-        <button
-          type="button"
-          onClick={() => navigate('/services')}
-          className="rounded-full p-2 transition-colors active:scale-95 passenger-row-hover"
-          style={{ color: PRIMARY }}
-          aria-label="Back to services"
-        >
-          <ArrowLeft className="h-6 w-6" strokeWidth={2} aria-hidden />
+    <div className="flex min-h-[100dvh] flex-col pb-28" style={{ backgroundColor: PAGE_BG, color: ON_SURFACE }}>
+      <header className="sticky top-0 z-50 flex h-16 items-center bg-[#f7f9fb] px-4 safe-t">
+        <button type="button" onClick={() => navigate('/services')} className="rounded-full p-2" style={{ color: PRIMARY }}>
+          <ArrowLeft className="h-6 w-6" />
         </button>
-        <h1 className="ml-2 text-xl font-semibold tracking-tight" style={{ color: PRIMARY }}>
-          Book for Someone Else
-        </h1>
+        <h1 className="ml-2 text-xl font-semibold" style={{ color: PRIMARY }}>Book for Someone Else</h1>
       </header>
 
-      <main className="mx-auto w-full max-w-2xl flex-1 space-y-8 px-4 py-4 safe-x">
+      <main className="mx-auto w-full max-w-2xl flex-1 space-y-6 px-4 py-4 safe-x">
         <section className="space-y-2">
-          <h2 className="text-[30px] font-bold leading-tight tracking-tight" style={{ color: ON_SURFACE }}>
-            Recipient Details
-          </h2>
+          <h2 className="text-[30px] font-bold leading-tight">Recipient Details</h2>
           <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-            They will receive ride details via SMS for a seamless premium experience.
+            Pick from Roam Contacts or enter details manually.
           </p>
         </section>
 
-        <div className="space-y-4">
-          <div
-            className="space-y-6 rounded-[24px] p-5"
-            style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
-          >
-            <div className="flex items-center justify-between pb-4">
-              <span
-                className="text-xs font-bold uppercase tracking-widest"
-                style={{ color: SECONDARY }}
-              >
-                Passenger Information
-              </span>
-              <button
-                type="button"
-                onClick={() => toast.message('Coming soon')}
-                className="flex items-center gap-1 text-xs font-bold tracking-wide transition-opacity hover:opacity-80"
-                style={{ color: PRIMARY }}
-              >
-                <Contact className="h-[18px] w-[18px]" aria-hidden />
-                Contacts
-              </button>
+        {!manual ? (
+          <>
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: ON_SURFACE_VARIANT }} />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search Roam Contacts"
+                className="h-12 w-full rounded-2xl border-none pl-11 pr-4 outline-none focus:ring-2 focus:ring-[#004ac6]"
+                style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
+              />
             </div>
-
-            <div className="space-y-4">
-              <div>
-                <label
-                  className="mb-2 block text-xs font-bold tracking-wide"
-                  style={{ color: ON_SURFACE_VARIANT }}
-                >
-                  FULL NAME
-                </label>
-                <input
-                  type="text"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="e.g. Alexander Sterling"
-                  className="h-14 w-full rounded-xl border-none px-4 text-base outline-none focus:ring-2 focus:ring-[#004ac6]"
-                  style={{
-                    backgroundColor: SURFACE_LOW,
-                    color: ON_SURFACE,
-                  }}
-                />
-              </div>
-              <div>
-                <label
-                  className="mb-2 block text-xs font-bold tracking-wide"
-                  style={{ color: ON_SURFACE_VARIANT }}
-                >
-                  PHONE NUMBER
-                </label>
-                <div className="flex gap-2">
-                  <div
-                    className="flex h-14 w-20 shrink-0 items-center justify-center rounded-xl text-base"
-                    style={{ backgroundColor: SURFACE_LOW, color: ON_SURFACE }}
-                  >
-                    +1
-                  </div>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="(555) 000-0000"
-                    className="h-14 min-w-0 flex-1 rounded-xl border-none px-4 text-base outline-none focus:ring-2 focus:ring-[#004ac6]"
-                    style={{
-                      backgroundColor: SURFACE_LOW,
-                      color: ON_SURFACE,
+            <ul className="max-h-64 space-y-2 overflow-y-auto">
+              {filtered.map((c) => (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelected(c);
+                      setSelectedPlaceId(null);
                     }}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <h3 className="px-1 text-xl font-semibold tracking-tight" style={{ color: ON_SURFACE }}>
-              Why are you booking?
-            </h3>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              {BOOKING_PURPOSES.map((option) => (
-                <PurposeOption
-                  key={option.id}
-                  title={option.title}
-                  description={option.description}
-                  icon={option.icon}
-                  selected={purpose === option.id}
-                  onSelect={() => setPurpose(option.id)}
-                />
+                    className="flex w-full items-center gap-3 rounded-2xl p-4 text-left"
+                    style={{
+                      backgroundColor: SURFACE_LOWEST,
+                      boxShadow: CARD_SHADOW,
+                      borderWidth: 2,
+                      borderStyle: 'solid',
+                      borderColor: selected?.id === c.id ? PRIMARY : 'transparent',
+                    }}
+                  >
+                    <div>
+                      <p className="font-semibold">{c.display_name}</p>
+                      <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
+                        {relationLabel(c.relation, c.relation_custom)}
+                      </p>
+                    </div>
+                  </button>
+                </li>
               ))}
-            </div>
+            </ul>
+            {selected?.places?.length ? (
+              <div className="space-y-2">
+                <p className="text-xs font-bold tracking-wide" style={{ color: SECONDARY }}>PICKUP FROM</p>
+                {selected.places.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setSelectedPlaceId(p.id)}
+                    className="block w-full rounded-xl p-3 text-left text-sm"
+                    style={{
+                      backgroundColor: selectedPlaceId === p.id ? 'rgba(0,74,198,0.08)' : SURFACE_LOW,
+                      borderWidth: 1,
+                      borderColor: selectedPlaceId === p.id ? PRIMARY : 'transparent',
+                    }}
+                  >
+                    <span className="font-semibold">{p.label}</span>
+                    <span className="block" style={{ color: ON_SURFACE_VARIANT }}>{p.address}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <button type="button" onClick={() => setManual(true)} className="text-sm font-semibold" style={{ color: PRIMARY }}>
+              Enter details manually
+            </button>
+          </>
+        ) : (
+          <div className="space-y-4 rounded-[24px] p-5" style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}>
+            <input
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="Full name"
+              className="h-14 w-full rounded-xl border-none px-4"
+              style={{ backgroundColor: SURFACE_LOW }}
+            />
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(formatGuestPhoneDisplay(e.target.value))}
+              placeholder="(555) 000-0000"
+              className="h-14 w-full rounded-xl border-none px-4"
+              style={{ backgroundColor: SURFACE_LOW }}
+            />
+            <button type="button" onClick={() => setManual(false)} className="text-sm font-semibold" style={{ color: PRIMARY }}>
+              Back to contacts
+            </button>
           </div>
+        )}
 
-          <div
-            className="relative h-40 w-full overflow-hidden rounded-[24px]"
-            style={{ boxShadow: CARD_SHADOW }}
-          >
-            <img src={LUXURY_IMAGE_URL} alt="" className="h-full w-full object-cover" />
-            <div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/60 to-transparent p-6">
-              <p className="text-xl font-semibold text-white">
-                Luxury standard for every guest.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="pt-4">
-          <button
-            type="button"
-            onClick={handleContinue}
-            className="flex h-16 w-full items-center justify-center gap-2 rounded-2xl text-lg font-semibold shadow-lg transition-transform active:scale-[0.98]"
-            style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_PRIMARY }}
-          >
-            Continue to Booking
-            <ArrowRight className="h-5 w-5" aria-hidden />
-          </button>
-          <p className="mt-4 text-center text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-            Recipient will receive a secure tracking link.
-          </p>
-        </div>
+        <button
+          type="button"
+          onClick={() => void handleContinue()}
+          className="flex h-16 w-full items-center justify-center gap-2 rounded-2xl text-lg font-semibold"
+          style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_PRIMARY }}
+        >
+          Continue to Booking
+          <ArrowRight className="h-5 w-5" />
+        </button>
       </main>
     </div>
   );

@@ -947,6 +947,9 @@ importers:
 
   apps/rides-passenger:
     dependencies:
+      '@capacitor-community/contacts':
+        specifier: ^7.0.0
+        version: 7.2.0(@capacitor/core@7.6.5)
       '@capacitor/android':
         specifier: ^7.6.5
         version: 7.6.5(@capacitor/core@7.6.5)
@@ -1007,6 +1010,9 @@ importers:
       clsx:
         specifier: '*'
         version: 2.1.1
+      leaflet:
+        specifier: ^1.9.4
+        version: 1.9.4
       lucide-react:
         specifier: ^0.487.0
         version: 0.487.0(react@18.3.1)
@@ -1035,6 +1041,9 @@ importers:
       '@types/google.maps':
         specifier: ^3.64.1
         version: 3.64.1
+      '@types/leaflet':
+        specifier: ^1.9.21
+        version: 1.9.21
       '@types/node':
         specifier: ^20.10.0
         version: 20.19.40
@@ -1398,6 +1407,11 @@ packages:
   '@babel/types@7.29.0':
     resolution: {integrity: sha512-LwdZHpScM4Qz8Xw2iKSzS+cfglZzJGvofQICy7W7v4caru4EaAmyUuO6BGrbyQ2mYV11W0U8j5mBhd14dd3B0A==}
     engines: {node: '>=6.9.0'}
+
+  '@capacitor-community/contacts@7.2.0':
+    resolution: {integrity: sha512-s/DVHuhMYbIbkSCuZyx6+ZDIho2wuUdtcb+cre4igo5Fz26lkBlayRSo+tBBfJsYxLlrQX21Jy8rMmUCdz2GTQ==}
+    peerDependencies:
+      '@capacitor/core': '>=7.0.0'
 
   '@capacitor/android@7.6.5':
     resolution: {integrity: sha512-FCNSo5bWkqCIuNt2OgG6IUsJJaYlghzbzlFf4IiHkFtir18FCyqHVGHszvtXB+npT7HQ9JQOZ4MQRDsgczKEGQ==}
@@ -4146,6 +4160,10 @@ snapshots:
     dependencies:
       '@babel/helper-string-parser': 7.27.1
       '@babel/helper-validator-identifier': 7.28.5
+
+  '@capacitor-community/contacts@7.2.0(@capacitor/core@7.6.5)':
+    dependencies:
+      '@capacitor/core': 7.6.5
 
   '@capacitor/android@7.6.5(@capacitor/core@7.6.5)':
     dependencies:

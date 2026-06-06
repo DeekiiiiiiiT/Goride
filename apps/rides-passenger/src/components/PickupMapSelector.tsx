@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Crosshair, Loader2, Navigation, MapPinned } from 'lucide-react';
+import { isNativeCapacitorPlatform } from '@roam/types';
 import {
   loadGoogleMapsApi,
   resolveAddressFromCoordinates,
@@ -7,6 +8,7 @@ import {
   snapToNearestRoad,
   type GeoPositionWithAccuracy,
 } from '@/services/locationService';
+import { LeafletPickupMapSelector } from '@/components/maps/LeafletPickupMap';
 
 const JAMAICA_CENTER = { lat: 18.1096, lng: -77.2975 };
 const DEFAULT_ZOOM = 15;
@@ -30,7 +32,14 @@ type Props = {
   className?: string;
 };
 
-export function PickupMapSelector({
+export function PickupMapSelector(props: Props) {
+  if (isNativeCapacitorPlatform()) {
+    return <LeafletPickupMapSelector {...props} />;
+  }
+  return <GooglePickupMapSelector {...props} />;
+}
+
+function GooglePickupMapSelector({
   pickup,
   accuracy,
   onPickupChange,

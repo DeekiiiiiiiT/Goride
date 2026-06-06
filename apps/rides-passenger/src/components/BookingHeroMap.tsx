@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import { isNativeCapacitorPlatform } from '@roam/types';
 import { loadGoogleMapsApi } from '@/services/locationService';
 import { TripRouteMap } from '@/components/TripRouteMap';
+import { LeafletPickupPreviewMap } from '@/components/maps/LeafletPickupMap';
 
 const JAMAICA_CENTER = { lat: 18.1096, lng: -77.2975 };
 
@@ -46,6 +48,13 @@ export function BookingHeroMap({
 }
 
 function PickupPreviewMap({ pickup }: { pickup: LatLng | null }) {
+  if (isNativeCapacitorPlatform()) {
+    return <LeafletPickupPreviewMap pickup={pickup} />;
+  }
+  return <GooglePickupPreviewMap pickup={pickup} />;
+}
+
+function GooglePickupPreviewMap({ pickup }: { pickup: LatLng | null }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const markerRef = useRef<google.maps.Marker | null>(null);

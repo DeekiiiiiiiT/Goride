@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { isNativeCapacitorPlatform } from '@roam/types';
 import { driverVehicleMarkerIcon, dropoffMarkerIcon, riderPickupMarkerIcon } from '@/lib/mapMarkerIcons';
 import { loadGoogleMapsApi } from '@/services/locationService';
+import { LeafletRouteMap } from '@/components/maps/LeafletRouteMap';
 
 type LatLng = { lat: number; lng: number };
 
@@ -17,7 +19,46 @@ type Props = {
   sheetInsetPx?: number;
 };
 
-export function LiveRideMap({
+export function LiveRideMap(props: Props) {
+  if (isNativeCapacitorPlatform()) {
+    const isLive = props.variant === 'live' || props.variant === 'trip';
+    const map = (
+      <LeafletRouteMap
+        pickup={props.pickup}
+        dropoff={props.dropoff}
+        encodedPolyline={props.encodedPolyline}
+        driverLocation={props.driverLocation}
+        variant={props.variant === 'trip' ? 'trip' : isLive ? 'live' : 'card'}
+        sheetInsetPx={props.sheetInsetPx}
+        className={isLive ? 'live-ride-map__canvas h-full w-full' : 'h-full w-full'}
+        fallbackClassName={
+          isLive
+            ? 'live-ride-map__fallback'
+            : 'h-[38dvh] min-h-[180px] w-full flex items-center justify-center bg-zinc-100 text-sm text-zinc-500 rounded-b-3xl'
+        }
+      />
+    );
+    return (
+      <div
+        className={
+          isLive
+            ? 'absolute inset-0 overflow-hidden'
+            : 'relative h-[38dvh] min-h-[180px] w-full overflow-hidden rounded-b-3xl'
+        }
+      >
+        {!isLive && props.statusLabel && (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 rounded-full bg-white/95 px-4 py-1.5 text-xs font-semibold text-zinc-800 shadow-md border border-zinc-200/80">
+            {props.statusLabel}
+          </div>
+        )}
+        {map}
+      </div>
+    );
+  }
+  return <GoogleLiveRideMap {...props} />;
+}
+
+function GoogleLiveRideMap({
   pickup,
   dropoff,
   encodedPolyline,

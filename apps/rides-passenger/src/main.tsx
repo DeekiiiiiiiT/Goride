@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import App from './App';
+import { NativeNavigationBridge } from './components/NativeNavigationBridge';
 import { initCapacitorNative } from './capacitor-native';
 import { ThemeProvider } from './contexts/ThemeContext';
 import './index.css';
@@ -23,6 +24,7 @@ const root = (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <ThemeProvider>
+          <NativeNavigationBridge />
           <App />
           <Toaster position="top-center" richColors />
         </ThemeProvider>

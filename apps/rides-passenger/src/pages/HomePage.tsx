@@ -8,6 +8,7 @@ import {
   Package,
   Pencil,
   UserPlus,
+  X,
 } from 'lucide-react';
 import { useHomeTripPicker } from '@/contexts/HomeTripPickerContext';
 import { supabase } from '@roam/auth-client';
@@ -43,8 +44,19 @@ import { formatVehicleEtaLineCompact } from '@/utils/formatRideEta';
 import { usePermissionPolicy } from '@/hooks/usePermissionPolicy';
 import { PermissionOnboardingSheet } from '@/components/PermissionOnboardingSheet';
 import {
+  buildGuestPhoneE164,
+  clearGuestRecipientDraft,
+  readGuestRecipientDraft,
+  type GuestRecipientDraft,
+} from '@/lib/guestRecipientBooking';
+import {
+  clearBookingRequestDraft,
+  readBookingRequestDraft,
+} from '@/lib/delegatedBookingSession';
+import {
   checkGeolocationGranted,
   isBlockedByPolicy,
+  isNativeCapacitorPlatform,
   isWebApplicable,
   permissionKeyToGrantChecker,
   readOnboardingDismissed,
@@ -69,6 +81,40 @@ export default function HomePage() {
   const { keyboardInset, height: viewportHeight } = useVisualViewport();
   const keyboardOpen = keyboardInset > 48;
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [guestRecipient, setGuestRecipient] = useState<GuestRecipientDraft | null>(() =>
+    readGuestRecipientDraft(),
+  );
+
+  useEffect(() => {
+    setGuestRecipient(readGuestRecipientDraft());
+  }, []);
+
+  useEffect(() => {
+    const draft = readGuestRecipientDraft();
+    if (draft?.pickupPreset) {
+      setPickup({ lat: draft.pickupPreset.lat, lng: draft.pickupPreset.lng });
+      setPickupAddress(draft.pickupPreset.address);
+      setPickupSetByDevice(false);
+    }
+    const tagDraft = readBookingRequestDraft();
+    if (tagDraft?.pickup) {
+      setPickup({ lat: tagDraft.pickup.lat, lng: tagDraft.pickup.lng });
+      setPickupAddress(tagDraft.pickup.address);
+      setPickupSetByDevice(false);
+    }
+    if (tagDraft?.dropoff) {
+      setDropoff({ lat: tagDraft.dropoff.lat, lng: tagDraft.dropoff.lng });
+      setDropoffAddress(tagDraft.dropoff.address);
+      setDestinationChosen(true);
+    }
+    if (tagDraft?.requesterName) {
+      setGuestRecipient({
+        fullName: tagDraft.requesterName,
+        phone: tagDraft.requesterPhone.replace(/\D/g, '').slice(-10),
+        countryCode: '+1',
+      });
+    }
+  }, []);
 
   useEffect(() => {
     if (keyboardOpen) {
@@ -168,6 +214,12 @@ export default function HomePage() {
     setTripPickerActive(coordsReady);
     return () => setTripPickerActive(false);
   }, [coordsReady, setTripPickerActive]);
+
+  const clearGuestRecipient = useCallback(() => {
+    clearGuestRecipientDraft();
+    clearBookingRequestDraft();
+    setGuestRecipient(null);
+  }, []);
 
   const handleTripPickerBack = useCallback(() => {
     if (quoteDebounceRef.current) {
@@ -320,19 +372,37 @@ export default function HomePage() {
       toast.error('Choose pickup and drop-off from the search suggestions.');
       return;
     }
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error('Sign in to book a ride.');
+      navigate('/login');
+      return;
+    }
+
     const geo = await checkGeolocationGranted();
-    if (isBlockedByPolicy(permissions, 'location_precise_while_using', geo)) {
-      toast.error('Enable location in your browser to book a ride.');
+    const manualRouteReady = Boolean(pickup && dropoff);
+    const blockedByLocation = isBlockedByPolicy(permissions, 'location_precise_while_using', geo);
+    if (blockedByLocation && !(isNativeCapacitorPlatform() && manualRouteReady)) {
+      toast.error('Enable location in your device settings to book a ride.');
       const next = await requestGeolocationPermission();
       setLocationBlocked(isBlockedByPolicy(permissions, 'location_precise_while_using', next));
       return;
     }
-    if (!quote?.quote_token) {
-      toast.error('Wait for the fare estimate, or tap Refresh price.');
-      return;
-    }
+
     setBookLoading(true);
     try {
+      const freshQuote = await ridesQuote({
+        pickup_lat: pickup.lat,
+        pickup_lng: pickup.lng,
+        dropoff_lat: dropoff.lat,
+        dropoff_lng: dropoff.lng,
+        vehicle_option: vehicleOption,
+      });
+      setQuotesBySlug((prev) => ({ ...prev, [vehicleOption]: freshQuote }));
+
+      const tagDraft = readBookingRequestDraft();
+
       const { ride } = await ridesCreateRequest({
         pickup_lat: pickup.lat,
         pickup_lng: pickup.lng,
@@ -341,11 +411,23 @@ export default function HomePage() {
         pickup_address: pickupAddress,
         dropoff_address: dropoffAddress,
         vehicle_option: vehicleOption,
-        quote_token: quote.quote_token,
+        quote_token: freshQuote.quote_token,
         idempotency_key: crypto.randomUUID(),
-        route_polyline_encoded: quote.route_polyline_encoded,
+        route_polyline_encoded: freshQuote.route_polyline_encoded,
         payment_method: selectedPayment.ridePaymentMethod,
+        ...(guestRecipient
+          ? {
+              guest_passenger_name: guestRecipient.fullName.trim(),
+              guest_passenger_phone: buildGuestPhoneE164(
+                guestRecipient.countryCode,
+                guestRecipient.phone,
+              ),
+              ...(guestRecipient.contactId ? { rider_contact_id: guestRecipient.contactId } : {}),
+            }
+          : {}),
+        ...(tagDraft ? { booking_request_id: tagDraft.bookingRequestId } : {}),
       });
+      clearGuestRecipient();
       toast.success('Searching for a driver…');
       navigate(`/ride/${ride.id}`);
     } catch (e: unknown) {
@@ -368,7 +450,8 @@ export default function HomePage() {
     Boolean(quote?.quote_token) &&
     !quotesLoading &&
     !locationBlocked &&
-    !initialGpsLoading;
+    !initialGpsLoading &&
+    !bookLoading;
 
   const selectedService = services.find((s) => s.slug === vehicleOption);
   const selectedPayment = getPaymentMethodById(selectedPaymentId);
@@ -524,7 +607,7 @@ export default function HomePage() {
                   className="mb-3 rounded-2xl border px-4 py-2 text-center text-sm"
                   style={{ borderColor: 'var(--home-card-border)', color: 'var(--home-on-surface)' }}
                 >
-                  Location is required to book. Allow location access in your browser to continue.
+                  Location is required to book. Allow location access in your device settings to continue.
                 </p>
               )}
 
@@ -544,7 +627,11 @@ export default function HomePage() {
                   boxShadow: '0 8px 24px color-mix(in srgb, var(--home-primary) 35%, transparent)',
                 }}
               >
-                {bookLoading ? 'Booking…' : "Let's Roam"}
+                {bookLoading
+                  ? 'Booking…'
+                  : guestRecipient
+                    ? `Book for ${guestRecipient.fullName.trim()}`
+                    : "Let's Roam"}
                 <ArrowRight className="h-5 w-5" aria-hidden />
               </button>
             </div>
@@ -561,7 +648,7 @@ export default function HomePage() {
               backgroundColor: 'var(--home-panel-solid)',
             }}
           >
-            Location is required to book. Allow location access in your browser to continue.
+            Location is required to book. Allow location access in your device settings to continue.
           </p>
         )}
 
@@ -595,6 +682,51 @@ export default function HomePage() {
             </div>
 
             <div className="home-booking-sheet__top px-5 pb-3 pt-1">
+              {guestRecipient ? (
+                <div
+                  className="mb-3 flex items-start gap-3 rounded-2xl border px-4 py-3"
+                  style={{
+                    borderColor: 'var(--home-card-border)',
+                    backgroundColor: 'color-mix(in srgb, var(--home-primary) 8%, transparent)',
+                  }}
+                >
+                  <div
+                    className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                    style={{ backgroundColor: 'var(--home-secondary-container)' }}
+                  >
+                    <UserPlus
+                      className="h-4 w-4"
+                      style={{ color: 'var(--home-primary)' }}
+                      aria-hidden
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className="text-xs font-bold uppercase tracking-wide"
+                      style={{ color: 'var(--home-on-surface-muted)' }}
+                    >
+                      Booking for someone else
+                    </p>
+                    <p className="truncate text-sm font-semibold" style={{ color: 'var(--home-on-surface)' }}>
+                      {guestRecipient.fullName.trim()}
+                    </p>
+                    <p className="text-xs" style={{ color: 'var(--home-on-surface-muted)' }}>
+                      SMS updates to{' '}
+                      {buildGuestPhoneE164(guestRecipient.countryCode, guestRecipient.phone)}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={clearGuestRecipient}
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-transform active:scale-95"
+                    style={{ color: 'var(--home-on-surface-muted)' }}
+                    aria-label="Cancel booking for someone else"
+                  >
+                    <X className="h-4 w-4" aria-hidden />
+                  </button>
+                </div>
+              ) : null}
+
               {showCompactRoute ? (
                 <div className="mb-2">
                   <button

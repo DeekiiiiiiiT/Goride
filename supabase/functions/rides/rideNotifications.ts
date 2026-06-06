@@ -1,0 +1,93 @@
+/**
+ * Transactional ride SMS (invite links, status updates).
+ * Uses Digicel/Flow when configured; logs in stub mode.
+ */
+
+import { normalizePhoneE164 } from "./rideAccess.ts";
+
+export type RideNotificationTemplate = "passenger_invite" | "driver_assigned" | "driver_arrived";
+
+type NotificationPayload = {
+  to: string;
+  template: RideNotificationTemplate;
+  payload: Record<string, unknown>;
+};
+
+function buildMessage(template: RideNotificationTemplate, payload: Record<string, unknown>): string {
+  switch (template) {
+    case "passenger_invite": {
+      const name = payload.guest_name ? String(payload.guest_name) : "there";
+      const url = String(payload.url ?? "");
+      return `Hi ${name}, a Roam ride has been booked for you. Track and chat with your driver: ${url}`;
+    }
+    case "driver_assigned":
+      return `Your Roam driver has been assigned and is heading to the pickup. Open the app to track your ride.`;
+    case "driver_arrived":
+      return `Your Roam driver has arrived. Open the app for your pickup PIN.`;
+    default:
+      return "You have a Roam ride update.";
+  }
+}
+
+async function sendViaCarrier(to: string, message: string): Promise<boolean> {
+  const stub = Deno.env.get("SMS_HOOK_STUB_LOG_OK") === "1" ||
+    Deno.env.get("RIDE_SMS_STUB_LOG_OK") === "1";
+  if (stub) {
+    console.log(JSON.stringify({ svc: "ride_notifications", to, message }));
+    return true;
+  }
+
+  const digicelUrl = Deno.env.get("DIGICEL_SMS_API_URL");
+  const digicelKey = Deno.env.get("DIGICEL_SMS_API_KEY");
+  if (digicelUrl && digicelKey) {
+    try {
+      const res = await fetch(digicelUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${digicelKey}`,
+        },
+        body: JSON.stringify({ to, message }),
+      });
+      return res.ok;
+    } catch (e) {
+      console.error("[ride_notifications] Digicel failed:", e);
+    }
+  }
+
+  console.warn("[ride_notifications] No SMS carrier configured; message not sent:", { to });
+  return false;
+}
+
+export async function sendRideNotification(input: NotificationPayload): Promise<void> {
+  const message = buildMessage(input.template, input.payload);
+  await sendViaCarrier(input.to, message);
+}
+
+/** SMS the passenger (guest phone or linked passenger account). */
+export async function notifyPassengerOfRideEvent(
+  svc: { auth: { admin: { getUserById: (id: string) => Promise<{ data: { user?: { phone?: string | null } | null } }> } } },
+  ride: Record<string, unknown>,
+  template: RideNotificationTemplate,
+  extraPayload: Record<string, unknown> = {},
+): Promise<void> {
+  let phone: string | null = ride.guest_passenger_phone ? String(ride.guest_passenger_phone) : null;
+
+  if (!phone && ride.passenger_user_id) {
+    const { data } = await svc.auth.admin.getUserById(String(ride.passenger_user_id));
+    phone = data.user?.phone ?? null;
+  }
+
+  if (!phone && !ride.guest_passenger_phone && !ride.passenger_user_id && ride.rider_user_id) {
+    const { data } = await svc.auth.admin.getUserById(String(ride.rider_user_id));
+    phone = data.user?.phone ?? null;
+  }
+
+  if (!phone) return;
+
+  await sendRideNotification({
+    to: normalizePhoneE164(phone),
+    template,
+    payload: extraPayload,
+  });
+}
