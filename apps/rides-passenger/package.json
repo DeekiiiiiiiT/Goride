@@ -10,6 +10,7 @@
     "build:mobile": "vite build",
     "cap:sync": "pnpm run build:mobile && cap sync android",
     "cap:release": "node scripts/bump-android-version.mjs && pnpm run cap:sync",
+    "cap:aab": "node scripts/build-android-aab.mjs",
     "cap:open:android": "cap open android",
     "cap:run:android": "pnpm run cap:sync && cap run android"
   },

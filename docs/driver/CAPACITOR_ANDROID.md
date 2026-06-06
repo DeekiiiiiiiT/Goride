@@ -36,20 +36,16 @@ In Android Studio: **Run** on a device or emulator (API 24+).
 
 ## Release AAB (Play Store)
 
-**Before each Play upload**, bump the version and sync (auto-increments `versionCode`):
+**Before each Play upload**:
 
 ```bash
 pnpm cap:driver:release
+pnpm cap:driver:aab
 ```
 
-Or from `apps/driver`: `pnpm cap:release`
+Upload: `apps/driver/android/app/release/app-release.aab`
 
-Then:
-
-1. Android Studio → **Build → Generate Signed Bundle / APK** → **Android App Bundle**
-2. Create or use a **upload keystore** (keep backup + passwords safe)
-3. Build **release** variant
-4. Upload `.aab` to Play Console → **Internal testing** first
+One-time: copy `apps/driver/android/keystore.properties.example` → `keystore.properties` (or copy from `apps/rides-passenger/android/keystore.properties`) and add your keystore passwords.
 
 Version numbers live in `apps/driver/android/version.properties`. Use `cap:sync` alone for local testing — only run `cap:release` when shipping to Play (each run bumps by 1).
 

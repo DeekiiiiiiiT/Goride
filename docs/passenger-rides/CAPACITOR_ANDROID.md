@@ -32,7 +32,23 @@ pnpm cap:rides:release
 
 Or from `apps/rides-passenger`: `pnpm cap:release`
 
-Then Android Studio → **Build → Generate Signed Bundle / APK** → **Android App Bundle** (release).
+Then Android Studio → **Build → Build Bundle(s) / APK(s) → Build Bundle(s)** (release).
+
+Signed AAB output (always here — **not** `app/release/`):
+
+```
+apps/rides-passenger/android/app/build/outputs/bundle/release/app-release.aab
+```
+
+In Android Studio: switch left panel to **Project** (not Android) → `app` → `build` → `outputs` → `bundle` → `release`.
+
+### One-time signing setup
+
+1. Copy `apps/rides-passenger/android/keystore.properties.example` → `keystore.properties`
+2. Fill in your keystore + key passwords (same keystore as Play Console upload key)
+3. **File → Sync Project with Gradle Files**
+
+After that, **Build Bundle(s)** signs automatically — no Generate Signed Bundle wizard needed.
 
 Version numbers live in `apps/rides-passenger/android/version.properties`. Use `cap:sync` alone for local testing — only run `cap:release` when shipping to Play (each run bumps by 1).
 
