@@ -3,10 +3,10 @@ import type { PlayStoreChecklistItemDef, PlayStoreProductMeta } from './types';
 
 export { PLAY_STORE_GROUP_LABELS } from './catalogGroups';
 
-/** Keep in sync with apps/rides-passenger/android/app/build.gradle */
+/** Keep in sync with apps/rides-passenger/android/version.properties */
 export const RIDES_ANDROID_BUILD = {
-  versionName: '1.0',
-  versionCode: 1,
+  versionName: '1.0.1',
+  versionCode: 2,
 } as const;
 
 export const RIDES_PLAY_STORE_META: PlayStoreProductMeta = {

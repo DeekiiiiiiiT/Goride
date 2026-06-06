@@ -22,6 +22,20 @@ pnpm cap:rides:android
 
 Or from `apps/rides-passenger`: `pnpm cap:sync` → `pnpm cap:open:android`.
 
+## Release AAB (Play Store)
+
+**Before each Play upload**, bump the version and sync (auto-increments `versionCode`):
+
+```bash
+pnpm cap:rides:release
+```
+
+Or from `apps/rides-passenger`: `pnpm cap:release`
+
+Then Android Studio → **Build → Generate Signed Bundle / APK** → **Android App Bundle** (release).
+
+Version numbers live in `apps/rides-passenger/android/version.properties`. Use `cap:sync` alone for local testing — only run `cap:release` when shipping to Play (each run bumps by 1).
+
 ## Play Store
 
 - Separate listing from **Roam Driver** (`co.roamenterprise.rides` vs `co.roamenterprise.driver`)
