@@ -45,7 +45,9 @@ import { usePermissionPolicy } from '@/hooks/usePermissionPolicy';
 import { PermissionOnboardingSheet } from '@/components/PermissionOnboardingSheet';
 import {
   buildGuestPhoneE164,
+  clearDelegatedBookingDrafts,
   clearGuestRecipientDraft,
+  readBookForSomeoneTrip,
   readGuestRecipientDraft,
   type GuestRecipientDraft,
 } from '@/lib/guestRecipientBooking';
@@ -90,8 +92,18 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
+    const tripDraft = readBookForSomeoneTrip();
+    if (tripDraft) {
+      setPickup({ lat: tripDraft.pickupLat, lng: tripDraft.pickupLng });
+      setPickupAddress(tripDraft.pickupAddress);
+      setDropoff({ lat: tripDraft.dropoffLat, lng: tripDraft.dropoffLng });
+      setDropoffAddress(tripDraft.dropoffAddress);
+      setDestinationChosen(true);
+      setPickupSetByDevice(false);
+    }
+
     const draft = readGuestRecipientDraft();
-    if (draft?.pickupPreset) {
+    if (draft?.pickupPreset && !tripDraft) {
       setPickup({ lat: draft.pickupPreset.lat, lng: draft.pickupPreset.lng });
       setPickupAddress(draft.pickupPreset.address);
       setPickupSetByDevice(false);
@@ -216,7 +228,7 @@ export default function HomePage() {
   }, [coordsReady, setTripPickerActive]);
 
   const clearGuestRecipient = useCallback(() => {
-    clearGuestRecipientDraft();
+    clearDelegatedBookingDrafts();
     clearBookingRequestDraft();
     setGuestRecipient(null);
   }, []);
@@ -427,7 +439,8 @@ export default function HomePage() {
           : {}),
         ...(tagDraft ? { booking_request_id: tagDraft.bookingRequestId } : {}),
       });
-      clearGuestRecipient();
+      clearDelegatedBookingDrafts();
+      clearBookingRequestDraft();
       toast.success('Searching for a driver…');
       navigate(`/ride/${ride.id}`);
     } catch (e: unknown) {

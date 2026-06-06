@@ -103,11 +103,57 @@ export async function requestNotificationPermission(): Promise<PermissionGrantSt
   return 'prompt';
 }
 
+async function getNativeContacts() {
+  if (!isNativeCapacitorPlatform()) return null;
+  try {
+    const { Contacts } = await import('@capacitor-community/contacts');
+    return Contacts;
+  } catch {
+    return null;
+  }
+}
+
+function mapContactsPermission(state: string | undefined): PermissionGrantState {
+  if (state === 'granted') return 'granted';
+  if (state === 'denied') return 'denied';
+  return 'prompt';
+}
+
+export async function checkContactsGranted(): Promise<PermissionGrantState> {
+  const Contacts = await getNativeContacts();
+  if (Contacts) {
+    try {
+      const perm = await Contacts.checkPermissions();
+      return mapContactsPermission(perm.contacts);
+    } catch {
+      return 'prompt';
+    }
+  }
+  if (typeof navigator !== 'undefined' && 'contacts' in navigator) {
+    return 'prompt';
+  }
+  return 'unsupported';
+}
+
+export async function requestContactsPermission(): Promise<PermissionGrantState> {
+  const Contacts = await getNativeContacts();
+  if (Contacts) {
+    try {
+      const perm = await Contacts.requestPermissions();
+      return mapContactsPermission(perm.contacts);
+    } catch {
+      return 'denied';
+    }
+  }
+  return 'unsupported';
+}
+
 export function permissionKeyToGrantChecker(
   key: string,
 ): () => Promise<PermissionGrantState> {
   if (key.startsWith('location')) return checkGeolocationGranted;
   if (key === 'notifications') return checkNotificationGranted;
+  if (key === 'contacts_split_fare') return checkContactsGranted;
   return async () => 'unsupported';
 }
 

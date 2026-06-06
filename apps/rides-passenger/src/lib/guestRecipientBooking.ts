@@ -5,7 +5,7 @@ export type GuestRecipientDraft = {
   countryCode: string;
   contactId?: string;
   selectedPlaceId?: string;
-  /** Pre-set pickup from contact saved place. */
+  /** Pre-set pickup from contact saved place (optional override). */
   pickupPreset?: {
     label: string;
     address: string;
@@ -14,7 +14,17 @@ export type GuestRecipientDraft = {
   };
 };
 
+export type BookForSomeoneTripDraft = {
+  pickupAddress: string;
+  pickupLat: number;
+  pickupLng: number;
+  dropoffAddress: string;
+  dropoffLat: number;
+  dropoffLng: number;
+};
+
 const STORAGE_KEY = 'roam:guest-recipient-draft';
+const TRIP_STORAGE_KEY = 'roam:book-for-someone-trip';
 
 export function persistGuestRecipientDraft(draft: GuestRecipientDraft): void {
   try {
@@ -42,6 +52,48 @@ export function clearGuestRecipientDraft(): void {
   } catch {
     /* ignore */
   }
+}
+
+export function persistBookForSomeoneTrip(draft: BookForSomeoneTripDraft): void {
+  try {
+    sessionStorage.setItem(TRIP_STORAGE_KEY, JSON.stringify(draft));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function readBookForSomeoneTrip(): BookForSomeoneTripDraft | null {
+  try {
+    const raw = sessionStorage.getItem(TRIP_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as BookForSomeoneTripDraft;
+    if (
+      !parsed?.pickupAddress?.trim() ||
+      !parsed?.dropoffAddress?.trim() ||
+      typeof parsed.pickupLat !== 'number' ||
+      typeof parsed.pickupLng !== 'number' ||
+      typeof parsed.dropoffLat !== 'number' ||
+      typeof parsed.dropoffLng !== 'number'
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function clearBookForSomeoneTrip(): void {
+  try {
+    sessionStorage.removeItem(TRIP_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearDelegatedBookingDrafts(): void {
+  clearGuestRecipientDraft();
+  clearBookForSomeoneTrip();
 }
 
 export function digitsOnly(value: string): string {

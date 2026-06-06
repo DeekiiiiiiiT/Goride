@@ -7,6 +7,7 @@ import {
   readOnboardingDismissed,
   requestGeolocationPermission,
   requestNotificationPermission,
+  requestContactsPermission,
   shouldShowOnboardingPrompt,
   type PermissionGrantState,
 } from '@roam/types';
@@ -68,6 +69,7 @@ export function PermissionOnboardingSheet({ surface, permissions, open, onClose 
     let state: PermissionGrantState = 'unsupported';
     if (key.startsWith('location')) state = await requestGeolocationPermission();
     else if (key === 'notifications') state = await requestNotificationPermission();
+    else if (key === 'contacts_split_fare') state = await requestContactsPermission();
     setGrantStates((prev) => ({ ...prev, [key]: state }));
     if (state === 'granted') markOnboardingDismissed(surface, key);
   };
