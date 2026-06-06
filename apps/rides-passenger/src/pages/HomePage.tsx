@@ -190,24 +190,32 @@ export default function HomePage() {
     let cancelled = false;
 
     void (async () => {
+      let lat: number | null = null;
+      let lng: number | null = null;
+
       try {
         const position: GeoPositionWithAccuracy = await getCurrentPositionWithAccuracy();
         if (cancelled) return;
-        setPickup({ lat: position.lat, lng: position.lng });
+        lat = position.lat;
+        lng = position.lng;
+        setPickup({ lat, lng });
         setPickupAccuracy(position.accuracyMeters);
-        try {
-          const address = await resolveAddressFromCoordinates(position.lat, position.lng);
-          if (!cancelled) {
-            setPickupAddress(address);
-            setPickupSetByDevice(true);
-          }
-        } catch {
-          // Address fill optional on first load
-        }
       } catch (e) {
         console.warn('Initial GPS failed:', e);
       } finally {
         if (!cancelled) setInitialGpsLoading(false);
+      }
+
+      if (cancelled || lat == null || lng == null) return;
+
+      try {
+        const address = await resolveAddressFromCoordinates(lat, lng);
+        if (!cancelled) {
+          setPickupAddress(address);
+          setPickupSetByDevice(true);
+        }
+      } catch {
+        // Address label optional — coords already set for booking
       }
     })();
 
@@ -356,7 +364,11 @@ export default function HomePage() {
 
   const surge = quote?.surge_multiplier ?? null;
   const canBook =
-    coordsReady && Boolean(quote?.quote_token) && !quotesLoading && !locationBlocked;
+    coordsReady &&
+    Boolean(quote?.quote_token) &&
+    !quotesLoading &&
+    !locationBlocked &&
+    !initialGpsLoading;
 
   const selectedService = services.find((s) => s.slug === vehicleOption);
   const selectedPayment = getPaymentMethodById(selectedPaymentId);

@@ -66,7 +66,7 @@ Add Supabase redirect URL for native app, e.g. `co.roamenterprise.rides://login`
 
 Capacitor serves the WebView at **`https://localhost`**, not `roam-s.co`. The browser Maps key (`GOOGLE_MAPS_API_KEY_RIDES`) is usually referrer-restricted to the web domain, which breaks Places autocomplete in the Play-installed app.
 
-**Shipped fix:** native builds call **`/rides/v1/places/autocomplete`** and **`/rides/v1/places/:id/details`** (server-side Places API using the same rides Maps secret). Deploy the `rides` Edge function after pulling this change, then rebuild/sync the AAB.
+**Shipped fix:** native builds call **`/rides/v1/places/autocomplete`** and **`/rides/v1/places/:id/details`** (server-side Places using **`GOOGLE_MAPS_SERVER_KEY_RIDES`** — not the browser key). Deploy the `rides` Edge function, set the server secret in Supabase, then rebuild the Roam Rides AAB (`pnpm cap:rides:release`).
 
 **Optional (maps tiles in WebView):** in Google Cloud → Credentials → browser key, also allow:
 

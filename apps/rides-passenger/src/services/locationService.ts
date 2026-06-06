@@ -141,8 +141,16 @@ async function searchAddressViaEdge(query: string): Promise<AddressResult[]> {
     `${API_ENDPOINTS.rides}/v1/places/autocomplete?q=${encodeURIComponent(query)}`,
     { headers: await edgePlacesHeaders() },
   );
-  if (!res.ok) return [];
-  const data = (await res.json()) as { suggestions?: AddressResult[] };
+  if (!res.ok) {
+    console.warn('[places] autocomplete HTTP', res.status, await res.text().catch(() => ''));
+    return [];
+  }
+  const data = (await res.json()) as { suggestions?: AddressResult[]; error?: string };
+  if (data.error === 'places_not_configured') {
+    console.error(
+      '[places] Server key missing — set GOOGLE_MAPS_SERVER_KEY_RIDES on Supabase rides function',
+    );
+  }
   return data.suggestions ?? [];
 }
 
@@ -416,8 +424,27 @@ export async function snapToNearestRoad(
   }
 }
 
+async function reverseGeocodeViaEdge(lat: number, lon: number): Promise<string | null> {
+  const res = await fetch(
+    `${API_ENDPOINTS.rides}/v1/places/reverse?lat=${encodeURIComponent(String(lat))}&lng=${encodeURIComponent(String(lon))}`,
+    { headers: await edgePlacesHeaders() },
+  );
+  if (!res.ok) {
+    console.warn('[places] reverse geocode HTTP', res.status);
+    return null;
+  }
+  const data = (await res.json()) as { address?: string };
+  return data.address?.trim() || null;
+}
+
 /** Coordinates → formatted address (Google Geocoder, legacy API). */
 export const reverseGeocode = async (lat: number, lon: number): Promise<string> => {
+  if (isNativeCapacitorPlatform()) {
+    const fromEdge = await reverseGeocodeViaEdge(lat, lon);
+    if (fromEdge) return fromEdge;
+    throw new Error('Native reverse geocode unavailable');
+  }
+
   await loadGoogleMapsApi();
   await waitForGeocoder();
 
@@ -448,8 +475,17 @@ function formatCoordsAsAddress(lat: number, lon: number): string {
   return `Current location (${lat.toFixed(5)}, ${lon.toFixed(5)})`;
 }
 
-/** Best-effort address string for coordinates (Google → OSM → coords label). */
+/** Best-effort address string for coordinates (server on native → Google → OSM → coords label). */
 export async function resolveAddressFromCoordinates(lat: number, lon: number): Promise<string> {
+  if (isNativeCapacitorPlatform()) {
+    try {
+      const fromEdge = await reverseGeocodeViaEdge(lat, lon);
+      if (fromEdge) return fromEdge;
+    } catch (e) {
+      console.warn('Edge reverse geocode failed:', e);
+    }
+  }
+
   try {
     return await reverseGeocode(lat, lon);
   } catch (e) {

@@ -58,8 +58,8 @@ Quotes pick up fare-rule changes within about **60 seconds** (Edge cache). Surge
 
 | Secret | Purpose |
 |--------|---------|
-| `GOOGLE_MAPS_API_KEY_RIDES` | Server: Directions + Distance Matrix (fare quotes, driver matching) |
-| `GOOGLE_MAPS_SERVER_KEY_RIDES` | Alternate server key (same APIs) |
+| `GOOGLE_MAPS_API_KEY_RIDES` | Browser Maps JS on **roam-s.co** (via `make-server` `/maps-config-rides`) — HTTP referrer–restricted |
+| `GOOGLE_MAPS_SERVER_KEY_RIDES` | **Required for Play Store address search** — server Places/Directions on `rides` Edge (no HTTP referrer restriction) |
 | `ROAM_RIDES_QUOTE_SECRET` | Sign `quote_token` (required in production) |
 | *(none)* | Fare rates come only from active `fare_rules` rows — quotes return `no_fare_rule` (404) if none match |
 
@@ -67,7 +67,14 @@ Enable on the Google Cloud project tied to the rides key:
 
 - **Directions API** — trip distance, traffic-aware duration, route polyline for the passenger map
 - **Distance Matrix API** — drive-time ranking when dispatching driver offers
-- **Maps JavaScript API** + **Places API (New)** — browser map and address search on **roam-s.co**; Capacitor uses server `/rides/v1/places/*` (same secret). Restrict the browser key to `roam-s.co` (+ `https://localhost/*` if you want in-app map tiles).
+- **Maps JavaScript API** + **Places API (New)** — browser map and address search on **roam-s.co**
+- **Places API** (legacy) or **Places API (New)** on the **server key** — Capacitor `/rides/v1/places/*`
+- **Geocoding API** on the **server key** — reverse geocode for “Current location” pickup on Play Store
+
+Create **two** Google Cloud credentials:
+
+1. **Browser key** → `GOOGLE_MAPS_API_KEY_RIDES` — restrict to `roam-s.co` (+ optional `https://localhost/*` for map tiles in the app WebView)
+2. **Server key** → `GOOGLE_MAPS_SERVER_KEY_RIDES` — restrict by IP or none; enable Directions, Distance Matrix, Places. **Without this, Play Store address search returns no suggestions** (web still works via the browser key).
 
 Set a billing budget alert; Distance Matrix is invoked per matching wave.
 

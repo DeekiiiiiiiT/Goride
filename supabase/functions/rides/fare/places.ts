@@ -11,20 +11,24 @@ export type PlaceDetailsDto = {
   address: string;
 };
 
+/** Prefer a server-restricted key for Edge → Google calls (browser keys fail referrer checks). */
+function googleMapsRidesServerKey(): string | null {
+  return (
+    Deno.env.get("GOOGLE_MAPS_SERVER_KEY_RIDES") ??
+    googleMapsRidesApiKey()
+  );
+}
+
 function placeResourceName(placeId: string): string {
   const trimmed = placeId.trim();
   if (!trimmed) return "";
   return trimmed.startsWith("places/") ? trimmed : `places/${trimmed}`;
 }
 
-/** Places API (New) — server-side autocomplete for Capacitor (https://localhost origin). */
-export async function autocompletePlaces(query: string): Promise<PlaceSuggestionDto[]> {
-  const input = query.trim();
-  if (input.length < 3) return [];
-
-  const apiKey = googleMapsRidesApiKey();
-  if (!apiKey) return [];
-
+async function autocompletePlacesNew(
+  input: string,
+  apiKey: string,
+): Promise<PlaceSuggestionDto[]> {
   const res = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
     method: "POST",
     headers: {
@@ -39,7 +43,7 @@ export async function autocompletePlaces(query: string): Promise<PlaceSuggestion
   });
 
   if (!res.ok) {
-    console.error("[places] autocomplete failed:", res.status, await res.text());
+    console.error("[places] autocomplete (new) failed:", res.status, await res.text());
     return [];
   }
 
@@ -65,13 +69,65 @@ export async function autocompletePlaces(query: string): Promise<PlaceSuggestion
   return out;
 }
 
-/** Places API (New) — resolve place id to coordinates + formatted address. */
-export async function fetchPlaceDetails(placeId: string): Promise<PlaceDetailsDto | null> {
+/** Legacy Places Autocomplete — works with classic server API keys. */
+async function autocompletePlacesLegacy(
+  input: string,
+  apiKey: string,
+): Promise<PlaceSuggestionDto[]> {
+  const url =
+    `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${
+      encodeURIComponent(input)
+    }&components=country:jm&key=${encodeURIComponent(apiKey)}`;
+
+  const res = await fetch(url);
+  const data = (await res.json()) as {
+    status?: string;
+    error_message?: string;
+    predictions?: Array<{ description?: string; place_id?: string }>;
+  };
+
+  if (data.status !== "OK" && data.status !== "ZERO_RESULTS") {
+    console.error(
+      "[places] autocomplete (legacy) failed:",
+      data.status,
+      data.error_message ?? "",
+    );
+    return [];
+  }
+
+  return (data.predictions ?? [])
+    .map((p) => ({
+      display_name: p.description?.trim() || "Unknown location",
+      place_id: p.place_id?.trim() || "",
+    }))
+    .filter((p) => p.place_id.length > 0);
+}
+
+/** Server-side autocomplete for Capacitor (WebView origin is https://localhost). */
+export async function autocompletePlaces(query: string): Promise<PlaceSuggestionDto[]> {
+  const input = query.trim();
+  if (input.length < 3) return [];
+
+  const apiKey = googleMapsRidesServerKey();
+  if (!apiKey) {
+    console.error(
+      "[places] no API key — set GOOGLE_MAPS_SERVER_KEY_RIDES on the rides Edge function",
+    );
+    return [];
+  }
+
+  const fromNew = await autocompletePlacesNew(input, apiKey);
+  if (fromNew.length > 0) return fromNew;
+
+  return autocompletePlacesLegacy(input, apiKey);
+}
+
+async function fetchPlaceDetailsNew(
+  placeId: string,
+  apiKey: string,
+): Promise<PlaceDetailsDto | null> {
   const resource = placeResourceName(placeId);
   if (!resource) return null;
-
-  const apiKey = googleMapsRidesApiKey();
-  if (!apiKey) return null;
 
   const res = await fetch(`https://places.googleapis.com/v1/${resource}`, {
     headers: {
@@ -81,7 +137,7 @@ export async function fetchPlaceDetails(placeId: string): Promise<PlaceDetailsDt
   });
 
   if (!res.ok) {
-    console.error("[places] details failed:", res.status, await res.text());
+    console.error("[places] details (new) failed:", res.status, await res.text());
     return null;
   }
 
@@ -105,4 +161,92 @@ export async function fetchPlaceDetails(placeId: string): Promise<PlaceDetailsDt
     lon,
     address: data.formattedAddress || displayName || "",
   };
+}
+
+async function fetchPlaceDetailsLegacy(
+  placeId: string,
+  apiKey: string,
+): Promise<PlaceDetailsDto | null> {
+  const url =
+    `https://maps.googleapis.com/maps/api/place/details/json?place_id=${
+      encodeURIComponent(placeId)
+    }&fields=geometry,formatted_address&key=${encodeURIComponent(apiKey)}`;
+
+  const res = await fetch(url);
+  const data = (await res.json()) as {
+    status?: string;
+    error_message?: string;
+    result?: {
+      formatted_address?: string;
+      geometry?: { location?: { lat?: number; lng?: number } };
+    };
+  };
+
+  if (data.status !== "OK") {
+    console.error(
+      "[places] details (legacy) failed:",
+      data.status,
+      data.error_message ?? "",
+    );
+    return null;
+  }
+
+  const lat = data.result?.geometry?.location?.lat;
+  const lon = data.result?.geometry?.location?.lng;
+  if (lat == null || lon == null) return null;
+
+  return {
+    lat,
+    lon,
+    address: data.result?.formatted_address || "",
+  };
+}
+
+export async function fetchPlaceDetails(placeId: string): Promise<PlaceDetailsDto | null> {
+  const trimmed = placeId.trim();
+  if (!trimmed) return null;
+
+  const apiKey = googleMapsRidesServerKey();
+  if (!apiKey) return null;
+
+  const fromNew = await fetchPlaceDetailsNew(trimmed, apiKey);
+  if (fromNew) return fromNew;
+
+  return fetchPlaceDetailsLegacy(trimmed, apiKey);
+}
+
+export function isPlacesConfigured(): boolean {
+  return googleMapsRidesServerKey() != null;
+}
+
+/** Server-side reverse geocode for Capacitor (browser Geocoder JS is referrer-blocked). */
+export async function reverseGeocodeCoordinates(
+  lat: number,
+  lon: number,
+): Promise<string | null> {
+  const apiKey = googleMapsRidesServerKey();
+  if (!apiKey) return null;
+
+  const url =
+    `https://maps.googleapis.com/maps/api/geocode/json?latlng=${
+      encodeURIComponent(`${lat},${lon}`)
+    }&key=${encodeURIComponent(apiKey)}`;
+
+  const res = await fetch(url);
+  const data = (await res.json()) as {
+    status?: string;
+    error_message?: string;
+    results?: Array<{ formatted_address?: string }>;
+  };
+
+  if (data.status !== "OK" || !data.results?.[0]?.formatted_address) {
+    console.error(
+      "[places] reverse geocode failed:",
+      data.status,
+      data.error_message ?? "",
+    );
+    return null;
+  }
+
+  return data.results[0].formatted_address.trim();
 }

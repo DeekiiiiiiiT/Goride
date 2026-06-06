@@ -68,7 +68,7 @@ import { evaluateGeofenceTransitions, cleanupRideLiveState } from "./rideGeofenc
 import { loadAppPermissionPolicy, policyDto } from "../_shared/appPermissionPolicy.ts";
 import type { AppPermissionSurface } from "../_shared/appPermissionCatalog.ts";
 import { registerRideChatRoutes } from "./rideChat.ts";
-import { autocompletePlaces, fetchPlaceDetails } from "./fare/places.ts";
+import { autocompletePlaces, fetchPlaceDetails, isPlacesConfigured, reverseGeocodeCoordinates } from "./fare/places.ts";
 
 /** Match Supabase path prefix: .../functions/v1/rides/<route> → /rides/<route> */
 const app = new Hono().basePath("/rides");
@@ -1113,11 +1113,42 @@ app.get("/v1/places/autocomplete", async (c) => {
   const q = (c.req.query("q") ?? "").trim();
   if (q.length < 3) return c.json({ suggestions: [] });
 
+  if (!isPlacesConfigured()) {
+    console.error("[rides] places autocomplete: GOOGLE_MAPS_SERVER_KEY_RIDES not set");
+    return c.json({ error: "places_not_configured", suggestions: [] }, 503);
+  }
+
   try {
     const suggestions = await autocompletePlaces(q);
     return c.json({ suggestions });
   } catch (e) {
     console.error("[rides] places autocomplete:", e);
+    return c.json({ error: "places_unavailable" }, 502);
+  }
+});
+
+app.get("/v1/places/reverse", async (c) => {
+  const ip = clientIp(c);
+  if (!rateLimit(`${ip}:places-reverse`, 90, 60_000)) {
+    return c.json({ error: "rate_limited" }, 429);
+  }
+
+  const lat = Number.parseFloat(c.req.query("lat") ?? "");
+  const lng = Number.parseFloat(c.req.query("lng") ?? "");
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return c.json({ error: "invalid_coordinates" }, 400);
+  }
+
+  if (!isPlacesConfigured()) {
+    return c.json({ error: "places_not_configured" }, 503);
+  }
+
+  try {
+    const address = await reverseGeocodeCoordinates(lat, lng);
+    if (!address) return c.json({ error: "address_not_found" }, 404);
+    return c.json({ address, lat, lng });
+  } catch (e) {
+    console.error("[rides] places reverse:", e);
     return c.json({ error: "places_unavailable" }, 502);
   }
 });

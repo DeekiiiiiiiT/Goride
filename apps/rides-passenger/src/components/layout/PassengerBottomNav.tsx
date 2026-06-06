@@ -14,20 +14,20 @@ const NAV_ITEMS = [
 export function PassengerBottomNav() {
   return (
     <nav
-      className="home-bottom-nav fixed bottom-0 left-0 right-0 z-50 flex h-[4.5rem] items-center justify-around border-t pb-safe shadow-[0px_-4px_20px_rgba(0,0,0,0.08)] safe-b safe-x"
+      className="home-bottom-nav fixed bottom-0 left-0 right-0 z-50 border-t safe-b safe-x shadow-[0px_-4px_20px_rgba(0,0,0,0.08)]"
       style={{
         backgroundColor: 'var(--home-sheet-bg, #ffffff)',
         borderColor: 'var(--home-sheet-border, rgba(188, 202, 190, 0.35))',
       }}
       aria-label="Main"
     >
-      <div className="mx-auto flex w-full max-w-xl items-center justify-around">
+      <div className="mx-auto flex h-[4.5rem] w-full max-w-xl items-center justify-around">
         {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
             to={to}
             end={end}
-            className="flex min-w-[4.5rem] flex-col items-center gap-1 px-3 py-2 touch-manipulation"
+            className="flex min-w-[4.5rem] flex-col items-center justify-center gap-0.5 px-3 py-1 touch-manipulation"
           >
             {({ isActive }) => (
               <>
