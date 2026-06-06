@@ -1,8 +1,12 @@
 /**
  * Google Maps / Places — Roam Rides uses its own browser key via Edge:
  * `make-server-37f42386/maps-config-rides` → secret `GOOGLE_MAPS_API_KEY_RIDES`.
+ *
+ * Capacitor Android serves the app at https://localhost, so the browser key’s HTTP
+ * referrer rules block Places JS. Native builds use `/rides/v1/places/*` instead.
  */
-import { projectId, publicAnonKey } from '@roam/api-client';
+import { API_ENDPOINTS, projectId, publicAnonKey } from '@roam/api-client';
+import { isNativeCapacitorPlatform } from '@roam/types';
 
 export interface GeoCoordinates {
   latitude: number;
@@ -125,8 +129,44 @@ export const loadGoogleMapsApi = async (): Promise<void> => {
   return mapsLoadedPromise;
 };
 
+async function edgePlacesHeaders(): Promise<HeadersInit> {
+  return {
+    Authorization: `Bearer ${publicAnonKey}`,
+    apikey: publicAnonKey,
+  };
+}
+
+async function searchAddressViaEdge(query: string): Promise<AddressResult[]> {
+  const res = await fetch(
+    `${API_ENDPOINTS.rides}/v1/places/autocomplete?q=${encodeURIComponent(query)}`,
+    { headers: await edgePlacesHeaders() },
+  );
+  if (!res.ok) return [];
+  const data = (await res.json()) as { suggestions?: AddressResult[] };
+  return data.suggestions ?? [];
+}
+
+async function getPlaceDetailsViaEdge(
+  placeId: string,
+): Promise<{ lat: number; lon: number; address: string } | null> {
+  const res = await fetch(
+    `${API_ENDPOINTS.rides}/v1/places/${encodeURIComponent(placeId)}/details`,
+    { headers: await edgePlacesHeaders() },
+  );
+  if (!res.ok) return null;
+  return (await res.json()) as { lat: number; lon: number; address: string };
+}
+
 export const searchAddress = async (query: string): Promise<AddressResult[]> => {
   if (!query || query.length < 3) return [];
+  if (isNativeCapacitorPlatform()) {
+    try {
+      return await searchAddressViaEdge(query);
+    } catch (e) {
+      console.error('Native address search error:', e);
+      return [];
+    }
+  }
   try {
     await loadGoogleMapsApi();
     if (window.google?.maps?.importLibrary) {
@@ -173,6 +213,14 @@ export const searchAddress = async (query: string): Promise<AddressResult[]> => 
 export const getPlaceDetails = async (
   placeId: string,
 ): Promise<{ lat: number; lon: number; address: string } | null> => {
+  if (isNativeCapacitorPlatform()) {
+    try {
+      return await getPlaceDetailsViaEdge(placeId);
+    } catch (e) {
+      console.error('Native place details error:', e);
+      return null;
+    }
+  }
   try {
     await loadGoogleMapsApi();
     if (window.google?.maps?.importLibrary) {

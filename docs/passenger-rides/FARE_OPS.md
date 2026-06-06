@@ -67,7 +67,7 @@ Enable on the Google Cloud project tied to the rides key:
 
 - **Directions API** — trip distance, traffic-aware duration, route polyline for the passenger map
 - **Distance Matrix API** — drive-time ranking when dispatching driver offers
-- **Maps JavaScript API** + **Places API** — browser map and address search (restrict the browser key; do not enable Directions/Matrix on the client-restricted key)
+- **Maps JavaScript API** + **Places API (New)** — browser map and address search on **roam-s.co**; Capacitor uses server `/rides/v1/places/*` (same secret). Restrict the browser key to `roam-s.co` (+ `https://localhost/*` if you want in-app map tiles).
 
 Set a billing budget alert; Distance Matrix is invoked per matching wave.
 

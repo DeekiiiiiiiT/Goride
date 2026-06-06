@@ -68,6 +68,7 @@ import { evaluateGeofenceTransitions, cleanupRideLiveState } from "./rideGeofenc
 import { loadAppPermissionPolicy, policyDto } from "../_shared/appPermissionPolicy.ts";
 import type { AppPermissionSurface } from "../_shared/appPermissionCatalog.ts";
 import { registerRideChatRoutes } from "./rideChat.ts";
+import { autocompletePlaces, fetchPlaceDetails } from "./fare/places.ts";
 
 /** Match Supabase path prefix: .../functions/v1/rides/<route> → /rides/<route> */
 const app = new Hono().basePath("/rides");
@@ -1099,6 +1100,44 @@ app.get("/v1/vehicle-types", async (c) => {
     const all = await loadVehicleTypesFromDb(svc(), "vehicle_types", { activeOnly: true });
     const services = all.filter((t) => t.solution_kind === "service");
     return c.json({ services, vehicle_types: services });
+  }
+});
+
+/** Address autocomplete for Capacitor (browser Maps key is referrer-locked to roam-s.co). */
+app.get("/v1/places/autocomplete", async (c) => {
+  const ip = clientIp(c);
+  if (!rateLimit(`${ip}:places-autocomplete`, 90, 60_000)) {
+    return c.json({ error: "rate_limited" }, 429);
+  }
+
+  const q = (c.req.query("q") ?? "").trim();
+  if (q.length < 3) return c.json({ suggestions: [] });
+
+  try {
+    const suggestions = await autocompletePlaces(q);
+    return c.json({ suggestions });
+  } catch (e) {
+    console.error("[rides] places autocomplete:", e);
+    return c.json({ error: "places_unavailable" }, 502);
+  }
+});
+
+app.get("/v1/places/:placeId/details", async (c) => {
+  const ip = clientIp(c);
+  if (!rateLimit(`${ip}:places-details`, 120, 60_000)) {
+    return c.json({ error: "rate_limited" }, 429);
+  }
+
+  const placeId = decodeURIComponent(c.req.param("placeId") ?? "").trim();
+  if (!placeId) return c.json({ error: "missing_place_id" }, 400);
+
+  try {
+    const details = await fetchPlaceDetails(placeId);
+    if (!details) return c.json({ error: "place_not_found" }, 404);
+    return c.json(details);
+  } catch (e) {
+    console.error("[rides] places details:", e);
+    return c.json({ error: "places_unavailable" }, 502);
   }
 });
 

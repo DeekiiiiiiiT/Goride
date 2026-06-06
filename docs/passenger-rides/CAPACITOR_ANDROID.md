@@ -32,6 +32,19 @@ Or from `apps/rides-passenger`: `pnpm cap:sync` → `pnpm cap:open:android`.
 
 Add Supabase redirect URL for native app, e.g. `co.roamenterprise.rides://login` (test on device after configuring Auth).
 
+## Address search (Places)
+
+Capacitor serves the WebView at **`https://localhost`**, not `roam-s.co`. The browser Maps key (`GOOGLE_MAPS_API_KEY_RIDES`) is usually referrer-restricted to the web domain, which breaks Places autocomplete in the Play-installed app.
+
+**Shipped fix:** native builds call **`/rides/v1/places/autocomplete`** and **`/rides/v1/places/:id/details`** (server-side Places API using the same rides Maps secret). Deploy the `rides` Edge function after pulling this change, then rebuild/sync the AAB.
+
+**Optional (maps tiles in WebView):** in Google Cloud → Credentials → browser key, also allow:
+
+- `https://localhost/*`
+- `http://localhost/*` (dev live reload)
+
+Enable **Places API (New)** on the project if autocomplete returns 403 from the Edge routes.
+
 ## Live reload (dev)
 
 In `capacitor.config.ts`, temporarily set:
