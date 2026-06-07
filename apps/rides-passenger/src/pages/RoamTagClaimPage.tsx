@@ -1,12 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { ArrowLeft, Tag } from 'lucide-react';
+import { ArrowLeft, Lock, Tag } from 'lucide-react';
 import { supabase } from '@roam/auth-client';
+import type {
+  BookingRequestPreviewRow,
+  BookingRequestRequesterPreview,
+} from '@roam/types/riderContacts';
 import { claimBookingRequest, getBookingRequestPreview } from '@/services/contactsEdge';
 import { persistBookingRequestDraft } from '@/lib/delegatedBookingSession';
 import { persistGuestRecipientDraft } from '@/lib/guestRecipientBooking';
-import type { BookingRequestRow } from '@roam/types/riderContacts';
+import { formatRoamTagDisplay } from '@/services/roamTagEdge';
 import {
   CARD_SHADOW,
   ON_PRIMARY,
@@ -15,6 +19,7 @@ import {
   PAGE_BG,
   PRIMARY,
   PRIMARY_CONTAINER,
+  SURFACE_LOW,
   SURFACE_LOWEST,
 } from '@/lib/passengerTheme';
 
@@ -33,10 +38,37 @@ function bookingRequestPreviewError(message: string): string {
   return message;
 }
 
+function RequesterAvatar({
+  requester,
+}: {
+  requester: BookingRequestRequesterPreview;
+}) {
+  const initials = requester.first_name.slice(0, 1).toUpperCase() || '?';
+  if (requester.avatar_url) {
+    return (
+      <img
+        src={requester.avatar_url}
+        alt=""
+        className="h-20 w-20 rounded-full object-cover"
+        style={{ boxShadow: '0 0 0 4px rgba(0, 74, 198, 0.12)' }}
+      />
+    );
+  }
+  return (
+    <div
+      className="flex h-20 w-20 items-center justify-center rounded-full text-2xl font-bold"
+      style={{ backgroundColor: 'rgba(0, 74, 198, 0.12)', color: PRIMARY }}
+    >
+      {initials}
+    </div>
+  );
+}
+
 export default function RoamTagClaimPage() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
-  const [preview, setPreview] = useState<BookingRequestRow | null>(null);
+  const [preview, setPreview] = useState<BookingRequestPreviewRow | null>(null);
+  const [requester, setRequester] = useState<BookingRequestRequesterPreview | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState(false);
@@ -44,7 +76,10 @@ export default function RoamTagClaimPage() {
   useEffect(() => {
     if (!token) return;
     void getBookingRequestPreview(token)
-      .then((r) => setPreview(r.booking_request))
+      .then((r) => {
+        setPreview(r.booking_request);
+        setRequester(r.requester);
+      })
       .catch((e) => {
         const message = bookingRequestPreviewError(
           e instanceof Error ? e.message : 'Tag not found',
@@ -56,7 +91,7 @@ export default function RoamTagClaimPage() {
   }, [token]);
 
   const handleClaim = async () => {
-    if (!token || !preview) return;
+    if (!token || !preview || !requester) return;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       navigate(`/login?return=${encodeURIComponent(`/tag/${token}`)}`);
@@ -64,33 +99,24 @@ export default function RoamTagClaimPage() {
     }
     setClaiming(true);
     try {
-      const { booking_request } = await claimBookingRequest(token);
+      const { booking_request, requester: claimedRequester } = await claimBookingRequest(token);
       const phoneDigits = phoneDigitsFromE164(booking_request.requester_phone);
 
       persistBookingRequestDraft({
         bookingRequestId: booking_request.id,
         token,
         requesterName: booking_request.requester_name,
+        requesterFirstName: claimedRequester.first_name,
+        requesterTag: claimedRequester.custom_tag_name,
+        requesterAvatarUrl: claimedRequester.avatar_url,
         requesterPhone: booking_request.requester_phone,
         pickup:
-          booking_request.pickup_lat != null &&
-          booking_request.pickup_lng != null &&
-          booking_request.pickup_address
-            ? {
-                lat: booking_request.pickup_lat,
-                lng: booking_request.pickup_lng,
-                address: booking_request.pickup_address,
-              }
+          booking_request.pickup_lat != null && booking_request.pickup_lng != null
+            ? { lat: booking_request.pickup_lat, lng: booking_request.pickup_lng }
             : undefined,
         dropoff:
-          booking_request.dropoff_lat != null &&
-          booking_request.dropoff_lng != null &&
-          booking_request.dropoff_address
-            ? {
-                lat: booking_request.dropoff_lat,
-                lng: booking_request.dropoff_lng,
-                address: booking_request.dropoff_address,
-              }
+          booking_request.dropoff_lat != null && booking_request.dropoff_lng != null
+            ? { lat: booking_request.dropoff_lat, lng: booking_request.dropoff_lng }
             : undefined,
         vehicleOption: booking_request.vehicle_option ?? undefined,
       });
@@ -101,7 +127,7 @@ export default function RoamTagClaimPage() {
         countryCode: '+1',
       });
 
-      toast.success(`Ready to book for ${booking_request.requester_name}`);
+      toast.success(`Ready to book for ${claimedRequester.first_name}`);
       navigate('/');
     } catch (e) {
       toast.error(bookingRequestPreviewError(e instanceof Error ? e.message : 'Could not claim tag'));
@@ -109,6 +135,10 @@ export default function RoamTagClaimPage() {
       setClaiming(false);
     }
   };
+
+  const displayTag = requester?.custom_tag_name
+    ? formatRoamTagDisplay(requester.custom_tag_name)
+    : null;
 
   if (loading) {
     return (
@@ -140,70 +170,69 @@ export default function RoamTagClaimPage() {
           className="space-y-6 rounded-[28px] p-6 text-center"
           style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
         >
-          <div
-            className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl"
-            style={{ backgroundColor: 'rgba(0, 74, 198, 0.1)', color: PRIMARY }}
-          >
-            <Tag className="h-7 w-7" aria-hidden />
-          </div>
+          {preview && requester ? (
+            <>
+              <RequesterAvatar requester={requester} />
 
-          <div className="space-y-2">
-            <h1 className="text-2xl font-bold" style={{ color: ON_SURFACE }}>
-              Roam Tag
-            </h1>
-            {preview ? (
-              <>
-                <p className="text-base" style={{ color: ON_SURFACE }}>
-                  <span className="font-semibold">{preview.requester_name}</span> asked you to book
-                  and pay for their ride.
-                </p>
-                {preview.pickup_address ? (
-                  <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-                    Pickup: {preview.pickup_address}
+              <div className="space-y-2">
+                <h1 className="text-2xl font-bold" style={{ color: ON_SURFACE }}>
+                  {requester.first_name}
+                </h1>
+                {displayTag ? (
+                  <p className="text-lg font-semibold" style={{ color: PRIMARY }}>
+                    {displayTag}
                   </p>
                 ) : null}
-                {preview.dropoff_address ? (
-                  <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-                    Drop-off: {preview.dropoff_address}
-                  </p>
-                ) : null}
-                <p className="pt-1 text-xs font-bold tracking-[0.25em]" style={{ color: PRIMARY }}>
-                  {preview.public_code}
+                <p className="text-base leading-relaxed" style={{ color: ON_SURFACE_VARIANT }}>
+                  asked you to book and pay for their Roam ride.
                 </p>
-              </>
-            ) : (
+              </div>
+
+              {preview.has_trip_route ? (
+                <div
+                  className="flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm"
+                  style={{ backgroundColor: SURFACE_LOW, color: ON_SURFACE_VARIANT }}
+                >
+                  <Lock className="h-4 w-4 shrink-0" aria-hidden />
+                  Their pickup and destination stay private until the driver arrives.
+                </div>
+              ) : null}
+
+              <button
+                type="button"
+                disabled={claiming}
+                onClick={() => void handleClaim()}
+                className="h-14 w-full rounded-2xl text-lg font-semibold disabled:opacity-50"
+                style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_PRIMARY }}
+              >
+                {claiming ? 'Preparing…' : `Book for ${requester.first_name}`}
+              </button>
+
+              <p className="text-xs leading-relaxed" style={{ color: ON_SURFACE_VARIANT }}>
+                Pay digitally (card or wallet). Cash is not available for Roam Tag trips.
+              </p>
+            </>
+          ) : (
+            <>
+              <div
+                className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl"
+                style={{ backgroundColor: 'rgba(0, 74, 198, 0.1)', color: PRIMARY }}
+              >
+                <Tag className="h-7 w-7" aria-hidden />
+              </div>
               <p style={{ color: ON_SURFACE_VARIANT }}>
                 {loadError ?? 'This Roam Tag is unavailable or has expired.'}
               </p>
-            )}
-          </div>
-
-          {preview ? (
-            <button
-              type="button"
-              disabled={claiming}
-              onClick={() => void handleClaim()}
-              className="h-14 w-full rounded-2xl text-lg font-semibold disabled:opacity-50"
-              style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_PRIMARY }}
-            >
-              {claiming ? 'Preparing…' : `Book for ${preview.requester_name}`}
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => navigate('/')}
-              className="h-14 w-full rounded-2xl text-lg font-semibold"
-              style={{ backgroundColor: PRIMARY, color: '#fff' }}
-            >
-              Go to home
-            </button>
+              <button
+                type="button"
+                onClick={() => navigate('/')}
+                className="h-14 w-full rounded-2xl text-lg font-semibold"
+                style={{ backgroundColor: PRIMARY, color: '#fff' }}
+              >
+                Go to home
+              </button>
+            </>
           )}
-
-          {preview ? (
-            <p className="text-xs leading-relaxed" style={{ color: ON_SURFACE_VARIANT }}>
-              Ride updates will be sent to the phone number they provided.
-            </p>
-          ) : null}
         </div>
       </main>
     </div>

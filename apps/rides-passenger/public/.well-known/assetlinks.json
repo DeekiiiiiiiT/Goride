@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "co.roamenterprise.rides",
+      "sha256_cert_fingerprints": [
+        "343A7DE35ED72997B7A65FB1E2D567DF4A002083ABF1D5C5E7BEA82D792C1369"
+      ]
+    }
+  }
+]

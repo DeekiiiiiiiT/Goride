@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Crosshair,
+  Lock,
   Package,
   Pencil,
   Tag,
@@ -54,6 +55,7 @@ import {
   type GuestRecipientDraft,
 } from '@/lib/guestRecipientBooking';
 import { createIdempotencyKey } from '@/lib/idempotencyKey';
+import { formatRoamTagDisplay } from '@/services/roamTagEdge';
 import { withTimeout } from '@/lib/withTimeout';
 import {
   clearBookingRequestDraft,
@@ -91,6 +93,7 @@ export default function HomePage() {
     readGuestRecipientDraft(),
   );
   const [roamTagActive, setRoamTagActive] = useState(() => Boolean(readBookingRequestDraft()));
+  const tagDraft = useMemo(() => (roamTagActive ? readBookingRequestDraft() : null), [roamTagActive]);
 
   useEffect(() => {
     setGuestRecipient(readGuestRecipientDraft());
@@ -117,13 +120,14 @@ export default function HomePage() {
     const tagDraft = readBookingRequestDraft();
     if (tagDraft?.pickup) {
       setPickup({ lat: tagDraft.pickup.lat, lng: tagDraft.pickup.lng });
-      setPickupAddress(tagDraft.pickup.address);
+      setPickupAddress('');
       setPickupSetByDevice(false);
     }
     if (tagDraft?.dropoff) {
       setDropoff({ lat: tagDraft.dropoff.lat, lng: tagDraft.dropoff.lng });
-      setDropoffAddress(tagDraft.dropoff.address);
+      setDropoffAddress('');
       setDestinationChosen(true);
+      setRouteExpanded(false);
     }
     if (tagDraft?.requesterName) {
       setGuestRecipient({
@@ -229,7 +233,8 @@ export default function HomePage() {
   const [initialGpsLoading, setInitialGpsLoading] = useState(true);
 
   const coordsReady = pickup && dropoff;
-  const showCompactRoute = coordsReady && !routeExpanded;
+  const showCompactRoute = coordsReady && !routeExpanded && !roamTagActive;
+  const showPrivateRoamTagRoute = coordsReady && roamTagActive;
   /** Pickup field hidden until destination is chosen (GPS still fills pickup in background). */
   const showPickupField = destinationChosen;
 
@@ -238,7 +243,7 @@ export default function HomePage() {
     else setRouteExpanded(true);
   }, [coordsReady]);
 
-  const showRouteMap = coordsReady;
+  const showRouteMap = coordsReady && !roamTagActive;
   const hasSelectedService = services.some((s) => s.slug === vehicleOption);
   const showBookCta = coordsReady && hasSelectedService;
 
@@ -779,7 +784,9 @@ export default function HomePage() {
               {bookLoading
                 ? 'Booking…'
                 : guestRecipient
-                  ? `Book for ${guestRecipient.fullName.trim()}`
+                  ? roamTagActive && tagDraft?.requesterFirstName
+                    ? `Book for ${tagDraft.requesterFirstName}`
+                    : `Book for ${guestRecipient.fullName.trim()}`
                   : "Let's Roam"}
               <ArrowRight className="h-5 w-5" aria-hidden />
             </button>
@@ -841,24 +848,32 @@ export default function HomePage() {
                     backgroundColor: 'color-mix(in srgb, var(--home-primary) 8%, transparent)',
                   }}
                 >
-                  <div
-                    className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
-                    style={{ backgroundColor: 'var(--home-secondary-container)' }}
-                  >
-                    {roamTagActive ? (
-                      <Tag
-                        className="h-4 w-4"
-                        style={{ color: 'var(--home-primary)' }}
-                        aria-hidden
-                      />
-                    ) : (
-                      <UserPlus
-                        className="h-4 w-4"
-                        style={{ color: 'var(--home-primary)' }}
-                        aria-hidden
-                      />
-                    )}
-                  </div>
+                  {roamTagActive && tagDraft?.requesterAvatarUrl ? (
+                    <img
+                      src={tagDraft.requesterAvatarUrl}
+                      alt=""
+                      className="mt-0.5 h-9 w-9 shrink-0 rounded-xl object-cover"
+                    />
+                  ) : (
+                    <div
+                      className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                      style={{ backgroundColor: 'var(--home-secondary-container)' }}
+                    >
+                      {roamTagActive ? (
+                        <Tag
+                          className="h-4 w-4"
+                          style={{ color: 'var(--home-primary)' }}
+                          aria-hidden
+                        />
+                      ) : (
+                        <UserPlus
+                          className="h-4 w-4"
+                          style={{ color: 'var(--home-primary)' }}
+                          aria-hidden
+                        />
+                      )}
+                    </div>
+                  )}
                   <div className="min-w-0 flex-1">
                     <p
                       className="text-xs font-bold uppercase tracking-wide"
@@ -867,12 +882,20 @@ export default function HomePage() {
                       {roamTagActive ? 'Roam Tag request' : 'Booking for someone else'}
                     </p>
                     <p className="truncate text-sm font-semibold" style={{ color: 'var(--home-on-surface)' }}>
-                      {guestRecipient.fullName.trim()}
+                      {roamTagActive && tagDraft?.requesterFirstName
+                        ? tagDraft.requesterFirstName
+                        : guestRecipient.fullName.trim()}
                     </p>
-                    <p className="text-xs" style={{ color: 'var(--home-on-surface-muted)' }}>
-                      SMS updates to{' '}
-                      {buildGuestPhoneE164(guestRecipient.countryCode, guestRecipient.phone)}
-                    </p>
+                    {roamTagActive && tagDraft?.requesterTag ? (
+                      <p className="text-xs font-semibold" style={{ color: 'var(--home-primary)' }}>
+                        {formatRoamTagDisplay(tagDraft.requesterTag)}
+                      </p>
+                    ) : (
+                      <p className="text-xs" style={{ color: 'var(--home-on-surface-muted)' }}>
+                        SMS updates to{' '}
+                        {buildGuestPhoneE164(guestRecipient.countryCode, guestRecipient.phone)}
+                      </p>
+                    )}
                   </div>
                   <button
                     type="button"
@@ -883,6 +906,30 @@ export default function HomePage() {
                   >
                     <X className="h-4 w-4" aria-hidden />
                   </button>
+                </div>
+              ) : null}
+
+              {showPrivateRoamTagRoute ? (
+                <div
+                  className="mb-3 flex items-start gap-3 rounded-2xl border px-4 py-3"
+                  style={{
+                    borderColor: 'var(--home-card-border)',
+                    backgroundColor: 'var(--home-card-bg)',
+                  }}
+                >
+                  <Lock
+                    className="mt-0.5 h-4 w-4 shrink-0"
+                    style={{ color: 'var(--home-on-surface-muted)' }}
+                    aria-hidden
+                  />
+                  <div>
+                    <p className="text-sm font-semibold" style={{ color: 'var(--home-on-surface)' }}>
+                      Private route
+                    </p>
+                    <p className="text-xs leading-relaxed" style={{ color: 'var(--home-on-surface-muted)' }}>
+                      Pickup and destination are hidden for their safety. You can still pay and book the trip.
+                    </p>
+                  </div>
                 </div>
               ) : null}
 
@@ -948,7 +995,7 @@ export default function HomePage() {
                 >
                   Where to?
                 </h1>
-                {coordsReady && routeExpanded && (
+                {coordsReady && routeExpanded && !roamTagActive && (
                   <button
                     type="button"
                     onClick={() => setRouteExpanded(false)}

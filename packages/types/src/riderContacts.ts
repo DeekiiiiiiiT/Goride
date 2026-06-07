@@ -157,6 +157,29 @@ export interface BookingRequestRow {
   updated_at: string;
 }
 
+export interface BookingRequestRequesterPreview {
+  first_name: string;
+  custom_tag_name: string | null;
+  avatar_url: string | null;
+}
+
+/** Public preview — no route coordinates or addresses. */
+export interface BookingRequestPreviewRow {
+  id: string;
+  token: string;
+  public_code: string;
+  requester_name: string;
+  status: BookingRequestStatus;
+  expires_at: string;
+  vehicle_option: string | null;
+  has_trip_route: boolean;
+}
+
+export interface BookingRequestPreviewResponse {
+  booking_request: BookingRequestPreviewRow;
+  requester: BookingRequestRequesterPreview;
+}
+
 export interface CreateBookingRequestBody {
   requester_name: string;
   requester_phone: string;
@@ -186,6 +209,7 @@ export interface ActiveBookingRequestResponse {
 
 export interface ClaimBookingRequestResponse {
   booking_request: BookingRequestRow;
+  requester: BookingRequestRequesterPreview;
 }
 
 export const RIDER_CONTACT_RELATION_LABELS: Record<RiderContactRelation, string> = {

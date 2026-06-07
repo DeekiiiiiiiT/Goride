@@ -43,6 +43,20 @@
                 <data android:scheme="co.roamenterprise.rides" android:host="tag" android:pathPrefix="/" />
             </intent-filter>
 
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="roam-s.co" android:pathPrefix="/tag" />
+            </intent-filter>
+
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="roam-s.co" android:pathPrefix="/ride/join" />
+            </intent-filter>
+
         </activity>
 
         <provider

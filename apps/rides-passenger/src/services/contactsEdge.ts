@@ -8,6 +8,8 @@ import type {
   CreateBookingRequestBody,
   CreateBookingRequestResponse,
   CreateRiderContactBody,
+  ClaimBookingRequestResponse,
+  BookingRequestPreviewResponse,
   CreateRiderContactGroupBody,
   CreateRiderContactPlaceBody,
   PassengerInviteDto,
@@ -240,7 +242,7 @@ export async function createBookingRequest(
   return res.json();
 }
 
-export async function getBookingRequestPreview(token: string): Promise<{ booking_request: import('@roam/types/riderContacts').BookingRequestRow }> {
+export async function getBookingRequestPreview(token: string): Promise<BookingRequestPreviewResponse> {
   const res = await fetch(`${base}/v1/booking-requests/${token}`, {
     headers: { apikey: publicAnonKey },
   });
@@ -248,7 +250,7 @@ export async function getBookingRequestPreview(token: string): Promise<{ booking
   return res.json();
 }
 
-export async function claimBookingRequest(token: string): Promise<{ booking_request: import('@roam/types/riderContacts').BookingRequestRow }> {
+export async function claimBookingRequest(token: string): Promise<ClaimBookingRequestResponse> {
   const res = await fetch(`${base}/v1/booking-requests/${token}/claim`, {
     method: 'POST',
     headers: await contactsHeaders(),

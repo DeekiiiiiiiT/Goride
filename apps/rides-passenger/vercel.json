@@ -4,8 +4,16 @@
   "buildCommand": "cd ../.. && pnpm --filter @roam/rides-passenger build",
   "outputDirectory": "dist",
   "framework": null,
+  "headers": [
+    {
+      "source": "/.well-known/assetlinks.json",
+      "headers": [
+        { "key": "Content-Type", "value": "application/json" }
+      ]
+    }
+  ],
   "rewrites": [
     { "source": "/admin/(.*)", "destination": "/" },
-    { "source": "/(.*)", "destination": "/" }
+    { "source": "/((?!\\.well-known/).*)", "destination": "/" }
   ]
 }

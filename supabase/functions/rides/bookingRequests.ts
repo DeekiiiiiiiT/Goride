@@ -1,5 +1,5 @@
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
-import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { jsonEdgeForbidden, ridesUserSurfaceRole } from "../_shared/authEdge.ts";
 import type { RidesContactsDb } from "../_shared/ridesContactsDb.ts";
 import { generatePublicCode, generateToken, normalizePhoneE164, roamTagUrl } from "./rideAccess.ts";
@@ -65,6 +65,80 @@ function publicBookingRequest(row: Record<string, unknown>) {
     ...row,
     requester_phone: String(row.requester_phone).replace(/\d(?=\d{4})/g, "*"),
   };
+}
+
+function serviceAuth() {
+  return createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+  );
+}
+
+function requesterFirstName(fullName: string): string {
+  const trimmed = fullName.trim();
+  if (!trimmed) return "Rider";
+  return trimmed.split(/\s+/)[0] ?? trimmed;
+}
+
+async function loadRequesterPublicProfile(
+  db: SupabaseClient,
+  tagsTable: string,
+  requesterUserId: string | null | undefined,
+  requesterName: string,
+) {
+  let customTagName: string | null = null;
+  if (requesterUserId) {
+    const { data: tagRow } = await db.from(tagsTable)
+      .select("custom_tag_name")
+      .eq("user_id", requesterUserId)
+      .maybeSingle();
+    customTagName = (tagRow?.custom_tag_name as string | null) ?? null;
+  }
+
+  let avatarUrl: string | null = null;
+  if (requesterUserId) {
+    try {
+      const { data } = await serviceAuth().auth.admin.getUserById(String(requesterUserId));
+      const meta = data.user?.user_metadata as Record<string, unknown> | undefined;
+      avatarUrl =
+        (typeof meta?.avatar_url === "string" && meta.avatar_url.trim()) ||
+        (typeof meta?.picture === "string" && meta.picture.trim()) ||
+        null;
+    } catch {
+      /* optional */
+    }
+  }
+
+  return {
+    first_name: requesterFirstName(requesterName),
+    custom_tag_name: customTagName,
+    avatar_url: avatarUrl,
+  };
+}
+
+/** Preview for claimers — no street addresses or coordinates. */
+function sanitizeBookingRequestPreview(row: Record<string, unknown>) {
+  const masked = publicBookingRequest(row);
+  return {
+    id: masked.id,
+    token: masked.token,
+    public_code: masked.public_code,
+    requester_name: masked.requester_name,
+    status: masked.status,
+    expires_at: masked.expires_at,
+    vehicle_option: masked.vehicle_option ?? null,
+    has_trip_route: masked.pickup_lat != null && masked.pickup_lng != null
+      && masked.dropoff_lat != null && masked.dropoff_lng != null,
+  };
+}
+
+/** Claim response — coords for quoting, no street addresses. */
+function sanitizeBookingRequestClaim(row: Record<string, unknown>) {
+  const out = { ...publicBookingRequest(row) } as Record<string, unknown>;
+  delete out.pickup_address;
+  delete out.dropoff_address;
+  delete out.notes;
+  return out;
 }
 
 function toCreateResponse(row: Record<string, unknown>, reused = false) {
@@ -168,7 +242,15 @@ export function registerBookingRequestRoutes(app: Hono, deps: BookingRequestDeps
       return c.json({ error: "unavailable", status: row.status }, 410);
     }
 
-    return c.json({ booking_request: publicBookingRequest(row) });
+    return c.json({
+      booking_request: sanitizeBookingRequestPreview(row),
+      requester: await loadRequesterPublicProfile(
+        db,
+        t.roam_passenger_tags,
+        row.requester_user_id as string | null,
+        String(row.requester_name),
+      ),
+    });
   });
 
   app.post("/v1/booking-requests/:token/claim", async (c) => {
@@ -201,7 +283,17 @@ export function registerBookingRequestRoutes(app: Hono, deps: BookingRequestDeps
     if (error || !updated) return c.json({ error: "claim_failed" }, 409);
     await deps.audit(null, auth.user.id, "booking_request_claimed", { booking_request_id: row.id });
 
-    return c.json({ booking_request: updated });
+    const requester = await loadRequesterPublicProfile(
+      db,
+      t.roam_passenger_tags,
+      row.requester_user_id as string | null,
+      String(row.requester_name),
+    );
+
+    return c.json({
+      booking_request: sanitizeBookingRequestClaim(updated as Record<string, unknown>),
+      requester,
+    });
   });
 }
 

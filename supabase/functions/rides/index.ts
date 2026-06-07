@@ -1451,7 +1451,7 @@ app.post("/v1/requests", async (c) => {
   if (bookingRequestId) {
     const { db: contactsDb, tables: ct } = await getRidesContactsDb();
     const { data: br } = await contactsDb.from(ct.booking_requests).select(
-      "id, status, claimed_by_user_id, requester_user_id, requester_name, requester_phone, expires_at",
+      "id, status, claimed_by_user_id, requester_user_id, requester_name, requester_phone, expires_at, pickup_lat, pickup_lng, pickup_address, dropoff_lat, dropoff_lng, dropoff_address, vehicle_option",
     )
       .eq("id", bookingRequestId).eq("claimed_by_user_id", auth.user.id).maybeSingle();
     if (!br || br.status !== "claimed") return c.json({ error: "invalid_booking_request" }, 400);
@@ -1466,6 +1466,19 @@ app.post("/v1/requests", async (c) => {
     if (!insertRow.guest_passenger_name) {
       insertRow.guest_passenger_name = br.requester_name;
       insertRow.guest_passenger_phone = br.requester_phone;
+    }
+    if (br.pickup_lat != null && br.pickup_lng != null) {
+      insertRow.pickup_lat = br.pickup_lat;
+      insertRow.pickup_lng = br.pickup_lng;
+      if (br.pickup_address) insertRow.pickup_address = br.pickup_address;
+    }
+    if (br.dropoff_lat != null && br.dropoff_lng != null) {
+      insertRow.dropoff_lat = br.dropoff_lat;
+      insertRow.dropoff_lng = br.dropoff_lng;
+      if (br.dropoff_address) insertRow.dropoff_address = br.dropoff_address;
+    }
+    if (br.vehicle_option && typeof br.vehicle_option === "string") {
+      insertRow.vehicle_option = br.vehicle_option;
     }
   }
 
