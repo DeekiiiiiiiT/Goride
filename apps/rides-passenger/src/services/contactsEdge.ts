@@ -1,6 +1,7 @@
 import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
 import { supabase } from '@roam/auth-client';
 import type {
+  ActiveBookingRequestResponse,
   BatchImportContactsBody,
   BatchImportContactsResponse,
   ClaimPassengerInviteResponse,
@@ -213,6 +214,14 @@ export async function getPassengerInvitePreview(token: string): Promise<{
 export async function claimPassengerInvite(token: string): Promise<ClaimPassengerInviteResponse> {
   const res = await fetch(`${base}/v1/passenger-invites/${token}/claim`, {
     method: 'POST',
+    headers: await contactsHeaders(),
+  });
+  if (!res.ok) await parseError(res);
+  return res.json();
+}
+
+export async function getActiveBookingRequest(): Promise<ActiveBookingRequestResponse> {
+  const res = await fetch(`${base}/v1/booking-requests/me/active`, {
     headers: await contactsHeaders(),
   });
   if (!res.ok) await parseError(res);

@@ -104,7 +104,10 @@ export interface BatchImportContactsBody {
 
 export interface BatchImportContactsResponse {
   imported: number;
+  updated: number;
   skipped: number;
+  failed: number;
+  error?: string;
   contacts: RiderContactRow[];
 }
 
@@ -126,6 +129,7 @@ export type BookingRequestStatus =
   | 'pending'
   | 'claimed'
   | 'booked'
+  | 'consumed'
   | 'expired'
   | 'cancelled';
 
@@ -147,6 +151,7 @@ export interface BookingRequestRow {
   status: BookingRequestStatus;
   claimed_by_user_id: string | null;
   ride_request_id: string | null;
+  consumed_at: string | null;
   expires_at: string;
   created_at: string;
   updated_at: string;
@@ -169,6 +174,14 @@ export interface CreateBookingRequestResponse {
   booking_request: BookingRequestRow;
   url: string;
   public_code: string;
+  /** True when an existing active link was returned instead of creating a new one. */
+  reused?: boolean;
+}
+
+export interface ActiveBookingRequestResponse {
+  booking_request: BookingRequestRow | null;
+  url?: string;
+  public_code?: string;
 }
 
 export interface ClaimBookingRequestResponse {

@@ -13,7 +13,13 @@ import {
   PRIMARY,
   SURFACE_LOWEST,
 } from '@/lib/passengerTheme';
-import { importDeviceContacts } from '@/utils/deviceContactsImport';
+import { DeviceContactsPickerSheet } from '@/components/contacts/DeviceContactsPickerSheet';
+import {
+  canUseBrowserContactPicker,
+  canUseInAppDeviceContactPicker,
+  importDeviceContactSelection,
+  pickDeviceContactsFromBrowser,
+} from '@/utils/deviceContactsImport';
 
 export default function ContactsPage() {
   const navigate = useNavigate();
@@ -21,6 +27,7 @@ export default function ContactsPage() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [importing, setImporting] = useState(false);
+  const [devicePickerOpen, setDevicePickerOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -44,16 +51,47 @@ export default function ContactsPage() {
     [contacts],
   );
 
+  const handleDeviceImportResult = async (result: {
+    imported: number;
+    updated: number;
+    skipped: number;
+    failed: number;
+    error?: string;
+    contacts: RiderContactRow[];
+  }) => {
+    if (result.failed > 0) {
+      toast.error(result.error ?? 'Could not save contacts.');
+      return;
+    }
+    const saved = result.imported + result.updated;
+    if (saved > 0) {
+      toast.success(`Added ${saved} contact${saved === 1 ? '' : 's'} to Roam Contacts`);
+      await load();
+      return;
+    }
+    toast.message('No contacts were added.');
+  };
+
   const handleImport = async () => {
+    if (canUseInAppDeviceContactPicker()) {
+      setDevicePickerOpen(true);
+      return;
+    }
+
+    if (!canUseBrowserContactPicker()) {
+      toast.error('Contact import is not available here. Add contacts manually.');
+      return;
+    }
+
     setImporting(true);
     try {
-      const count = await importDeviceContacts();
-      if (count > 0) {
-        toast.success(`Imported ${count} contact${count === 1 ? '' : 's'}`);
-        await load();
-      } else {
-        toast.message('No new contacts to import.');
+      const picked = await pickDeviceContactsFromBrowser();
+      if (!picked.length) {
+        toast.message('No contact selected.');
+        return;
       }
+      const result = await importDeviceContactSelection(picked);
+      await handleDeviceImportResult(result);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Import failed');
     } finally {
@@ -149,6 +187,12 @@ export default function ContactsPage() {
           </ul>
         )}
       </main>
+
+      <DeviceContactsPickerSheet
+        open={devicePickerOpen}
+        onClose={() => setDevicePickerOpen(false)}
+        onImported={(result) => void handleDeviceImportResult(result)}
+      />
     </div>
   );
 }

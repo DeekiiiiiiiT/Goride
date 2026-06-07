@@ -4,6 +4,7 @@ export type BookingRequestDraft = {
   bookingRequestId: string;
   token: string;
   requesterName: string;
+  /** Full E.164 from claim response (not the masked preview phone). */
   requesterPhone: string;
   pickup?: { lat: number; lng: number; address: string };
   dropoff?: { lat: number; lng: number; address: string };

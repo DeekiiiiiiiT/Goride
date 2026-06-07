@@ -35,3 +35,4 @@ export * from './vendor';
 export * from './delivery';
 export * from './rides';
 export * from './riderContacts';
+export * from './roamPassengerTag';

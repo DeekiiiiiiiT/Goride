@@ -115,3 +115,7 @@ body {
   min-height: 3rem;
   touch-action: manipulation;
 }
+
+[data-sonner-toaster] {
+  z-index: 100000 !important;
+}

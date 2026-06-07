@@ -968,6 +968,9 @@ importers:
       '@capacitor/keyboard':
         specifier: ^7.0.6
         version: 7.0.6(@capacitor/core@7.6.5)
+      '@capacitor/share':
+        specifier: ^7.0.4
+        version: 7.0.4(@capacitor/core@7.6.5)
       '@capacitor/splash-screen':
         specifier: ^7.0.5
         version: 7.0.5(@capacitor/core@7.6.5)
@@ -1446,6 +1449,11 @@ packages:
 
   '@capacitor/keyboard@7.0.6':
     resolution: {integrity: sha512-mH9EHo4EnBA9zJAi6domGVB/PdEkcm0h27nJDHG4Y3fd2oKsheCxDRXlYrbgj8hcyQPe0cGWqAfzfwKzkWQoFQ==}
+    peerDependencies:
+      '@capacitor/core': '>=7.0.0'
+
+  '@capacitor/share@7.0.4':
+    resolution: {integrity: sha512-wNXxmXUcChrtbZ5jQv8scFIbIGKo3rk6B7qpWySxfUhYJP5NANgAqQ9Z69m0k/zYsucdh66SBU7XW1ykd9aUug==}
     peerDependencies:
       '@capacitor/core': '>=7.0.0'
 
@@ -4212,6 +4220,10 @@ snapshots:
       '@capacitor/synapse': 1.0.4
 
   '@capacitor/keyboard@7.0.6(@capacitor/core@7.6.5)':
+    dependencies:
+      '@capacitor/core': 7.6.5
+
+  '@capacitor/share@7.0.4(@capacitor/core@7.6.5)':
     dependencies:
       '@capacitor/core': 7.6.5
 

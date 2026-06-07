@@ -125,8 +125,8 @@ html.dark .home-page {
 
 .home-map-stage__back {
   position: absolute;
-  left: 1rem;
-  top: 0.75rem;
+  left: max(1rem, env(safe-area-inset-left, 0px));
+  top: calc(0.75rem + env(safe-area-inset-top, 0px));
   z-index: 15;
   border: 1px solid color-mix(in srgb, var(--home-on-surface) 12%, transparent);
   background: var(--home-panel-solid);
@@ -217,7 +217,9 @@ html.dark .home-page {
   position: fixed;
   left: 0;
   right: 0;
-  z-index: 45;
+  z-index: 1000;
+  pointer-events: auto;
+  touch-action: manipulation;
   bottom: calc(var(--home-nav-h) + env(safe-area-inset-bottom, 0px));
   padding-left: max(1rem, env(safe-area-inset-left, 0px));
   padding-right: max(1rem, env(safe-area-inset-right, 0px));
@@ -550,4 +552,11 @@ html[data-keyboard-open='true'] .home-booking-actions {
   opacity: 0;
   pointer-events: none;
   transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+/* Trip picker CTA must stay tappable — Android WebView often mis-reports keyboard inset */
+html[data-keyboard-open='true'] .home-page--trip-picker.home-page--has-book-cta .home-booking-actions {
+  transform: none;
+  opacity: 1;
+  pointer-events: auto;
 }

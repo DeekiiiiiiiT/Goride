@@ -1,6 +1,7 @@
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { jsonEdgeForbidden, ridesUserSurfaceRole } from "../_shared/authEdge.ts";
+import type { RidesContactsDb } from "../_shared/ridesContactsDb.ts";
 import {
   generateToken,
   normalizePhoneE164,
@@ -11,7 +12,8 @@ import { canAccessRide, getRideParticipantRole } from "./rideAccess.ts";
 import { sendRideNotification } from "./rideNotifications.ts";
 
 type InviteDeps = {
-  svc: () => SupabaseClient;
+  getContactsDb: () => Promise<RidesContactsDb>;
+  pubSvc: () => SupabaseClient;
   requireUser: (authHeader: string | undefined) => Promise<
     { user: { id: string } } | { error: string; status: 401 }
   >;
@@ -45,8 +47,8 @@ export function registerPassengerInviteRoutes(app: Hono, deps: InviteDeps) {
       return c.json({ error: "ride_terminal" }, 409);
     }
 
-    const db = deps.svc();
-    const { data: existing } = await db.from("ride_passenger_invites")
+    const { db, tables: t } = await deps.getContactsDb();
+    const { data: existing } = await db.from(t.ride_passenger_invites)
       .select("*")
       .eq("ride_request_id", rideId)
       .is("claimed_at", null)
@@ -68,7 +70,7 @@ export function registerPassengerInviteRoutes(app: Hono, deps: InviteDeps) {
     const expiresAt = new Date(Date.now() + INVITE_TTL_HOURS * 3600_000).toISOString();
     const phone = normalizePhoneE164(String(ride.guest_passenger_phone));
 
-    const { data: invite, error } = await db.from("ride_passenger_invites").insert({
+    const { data: invite, error } = await db.from(t.ride_passenger_invites).insert({
       ride_request_id: rideId,
       token,
       phone_e164: phone,
@@ -99,7 +101,8 @@ export function registerPassengerInviteRoutes(app: Hono, deps: InviteDeps) {
 
   app.get("/v1/passenger-invites/:token", async (c) => {
     const token = c.req.param("token");
-    const { data: invite } = await deps.svc().from("ride_passenger_invites")
+    const { db, tables: t } = await deps.getContactsDb();
+    const { data: invite } = await db.from(t.ride_passenger_invites)
       .select("*, ride_request_id")
       .eq("token", token)
       .maybeSingle();
@@ -132,8 +135,8 @@ export function registerPassengerInviteRoutes(app: Hono, deps: InviteDeps) {
     }
 
     const token = c.req.param("token");
-    const db = deps.svc();
-    const { data: invite } = await db.from("ride_passenger_invites")
+    const { db, tables: t } = await deps.getContactsDb();
+    const { data: invite } = await db.from(t.ride_passenger_invites)
       .select("*")
       .eq("token", token)
       .maybeSingle();
@@ -156,12 +159,13 @@ export function registerPassengerInviteRoutes(app: Hono, deps: InviteDeps) {
     }
 
     const now = new Date().toISOString();
-    await db.from("ride_requests").update({
-      passenger_user_id: auth.user.id,
-      updated_at: now,
-    }).eq("id", rideId);
+    const { error: patchErr } = await deps.pubSvc().rpc("rides_patch_ride_request", {
+      p_id: rideId,
+      p_patch: { passenger_user_id: auth.user.id, updated_at: now },
+    });
+    if (patchErr) return c.json({ error: "claim_failed", message: patchErr.message }, 500);
 
-    await db.from("ride_passenger_invites").update({
+    await db.from(t.ride_passenger_invites).update({
       claimed_by_user_id: auth.user.id,
       claimed_at: now,
     }).eq("id", invite.id);

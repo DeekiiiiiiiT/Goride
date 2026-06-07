@@ -1,6 +1,7 @@
 import type { Context, Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { jsonEdgeForbidden, ridesUserSurfaceRole } from "../_shared/authEdge.ts";
+import type { RidesContactsDb, RidesContactsTables } from "../_shared/ridesContactsDb.ts";
 import { normalizePhoneE164 } from "./rideAccess.ts";
 
 const VALID_RELATIONS = new Set([
@@ -8,7 +9,7 @@ const VALID_RELATIONS = new Set([
 ]);
 
 type ContactsDeps = {
-  svc: () => SupabaseClient;
+  getContactsDb: () => Promise<RidesContactsDb>;
   requireUser: (authHeader: string | undefined) => Promise<
     { user: { id: string } } | { error: string; status: 401 }
   >;
@@ -28,14 +29,15 @@ function validateRelation(relation: string, relationCustom: string | null): stri
 
 async function loadContactGroupsForContact(
   db: SupabaseClient,
+  tables: RidesContactsTables,
   contactId: string,
 ): Promise<Record<string, unknown>[]> {
-  const { data: members } = await db.from("rider_contact_group_members")
+  const { data: members } = await db.from(tables.rider_contact_group_members)
     .select("group_id")
     .eq("contact_id", contactId);
   if (!members?.length) return [];
   const groupIds = members.map((m) => m.group_id as string);
-  const { data: groups } = await db.from("rider_contact_groups")
+  const { data: groups } = await db.from(tables.rider_contact_groups)
     .select("*")
     .in("id", groupIds);
   return groups ?? [];
@@ -43,9 +45,10 @@ async function loadContactGroupsForContact(
 
 async function loadPlacesForContact(
   db: SupabaseClient,
+  tables: RidesContactsTables,
   contactId: string,
 ): Promise<Record<string, unknown>[]> {
-  const { data } = await db.from("rider_contact_places")
+  const { data } = await db.from(tables.rider_contact_places)
     .select("*")
     .eq("contact_id", contactId)
     .order("created_at", { ascending: true });
@@ -54,26 +57,28 @@ async function loadPlacesForContact(
 
 async function enrichContact(
   db: SupabaseClient,
+  tables: RidesContactsTables,
   row: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   const id = row.id as string;
   const [groups, places] = await Promise.all([
-    loadContactGroupsForContact(db, id),
-    loadPlacesForContact(db, id),
+    loadContactGroupsForContact(db, tables, id),
+    loadPlacesForContact(db, tables, id),
   ]);
   return { ...row, groups, places };
 }
 
 async function syncContactGroups(
   db: SupabaseClient,
+  tables: RidesContactsTables,
   ownerId: string,
   contactId: string,
   groupIds: string[] | undefined,
 ): Promise<void> {
   if (groupIds === undefined) return;
-  await db.from("rider_contact_group_members").delete().eq("contact_id", contactId);
+  await db.from(tables.rider_contact_group_members).delete().eq("contact_id", contactId);
   if (!groupIds.length) return;
-  const { data: valid } = await db.from("rider_contact_groups")
+  const { data: valid } = await db.from(tables.rider_contact_groups)
     .select("id")
     .eq("owner_user_id", ownerId)
     .in("id", groupIds);
@@ -82,7 +87,7 @@ async function syncContactGroups(
     contact_id: contactId,
   }));
   if (rows.length) {
-    await db.from("rider_contact_group_members").insert(rows);
+    await db.from(tables.rider_contact_group_members).insert(rows);
   }
 }
 
@@ -100,10 +105,10 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
   app.get("/v1/contacts", async (c) => {
     const gate = await requirePassenger(c);
     if (gate.response) return gate.response;
-    const db = deps.svc();
+    const { db, tables: t } = await deps.getContactsDb();
     const q = c.req.query("q")?.trim().toLowerCase();
     const trusted = c.req.query("trusted_for_safety");
-    let query = db.from("rider_contacts").select("*").eq("owner_user_id", gate.user!.id)
+    let query = db.from(t.rider_contacts).select("*").eq("owner_user_id", gate.user!.id)
       .order("display_name", { ascending: true });
     if (trusted === "true") query = query.eq("trusted_for_safety", true);
     const { data, error } = await query;
@@ -115,7 +120,7 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
         String(r.phone_e164).includes(q)
       );
     }
-    const contacts = await Promise.all(rows.map((r) => enrichContact(db, r as Record<string, unknown>)));
+    const contacts = await Promise.all(rows.map((r) => enrichContact(db, t, r as Record<string, unknown>)));
     return c.json({ contacts });
   });
 
@@ -131,7 +136,7 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
     const relErr = validateRelation(relation, relationCustom);
     if (relErr) return c.json({ error: relErr }, 400);
 
-    const db = deps.svc();
+    const { db, tables: t } = await deps.getContactsDb();
     const insertRow = {
       owner_user_id: gate.user!.id,
       display_name: displayName,
@@ -143,14 +148,14 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
       trusted_for_safety: body.trusted_for_safety === true,
       updated_at: new Date().toISOString(),
     };
-    const { data, error } = await db.from("rider_contacts").insert(insertRow).select("*").single();
+    const { data, error } = await db.from(t.rider_contacts).insert(insertRow).select("*").single();
     if (error) {
       if (error.code === "23505") return c.json({ error: "duplicate_phone" }, 409);
       return c.json({ error: "insert_failed", message: error.message }, 500);
     }
-    await syncContactGroups(db, gate.user!.id, data.id as string, body.group_ids);
+    await syncContactGroups(db, t, gate.user!.id, data.id as string, body.group_ids);
     await deps.audit(null, gate.user!.id, "rider_contact_created", { contact_id: data.id });
-    return c.json({ contact: await enrichContact(db, data as Record<string, unknown>) });
+    return c.json({ contact: await enrichContact(db, t, data as Record<string, unknown>) });
   });
 
   app.post("/v1/contacts/batch-import", async (c) => {
@@ -158,9 +163,12 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
     if (gate.response) return gate.response;
     const body = await c.req.json().catch(() => ({}));
     const items = Array.isArray(body.contacts) ? body.contacts : [];
-    const db = deps.svc();
+    const { db, tables: t } = await deps.getContactsDb();
     let imported = 0;
+    let updated = 0;
     let skipped = 0;
+    let failed = 0;
+    let firstError: string | null = null;
     const results: Record<string, unknown>[] = [];
     for (const item of items) {
       const displayName = typeof item.display_name === "string" ? item.display_name.trim() : "";
@@ -171,14 +179,38 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
       }
       const relation = typeof item.relation === "string" ? item.relation : "friend";
       const relationCustom = typeof item.relation_custom === "string" ? item.relation_custom.trim() : null;
-      if (validateRelation(relation, relationCustom)) {
+      const relErr = validateRelation(relation, relationCustom);
+      if (relErr) {
         skipped++;
         continue;
       }
-      const { data, error } = await db.from("rider_contacts").insert({
+      const phoneE164 = normalizePhoneE164(phoneRaw);
+      const { data: existing } = await db.from(t.rider_contacts).select("id")
+        .eq("owner_user_id", gate.user!.id)
+        .eq("phone_e164", phoneE164)
+        .maybeSingle();
+
+      if (existing?.id) {
+        const { data, error } = await db.from(t.rider_contacts).update({
+          display_name: displayName,
+          source: "device_import",
+          bookable: true,
+          updated_at: new Date().toISOString(),
+        }).eq("id", existing.id).select("*").single();
+        if (error) {
+          failed++;
+          if (!firstError) firstError = error.message;
+          continue;
+        }
+        updated++;
+        results.push(await enrichContact(db, t, data as Record<string, unknown>));
+        continue;
+      }
+
+      const { data, error } = await db.from(t.rider_contacts).insert({
         owner_user_id: gate.user!.id,
         display_name: displayName,
-        phone_e164: normalizePhoneE164(phoneRaw),
+        phone_e164: phoneE164,
         relation,
         relation_custom: relation === "other" ? relationCustom : null,
         source: "device_import",
@@ -186,35 +218,43 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
         updated_at: new Date().toISOString(),
       }).select("*").single();
       if (error) {
-        skipped++;
+        failed++;
+        if (!firstError) firstError = error.message;
         continue;
       }
       imported++;
-      results.push(await enrichContact(db, data as Record<string, unknown>));
+      results.push(await enrichContact(db, t, data as Record<string, unknown>));
     }
-    return c.json({ imported, skipped, contacts: results });
+    return c.json({
+      imported,
+      updated,
+      skipped,
+      failed,
+      ...(firstError ? { error: firstError } : {}),
+      contacts: results,
+    });
   });
 
   app.get("/v1/contacts/:id", async (c) => {
     const gate = await requirePassenger(c);
     if (gate.response) return gate.response;
-    const db = deps.svc();
-    const { data, error } = await db.from("rider_contacts").select("*")
+    const { db, tables: t } = await deps.getContactsDb();
+    const { data, error } = await db.from(t.rider_contacts).select("*")
       .eq("id", c.req.param("id"))
       .eq("owner_user_id", gate.user!.id)
       .maybeSingle();
     if (error) return c.json({ error: "fetch_failed" }, 500);
     if (!data) return c.json({ error: "not_found" }, 404);
-    return c.json({ contact: await enrichContact(db, data as Record<string, unknown>) });
+    return c.json({ contact: await enrichContact(db, t, data as Record<string, unknown>) });
   });
 
   app.patch("/v1/contacts/:id", async (c) => {
     const gate = await requirePassenger(c);
     if (gate.response) return gate.response;
     const body = await c.req.json().catch(() => ({}));
-    const db = deps.svc();
+    const { db, tables: t } = await deps.getContactsDb();
     const contactId = c.req.param("id");
-    const { data: existing } = await db.from("rider_contacts").select("*")
+    const { data: existing } = await db.from(t.rider_contacts).select("*")
       .eq("id", contactId).eq("owner_user_id", gate.user!.id).maybeSingle();
     if (!existing) return c.json({ error: "not_found" }, 404);
 
@@ -234,18 +274,18 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
     if (relErr) return c.json({ error: relErr }, 400);
     if (relation !== "other") patch.relation_custom = null;
 
-    const { data, error } = await db.from("rider_contacts").update(patch)
+    const { data, error } = await db.from(t.rider_contacts).update(patch)
       .eq("id", contactId).select("*").single();
     if (error) return c.json({ error: "update_failed", message: error.message }, 500);
-    await syncContactGroups(db, gate.user!.id, contactId, body.group_ids);
-    return c.json({ contact: await enrichContact(db, data as Record<string, unknown>) });
+    await syncContactGroups(db, t, gate.user!.id, contactId, body.group_ids);
+    return c.json({ contact: await enrichContact(db, t, data as Record<string, unknown>) });
   });
 
   app.delete("/v1/contacts/:id", async (c) => {
     const gate = await requirePassenger(c);
     if (gate.response) return gate.response;
-    const db = deps.svc();
-    const { error } = await db.from("rider_contacts").delete()
+    const { db, tables: t } = await deps.getContactsDb();
+    const { error } = await db.from(t.rider_contacts).delete()
       .eq("id", c.req.param("id")).eq("owner_user_id", gate.user!.id);
     if (error) return c.json({ error: "delete_failed" }, 500);
     return c.json({ ok: true });
@@ -254,7 +294,8 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
   app.get("/v1/contact-groups", async (c) => {
     const gate = await requirePassenger(c);
     if (gate.response) return gate.response;
-    const { data, error } = await deps.svc().from("rider_contact_groups").select("*")
+    const { db, tables: t } = await deps.getContactsDb();
+    const { data, error } = await db.from(t.rider_contact_groups).select("*")
       .eq("owner_user_id", gate.user!.id).order("name");
     if (error) return c.json({ error: "fetch_failed" }, 500);
     return c.json({ groups: data ?? [] });
@@ -266,7 +307,8 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
     const body = await c.req.json().catch(() => ({}));
     const name = typeof body.name === "string" ? body.name.trim() : "";
     if (!name) return c.json({ error: "invalid_body" }, 400);
-    const { data, error } = await deps.svc().from("rider_contact_groups").insert({
+    const { db, tables: t } = await deps.getContactsDb();
+    const { data, error } = await db.from(t.rider_contact_groups).insert({
       owner_user_id: gate.user!.id,
       name,
       updated_at: new Date().toISOString(),
@@ -284,7 +326,8 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
     const body = await c.req.json().catch(() => ({}));
     const name = typeof body.name === "string" ? body.name.trim() : "";
     if (!name) return c.json({ error: "invalid_body" }, 400);
-    const { data, error } = await deps.svc().from("rider_contact_groups").update({
+    const { db, tables: t } = await deps.getContactsDb();
+    const { data, error } = await db.from(t.rider_contact_groups).update({
       name,
       updated_at: new Date().toISOString(),
     }).eq("id", c.req.param("id")).eq("owner_user_id", gate.user!.id).select("*").single();
@@ -295,8 +338,9 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
   app.delete("/v1/contact-groups/:id", async (c) => {
     const gate = await requirePassenger(c);
     if (gate.response) return gate.response;
-    await deps.svc().from("rider_contact_group_members").delete().eq("group_id", c.req.param("id"));
-    const { error } = await deps.svc().from("rider_contact_groups").delete()
+    const { db, tables: t } = await deps.getContactsDb();
+    await db.from(t.rider_contact_group_members).delete().eq("group_id", c.req.param("id"));
+    const { error } = await db.from(t.rider_contact_groups).delete()
       .eq("id", c.req.param("id")).eq("owner_user_id", gate.user!.id);
     if (error) return c.json({ error: "delete_failed" }, 500);
     return c.json({ ok: true });
@@ -313,12 +357,12 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
     if (!label || !address || Number.isNaN(lat) || Number.isNaN(lng)) {
       return c.json({ error: "invalid_body" }, 400);
     }
-    const db = deps.svc();
+    const { db, tables: t } = await deps.getContactsDb();
     const contactId = c.req.param("id");
-    const { data: contact } = await db.from("rider_contacts").select("id")
+    const { data: contact } = await db.from(t.rider_contacts).select("id")
       .eq("id", contactId).eq("owner_user_id", gate.user!.id).maybeSingle();
     if (!contact) return c.json({ error: "not_found" }, 404);
-    const { data, error } = await db.from("rider_contact_places").insert({
+    const { data, error } = await db.from(t.rider_contact_places).insert({
       contact_id: contactId,
       label,
       address,
@@ -334,8 +378,8 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
     const gate = await requirePassenger(c);
     if (gate.response) return gate.response;
     const body = await c.req.json().catch(() => ({}));
-    const db = deps.svc();
-    const { data: contact } = await db.from("rider_contacts").select("id")
+    const { db, tables: t } = await deps.getContactsDb();
+    const { data: contact } = await db.from(t.rider_contacts).select("id")
       .eq("id", c.req.param("contactId")).eq("owner_user_id", gate.user!.id).maybeSingle();
     if (!contact) return c.json({ error: "not_found" }, 404);
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -343,7 +387,7 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
     if (typeof body.address === "string") patch.address = body.address.trim();
     if (body.lat != null) patch.lat = Number(body.lat);
     if (body.lng != null) patch.lng = Number(body.lng);
-    const { data, error } = await db.from("rider_contact_places").update(patch)
+    const { data, error } = await db.from(t.rider_contact_places).update(patch)
       .eq("id", c.req.param("placeId")).eq("contact_id", c.req.param("contactId"))
       .select("*").single();
     if (error || !data) return c.json({ error: "not_found" }, 404);
@@ -353,11 +397,11 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
   app.delete("/v1/contacts/:contactId/places/:placeId", async (c) => {
     const gate = await requirePassenger(c);
     if (gate.response) return gate.response;
-    const db = deps.svc();
-    const { data: contact } = await db.from("rider_contacts").select("id")
+    const { db, tables: t } = await deps.getContactsDb();
+    const { data: contact } = await db.from(t.rider_contacts).select("id")
       .eq("id", c.req.param("contactId")).eq("owner_user_id", gate.user!.id).maybeSingle();
     if (!contact) return c.json({ error: "not_found" }, 404);
-    await db.from("rider_contact_places").delete()
+    await db.from(t.rider_contact_places).delete()
       .eq("id", c.req.param("placeId")).eq("contact_id", c.req.param("contactId"));
     return c.json({ ok: true });
   });

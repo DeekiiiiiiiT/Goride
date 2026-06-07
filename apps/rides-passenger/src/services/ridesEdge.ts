@@ -1,5 +1,6 @@
 import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
 import { supabase } from '@roam/auth-client';
+import { withTimeout } from '@/lib/withTimeout';
 import type {
   CreateRideBody,
   DriverOfferRow,
@@ -13,11 +14,33 @@ import type {
 } from '@roam/types/rides';
 import type { RidesVehicleTypeDto } from '@/types/vehicleTypes';
 
+const base = API_ENDPOINTS.rides;
+const RIDES_FETCH_TIMEOUT_MS = 25_000;
+
+async function ridesFetch(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), RIDES_FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      throw new Error('Request timed out — check your connection and try again.');
+    }
+    throw e;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 async function ridesHeaders(): Promise<HeadersInit> {
-  const { data: { user } } = await supabase.auth.getUser();
-  let token = user ? (await supabase.auth.getSession()).data.session?.access_token : null;
+  const { data: { session } } = await supabase.auth.getSession();
+  let token = session?.access_token ?? null;
   if (!token) {
-    const refreshed = await supabase.auth.refreshSession();
+    const refreshed = await withTimeout(
+      supabase.auth.refreshSession(),
+      12_000,
+      'Session refresh timed out — sign in again.',
+    );
     token = refreshed.data.session?.access_token ?? null;
   }
   return {
@@ -27,13 +50,11 @@ async function ridesHeaders(): Promise<HeadersInit> {
   };
 }
 
-const base = API_ENDPOINTS.rides;
-
 export async function ridesListVehicleTypes(): Promise<{
   services?: RidesVehicleTypeDto[];
   vehicle_types: RidesVehicleTypeDto[];
 }> {
-  const res = await fetch(`${base}/v1/vehicle-types`, { headers: await ridesHeaders() });
+  const res = await ridesFetch(`${base}/v1/vehicle-types`, { headers: await ridesHeaders() });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -126,7 +147,7 @@ export async function ridesQuote(body: {
   dropoff_lng: number;
   vehicle_option?: string;
 }): Promise<FareQuoteResponse> {
-  const res = await fetch(`${base}/v1/quote`, {
+  const res = await ridesFetch(`${base}/v1/quote`, {
     method: 'POST',
     headers: await ridesHeaders(),
     body: JSON.stringify(body),
@@ -136,7 +157,7 @@ export async function ridesQuote(body: {
 }
 
 export async function ridesCreateRequest(body: CreateRideBody): Promise<{ ride: RideRequestRow }> {
-  const res = await fetch(`${base}/v1/requests`, {
+  const res = await ridesFetch(`${base}/v1/requests`, {
     method: 'POST',
     headers: await ridesHeaders(),
     body: JSON.stringify(body),
@@ -153,19 +174,19 @@ export async function ridesGetRequest(id: string): Promise<{
   can_chat?: boolean;
   participant_role?: 'booker' | 'passenger' | 'driver' | 'none';
 }> {
-  const res = await fetch(`${base}/v1/requests/${id}`, { headers: await ridesHeaders() });
+  const res = await ridesFetch(`${base}/v1/requests/${id}`, { headers: await ridesHeaders() });
   if (!res.ok) await parseRidesError(res);
   return res.json();
 }
 
 export async function ridesGetLive(id: string): Promise<RideLiveResponse> {
-  const res = await fetch(`${base}/v1/requests/${id}/live`, { headers: await ridesHeaders() });
+  const res = await ridesFetch(`${base}/v1/requests/${id}/live`, { headers: await ridesHeaders() });
   if (!res.ok) await parseRidesError(res);
   return res.json();
 }
 
 export async function ridesCancelRequest(id: string, reason?: string): Promise<{ ride: RideRequestRow }> {
-  const res = await fetch(`${base}/v1/requests/${id}/cancel`, {
+  const res = await ridesFetch(`${base}/v1/requests/${id}/cancel`, {
     method: 'POST',
     headers: await ridesHeaders(),
     body: JSON.stringify({ reason }),
@@ -182,7 +203,7 @@ export async function ridesListMessages(
   if (opts?.limit != null) params.set('limit', String(opts.limit));
   if (opts?.before) params.set('before', opts.before);
   const qs = params.toString();
-  const res = await fetch(`${base}/v1/requests/${rideId}/messages${qs ? `?${qs}` : ''}`, {
+  const res = await ridesFetch(`${base}/v1/requests/${rideId}/messages${qs ? `?${qs}` : ''}`, {
     headers: await ridesHeaders(),
   });
   if (!res.ok) await parseRidesError(res);
@@ -193,7 +214,7 @@ export async function ridesSendMessage(
   rideId: string,
   body: SendRideMessageBody,
 ): Promise<SendRideMessageResponse> {
-  const res = await fetch(`${base}/v1/requests/${rideId}/messages`, {
+  const res = await ridesFetch(`${base}/v1/requests/${rideId}/messages`, {
     method: 'POST',
     headers: await ridesHeaders(),
     body: JSON.stringify(body),

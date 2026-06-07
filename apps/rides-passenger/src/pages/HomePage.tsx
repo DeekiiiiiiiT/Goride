@@ -7,6 +7,7 @@ import {
   Crosshair,
   Package,
   Pencil,
+  Tag,
   UserPlus,
   X,
 } from 'lucide-react';
@@ -45,12 +46,15 @@ import { usePermissionPolicy } from '@/hooks/usePermissionPolicy';
 import { PermissionOnboardingSheet } from '@/components/PermissionOnboardingSheet';
 import {
   buildGuestPhoneE164,
+  clearBookForSomeoneTrip,
   clearDelegatedBookingDrafts,
   clearGuestRecipientDraft,
   readBookForSomeoneTrip,
   readGuestRecipientDraft,
   type GuestRecipientDraft,
 } from '@/lib/guestRecipientBooking';
+import { createIdempotencyKey } from '@/lib/idempotencyKey';
+import { withTimeout } from '@/lib/withTimeout';
 import {
   clearBookingRequestDraft,
   readBookingRequestDraft,
@@ -86,9 +90,11 @@ export default function HomePage() {
   const [guestRecipient, setGuestRecipient] = useState<GuestRecipientDraft | null>(() =>
     readGuestRecipientDraft(),
   );
+  const [roamTagActive, setRoamTagActive] = useState(() => Boolean(readBookingRequestDraft()));
 
   useEffect(() => {
     setGuestRecipient(readGuestRecipientDraft());
+    setRoamTagActive(Boolean(readBookingRequestDraft()));
   }, []);
 
   useEffect(() => {
@@ -125,6 +131,7 @@ export default function HomePage() {
         phone: tagDraft.requesterPhone.replace(/\D/g, '').slice(-10),
         countryCode: '+1',
       });
+      setRoamTagActive(true);
     }
   }, []);
 
@@ -163,7 +170,10 @@ export default function HomePage() {
   /** Pickup was filled from device GPS (grey field until user edits pickup). */
   const [pickupSetByDevice, setPickupSetByDevice] = useState(false);
   const { active: services } = useRidesVehicleTypes();
-  const [vehicleOption, setVehicleOption] = useState<string>(DEFAULT_VEHICLE_OPTION);
+  const [vehicleOption, setVehicleOption] = useState<string>(() => {
+    const tagVehicle = readBookingRequestDraft()?.vehicleOption;
+    return tagVehicle?.trim() || DEFAULT_VEHICLE_OPTION;
+  });
   const serviceSlugs = useMemo(
     () => services.map((s) => s.slug).join(','),
     [services],
@@ -177,8 +187,18 @@ export default function HomePage() {
 
   const [quotesLoading, setQuotesLoading] = useState(false);
   const [bookLoading, setBookLoading] = useState(false);
+  const [bookError, setBookError] = useState<string | null>(null);
   const [selectedPaymentId, setSelectedPaymentId] = useState<TripPaymentMethodId>(getDefaultPaymentMethodId);
   const [paymentSheetOpen, setPaymentSheetOpen] = useState(false);
+
+  useEffect(() => {
+    if (!roamTagActive) return;
+    const payment = getPaymentMethodById(selectedPaymentId);
+    if (payment.ridePaymentMethod === 'cash') {
+      setSelectedPaymentId(getDefaultPaymentMethodId() === 'cash' ? 'apple_pay' : getDefaultPaymentMethodId());
+    }
+  }, [roamTagActive, selectedPaymentId]);
+
   const [quotesBySlug, setQuotesBySlug] = useState<Record<string, FareQuoteResponse>>({});
   const { permissions } = usePermissionPolicy('rider');
   const [onboardingOpen, setOnboardingOpen] = useState(false);
@@ -231,13 +251,15 @@ export default function HomePage() {
     clearDelegatedBookingDrafts();
     clearBookingRequestDraft();
     setGuestRecipient(null);
+    setRoamTagActive(false);
   }, []);
 
-  const handleTripPickerBack = useCallback(() => {
+  const handleBackToHome = useCallback(() => {
     if (quoteDebounceRef.current) {
       clearTimeout(quoteDebounceRef.current);
       quoteDebounceRef.current = null;
     }
+    clearBookForSomeoneTrip();
     setDropoffAddress('');
     setDropoff(null);
     setDestinationChosen(false);
@@ -252,6 +274,19 @@ export default function HomePage() {
 
   useEffect(() => {
     let cancelled = false;
+
+    const tripDraft = readBookForSomeoneTrip();
+    const tagDraft = readBookingRequestDraft();
+    const guestDraft = readGuestRecipientDraft();
+    const hasPresetPickup =
+      Boolean(tripDraft) ||
+      Boolean(tagDraft?.pickup) ||
+      Boolean(guestDraft?.pickupPreset);
+
+    if (hasPresetPickup) {
+      setInitialGpsLoading(false);
+      return;
+    }
 
     void (async () => {
       let lat: number | null = null;
@@ -379,72 +414,153 @@ export default function HomePage() {
 
   const clearQuotes = () => setQuotesBySlug({});
 
+  const manualRouteReady = Boolean(pickup && dropoff);
+
+  const locationOkForBooking = useCallback(
+    (geo: Awaited<ReturnType<typeof checkGeolocationGranted>>) => {
+      const blockedByLocation = isBlockedByPolicy(
+        permissions,
+        'location_precise_while_using',
+        geo,
+      );
+      return !blockedByLocation || (isNativeCapacitorPlatform() && manualRouteReady);
+    },
+    [permissions, manualRouteReady],
+  );
+
   const handleBook = async () => {
+    setBookError(null);
+
     if (!pickup || !dropoff) {
-      toast.error('Choose pickup and drop-off from the search suggestions.');
+      const msg = 'Choose pickup and drop-off from the search suggestions.';
+      setBookError(msg);
+      toast.error(msg);
       return;
     }
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      toast.error('Sign in to book a ride.');
-      navigate('/login');
+    if (initialGpsLoading && !manualRouteReady) {
+      const msg = 'Still finding your location — wait a moment or set pickup on the map.';
+      setBookError(msg);
+      toast.error(msg);
       return;
     }
 
-    const geo = await checkGeolocationGranted();
-    const manualRouteReady = Boolean(pickup && dropoff);
-    const blockedByLocation = isBlockedByPolicy(permissions, 'location_precise_while_using', geo);
-    if (blockedByLocation && !(isNativeCapacitorPlatform() && manualRouteReady)) {
-      toast.error('Enable location in your device settings to book a ride.');
-      const next = await requestGeolocationPermission();
-      setLocationBlocked(isBlockedByPolicy(permissions, 'location_precise_while_using', next));
+    if (!quote?.quote_token) {
+      const msg = quotesLoading
+        ? 'Loading fares…'
+        : 'Could not get a fare — edit your trip and try again.';
+      setBookError(msg);
+      toast.error(msg);
+      if (!quotesLoading) void fetchAllServiceQuotes();
       return;
     }
 
     setBookLoading(true);
     try {
-      const freshQuote = await ridesQuote({
-        pickup_lat: pickup.lat,
-        pickup_lng: pickup.lng,
-        dropoff_lat: dropoff.lat,
-        dropoff_lng: dropoff.lng,
-        vehicle_option: vehicleOption,
-      });
-      setQuotesBySlug((prev) => ({ ...prev, [vehicleOption]: freshQuote }));
+      await withTimeout(
+        (async () => {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (!session?.user) {
+            const msg = 'Sign in to book a ride.';
+            setBookError(msg);
+            toast.error(msg);
+            navigate('/login');
+            return;
+          }
 
-      const tagDraft = readBookingRequestDraft();
-
-      const { ride } = await ridesCreateRequest({
-        pickup_lat: pickup.lat,
-        pickup_lng: pickup.lng,
-        dropoff_lat: dropoff.lat,
-        dropoff_lng: dropoff.lng,
-        pickup_address: pickupAddress,
-        dropoff_address: dropoffAddress,
-        vehicle_option: vehicleOption,
-        quote_token: freshQuote.quote_token,
-        idempotency_key: crypto.randomUUID(),
-        route_polyline_encoded: freshQuote.route_polyline_encoded,
-        payment_method: selectedPayment.ridePaymentMethod,
-        ...(guestRecipient
-          ? {
-              guest_passenger_name: guestRecipient.fullName.trim(),
-              guest_passenger_phone: buildGuestPhoneE164(
-                guestRecipient.countryCode,
-                guestRecipient.phone,
-              ),
-              ...(guestRecipient.contactId ? { rider_contact_id: guestRecipient.contactId } : {}),
+          if (!locationAllowsBooking) {
+            const geo = await checkGeolocationGranted();
+            if (!locationOkForBooking(geo)) {
+              const msg = 'Enable location in your device settings to book a ride.';
+              setBookError(msg);
+              toast.error(msg);
+              const next = await requestGeolocationPermission();
+              setLocationBlocked(
+                isBlockedByPolicy(permissions, 'location_precise_while_using', next),
+              );
+              return;
             }
-          : {}),
-        ...(tagDraft ? { booking_request_id: tagDraft.bookingRequestId } : {}),
-      });
-      clearDelegatedBookingDrafts();
-      clearBookingRequestDraft();
-      toast.success('Searching for a driver…');
-      navigate(`/ride/${ride.id}`);
+          }
+
+          const tagDraft = readBookingRequestDraft();
+          if (tagDraft && selectedPayment.ridePaymentMethod === 'cash') {
+            const msg = 'Roam Tag bookings must be paid digitally (card or wallet).';
+            setBookError(msg);
+            toast.error(msg);
+            return;
+          }
+
+          const rideBodyBase = {
+            pickup_lat: pickup.lat,
+            pickup_lng: pickup.lng,
+            dropoff_lat: dropoff.lat,
+            dropoff_lng: dropoff.lng,
+            pickup_address: pickupAddress,
+            dropoff_address: dropoffAddress,
+            vehicle_option: vehicleOption,
+            idempotency_key: createIdempotencyKey(),
+            payment_method: selectedPayment.ridePaymentMethod,
+            ...(guestRecipient
+              ? {
+                  guest_passenger_name: guestRecipient.fullName.trim(),
+                  guest_passenger_phone: buildGuestPhoneE164(
+                    guestRecipient.countryCode,
+                    guestRecipient.phone,
+                  ),
+                  ...(guestRecipient.contactId ? { rider_contact_id: guestRecipient.contactId } : {}),
+                }
+              : {}),
+            ...(tagDraft ? { booking_request_id: tagDraft.bookingRequestId } : {}),
+          };
+
+          const submitRide = async (quoteToken: string, routePolyline?: string | null) =>
+            ridesCreateRequest({
+              ...rideBodyBase,
+              quote_token: quoteToken,
+              route_polyline_encoded: routePolyline ?? undefined,
+            });
+
+          let activeQuote = quote!;
+          try {
+            const { ride } = await submitRide(
+              activeQuote.quote_token,
+              activeQuote.route_polyline_encoded,
+            );
+            clearDelegatedBookingDrafts();
+            clearBookingRequestDraft();
+            setRoamTagActive(false);
+            toast.success('Searching for a driver…');
+            navigate(`/ride/${ride.id}`);
+          } catch (createErr: unknown) {
+            const createMsg = createErr instanceof Error ? createErr.message : '';
+            if (!createMsg.includes('expired')) throw createErr;
+
+            activeQuote = await ridesQuote({
+              pickup_lat: pickup.lat,
+              pickup_lng: pickup.lng,
+              dropoff_lat: dropoff.lat,
+              dropoff_lng: dropoff.lng,
+              vehicle_option: vehicleOption,
+            });
+            setQuotesBySlug((prev) => ({ ...prev, [vehicleOption]: activeQuote }));
+            const { ride } = await submitRide(
+              activeQuote.quote_token,
+              activeQuote.route_polyline_encoded,
+            );
+            clearDelegatedBookingDrafts();
+            clearBookingRequestDraft();
+            setRoamTagActive(false);
+            toast.success('Searching for a driver…');
+            navigate(`/ride/${ride.id}`);
+          }
+        })(),
+        30_000,
+        'Booking timed out — check your connection and try again.',
+      );
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Could not request ride');
+      const msg = e instanceof Error ? e.message : 'Could not request ride';
+      setBookError(msg);
+      toast.error(msg);
       if (e instanceof Error && e.message.includes('expired')) {
         void fetchAllServiceQuotes();
       }
@@ -458,13 +574,8 @@ export default function HomePage() {
   }, []);
 
   const surge = quote?.surge_multiplier ?? null;
-  const canBook =
-    coordsReady &&
-    Boolean(quote?.quote_token) &&
-    !quotesLoading &&
-    !locationBlocked &&
-    !initialGpsLoading &&
-    !bookLoading;
+  const locationAllowsBooking =
+    !locationBlocked || (isNativeCapacitorPlatform() && manualRouteReady);
 
   const selectedService = services.find((s) => s.slug === vehicleOption);
   const selectedPayment = getPaymentMethodById(selectedPaymentId);
@@ -583,9 +694,9 @@ export default function HomePage() {
 
           <button
             type="button"
-            onClick={handleTripPickerBack}
-            className="home-map-stage__back flex h-11 w-11 items-center justify-center rounded-full shadow-lg transition-transform active:scale-95"
-            aria-label="Back to edit trip"
+            onClick={handleBackToHome}
+            className="home-map-stage__back flex h-11 w-11 items-center justify-center rounded-full shadow-lg transition-transform active:scale-95 touch-manipulation"
+            aria-label="Back to home"
           >
             <ArrowLeft className="h-5 w-5" strokeWidth={2.25} aria-hidden />
           </button>
@@ -607,49 +718,76 @@ export default function HomePage() {
         </div>
       )}
 
-      <main className="relative min-h-[100dvh] w-full pointer-events-none">
+      {showBookCta && (
+        <div
+          className="home-booking-actions safe-x transition-[bottom] duration-200 ease-out"
+          style={{ bottom: bookingActionsBottom }}
+        >
+          <div className="home-booking-actions__inner px-1">
+            {locationBlocked && !locationAllowsBooking && (
+              <p
+                className="mb-3 rounded-2xl border px-4 py-2 text-center text-sm"
+                style={{ borderColor: 'var(--home-card-border)', color: 'var(--home-on-surface)' }}
+              >
+                Location is required to book. Allow location access in your device settings to continue.
+              </p>
+            )}
 
-        {showBookCta && (
-          <div
-            className="home-booking-actions pointer-events-auto safe-x transition-[bottom] duration-200 ease-out"
-            style={{ bottom: bookingActionsBottom }}
-          >
-            <div className="home-booking-actions__inner px-1">
-              {locationBlocked && (
-                <p
-                  className="mb-3 rounded-2xl border px-4 py-2 text-center text-sm"
-                  style={{ borderColor: 'var(--home-card-border)', color: 'var(--home-on-surface)' }}
-                >
-                  Location is required to book. Allow location access in your device settings to continue.
-                </p>
-              )}
-
-              <TripPaymentMethodBar
-                method={selectedPayment}
-                onPress={() => setPaymentSheetOpen(true)}
-              />
-
-              <button
-                type="button"
-                onClick={handleBook}
-                disabled={bookLoading || !canBook}
-                className="btn-touch mt-3 flex h-14 w-full items-center justify-center gap-2 rounded-2xl text-lg font-semibold shadow-lg transition-all active:scale-[0.97] disabled:opacity-50"
+            {roamTagActive && (
+              <p
+                className="mb-3 rounded-2xl border px-4 py-2 text-center text-sm"
                 style={{
-                  backgroundColor: 'var(--home-primary)',
-                  color: 'var(--home-on-primary)',
-                  boxShadow: '0 8px 24px color-mix(in srgb, var(--home-primary) 35%, transparent)',
+                  borderColor: 'color-mix(in srgb, var(--home-primary) 25%, var(--home-card-border))',
+                  color: 'var(--home-on-surface)',
+                  backgroundColor: 'color-mix(in srgb, var(--home-primary) 6%, var(--home-panel-solid))',
                 }}
               >
-                {bookLoading
-                  ? 'Booking…'
-                  : guestRecipient
-                    ? `Book for ${guestRecipient.fullName.trim()}`
-                    : "Let's Roam"}
-                <ArrowRight className="h-5 w-5" aria-hidden />
-              </button>
-            </div>
+                Roam Tag trip — pay digitally so their link is used once.
+              </p>
+            )}
+
+            {bookError && (
+              <p
+                className="mb-3 rounded-2xl border px-4 py-2 text-center text-sm"
+                style={{
+                  borderColor: 'color-mix(in srgb, #dc2626 35%, var(--home-card-border))',
+                  color: '#b91c1c',
+                  backgroundColor: 'color-mix(in srgb, #dc2626 8%, var(--home-panel-solid))',
+                }}
+                role="alert"
+              >
+                {bookError}
+              </p>
+            )}
+
+            <TripPaymentMethodBar
+              method={selectedPayment}
+              onPress={() => setPaymentSheetOpen(true)}
+            />
+
+            <button
+              type="button"
+              onClick={() => void handleBook()}
+              disabled={bookLoading}
+              className="btn-touch mt-3 flex h-14 w-full touch-manipulation items-center justify-center gap-2 rounded-2xl text-lg font-semibold shadow-lg transition-all active:scale-[0.97] disabled:opacity-50"
+              style={{
+                backgroundColor: 'var(--home-primary)',
+                color: 'var(--home-on-primary)',
+                boxShadow: '0 8px 24px color-mix(in srgb, var(--home-primary) 35%, transparent)',
+              }}
+            >
+              {bookLoading
+                ? 'Booking…'
+                : guestRecipient
+                  ? `Book for ${guestRecipient.fullName.trim()}`
+                  : "Let's Roam"}
+              <ArrowRight className="h-5 w-5" aria-hidden />
+            </button>
           </div>
-        )}
+        </div>
+      )}
+
+      <main className="relative min-h-[100dvh] w-full pointer-events-none">
 
         {coordsReady && locationBlocked && !showBookCta && (
           <p
@@ -707,18 +845,26 @@ export default function HomePage() {
                     className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
                     style={{ backgroundColor: 'var(--home-secondary-container)' }}
                   >
-                    <UserPlus
-                      className="h-4 w-4"
-                      style={{ color: 'var(--home-primary)' }}
-                      aria-hidden
-                    />
+                    {roamTagActive ? (
+                      <Tag
+                        className="h-4 w-4"
+                        style={{ color: 'var(--home-primary)' }}
+                        aria-hidden
+                      />
+                    ) : (
+                      <UserPlus
+                        className="h-4 w-4"
+                        style={{ color: 'var(--home-primary)' }}
+                        aria-hidden
+                      />
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p
                       className="text-xs font-bold uppercase tracking-wide"
                       style={{ color: 'var(--home-on-surface-muted)' }}
                     >
-                      Booking for someone else
+                      {roamTagActive ? 'Roam Tag request' : 'Booking for someone else'}
                     </p>
                     <p className="truncate text-sm font-semibold" style={{ color: 'var(--home-on-surface)' }}>
                       {guestRecipient.fullName.trim()}
@@ -741,6 +887,22 @@ export default function HomePage() {
               ) : null}
 
               {showCompactRoute ? (
+                <>
+                <div className="mb-2">
+                  <button
+                    type="button"
+                    onClick={handleBackToHome}
+                    className="flex h-9 w-9 items-center justify-center rounded-full border touch-manipulation transition-transform active:scale-95"
+                    style={{
+                      borderColor: 'var(--home-card-border)',
+                      backgroundColor: 'var(--home-card-bg)',
+                      color: 'var(--home-on-surface)',
+                    }}
+                    aria-label="Back to home"
+                  >
+                    <ArrowLeft className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+                  </button>
+                </div>
                 <div className="mb-2">
                   <button
                     type="button"
@@ -776,6 +938,7 @@ export default function HomePage() {
                     </span>
                   </button>
                 </div>
+                </>
               ) : (
                 <>
               <div className="mb-4 flex items-end justify-between gap-3">
@@ -1042,6 +1205,7 @@ export default function HomePage() {
         selectedId={selectedPaymentId}
         onClose={() => setPaymentSheetOpen(false)}
         onSelect={setSelectedPaymentId}
+        excludeIds={roamTagActive ? ['cash'] : undefined}
       />
     </div>
   );

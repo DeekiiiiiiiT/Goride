@@ -70,8 +70,16 @@ import type { AppPermissionSurface } from "../_shared/appPermissionCatalog.ts";
 import { registerRideChatRoutes } from "./rideChat.ts";
 import { autocompletePlaces, fetchPlaceDetails, isPlacesConfigured, reverseGeocodeCoordinates } from "./fare/places.ts";
 import { registerContactsRoutes } from "./contacts.ts";
+import { getRidesContactsDb } from "../_shared/ridesContactsDb.ts";
 import { registerPassengerInviteRoutes } from "./passengerInvites.ts";
-import { registerBookingRequestRoutes, markBookingRequestBooked } from "./bookingRequests.ts";
+import {
+  registerBookingRequestRoutes,
+  linkBookingRequestToRide,
+  markBookingRequestConsumed,
+  releaseBookingRequestAfterRideCancelled,
+  isDigitalRidePayment,
+} from "./bookingRequests.ts";
+import { registerRoamPassengerTagRoutes } from "./roamPassengerTag.ts";
 import {
   canAccessRide,
   getRideParticipantRole,
@@ -435,10 +443,20 @@ async function handleTerminalRideLedgerAndSync(rideId: string): Promise<void> {
   const status = String(fresh.status ?? "");
   if (status !== "completed" && status !== "cancelled") return;
 
+  const bookingRequestId = typeof fresh.booking_request_id === "string"
+    ? fresh.booking_request_id
+    : null;
+
   try {
     await persistRideLedgerLinesForTerminalState(svc(), fresh);
     if (status === "completed") {
       await finalizeRideLedgerFields(svc(), rideId, fresh);
+      if (bookingRequestId && isDigitalRidePayment(fresh.payment_method)) {
+        await markBookingRequestConsumed(getRidesContactsDb, bookingRequestId, rideId);
+      }
+    }
+    if (status === "cancelled" && bookingRequestId) {
+      await releaseBookingRequestAfterRideCancelled(getRidesContactsDb, bookingRequestId);
     }
   } catch (e) {
     console.error("[rides] ledger line persist failed:", e);
@@ -1419,7 +1437,8 @@ app.post("/v1/requests", async (c) => {
 
   const riderContactId = typeof body.rider_contact_id === "string" ? body.rider_contact_id : null;
   if (riderContactId) {
-    const { data: contact } = await db.from("rider_contacts").select("id, linked_user_id")
+    const { db: contactsDb, tables: ct } = await getRidesContactsDb();
+    const { data: contact } = await contactsDb.from(ct.rider_contacts).select("id, linked_user_id")
       .eq("id", riderContactId).eq("owner_user_id", auth.user.id).maybeSingle();
     if (!contact) return c.json({ error: "invalid_rider_contact" }, 400);
     insertRow.rider_contact_id = riderContactId;
@@ -1430,11 +1449,18 @@ app.post("/v1/requests", async (c) => {
 
   const bookingRequestId = typeof body.booking_request_id === "string" ? body.booking_request_id : null;
   if (bookingRequestId) {
-    const { data: br } = await db.from("booking_requests").select(
-      "id, status, claimed_by_user_id, requester_user_id, requester_name, requester_phone",
+    const { db: contactsDb, tables: ct } = await getRidesContactsDb();
+    const { data: br } = await contactsDb.from(ct.booking_requests).select(
+      "id, status, claimed_by_user_id, requester_user_id, requester_name, requester_phone, expires_at",
     )
       .eq("id", bookingRequestId).eq("claimed_by_user_id", auth.user.id).maybeSingle();
     if (!br || br.status !== "claimed") return c.json({ error: "invalid_booking_request" }, 400);
+    if (new Date(String(br.expires_at)) <= new Date()) {
+      return c.json({ error: "booking_request_expired" }, 410);
+    }
+    if (paymentMethod !== "card") {
+      return c.json({ error: "roam_tag_digital_payment_required" }, 400);
+    }
     insertRow.booking_request_id = bookingRequestId;
     if (br.requester_user_id) insertRow.passenger_user_id = br.requester_user_id;
     if (!insertRow.guest_passenger_name) {
@@ -1495,7 +1521,7 @@ app.post("/v1/requests", async (c) => {
   await reconcileMatching(ride.id as string, reqId);
 
   if (bookingRequestId) {
-    await markBookingRequestBooked(db, bookingRequestId, ride.id as string);
+    await linkBookingRequestToRide(getRidesContactsDb, bookingRequestId, ride.id as string);
   }
 
   const freshRide = await loadRideRequestById(ride.id as string);
@@ -2193,14 +2219,16 @@ registerRideChatRoutes(app, {
   audit,
 });
 
-registerContactsRoutes(app, { svc, requireUser, audit });
+registerContactsRoutes(app, { getContactsDb: getRidesContactsDb, requireUser, audit });
 registerPassengerInviteRoutes(app, {
-  svc,
+  getContactsDb: getRidesContactsDb,
+  pubSvc,
   requireUser,
   loadRideRequestById,
   audit,
 });
-registerBookingRequestRoutes(app, { svc, requireUser, audit });
+registerBookingRequestRoutes(app, { getContactsDb: getRidesContactsDb, requireUser, audit });
+registerRoamPassengerTagRoutes(app, { getContactsDb: getRidesContactsDb, requireUser });
 
 registerAdminRoutes(app, { logLine });
 

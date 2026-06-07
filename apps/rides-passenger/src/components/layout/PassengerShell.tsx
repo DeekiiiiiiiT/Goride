@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { HomeTripPickerProvider, useHomeTripPicker } from '@/contexts/HomeTripPickerContext';
 import { PassengerBottomNav } from './PassengerBottomNav';
+import { ensureRoamPassengerTag } from '@/services/roamTagEdge';
 
 function PassengerShellInner() {
   const { pathname } = useLocation();
@@ -22,6 +23,12 @@ function PassengerShellInner() {
 
 /** Authenticated rider shell: tab content + fixed bottom navigation. */
 export function PassengerShell() {
+  useEffect(() => {
+    void ensureRoamPassengerTag().catch(() => {
+      /* non-blocking — tag loads again on Roam Tag screens */
+    });
+  }, []);
+
   return (
     <HomeTripPickerProvider>
       <PassengerShellInner />

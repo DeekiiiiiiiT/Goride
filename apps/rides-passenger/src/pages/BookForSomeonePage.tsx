@@ -14,7 +14,6 @@ import {
 } from 'lucide-react';
 import { supabase } from '@roam/auth-client';
 import type { RiderContactGroupRow, RiderContactRow } from '@roam/types/riderContacts';
-import { isNativeCapacitorPlatform } from '@roam/types';
 import { RoamPlaceField } from '@/components/RoamPlaceField';
 import { contactsCreate, contactsList, contactGroupsList } from '@/services/contactsEdge';
 import { relationLabel } from '@/components/contacts/ContactRelationPicker';
@@ -27,7 +26,13 @@ import {
   readBookForSomeoneTrip,
   readGuestRecipientDraft,
 } from '@/lib/guestRecipientBooking';
-import { importDeviceContacts } from '@/utils/deviceContactsImport';
+import { DeviceContactsPickerSheet } from '@/components/contacts/DeviceContactsPickerSheet';
+import {
+  canUseBrowserContactPicker,
+  canUseInAppDeviceContactPicker,
+  importDeviceContactSelection,
+  pickDeviceContactsFromBrowser,
+} from '@/utils/deviceContactsImport';
 import {
   getCurrentPositionWithAccuracy,
   resolveAddressFromCoordinates,
@@ -64,6 +69,7 @@ export default function BookForSomeonePage() {
   const [groupFilterId, setGroupFilterId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
+  const [devicePickerOpen, setDevicePickerOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [manual, setManual] = useState(false);
   const [fullName, setFullName] = useState('');
@@ -81,7 +87,7 @@ export default function BookForSomeonePage() {
     setDropoff({ lat: trip.dropoffLat, lng: trip.dropoffLng });
   }, []);
 
-  const reloadContacts = useCallback(async () => {
+  const reloadContacts = useCallback(async (): Promise<boolean> => {
     setLoading(true);
     try {
       const [listRes, groupsRes] = await Promise.all([
@@ -90,8 +96,10 @@ export default function BookForSomeonePage() {
       ]);
       setContacts(listRes.contacts);
       setGroups(groupsRes.groups);
-    } catch {
-      /* empty list is ok */
+      return true;
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not load Roam Contacts');
+      return false;
     } finally {
       setLoading(false);
     }
@@ -144,20 +152,64 @@ export default function BookForSomeonePage() {
     setStep('recipient');
   };
 
+  const handleDeviceImportResult = useCallback(async (result: {
+    imported: number;
+    updated: number;
+    skipped: number;
+    failed: number;
+    error?: string;
+    contacts: RiderContactRow[];
+  }) => {
+    if (result.failed > 0) {
+      toast.error(
+        result.error?.includes('schema')
+          ? 'Contacts could not be saved — Roam server needs an update. Try Add contact manually.'
+          : result.error ?? 'Could not save contacts. Try Add contact manually.',
+      );
+      return;
+    }
+
+    const saved = result.imported + result.updated;
+    const mergeImported = (prev: RiderContactRow[]) => {
+      if (!result.contacts.length) return prev;
+      const byId = new Map(prev.map((c) => [c.id, c]));
+      for (const c of result.contacts) byId.set(c.id, c);
+      return [...byId.values()].sort((a, b) => a.display_name.localeCompare(b.display_name));
+    };
+
+    if (saved > 0) {
+      toast.success(`Added ${saved} contact${saved === 1 ? '' : 's'} to Roam Contacts.`);
+      await reloadContacts();
+      setContacts((prev) => mergeImported(prev));
+      return;
+    }
+    if (result.skipped > 0) {
+      toast.message('Could not add those contacts — check the name and phone number.');
+      return;
+    }
+    toast.message('No contacts were added.');
+  }, [reloadContacts]);
+
   const handleImportFromPhone = async () => {
+    if (canUseInAppDeviceContactPicker()) {
+      setDevicePickerOpen(true);
+      return;
+    }
+
+    if (!canUseBrowserContactPicker()) {
+      toast.error('Contact picker is not available here. Use Add contact instead.');
+      return;
+    }
+
     setImporting(true);
     try {
-      const count = await importDeviceContacts();
-      if (count > 0) {
-        toast.success(`Imported ${count} contact${count === 1 ? '' : 's'}.`);
-        await reloadContacts();
-      } else {
-        toast.message(
-          isNativeCapacitorPlatform()
-            ? 'No contacts selected or none were new.'
-            : 'Add contacts manually or use the Android app to import from your phone.',
-        );
+      const picked = await pickDeviceContactsFromBrowser();
+      if (!picked.length) {
+        toast.message('No contact selected.');
+        return;
       }
+      const result = await importDeviceContactSelection(picked);
+      await handleDeviceImportResult(result);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not access phone contacts');
     } finally {
@@ -568,6 +620,12 @@ export default function BookForSomeonePage() {
           </>
         )}
       </main>
+
+      <DeviceContactsPickerSheet
+        open={devicePickerOpen}
+        onClose={() => setDevicePickerOpen(false)}
+        onImported={(result) => void handleDeviceImportResult(result)}
+      />
     </div>
   );
 }

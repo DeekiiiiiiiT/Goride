@@ -74,6 +74,33 @@ export function generatePublicCode(): string {
   return Array.from(arr, (b) => chars[b % chars.length]).join("");
 }
 
+/** Company-internal Roam Tag ID — never returned to clients. */
+export function generateInternalRoamTagId(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const arr = new Uint8Array(10);
+  crypto.getRandomValues(arr);
+  const body = Array.from(arr, (b) => chars[b % chars.length]).join("");
+  return `RT-${body}`;
+}
+
+const RESERVED_CUSTOM_TAGS = new Set([
+  "admin", "support", "help", "roam", "rides", "official", "system", "null", "undefined",
+]);
+
+/** Normalize user input to stored custom tag (lowercase, no @). */
+export function normalizeCustomRoamTagName(raw: string): string {
+  return raw.trim().toLowerCase().replace(/^@+/, "");
+}
+
+export function validateCustomRoamTagName(raw: string): string | null {
+  const name = normalizeCustomRoamTagName(raw);
+  if (name.length < 3 || name.length > 24) return "tag_length";
+  if (!/^[a-z0-9_]+$/.test(name)) return "tag_format";
+  if (RESERVED_CUSTOM_TAGS.has(name)) return "tag_reserved";
+  if (/^rt[-_]?[a-z0-9]+$/i.test(name)) return "tag_reserved";
+  return null;
+}
+
 export const PASSENGER_APP_ORIGIN = Deno.env.get("ROAM_RIDES_APP_ORIGIN") ?? "https://roam-s.co";
 
 export function passengerInviteUrl(token: string): string {

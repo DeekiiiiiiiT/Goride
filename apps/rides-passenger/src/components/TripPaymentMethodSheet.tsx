@@ -13,6 +13,8 @@ type Props = {
   selectedId: TripPaymentMethodId;
   onClose: () => void;
   onSelect: (id: TripPaymentMethodId) => void;
+  /** Hide payment options (e.g. cash is not allowed for Roam Tag bookings). */
+  excludeIds?: TripPaymentMethodId[];
 };
 
 function MethodRow({
@@ -58,8 +60,11 @@ function MethodRow({
   );
 }
 
-export function TripPaymentMethodSheet({ open, selectedId, onClose, onSelect }: Props) {
+export function TripPaymentMethodSheet({ open, selectedId, onClose, onSelect, excludeIds }: Props) {
   const navigate = useNavigate();
+  const methods = excludeIds?.length
+    ? TRIP_PAYMENT_METHODS.filter((m) => !excludeIds.includes(m.id))
+    : TRIP_PAYMENT_METHODS;
 
   useEffect(() => {
     if (!open) return;
@@ -119,7 +124,7 @@ export function TripPaymentMethodSheet({ open, selectedId, onClose, onSelect }: 
         </p>
 
         <div className="space-y-2 max-h-[min(50dvh,360px)] overflow-y-auto">
-          {TRIP_PAYMENT_METHODS.map((method) => (
+          {methods.map((method) => (
             <MethodRow
               key={method.id}
               method={method}

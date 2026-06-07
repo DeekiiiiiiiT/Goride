@@ -16,6 +16,10 @@ import { supabase } from '@roam/auth-client';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 import {
+  formatRoamTagDisplay,
+  getMyRoamPassengerTag,
+} from '@/services/roamTagEdge';
+import {
   CARD_SHADOW,
   ERROR,
   ON_SURFACE,
@@ -83,6 +87,7 @@ function GroupCard({
 export default function AccountPage() {
   const navigate = useNavigate();
   const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [roamTagLabel, setRoamTagLabel] = useState<string | null>(null);
 
   useEffect(() => {
     void supabase.auth.getUser().then(({ data }) => setUser(data.user));
@@ -92,6 +97,12 @@ export default function AccountPage() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    void getMyRoamPassengerTag()
+      .then((res) => setRoamTagLabel(formatRoamTagDisplay(res.tag.custom_tag_name)))
+      .catch(() => setRoamTagLabel(null));
+  }, [user?.id]);
+
   const displayName = useMemo(() => {
     const meta = user?.user_metadata;
     const name = (meta?.name as string | undefined)?.trim();
@@ -100,13 +111,14 @@ export default function AccountPage() {
   }, [user]);
 
   const handle = useMemo(() => {
+    if (roamTagLabel) return roamTagLabel;
     const meta = user?.user_metadata;
     const username = (meta?.username as string | undefined)?.trim();
     if (username) return username.startsWith('@') ? username : `@${username}`;
     const email = user?.email;
     if (email) return `@${email.split('@')[0]}`;
     return '@rider';
-  }, [user]);
+  }, [user, roamTagLabel]);
 
   const avatarUrl =
     (user?.user_metadata?.avatar_url as string | undefined) ||
@@ -240,6 +252,11 @@ export default function AccountPage() {
           </GroupCard>
 
           <GroupCard title="Promotions & Credits">
+            <AccountListRow
+              icon={<Tag className="h-5 w-5" style={{ color: PRIMARY }} />}
+              label="Roam Tag"
+              onClick={() => navigate('/services/roam-tag')}
+            />
             <AccountListRow
               icon={<Gift className="h-5 w-5" style={{ color: ON_SURFACE_VARIANT }} />}
               label="Gift Cards"
