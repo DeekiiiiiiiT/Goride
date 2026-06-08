@@ -176,6 +176,15 @@ export async function tripIntentClaim(id: string): Promise<{ trip_intent: TripIn
   return res.json();
 }
 
+export async function tripIntentReject(id: string): Promise<{ ok: boolean; status: string }> {
+  const res = await fetch(`${base}/v1/trip-intents/${id}/reject`, {
+    method: 'POST',
+    headers: await headers(),
+  });
+  if (!res.ok) await parseError(res);
+  return res.json();
+}
+
 export async function tripIntentFulfill(id: string): Promise<FulfillTripIntentResponse> {
   const res = await fetch(`${base}/v1/trip-intents/${id}/fulfill`, {
     method: 'POST',

@@ -287,6 +287,8 @@ export function mapTripIntentHubItem(
     requester_name: typeof row.requester_name === "string" ? row.requester_name : null,
     intent_role: role,
     ride_request_id: row.ride_request_id != null ? String(row.ride_request_id) : null,
+    linked_ride_status: row.linked_ride_status != null ? String(row.linked_ride_status) : null,
+    can_cancel: row.can_cancel === true || role === "requester",
   };
 }
 
@@ -647,6 +649,65 @@ export function registerTripIntentRoutes(app: Hono, deps: TripIntentDeps) {
     );
     const intent = await buildTripIntentBookerView(updated as Record<string, unknown>, requester, gate.user!.id);
     return c.json({ trip_intent: intent });
+  });
+
+  app.post("/v1/trip-intents/:id/reject", async (c) => {
+    const gate = await requirePassenger(c);
+    if (gate.response) return gate.response;
+    const id = c.req.param("id");
+    const bookerPhone = resolveBookerPhone(gate.user!);
+    const { db, tables: t } = await deps.getContactsDb();
+    const { data: br } = await db.from(t.booking_requests).select("*").eq("id", id).maybeSingle();
+    if (!br) return c.json({ error: "not_found" }, 404);
+
+    const row = await expireIfNeeded(db, t.booking_requests, br as Record<string, unknown>);
+    const status = String(row.status);
+    const bookerId = gate.user!.id;
+    const claimedByMe = String(row.claimed_by_user_id) === bookerId;
+
+    if (status === "booked") {
+      return c.json({ error: "not_rejectable", status }, 409);
+    }
+    if (status === "claimed" && !claimedByMe) {
+      return c.json({ error: "not_claimed_by_you" }, 403);
+    }
+    if (!["published", "claimed"].includes(status)) {
+      return c.json({ error: "not_rejectable", status }, 409);
+    }
+
+    const access = canBookerAccessIntent(row, bookerId, bookerPhone);
+    if (!access.ok) return c.json({ error: access.reason ?? "forbidden" }, 403);
+
+    const now = new Date().toISOString();
+    const audience = String(row.audience ?? "any_booker");
+
+    if (status === "claimed" && claimedByMe && audience === "any_booker") {
+      await db.from(t.booking_requests).update({
+        status: "published",
+        claimed_by_user_id: null,
+        updated_at: now,
+      }).eq("id", id);
+      await deps.audit(null, bookerId, "trip_intent_rejected_by_booker", {
+        trip_intent_id: id,
+        audience,
+        prior_status: status,
+        outcome: "released",
+      });
+      return c.json({ ok: true, status: "published" });
+    }
+
+    await db.from(t.booking_requests).update({
+      status: "cancelled",
+      claimed_by_user_id: null,
+      updated_at: now,
+    }).eq("id", id);
+    await deps.audit(null, bookerId, "trip_intent_rejected_by_booker", {
+      trip_intent_id: id,
+      audience,
+      prior_status: status,
+      outcome: "cancelled",
+    });
+    return c.json({ ok: true, status: "cancelled" });
   });
 
   app.post("/v1/trip-intents/:id/fulfill", async (c) => {

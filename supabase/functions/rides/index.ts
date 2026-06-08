@@ -78,6 +78,7 @@ import {
   linkBookingRequestToRide,
   markBookingRequestConsumed,
   releaseBookingRequestAfterRideCancelled,
+  syncBookingRequestAfterSystemRideCancel,
   isDigitalRidePayment,
 } from "./bookingRequests.ts";
 import { registerRoamPassengerTagRoutes } from "./roamPassengerTag.ts";
@@ -482,7 +483,9 @@ async function handleTerminalRideLedgerAndSync(rideId: string): Promise<void> {
     }
     if (status === "cancelled" && bookingRequestId) {
       const cancelledBy = String(fresh.cancelled_by ?? "");
-      if (cancelledBy !== "system") {
+      if (cancelledBy === "system") {
+        await syncBookingRequestAfterSystemRideCancel(getRidesContactsDb, bookingRequestId);
+      } else {
         await releaseBookingRequestAfterRideCancelled(getRidesContactsDb, bookingRequestId);
       }
     }

@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, Loader2, MapPin, Tag, UserPlus } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { ChevronRight, Loader2, MapPin, X } from 'lucide-react';
 import type {
   BookForOthersIntentActivityItem,
   BookForOthersMeActivityItem,
@@ -8,11 +10,22 @@ import type {
   BookForOthersSomeoneActivityItem,
 } from '@roam/types/riderContacts';
 import type { RideRequestRow, RideRequestStatus } from '@roam/types/rides';
+import type { TripIntentBookerViewDto } from '@roam/types/riderContacts';
 import { liveRideStatusHeadline } from '@/components/LiveRideView';
+import { TripIntentBookSheet } from '@/components/trip-intent/TripIntentBookSheet';
+import { TRIP_INTENT_V2 } from '@/lib/tripIntentFlags';
 import { formatShortAddress } from '@/lib/formatRideAddress';
-import { formatFareMinor } from '@/services/tripIntentEdge';
+import {
+  formatFareMinor,
+  tripIntentClaim,
+  tripIntentFulfill,
+  tripIntentGetBookerView,
+  tripIntentReject,
+  tripIntentWithdraw,
+} from '@/services/tripIntentEdge';
 import { OPEN_ROAM_LABEL, SHADOW_ROAM_LABEL } from '@/lib/tripIntentCopy';
 import {
+  ERROR,
   ON_SURFACE,
   ON_SURFACE_VARIANT,
   OUTLINE_VARIANT,
@@ -27,7 +40,8 @@ function rideStatusLabel(status: RideRequestStatus): string {
   return liveRideStatusHeadline(status, {} as RideRequestRow);
 }
 
-function intentStatusLabel(status: string): string {
+function intentStatusLabel(status: string, linkedRideStatus?: string | null): string {
+  if (status === 'booked' && linkedRideStatus === 'cancelled') return 'Ride ended — cancel to remove';
   if (status === 'draft') return 'Finish setting up your trip';
   if (status === 'published') return 'Waiting for someone to pay';
   if (status === 'claimed') return 'Someone is booking your ride';
@@ -144,12 +158,23 @@ function SomeoneItemRow({
 function MeItemRow({
   item,
   onOpen,
+  onCancelIntent,
+  cancellingIntentId,
 }: {
   item: BookForOthersMeActivityItem;
   onOpen: (item: BookForOthersMeActivityItem) => void;
+  onCancelIntent: (item: BookForOthersIntentActivityItem) => void;
+  cancellingIntentId: string | null;
 }) {
   if (item.kind === 'trip_intent') {
-    return <MeIntentRow item={item} onOpen={onOpen} />;
+    return (
+      <MeIntentRow
+        item={item}
+        onOpen={onOpen}
+        onCancel={onCancelIntent}
+        cancelling={cancellingIntentId === item.intent_id}
+      />
+    );
   }
   return <MeRideRow item={item} onOpen={onOpen} />;
 }
@@ -157,24 +182,75 @@ function MeItemRow({
 function MeIntentRow({
   item,
   onOpen,
+  onCancel,
+  cancelling,
 }: {
   item: BookForOthersIntentActivityItem;
   onOpen: (item: BookForOthersMeActivityItem) => void;
+  onCancel: (item: BookForOthersIntentActivityItem) => void;
+  cancelling: boolean;
 }) {
   const fare =
     item.fare_estimate_minor && item.currency
       ? formatFareMinor(item.fare_estimate_minor, item.currency)
       : null;
-  const subtitle = fare
-    ? `${intentStatusLabel(item.status)} · ${fare}`
-    : intentStatusLabel(item.status);
+  const statusLine = intentStatusLabel(item.status, item.linked_ride_status);
+  const subtitle = fare ? `${statusLine} · ${fare}` : statusLine;
+  const showCancel = item.can_cancel !== false;
+  const staleRide = item.linked_ride_status === 'cancelled';
+
   return (
-    <ActivityRow
-      title={`Your tag · ${roamModeLabel(item.roam_mode)}`}
-      subtitle={subtitle}
-      detail={formatShortAddress(item.pickup_address)}
-      onClick={() => onOpen(item)}
-    />
+    <div className="flex items-stretch gap-1 px-4 py-3.5">
+      <button
+        type="button"
+        onClick={() => onOpen(item)}
+        className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left touch-manipulation transition-colors active:opacity-80"
+      >
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[14px] font-semibold leading-tight" style={{ color: ON_SURFACE }}>
+            {`Your tag · ${roamModeLabel(item.roam_mode)}`}
+          </p>
+          <p
+            className="mt-0.5 truncate text-[12px]"
+            style={{ color: staleRide ? ERROR : PRIMARY }}
+          >
+            {subtitle}
+          </p>
+          {item.pickup_address ? (
+            <p className="mt-1 flex items-center gap-1 truncate text-[11px]" style={{ color: ON_SURFACE_VARIANT }}>
+              <MapPin className="h-3 w-3 shrink-0" aria-hidden />
+              {formatShortAddress(item.pickup_address)}
+            </p>
+          ) : null}
+        </div>
+        <ChevronRight className="h-5 w-5 shrink-0" style={{ color: OUTLINE_VARIANT }} aria-hidden />
+      </button>
+      {showCancel ? (
+        <button
+          type="button"
+          disabled={cancelling}
+          onClick={(event) => {
+            event.stopPropagation();
+            onCancel(item);
+          }}
+          className="flex shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl px-2.5 py-1.5 text-[11px] font-semibold touch-manipulation transition-colors active:opacity-80 disabled:opacity-50"
+          style={{
+            color: ERROR,
+            backgroundColor: 'rgba(220, 38, 38, 0.08)',
+          }}
+          aria-label="Cancel trip"
+        >
+          {cancelling ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          ) : (
+            <>
+              <X className="h-4 w-4" aria-hidden />
+              <span>Cancel</span>
+            </>
+          )}
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -272,8 +348,15 @@ export function BookForOthersActivitySections({
   loading: boolean;
 }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [tab, setTab] = useState<ActivityTab>('someone');
   const [userPickedTab, setUserPickedTab] = useState(false);
+  const [cancellingIntentId, setCancellingIntentId] = useState<string | null>(null);
+  const [intentSheetOpen, setIntentSheetOpen] = useState(false);
+  const [pendingIntent, setPendingIntent] = useState<TripIntentBookerViewDto | null>(null);
+  const [intentLoading, setIntentLoading] = useState(false);
+  const [fulfilling, setFulfilling] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
 
   useEffect(() => {
     if (userPickedTab || loading) return;
@@ -297,12 +380,73 @@ export function BookForOthersActivitySections({
       navigate(`/ride/${item.ride_request_id}`);
       return;
     }
-    navigate('/services/book-for-someone', { state: { tripIntentId: item.intent_id } });
+    if (!TRIP_INTENT_V2) {
+      navigate('/services/book-for-someone', { state: { tripIntentId: item.intent_id } });
+      return;
+    }
+
+    setIntentLoading(true);
+    void tripIntentGetBookerView(item.intent_id)
+      .then((res) => {
+        if (!res.trip_intent?.can_fulfill) {
+          toast.error('This trip is no longer available to pay for.');
+          return;
+        }
+        setPendingIntent(res.trip_intent);
+        setIntentSheetOpen(true);
+      })
+      .catch(() => {
+        toast.error('Could not load that trip request.');
+      })
+      .finally(() => {
+        setIntentLoading(false);
+      });
+  };
+
+  const closeIntentSheet = () => {
+    setIntentSheetOpen(false);
+    setPendingIntent(null);
+  };
+
+  const handleIntentFulfill = async (intent: TripIntentBookerViewDto) => {
+    setFulfilling(true);
+    try {
+      await tripIntentClaim(intent.intent_id).catch(() => undefined);
+      const res = await tripIntentFulfill(intent.intent_id);
+      closeIntentSheet();
+      await queryClient.invalidateQueries({ queryKey: ['book-for-others', 'activity'] });
+      toast.success(
+        res.roam_mode === 'shadow_roam' ? 'Payment confirmed' : 'Ride booked — tracking now',
+      );
+      if (res.roam_mode === 'shadow_roam') {
+        navigate(`/shadow-trip/${res.ride.id}`);
+      } else {
+        navigate(`/ride/${res.ride.id}`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not book trip');
+    } finally {
+      setFulfilling(false);
+    }
+  };
+
+  const handleIntentReject = async (intent: TripIntentBookerViewDto) => {
+    setRejecting(true);
+    try {
+      await tripIntentReject(intent.intent_id);
+      closeIntentSheet();
+      await queryClient.invalidateQueries({ queryKey: ['book-for-others', 'activity'] });
+      toast.message('Trip request declined');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not decline trip');
+    } finally {
+      setRejecting(false);
+    }
   };
 
   const openMeItem = (item: BookForOthersMeActivityItem) => {
     if (item.kind === 'trip_intent') {
-      if (item.status === 'booked' && item.ride_request_id) {
+      if (item.status === 'booked' && item.ride_request_id && item.linked_ride_status !== 'cancelled') {
         navigate(`/ride/${item.ride_request_id}`);
         return;
       }
@@ -310,6 +454,19 @@ export function BookForOthersActivitySections({
       return;
     }
     navigate(`/ride/${item.ride_id}`);
+  };
+
+  const cancelMeIntent = async (item: BookForOthersIntentActivityItem) => {
+    setCancellingIntentId(item.intent_id);
+    try {
+      await tripIntentWithdraw(item.intent_id);
+      await queryClient.invalidateQueries({ queryKey: ['book-for-others', 'activity'] });
+      toast.message('Trip cancelled');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not cancel trip');
+    } finally {
+      setCancellingIntentId(null);
+    }
   };
 
   const selectTab = (next: ActivityTab) => {
@@ -375,11 +532,26 @@ export function BookForOthersActivitySections({
           {bookForMe.map((item, index) => (
             <React.Fragment key={item.kind === 'trip_intent' ? item.intent_id : item.ride_id}>
               {index > 0 ? <div className="mx-4 h-px bg-black/[0.06]" /> : null}
-              <MeItemRow item={item} onOpen={openMeItem} />
+              <MeItemRow
+                item={item}
+                onOpen={openMeItem}
+                onCancelIntent={cancelMeIntent}
+                cancellingIntentId={cancellingIntentId}
+              />
             </React.Fragment>
           ))}
         </ActivityPanel>
       )}
+
+      <TripIntentBookSheet
+        open={intentSheetOpen}
+        intent={pendingIntent}
+        accepting={fulfilling || intentLoading}
+        rejecting={rejecting}
+        onClose={closeIntentSheet}
+        onAccept={(intent) => void handleIntentFulfill(intent)}
+        onReject={(intent) => void handleIntentReject(intent)}
+      />
     </section>
   );
 }

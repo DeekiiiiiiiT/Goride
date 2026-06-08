@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Info, Loader2, Lock, X } from 'lucide-react';
+import { Check, Info, Loader2, Lock, X } from 'lucide-react';
 import { vehicleTypeLabel } from '@roam/business-config/ridesVehicleTypes';
 import type { RoamMode, TripIntentBookerViewDto } from '@roam/types/riderContacts';
 import { formatRoamTagDisplay } from '@/services/roamTagEdge';
@@ -10,6 +10,7 @@ import {
   SHADOW_ROAM_LABEL,
 } from '@/lib/tripIntentCopy';
 import {
+  ERROR,
   ON_PRIMARY,
   ON_SURFACE,
   ON_SURFACE_VARIANT,
@@ -22,11 +23,11 @@ import {
 type Props = {
   open: boolean;
   intent: TripIntentBookerViewDto | null;
-  loading?: boolean;
+  accepting?: boolean;
+  rejecting?: boolean;
   onClose: () => void;
-  onFulfill: (intent: TripIntentBookerViewDto) => void;
-  onBookDifferent?: () => void;
-  showBookDifferent?: boolean;
+  onAccept: (intent: TripIntentBookerViewDto) => void;
+  onReject: (intent: TripIntentBookerViewDto) => void;
 };
 
 function modeLabel(mode: RoamMode): string {
@@ -36,11 +37,11 @@ function modeLabel(mode: RoamMode): string {
 export function TripIntentBookSheet({
   open,
   intent,
-  loading,
+  accepting,
+  rejecting,
   onClose,
-  onFulfill,
-  onBookDifferent,
-  showBookDifferent,
+  onAccept,
+  onReject,
 }: Props) {
   const [tooltipOpen, setTooltipOpen] = useState(false);
   if (!open || !intent) return null;
@@ -51,7 +52,8 @@ export function TripIntentBookSheet({
   const vehicle = intent.vehicle_option ? vehicleTypeLabel(intent.vehicle_option) : 'Roam';
   const fare = formatFareMinor(intent.fare_estimate_minor, intent.currency);
   const isShadow = intent.roam_mode === 'shadow_roam';
-  const ctaLabel = isShadow ? 'Pay for trip' : 'Book and track';
+  const busy = accepting || rejecting;
+  const canAct = intent.can_fulfill && !busy;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 safe-x" role="dialog" aria-modal>
@@ -138,26 +140,42 @@ export function TripIntentBookSheet({
             </p>
           ) : null}
 
-          <button
-            type="button"
-            disabled={loading || !intent.can_fulfill}
-            onClick={() => onFulfill(intent)}
-            className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl font-semibold disabled:opacity-50"
-            style={{ backgroundColor: PRIMARY, color: ON_PRIMARY }}
-          >
-            {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : ctaLabel}
-          </button>
-
-          {showBookDifferent && onBookDifferent ? (
+          <div className="flex items-center justify-center gap-10 pt-2">
             <button
               type="button"
-              onClick={onBookDifferent}
-              className="w-full py-2 text-sm font-medium"
-              style={{ color: PRIMARY }}
+              disabled={!canAct}
+              onClick={() => onReject(intent)}
+              className="flex h-16 w-16 items-center justify-center rounded-full touch-manipulation transition-opacity disabled:opacity-40"
+              style={{
+                backgroundColor: 'rgba(220, 38, 38, 0.1)',
+                color: ERROR,
+              }}
+              aria-label="Reject trip request"
             >
-              Book a different trip
+              {rejecting ? (
+                <Loader2 className="h-7 w-7 animate-spin" aria-hidden />
+              ) : (
+                <X className="h-8 w-8" strokeWidth={2.25} aria-hidden />
+              )}
             </button>
-          ) : null}
+            <button
+              type="button"
+              disabled={!canAct}
+              onClick={() => onAccept(intent)}
+              className="flex h-16 w-16 items-center justify-center rounded-full touch-manipulation transition-opacity disabled:opacity-40"
+              style={{
+                backgroundColor: PRIMARY,
+                color: ON_PRIMARY,
+              }}
+              aria-label={isShadow ? 'Accept and pay for trip' : 'Accept and book trip'}
+            >
+              {accepting ? (
+                <Loader2 className="h-7 w-7 animate-spin" aria-hidden />
+              ) : (
+                <Check className="h-8 w-8" strokeWidth={2.5} aria-hidden />
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>

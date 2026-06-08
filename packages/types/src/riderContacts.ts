@@ -367,6 +367,10 @@ export interface BookForOthersIntentActivityItem {
   intent_role?: 'requester' | 'target_booker';
   /** Linked live ride after the booker pays (status booked). */
   ride_request_id?: string | null;
+  /** If the linked ride was cancelled, the hub shows a dismiss action. */
+  linked_ride_status?: string | null;
+  /** Requester can cancel from the hub when true (default for live requester intents). */
+  can_cancel?: boolean;
 }
 
 export type BookForOthersMeActivityItem =

@@ -68,6 +68,53 @@ function resolveBookerPhone(user: {
   return null;
 }
 
+async function reconcileRequesterIntents(
+  svc: () => SupabaseClient,
+  contactsDb: SupabaseClient,
+  table: string,
+  intents: Record<string, unknown>[],
+): Promise<Record<string, unknown>[]> {
+  const rideIds = intents
+    .filter((row) => String(row.status) === "booked" && row.ride_request_id)
+    .map((row) => String(row.ride_request_id));
+  if (rideIds.length === 0) {
+    return intents.map((row) => ({ ...row, can_cancel: true }));
+  }
+
+  const { data: rides } = await svc().from("ride_requests")
+    .select("id, status, cancel_reason")
+    .in("id", rideIds);
+  const rideById = new Map(
+    (rides ?? []).map((ride) => [String(ride.id), ride as Record<string, unknown>]),
+  );
+
+  const kept: Record<string, unknown>[] = [];
+  const now = new Date().toISOString();
+
+  for (const row of intents) {
+    const rideId = row.ride_request_id ? String(row.ride_request_id) : null;
+    const linkedRide = rideId ? rideById.get(rideId) : null;
+    const linkedStatus = linkedRide ? String(linkedRide.status) : null;
+
+    if (String(row.status) === "booked" && linkedStatus === "cancelled") {
+      await contactsDb.from(table).update({
+        status: "cancelled",
+        ride_request_id: null,
+        updated_at: now,
+      }).eq("id", row.id).eq("status", "booked");
+      continue;
+    }
+
+    kept.push({
+      ...row,
+      linked_ride_status: linkedStatus,
+      can_cancel: true,
+    });
+  }
+
+  return kept;
+}
+
 export function registerBookForOthersActivityRoutes(
   app: Hono,
   deps: BookForOthersActivityDeps,
@@ -126,9 +173,16 @@ export function registerBookForOthersActivityRoutes(
       if (intentsError) {
         console.error("[book_for_others] intents_query_failed", intentsError.message);
       } else {
-        bookForMeIntents = (intents ?? [])
+        const freshRows = (intents ?? [])
           .filter((row) => !isExpired((row as Record<string, unknown>).expires_at as string | null))
-          .map((row) => mapIntent(row as Record<string, unknown>, "requester"));
+          .map((row) => row as Record<string, unknown>);
+        const reconciled = await reconcileRequesterIntents(
+          deps.svc,
+          contactsDb,
+          t.booking_requests,
+          freshRows,
+        );
+        bookForMeIntents = reconciled.map((row) => mapIntent(row, "requester"));
       }
 
       targetedIntents = targetingRows.map((row) => mapIntent(row, "target_booker"));

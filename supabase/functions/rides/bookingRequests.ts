@@ -254,6 +254,22 @@ export async function markBookingRequestConsumed(
   }).eq("id", bookingRequestId).neq("status", "consumed");
 }
 
+/** When a trip-intent ride is system-cancelled, close the intent so the hub can clear it. */
+export async function syncBookingRequestAfterSystemRideCancel(
+  getContactsDb: () => Promise<RidesContactsDb>,
+  bookingRequestId: string,
+): Promise<void> {
+  const { db, tables: t } = await getContactsDb();
+  const { data: br } = await db.from(t.booking_requests).select("id, status")
+    .eq("id", bookingRequestId).maybeSingle();
+  if (!br || !["booked", "claimed"].includes(String(br.status))) return;
+  await db.from(t.booking_requests).update({
+    status: "cancelled",
+    ride_request_id: null,
+    updated_at: new Date().toISOString(),
+  }).eq("id", bookingRequestId);
+}
+
 /** If a Roam Tag ride is cancelled before payment, release the link for another attempt. */
 export async function releaseBookingRequestAfterRideCancelled(
   getContactsDb: () => Promise<RidesContactsDb>,

@@ -26,6 +26,7 @@ import {
   tripIntentFulfill,
   tripIntentClaim,
   tripIntentGetBookerView,
+  tripIntentReject,
 } from '@/services/tripIntentEdge';
 import { RoamPlaceField } from '@/components/RoamPlaceField';
 import { contactsCreate, contactsList, contactGroupsList, createPassengerAuthorization, getPassengerAuthorizationById, lookupPassengerByPhone } from '@/services/contactsEdge';
@@ -115,6 +116,7 @@ export default function BookForSomeonePage() {
   const [pendingIntent, setPendingIntent] = useState<TripIntentBookerViewDto | null>(null);
   const [intentLoading, setIntentLoading] = useState(false);
   const [fulfilling, setFulfilling] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
 
   const openIntentSheet = (intent: TripIntentBookerViewDto | null | undefined): boolean => {
     if (!TRIP_INTENT_V2 || !intent?.can_fulfill) return false;
@@ -142,6 +144,20 @@ export default function BookForSomeonePage() {
       toast.error(e instanceof Error ? e.message : 'Could not book trip');
     } finally {
       setFulfilling(false);
+    }
+  };
+
+  const handleIntentReject = async (intent: TripIntentBookerViewDto) => {
+    setRejecting(true);
+    try {
+      await tripIntentReject(intent.intent_id);
+      setIntentSheetOpen(false);
+      setPendingIntent(null);
+      toast.message('Trip request declined');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not decline trip');
+    } finally {
+      setRejecting(false);
     }
   };
 
@@ -1076,17 +1092,14 @@ export default function BookForSomeonePage() {
       <TripIntentBookSheet
         open={intentSheetOpen}
         intent={pendingIntent}
-        loading={fulfilling || intentLoading}
+        accepting={fulfilling || intentLoading}
+        rejecting={rejecting}
         onClose={() => {
           setIntentSheetOpen(false);
           setPendingIntent(null);
         }}
-        onFulfill={(intent) => void handleIntentFulfill(intent)}
-        showBookDifferent
-        onBookDifferent={() => {
-          setIntentSheetOpen(false);
-          setPendingIntent(null);
-        }}
+        onAccept={(intent) => void handleIntentFulfill(intent)}
+        onReject={(intent) => void handleIntentReject(intent)}
       />
 
       <DeviceContactsPickerSheet

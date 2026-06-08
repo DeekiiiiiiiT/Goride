@@ -9,8 +9,8 @@ import type {
   BookForOthersSomeoneActivityItem,
   TripIntentRow,
 } from '@roam/types/riderContacts';
-import { ridesGetMyActiveRide } from '@/services/ridesEdge';
-import { tripIntentGetMyActive, tripIntentGetTargetingMe } from '@/services/tripIntentEdge';
+import { ridesGetMyActiveRide, ridesGetRequest } from '@/services/ridesEdge';
+import { tripIntentGetMyActive, tripIntentGetTargetingMe, tripIntentWithdraw } from '@/services/tripIntentEdge';
 
 const base = API_ENDPOINTS.rides;
 
@@ -49,6 +49,7 @@ function intentToActivityItem(
     requester_name: row.requester_name,
     intent_role: role,
     ride_request_id: row.ride_request_id ?? null,
+    can_cancel: role === 'requester',
   };
 }
 
@@ -147,6 +148,66 @@ function mergeBookForOthersActivity(
   };
 }
 
+/** Drops or auto-clears booked intents whose linked ride already ended. */
+async function reconcileStaleMeIntents(
+  items: BookForOthersMeActivityItem[],
+): Promise<BookForOthersMeActivityItem[]> {
+  const bookedIntents = items.filter(
+    (item): item is BookForOthersIntentActivityItem =>
+      item.kind === 'trip_intent'
+      && item.status === 'booked'
+      && Boolean(item.ride_request_id),
+  );
+
+  const rideStatusById = new Map<string, string>();
+  await Promise.all(
+    bookedIntents.map(async (item) => {
+      const rideId = item.ride_request_id!;
+      if (item.linked_ride_status) {
+        rideStatusById.set(rideId, item.linked_ride_status);
+        return;
+      }
+      try {
+        const res = await ridesGetRequest(rideId);
+        rideStatusById.set(rideId, res.ride.status);
+      } catch {
+        /* keep item if ride lookup fails */
+      }
+    }),
+  );
+
+  const kept: BookForOthersMeActivityItem[] = [];
+  for (const item of items) {
+    if (item.kind !== 'trip_intent' || item.status !== 'booked' || !item.ride_request_id) {
+      kept.push(item);
+      continue;
+    }
+
+    const linkedStatus = item.linked_ride_status ?? rideStatusById.get(item.ride_request_id) ?? null;
+    if (linkedStatus === 'cancelled') {
+      try {
+        await tripIntentWithdraw(item.intent_id);
+      } catch {
+        kept.push({
+          ...item,
+          linked_ride_status: 'cancelled',
+          can_cancel: true,
+        });
+      }
+      continue;
+    }
+    if (linkedStatus === 'completed') continue;
+
+    kept.push(
+      linkedStatus
+        ? { ...item, linked_ride_status: linkedStatus, can_cancel: item.can_cancel ?? true }
+        : item,
+    );
+  }
+
+  return kept;
+}
+
 /** Loads hub activity from the list API plus live trip-intent / active-ride endpoints. */
 export async function loadBookForOthersActivity(): Promise<BookForOthersActivityResponse> {
   const [apiResult, intentResult, targetingResult, rideResult] = await Promise.allSettled([
@@ -163,5 +224,7 @@ export async function loadBookForOthersActivity(): Promise<BookForOthersActivity
     targetingResult.status === 'fulfilled' ? targetingResult.value.trip_intents : [];
   const activeRide = rideResult.status === 'fulfilled' ? rideResult.value : null;
 
-  return mergeBookForOthersActivity(fromApi, intent, targetingIntents, activeRide);
+  const merged = mergeBookForOthersActivity(fromApi, intent, targetingIntents, activeRide);
+  merged.book_for_me = await reconcileStaleMeIntents(merged.book_for_me);
+  return merged;
 }
