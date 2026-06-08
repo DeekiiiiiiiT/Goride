@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   ArrowLeft,
@@ -25,6 +25,7 @@ import {
   roamTagLookupIntent,
   tripIntentFulfill,
   tripIntentClaim,
+  tripIntentGetBookerView,
 } from '@/services/tripIntentEdge';
 import { RoamPlaceField } from '@/components/RoamPlaceField';
 import { contactsCreate, contactsList, contactGroupsList, createPassengerAuthorization, getPassengerAuthorizationById, lookupPassengerByPhone } from '@/services/contactsEdge';
@@ -74,6 +75,7 @@ type Step = 'locations' | 'recipient';
 
 export default function BookForSomeonePage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [step, setStep] = useState<Step>('locations');
 
   const [pickupAddress, setPickupAddress] = useState('');
@@ -142,6 +144,33 @@ export default function BookForSomeonePage() {
       setFulfilling(false);
     }
   };
+
+  useEffect(() => {
+    const tripIntentId = (location.state as { tripIntentId?: string } | null)?.tripIntentId;
+    if (!tripIntentId || !TRIP_INTENT_V2) return;
+
+    let cancelled = false;
+    setIntentLoading(true);
+    void tripIntentGetBookerView(tripIntentId)
+      .then((res) => {
+        if (cancelled) return;
+        if (openIntentSheet(res.trip_intent)) {
+          navigate(location.pathname, { replace: true, state: null });
+        } else {
+          toast.error('This trip is no longer available to pay for.');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) toast.error('Could not load that trip request.');
+      })
+      .finally(() => {
+        if (!cancelled) setIntentLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [location.pathname, location.state, navigate]);
 
   const clearRecipientSelection = () => {
     setSelected(null);

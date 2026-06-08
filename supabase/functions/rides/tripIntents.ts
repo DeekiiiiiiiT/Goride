@@ -176,6 +176,108 @@ function canBookerAccessIntent(
   return { ok: false, reason: "not_targeted" };
 }
 
+export async function listTripIntentsTargetingBooker(
+  db: SupabaseClient,
+  table: string,
+  bookerUserId: string,
+  bookerPhone?: string | null,
+): Promise<Record<string, unknown>[]> {
+  const statuses = ["published", "claimed"] as const;
+  const queries = [
+    db.from(table).select("*")
+      .eq("target_booker_user_id", bookerUserId)
+      .eq("audience", "targeted")
+      .in("status", [...statuses]),
+    db.from(table).select("*")
+      .eq("claimed_by_user_id", bookerUserId)
+      .in("status", ["claimed"]),
+  ];
+
+  const normalizedPhone = bookerPhone ? normalizePhoneE164(bookerPhone) : null;
+  if (normalizedPhone) {
+    queries.push(
+      db.from(table).select("*")
+        .eq("target_booker_phone_e164", normalizedPhone)
+        .eq("audience", "targeted")
+        .in("status", [...statuses]),
+    );
+  }
+
+  const results = await Promise.all(queries);
+  const merged = new Map<string, Record<string, unknown>>();
+
+  for (const { data } of results) {
+    for (const row of data ?? []) {
+      const record = row as Record<string, unknown>;
+      if (String(record.requester_user_id) === bookerUserId) continue;
+      const fresh = await expireIfNeeded(db, table, record);
+      const status = String(fresh.status);
+      if (!statuses.includes(status as typeof statuses[number])) continue;
+      if (status === "claimed" && String(fresh.claimed_by_user_id) !== bookerUserId) continue;
+      if (status === "published" && String(fresh.audience) === "targeted") {
+        const access = canBookerAccessIntent(fresh, bookerUserId, bookerPhone);
+        if (!access.ok) continue;
+      }
+      merged.set(String(fresh.id), fresh);
+    }
+  }
+
+  return [...merged.values()].sort(
+    (a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime(),
+  );
+}
+
+export async function loadTripIntentBookerViewById(
+  deps: TripIntentDeps,
+  intentId: string,
+  bookerUserId: string,
+  bookerPhone?: string | null,
+): Promise<Record<string, unknown> | null> {
+  const { db, tables: t } = await deps.getContactsDb();
+  const { data: row } = await db.from(t.booking_requests).select("*").eq("id", intentId).maybeSingle();
+  if (!row) return null;
+  const fresh = await expireIfNeeded(db, t.booking_requests, row as Record<string, unknown>);
+  if (!["published", "claimed"].includes(String(fresh.status))) return null;
+  const access = canBookerAccessIntent(fresh, bookerUserId, bookerPhone);
+  if (!access.ok) return null;
+  const requester = await loadRequesterPublicProfile(
+    db,
+    t.roam_passenger_tags,
+    String(fresh.requester_user_id),
+    String(fresh.requester_name),
+  );
+  return buildTripIntentBookerView(fresh, requester, bookerUserId, bookerPhone);
+}
+
+export function mapTripIntentHubItem(
+  row: Record<string, unknown>,
+  role: "requester" | "target_booker",
+): Record<string, unknown> {
+  return {
+    kind: "trip_intent",
+    intent_id: String(row.id),
+    status: String(row.status),
+    roam_mode: String(row.roam_mode ?? "open_roam"),
+    pickup_address: typeof row.pickup_address === "string" ? row.pickup_address : null,
+    dropoff_address: typeof row.dropoff_address === "string" ? row.dropoff_address : null,
+    fare_estimate_minor: row.fare_estimate_minor != null ? String(row.fare_estimate_minor) : null,
+    currency: typeof row.currency === "string" ? row.currency : null,
+    created_at: String(row.created_at),
+    requester_name: typeof row.requester_name === "string" ? row.requester_name : null,
+    intent_role: role,
+  };
+}
+
+function resolveBookerPhone(user: {
+  phone?: string | null;
+  user_metadata?: Record<string, unknown>;
+}): string | null {
+  if (typeof user.phone === "string" && user.phone.trim()) return user.phone;
+  const metaPhone = user.user_metadata?.phone;
+  if (typeof metaPhone === "string" && metaPhone.trim()) return metaPhone;
+  return null;
+}
+
 export async function buildTripIntentBookerView(
   row: Record<string, unknown>,
   requester: Record<string, unknown>,
@@ -427,6 +529,32 @@ export function registerTripIntentRoutes(app: Hono, deps: TripIntentDeps) {
     const { db, tables: t } = await deps.getContactsDb();
     const active = await findActiveForRequester(db, t.booking_requests, gate.user!.id);
     return c.json({ trip_intent: active });
+  });
+
+  app.get("/v1/trip-intents/me/targeting-me", async (c) => {
+    const gate = await requirePassenger(c);
+    if (gate.response) return gate.response;
+    const { db, tables: t } = await deps.getContactsDb();
+    const bookerPhone = resolveBookerPhone(gate.user!);
+    const rows = await listTripIntentsTargetingBooker(
+      db,
+      t.booking_requests,
+      gate.user!.id,
+      bookerPhone,
+    );
+    return c.json({
+      trip_intents: rows.map((row) => mapTripIntentHubItem(row, "target_booker")),
+    });
+  });
+
+  app.get("/v1/trip-intents/:id/booker-view", async (c) => {
+    const gate = await requirePassenger(c);
+    if (gate.response) return gate.response;
+    const id = c.req.param("id");
+    const bookerPhone = resolveBookerPhone(gate.user!);
+    const intent = await loadTripIntentBookerViewById(deps, id, gate.user!.id, bookerPhone);
+    if (!intent) return c.json({ error: "not_found" }, 404);
+    return c.json({ trip_intent: intent });
   });
 
   app.delete("/v1/trip-intents/:id", async (c) => {

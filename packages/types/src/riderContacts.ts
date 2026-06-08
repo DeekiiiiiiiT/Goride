@@ -338,3 +338,44 @@ export const RIDER_CONTACT_RELATION_LABELS: Record<RiderContactRelation, string>
   colleague: 'Colleague',
   other: 'Other',
 };
+
+/** Live ride row on the Book for others hub (booker or passenger view). */
+export interface BookForOthersRideActivityItem {
+  kind: 'ride';
+  ride_id: string;
+  status: import('./rides').RideRequestStatus;
+  roam_mode: RoamMode;
+  counterparty_name: string | null;
+  pickup_address: string | null;
+  dropoff_address: string | null;
+  created_at: string;
+}
+
+/** Published trip intent on the Book for others hub. */
+export interface BookForOthersIntentActivityItem {
+  kind: 'trip_intent';
+  intent_id: string;
+  status: BookingRequestStatus;
+  roam_mode: RoamMode;
+  pickup_address: string | null;
+  dropoff_address: string | null;
+  fare_estimate_minor: string | null;
+  currency: string | null;
+  created_at: string;
+  /** Set when the current user was picked to pay for this trip. */
+  requester_name?: string | null;
+  intent_role?: 'requester' | 'target_booker';
+}
+
+export type BookForOthersMeActivityItem =
+  | BookForOthersRideActivityItem
+  | BookForOthersIntentActivityItem;
+
+export type BookForOthersSomeoneActivityItem =
+  | BookForOthersRideActivityItem
+  | BookForOthersIntentActivityItem;
+
+export interface BookForOthersActivityResponse {
+  book_for_someone: BookForOthersSomeoneActivityItem[];
+  book_for_me: BookForOthersMeActivityItem[];
+}

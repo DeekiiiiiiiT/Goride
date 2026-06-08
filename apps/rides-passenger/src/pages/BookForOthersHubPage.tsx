@@ -1,6 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ChevronRight, Tag, UserPlus } from 'lucide-react';
+import { BookForOthersActivitySections } from '@/components/book-for-others/BookForOthersActivitySections';
+import { useBookForOthersActivity } from '@/hooks/useBookForOthersActivity';
 import {
   NAVY,
   ON_SURFACE,
@@ -51,6 +53,11 @@ function HubRow({
 
 export default function BookForOthersHubPage() {
   const navigate = useNavigate();
+  const { data, isLoading, isFetching } = useBookForOthersActivity();
+
+  const bookForSomeone = data?.book_for_someone ?? [];
+  const bookForMe = data?.book_for_me ?? [];
+  const activityLoading = isLoading || (isFetching && !data);
 
   return (
     <div
@@ -100,6 +107,12 @@ export default function BookForOthersHubPage() {
             onClick={() => navigate('/services/book-for-me')}
           />
         </div>
+
+        <BookForOthersActivitySections
+          bookForSomeone={bookForSomeone}
+          bookForMe={bookForMe}
+          loading={activityLoading}
+        />
       </main>
     </div>
   );

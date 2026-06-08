@@ -82,6 +82,7 @@ import {
 } from "./bookingRequests.ts";
 import { registerRoamPassengerTagRoutes } from "./roamPassengerTag.ts";
 import { registerTripIntentRoutes } from "./tripIntents.ts";
+import { registerBookForOthersActivityRoutes } from "./bookForOthersActivity.ts";
 import { createRideFromTripIntent } from "./tripIntentFulfill.ts";
 import {
   bookerVisibilityForRide,
@@ -2520,6 +2521,12 @@ registerTripIntentRoutes(app, {
     );
     return { ride };
   },
+});
+
+registerBookForOthersActivityRoutes(app, {
+  svc,
+  getContactsDb: getRidesContactsDb,
+  requireUser,
 });
 
 app.get("/v1/wallet/transactions", async (c) => {

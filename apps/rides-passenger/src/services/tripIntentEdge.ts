@@ -1,6 +1,7 @@
 import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
 import { supabase } from '@roam/auth-client';
 import type {
+  BookForOthersIntentActivityItem,
   CreateTripIntentBody,
   FulfillTripIntentResponse,
   TripIntentBookerViewDto,
@@ -111,6 +112,20 @@ export async function tripIntentPublish(id: string): Promise<{ trip_intent: Trip
 
 export async function tripIntentGetMyActive(): Promise<{ trip_intent: TripIntentRow | null }> {
   const res = await fetch(`${base}/v1/trip-intents/me/active`, { headers: await headers() });
+  if (!res.ok) await parseError(res);
+  return res.json();
+}
+
+export async function tripIntentGetTargetingMe(): Promise<{
+  trip_intents: BookForOthersIntentActivityItem[];
+}> {
+  const res = await fetch(`${base}/v1/trip-intents/me/targeting-me`, { headers: await headers() });
+  if (!res.ok) await parseError(res);
+  return res.json();
+}
+
+export async function tripIntentGetBookerView(id: string): Promise<{ trip_intent: TripIntentBookerViewDto }> {
+  const res = await fetch(`${base}/v1/trip-intents/${id}/booker-view`, { headers: await headers() });
   if (!res.ok) await parseError(res);
   return res.json();
 }
