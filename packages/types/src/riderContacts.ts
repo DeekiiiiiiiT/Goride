@@ -365,6 +365,8 @@ export interface BookForOthersIntentActivityItem {
   /** Set when the current user was picked to pay for this trip. */
   requester_name?: string | null;
   intent_role?: 'requester' | 'target_booker';
+  /** Linked live ride after the booker pays (status booked). */
+  ride_request_id?: string | null;
 }
 
 export type BookForOthersMeActivityItem =

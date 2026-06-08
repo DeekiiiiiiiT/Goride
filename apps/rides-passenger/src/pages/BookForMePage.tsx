@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ArrowLeft, ChevronDown, Copy, Loader2, Navigation, Tag, Users, X } from 'lucide-react';
 import { supabase } from '@roam/auth-client';
@@ -47,6 +48,7 @@ type Step = 'mode' | 'trip' | 'payer' | 'published';
 
 export default function BookForMePage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { tag, loading: tagLoading, saveCustomName, refresh } = useRoamPassengerTag({ ensureOnMount: true });
   const { active: services } = useRidesVehicleTypes();
 
@@ -69,6 +71,7 @@ export default function BookForMePage() {
   const [targetPhone, setTargetPhone] = useState('');
   const [intent, setIntent] = useState<TripIntentRow | null>(null);
   const [loading, setLoading] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
   const [roamPickerOpen, setRoamPickerOpen] = useState(false);
   const [devicePickerOpen, setDevicePickerOpen] = useState(false);
   const [contacts, setContacts] = useState<RiderContactRow[]>([]);
@@ -108,14 +111,46 @@ export default function BookForMePage() {
 
   useEffect(() => {
     void tripIntentGetMyActive().then((r) => {
-      if (r.trip_intent && ['draft', 'published', 'claimed'].includes(r.trip_intent.status)) {
-        setIntent(r.trip_intent);
-        if (r.trip_intent.status === 'published' || r.trip_intent.status === 'claimed') {
-          setStep('published');
-        }
-      }
+      if (!r.trip_intent) return;
+      const { status } = r.trip_intent;
+      if (!['draft', 'published', 'claimed', 'booked'].includes(status)) return;
+      setIntent(r.trip_intent);
+      if (status === 'draft') return;
+      setStep('published');
     }).catch(() => undefined);
   }, []);
+
+  const handleWithdrawTrip = async () => {
+    if (!intent?.id) return;
+    setWithdrawing(true);
+    try {
+      await tripIntentWithdraw(intent.id);
+      setIntent(null);
+      setStep('mode');
+      await queryClient.invalidateQueries({ queryKey: ['book-for-others', 'activity'] });
+      toast.message('Trip cancelled');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not cancel trip');
+    } finally {
+      setWithdrawing(false);
+    }
+  };
+
+  const liveIntentHeadline = (status: TripIntentRow['status']) => {
+    if (status === 'booked') return 'Finding a driver';
+    if (status === 'claimed') return 'Someone is booking your ride';
+    return 'Your trip is waiting for a booker';
+  };
+
+  const liveIntentDetail = (status: TripIntentRow['status']) => {
+    if (status === 'booked') {
+      return 'Your booker paid — we are matching a driver. You can cancel below if plans changed.';
+    }
+    if (status === 'claimed') {
+      return 'A booker is completing payment. You can cancel if you no longer need the ride.';
+    }
+    return `Tell them to search ${displayTag ?? 'your tag'} in Roam`;
+  };
 
   useEffect(() => {
     void supabase.auth.getUser().then(({ data: { user } }) => {
@@ -243,23 +278,40 @@ export default function BookForMePage() {
       <main className="mx-auto w-full max-w-2xl space-y-4 px-4 py-4 safe-x">
         {step === 'published' && intent ? (
           <div className="space-y-4 rounded-[24px] p-5" style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}>
-            <p className="font-semibold">Your trip is waiting for a booker</p>
+            <p className="font-semibold">{liveIntentHeadline(intent.status)}</p>
             <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-              Tell them to search <strong>{displayTag}</strong> in Roam
+              {intent.status === 'published' ? (
+                <>Tell them to search <strong>{displayTag}</strong> in Roam</>
+              ) : (
+                liveIntentDetail(intent.status)
+              )}
             </p>
             {intent.fare_estimate_minor ? (
               <p className="text-lg font-bold">{formatFareMinor(intent.fare_estimate_minor, intent.currency ?? 'JMD')}</p>
             ) : null}
-            <button type="button" onClick={() => void copyTag()} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl font-semibold" style={{ backgroundColor: PRIMARY, color: '#fff' }}>
-              <Copy className="h-4 w-4" /> Copy tag
-            </button>
+            {intent.status === 'published' ? (
+              <button type="button" onClick={() => void copyTag()} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl font-semibold" style={{ backgroundColor: PRIMARY, color: '#fff' }}>
+                <Copy className="h-4 w-4" /> Copy tag
+              </button>
+            ) : null}
+            {intent.status === 'booked' && intent.ride_request_id ? (
+              <button
+                type="button"
+                onClick={() => navigate(`/ride/${intent.ride_request_id}`)}
+                className="flex h-12 w-full items-center justify-center rounded-xl font-semibold"
+                style={{ backgroundColor: PRIMARY, color: '#fff' }}
+              >
+                View live trip
+              </button>
+            ) : null}
             <button
               type="button"
-              onClick={() => void tripIntentWithdraw(intent.id).then(() => { setIntent(null); setStep('mode'); toast.message('Trip withdrawn'); })}
-              className="w-full text-sm font-medium"
-              style={{ color: ON_SURFACE_VARIANT }}
+              disabled={withdrawing}
+              onClick={() => void handleWithdrawTrip()}
+              className="w-full text-sm font-medium disabled:opacity-50"
+              style={{ color: '#b42318' }}
             >
-              Withdraw trip
+              {withdrawing ? 'Cancelling…' : 'Cancel trip'}
             </button>
           </div>
         ) : null}

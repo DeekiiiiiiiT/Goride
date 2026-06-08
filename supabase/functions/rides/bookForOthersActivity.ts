@@ -11,7 +11,7 @@ import {
 const RIDE_COLUMNS =
   "id, status, roam_mode, guest_passenger_name, guest_passenger_phone, passenger_user_id, rider_user_id, pickup_address, dropoff_address, created_at, booking_request_id";
 const INTENT_COLUMNS =
-  "id, status, roam_mode, pickup_address, dropoff_address, fare_estimate_minor, currency, created_at, expires_at, requester_user_id";
+  "id, status, roam_mode, pickup_address, dropoff_address, fare_estimate_minor, currency, created_at, expires_at, requester_user_id, requester_name, ride_request_id";
 const INTENT_HUB_STATUSES = ["draft", "published", "claimed", "booked", "pending"] as const;
 
 export type BookForOthersActivityDeps = {
@@ -150,7 +150,17 @@ export function registerBookForOthersActivityRoutes(
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     );
 
-    const bookForSomeone = [...bookForSomeoneRides, ...targetedIntents].sort(
+    const intentsWithLiveRide = new Set(
+      (asBooker ?? [])
+        .filter((row) => isDelegatedBooking(row as Record<string, unknown>))
+        .map((row) => (row as Record<string, unknown>).booking_request_id)
+        .filter((id): id is string => typeof id === "string" && id.length > 0),
+    );
+    const targetedIntentsVisible = targetedIntents.filter(
+      (item) => !intentsWithLiveRide.has(String(item.intent_id)),
+    );
+
+    const bookForSomeone = [...bookForSomeoneRides, ...targetedIntentsVisible].sort(
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     );
 

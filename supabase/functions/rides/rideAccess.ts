@@ -144,6 +144,14 @@ export const ACTIVE_RIDE_STATUSES = [
   "on_trip",
 ] as const;
 
+/** Book-for-others rides should not auto-cancel when matching fails (no drivers / timeout). */
+export function isBookForOthersPersistedRide(ride: Record<string, unknown>): boolean {
+  if (typeof ride.booking_request_id === "string" && ride.booking_request_id.length > 0) {
+    return true;
+  }
+  return isDelegatedBooking(ride);
+}
+
 export function passengerInviteUrl(token: string): string {
   return `${PASSENGER_APP_ORIGIN}/ride/join/${token}`;
 }

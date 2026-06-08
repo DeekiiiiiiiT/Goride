@@ -48,6 +48,7 @@ function intentToActivityItem(
     created_at: row.created_at,
     requester_name: row.requester_name,
     intent_role: role,
+    ride_request_id: row.ride_request_id ?? null,
   };
 }
 
@@ -117,7 +118,11 @@ function mergeBookForOthersActivity(
     const alreadyListed = bookForSomeone.some(
       (entry) => entry.kind === 'trip_intent' && entry.intent_id === item.intent_id,
     );
-    if (!alreadyListed) {
+    const rideCoversIntent =
+      activeRide?.ride?.booking_request_id === item.intent_id
+      && activeRide.participant_role === 'booker'
+      && activeRide.is_delegated;
+    if (!alreadyListed && !rideCoversIntent) {
       bookForSomeone = [item, ...bookForSomeone];
     }
   }

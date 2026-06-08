@@ -17,9 +17,9 @@ import {
 import { isTripIntentV2Enabled } from "./tripIntentFlags.ts";
 import { linkBookingRequestToRide } from "./bookingRequests.ts";
 
-export const TRIP_INTENT_TTL_HOURS = 12;
+export const TRIP_INTENT_TTL_HOURS = 1;
 
-const ACTIVE_REQUESTER_STATUSES = ["draft", "published", "claimed", "pending"] as const;
+const ACTIVE_REQUESTER_STATUSES = ["draft", "published", "claimed", "booked", "pending"] as const;
 const PUBLISHED_STATUSES = ["published", "claimed"] as const;
 
 export type TripIntentDeps = {
@@ -46,6 +46,10 @@ export type TripIntentDeps = {
     intent: Record<string, unknown>;
     paymentMethod: string;
   }) => Promise<{ ride: Record<string, unknown> }>;
+  cancelLinkedRide?: (
+    rideId: string,
+    requesterUserId: string,
+  ) => Promise<{ ok: boolean; reason?: string }>;
 };
 
 function isExpired(expiresAt: string): boolean {
@@ -182,15 +186,15 @@ export async function listTripIntentsTargetingBooker(
   bookerUserId: string,
   bookerPhone?: string | null,
 ): Promise<Record<string, unknown>[]> {
-  const statuses = ["published", "claimed"] as const;
+  const openStatuses = ["published", "claimed"] as const;
   const queries = [
     db.from(table).select("*")
       .eq("target_booker_user_id", bookerUserId)
       .eq("audience", "targeted")
-      .in("status", [...statuses]),
+      .in("status", [...openStatuses]),
     db.from(table).select("*")
       .eq("claimed_by_user_id", bookerUserId)
-      .in("status", ["claimed"]),
+      .in("status", ["claimed", "booked"]),
   ];
 
   const normalizedPhone = bookerPhone ? normalizePhoneE164(bookerPhone) : null;
@@ -199,7 +203,7 @@ export async function listTripIntentsTargetingBooker(
       db.from(table).select("*")
         .eq("target_booker_phone_e164", normalizedPhone)
         .eq("audience", "targeted")
-        .in("status", [...statuses]),
+        .in("status", [...openStatuses]),
     );
   }
 
@@ -212,13 +216,23 @@ export async function listTripIntentsTargetingBooker(
       if (String(record.requester_user_id) === bookerUserId) continue;
       const fresh = await expireIfNeeded(db, table, record);
       const status = String(fresh.status);
-      if (!statuses.includes(status as typeof statuses[number])) continue;
-      if (status === "claimed" && String(fresh.claimed_by_user_id) !== bookerUserId) continue;
-      if (status === "published" && String(fresh.audience) === "targeted") {
-        const access = canBookerAccessIntent(fresh, bookerUserId, bookerPhone);
-        if (!access.ok) continue;
+      const claimedByMe = String(fresh.claimed_by_user_id) === bookerUserId;
+
+      if (status === "booked" && claimedByMe) {
+        merged.set(String(fresh.id), fresh);
+        continue;
       }
-      merged.set(String(fresh.id), fresh);
+      if (status === "claimed" && claimedByMe) {
+        merged.set(String(fresh.id), fresh);
+        continue;
+      }
+      if (status === "published" && openStatuses.includes(status as typeof openStatuses[number])) {
+        if (String(fresh.audience) === "targeted") {
+          const access = canBookerAccessIntent(fresh, bookerUserId, bookerPhone);
+          if (!access.ok) continue;
+        }
+        merged.set(String(fresh.id), fresh);
+      }
     }
   }
 
@@ -237,9 +251,16 @@ export async function loadTripIntentBookerViewById(
   const { data: row } = await db.from(t.booking_requests).select("*").eq("id", intentId).maybeSingle();
   if (!row) return null;
   const fresh = await expireIfNeeded(db, t.booking_requests, row as Record<string, unknown>);
-  if (!["published", "claimed"].includes(String(fresh.status))) return null;
-  const access = canBookerAccessIntent(fresh, bookerUserId, bookerPhone);
-  if (!access.ok) return null;
+  const status = String(fresh.status);
+  const claimedByMe = String(fresh.claimed_by_user_id) === bookerUserId;
+  if (status === "booked") {
+    if (!claimedByMe) return null;
+  } else if (!["published", "claimed"].includes(status)) {
+    return null;
+  } else {
+    const access = canBookerAccessIntent(fresh, bookerUserId, bookerPhone);
+    if (!access.ok) return null;
+  }
   const requester = await loadRequesterPublicProfile(
     db,
     t.roam_passenger_tags,
@@ -265,6 +286,7 @@ export function mapTripIntentHubItem(
     created_at: String(row.created_at),
     requester_name: typeof row.requester_name === "string" ? row.requester_name : null,
     intent_role: role,
+    ride_request_id: row.ride_request_id != null ? String(row.ride_request_id) : null,
   };
 }
 
@@ -562,15 +584,37 @@ export function registerTripIntentRoutes(app: Hono, deps: TripIntentDeps) {
     if (gate.response) return gate.response;
     const id = c.req.param("id");
     const { db, tables: t } = await deps.getContactsDb();
-    const { data: row } = await db.from(t.booking_requests).select("id, status").eq("id", id)
+    const { data: row } = await db.from(t.booking_requests).select("*").eq("id", id)
       .eq("requester_user_id", gate.user!.id).maybeSingle();
     if (!row) return c.json({ error: "not_found" }, 404);
-    if (String(row.status) === "claimed") return c.json({ error: "already_claimed" }, 409);
-    const nextStatus = ["draft", "published"].includes(String(row.status)) ? "cancelled" : String(row.status);
+
+    const status = String(row.status);
+    const withdrawable = ["draft", "published", "claimed", "booked"];
+    if (!withdrawable.includes(status)) {
+      return c.json({ error: "not_cancellable", status }, 409);
+    }
+
+    const now = new Date().toISOString();
     await db.from(t.booking_requests).update({
-      status: nextStatus,
-      updated_at: new Date().toISOString(),
+      status: "cancelled",
+      updated_at: now,
     }).eq("id", id);
+
+    const rideId = typeof row.ride_request_id === "string" ? row.ride_request_id : null;
+    if (rideId && deps.cancelLinkedRide) {
+      const result = await deps.cancelLinkedRide(rideId, gate.user!.id);
+      if (!result.ok && result.reason === "ride_not_cancellable") {
+        return c.json({
+          error: "ride_not_cancellable",
+          message: "Your driver is already on the way — contact support if you need help.",
+        }, 409);
+      }
+    }
+
+    await deps.audit(rideId, gate.user!.id, "trip_intent_cancelled_by_requester", {
+      trip_intent_id: id,
+      prior_status: status,
+    });
     return c.json({ ok: true });
   });
 

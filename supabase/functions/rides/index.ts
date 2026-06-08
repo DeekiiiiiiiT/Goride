@@ -98,6 +98,7 @@ import {
   getRideParticipantRole,
   ACTIVE_RIDE_STATUSES,
   isDelegatedBooking,
+  isBookForOthersPersistedRide,
   PASSENGER_APP_ORIGIN,
   shouldExposePinToUser,
 } from "./rideAccess.ts";
@@ -480,7 +481,10 @@ async function handleTerminalRideLedgerAndSync(rideId: string): Promise<void> {
       }
     }
     if (status === "cancelled" && bookingRequestId) {
-      await releaseBookingRequestAfterRideCancelled(getRidesContactsDb, bookingRequestId);
+      const cancelledBy = String(fresh.cancelled_by ?? "");
+      if (cancelledBy !== "system") {
+        await releaseBookingRequestAfterRideCancelled(getRidesContactsDb, bookingRequestId);
+      }
     }
   } catch (e) {
     console.error("[rides] ledger line persist failed:", e);
@@ -800,6 +804,15 @@ async function cancelMatchingRideSystem(
   extraAudit: Record<string, unknown>,
   requestId?: string,
 ): Promise<void> {
+  if (isBookForOthersPersistedRide(ride)) {
+    logLine({
+      event: "matching_cancel_skipped_book_for_others",
+      ride_id: rideId,
+      cancel_reason: cancelReason,
+      request_id: requestId ?? null,
+    });
+    return;
+  }
   const wave = Number(ride.matching_wave ?? 0);
   const patched = await patchRideRequest(rideId, {
     status: "cancelled",
@@ -843,6 +856,14 @@ async function reconcileMatching(rideId: string, requestId?: string) {
     if (!ride || ride.status !== "matching") return;
 
     if (isMatchingTimedOut(ride, dispatchSettings)) {
+      if (isBookForOthersPersistedRide(ride)) {
+        logLine({
+          event: "matching_timeout_skipped_book_for_others",
+          ride_id: rideId,
+          request_id: requestId ?? null,
+        });
+        return;
+      }
       await cancelMatchingRideSystem(rideId, ride, "matching_timeout", {}, requestId);
       return;
     }
@@ -852,6 +873,19 @@ async function reconcileMatching(rideId: string, requestId?: string) {
 
     const wave = Number(ride.matching_wave ?? 0);
     if (wave >= dispatchSettings.max_match_waves) {
+      if (isBookForOthersPersistedRide(ride)) {
+        await patchRideRequest(rideId, {
+          matching_wave: 0,
+          updated_at: new Date().toISOString(),
+        });
+        logLine({
+          event: "matching_wave_reset_book_for_others",
+          ride_id: rideId,
+          wave,
+          request_id: requestId ?? null,
+        });
+        return;
+      }
       await cancelMatchingRideSystem(rideId, ride, "no_drivers_available", {}, requestId);
       return;
     }
@@ -2520,6 +2554,24 @@ registerTripIntentRoutes(app, {
       paymentMethod,
     );
     return { ride };
+  },
+  cancelLinkedRide: async (rideId: string, requesterUserId: string) => {
+    const ride = await loadRideRequestById(rideId);
+    if (!ride) return { ok: true };
+    if (String(ride.status) === "completed" || String(ride.status) === "cancelled") {
+      return { ok: true };
+    }
+    if (!canCancelRide(ride, requesterUserId)) {
+      return { ok: false, reason: "ride_not_cancellable" };
+    }
+    const patched = await cancelRideRequestRow(rideId, "rider", "requester_withdrew_trip");
+    if (!patched) return { ok: false, reason: "cancel_failed" };
+    await supersedePendingOffersForRide(rideId);
+    const cellKey = gridCellKey(Number(ride.pickup_lat), Number(ride.pickup_lng));
+    await bumpSurgeDemand(cellKey, -1);
+    await audit(rideId, requesterUserId, "ride_cancelled_passenger", { via: "trip_intent_withdraw" });
+    await handleTerminalRideLedgerAndSync(rideId);
+    return { ok: true };
   },
 });
 

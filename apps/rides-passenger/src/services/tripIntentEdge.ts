@@ -44,8 +44,22 @@ async function parseError(res: Response): Promise<never> {
       );
     }
   }
-  if (res.status === 409 && message === 'not_draft') {
-    throw new Error('You already have a live trip on your tag. Withdraw it first, then publish again.');
+  if (res.status === 409) {
+    if (message === 'not_draft') {
+      throw new Error('You already have a live trip on your tag. Withdraw it first, then publish again.');
+    }
+    if (message === 'ride_not_cancellable') {
+      try {
+        const body = JSON.parse(text) as { message?: string };
+        throw new Error(body.message ?? 'This trip can no longer be cancelled from the app.');
+      } catch (e) {
+        if (e instanceof Error && e.message.includes('driver')) throw e;
+        throw new Error('This trip can no longer be cancelled from the app.');
+      }
+    }
+    if (message === 'not_cancellable') {
+      throw new Error('This trip has already ended.');
+    }
   }
   if (message === 'insert_failed') {
     try {

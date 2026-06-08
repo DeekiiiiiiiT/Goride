@@ -31,14 +31,14 @@ function intentStatusLabel(status: string): string {
   if (status === 'draft') return 'Finish setting up your trip';
   if (status === 'published') return 'Waiting for someone to pay';
   if (status === 'claimed') return 'Someone is booking your ride';
-  if (status === 'booked') return 'Ride is being confirmed';
+  if (status === 'booked') return 'Finding a driver';
   return 'Trip request live';
 }
 
 function bookerIntentStatusLabel(status: string): string {
   if (status === 'published') return 'Requested you to pay';
   if (status === 'claimed') return 'Ready for you to pay';
-  if (status === 'booked') return 'Confirming ride';
+  if (status === 'booked') return 'Finding a driver';
   return 'Payment requested';
 }
 
@@ -293,11 +293,19 @@ export function BookForOthersActivitySections({
   };
 
   const openSomeoneIntent = (item: BookForOthersIntentActivityItem) => {
+    if (item.status === 'booked' && item.ride_request_id) {
+      navigate(`/ride/${item.ride_request_id}`);
+      return;
+    }
     navigate('/services/book-for-someone', { state: { tripIntentId: item.intent_id } });
   };
 
   const openMeItem = (item: BookForOthersMeActivityItem) => {
     if (item.kind === 'trip_intent') {
+      if (item.status === 'booked' && item.ride_request_id) {
+        navigate(`/ride/${item.ride_request_id}`);
+        return;
+      }
       navigate('/services/book-for-me');
       return;
     }

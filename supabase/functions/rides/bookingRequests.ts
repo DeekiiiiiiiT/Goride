@@ -262,7 +262,7 @@ export async function releaseBookingRequestAfterRideCancelled(
   const { db, tables: t } = await getContactsDb();
   const { data: br } = await db.from(t.booking_requests).select("id, status, expires_at")
     .eq("id", bookingRequestId).maybeSingle();
-  if (!br || br.status === "consumed") return;
+  if (!br || br.status === "consumed" || br.status === "cancelled") return;
   if (isExpired(String(br.expires_at))) {
     await db.from(t.booking_requests).update({ status: "expired", updated_at: new Date().toISOString() })
       .eq("id", bookingRequestId);
