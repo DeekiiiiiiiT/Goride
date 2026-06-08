@@ -81,6 +81,13 @@ import {
   isDigitalRidePayment,
 } from "./bookingRequests.ts";
 import { registerRoamPassengerTagRoutes } from "./roamPassengerTag.ts";
+import { registerTripIntentRoutes } from "./tripIntents.ts";
+import { createRideFromTripIntent } from "./tripIntentFulfill.ts";
+import {
+  bookerVisibilityForRide,
+  canShadowBookerAccessLive,
+  sanitizeRideForShadowBooker,
+} from "./tripIntentAccess.ts";
 import { registerPassengerProfileRoutes } from "./passengerProfile.ts";
 import { registerTripShareRoutes, maybeAutoShareWithTrustedContacts } from "./tripShare.ts";
 import {
@@ -88,10 +95,15 @@ import {
   canCancelRide,
   canChatOnRide,
   getRideParticipantRole,
+  ACTIVE_RIDE_STATUSES,
   isDelegatedBooking,
+  PASSENGER_APP_ORIGIN,
   shouldExposePinToUser,
 } from "./rideAccess.ts";
-import { notifyPassengerOfRideEvent } from "./rideNotifications.ts";
+import {
+  notifyPassengerOfRideEvent,
+  notifyShadowBookerOfTripCompleted,
+} from "./rideNotifications.ts";
 
 /** Match Supabase path prefix: .../functions/v1/rides/<route> → /rides/<route> */
 const app = new Hono().basePath("/rides");
@@ -459,6 +471,11 @@ async function handleTerminalRideLedgerAndSync(rideId: string): Promise<void> {
       await finalizeRideLedgerFields(svc(), rideId, fresh);
       if (bookingRequestId && isDigitalRidePayment(fresh.payment_method)) {
         await markBookingRequestConsumed(getRidesContactsDb, bookingRequestId, rideId);
+      }
+      if (fresh.roam_mode === "shadow_roam") {
+        void notifyShadowBookerOfTripCompleted(pubSvc(), fresh).catch((e) =>
+          logLine({ event: "shadow_booker_notify_failed", error: String(e) })
+        );
       }
     }
     if (status === "cancelled" && bookingRequestId) {
@@ -1453,11 +1470,15 @@ app.post("/v1/requests", async (c) => {
     }
   }
 
-  const bookingRequestId = typeof body.booking_request_id === "string" ? body.booking_request_id : null;
+  const bookingRequestId = typeof body.trip_intent_id === "string"
+    ? body.trip_intent_id
+    : typeof body.booking_request_id === "string"
+      ? body.booking_request_id
+      : null;
   if (bookingRequestId) {
     const { db: contactsDb, tables: ct } = await getRidesContactsDb();
     const { data: br } = await contactsDb.from(ct.booking_requests).select(
-      "id, status, claimed_by_user_id, requester_user_id, requester_name, requester_phone, expires_at, pickup_lat, pickup_lng, pickup_address, dropoff_lat, dropoff_lng, dropoff_address, vehicle_option",
+      "id, status, claimed_by_user_id, requester_user_id, requester_name, requester_phone, expires_at, pickup_lat, pickup_lng, pickup_address, dropoff_lat, dropoff_lng, dropoff_address, vehicle_option, roam_mode, quote_token",
     )
       .eq("id", bookingRequestId).eq("claimed_by_user_id", auth.user.id).maybeSingle();
     if (!br || br.status !== "claimed") return c.json({ error: "invalid_booking_request" }, 400);
@@ -1485,6 +1506,9 @@ app.post("/v1/requests", async (c) => {
     }
     if (br.vehicle_option && typeof br.vehicle_option === "string") {
       insertRow.vehicle_option = br.vehicle_option;
+    }
+    if (br.roam_mode === "shadow_roam" || br.roam_mode === "open_roam") {
+      insertRow.roam_mode = br.roam_mode;
     }
   }
 
@@ -1596,12 +1620,104 @@ app.post("/v1/requests", async (c) => {
   }
 
   logLine({ event: "ride_created", ride_id: ride.id, request_id: reqId });
+
+  const passengerId = insertRow.passenger_user_id ? String(insertRow.passenger_user_id) : null;
+  if (passengerId && passengerId !== auth.user.id) {
+    const notifyRide = freshRide ?? ride;
+    void notifyPassengerOfRideEvent(pubSvc(), notifyRide, "delegated_ride_booked", {
+      guest_name: notifyRide.guest_passenger_name ?? "there",
+      url: `${PASSENGER_APP_ORIGIN}/ride/${ride.id}`,
+    }).catch((e) => logLine({ event: "delegated_ride_notify_failed", error: String(e) }));
+  }
+
   return c.json({
     ride: rideOut,
     rider_pin:
       pinEnabled && rideOut && shouldExposeRiderPin(rideOut)
         ? normalizeVerificationPin(rideOut.verification_pin)
         : null,
+  });
+});
+
+async function loadActiveRideForUser(userId: string): Promise<{
+  ride: Record<string, unknown>;
+  participant_role: "booker" | "passenger";
+} | null> {
+  const statuses = [...ACTIVE_RIDE_STATUSES];
+  const db = svc();
+
+  const { data: asPassenger } = await db.from("ride_requests")
+    .select("*")
+    .eq("passenger_user_id", userId)
+    .in("status", statuses)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (asPassenger) {
+    return {
+      ride: asPassenger as Record<string, unknown>,
+      participant_role: "passenger",
+    };
+  }
+
+  const { data: asBooker } = await db.from("ride_requests")
+    .select("*")
+    .eq("rider_user_id", userId)
+    .in("status", statuses)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (asBooker) {
+    return {
+      ride: asBooker as Record<string, unknown>,
+      participant_role: "booker",
+    };
+  }
+
+  return null;
+}
+
+app.get("/v1/requests/me/active", async (c) => {
+  const auth = await requireUser(c.req.header("Authorization"));
+  if ("error" in auth) return c.json({ error: auth.error }, auth.status);
+  const r = ridesUserSurfaceRole(auth.user);
+  if (r && r !== "passenger") {
+    return jsonEdgeForbidden(c, "forbidden_role");
+  }
+
+  const active = await loadActiveRideForUser(auth.user.id);
+  if (c.req.query("summary") === "1") {
+    if (!active) return c.json({ summary: null });
+    const delegated = isDelegatedBooking(active.ride);
+    if (active.participant_role === "booker" && !delegated) {
+      return c.json({ summary: null });
+    }
+    if (active.ride.roam_mode === "shadow_roam" && active.participant_role === "booker") {
+      return c.json({ summary: null });
+    }
+    return c.json({
+      summary: {
+        ride_id: String(active.ride.id),
+        status: active.ride.status,
+        guest_passenger_name:
+          typeof active.ride.guest_passenger_name === "string"
+            ? active.ride.guest_passenger_name
+            : null,
+        participant_role: active.participant_role,
+        is_delegated: delegated,
+        roam_mode: active.ride.roam_mode ?? null,
+      },
+    });
+  }
+
+  if (!active) return c.json({ ride: null, participant_role: null });
+
+  return c.json({
+    ride: active.ride,
+    participant_role: active.participant_role,
+    is_delegated: isDelegatedBooking(active.ride),
   });
 });
 
@@ -1665,20 +1781,29 @@ app.get("/v1/requests/:id", async (c) => {
     });
   }
 
+  const rideForParticipant = rideOut ?? ride;
+  const bookerVis = bookerVisibilityForRide(rideForParticipant, auth.user.id);
+  let rideResponse = isDriver && rideOut
+    ? sanitizeRideForDriver(rideOut, settings.pin_verification_required_for_start)
+    : isBooker || isPassenger
+      ? sanitizeRideForRider(rideOut)
+      : rideOut;
+  if (bookerVis === "shadow" && rideResponse) {
+    rideResponse = sanitizeRideForShadowBooker(rideResponse);
+  }
+
   return c.json({
-    ride: isDriver && rideOut
-      ? sanitizeRideForDriver(rideOut, settings.pin_verification_required_for_start)
-      : isBooker || isPassenger
-        ? sanitizeRideForRider(rideOut)
-        : rideOut,
-    offers,
-    wait_time: waitTimeInfo,
+    ride: rideResponse,
+    offers: bookerVis === "shadow" ? [] : offers,
+    wait_time: bookerVis === "shadow" ? null : waitTimeInfo,
     rider_pin: pinEligible ? riderPin : null,
     participant_role: participantRole,
-    can_chat: canChatOnRide(rideOut ?? ride, auth.user.id),
-    can_cancel: canCancelRide(rideOut ?? ride, auth.user.id),
-    is_delegated: isDelegatedBooking(rideOut ?? ride),
+    can_chat: canChatOnRide(rideForParticipant, auth.user.id),
+    can_cancel: canCancelRide(rideForParticipant, auth.user.id),
+    is_delegated: isDelegatedBooking(rideForParticipant),
     pin_enabled: isPinFeatureEnabled(settings),
+    booker_visibility: bookerVis === "none" ? undefined : bookerVis,
+    roam_mode: rideForParticipant.roam_mode ?? null,
   });
 });
 
@@ -1888,7 +2013,9 @@ app.post("/v1/drivers/offers/:offerId/accept", async (c) => {
   await audit(rideId, auth.user.id, "offer_accepted", { offer_id: offerId });
   logLine({ event: "offer_accepted", ride_id: rideId, driver_id: auth.user.id });
 
-  void notifyPassengerOfRideEvent(db, freshRide, "driver_assigned").catch((e) =>
+  void notifyPassengerOfRideEvent(db, freshRide, "driver_assigned", {
+    url: `${PASSENGER_APP_ORIGIN}/ride/${rideId}`,
+  }).catch((e) =>
     console.warn("[rides] passenger SMS driver_assigned failed:", e)
   );
 
@@ -2114,6 +2241,10 @@ app.get("/v1/requests/:id/live", async (c) => {
     return jsonEdgeForbidden(c, "forbidden");
   }
 
+  if (!canShadowBookerAccessLive(ride, auth.user.id)) {
+    return c.json({ error: "shadow_booker_live_forbidden" }, 403);
+  }
+
   const driverLocation =
     ride.last_driver_lat != null && ride.last_driver_lng != null
       ? {
@@ -2196,7 +2327,9 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
   logLine({ event: "driver_transition", ride_id: id, from: current, to: next, source: "manual" });
 
   if (next === "driver_arrived_pickup" && result.ride) {
-    void notifyPassengerOfRideEvent(svc(), result.ride as Record<string, unknown>, "driver_arrived").catch((e) =>
+    void notifyPassengerOfRideEvent(svc(), result.ride as Record<string, unknown>, "driver_arrived", {
+      url: `${PASSENGER_APP_ORIGIN}/ride/${id}`,
+    }).catch((e) =>
       console.warn("[rides] passenger SMS driver_arrived failed:", e)
     );
   }
@@ -2321,6 +2454,106 @@ registerPassengerAuthorizationRoutes(app, {
   audit,
   rateLimit,
 });
+registerTripIntentRoutes(app, {
+  getContactsDb: getRidesContactsDb,
+  requireUser,
+  audit,
+  quoteIntent: async (params) => {
+    const db = svc();
+    const fareRulesAccess = await resolveFareRulesDbForQuote();
+    let dispatchSettings = DEFAULT_DISPATCH_SETTINGS;
+    try {
+      const { db: adminDb, tables } = await getRidesAdminDb();
+      dispatchSettings = await loadDispatchSettings(adminDb, tables);
+    } catch { /* defaults */ }
+    const quote = await buildFareQuote(db, {
+      pickupLat: params.pickup_lat,
+      pickupLng: params.pickup_lng,
+      dropoffLat: params.dropoff_lat,
+      dropoffLng: params.dropoff_lng,
+      vehicleType: params.vehicle_option,
+      readSurge: readSurgeMultiplier,
+      dispatchSettings,
+      fareRulesDb: fareRulesAccess.db,
+      fareRulesTable: fareRulesAccess.fareRulesTable,
+      vehicleTypesTable: fareRulesAccess.vehicleTypesTable,
+    });
+    return {
+      quote_token: quote.quoteToken,
+      fare_estimate_minor: quote.fareEstimateMinor.toString(),
+      currency: quote.currency,
+    };
+  },
+  fulfillIntent: async ({ bookerUserId, intent, paymentMethod }) => {
+    let bookDispatchSettings = DEFAULT_DISPATCH_SETTINGS;
+    try {
+      const { db: adminDb, tables } = await getRidesAdminDb();
+      bookDispatchSettings = await loadDispatchSettings(adminDb, tables);
+    } catch { /* defaults */ }
+    const ride = await createRideFromTripIntent(
+      {
+        svc,
+        pubSvc,
+        loadRideRequestById,
+        patchRideRequest,
+        runMatchingWave,
+        reconcileMatching,
+        audit,
+        gridCellKey,
+        bumpSurgeDemand,
+        cancelPriorMatchingRidesForRider,
+        bookDispatchSettings,
+        isPinFeatureEnabled,
+        notifyPassengerBooked: (r) => {
+          const passengerId = r.passenger_user_id ? String(r.passenger_user_id) : null;
+          if (passengerId && passengerId !== bookerUserId) {
+            void notifyPassengerOfRideEvent(pubSvc(), r, "delegated_ride_booked", {
+              guest_name: r.guest_passenger_name ?? "there",
+              url: `${PASSENGER_APP_ORIGIN}/ride/${r.id}`,
+            }).catch(() => undefined);
+          }
+        },
+      },
+      bookerUserId,
+      intent,
+      paymentMethod,
+    );
+    return { ride };
+  },
+});
+
+app.get("/v1/wallet/transactions", async (c) => {
+  const auth = await requireUser(c.req.header("Authorization"));
+  if ("error" in auth) return c.json({ error: auth.error }, auth.status);
+  if (ridesUserSurfaceRole(auth.user) !== "passenger") {
+    return jsonEdgeForbidden(c, "forbidden_role");
+  }
+  const db = svc();
+  const { data: rides } = await db.from("ride_requests")
+    .select("id, status, roam_mode, fare_estimate_minor, currency, created_at, updated_at, guest_passenger_name, rider_user_id")
+    .eq("rider_user_id", auth.user.id)
+    .in("status", ["completed", "cancelled", "on_trip", "matching", "driver_assigned", "driver_en_route_pickup", "driver_arrived_pickup"])
+    .order("created_at", { ascending: false })
+    .limit(50);
+  const transactions = (rides ?? []).map((r: Record<string, unknown>) => {
+    const isShadow = r.roam_mode === "shadow_roam";
+    const amount = r.fare_estimate_minor != null ? `-${r.fare_estimate_minor}` : "0";
+    return {
+      id: String(r.id),
+      kind: isShadow ? "shadow_trip" : "open_trip",
+      title: isShadow ? "Shadow trip" : `Ride for ${r.guest_passenger_name ?? "passenger"}`,
+      amount_minor: String(amount).replace(/^-/, ""),
+      currency: r.currency ?? "JMD",
+      date: r.updated_at ?? r.created_at,
+      meta: String(r.status).toUpperCase(),
+      ride_id: r.id,
+      pickup_at: r.created_at,
+      dropoff_at: r.status === "completed" ? r.updated_at : null,
+    };
+  });
+  return c.json({ transactions });
+});
+
 registerBookingRequestRoutes(app, { getContactsDb: getRidesContactsDb, requireUser, audit });
 registerRoamPassengerTagRoutes(app, { getContactsDb: getRidesContactsDb, requireUser });
 registerPassengerProfileRoutes(app, { requireUser });

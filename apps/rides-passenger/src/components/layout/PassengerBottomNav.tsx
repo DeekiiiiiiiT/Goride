@@ -14,14 +14,20 @@ const NAV_ITEMS = [
 export function PassengerBottomNav() {
   return (
     <nav
-      className="home-bottom-nav fixed bottom-0 left-0 right-0 z-50 border-t safe-b safe-x shadow-[0px_-4px_20px_rgba(0,0,0,0.08)]"
+      className="home-bottom-nav fixed bottom-0 left-0 right-0 z-50 border-t safe-x shadow-[0px_-4px_20px_rgba(0,0,0,0.08)]"
       style={{
-        backgroundColor: 'var(--home-sheet-bg, #ffffff)',
+        backgroundColor: 'var(--home-nav-safe-area-bg, #e8eaed)',
         borderColor: 'var(--home-sheet-border, rgba(188, 202, 190, 0.35))',
       }}
       aria-label="Main"
     >
-      <div className="mx-auto flex h-[4.5rem] w-full max-w-xl items-center justify-around">
+      <div
+        className="mx-auto flex h-[4.5rem] w-full max-w-xl items-center justify-around border-b"
+        style={{
+          backgroundColor: 'var(--home-sheet-bg, #ffffff)',
+          borderColor: 'var(--home-sheet-border, rgba(188, 202, 190, 0.35))',
+        }}
+      >
         {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
@@ -49,6 +55,11 @@ export function PassengerBottomNav() {
           </NavLink>
         ))}
       </div>
+      <div
+        className="w-full"
+        style={{ height: 'max(0.5rem, env(safe-area-inset-bottom, 0px))' }}
+        aria-hidden
+      />
     </nav>
   );
 }

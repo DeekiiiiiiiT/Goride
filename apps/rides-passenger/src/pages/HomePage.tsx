@@ -5,7 +5,6 @@ import {
   ArrowLeft,
   ArrowRight,
   Crosshair,
-  Lock,
   Package,
   Pencil,
   Tag,
@@ -58,10 +57,6 @@ import { createIdempotencyKey } from '@/lib/idempotencyKey';
 import { formatRoamTagDisplay } from '@/services/roamTagEdge';
 import { withTimeout } from '@/lib/withTimeout';
 import {
-  clearBookingRequestDraft,
-  readBookingRequestDraft,
-} from '@/lib/delegatedBookingSession';
-import {
   checkGeolocationGranted,
   isBlockedByPolicy,
   isNativeCapacitorPlatform,
@@ -92,20 +87,14 @@ export default function HomePage() {
   const [guestRecipient, setGuestRecipient] = useState<GuestRecipientDraft | null>(() =>
     readGuestRecipientDraft(),
   );
-  const [roamTagActive, setRoamTagActive] = useState(() => Boolean(readBookingRequestDraft()));
-  const tagDraft = useMemo(() => (roamTagActive ? readBookingRequestDraft() : null), [roamTagActive]);
-
   useEffect(() => {
     setGuestRecipient(readGuestRecipientDraft());
-    setRoamTagActive(Boolean(readBookingRequestDraft()));
   }, []);
 
   useEffect(() => {
     const guest = readGuestRecipientDraft();
     let tripDraft = readBookForSomeoneTrip();
-    const tagDraft = readBookingRequestDraft();
-
-    if (tripDraft && !guest && !tagDraft) {
+    if (tripDraft && !guest) {
       clearBookForSomeoneTrip();
       tripDraft = null;
     }
@@ -124,25 +113,6 @@ export default function HomePage() {
       setPickup({ lat: draft.pickupPreset.lat, lng: draft.pickupPreset.lng });
       setPickupAddress(draft.pickupPreset.address);
       setPickupSetByDevice(false);
-    }
-    if (tagDraft?.pickup) {
-      setPickup({ lat: tagDraft.pickup.lat, lng: tagDraft.pickup.lng });
-      setPickupAddress('');
-      setPickupSetByDevice(false);
-    }
-    if (tagDraft?.dropoff) {
-      setDropoff({ lat: tagDraft.dropoff.lat, lng: tagDraft.dropoff.lng });
-      setDropoffAddress('');
-      setDestinationChosen(true);
-      setRouteExpanded(false);
-    }
-    if (tagDraft?.requesterName) {
-      setGuestRecipient({
-        fullName: tagDraft.requesterName,
-        phone: tagDraft.requesterPhone.replace(/\D/g, '').slice(-10),
-        countryCode: '+1',
-      });
-      setRoamTagActive(true);
     }
   }, []);
 
@@ -181,10 +151,7 @@ export default function HomePage() {
   /** Pickup was filled from device GPS (grey field until user edits pickup). */
   const [pickupSetByDevice, setPickupSetByDevice] = useState(false);
   const { active: services } = useRidesVehicleTypes();
-  const [vehicleOption, setVehicleOption] = useState<string>(() => {
-    const tagVehicle = readBookingRequestDraft()?.vehicleOption;
-    return tagVehicle?.trim() || DEFAULT_VEHICLE_OPTION;
-  });
+  const [vehicleOption, setVehicleOption] = useState<string>(DEFAULT_VEHICLE_OPTION);
   const serviceSlugs = useMemo(
     () => services.map((s) => s.slug).join(','),
     [services],
@@ -201,14 +168,6 @@ export default function HomePage() {
   const [bookError, setBookError] = useState<string | null>(null);
   const [selectedPaymentId, setSelectedPaymentId] = useState<TripPaymentMethodId>(getDefaultPaymentMethodId);
   const [paymentSheetOpen, setPaymentSheetOpen] = useState(false);
-
-  useEffect(() => {
-    if (!roamTagActive) return;
-    const payment = getPaymentMethodById(selectedPaymentId);
-    if (payment.ridePaymentMethod === 'cash') {
-      setSelectedPaymentId(getDefaultPaymentMethodId() === 'cash' ? 'apple_pay' : getDefaultPaymentMethodId());
-    }
-  }, [roamTagActive, selectedPaymentId]);
 
   const [quotesBySlug, setQuotesBySlug] = useState<Record<string, FareQuoteResponse>>({});
   const { permissions } = usePermissionPolicy('rider');
@@ -240,8 +199,7 @@ export default function HomePage() {
   const [initialGpsLoading, setInitialGpsLoading] = useState(true);
 
   const coordsReady = pickup && dropoff;
-  const showCompactRoute = coordsReady && !routeExpanded && !roamTagActive;
-  const showPrivateRoamTagRoute = coordsReady && roamTagActive;
+  const showCompactRoute = coordsReady && !routeExpanded;
   /** Pickup field hidden until destination is chosen (GPS still fills pickup in background). */
   const showPickupField = destinationChosen;
 
@@ -250,7 +208,7 @@ export default function HomePage() {
     else setRouteExpanded(true);
   }, [coordsReady]);
 
-  const showRouteMap = coordsReady && !roamTagActive;
+  const showRouteMap = coordsReady;
   const hasSelectedService = services.some((s) => s.slug === vehicleOption);
   const showBookCta = coordsReady && hasSelectedService;
 
@@ -296,9 +254,7 @@ export default function HomePage() {
 
   const clearGuestRecipient = useCallback(() => {
     clearDelegatedBookingDrafts();
-    clearBookingRequestDraft();
     setGuestRecipient(null);
-    setRoamTagActive(false);
     handleBackToHome();
     void refreshPickupFromDevice();
   }, [handleBackToHome, refreshPickupFromDevice]);
@@ -310,11 +266,9 @@ export default function HomePage() {
     let cancelled = false;
 
     const tripDraft = readBookForSomeoneTrip();
-    const tagDraft = readBookingRequestDraft();
     const guestDraft = readGuestRecipientDraft();
     const hasPresetPickup =
       (Boolean(tripDraft) && Boolean(guestDraft)) ||
-      Boolean(tagDraft?.pickup) ||
       Boolean(guestDraft?.pickupPreset);
 
     if (hasPresetPickup) {
@@ -516,16 +470,8 @@ export default function HomePage() {
             }
           }
 
-          const tagDraft = readBookingRequestDraft();
           if (guestRecipient && !guestRecipient.passengerUserId) {
             const msg = 'The passenger must authorize before you can book.';
-            setBookError(msg);
-            toast.error(msg);
-            return;
-          }
-
-          if (tagDraft && selectedPayment.ridePaymentMethod === 'cash') {
-            const msg = 'Roam Tag bookings must be paid digitally (card or wallet).';
             setBookError(msg);
             toast.error(msg);
             return;
@@ -557,7 +503,6 @@ export default function HomePage() {
                     : {}),
                 }
               : {}),
-            ...(tagDraft ? { booking_request_id: tagDraft.bookingRequestId } : {}),
           };
 
           const submitRide = async (quoteToken: string, routePolyline?: string | null) =>
@@ -574,8 +519,6 @@ export default function HomePage() {
               activeQuote.route_polyline_encoded,
             );
             clearDelegatedBookingDrafts();
-            clearBookingRequestDraft();
-            setRoamTagActive(false);
             toast.success('Searching for a driver…');
             navigate(`/ride/${ride.id}`);
           } catch (createErr: unknown) {
@@ -595,8 +538,6 @@ export default function HomePage() {
               activeQuote.route_polyline_encoded,
             );
             clearDelegatedBookingDrafts();
-            clearBookingRequestDraft();
-            setRoamTagActive(false);
             toast.success('Searching for a driver…');
             navigate(`/ride/${ride.id}`);
           }
@@ -780,19 +721,6 @@ export default function HomePage() {
               </p>
             )}
 
-            {roamTagActive && (
-              <p
-                className="mb-3 rounded-2xl border px-4 py-2 text-center text-sm"
-                style={{
-                  borderColor: 'color-mix(in srgb, var(--home-primary) 25%, var(--home-card-border))',
-                  color: 'var(--home-on-surface)',
-                  backgroundColor: 'color-mix(in srgb, var(--home-primary) 6%, var(--home-panel-solid))',
-                }}
-              >
-                Roam Tag trip — pay digitally so their link is used once.
-              </p>
-            )}
-
             {bookError && (
               <p
                 className="mb-3 rounded-2xl border px-4 py-2 text-center text-sm"
@@ -826,9 +754,7 @@ export default function HomePage() {
               {bookLoading
                 ? 'Booking…'
                 : guestRecipient
-                  ? roamTagActive && tagDraft?.requesterFirstName
-                    ? `Book for ${tagDraft.requesterFirstName}`
-                    : `Book for ${guestRecipient.fullName.trim()}`
+                  ? `Book for ${guestRecipient.fullName.trim()}`
                   : "Let's Roam"}
               <ArrowRight className="h-5 w-5" aria-hidden />
             </button>
@@ -890,55 +816,35 @@ export default function HomePage() {
                     backgroundColor: 'color-mix(in srgb, var(--home-primary) 8%, transparent)',
                   }}
                 >
-                  {roamTagActive && tagDraft?.requesterAvatarUrl ? (
-                    <img
-                      src={tagDraft.requesterAvatarUrl}
-                      alt=""
-                      className="mt-0.5 h-9 w-9 shrink-0 rounded-xl object-cover"
-                    />
-                  ) : (
-                    <div
-                      className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
-                      style={{ backgroundColor: 'var(--home-secondary-container)' }}
-                    >
-                      {roamTagActive ? (
-                        <Tag
-                          className="h-4 w-4"
-                          style={{ color: 'var(--home-primary)' }}
-                          aria-hidden
-                        />
-                      ) : guestRecipient.roamTagName ? (
-                        <Tag
-                          className="h-4 w-4"
-                          style={{ color: 'var(--home-primary)' }}
-                          aria-hidden
-                        />
-                      ) : (
-                        <UserPlus
-                          className="h-4 w-4"
-                          style={{ color: 'var(--home-primary)' }}
-                          aria-hidden
-                        />
-                      )}
-                    </div>
-                  )}
+                  <div
+                    className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                    style={{ backgroundColor: 'var(--home-secondary-container)' }}
+                  >
+                    {guestRecipient.roamTagName ? (
+                      <Tag
+                        className="h-4 w-4"
+                        style={{ color: 'var(--home-primary)' }}
+                        aria-hidden
+                      />
+                    ) : (
+                      <UserPlus
+                        className="h-4 w-4"
+                        style={{ color: 'var(--home-primary)' }}
+                        aria-hidden
+                      />
+                    )}
+                  </div>
                   <div className="min-w-0 flex-1">
                     <p
                       className="text-xs font-bold uppercase tracking-wide"
                       style={{ color: 'var(--home-on-surface-muted)' }}
                     >
-                      {roamTagActive ? 'Roam Tag request' : 'Booking for someone else'}
+                      Booking for someone else
                     </p>
                     <p className="truncate text-sm font-semibold" style={{ color: 'var(--home-on-surface)' }}>
-                      {roamTagActive && tagDraft?.requesterFirstName
-                        ? tagDraft.requesterFirstName
-                        : guestRecipient.fullName.trim()}
+                      {guestRecipient.fullName.trim()}
                     </p>
-                    {roamTagActive && tagDraft?.requesterTag ? (
-                      <p className="text-xs font-semibold" style={{ color: 'var(--home-primary)' }}>
-                        {formatRoamTagDisplay(tagDraft.requesterTag)}
-                      </p>
-                    ) : guestRecipient.roamTagName ? (
+                    {guestRecipient.roamTagName ? (
                       <p className="text-xs font-semibold" style={{ color: 'var(--home-primary)' }}>
                         {formatRoamTagDisplay(guestRecipient.roamTagName)}
                       </p>
@@ -958,30 +864,6 @@ export default function HomePage() {
                   >
                     <X className="h-4 w-4" aria-hidden />
                   </button>
-                </div>
-              ) : null}
-
-              {showPrivateRoamTagRoute ? (
-                <div
-                  className="mb-3 flex items-start gap-3 rounded-2xl border px-4 py-3"
-                  style={{
-                    borderColor: 'var(--home-card-border)',
-                    backgroundColor: 'var(--home-card-bg)',
-                  }}
-                >
-                  <Lock
-                    className="mt-0.5 h-4 w-4 shrink-0"
-                    style={{ color: 'var(--home-on-surface-muted)' }}
-                    aria-hidden
-                  />
-                  <div>
-                    <p className="text-sm font-semibold" style={{ color: 'var(--home-on-surface)' }}>
-                      Private route
-                    </p>
-                    <p className="text-xs leading-relaxed" style={{ color: 'var(--home-on-surface-muted)' }}>
-                      Pickup and destination are hidden for their safety. You can still pay and book the trip.
-                    </p>
-                  </div>
                 </div>
               ) : null}
 
@@ -1047,7 +929,7 @@ export default function HomePage() {
                 >
                   Where to?
                 </h1>
-                {coordsReady && routeExpanded && !roamTagActive && (
+                {coordsReady && routeExpanded && (
                   <button
                     type="button"
                     onClick={() => setRouteExpanded(false)}
@@ -1304,7 +1186,6 @@ export default function HomePage() {
         selectedId={selectedPaymentId}
         onClose={() => setPaymentSheetOpen(false)}
         onSelect={setSelectedPaymentId}
-        excludeIds={roamTagActive ? ['cash'] : undefined}
       />
     </div>
   );

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
-  ArrowLeft,
   ArrowLeftRight,
+  ChevronDown,
   MapPin,
   MessageCircle,
   MoreVertical,
@@ -25,7 +25,7 @@ type Props = {
   driverHeading: number | null;
   passengerName?: string | null;
   isFetching?: boolean;
-  onBack: () => void;
+  onMinimize: () => void;
   onCancelTrip: () => void;
   cancelling?: boolean;
   canChat?: boolean;
@@ -46,7 +46,7 @@ export function BookerTrackingView({
   driverHeading,
   passengerName,
   isFetching,
-  onBack,
+  onMinimize,
   onCancelTrip,
   cancelling,
   canChat = false,
@@ -67,8 +67,13 @@ export function BookerTrackingView({
       {(openChat, { unreadCount }) => (
         <div className="live-ride-page">
           <header className="live-ride-topbar">
-            <button type="button" className="live-ride-topbar__btn" onClick={onBack} aria-label="Go back">
-              <ArrowLeft className="size-6" strokeWidth={2} />
+            <button
+              type="button"
+              className="live-ride-topbar__btn"
+              onClick={onMinimize}
+              aria-label="Minimize tracker"
+            >
+              <ChevronDown className="size-6" strokeWidth={2} />
             </button>
             <h1 className="live-ride-topbar__brand">Roam</h1>
             <button

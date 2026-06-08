@@ -148,6 +148,8 @@ export interface RideRequestRow {
   rider_contact_id?: string | null;
   /** Set when ride originated from a Roam Tag booking request. */
   booking_request_id?: string | null;
+  /** Open Roam (full tracking) or Shadow Roam (pay-only booker). */
+  roam_mode?: 'open_roam' | 'shadow_roam' | null;
   created_at: string;
   updated_at: string;
 }
@@ -221,6 +223,45 @@ export interface FareQuoteResponse {
   pickup_eta_source?: 'google_distance_matrix' | 'haversine_fallback' | 'no_drivers';
   fare_breakdown: FareBreakdown;
   quote_token: string;
+}
+
+export interface ActiveRideResponse {
+  ride: RideRequestRow | null;
+  participant_role: 'booker' | 'passenger' | null;
+  is_delegated?: boolean;
+}
+
+export interface ActiveRideSummaryDto {
+  ride_id: string;
+  status: RideRequestStatus;
+  guest_passenger_name: string | null;
+  participant_role: 'booker' | 'passenger';
+  is_delegated: boolean;
+  roam_mode?: 'open_roam' | 'shadow_roam' | null;
+}
+
+export interface ActiveRideSummaryResponse {
+  summary: ActiveRideSummaryDto | null;
+}
+
+export type WalletTransactionKind = 'shadow_trip' | 'open_trip' | 'topup';
+
+export interface WalletTransactionDto {
+  id: string;
+  kind: WalletTransactionKind;
+  title: string;
+  amount_minor: string;
+  currency: string;
+  date: string;
+  meta?: string;
+  ride_id?: string;
+  driver_name?: string | null;
+  pickup_at?: string | null;
+  dropoff_at?: string | null;
+}
+
+export interface WalletTransactionsResponse {
+  transactions: WalletTransactionDto[];
 }
 
 export interface CreateRideBody {

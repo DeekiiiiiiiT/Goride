@@ -7,8 +7,10 @@ import { normalizePhoneE164 } from "./rideAccess.ts";
 
 export type RideNotificationTemplate =
   | "passenger_invite"
+  | "delegated_ride_booked"
   | "driver_assigned"
   | "driver_arrived"
+  | "shadow_trip_completed"
   | "trip_share"
   | "trip_share_emergency"
   | "trip_share_test";
@@ -26,10 +28,27 @@ function buildMessage(template: RideNotificationTemplate, payload: Record<string
       const url = String(payload.url ?? "");
       return `Hi ${name}, a Roam ride has been booked for you. Track and chat with your driver: ${url}`;
     }
-    case "driver_assigned":
-      return `Your Roam driver has been assigned and is heading to the pickup. Open the app to track your ride.`;
-    case "driver_arrived":
-      return `Your Roam driver has arrived. Open the app for your pickup PIN.`;
+    case "delegated_ride_booked": {
+      const name = payload.guest_name ? String(payload.guest_name) : "there";
+      const url = String(payload.url ?? "");
+      return `Hi ${name}, a Roam ride has been booked for you. Open the app to track your driver and get your trip PIN: ${url}`;
+    }
+    case "driver_assigned": {
+      const url = payload.url ? String(payload.url) : "";
+      return url
+        ? `Your Roam driver has been assigned. Track your ride: ${url}`
+        : `Your Roam driver has been assigned and is heading to the pickup. Open the app to track your ride.`;
+    }
+    case "driver_arrived": {
+      const url = payload.url ? String(payload.url) : "";
+      return url
+        ? `Your Roam driver has arrived. Open the app for your pickup PIN: ${url}`
+        : `Your Roam driver has arrived. Open the app for your pickup PIN.`;
+    }
+    case "shadow_trip_completed": {
+      const name = payload.guest_name ? String(payload.guest_name) : "the rider";
+      return `Shadow trip complete — ${name} has been dropped off. View your receipt in the Roam app Wallet.`;
+    }
     case "trip_share": {
       const name = payload.rider_name ? String(payload.rider_name) : "Someone";
       const url = String(payload.url ?? "");
@@ -112,3 +131,25 @@ export async function notifyPassengerOfRideEvent(
     payload: extraPayload,
   });
 }
+
+/** SMS the shadow booker when a delegated shadow trip completes. */
+export async function notifyShadowBookerOfTripCompleted(
+  svc: { auth: { admin: { getUserById: (id: string) => Promise<{ data: { user?: { phone?: string | null } | null } }> } } },
+  ride: Record<string, unknown>,
+): Promise<void> {
+  if (ride.roam_mode !== "shadow_roam") return;
+  const bookerId = ride.rider_user_id ? String(ride.rider_user_id) : null;
+  if (!bookerId) return;
+  const { data } = await svc.auth.admin.getUserById(bookerId);
+  const phone = data.user?.phone ?? null;
+  if (!phone) return;
+  await sendRideNotification({
+    to: normalizePhoneE164(phone),
+    template: "shadow_trip_completed",
+    payload: {
+      guest_name: ride.guest_passenger_name ?? "the rider",
+      ride_id: ride.id,
+    },
+  });
+}
+

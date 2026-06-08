@@ -11,6 +11,8 @@ import {
   isSystemGroup,
   systemNameTaken,
 } from "./contactGroupHelpers.ts";
+import { isTripIntentV2Enabled } from "./tripIntentFlags.ts";
+import { loadActiveTripIntentSummary } from "./tripIntents.ts";
 
 const VALID_RELATIONS = new Set([
   "father", "mother", "sibling", "spouse", "friend", "colleague", "other",
@@ -102,11 +104,19 @@ async function enrichContact(
   row: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   const id = row.id as string;
-  const [groups, places] = await Promise.all([
+  const [groups, places, intentSummary] = await Promise.all([
     loadContactGroupsForContact(db, tables, id),
     loadPlacesForContact(db, tables, id),
+    isTripIntentV2Enabled() && row.linked_user_id
+      ? loadActiveTripIntentSummary(db, tables.booking_requests, String(row.linked_user_id))
+      : Promise.resolve(null),
   ]);
-  return { ...row, groups, places };
+  return {
+    ...row,
+    groups,
+    places,
+    ...(intentSummary ? { active_trip_intent_summary: intentSummary } : {}),
+  };
 }
 
 async function syncContactGroups(

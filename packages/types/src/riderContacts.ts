@@ -1,5 +1,28 @@
 /** Roam Contacts — passenger address book for delegated booking. */
 
+export type RoamMode = 'open_roam' | 'shadow_roam';
+
+export type TripIntentAudience = 'any_booker' | 'targeted';
+
+export type BookingRequestStatus =
+  | 'draft'
+  | 'published'
+  | 'pending'
+  | 'claimed'
+  | 'booked'
+  | 'consumed'
+  | 'expired'
+  | 'cancelled';
+
+/** @deprecated Use TripIntentStatus */
+export type TripIntentStatus = BookingRequestStatus;
+
+export interface ActiveTripIntentSummary {
+  roam_mode: RoamMode;
+  fare_estimate_minor: string | null;
+  status: BookingRequestStatus;
+}
+
 /** @deprecated Legacy DB field — not used in the passenger app UI. */
 export type RiderContactRelation =
   | 'father'
@@ -66,6 +89,7 @@ export interface RiderContactRow {
   updated_at: string;
   places?: RiderContactPlaceRow[];
   groups?: RiderContactGroupRow[];
+  active_trip_intent_summary?: ActiveTripIntentSummary | null;
 }
 
 export interface CreateRiderContactBody {
@@ -152,14 +176,6 @@ export interface ClaimPassengerInviteResponse {
 }
 
 /** Roam Tag — reverse booking request. */
-export type BookingRequestStatus =
-  | 'pending'
-  | 'claimed'
-  | 'booked'
-  | 'consumed'
-  | 'expired'
-  | 'cancelled';
-
 export interface BookingRequestRow {
   id: string;
   token: string;
@@ -182,6 +198,80 @@ export interface BookingRequestRow {
   expires_at: string;
   created_at: string;
   updated_at: string;
+  roam_mode?: RoamMode;
+  audience?: TripIntentAudience;
+  target_booker_user_id?: string | null;
+  target_booker_phone_e164?: string | null;
+  quote_token?: string | null;
+  fare_estimate_minor?: string | null;
+  currency?: string | null;
+  published_at?: string | null;
+}
+
+/** Trip intent row — same table as BookingRequestRow */
+export type TripIntentRow = BookingRequestRow;
+
+export interface TripIntentBookerViewDto {
+  intent_id: string;
+  roam_mode: RoamMode;
+  status: BookingRequestStatus;
+  vehicle_option: string | null;
+  fare_estimate_minor: string | null;
+  currency: string;
+  has_route: boolean;
+  expires_at: string;
+  can_fulfill: boolean;
+  block_reason?: string | null;
+  requester: BookingRequestRequesterPreview & {
+    requester_name: string;
+    user_id?: string;
+  };
+}
+
+export interface TripIntentLookupResponse {
+  tag?: { custom_tag_name: string; display_name: string | null };
+  intent: TripIntentBookerViewDto | null;
+}
+
+export interface CreateTripIntentBody {
+  requester_name: string;
+  requester_phone: string;
+  roam_mode?: RoamMode;
+  audience?: TripIntentAudience;
+  target_booker_user_id?: string;
+  target_booker_phone_e164?: string;
+  pickup_lat?: number;
+  pickup_lng?: number;
+  pickup_address?: string;
+  dropoff_lat?: number;
+  dropoff_lng?: number;
+  dropoff_address?: string;
+  vehicle_option?: string;
+  notes?: string;
+}
+
+export interface UpdateTripIntentBody {
+  roam_mode?: RoamMode;
+  audience?: TripIntentAudience;
+  target_booker_user_id?: string | null;
+  target_booker_phone_e164?: string | null;
+  pickup_lat?: number;
+  pickup_lng?: number;
+  pickup_address?: string;
+  dropoff_lat?: number;
+  dropoff_lng?: number;
+  dropoff_address?: string;
+  vehicle_option?: string;
+  notes?: string;
+}
+
+export interface FulfillTripIntentBody {
+  payment_method: 'card';
+}
+
+export interface FulfillTripIntentResponse {
+  ride: { id: string; status: string; roam_mode: RoamMode };
+  roam_mode: RoamMode;
 }
 
 export interface BookingRequestRequesterPreview {

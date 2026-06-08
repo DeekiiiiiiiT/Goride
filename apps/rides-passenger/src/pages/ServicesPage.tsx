@@ -5,8 +5,7 @@ import {
   CalendarDays,
   Clock,
   Package,
-  Tag,
-  UserPlus,
+  Users,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -28,18 +27,11 @@ type ServiceMenuItem = {
 
 const SERVICE_MENU: ServiceMenuItem[] = [
   {
-    id: 'book-for-other',
-    title: 'Book for someone',
-    description: 'Friend, child, or family member',
-    icon: UserPlus,
+    id: 'book-for-others',
+    title: 'Book for others',
+    description: 'Book for them, or let them book for you',
+    icon: Users,
     iconWrapClassName: 'bg-[#E8F1FC] text-[#4A7FD4]',
-  },
-  {
-    id: 'roam-tag',
-    title: 'Roam Tag',
-    description: 'Ask someone to book for you',
-    icon: Tag,
-    iconWrapClassName: 'bg-[#E8F1FC] text-[#004AC6]',
   },
   {
     id: 'courier',
@@ -151,10 +143,8 @@ export default function ServicesPage() {
                 item={item}
                 showComingBadge={false}
                 onClick={
-                  item.id === 'book-for-other'
-                    ? () => navigate('/services/book-for-someone')
-                    : item.id === 'roam-tag'
-                      ? () => navigate('/services/roam-tag')
+                  item.id === 'book-for-others'
+                    ? () => navigate('/services/book-for-others')
                     : item.id === 'courier'
                       ? () => navigate('/services/courier')
                       : item.id === 'schedule'

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
@@ -7,10 +7,13 @@ import {
   ChevronRight,
   CircleHelp,
   CreditCard,
+  Loader2,
   PlusCircle,
   Smartphone,
   Wallet,
 } from 'lucide-react';
+import type { WalletTransactionDto } from '@roam/types/rides';
+import { walletGetTransactions, formatFareMinor } from '@/services/tripIntentEdge';
 
 import {
   CARD_SHADOW,
@@ -38,48 +41,60 @@ const PROMO_BANNER_URL =
 
 const BALANCE = 42.5;
 
-const TRANSACTIONS = [
-  {
-    id: 'ride-downtown',
-    title: 'Ride to Downtown',
-    date: 'Oct 24, 2:30 PM',
-    amount: '-$18.20',
-    meta: 'COMPLETED',
-    positive: false,
-    icon: Car,
-    iconBg: SURFACE_CONTAINER_HIGH,
-    iconColor: ON_SURFACE_VARIANT,
-  },
-  {
-    id: 'topup',
-    title: 'Wallet Top-up',
-    date: 'Oct 22, 11:05 AM',
-    amount: '+$50.00',
-    meta: 'VIA APPLE PAY',
-    positive: true,
-    icon: Wallet,
-    iconBg: PRIMARY_FIXED,
-    iconColor: PRIMARY_CONTAINER,
-  },
-  {
-    id: 'ride-airport',
-    title: 'Airport Premier XL',
-    date: 'Oct 20, 9:15 AM',
-    amount: '-$34.50',
-    meta: 'COMPLETED',
-    positive: false,
-    icon: Car,
-    iconBg: SURFACE_CONTAINER_HIGH,
-    iconColor: ON_SURFACE_VARIANT,
-  },
-] as const;
+function formatTxDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function txIcon(tx: WalletTransactionDto) {
+  if (tx.kind === 'topup') {
+    return { Icon: Wallet, iconBg: PRIMARY_FIXED, iconColor: PRIMARY_CONTAINER, positive: true };
+  }
+  if (tx.kind === 'shadow_trip') {
+    return { Icon: Wallet, iconBg: PRIMARY_FIXED, iconColor: PRIMARY_CONTAINER, positive: false };
+  }
+  return { Icon: Car, iconBg: SURFACE_CONTAINER_HIGH, iconColor: ON_SURFACE_VARIANT, positive: false };
+}
 
 export default function WalletPage() {
   const navigate = useNavigate();
   const [addFundsOpen, setAddFundsOpen] = useState(false);
+  const [transactions, setTransactions] = useState<WalletTransactionDto[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    void walletGetTransactions()
+      .then((res) => {
+        if (!cancelled) setTransactions(res.transactions);
+      })
+      .catch((e) => {
+        if (!cancelled) toast.error(e instanceof Error ? e.message : 'Could not load transactions');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const notifySoon = () => {
     toast.message('Coming soon');
+  };
+
+  const handleTxClick = (tx: WalletTransactionDto) => {
+    if (tx.kind === 'shadow_trip' && tx.ride_id) {
+      navigate(`/shadow-trip/${tx.ride_id}/receipt`);
+    }
   };
 
   return (
@@ -227,52 +242,66 @@ export default function WalletPage() {
             className="overflow-hidden rounded-[24px]"
             style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
           >
-            {TRANSACTIONS.map((tx) => {
-              const Icon = tx.icon;
-              return (
-                <div
-                  key={tx.id}
-                  className="flex items-center justify-between p-4 transition-colors passenger-row-hover"
-                >
-                  <div className="flex items-center gap-4">
-                    <div
-                      className="flex h-10 w-10 items-center justify-center rounded-full"
-                      style={{ backgroundColor: tx.iconBg }}
-                    >
-                      <Icon className="h-5 w-5" style={{ color: tx.iconColor }} aria-hidden />
+            {loading ? (
+              <div className="flex items-center justify-center gap-2 p-8" style={{ color: ON_SURFACE_VARIANT }}>
+                <Loader2 className="h-5 w-5 animate-spin" />
+                Loading…
+              </div>
+            ) : transactions.length === 0 ? (
+              <p className="p-6 text-center text-sm" style={{ color: ON_SURFACE_VARIANT }}>
+                No trips yet.
+              </p>
+            ) : (
+              transactions.map((tx) => {
+                const { Icon, iconBg, iconColor, positive } = txIcon(tx);
+                const amount = positive
+                  ? `+${formatFareMinor(tx.amount_minor, tx.currency)}`
+                  : `-${formatFareMinor(tx.amount_minor, tx.currency)}`;
+                const clickable = tx.kind === 'shadow_trip' && Boolean(tx.ride_id);
+                const Row = clickable ? 'button' : 'div';
+                return (
+                  <Row
+                    key={tx.id}
+                    type={clickable ? 'button' : undefined}
+                    onClick={clickable ? () => handleTxClick(tx) : undefined}
+                    className={`flex w-full items-center justify-between p-4 transition-colors passenger-row-hover ${
+                      clickable ? 'text-left' : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div
+                        className="flex h-10 w-10 items-center justify-center rounded-full"
+                        style={{ backgroundColor: iconBg }}
+                      >
+                        <Icon className="h-5 w-5" style={{ color: iconColor }} aria-hidden />
+                      </div>
+                      <div>
+                        <p className="font-bold" style={{ color: ON_SURFACE }}>
+                          {tx.title}
+                        </p>
+                        <p className="text-sm" style={{ color: SECONDARY }}>
+                          {formatTxDate(tx.date)}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-bold" style={{ color: ON_SURFACE }}>
-                        {tx.title}
+                    <div className="text-right">
+                      <p
+                        className="font-bold"
+                        style={{ color: positive ? PRIMARY : ON_SURFACE }}
+                      >
+                        {amount}
                       </p>
-                      <p className="text-sm" style={{ color: SECONDARY }}>
-                        {tx.date}
-                      </p>
+                      {tx.meta ? (
+                        <p className="text-[11px] font-semibold" style={{ color: SECONDARY }}>
+                          {tx.meta}
+                        </p>
+                      ) : null}
                     </div>
-                  </div>
-                  <div className="text-right">
-                    <p
-                      className="font-bold"
-                      style={{ color: tx.positive ? PRIMARY : ON_SURFACE }}
-                    >
-                      {tx.amount}
-                    </p>
-                    <p className="text-[11px] font-semibold" style={{ color: SECONDARY }}>
-                      {tx.meta}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
+                  </Row>
+                );
+              })
+            )}
           </div>
-          <button
-            type="button"
-            onClick={notifySoon}
-            className="w-full rounded-xl py-4 font-bold transition-colors passenger-row-hover"
-            style={{ color: PRIMARY }}
-          >
-            View Transaction History
-          </button>
         </section>
 
         <button

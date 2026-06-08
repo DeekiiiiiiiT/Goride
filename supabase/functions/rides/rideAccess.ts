@@ -37,6 +37,7 @@ export function canChatOnRide(
   ride: Record<string, unknown>,
   userId: string,
 ): boolean {
+  if (ride.roam_mode === "shadow_roam" && ride.rider_user_id === userId) return false;
   const role = getRideParticipantRole(ride, userId);
   if (role === "driver" || role === "passenger") return true;
   if (role === "booker") return true;
@@ -54,6 +55,7 @@ export function canCancelRide(
   const role = getRideParticipantRole(ride, userId);
   if (role === "passenger") return true;
   if (role === "booker") {
+    if (ride.roam_mode === "shadow_roam") return false;
     return status !== BOOKER_CANCEL_BLOCKED_FROM && status !== "on_trip";
   }
   return false;
@@ -134,6 +136,14 @@ export function validateCustomRoamTagName(raw: string): string | null {
 
 export const PASSENGER_APP_ORIGIN = Deno.env.get("ROAM_RIDES_APP_ORIGIN") ?? "https://roam-s.co";
 
+export const ACTIVE_RIDE_STATUSES = [
+  "matching",
+  "driver_assigned",
+  "driver_en_route_pickup",
+  "driver_arrived_pickup",
+  "on_trip",
+] as const;
+
 export function passengerInviteUrl(token: string): string {
   return `${PASSENGER_APP_ORIGIN}/ride/join/${token}`;
 }
@@ -144,8 +154,4 @@ export function passengerAuthorizeUrl(token: string): string {
 
 export function tripShareUrl(token: string): string {
   return `${PASSENGER_APP_ORIGIN}/trip/${token}`;
-}
-
-export function roamTagUrl(token: string): string {
-  return `${PASSENGER_APP_ORIGIN}/tag/${token}`;
 }

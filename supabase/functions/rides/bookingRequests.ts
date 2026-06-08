@@ -2,7 +2,7 @@ import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { jsonEdgeForbidden, ridesUserSurfaceRole } from "../_shared/authEdge.ts";
 import type { RidesContactsDb } from "../_shared/ridesContactsDb.ts";
-import { generatePublicCode, generateToken, normalizePhoneE164, roamTagUrl } from "./rideAccess.ts";
+import { generatePublicCode, generateToken, normalizePhoneE164 } from "./rideAccess.ts";
 
 type BookingRequestDeps = {
   getContactsDb: () => Promise<RidesContactsDb>;
@@ -144,7 +144,6 @@ function sanitizeBookingRequestClaim(row: Record<string, unknown>) {
 function toCreateResponse(row: Record<string, unknown>, reused = false) {
   return {
     booking_request: row,
-    url: roamTagUrl(String(row.token)),
     public_code: row.public_code,
     reused,
   };
@@ -163,7 +162,6 @@ export function registerBookingRequestRoutes(app: Hono, deps: BookingRequestDeps
     if (!active) return c.json({ booking_request: null });
     return c.json({
       booking_request: publicBookingRequest(active),
-      url: roamTagUrl(String(active.token)),
       public_code: active.public_code,
     });
   });
@@ -224,76 +222,6 @@ export function registerBookingRequestRoutes(app: Hono, deps: BookingRequestDeps
     });
 
     return c.json(toCreateResponse(data as Record<string, unknown>));
-  });
-
-  app.get("/v1/booking-requests/:token", async (c) => {
-    const token = c.req.param("token");
-    const { db, tables: t } = await deps.getContactsDb();
-    const { data, error } = await db.from(t.booking_requests)
-      .select("*")
-      .eq("token", token)
-      .maybeSingle();
-    if (error || !data) return c.json({ error: "not_found" }, 404);
-
-    const row = await expireIfNeeded(db, t.booking_requests, data as Record<string, unknown>);
-    if (row.status === "consumed") return c.json({ error: "consumed" }, 410);
-    if (row.status === "expired") return c.json({ error: "expired" }, 410);
-    if (row.status !== "pending" && row.status !== "claimed") {
-      return c.json({ error: "unavailable", status: row.status }, 410);
-    }
-
-    return c.json({
-      booking_request: sanitizeBookingRequestPreview(row),
-      requester: await loadRequesterPublicProfile(
-        db,
-        t.roam_passenger_tags,
-        row.requester_user_id as string | null,
-        String(row.requester_name),
-      ),
-    });
-  });
-
-  app.post("/v1/booking-requests/:token/claim", async (c) => {
-    const auth = await deps.requireUser(c.req.header("Authorization"));
-    if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-    if (ridesUserSurfaceRole(auth.user) !== "passenger") {
-      return jsonEdgeForbidden(c, "forbidden_role");
-    }
-
-    const token = c.req.param("token");
-    const { db, tables: t } = await deps.getContactsDb();
-    const { data: br } = await db.from(t.booking_requests).select("*").eq("token", token).maybeSingle();
-    if (!br) return c.json({ error: "not_found" }, 404);
-
-    const row = await expireIfNeeded(db, t.booking_requests, br as Record<string, unknown>);
-    if (row.status === "consumed") return c.json({ error: "consumed" }, 410);
-    if (row.status === "expired") return c.json({ error: "expired" }, 410);
-    if (row.status !== "pending") return c.json({ error: "not_pending", status: row.status }, 409);
-    if (row.requester_user_id === auth.user.id) {
-      return c.json({ error: "cannot_claim_own_request" }, 400);
-    }
-
-    const now = new Date().toISOString();
-    const { data: updated, error } = await db.from(t.booking_requests).update({
-      status: "claimed",
-      claimed_by_user_id: auth.user.id,
-      updated_at: now,
-    }).eq("id", row.id).eq("status", "pending").select("*").single();
-
-    if (error || !updated) return c.json({ error: "claim_failed" }, 409);
-    await deps.audit(null, auth.user.id, "booking_request_claimed", { booking_request_id: row.id });
-
-    const requester = await loadRequesterPublicProfile(
-      db,
-      t.roam_passenger_tags,
-      row.requester_user_id as string | null,
-      String(row.requester_name),
-    );
-
-    return c.json({
-      booking_request: sanitizeBookingRequestClaim(updated as Record<string, unknown>),
-      requester,
-    });
   });
 }
 

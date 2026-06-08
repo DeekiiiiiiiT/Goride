@@ -29,6 +29,7 @@ import {
   persistRiderRideCache,
   readRiderRideCache,
 } from '@/utils/riderActiveRideSession';
+import { useBookerTrackingOptional } from '@/contexts/BookerTrackingContext';
 
 function statusLabel(s: RideRequestStatus): string {
   switch (s) {
@@ -181,6 +182,9 @@ export default function RidePage() {
   const [sharingInvite, setSharingInvite] = useState(false);
   const prevStatusRef = useRef<RideRequestStatus | null>(null);
   const { isOnline, justReconnected } = useRiderOnline();
+  const bookerTracking = useBookerTrackingOptional();
+  const trackingMode = bookerTracking?.mode ?? 'full';
+  const heavyTrackingEnabled = trackingMode === 'full';
 
   const { data, error, refetch, isFetching } = useQuery({
     queryKey: ['ride', id],
@@ -194,6 +198,7 @@ export default function RidePage() {
     staleTime: 0,
     refetchOnWindowFocus: true,
     refetchInterval: (q) => {
+      if (!heavyTrackingEnabled) return false;
       const st = q.state.data?.ride.status;
       if (!st || st === 'completed' || st === 'cancelled') return false;
       if (st === 'driver_arrived_pickup' || st === 'on_trip') return RIDE_ARRIVED_SYNC_MS;
@@ -204,6 +209,16 @@ export default function RidePage() {
       return RIDE_SYNC_MS;
     },
   });
+
+  useEffect(() => {
+    if (!data || !id) return;
+    const shadowBooker =
+      data.participant_role === 'booker' &&
+      (data.booker_visibility === 'shadow' || data.roam_mode === 'shadow_roam');
+    if (shadowBooker) {
+      navigate(`/shadow-trip/${id}`, { replace: true });
+    }
+  }, [data, id, navigate]);
 
   const ride = data?.ride;
   const waitTime = data?.wait_time as WaitTimeInfo | null | undefined;
@@ -252,9 +267,9 @@ export default function RidePage() {
 
   const { data: liveData } = useQuery({
     queryKey: ['ride-live', id],
-    enabled: Boolean(id && ride && showLiveTracking(ride.status)),
+    enabled: Boolean(id && ride && showLiveTracking(ride.status) && heavyTrackingEnabled),
     queryFn: () => ridesGetLive(id!),
-    refetchInterval: RIDE_SYNC_MS,
+    refetchInterval: heavyTrackingEnabled ? RIDE_SYNC_MS : false,
   });
 
   useEffect(() => {
@@ -296,7 +311,7 @@ export default function RidePage() {
   }, [ride?.status, riderPin]);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || !heavyTrackingEnabled) return;
 
     const channel = supabase
       .channel(`rider-ride-${id}`)
@@ -338,7 +353,7 @@ export default function RidePage() {
       document.removeEventListener('visibilitychange', onVisible);
       void supabase.removeChannel(channel);
     };
-  }, [id, refetch, queryClient]);
+  }, [id, refetch, queryClient, heavyTrackingEnabled]);
 
   const driverLocation = useMemo(() => {
     const fromLive = liveData?.driver_location;
@@ -359,6 +374,7 @@ export default function RidePage() {
       toast.success('Ride cancelled');
       setCancelDialogOpen(false);
       setLeaveDialogOpen(false);
+      bookerTracking?.clear();
       navigate('/', { replace: true });
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Cancel failed');
@@ -373,6 +389,11 @@ export default function RidePage() {
       return;
     }
     setLeaveDialogOpen(true);
+  };
+
+  const handleBookerMinimize = () => {
+    if (!id) return;
+    bookerTracking?.minimize(id);
   };
 
   if (!id) return null;
@@ -401,7 +422,7 @@ export default function RidePage() {
               driverHeading={liveData?.driver_location?.heading ?? ride.last_driver_heading ?? null}
               passengerName={ride.guest_passenger_name}
               isFetching={isFetching}
-              onBack={() => navigate('/')}
+              onMinimize={handleBookerMinimize}
               onCancelTrip={() => setCancelDialogOpen(true)}
               cancelling={cancelling}
               canChat={canChat}
@@ -411,11 +432,12 @@ export default function RidePage() {
           <RidePageDialogs
             cancelDialogOpen={cancelDialogOpen}
             setCancelDialogOpen={setCancelDialogOpen}
-            leaveDialogOpen={leaveDialogOpen}
+            leaveDialogOpen={false}
             setLeaveDialogOpen={setLeaveDialogOpen}
             cancelling={cancelling}
             cancelCopy={getCancelCopy(ride.status)}
             onConfirmCancel={() => void performCancel()}
+            showLeaveDialog={false}
           />
         </>
       );
@@ -449,7 +471,7 @@ export default function RidePage() {
               driverHeading={liveData?.driver_location?.heading ?? ride.last_driver_heading ?? null}
               passengerName={ride.guest_passenger_name}
               isFetching={isFetching}
-              onBack={handleBack}
+              onMinimize={handleBookerMinimize}
               onCancelTrip={() => setCancelDialogOpen(true)}
               cancelling={cancelling}
               canChat={canChat}
@@ -459,11 +481,12 @@ export default function RidePage() {
           <RidePageDialogs
             cancelDialogOpen={cancelDialogOpen}
             setCancelDialogOpen={setCancelDialogOpen}
-            leaveDialogOpen={leaveDialogOpen}
+            leaveDialogOpen={false}
             setLeaveDialogOpen={setLeaveDialogOpen}
             cancelling={cancelling}
             cancelCopy={getCancelCopy(ride.status)}
             onConfirmCancel={() => void performCancel()}
+            showLeaveDialog={false}
           />
         </>
       );
@@ -512,7 +535,7 @@ export default function RidePage() {
             driverHeading={liveData?.driver_location?.heading ?? ride.last_driver_heading ?? null}
             passengerName={ride.guest_passenger_name}
             isFetching={isFetching}
-            onBack={handleBack}
+            onMinimize={handleBookerMinimize}
             onCancelTrip={() => setCancelDialogOpen(true)}
             cancelling={cancelling}
             canChat={canChat}
@@ -522,11 +545,12 @@ export default function RidePage() {
         <RidePageDialogs
           cancelDialogOpen={cancelDialogOpen}
           setCancelDialogOpen={setCancelDialogOpen}
-          leaveDialogOpen={leaveDialogOpen}
+          leaveDialogOpen={false}
           setLeaveDialogOpen={setLeaveDialogOpen}
           cancelling={cancelling}
           cancelCopy={getCancelCopy(ride.status)}
           onConfirmCancel={() => void performCancel()}
+          showLeaveDialog={false}
         />
       </>
     );
@@ -657,6 +681,7 @@ function RidePageDialogs({
   cancelling,
   cancelCopy,
   onConfirmCancel,
+  showLeaveDialog = true,
 }: {
   cancelDialogOpen: boolean;
   setCancelDialogOpen: (open: boolean) => void;
@@ -665,6 +690,7 @@ function RidePageDialogs({
   cancelling: boolean;
   cancelCopy: string;
   onConfirmCancel: () => void;
+  showLeaveDialog?: boolean;
 }) {
   return (
     <>
@@ -702,6 +728,7 @@ function RidePageDialogs({
         </AlertDialogContent>
       </AlertDialog>
 
+      {showLeaveDialog ? (
       <AlertDialog open={leaveDialogOpen} onOpenChange={setLeaveDialogOpen}>
         <AlertDialogContent
           overlayClassName="bg-zinc-900/80 backdrop-blur-md"
@@ -735,6 +762,7 @@ function RidePageDialogs({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      ) : null}
     </>
   );
 }

@@ -2,6 +2,7 @@
 :root {
   --home-nav-active: #006d43;
   --home-nav-inactive: #5d5e61;
+  --home-nav-safe-area-bg: #e8eaed;
   --home-sheet-bg: #ffffff;
   --home-sheet-border: rgba(188, 202, 190, 0.35);
   --home-suggestion-bg: rgba(255, 255, 255, 0.98);
@@ -12,6 +13,7 @@
 html.dark {
   --home-nav-active: #59de9b;
   --home-nav-inactive: #bccabe;
+  --home-nav-safe-area-bg: #0a0b0a;
   --home-sheet-bg: #121413;
   --home-sheet-border: rgba(61, 74, 65, 0.35);
   --home-suggestion-bg: rgba(38, 40, 39, 0.98);

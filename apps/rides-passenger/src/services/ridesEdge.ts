@@ -2,6 +2,8 @@ import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
 import { supabase } from '@roam/auth-client';
 import { withTimeout } from '@/lib/withTimeout';
 import type {
+  ActiveRideResponse,
+  ActiveRideSummaryResponse,
   CreateRideBody,
   DriverOfferRow,
   FareQuoteResponse,
@@ -166,6 +168,20 @@ export async function ridesCreateRequest(body: CreateRideBody): Promise<{ ride: 
   return res.json();
 }
 
+export async function ridesGetMyActiveRide(): Promise<ActiveRideResponse> {
+  const res = await ridesFetch(`${base}/v1/requests/me/active`, { headers: await ridesHeaders() });
+  if (!res.ok) await parseRidesError(res);
+  return res.json();
+}
+
+export async function ridesGetMyActiveRideSummary(): Promise<ActiveRideSummaryResponse> {
+  const res = await ridesFetch(`${base}/v1/requests/me/active?summary=1`, {
+    headers: await ridesHeaders(),
+  });
+  if (!res.ok) await parseRidesError(res);
+  return res.json();
+}
+
 export async function ridesGetRequest(id: string): Promise<{
   ride: RideRequestRow;
   offers: DriverOfferRow[];
@@ -176,6 +192,8 @@ export async function ridesGetRequest(id: string): Promise<{
   can_cancel?: boolean;
   is_delegated?: boolean;
   participant_role?: 'booker' | 'passenger' | 'driver' | 'none';
+  booker_visibility?: 'shadow' | 'open';
+  roam_mode?: 'open_roam' | 'shadow_roam' | null;
 }> {
   const res = await ridesFetch(`${base}/v1/requests/${id}`, { headers: await ridesHeaders() });
   if (!res.ok) await parseRidesError(res);

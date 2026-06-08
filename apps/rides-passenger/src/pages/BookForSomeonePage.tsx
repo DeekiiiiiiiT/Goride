@@ -17,7 +17,15 @@ import {
   Users,
 } from 'lucide-react';
 import { supabase } from '@roam/auth-client';
-import type { RiderContactGroupRow, RiderContactRow } from '@roam/types/riderContacts';
+import type { RiderContactGroupRow, RiderContactRow, TripIntentBookerViewDto } from '@roam/types/riderContacts';
+import { TripIntentBookSheet } from '@/components/trip-intent/TripIntentBookSheet';
+import { TRIP_INTENT_V2 } from '@/lib/tripIntentFlags';
+import {
+  contactLookupIntent,
+  roamTagLookupIntent,
+  tripIntentFulfill,
+  tripIntentClaim,
+} from '@/services/tripIntentEdge';
 import { RoamPlaceField } from '@/components/RoamPlaceField';
 import { contactsCreate, contactsList, contactGroupsList, createPassengerAuthorization, getPassengerAuthorizationById, lookupPassengerByPhone } from '@/services/contactsEdge';
 import {
@@ -101,6 +109,39 @@ export default function BookForSomeonePage() {
   const [authorizationUrl, setAuthorizationUrl] = useState<string | null>(null);
   const [waitingForName, setWaitingForName] = useState<string | null>(null);
   const [linkedPassengerUserId, setLinkedPassengerUserId] = useState<string | null>(null);
+  const [intentSheetOpen, setIntentSheetOpen] = useState(false);
+  const [pendingIntent, setPendingIntent] = useState<TripIntentBookerViewDto | null>(null);
+  const [intentLoading, setIntentLoading] = useState(false);
+  const [fulfilling, setFulfilling] = useState(false);
+
+  const openIntentSheet = (intent: TripIntentBookerViewDto | null | undefined): boolean => {
+    if (!TRIP_INTENT_V2 || !intent?.can_fulfill) return false;
+    setPendingIntent(intent);
+    setIntentSheetOpen(true);
+    return true;
+  };
+
+  const handleIntentFulfill = async (intent: TripIntentBookerViewDto) => {
+    setFulfilling(true);
+    try {
+      await tripIntentClaim(intent.intent_id).catch(() => undefined);
+      const res = await tripIntentFulfill(intent.intent_id);
+      setIntentSheetOpen(false);
+      setPendingIntent(null);
+      toast.success(
+        res.roam_mode === 'shadow_roam' ? 'Payment confirmed' : 'Ride booked — tracking now',
+      );
+      if (res.roam_mode === 'shadow_roam') {
+        navigate(`/shadow-trip/${res.ride.id}`);
+      } else {
+        navigate(`/ride/${res.ride.id}`);
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not book trip');
+    } finally {
+      setFulfilling(false);
+    }
+  };
 
   const clearRecipientSelection = () => {
     setSelected(null);
@@ -166,6 +207,13 @@ export default function BookForSomeonePage() {
     setRoamTagLoading(true);
     setRoamTagError(null);
     try {
+      if (TRIP_INTENT_V2) {
+        const lookup = await roamTagLookupIntent(normalized);
+        if (lookup.intent && openIntentSheet(lookup.intent)) {
+          setRoamTagMatch(null);
+          return;
+        }
+      }
       const { tag } = await lookupRoamPassengerTagForBooking(normalized);
       setRoamTagMatch(tag);
       setSelected(null);
@@ -962,12 +1010,26 @@ export default function BookForSomeonePage() {
         onGroupFilterChange={setGroupFilterId}
         selectedId={selected?.id ?? null}
         onSelect={async (contact) => {
-          setSelected(contact);
-          setSelectedPlaceId(null);
           setRoamTagMatch(null);
           setRoamTagInput('');
           setManual(false);
           setPhoneProfileMatch(null);
+          if (TRIP_INTENT_V2 && contact.linked_user_id) {
+            setIntentLoading(true);
+            try {
+              const { intent } = await contactLookupIntent(contact.id);
+              if (openIntentSheet(intent ?? undefined)) {
+                setSelected(contact);
+                return;
+              }
+            } catch {
+              /* fall through to standard flow */
+            } finally {
+              setIntentLoading(false);
+            }
+          }
+          setSelected(contact);
+          setSelectedPlaceId(null);
           if (contact.linked_user_id) {
             setRecipientStatus('linked');
             setPassengerAuthorizationId(null);
@@ -979,6 +1041,22 @@ export default function BookForSomeonePage() {
               contact.phone_e164.replace(/\D/g, '').slice(-10),
             );
           }
+        }}
+      />
+
+      <TripIntentBookSheet
+        open={intentSheetOpen}
+        intent={pendingIntent}
+        loading={fulfilling || intentLoading}
+        onClose={() => {
+          setIntentSheetOpen(false);
+          setPendingIntent(null);
+        }}
+        onFulfill={(intent) => void handleIntentFulfill(intent)}
+        showBookDifferent
+        onBookDifferent={() => {
+          setIntentSheetOpen(false);
+          setPendingIntent(null);
         }}
       />
 

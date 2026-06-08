@@ -13,6 +13,7 @@ import LoginPage from './pages/LoginPage';
 import RidePage from './pages/RidePage';
 import ServicesPage from './pages/ServicesPage';
 import BookForSomeonePage from './pages/BookForSomeonePage';
+import BookForOthersHubPage from './pages/BookForOthersHubPage';
 import CourierServicePage from './pages/CourierServicePage';
 import ScheduleRidePage from './pages/ScheduleRidePage';
 import EventBookingPage from './pages/EventBookingPage';
@@ -31,8 +32,9 @@ import ContactGroupDetailPage from './pages/ContactGroupDetailPage';
 import ContactDetailPage from './pages/ContactDetailPage';
 import PassengerInviteLandingPage from './pages/PassengerInviteLandingPage';
 import PassengerAuthorizePage from './pages/PassengerAuthorizePage';
-import RoamTagPage from './pages/RoamTagPage';
-import RoamTagClaimPage from './pages/RoamTagClaimPage';
+import BookForMePage from './pages/BookForMePage';
+import ShadowTripStatusPage from './pages/ShadowTripStatusPage';
+import ShadowTripReceiptPage from './pages/ShadowTripReceiptPage';
 import WalletPage from './pages/WalletPage';
 import ManagePaymentMethodsPage from './pages/ManagePaymentMethodsPage';
 import AppSettingsPage from './pages/AppSettingsPage';
@@ -53,6 +55,7 @@ import { TripLedgerPage } from './admin/pages/TripLedgerPage';
 import { RidersListPage } from './admin/pages/users/RidersListPage';
 import { RiderDetailPage } from './admin/pages/users/RiderDetailPage';
 import { SplashScreen } from './components/layout/SplashScreen';
+import { BookerTrackingProvider } from './contexts/BookerTrackingContext';
 
 const SPLASH_MIN_MS = 2000;
 
@@ -109,7 +112,7 @@ export default function App() {
     );
   }
 
-  return (
+  const routes = (
     <Routes>
       {/* Admin routes */}
       <Route path="/admin" element={<RidesAdminLayout />}>
@@ -141,7 +144,6 @@ export default function App() {
       <Route path="/ride/join/:token" element={<PassengerInviteLandingPage />} />
       <Route path="/ride/authorize/:token" element={<PassengerAuthorizePage />} />
       <Route path="/trip/:token" element={<TripSharePublicPage />} />
-      <Route path="/tag/:token" element={<RoamTagClaimPage />} />
 
       {/* Passenger app routes */}
       <Route path="/login" element={<LoginPage session={session} />} />
@@ -150,11 +152,13 @@ export default function App() {
       >
         <Route path="/" element={<HomePage />} />
         <Route path="/services" element={<ServicesPage />} />
+        <Route path="/services/book-for-others" element={<BookForOthersHubPage />} />
         <Route path="/services/book-for-someone" element={<BookForSomeonePage />} />
         <Route path="/services/courier" element={<CourierServicePage />} />
         <Route path="/services/schedule" element={<ScheduleRidePage />} />
         <Route path="/services/event" element={<EventBookingPage />} />
-        <Route path="/services/roam-tag" element={<RoamTagPage />} />
+        <Route path="/services/book-for-me" element={<BookForMePage />} />
+        <Route path="/services/roam-tag" element={<Navigate to="/services/book-for-me" replace />} />
         <Route path="/account" element={<AccountPage />} />
         <Route path="/account/gift-cards" element={<GiftCardsPage />} />
         <Route path="/account/emergency-assistance" element={<EmergencyAssistancePage />} />
@@ -176,7 +180,21 @@ export default function App() {
         path="/ride/:id"
         element={session ? <RidePage /> : <Navigate to="/login" replace />}
       />
+      <Route
+        path="/shadow-trip/:id/receipt"
+        element={session ? <ShadowTripReceiptPage /> : <Navigate to="/login" replace />}
+      />
+      <Route
+        path="/shadow-trip/:id"
+        element={session ? <ShadowTripStatusPage /> : <Navigate to="/login" replace />}
+      />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
+
+  if (session && !isAdminPath) {
+    return <BookerTrackingProvider>{routes}</BookerTrackingProvider>;
+  }
+
+  return routes;
 }

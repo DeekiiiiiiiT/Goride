@@ -1,15 +1,10 @@
 import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
 import { supabase } from '@roam/auth-client';
 import type {
-  ActiveBookingRequestResponse,
   BatchImportContactsBody,
   BatchImportContactsResponse,
   ClaimPassengerInviteResponse,
-  CreateBookingRequestBody,
-  CreateBookingRequestResponse,
   CreateRiderContactBody,
-  ClaimBookingRequestResponse,
-  BookingRequestPreviewResponse,
   CreateRiderContactGroupBody,
   CreateRiderContactPlaceBody,
   PassengerInviteDto,
@@ -262,43 +257,6 @@ export async function getPassengerInvitePreview(token: string): Promise<{
 
 export async function claimPassengerInvite(token: string): Promise<ClaimPassengerInviteResponse> {
   const res = await fetch(`${base}/v1/passenger-invites/${token}/claim`, {
-    method: 'POST',
-    headers: await contactsHeaders(),
-  });
-  if (!res.ok) await parseError(res);
-  return res.json();
-}
-
-export async function getActiveBookingRequest(): Promise<ActiveBookingRequestResponse> {
-  const res = await fetch(`${base}/v1/booking-requests/me/active`, {
-    headers: await contactsHeaders(),
-  });
-  if (!res.ok) await parseError(res);
-  return res.json();
-}
-
-export async function createBookingRequest(
-  body: CreateBookingRequestBody,
-): Promise<CreateBookingRequestResponse> {
-  const res = await fetch(`${base}/v1/booking-requests`, {
-    method: 'POST',
-    headers: await contactsHeaders(),
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) await parseError(res);
-  return res.json();
-}
-
-export async function getBookingRequestPreview(token: string): Promise<BookingRequestPreviewResponse> {
-  const res = await fetch(`${base}/v1/booking-requests/${token}`, {
-    headers: { apikey: publicAnonKey },
-  });
-  if (!res.ok) await parseError(res);
-  return res.json();
-}
-
-export async function claimBookingRequest(token: string): Promise<ClaimBookingRequestResponse> {
-  const res = await fetch(`${base}/v1/booking-requests/${token}/claim`, {
     method: 'POST',
     headers: await contactsHeaders(),
   });

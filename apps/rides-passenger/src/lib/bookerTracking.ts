@@ -1,0 +1,85 @@
+/**
+ * Delegated-booker trip minimize tracker — session + mode helpers.
+ *
+ * Heavy RidePage subscriptions (see RidePage.tsx):
+ * - ridesGetRequest poll (5s / 2s)
+ * - ridesGetLive poll (5s)
+ * - Supabase realtime on ride_requests
+ * - LiveRideMap + RideChat (via BookerTrackingView)
+ * All disabled when mode !== 'full' (RidePage unmounted on minimize).
+ *
+ * Edge cases:
+ * - Multiple active rides: chip shows the most recent delegated booker ride only.
+ * - Trip terminal: minimized session cleared on next focus fetch; optional toast.
+ * - Stale map on re-open: RidePage remounts with immediate refetch.
+ *
+ * Deploy: client Phases 0–4,6–8 need passenger rebuild; Phase 5 needs `rides` edge deploy.
+ *
+ * QA: minimize → Home usable; no ride/live polls while minimized; focus → one summary fetch;
+ * eye chip → full tracker; cancel still explicit; passenger auto-redirect unchanged; self-booked
+ * leave dialog unchanged; trip complete → chip gone.
+ *
+ * Trip Intent v2 QA (shadow vs open):
+ * - Shadow booker: no chip, no RidePage tracking, `/shadow-trip/:id` status only, no cancel after pay.
+ * - Open booker: overlay fulfill → full tracker + minimize chip unchanged.
+ * - Tag lookup / contact intent → TripIntentBookSheet → fulfill routes by roam_mode.
+ */
+
+import type { RideRequestRow, RideRequestStatus } from '@roam/types/rides';
+import { liveRideStatusHeadline } from '@/components/LiveRideView';
+
+export const BOOKER_TRACKING_SESSION_KEY = 'roam:booker-tracking-minimized';
+
+export type BookerTrackingMode = 'full' | 'minimized' | 'off';
+
+export const TERMINAL_RIDE_STATUSES: RideRequestStatus[] = ['completed', 'cancelled'];
+
+export const BOOKER_CHIP_HEIGHT_PX = 56;
+
+export function isDelegatedBookerRole(
+  participantRole: string | null | undefined,
+  isDelegated: boolean | undefined,
+): boolean {
+  return participantRole === 'booker' && isDelegated === true;
+}
+
+export function isTerminalRideStatus(status: string | undefined): boolean {
+  return Boolean(status && TERMINAL_RIDE_STATUSES.includes(status as RideRequestStatus));
+}
+
+export function bookerChipStatusLabel(
+  status: RideRequestStatus,
+  ride?: Pick<RideRequestRow, 'eta_pickup_seconds_estimate'>,
+): string {
+  if (status === 'matching') return 'Finding a driver…';
+  return liveRideStatusHeadline(status, (ride ?? {}) as RideRequestRow);
+}
+
+export function persistBookerMinimized(rideId: string): void {
+  try {
+    sessionStorage.setItem(BOOKER_TRACKING_SESSION_KEY, rideId);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function readBookerMinimizedRideId(): string | null {
+  try {
+    return sessionStorage.getItem(BOOKER_TRACKING_SESSION_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function clearBookerMinimized(): void {
+  try {
+    sessionStorage.removeItem(BOOKER_TRACKING_SESSION_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function parseRideIdFromPath(pathname: string): string | null {
+  const match = pathname.match(/^\/ride\/([^/]+)/);
+  return match?.[1] ?? null;
+}
