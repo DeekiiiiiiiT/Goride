@@ -110,6 +110,7 @@ export default function BookForSomeonePage() {
     setRoamTagInput('');
     setFullName('');
     setPhone('');
+    setManual(false);
     setRecipientStatus('linked');
     setPassengerAuthorizationId(null);
     setAuthorizationUrl(null);
@@ -458,7 +459,14 @@ export default function BookForSomeonePage() {
   const tripSummary = tripDraft;
 
   return (
-    <div className="flex min-h-[100dvh] flex-col" style={{ backgroundColor: PAGE_BG, color: ON_SURFACE }}>
+    <div
+      className="flex min-h-[100dvh] flex-col"
+      style={{
+        backgroundColor: PAGE_BG,
+        color: ON_SURFACE,
+        paddingBottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))',
+      }}
+    >
       <header className="sticky top-0 z-50 flex h-16 items-center bg-[#f7f9fb] px-4 safe-t">
         <button type="button" onClick={handleBack} className="rounded-full p-2" style={{ color: PRIMARY }}>
           <ArrowLeft className="h-6 w-6" />
@@ -482,7 +490,7 @@ export default function BookForSomeonePage() {
         Step {step === 'locations' ? '1 of 2 · Trip' : '2 of 2 · Passenger'}
       </p>
 
-      <main className={`mx-auto w-full max-w-2xl flex-1 px-4 py-4 safe-x ${step === 'recipient' ? 'pb-36' : 'pb-28'}`}>
+      <main className="mx-auto w-full max-w-2xl min-h-0 flex-1 overflow-y-auto px-4 py-4 safe-x">
         {step === 'locations' ? (
           <>
             <section className="space-y-2">
@@ -728,12 +736,22 @@ export default function BookForSomeonePage() {
                 className="space-y-3 rounded-2xl p-4"
                 style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
               >
-                <p className="text-sm font-semibold" style={{ color: PRIMARY }}>
-                  Waiting for {waitingForName ?? 'passenger'}
-                </p>
-                <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-                  Share this link so they can sign in and authorize the ride.
-                </p>
+                <div className="flex items-start gap-3">
+                  <div
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold"
+                    style={{ backgroundColor: 'rgba(0,74,198,0.1)', color: PRIMARY }}
+                  >
+                    {(waitingForName ?? 'Passenger').slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold" style={{ color: PRIMARY }}>
+                      Waiting for {waitingForName ?? 'passenger'}
+                    </p>
+                    <p className="mt-1 text-sm" style={{ color: ON_SURFACE_VARIANT }}>
+                      Share this link so they can sign in and authorize the ride.
+                    </p>
+                  </div>
+                </div>
                 <button
                   type="button"
                   onClick={async () => {
@@ -753,6 +771,14 @@ export default function BookForSomeonePage() {
                 >
                   <Copy className="h-4 w-4" />
                   Copy authorization link
+                </button>
+                <button
+                  type="button"
+                  onClick={clearRecipientSelection}
+                  className="w-full py-1 text-center text-xs font-semibold"
+                  style={{ color: ON_SURFACE_VARIANT }}
+                >
+                  Change recipient
                 </button>
               </div>
             ) : null}
@@ -786,7 +812,7 @@ export default function BookForSomeonePage() {
               </div>
             ) : null}
 
-            {manual && fullName.trim() ? (
+            {manual && fullName.trim() && recipientStatus !== 'pending_authorization' ? (
               <div
                 className="flex items-center gap-3 rounded-2xl p-4"
                 style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
@@ -885,20 +911,21 @@ export default function BookForSomeonePage() {
       </main>
 
       {step === 'recipient' ? (
-        <div
-          className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] left-0 right-0 z-40 px-4 safe-x"
+        <footer
+          className="shrink-0 border-t border-black/5 bg-[#f7f9fb] px-4 py-3 safe-x"
+          style={{ boxShadow: '0 -4px 20px rgba(0,0,0,0.04)' }}
         >
           <button
             type="button"
             disabled={!canContinue}
             onClick={() => void handleFinish()}
-            className="mx-auto flex h-16 w-full max-w-2xl items-center justify-center gap-2 rounded-2xl text-lg font-semibold disabled:opacity-50"
+            className="mx-auto flex h-14 w-full max-w-2xl items-center justify-center gap-2 rounded-2xl text-lg font-semibold disabled:opacity-50"
             style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_PRIMARY, boxShadow: CARD_SHADOW }}
           >
             Continue to ride options
             <ArrowRight className="h-5 w-5" />
           </button>
-        </div>
+        </footer>
       ) : null}
 
       <ManualRecipientSheet
