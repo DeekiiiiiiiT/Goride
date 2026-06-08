@@ -60,4 +60,7 @@ CREATE INDEX IF NOT EXISTS idx_booking_requests_target_booker
   ON rides.booking_requests (target_booker_user_id)
   WHERE status = 'published';
 
+-- PostgREST reads public.rides_booking_requests; refresh after new columns.
+CREATE OR REPLACE VIEW public.rides_booking_requests AS SELECT * FROM rides.booking_requests;
+
 NOTIFY pgrst, 'reload schema';

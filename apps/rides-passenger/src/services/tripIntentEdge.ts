@@ -46,6 +46,21 @@ async function parseError(res: Response): Promise<never> {
   if (res.status === 409 && message === 'not_draft') {
     throw new Error('You already have a live trip on your tag. Withdraw it first, then publish again.');
   }
+  if (message === 'insert_failed') {
+    try {
+      const body = JSON.parse(text) as { hint?: string; message?: string };
+      throw new Error(
+        body.hint ??
+          body.message ??
+          'Could not save your trip request. Run the database migration (supabase db push), then try again.',
+      );
+    } catch (e) {
+      if (e instanceof Error && e.message.includes('migration')) throw e;
+      throw new Error(
+        'Could not save your trip request. Run the database migration (supabase db push), then try again.',
+      );
+    }
+  }
   throw new Error(message);
 }
 

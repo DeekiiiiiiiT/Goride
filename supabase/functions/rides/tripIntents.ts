@@ -19,7 +19,7 @@ import { linkBookingRequestToRide } from "./bookingRequests.ts";
 
 export const TRIP_INTENT_TTL_HOURS = 12;
 
-const ACTIVE_REQUESTER_STATUSES = ["draft", "published", "claimed"] as const;
+const ACTIVE_REQUESTER_STATUSES = ["draft", "published", "claimed", "pending"] as const;
 const PUBLISHED_STATUSES = ["published", "claimed"] as const;
 
 export type TripIntentDeps = {
@@ -249,7 +249,34 @@ export function registerTripIntentRoutes(app: Hono, deps: TripIntentDeps) {
 
     const { db, tables: t } = await deps.getContactsDb();
     const existing = await findActiveForRequester(db, t.booking_requests, gate.user!.id);
-    if (existing) return c.json({ trip_intent: existing, reused: true });
+    if (existing) {
+      if (String(existing.status) === "pending") {
+        const { data: upgraded, error: upgradeErr } = await db.from(t.booking_requests).update({
+          status: "draft",
+          roam_mode: body.roam_mode === "shadow_roam" ? "shadow_roam" : "open_roam",
+          updated_at: new Date().toISOString(),
+        }).eq("id", existing.id).select("*").single();
+        if (upgradeErr || !upgraded) {
+          console.error("[trip_intents] pending_upgrade_failed", upgradeErr);
+          return c.json({
+            error: "insert_failed",
+            message: upgradeErr?.message ?? "Could not upgrade legacy booking request",
+            hint: "Run supabase db push to apply trip_intents migration",
+          }, 500);
+        }
+        return c.json({ trip_intent: upgraded, reused: true });
+      }
+      if (String(existing.status) === "published") {
+        const { data: upgraded, error: upgradeErr } = await db.from(t.booking_requests).update({
+          status: "draft",
+          updated_at: new Date().toISOString(),
+        }).eq("id", existing.id).select("*").single();
+        if (!upgradeErr && upgraded) {
+          return c.json({ trip_intent: upgraded, reused: true });
+        }
+      }
+      return c.json({ trip_intent: existing, reused: true });
+    }
 
     const roamMode = body.roam_mode === "shadow_roam" ? "shadow_roam" : "open_roam";
     const expiresAt = new Date(Date.now() + TRIP_INTENT_TTL_HOURS * 3600_000).toISOString();
@@ -280,7 +307,20 @@ export function registerTripIntentRoutes(app: Hono, deps: TripIntentDeps) {
     };
 
     const { data, error } = await db.from(t.booking_requests).insert(row).select("*").single();
-    if (error || !data) return c.json({ error: "insert_failed" }, 500);
+    if (error || !data) {
+      console.error("[trip_intents] insert_failed", error);
+      const hint = error?.code === "23514"
+        ? "Database migration required — run: npx supabase db push"
+        : error?.code === "42703"
+          ? "booking_requests view out of date — run migration 20260615120000_trip_intents_view_refresh.sql"
+          : undefined;
+      return c.json({
+        error: "insert_failed",
+        message: error?.message ?? undefined,
+        code: error?.code ?? undefined,
+        hint,
+      }, 500);
+    }
     await deps.audit(null, gate.user!.id, "trip_intent_created", { trip_intent_id: data.id });
     return c.json({ trip_intent: data });
   });
