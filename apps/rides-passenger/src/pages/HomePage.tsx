@@ -101,8 +101,16 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    const tripDraft = readBookForSomeoneTrip();
-    if (tripDraft) {
+    const guest = readGuestRecipientDraft();
+    let tripDraft = readBookForSomeoneTrip();
+    const tagDraft = readBookingRequestDraft();
+
+    if (tripDraft && !guest && !tagDraft) {
+      clearBookForSomeoneTrip();
+      tripDraft = null;
+    }
+
+    if (tripDraft && guest) {
       setPickup({ lat: tripDraft.pickupLat, lng: tripDraft.pickupLng });
       setPickupAddress(tripDraft.pickupAddress);
       setDropoff({ lat: tripDraft.dropoffLat, lng: tripDraft.dropoffLng });
@@ -111,13 +119,12 @@ export default function HomePage() {
       setPickupSetByDevice(false);
     }
 
-    const draft = readGuestRecipientDraft();
+    const draft = guest;
     if (draft?.pickupPreset && !tripDraft) {
       setPickup({ lat: draft.pickupPreset.lat, lng: draft.pickupPreset.lng });
       setPickupAddress(draft.pickupPreset.address);
       setPickupSetByDevice(false);
     }
-    const tagDraft = readBookingRequestDraft();
     if (tagDraft?.pickup) {
       setPickup({ lat: tagDraft.pickup.lat, lng: tagDraft.pickup.lng });
       setPickupAddress('');
@@ -252,19 +259,16 @@ export default function HomePage() {
     return () => setTripPickerActive(false);
   }, [coordsReady, setTripPickerActive]);
 
-  const clearGuestRecipient = useCallback(() => {
-    clearDelegatedBookingDrafts();
-    clearBookingRequestDraft();
-    setGuestRecipient(null);
-    setRoamTagActive(false);
-  }, []);
-
   const handleBackToHome = useCallback(() => {
     if (quoteDebounceRef.current) {
       clearTimeout(quoteDebounceRef.current);
       quoteDebounceRef.current = null;
     }
     clearBookForSomeoneTrip();
+    setPickupAddress('');
+    setPickup(null);
+    setPickupAccuracy(null);
+    setPickupSetByDevice(false);
     setDropoffAddress('');
     setDropoff(null);
     setDestinationChosen(false);
@@ -273,6 +277,31 @@ export default function HomePage() {
     setQuotesBySlug({});
     setQuotesLoading(false);
   }, []);
+
+  const refreshPickupFromDevice = useCallback(async () => {
+    setInitialGpsLoading(true);
+    try {
+      const position = await getCurrentPositionWithAccuracy();
+      setPickup({ lat: position.lat, lng: position.lng });
+      setPickupAccuracy(position.accuracyMeters);
+      const address = await resolveAddressFromCoordinates(position.lat, position.lng);
+      setPickupAddress(address);
+      setPickupSetByDevice(true);
+    } catch (e) {
+      console.warn('GPS refresh failed:', e);
+    } finally {
+      setInitialGpsLoading(false);
+    }
+  }, []);
+
+  const clearGuestRecipient = useCallback(() => {
+    clearDelegatedBookingDrafts();
+    clearBookingRequestDraft();
+    setGuestRecipient(null);
+    setRoamTagActive(false);
+    handleBackToHome();
+    void refreshPickupFromDevice();
+  }, [handleBackToHome, refreshPickupFromDevice]);
 
   const quote = vehicleOption ? quotesBySlug[vehicleOption] ?? null : null;
   const hasQuotes = Object.keys(quotesBySlug).length > 0;
@@ -284,7 +313,7 @@ export default function HomePage() {
     const tagDraft = readBookingRequestDraft();
     const guestDraft = readGuestRecipientDraft();
     const hasPresetPickup =
-      Boolean(tripDraft) ||
+      (Boolean(tripDraft) && Boolean(guestDraft)) ||
       Boolean(tagDraft?.pickup) ||
       Boolean(guestDraft?.pickupPreset);
 
@@ -513,6 +542,9 @@ export default function HomePage() {
                     guestRecipient.phone,
                   ),
                   ...(guestRecipient.contactId ? { rider_contact_id: guestRecipient.contactId } : {}),
+                  ...(guestRecipient.passengerUserId
+                    ? { passenger_user_id: guestRecipient.passengerUserId }
+                    : {}),
                 }
               : {}),
             ...(tagDraft ? { booking_request_id: tagDraft.bookingRequestId } : {}),
@@ -865,6 +897,12 @@ export default function HomePage() {
                           style={{ color: 'var(--home-primary)' }}
                           aria-hidden
                         />
+                      ) : guestRecipient.roamTagName ? (
+                        <Tag
+                          className="h-4 w-4"
+                          style={{ color: 'var(--home-primary)' }}
+                          aria-hidden
+                        />
                       ) : (
                         <UserPlus
                           className="h-4 w-4"
@@ -889,6 +927,10 @@ export default function HomePage() {
                     {roamTagActive && tagDraft?.requesterTag ? (
                       <p className="text-xs font-semibold" style={{ color: 'var(--home-primary)' }}>
                         {formatRoamTagDisplay(tagDraft.requesterTag)}
+                      </p>
+                    ) : guestRecipient.roamTagName ? (
+                      <p className="text-xs font-semibold" style={{ color: 'var(--home-primary)' }}>
+                        {formatRoamTagDisplay(guestRecipient.roamTagName)}
                       </p>
                     ) : (
                       <p className="text-xs" style={{ color: 'var(--home-on-surface-muted)' }}>

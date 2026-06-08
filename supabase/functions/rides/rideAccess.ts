@@ -107,6 +107,10 @@ export function passengerInviteUrl(token: string): string {
   return `${PASSENGER_APP_ORIGIN}/ride/join/${token}`;
 }
 
+export function tripShareUrl(token: string): string {
+  return `${PASSENGER_APP_ORIGIN}/trip/${token}`;
+}
+
 export function roamTagUrl(token: string): string {
   return `${PASSENGER_APP_ORIGIN}/tag/${token}`;
 }

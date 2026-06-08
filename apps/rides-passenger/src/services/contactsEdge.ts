@@ -19,6 +19,8 @@ import type {
   UpdateRiderContactBody,
   UpdateRiderContactGroupBody,
   UpdateRiderContactPlaceBody,
+  RiderContactGroupDetailResponse,
+  AddRiderContactGroupMembersBody,
 } from '@roam/types/riderContacts';
 
 async function contactsHeaders(): Promise<HeadersInit> {
@@ -51,11 +53,14 @@ async function parseError(res: Response): Promise<never> {
 
 export async function contactsList(opts?: {
   q?: string;
-  trusted_for_safety?: boolean;
+  trusted_for_safety?: boolean | 'false';
+  group_id?: string;
 }): Promise<RiderContactsListResponse> {
   const params = new URLSearchParams();
   if (opts?.q) params.set('q', opts.q);
-  if (opts?.trusted_for_safety) params.set('trusted_for_safety', 'true');
+  if (opts?.trusted_for_safety === true) params.set('trusted_for_safety', 'true');
+  if (opts?.trusted_for_safety === 'false') params.set('trusted_for_safety', 'false');
+  if (opts?.group_id) params.set('group_id', opts.group_id);
   const qs = params.toString();
   const res = await fetch(`${base}/v1/contacts${qs ? `?${qs}` : ''}`, {
     headers: await contactsHeaders(),
@@ -142,6 +147,42 @@ export async function contactGroupUpdate(
   });
   if (!res.ok) await parseError(res);
   return res.json();
+}
+
+export async function contactGroupsEnsureDefaults(): Promise<{ ok: boolean }> {
+  const res = await fetch(`${base}/v1/contact-groups/ensure-defaults`, {
+    method: 'POST',
+    headers: await contactsHeaders(),
+  });
+  if (!res.ok) await parseError(res);
+  return res.json();
+}
+
+export async function contactGroupGet(id: string): Promise<RiderContactGroupDetailResponse> {
+  const res = await fetch(`${base}/v1/contact-groups/${id}`, { headers: await contactsHeaders() });
+  if (!res.ok) await parseError(res);
+  return res.json();
+}
+
+export async function contactGroupAddMembers(
+  groupId: string,
+  body: AddRiderContactGroupMembersBody,
+): Promise<{ added: number }> {
+  const res = await fetch(`${base}/v1/contact-groups/${groupId}/members`, {
+    method: 'POST',
+    headers: await contactsHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await parseError(res);
+  return res.json();
+}
+
+export async function contactGroupRemoveMember(groupId: string, contactId: string): Promise<void> {
+  const res = await fetch(`${base}/v1/contact-groups/${groupId}/members/${contactId}`, {
+    method: 'DELETE',
+    headers: await contactsHeaders(),
+  });
+  if (!res.ok) await parseError(res);
 }
 
 export async function contactGroupDelete(id: string): Promise<void> {

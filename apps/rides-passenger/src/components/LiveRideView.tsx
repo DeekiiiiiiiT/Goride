@@ -15,6 +15,7 @@ import type { RideRequestRow, RideRequestStatus } from '@roam/types/rides';
 import { LiveRideMap } from '@/components/LiveRideMap';
 import { RideChatUnreadDot } from '@roam/ride-chat';
 import { RiderRideChatWrap } from '@/components/RiderRideChatWrap';
+import { ShareMyTripSheet } from '@/components/trusted-contacts/ShareMyTripSheet';
 import { formatShortAddress } from '@/lib/formatRideAddress';
 import { isRiderPinTripPhase, shouldShowRiderPin } from '@/lib/riderPin';
 
@@ -103,6 +104,7 @@ export function LiveRideView({
   cancelling,
   canChat = true,
 }: Props) {
+  const [safetyOpen, setSafetyOpen] = useState(false);
   const headline = liveRideStatusHeadline(ride.status, ride);
   const pickupShort = formatShortAddress(ride.pickup_address);
   const serviceLabel = vehicleTypeLabel(ride.vehicle_option);
@@ -213,7 +215,7 @@ export function LiveRideView({
               <button
                 type="button"
                 className="live-ride-action live-ride-action--safety"
-                onClick={() => comingSoon('Safety')}
+                onClick={() => setSafetyOpen(true)}
               >
                 <span className="live-ride-action__circle">
                   <Shield className="size-6" strokeWidth={2} />
@@ -265,6 +267,12 @@ export function LiveRideView({
           </div>
         </section>
       </main>
+      <ShareMyTripSheet
+        open={safetyOpen}
+        onClose={() => setSafetyOpen(false)}
+        rideId={ride.id}
+        onShared={() => toast.success('Trip shared. Your contacts can track your ride from the link we sent.')}
+      />
     </div>
       )}
     </RiderRideChatWrap>

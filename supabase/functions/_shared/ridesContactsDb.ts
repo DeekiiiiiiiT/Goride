@@ -10,6 +10,8 @@ export type RidesContactsTables = {
   rider_contact_group_members: string;
   rider_contact_places: string;
   ride_passenger_invites: string;
+  ride_trip_shares: string;
+  ride_trip_share_events: string;
   booking_requests: string;
   roam_passenger_tags: string;
 };
@@ -20,6 +22,8 @@ const NATIVE_TABLES: RidesContactsTables = {
   rider_contact_group_members: "rider_contact_group_members",
   rider_contact_places: "rider_contact_places",
   ride_passenger_invites: "ride_passenger_invites",
+  ride_trip_shares: "ride_trip_shares",
+  ride_trip_share_events: "ride_trip_share_events",
   booking_requests: "booking_requests",
   roam_passenger_tags: "roam_passenger_tags",
 };
@@ -30,6 +34,8 @@ const PUBLIC_TABLES: RidesContactsTables = {
   rider_contact_group_members: "rides_rider_contact_group_members",
   rider_contact_places: "rides_rider_contact_places",
   ride_passenger_invites: "rides_ride_passenger_invites",
+  ride_trip_shares: "rides_ride_trip_shares",
+  ride_trip_share_events: "rides_ride_trip_share_events",
   booking_requests: "rides_booking_requests",
   roam_passenger_tags: "rides_roam_passenger_tags",
 };

@@ -33,3 +33,18 @@ export function clearRiderRideCache(rideId: string): void {
     /* ignore */
   }
 }
+
+/** Returns the first cached active ride id, if any. */
+export function readAnyActiveRideId(): string | undefined {
+  try {
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      if (key?.startsWith('roam:rider:ride-snapshot:')) {
+        return key.slice('roam:rider:ride-snapshot:'.length);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return undefined;
+}

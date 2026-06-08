@@ -1,5 +1,6 @@
 /** Roam Contacts — passenger address book for delegated booking. */
 
+/** @deprecated Legacy DB field — not used in the passenger app UI. */
 export type RiderContactRelation =
   | 'father'
   | 'mother'
@@ -26,8 +27,27 @@ export interface RiderContactGroupRow {
   id: string;
   owner_user_id: string;
   name: string;
+  emoji: string | null;
+  color: string | null;
+  is_system: boolean;
+  is_pinned: boolean;
+  sort_order: number;
   created_at: string;
   updated_at: string;
+  member_count?: number;
+  preview_members?: RiderContactGroupPreviewMember[];
+}
+
+export interface RiderContactGroupPreviewMember {
+  id: string;
+  display_name: string;
+  linked_user_id: string | null;
+}
+
+export interface RiderContactGroupDetailResponse {
+  group: RiderContactGroupRow & {
+    members: RiderContactRow[];
+  };
 }
 
 export interface RiderContactRow {
@@ -41,6 +61,7 @@ export interface RiderContactRow {
   linked_user_id: string | null;
   bookable: boolean;
   trusted_for_safety: boolean;
+  last_shared_at?: string | null;
   created_at: string;
   updated_at: string;
   places?: RiderContactPlaceRow[];
@@ -50,9 +71,8 @@ export interface RiderContactRow {
 export interface CreateRiderContactBody {
   display_name: string;
   phone_e164: string;
-  relation?: RiderContactRelation;
-  relation_custom?: string | null;
   source?: RiderContactSource;
+  linked_user_id?: string | null;
   bookable?: boolean;
   trusted_for_safety?: boolean;
   group_ids?: string[];
@@ -61,8 +81,6 @@ export interface CreateRiderContactBody {
 export interface UpdateRiderContactBody {
   display_name?: string;
   phone_e164?: string;
-  relation?: RiderContactRelation;
-  relation_custom?: string | null;
   bookable?: boolean;
   trusted_for_safety?: boolean;
   group_ids?: string[];
@@ -84,10 +102,19 @@ export interface UpdateRiderContactPlaceBody {
 
 export interface CreateRiderContactGroupBody {
   name: string;
+  emoji?: string | null;
+  color?: string | null;
 }
 
 export interface UpdateRiderContactGroupBody {
   name?: string;
+  emoji?: string | null;
+  color?: string | null;
+  is_pinned?: boolean;
+}
+
+export interface AddRiderContactGroupMembersBody {
+  contact_ids: string[];
 }
 
 export interface RiderContactsListResponse {

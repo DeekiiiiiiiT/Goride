@@ -10,6 +10,7 @@ import { Label } from '@roam/ui';
 import { LegalPolicyAcceptanceLabel } from '@roam/ui';
 import { Loader2, MessageCircle, Smartphone, X } from 'lucide-react';
 import { supabase } from '@roam/auth-client';
+import { ensurePassengerProfile } from '@/services/passengerProfileEdge';
 import { PassengerPhoneCountryInput } from './PassengerPhoneCountryInput';
 import { toE164ForCountry } from '../../utils/phoneE164';
 import { DEFAULT_PHONE_COUNTRY, type PhoneCountry } from '../../utils/phoneCountries';
@@ -154,6 +155,11 @@ export function PassengerPhoneAuthWizard({
         type: 'sms',
       });
       if (vError) throw vError;
+      try {
+        await ensurePassengerProfile();
+      } catch {
+        /* profile sync is best-effort; gate will retry */
+      }
       onVerified();
     } catch (err: unknown) {
       const msg = getAuthErrorMessage(err, 'Verification failed.');

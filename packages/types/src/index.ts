@@ -36,3 +36,5 @@ export * from './delivery';
 export * from './rides';
 export * from './riderContacts';
 export * from './roamPassengerTag';
+export * from './passengerProfile';
+export * from './tripShare';

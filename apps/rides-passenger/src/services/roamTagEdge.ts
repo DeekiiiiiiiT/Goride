@@ -46,6 +46,18 @@ export function roamTagErrorMessage(code: string): string {
       return 'That Roam Tag is already taken.';
     case 'tag_collides_with_internal':
       return 'That name is not available. Try another.';
+    case 'passenger_not_verified':
+      return "This Roam user isn't verified yet.";
+    case 'phone_required':
+      return 'Add your phone number to activate your Roam Tag.';
+    case 'cannot_book_self':
+      return "You can't book a ride for yourself with your own tag.";
+    case 'not_found':
+      return 'No Roam user found with that tag.';
+    case 'invalid_tag':
+      return 'Enter a valid Roam Tag (letters, numbers, underscores).';
+    case 'lookup_failed':
+      return 'Could not look up that Roam Tag. Try again.';
     default:
       return code;
   }
@@ -78,12 +90,12 @@ export async function updateMyRoamPassengerTag(
   return res.json();
 }
 
-export async function lookupRoamPassengerTag(
+export async function lookupRoamPassengerTagForBooking(
   name: string,
-): Promise<{ tag: RoamPassengerTagLookupDto }> {
+): Promise<{ tag: import('@roam/types/roamPassengerTag').RoamPassengerTagBookingLookupDto }> {
   const normalized = name.trim().toLowerCase().replace(/^@+/, '');
   const res = await fetch(`${base}/v1/roam-tag/lookup/${encodeURIComponent(normalized)}`, {
-    headers: { apikey: publicAnonKey },
+    headers: await tagHeaders(),
   });
   if (!res.ok) await parseError(res);
   return res.json();

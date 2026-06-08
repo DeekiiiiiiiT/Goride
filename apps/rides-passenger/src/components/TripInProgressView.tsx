@@ -15,6 +15,7 @@ import { formatMoneyMinor } from '@roam/types/rides';
 import { LiveRideMap } from '@/components/LiveRideMap';
 import { RideChatUnreadDot } from '@roam/ride-chat';
 import { RiderRideChatWrap } from '@/components/RiderRideChatWrap';
+import { ShareMyTripSheet } from '@/components/trusted-contacts/ShareMyTripSheet';
 import { formatShortAddress } from '@/lib/formatRideAddress';
 
 type LatLng = { lat: number; lng: number };
@@ -41,6 +42,7 @@ export function tripArrivalHeadline(ride: RideRequestRow): string {
 
 export function TripInProgressView({ ride, driverLocation, driverHeading, onBack, canChat = true }: Props) {
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [safetyOpen, setSafetyOpen] = useState(false);
   const headline = tripArrivalHeadline(ride);
   const destShort = formatShortAddress(ride.dropoff_address, 3);
   const serviceLabel = vehicleTypeLabel(ride.vehicle_option);
@@ -48,28 +50,6 @@ export function TripInProgressView({ ride, driverLocation, driverHeading, onBack
     ride.fare_final_minor ?? ride.fare_estimate_minor,
     ride.currency ?? 'JMD',
   );
-
-  const comingSoon = (label: string) => {
-    toast.message(label, { description: 'Coming soon' });
-  };
-
-  const handleShareTrip = async () => {
-    const text = `I'm on a Roam trip to ${ride.dropoff_address ?? 'my destination'}.`;
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: 'Share my Roam trip', text });
-        return;
-      }
-    } catch {
-      /* cancelled */
-    }
-    try {
-      await navigator.clipboard.writeText(text);
-      toast.success('Trip link copied');
-    } catch {
-      toast.message('Share trip', { description: text });
-    }
-  };
 
   return (
     <RiderRideChatWrap ride={ride}>
@@ -145,7 +125,7 @@ export function TripInProgressView({ ride, driverLocation, driverHeading, onBack
               <span className="trip-progress-action__label">Message</span>
             </button>
             ) : null}
-            <button type="button" className="trip-progress-action" onClick={() => void handleShareTrip()}>
+            <button type="button" className="trip-progress-action" onClick={() => setSafetyOpen(true)}>
               <span className="trip-progress-action__circle">
                 <Share2 className="size-6" strokeWidth={2} />
               </span>
@@ -154,7 +134,7 @@ export function TripInProgressView({ ride, driverLocation, driverHeading, onBack
             <button
               type="button"
               className="trip-progress-action trip-progress-action--safety"
-              onClick={() => comingSoon('Safety')}
+              onClick={() => setSafetyOpen(true)}
             >
               <span className="trip-progress-action__circle">
                 <Shield className="size-6" strokeWidth={2} />
@@ -191,6 +171,12 @@ export function TripInProgressView({ ride, driverLocation, driverHeading, onBack
           )}
         </section>
       </main>
+      <ShareMyTripSheet
+        open={safetyOpen}
+        onClose={() => setSafetyOpen(false)}
+        rideId={ride.id}
+        onShared={() => toast.success('Trip shared. Your contacts can track your ride from the link we sent.')}
+      />
     </div>
       )}
     </RiderRideChatWrap>

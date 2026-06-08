@@ -1,11 +1,17 @@
 /**
- * Transactional ride SMS (invite links, status updates).
+ * Transactional ride SMS (invite links, status updates, trusted contact trip sharing).
  * Uses Digicel/Flow when configured; logs in stub mode.
  */
 
 import { normalizePhoneE164 } from "./rideAccess.ts";
 
-export type RideNotificationTemplate = "passenger_invite" | "driver_assigned" | "driver_arrived";
+export type RideNotificationTemplate =
+  | "passenger_invite"
+  | "driver_assigned"
+  | "driver_arrived"
+  | "trip_share"
+  | "trip_share_emergency"
+  | "trip_share_test";
 
 type NotificationPayload = {
   to: string;
@@ -24,6 +30,21 @@ function buildMessage(template: RideNotificationTemplate, payload: Record<string
       return `Your Roam driver has been assigned and is heading to the pickup. Open the app to track your ride.`;
     case "driver_arrived":
       return `Your Roam driver has arrived. Open the app for your pickup PIN.`;
+    case "trip_share": {
+      const name = payload.rider_name ? String(payload.rider_name) : "Someone";
+      const url = String(payload.url ?? "");
+      return `${name} is sharing their Roam trip with you. Track live: ${url}`;
+    }
+    case "trip_share_emergency": {
+      const name = payload.rider_name ? String(payload.rider_name) : "Someone";
+      const url = String(payload.url ?? "");
+      return `URGENT: ${name} requested emergency help on a Roam trip. Location: ${url}`;
+    }
+    case "trip_share_test": {
+      const name = payload.rider_name ? String(payload.rider_name) : "Someone";
+      const url = String(payload.url ?? "");
+      return `This is a test safety alert from Roam. When ${name} rides, you'll get links like this: ${url}`;
+    }
     default:
       return "You have a Roam ride update.";
   }
@@ -59,9 +80,9 @@ async function sendViaCarrier(to: string, message: string): Promise<boolean> {
   return false;
 }
 
-export async function sendRideNotification(input: NotificationPayload): Promise<void> {
+export async function sendRideNotification(input: NotificationPayload): Promise<boolean> {
   const message = buildMessage(input.template, input.payload);
-  await sendViaCarrier(input.to, message);
+  return sendViaCarrier(input.to, message);
 }
 
 /** SMS the passenger (guest phone or linked passenger account). */

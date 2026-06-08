@@ -80,6 +80,8 @@ import {
   isDigitalRidePayment,
 } from "./bookingRequests.ts";
 import { registerRoamPassengerTagRoutes } from "./roamPassengerTag.ts";
+import { registerPassengerProfileRoutes } from "./passengerProfile.ts";
+import { registerTripShareRoutes, maybeAutoShareWithTrustedContacts } from "./tripShare.ts";
 import {
   canAccessRide,
   getRideParticipantRole,
@@ -1840,6 +1842,14 @@ app.post("/v1/drivers/offers/:offerId/accept", async (c) => {
     auth.user.id,
   );
 
+  const enRouteRide = rideOut ?? freshRide;
+  if (String(enRouteRide.status) === "driver_en_route_pickup") {
+    void maybeAutoShareWithTrustedContacts(
+      { getContactsDb: getRidesContactsDb, requireUser, loadRideRequestById, audit },
+      enRouteRide as Record<string, unknown>,
+    ).catch((e) => console.warn("[rides] auto trip share failed:", e));
+  }
+
   return c.json({
     ride: sanitizeRideForDriver(
       (rideOut ?? freshRide) as Record<string, unknown>,
@@ -2133,6 +2143,13 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
     );
   }
 
+  if (next === "driver_en_route_pickup" && result.ride) {
+    void maybeAutoShareWithTrustedContacts(
+      { getContactsDb: getRidesContactsDb, requireUser, loadRideRequestById, audit },
+      result.ride as Record<string, unknown>,
+    ).catch((e) => console.warn("[rides] auto trip share failed:", e));
+  }
+
   return c.json({
     ride: sanitizeRideForDriver(
       result.ride as Record<string, unknown> | undefined ?? null,
@@ -2242,6 +2259,13 @@ registerPassengerInviteRoutes(app, {
 });
 registerBookingRequestRoutes(app, { getContactsDb: getRidesContactsDb, requireUser, audit });
 registerRoamPassengerTagRoutes(app, { getContactsDb: getRidesContactsDb, requireUser });
+registerPassengerProfileRoutes(app, { requireUser });
+registerTripShareRoutes(app, {
+  getContactsDb: getRidesContactsDb,
+  requireUser,
+  loadRideRequestById,
+  audit,
+});
 
 registerAdminRoutes(app, { logLine });
 

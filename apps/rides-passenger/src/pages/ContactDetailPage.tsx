@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { ArrowLeft, MapPin, Trash2 } from 'lucide-react';
-import type { RiderContactRelation, RiderContactRow } from '@roam/types/riderContacts';
+import { ArrowLeft, MapPin, Shield, Trash2 } from 'lucide-react';
+import type { RiderContactRow } from '@roam/types/riderContacts';
 import {
   contactGroupCreate,
   contactGroupsList,
@@ -11,10 +11,12 @@ import {
   contactsCreate,
   contactsDelete,
   contactsGet,
+  contactsList,
   contactsUpdate,
 } from '@/services/contactsEdge';
 import { ContactGroupPicker } from '@/components/contacts/ContactGroupPicker';
-import { ContactRelationPicker } from '@/components/contacts/ContactRelationPicker';
+import { SafetyPreferenceToggle } from '@/components/trusted-contacts/SafetyPreferenceToggle';
+import { MAX_TRUSTED_CONTACTS } from '@/services/trustedContactsEdge';
 import { RoamPlaceField } from '@/components/RoamPlaceField';
 import {
   buildGuestPhoneE164,
@@ -31,6 +33,7 @@ import {
   PAGE_BG,
   PRIMARY,
   PRIMARY_CONTAINER,
+  SECONDARY,
   SURFACE_LOW,
   SURFACE_LOWEST,
 } from '@/lib/passengerTheme';
@@ -44,8 +47,6 @@ export default function ContactDetailPage() {
   const [saving, setSaving] = useState(false);
   const [displayName, setDisplayName] = useState('');
   const [phone, setPhone] = useState('');
-  const [relation, setRelation] = useState<RiderContactRelation>('friend');
-  const [relationCustom, setRelationCustom] = useState('');
   const [trusted, setTrusted] = useState(false);
   const [groupIds, setGroupIds] = useState<string[]>([]);
   const [groups, setGroups] = useState<Awaited<ReturnType<typeof contactGroupsList>>['groups']>([]);
@@ -70,14 +71,12 @@ export default function ContactDetailPage() {
       const { contact } = await contactsGet(id);
       setDisplayName(contact.display_name);
       setPhone(formatGuestPhoneDisplay(contact.phone_e164.replace(/^\+1/, '')));
-      setRelation(contact.relation);
-      setRelationCustom(contact.relation_custom ?? '');
       setTrusted(contact.trusted_for_safety);
       setGroupIds(contact.groups?.map((g) => g.id) ?? []);
       setPlaces(contact.places ?? []);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Contact not found');
-      navigate('/account/contacts');
+      navigate('/account/contacts/roam');
     } finally {
       setLoading(false);
     }
@@ -97,9 +96,15 @@ export default function ContactDetailPage() {
       toast.error('Enter a valid phone number.');
       return;
     }
-    if (relation === 'other' && !relationCustom.trim()) {
-      toast.error('Enter a custom relation.');
-      return;
+
+    if (trusted) {
+      const trustedRes = await contactsList({ trusted_for_safety: true }).catch(() => ({ contacts: [] }));
+      const alreadyTrusted = !isNew && id && trustedRes.contacts.some((c) => c.id === id);
+      const trustedCount = trustedRes.contacts.length - (alreadyTrusted ? 1 : 0);
+      if (trustedCount >= MAX_TRUSTED_CONTACTS) {
+        toast.error(`You can trust up to ${MAX_TRUSTED_CONTACTS} contacts. Remove one to add another.`);
+        return;
+      }
     }
 
     setSaving(true);
@@ -107,8 +112,6 @@ export default function ContactDetailPage() {
       const body = {
         display_name: displayName.trim(),
         phone_e164: buildGuestPhoneE164('+1', phone),
-        relation,
-        relation_custom: relation === 'other' ? relationCustom.trim() : null,
         trusted_for_safety: trusted,
         group_ids: groupIds,
       };
@@ -193,7 +196,7 @@ export default function ContactDetailPage() {
   return (
     <div className="flex min-h-[100dvh] flex-col pb-28" style={{ backgroundColor: PAGE_BG, color: ON_SURFACE }}>
       <header className="sticky top-0 z-50 flex h-16 items-center bg-[#f7f9fb] px-4 safe-t">
-        <button type="button" onClick={() => navigate('/account/contacts')} className="rounded-full p-2" style={{ color: PRIMARY }}>
+        <button type="button" onClick={() => navigate('/account/contacts/roam')} className="rounded-full p-2" style={{ color: PRIMARY }}>
           <ArrowLeft className="h-6 w-6" />
         </button>
         <h1 className="ml-2 text-xl font-semibold" style={{ color: PRIMARY }}>
@@ -222,12 +225,6 @@ export default function ContactDetailPage() {
               style={{ backgroundColor: SURFACE_LOW, color: ON_SURFACE }}
             />
           </div>
-          <ContactRelationPicker
-            value={relation}
-            customValue={relationCustom}
-            onChange={setRelation}
-            onCustomChange={setRelationCustom}
-          />
           <ContactGroupPicker
             groups={groups}
             selectedIds={groupIds}
@@ -238,10 +235,23 @@ export default function ContactDetailPage() {
               setGroupIds((prev) => [...prev, group.id]);
             }}
           />
-          <label className="flex items-center gap-3">
-            <input type="checkbox" checked={trusted} onChange={(e) => setTrusted(e.target.checked)} />
-            <span className="text-sm">Trusted contact for safety alerts</span>
-          </label>
+          <div
+            className="overflow-hidden rounded-2xl"
+            style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
+          >
+            <SafetyPreferenceToggle
+              checked={trusted}
+              onChange={setTrusted}
+              icon={<Shield className="h-6 w-6" aria-hidden />}
+              iconBg="rgba(0, 74, 198, 0.1)"
+              iconColor={PRIMARY}
+              title="Trusted contact for safety"
+              description="Receive live trip updates via SMS"
+            />
+          </div>
+          <p className="text-xs" style={{ color: ON_SURFACE_VARIANT }}>
+            Manage all trusted contacts in Account → Contacts → Trusted Contacts.
+          </p>
         </div>
 
         {!isNew && id ? (
@@ -320,7 +330,7 @@ export default function ContactDetailPage() {
               type="button"
               onClick={() => void contactsDelete(id).then(() => {
                 toast.message('Contact removed');
-                navigate('/account/contacts');
+                navigate('/account/contacts/roam');
               })}
               className="w-full py-2 text-sm font-semibold"
               style={{ color: ERROR }}

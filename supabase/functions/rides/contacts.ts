@@ -3,10 +3,51 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { jsonEdgeForbidden, ridesUserSurfaceRole } from "../_shared/authEdge.ts";
 import type { RidesContactsDb, RidesContactsTables } from "../_shared/ridesContactsDb.ts";
 import { normalizePhoneE164 } from "./rideAccess.ts";
+import {
+  addContactsToGroup,
+  ensureDefaultContactGroups,
+  enrichGroupDetail,
+  enrichGroupSummary,
+  isSystemGroup,
+  systemNameTaken,
+} from "./contactGroupHelpers.ts";
 
 const VALID_RELATIONS = new Set([
   "father", "mother", "sibling", "spouse", "friend", "colleague", "other",
 ]);
+
+const MAX_TRUSTED_CONTACTS = 5;
+
+async function countTrustedContacts(
+  db: SupabaseClient,
+  tables: RidesContactsTables,
+  ownerId: string,
+  excludeContactId?: string,
+): Promise<number> {
+  let query = db.from(tables.rider_contacts)
+    .select("id", { count: "exact", head: true })
+    .eq("owner_user_id", ownerId)
+    .eq("trusted_for_safety", true);
+  if (excludeContactId) {
+    query = query.neq("id", excludeContactId);
+  }
+  const { count } = await query;
+  return count ?? 0;
+}
+
+async function assertTrustedLimit(
+  db: SupabaseClient,
+  tables: RidesContactsTables,
+  ownerId: string,
+  addingCount: number,
+  excludeContactId?: string,
+): Promise<string | null> {
+  const current = await countTrustedContacts(db, tables, ownerId, excludeContactId);
+  if (current + addingCount > MAX_TRUSTED_CONTACTS) {
+    return "trusted_limit_reached";
+  }
+  return null;
+}
 
 type ContactsDeps = {
   getContactsDb: () => Promise<RidesContactsDb>;
@@ -108,12 +149,21 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
     const { db, tables: t } = await deps.getContactsDb();
     const q = c.req.query("q")?.trim().toLowerCase();
     const trusted = c.req.query("trusted_for_safety");
+    const groupId = c.req.query("group_id")?.trim();
     let query = db.from(t.rider_contacts).select("*").eq("owner_user_id", gate.user!.id)
       .order("display_name", { ascending: true });
     if (trusted === "true") query = query.eq("trusted_for_safety", true);
+    if (trusted === "false") query = query.eq("trusted_for_safety", false);
     const { data, error } = await query;
     if (error) return c.json({ error: "fetch_failed", message: error.message }, 500);
     let rows = data ?? [];
+    if (groupId) {
+      const { data: members } = await db.from(t.rider_contact_group_members)
+        .select("contact_id")
+        .eq("group_id", groupId);
+      const memberIds = new Set((members ?? []).map((m) => m.contact_id as string));
+      rows = rows.filter((r) => memberIds.has(r.id as string));
+    }
     if (q) {
       rows = rows.filter((r) =>
         String(r.display_name).toLowerCase().includes(q) ||
@@ -135,15 +185,38 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
     const relationCustom = typeof body.relation_custom === "string" ? body.relation_custom.trim() : null;
     const relErr = validateRelation(relation, relationCustom);
     if (relErr) return c.json({ error: relErr }, 400);
+    const linkedUserId = typeof body.linked_user_id === "string" && body.linked_user_id.trim()
+      ? body.linked_user_id.trim()
+      : null;
+    const source = linkedUserId
+      ? "roam_user"
+      : (typeof body.source === "string" ? body.source : "manual");
 
     const { db, tables: t } = await deps.getContactsDb();
+
+    if (body.trusted_for_safety === true) {
+      const limitErr = await assertTrustedLimit(db, t, gate.user!.id, 1);
+      if (limitErr) return c.json({ error: limitErr, message: `Maximum ${MAX_TRUSTED_CONTACTS} trusted contacts` }, 409);
+    }
+
+    if (linkedUserId) {
+      const { data: linkedExisting } = await db.from(t.rider_contacts).select("id")
+        .eq("owner_user_id", gate.user!.id)
+        .eq("linked_user_id", linkedUserId)
+        .maybeSingle();
+      if (linkedExisting?.id) {
+        return c.json({ error: "duplicate_roam_user" }, 409);
+      }
+    }
+
     const insertRow = {
       owner_user_id: gate.user!.id,
       display_name: displayName,
       phone_e164: normalizePhoneE164(phoneRaw),
       relation,
       relation_custom: relation === "other" ? relationCustom : null,
-      source: typeof body.source === "string" ? body.source : "manual",
+      source,
+      linked_user_id: linkedUserId,
       bookable: body.bookable !== false,
       trusted_for_safety: body.trusted_for_safety === true,
       updated_at: new Date().toISOString(),
@@ -268,6 +341,11 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
     if (typeof body.bookable === "boolean") patch.bookable = body.bookable;
     if (typeof body.trusted_for_safety === "boolean") patch.trusted_for_safety = body.trusted_for_safety;
 
+    if (body.trusted_for_safety === true && !existing.trusted_for_safety) {
+      const limitErr = await assertTrustedLimit(db, t, gate.user!.id, 1, contactId);
+      if (limitErr) return c.json({ error: limitErr, message: `Maximum ${MAX_TRUSTED_CONTACTS} trusted contacts` }, 409);
+    }
+
     const relation = String(patch.relation ?? existing.relation);
     const relationCustom = (patch.relation_custom ?? existing.relation_custom) as string | null;
     const relErr = validateRelation(relation, relationCustom);
@@ -281,6 +359,47 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
     return c.json({ contact: await enrichContact(db, t, data as Record<string, unknown>) });
   });
 
+  app.post("/v1/contacts/trusted/bulk", async (c) => {
+    const gate = await requirePassenger(c);
+    if (gate.response) return gate.response;
+    const body = await c.req.json().catch(() => ({}));
+    const contactIds = Array.isArray(body.contact_ids)
+      ? [...new Set(body.contact_ids.filter((id: unknown) => typeof id === "string"))]
+      : [];
+    if (!contactIds.length) return c.json({ error: "invalid_body" }, 400);
+
+    const { db, tables: t } = await deps.getContactsDb();
+    const { data: rows } = await db.from(t.rider_contacts)
+      .select("*")
+      .eq("owner_user_id", gate.user!.id)
+      .in("id", contactIds);
+    if (!rows?.length) return c.json({ error: "not_found" }, 404);
+
+    const toTrust = rows.filter((r) => !r.trusted_for_safety);
+    const limitErr = await assertTrustedLimit(db, t, gate.user!.id, toTrust.length);
+    if (limitErr) {
+      return c.json({ error: limitErr, message: `Maximum ${MAX_TRUSTED_CONTACTS} trusted contacts` }, 409);
+    }
+
+    const now = new Date().toISOString();
+    const updated: Record<string, unknown>[] = [];
+    for (const row of toTrust) {
+      const { data, error } = await db.from(t.rider_contacts)
+        .update({ trusted_for_safety: true, updated_at: now })
+        .eq("id", row.id as string)
+        .select("*")
+        .single();
+      if (error || !data) continue;
+      updated.push(await enrichContact(db, t, data as Record<string, unknown>));
+    }
+
+    await deps.audit(null, gate.user!.id, "trusted_contacts_bulk_marked", {
+      contact_ids: updated.map((c) => c.id),
+    });
+
+    return c.json({ updated: updated.length, contacts: updated });
+  });
+
   app.delete("/v1/contacts/:id", async (c) => {
     const gate = await requirePassenger(c);
     if (gate.response) return gate.response;
@@ -291,14 +410,35 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
     return c.json({ ok: true });
   });
 
+  app.post("/v1/contact-groups/ensure-defaults", async (c) => {
+    const gate = await requirePassenger(c);
+    if (gate.response) return gate.response;
+    const { db, tables: t } = await deps.getContactsDb();
+    await ensureDefaultContactGroups(db, t, gate.user!.id);
+    return c.json({ ok: true });
+  });
+
   app.get("/v1/contact-groups", async (c) => {
     const gate = await requirePassenger(c);
     if (gate.response) return gate.response;
     const { db, tables: t } = await deps.getContactsDb();
     const { data, error } = await db.from(t.rider_contact_groups).select("*")
-      .eq("owner_user_id", gate.user!.id).order("name");
+      .eq("owner_user_id", gate.user!.id);
     if (error) return c.json({ error: "fetch_failed" }, 500);
-    return c.json({ groups: data ?? [] });
+    const rows = (data ?? []) as Record<string, unknown>[];
+    rows.sort((a, b) => {
+      const aPin = a.is_pinned === true ? 0 : 1;
+      const bPin = b.is_pinned === true ? 0 : 1;
+      if (aPin !== bPin) return aPin - bPin;
+      const aOrder = Number(a.sort_order ?? 0);
+      const bOrder = Number(b.sort_order ?? 0);
+      if (aPin === 0 && aOrder !== bOrder) return aOrder - bOrder;
+      return String(a.name).localeCompare(String(b.name));
+    });
+    const groups = await Promise.all(
+      rows.map((g) => enrichGroupSummary(db, t, g, gate.user!.id)),
+    );
+    return c.json({ groups });
   });
 
   app.post("/v1/contact-groups", async (c) => {
@@ -307,42 +447,128 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
     const body = await c.req.json().catch(() => ({}));
     const name = typeof body.name === "string" ? body.name.trim() : "";
     if (!name) return c.json({ error: "invalid_body" }, 400);
+    if (systemNameTaken(name)) return c.json({ error: "reserved_group_name" }, 409);
+    const emoji = typeof body.emoji === "string" ? body.emoji.trim() || null : null;
+    const color = typeof body.color === "string" ? body.color.trim() || null : null;
     const { db, tables: t } = await deps.getContactsDb();
     const { data, error } = await db.from(t.rider_contact_groups).insert({
       owner_user_id: gate.user!.id,
       name,
+      emoji,
+      color,
+      is_system: false,
+      is_pinned: false,
+      sort_order: 100,
       updated_at: new Date().toISOString(),
     }).select("*").single();
     if (error) {
       if (error.code === "23505") return c.json({ error: "duplicate_group" }, 409);
       return c.json({ error: "insert_failed" }, 500);
     }
-    return c.json({ group: data });
+    return c.json({ group: await enrichGroupSummary(db, t, data as Record<string, unknown>, gate.user!.id) });
+  });
+
+  app.get("/v1/contact-groups/:id", async (c) => {
+    const gate = await requirePassenger(c);
+    if (gate.response) return gate.response;
+    const { db, tables: t } = await deps.getContactsDb();
+    const { data, error } = await db.from(t.rider_contact_groups).select("*")
+      .eq("id", c.req.param("id"))
+      .eq("owner_user_id", gate.user!.id)
+      .maybeSingle();
+    if (error) return c.json({ error: "fetch_failed" }, 500);
+    if (!data) return c.json({ error: "not_found" }, 404);
+    return c.json({
+      group: await enrichGroupDetail(db, t, data as Record<string, unknown>, gate.user!.id),
+    });
   });
 
   app.patch("/v1/contact-groups/:id", async (c) => {
     const gate = await requirePassenger(c);
     if (gate.response) return gate.response;
     const body = await c.req.json().catch(() => ({}));
-    const name = typeof body.name === "string" ? body.name.trim() : "";
-    if (!name) return c.json({ error: "invalid_body" }, 400);
     const { db, tables: t } = await deps.getContactsDb();
-    const { data, error } = await db.from(t.rider_contact_groups).update({
-      name,
-      updated_at: new Date().toISOString(),
-    }).eq("id", c.req.param("id")).eq("owner_user_id", gate.user!.id).select("*").single();
-    if (error || !data) return c.json({ error: "not_found" }, 404);
-    return c.json({ group: data });
+    const groupId = c.req.param("id");
+    const { data: existing } = await db.from(t.rider_contact_groups).select("*")
+      .eq("id", groupId).eq("owner_user_id", gate.user!.id).maybeSingle();
+    if (!existing) return c.json({ error: "not_found" }, 404);
+
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (isSystemGroup(existing as Record<string, unknown>)) {
+      if (typeof body.is_pinned === "boolean") patch.is_pinned = body.is_pinned;
+      else return c.json({ error: "system_group_readonly" }, 403);
+    } else {
+      if (typeof body.name === "string") {
+        const name = body.name.trim();
+        if (!name) return c.json({ error: "invalid_body" }, 400);
+        if (systemNameTaken(name)) return c.json({ error: "reserved_group_name" }, 409);
+        patch.name = name;
+      }
+      if (body.emoji !== undefined) {
+        patch.emoji = typeof body.emoji === "string" ? body.emoji.trim() || null : null;
+      }
+      if (body.color !== undefined) {
+        patch.color = typeof body.color === "string" ? body.color.trim() || null : null;
+      }
+      if (typeof body.is_pinned === "boolean") patch.is_pinned = body.is_pinned;
+    }
+
+    const { data, error } = await db.from(t.rider_contact_groups).update(patch)
+      .eq("id", groupId).select("*").single();
+    if (error) return c.json({ error: "update_failed", message: error.message }, 500);
+    return c.json({
+      group: await enrichGroupSummary(db, t, data as Record<string, unknown>, gate.user!.id),
+    });
   });
 
   app.delete("/v1/contact-groups/:id", async (c) => {
     const gate = await requirePassenger(c);
     if (gate.response) return gate.response;
     const { db, tables: t } = await deps.getContactsDb();
-    await db.from(t.rider_contact_group_members).delete().eq("group_id", c.req.param("id"));
+    const groupId = c.req.param("id");
+    const { data: existing } = await db.from(t.rider_contact_groups).select("id")
+      .eq("id", groupId).eq("owner_user_id", gate.user!.id).maybeSingle();
+    if (!existing) return c.json({ error: "not_found" }, 404);
+    await db.from(t.rider_contact_group_members).delete().eq("group_id", groupId);
     const { error } = await db.from(t.rider_contact_groups).delete()
-      .eq("id", c.req.param("id")).eq("owner_user_id", gate.user!.id);
+      .eq("id", groupId).eq("owner_user_id", gate.user!.id);
     if (error) return c.json({ error: "delete_failed" }, 500);
+    return c.json({ ok: true });
+  });
+
+  app.post("/v1/contact-groups/:id/members", async (c) => {
+    const gate = await requirePassenger(c);
+    if (gate.response) return gate.response;
+    const body = await c.req.json().catch(() => ({}));
+    const contactIds = Array.isArray(body.contact_ids)
+      ? body.contact_ids.filter((id: unknown) => typeof id === "string")
+      : [];
+    const { db, tables: t } = await deps.getContactsDb();
+    const groupId = c.req.param("id");
+    const { data: group } = await db.from(t.rider_contact_groups).select("id")
+      .eq("id", groupId).eq("owner_user_id", gate.user!.id).maybeSingle();
+    if (!group) return c.json({ error: "not_found" }, 404);
+    const added = await addContactsToGroup(db, t, gate.user!.id, groupId, contactIds);
+    return c.json({ added });
+  });
+
+  app.delete("/v1/contact-groups/:id/members/:contactId", async (c) => {
+    const gate = await requirePassenger(c);
+    if (gate.response) return gate.response;
+    const { db, tables: t } = await deps.getContactsDb();
+    const groupId = c.req.param("id");
+    const contactId = c.req.param("contactId");
+    const { data: group } = await db.from(t.rider_contact_groups).select("id")
+      .eq("id", groupId).eq("owner_user_id", gate.user!.id).maybeSingle();
+    if (!group) return c.json({ error: "not_found" }, 404);
+    const { data: contact } = await db.from(t.rider_contacts).select("id")
+      .eq("id", contactId).eq("owner_user_id", gate.user!.id).maybeSingle();
+    if (!contact) return c.json({ error: "not_found" }, 404);
+    await db.from(t.rider_contact_group_members).delete()
+      .eq("group_id", groupId).eq("contact_id", contactId);
+    await db.from(t.rider_contact_groups).update({
+      updated_at: new Date().toISOString(),
+    }).eq("id", groupId);
     return c.json({ ok: true });
   });
 

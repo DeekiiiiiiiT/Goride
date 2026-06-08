@@ -13,6 +13,8 @@ import {
   Users,
 } from 'lucide-react';
 
+import { emergencyAlertTrusted } from '@/services/trustedContactsEdge';
+import { readAnyActiveRideId } from '@/utils/riderActiveRideSession';
 import {
   CARD_SHADOW,
   ERROR,
@@ -101,9 +103,49 @@ function ToolkitRow({
 export default function EmergencyAssistancePage() {
   const navigate = useNavigate();
   const [calling, setCalling] = useState(false);
+  const [alerting, setAlerting] = useState(false);
 
   const notifySoon = () => {
     toast.message('Coming soon');
+  };
+
+  const handleAlertTrusted = async () => {
+    const confirmed = window.confirm(
+      'Send an urgent safety alert with your location to all trusted contacts?',
+    );
+    if (!confirmed) return;
+
+    setAlerting(true);
+    try {
+      let lat: number | undefined;
+      let lng: number | undefined;
+      if ('geolocation' in navigator) {
+        try {
+          const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 10000,
+            });
+          });
+          lat = pos.coords.latitude;
+          lng = pos.coords.longitude;
+        } catch {
+          /* location optional */
+        }
+      }
+
+      const activeRideId = readAnyActiveRideId();
+      const res = await emergencyAlertTrusted({
+        lat,
+        lng,
+        ride_request_id: activeRideId,
+      });
+      toast.success(`Alert sent to ${res.sent_count} trusted contact${res.sent_count === 1 ? '' : 's'}.`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not alert contacts');
+    } finally {
+      setAlerting(false);
+    }
   };
 
   const handleEmergencyCall = () => {
@@ -213,8 +255,9 @@ export default function EmergencyAssistancePage() {
         <div className="grid grid-cols-2 gap-4">
           <button
             type="button"
-            onClick={notifySoon}
-            className="flex flex-col items-center justify-center rounded-[24px] p-6 transition-colors active:scale-95 passenger-row-hover"
+            onClick={() => void handleAlertTrusted()}
+            disabled={alerting}
+            className="flex flex-col items-center justify-center rounded-[24px] p-6 transition-colors active:scale-95 passenger-row-hover disabled:opacity-60"
             style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
           >
             <div
@@ -227,7 +270,7 @@ export default function EmergencyAssistancePage() {
               Alert Contacts
             </span>
             <span className="mt-1 text-center text-[10px]" style={{ color: ON_SURFACE_VARIANT }}>
-              Text trusted network
+              {alerting ? 'Sending alert…' : 'Text trusted network'}
             </span>
           </button>
           <button

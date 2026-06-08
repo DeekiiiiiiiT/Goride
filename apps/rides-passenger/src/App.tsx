@@ -7,7 +7,7 @@ import {
   isRidesPassengerUiBlockedRole,
 } from '@roam/auth-client';
 import { PASSENGER_OAUTH_INTENT_KEY, PASSENGER_OAUTH_INTENT_VALUE } from './utils/passengerAuthSignup';
-import { PassengerShell } from './components/layout/PassengerShell';
+import { AuthenticatedPassengerRoute } from './components/auth/AuthenticatedPassengerRoute';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import RidePage from './pages/RidePage';
@@ -22,7 +22,12 @@ import EmergencyAssistancePage from './pages/EmergencyAssistancePage';
 import PromoCodesPage from './pages/PromoCodesPage';
 import SupportCenterPage from './pages/SupportCenterPage';
 import TrustedContactsPage from './pages/TrustedContactsPage';
+import AddTrustedContactsPage from './pages/AddTrustedContactsPage';
+import TripSharePublicPage from './pages/TripSharePublicPage';
+import ContactsHubPage from './pages/ContactsHubPage';
 import ContactsPage from './pages/ContactsPage';
+import ContactGroupsPage from './pages/ContactGroupsPage';
+import ContactGroupDetailPage from './pages/ContactGroupDetailPage';
 import ContactDetailPage from './pages/ContactDetailPage';
 import PassengerInviteLandingPage from './pages/PassengerInviteLandingPage';
 import RoamTagPage from './pages/RoamTagPage';
@@ -133,12 +138,13 @@ export default function App() {
 
       {/* Public delegated-booking entry (signup gate) */}
       <Route path="/ride/join/:token" element={<PassengerInviteLandingPage />} />
+      <Route path="/trip/:token" element={<TripSharePublicPage />} />
       <Route path="/tag/:token" element={<RoamTagClaimPage />} />
 
       {/* Passenger app routes */}
       <Route path="/login" element={<LoginPage session={session} />} />
       <Route
-        element={session ? <PassengerShell /> : <Navigate to="/login" replace />}
+        element={session ? <AuthenticatedPassengerRoute /> : <Navigate to="/login" replace />}
       >
         <Route path="/" element={<HomePage />} />
         <Route path="/services" element={<ServicesPage />} />
@@ -152,8 +158,13 @@ export default function App() {
         <Route path="/account/emergency-assistance" element={<EmergencyAssistancePage />} />
         <Route path="/account/promo-codes" element={<PromoCodesPage />} />
         <Route path="/account/support" element={<SupportCenterPage />} />
-        <Route path="/account/trusted-contacts" element={<TrustedContactsPage />} />
-        <Route path="/account/contacts" element={<ContactsPage />} />
+        <Route path="/account/trusted-contacts" element={<Navigate to="/account/contacts/trusted" replace />} />
+        <Route path="/account/contacts" element={<ContactsHubPage />} />
+        <Route path="/account/contacts/roam" element={<ContactsPage />} />
+        <Route path="/account/contacts/trusted" element={<TrustedContactsPage />} />
+        <Route path="/account/contacts/trusted/add" element={<AddTrustedContactsPage />} />
+        <Route path="/account/contacts/groups" element={<ContactGroupsPage />} />
+        <Route path="/account/contacts/groups/:id" element={<ContactGroupDetailPage />} />
         <Route path="/account/contacts/:id" element={<ContactDetailPage />} />
         <Route path="/account/wallet" element={<WalletPage />} />
         <Route path="/account/wallet/payment-methods" element={<ManagePaymentMethodsPage />} />

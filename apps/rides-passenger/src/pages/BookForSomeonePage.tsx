@@ -4,29 +4,32 @@ import { toast } from 'sonner';
 import {
   ArrowLeft,
   ArrowRight,
+  AlertCircle,
   CircleDot,
   MapPin,
+  Navigation,
+  Pencil,
   Plus,
-  Search,
   Smartphone,
-  SlidersHorizontal,
   UserPlus,
+  Users,
 } from 'lucide-react';
 import { supabase } from '@roam/auth-client';
 import type { RiderContactGroupRow, RiderContactRow } from '@roam/types/riderContacts';
 import { RoamPlaceField } from '@/components/RoamPlaceField';
 import { contactsCreate, contactsList, contactGroupsList } from '@/services/contactsEdge';
-import { relationLabel } from '@/components/contacts/ContactRelationPicker';
 import {
   buildGuestPhoneE164,
-  formatGuestPhoneDisplay,
+  clearBookForSomeoneTrip,
   isValidGuestPhone,
   persistBookForSomeoneTrip,
   persistGuestRecipientDraft,
-  readBookForSomeoneTrip,
   readGuestRecipientDraft,
+  type BookForSomeoneTripDraft,
 } from '@/lib/guestRecipientBooking';
 import { DeviceContactsPickerSheet } from '@/components/contacts/DeviceContactsPickerSheet';
+import { RoamContactsPickerSheet } from '@/components/contacts/RoamContactsPickerSheet';
+import { ManualRecipientSheet } from '@/components/contacts/ManualRecipientSheet';
 import {
   canUseBrowserContactPicker,
   canUseInAppDeviceContactPicker,
@@ -37,6 +40,13 @@ import {
   getCurrentPositionWithAccuracy,
   resolveAddressFromCoordinates,
 } from '@/services/locationService';
+import {
+  formatRoamTagDisplay,
+  lookupRoamPassengerTagForBooking,
+  normalizeRoamTagInput,
+  roamTagErrorMessage,
+} from '@/services/roamTagEdge';
+import type { RoamPassengerTagBookingLookupDto } from '@roam/types/roamPassengerTag';
 import {
   CARD_SHADOW,
   ON_PRIMARY,
@@ -54,15 +64,14 @@ type Step = 'locations' | 'recipient';
 
 export default function BookForSomeonePage() {
   const navigate = useNavigate();
-  const [step, setStep] = useState<Step>(() =>
-    readBookForSomeoneTrip() && !readGuestRecipientDraft()?.fullName ? 'recipient' : 'locations',
-  );
+  const [step, setStep] = useState<Step>('locations');
 
   const [pickupAddress, setPickupAddress] = useState('');
   const [dropoffAddress, setDropoffAddress] = useState('');
   const [pickup, setPickup] = useState<{ lat: number; lng: number } | null>(null);
   const [dropoff, setDropoff] = useState<{ lat: number; lng: number } | null>(null);
   const [pickupLocLoading, setPickupLocLoading] = useState(false);
+  const [tripDraft, setTripDraft] = useState<BookForSomeoneTripDraft | null>(null);
 
   const [contacts, setContacts] = useState<RiderContactRow[]>([]);
   const [groups, setGroups] = useState<RiderContactGroupRow[]>([]);
@@ -72,26 +81,61 @@ export default function BookForSomeonePage() {
   const [devicePickerOpen, setDevicePickerOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [manual, setManual] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [saveToRoam, setSaveToRoam] = useState(true);
   const [selected, setSelected] = useState<RiderContactRow | null>(null);
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
+  const [contactsOpen, setContactsOpen] = useState(false);
+  const [roamTagInput, setRoamTagInput] = useState('');
+  const [roamTagLoading, setRoamTagLoading] = useState(false);
+  const [roamTagError, setRoamTagError] = useState<string | null>(null);
+  const [roamTagMatch, setRoamTagMatch] = useState<RoamPassengerTagBookingLookupDto | null>(null);
+
+  const clearRecipientSelection = () => {
+    setSelected(null);
+    setSelectedPlaceId(null);
+    setRoamTagMatch(null);
+    setRoamTagInput('');
+    setFullName('');
+    setPhone('');
+  };
+
+  const lookupRoamTag = async (raw: string) => {
+    const normalized = normalizeRoamTagInput(raw);
+    if (normalized.length < 3) {
+      setRoamTagMatch(null);
+      return;
+    }
+    setRoamTagLoading(true);
+    setRoamTagError(null);
+    try {
+      const { tag } = await lookupRoamPassengerTagForBooking(normalized);
+      setRoamTagMatch(tag);
+      setSelected(null);
+      setSelectedPlaceId(null);
+      setManual(false);
+    } catch (e) {
+      setRoamTagMatch(null);
+      const code = e instanceof Error ? e.message : 'lookup_failed';
+      setRoamTagError(roamTagErrorMessage(code) || 'Could not find that Roam Tag.');
+    } finally {
+      setRoamTagLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const trip = readBookForSomeoneTrip();
-    if (!trip) return;
-    setPickupAddress(trip.pickupAddress);
-    setPickup({ lat: trip.pickupLat, lng: trip.pickupLng });
-    setDropoffAddress(trip.dropoffAddress);
-    setDropoff({ lat: trip.dropoffLat, lng: trip.dropoffLng });
+    if (!readGuestRecipientDraft()) {
+      clearBookForSomeoneTrip();
+    }
   }, []);
 
   const reloadContacts = useCallback(async (): Promise<boolean> => {
     setLoading(true);
     try {
       const [listRes, groupsRes] = await Promise.all([
-        contactsList({ q: query.trim() || undefined }),
+        contactsList(),
         contactGroupsList().catch(() => ({ groups: [] as RiderContactGroupRow[] })),
       ]);
       setContacts(listRes.contacts);
@@ -103,20 +147,16 @@ export default function BookForSomeonePage() {
     } finally {
       setLoading(false);
     }
-  }, [query]);
+  }, []);
 
   useEffect(() => {
     if (step !== 'recipient') return;
-    const t = setTimeout(() => void reloadContacts(), query ? 300 : 0);
-    return () => clearTimeout(t);
-  }, [reloadContacts, query, step]);
+    void reloadContacts();
+  }, [step, reloadContacts]);
 
-  const filtered = contacts.filter((c) => {
-    if (groupFilterId && !c.groups?.some((g) => g.id === groupFilterId)) return false;
-    if (!query.trim()) return true;
-    const q = query.toLowerCase();
-    return c.display_name.toLowerCase().includes(q) || c.phone_e164.includes(q);
-  });
+  const hasRecipient = Boolean(
+    roamTagMatch || (selected && !manual) || (manual && fullName.trim() && phone.replace(/\D/g, '').length >= 10),
+  );
 
   const coordsReady = Boolean(pickup && dropoff);
 
@@ -141,7 +181,7 @@ export default function BookForSomeonePage() {
       toast.error('Enter pickup and drop-off locations.');
       return;
     }
-    persistBookForSomeoneTrip({
+    setTripDraft({
       pickupAddress: pickupAddress.trim(),
       pickupLat: pickup.lat,
       pickupLng: pickup.lng,
@@ -218,20 +258,33 @@ export default function BookForSomeonePage() {
   };
 
   const handleFinish = async () => {
+    if (!tripDraft) {
+      toast.error('Set pickup and drop-off first.');
+      setStep('locations');
+      return;
+    }
+
     let draftName = fullName.trim();
     let draftPhone = phone.replace(/\D/g, '');
     let contactId: string | undefined;
+    let passengerUserId: string | undefined;
+    let roamTagName: string | undefined;
     let pickupPreset: { label: string; address: string; lat: number; lng: number } | undefined;
     let placeId: string | undefined;
+    let finalTrip = tripDraft;
 
-    if (selected && !manual) {
+    if (roamTagMatch) {
+      draftName = roamTagMatch.display_name?.trim() || roamTagMatch.custom_tag_name;
+      draftPhone = roamTagMatch.phone_e164!.replace(/\D/g, '').slice(-10);
+      passengerUserId = roamTagMatch.user_id;
+      roamTagName = roamTagMatch.custom_tag_name;
+    } else if (selected && !manual) {
       draftName = selected.display_name;
       draftPhone = selected.phone_e164.replace(/\D/g, '').slice(-10);
       contactId = selected.id;
       if (selectedPlaceId) {
         const place = selected.places?.find((p) => p.id === selectedPlaceId);
-        const trip = readBookForSomeoneTrip();
-        if (place && trip) {
+        if (place) {
           placeId = place.id;
           pickupPreset = {
             label: place.label,
@@ -239,14 +292,12 @@ export default function BookForSomeonePage() {
             lat: place.lat,
             lng: place.lng,
           };
-          persistBookForSomeoneTrip({
+          finalTrip = {
+            ...finalTrip,
             pickupAddress: place.address,
             pickupLat: place.lat,
             pickupLng: place.lng,
-            dropoffAddress: trip.dropoffAddress,
-            dropoffLat: trip.dropoffLat,
-            dropoffLng: trip.dropoffLng,
-          });
+          };
         }
       }
     }
@@ -272,7 +323,6 @@ export default function BookForSomeonePage() {
         const { contact } = await contactsCreate({
           display_name: draftName,
           phone_e164: buildGuestPhoneE164('+1', draftPhone),
-          relation: 'friend',
         });
         contactId = contact.id;
         toast.success(`${draftName} saved to Roam Contacts`);
@@ -282,6 +332,7 @@ export default function BookForSomeonePage() {
       }
     }
 
+    persistBookForSomeoneTrip(finalTrip);
     persistGuestRecipientDraft({
       fullName: draftName,
       phone: draftPhone.length > 10 ? draftPhone.slice(-10) : draftPhone,
@@ -289,6 +340,8 @@ export default function BookForSomeonePage() {
       contactId,
       selectedPlaceId: placeId,
       pickupPreset,
+      passengerUserId,
+      roamTagName,
     });
     toast.success(`Ready to book for ${draftName}.`);
     navigate('/');
@@ -299,13 +352,15 @@ export default function BookForSomeonePage() {
       setStep('locations');
       return;
     }
+    clearBookForSomeoneTrip();
+    setTripDraft(null);
     navigate('/services');
   };
 
-  const tripSummary = readBookForSomeoneTrip();
+  const tripSummary = tripDraft;
 
   return (
-    <div className="flex min-h-[100dvh] flex-col pb-28" style={{ backgroundColor: PAGE_BG, color: ON_SURFACE }}>
+    <div className="flex min-h-[100dvh] flex-col" style={{ backgroundColor: PAGE_BG, color: ON_SURFACE }}>
       <header className="sticky top-0 z-50 flex h-16 items-center bg-[#f7f9fb] px-4 safe-t">
         <button type="button" onClick={handleBack} className="rounded-full p-2" style={{ color: PRIMARY }}>
           <ArrowLeft className="h-6 w-6" />
@@ -329,7 +384,7 @@ export default function BookForSomeonePage() {
         Step {step === 'locations' ? '1 of 2 · Trip' : '2 of 2 · Passenger'}
       </p>
 
-      <main className="mx-auto w-full max-w-2xl flex-1 space-y-6 px-4 py-4 safe-x">
+      <main className={`mx-auto w-full max-w-2xl flex-1 px-4 py-4 safe-x ${step === 'recipient' ? 'pb-36' : 'pb-28'}`}>
         {step === 'locations' ? (
           <>
             <section className="space-y-2">
@@ -343,28 +398,40 @@ export default function BookForSomeonePage() {
               className="space-y-4 rounded-[24px] p-5"
               style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
             >
-              <RoamPlaceField
-                label={
-                  <span className="flex items-center gap-2 text-sm font-semibold">
-                    <CircleDot className="h-4 w-4" style={{ color: PRIMARY }} aria-hidden />
-                    Pickup
-                  </span>
-                }
-                value={pickupAddress}
-                onChangeText={(text) => {
-                  setPickupAddress(text);
-                  if (!text.trim()) setPickup(null);
-                }}
-                onResolved={({ address, lat, lng }) => {
-                  setPickupAddress(address);
-                  setPickup({ lat, lng });
-                }}
-                placeholder="Where should we pick them up?"
-                clearable
-                showLocationButton
-                onLocationClick={() => void handleUseMyLocationForPickup()}
-                locationLoading={pickupLocLoading}
-              />
+              <div className="space-y-2">
+                <RoamPlaceField
+                  label={
+                    <span className="flex items-center gap-2 text-sm font-semibold">
+                      <CircleDot className="h-4 w-4" style={{ color: PRIMARY }} aria-hidden />
+                      Pickup
+                    </span>
+                  }
+                  value={pickupAddress}
+                  onChangeText={(text) => {
+                    setPickupAddress(text);
+                    if (!text.trim()) setPickup(null);
+                  }}
+                  onResolved={({ address, lat, lng }) => {
+                    setPickupAddress(address);
+                    setPickup({ lat, lng });
+                  }}
+                  placeholder="Where should we pick them up?"
+                  clearable
+                  showLocationButton
+                  onLocationClick={() => void handleUseMyLocationForPickup()}
+                  locationLoading={pickupLocLoading}
+                />
+                <button
+                  type="button"
+                  disabled={pickupLocLoading}
+                  onClick={() => void handleUseMyLocationForPickup()}
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition-opacity disabled:opacity-50"
+                  style={{ color: PRIMARY, backgroundColor: SURFACE_LOW }}
+                >
+                  <Navigation className="h-4 w-4 shrink-0" aria-hidden />
+                  {pickupLocLoading ? 'Getting your location…' : 'Use my current location'}
+                </button>
+              </div>
 
               <RoamPlaceField
                 label={
@@ -399,37 +466,120 @@ export default function BookForSomeonePage() {
             </button>
           </>
         ) : (
-          <>
+          <div className="space-y-5">
             {tripSummary ? (
-              <div
-                className="rounded-2xl px-4 py-3 text-sm"
-                style={{ backgroundColor: 'rgba(0,74,198,0.06)', color: ON_SURFACE }}
+              <button
+                type="button"
+                onClick={() => setStep('locations')}
+                className="flex items-center gap-2 text-sm font-semibold"
+                style={{ color: PRIMARY }}
               >
-                <p className="text-xs font-bold uppercase tracking-wide" style={{ color: ON_SURFACE_VARIANT }}>
-                  Trip
-                </p>
-                <p className="mt-1 font-medium">{tripSummary.pickupAddress}</p>
-                <p className="text-xs" style={{ color: ON_SURFACE_VARIANT }}>to</p>
-                <p className="font-medium">{tripSummary.dropoffAddress}</p>
-                <button
-                  type="button"
-                  onClick={() => setStep('locations')}
-                  className="mt-2 text-xs font-semibold"
-                  style={{ color: PRIMARY }}
-                >
-                  Edit locations
-                </button>
-              </div>
+                <Pencil className="h-4 w-4" aria-hidden />
+                Edit address
+              </button>
             ) : null}
 
             <section className="space-y-2">
-              <h2 className="text-[30px] font-bold leading-tight">Who is riding?</h2>
+              <h2 className="text-[30px] font-bold leading-tight">Who is roaming?</h2>
               <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-                Choose from Roam Contacts, import from your phone, or enter details manually.
+                Use their Roam Tag, pick a contact, or enter details manually.
               </p>
             </section>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div
+              className="space-y-3 rounded-[24px] p-4"
+              style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
+            >
+              <p className="text-xs font-bold uppercase tracking-wide" style={{ color: ON_SURFACE_VARIANT }}>
+                Roam Tag
+              </p>
+              <div className="flex gap-2">
+                <div className="relative min-w-0 flex-1">
+                  <span
+                    className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 font-semibold"
+                    style={{ color: ON_SURFACE_VARIANT }}
+                  >
+                    @
+                  </span>
+                  <input
+                    value={roamTagInput}
+                    onChange={(e) => {
+                      setRoamTagInput(normalizeRoamTagInput(e.target.value));
+                      setRoamTagMatch(null);
+                      setRoamTagError(null);
+                    }}
+                    onBlur={() => {
+                      if (roamTagInput.length >= 3) void lookupRoamTag(roamTagInput);
+                    }}
+                    placeholder="theirname"
+                    maxLength={24}
+                    className="h-12 w-full rounded-xl pl-9 pr-4 outline-none focus:ring-2 focus:ring-[#004ac6]/30"
+                    style={{ backgroundColor: SURFACE_LOW }}
+                  />
+                </div>
+                <button
+                  type="button"
+                  disabled={roamTagLoading || roamTagInput.length < 3}
+                  onClick={() => void lookupRoamTag(roamTagInput)}
+                  className="shrink-0 rounded-xl px-4 text-sm font-semibold disabled:opacity-50"
+                  style={{ backgroundColor: PRIMARY, color: '#fff' }}
+                >
+                  {roamTagLoading ? '…' : 'Find'}
+                </button>
+              </div>
+              {roamTagError ? (
+                <div
+                  className="flex items-start gap-2 rounded-xl px-3 py-2.5 text-sm"
+                  style={{ backgroundColor: 'rgba(220,38,38,0.08)', color: '#b91c1c' }}
+                  role="alert"
+                >
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                  <span>{roamTagError}</span>
+                </div>
+              ) : null}
+              {roamTagMatch ? (
+                <div
+                  className="flex items-center gap-3 rounded-xl px-3 py-2"
+                  style={{ backgroundColor: 'rgba(0,74,198,0.08)' }}
+                >
+                  {roamTagMatch.avatar_url ? (
+                    <img
+                      src={roamTagMatch.avatar_url}
+                      alt=""
+                      className="h-10 w-10 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div
+                      className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold"
+                      style={{ backgroundColor: 'rgba(0,74,198,0.15)', color: PRIMARY }}
+                    >
+                      {(roamTagMatch.display_name ?? roamTagMatch.custom_tag_name).slice(0, 1).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold">
+                      {roamTagMatch.display_name ?? roamTagMatch.custom_tag_name}
+                    </p>
+                    <p className="text-sm font-medium" style={{ color: PRIMARY }}>
+                      {formatRoamTagDisplay(roamTagMatch.custom_tag_name)}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRoamTagMatch(null);
+                      setRoamTagInput('');
+                    }}
+                    className="text-xs font-semibold"
+                    style={{ color: ON_SURFACE_VARIANT }}
+                  >
+                    Clear
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => void handleImportFromPhone()}
@@ -451,175 +601,182 @@ export default function BookForSomeonePage() {
               </button>
               <button
                 type="button"
-                onClick={() => navigate('/account/contacts')}
+                onClick={() => {
+                  setSelected(null);
+                  setSelectedPlaceId(null);
+                  setRoamTagMatch(null);
+                  setRoamTagInput('');
+                  setFullName('');
+                  setPhone('');
+                  setManual(false);
+                  setManualOpen(true);
+                }}
                 className="flex flex-col items-center gap-1.5 rounded-2xl px-2 py-3 text-center text-xs font-semibold"
                 style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW, color: PRIMARY }}
               >
-                <SlidersHorizontal className="h-5 w-5" aria-hidden />
-                Organize
+                <UserPlus className="h-5 w-5" aria-hidden />
+                Enter manually
+              </button>
+              <button
+                type="button"
+                onClick={() => setContactsOpen(true)}
+                className="flex flex-col items-center gap-1.5 rounded-2xl px-2 py-3 text-center text-xs font-semibold"
+                style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW, color: PRIMARY }}
+              >
+                <Users className="h-5 w-5" aria-hidden />
+                Roam Contacts
               </button>
             </div>
 
-            {!manual ? (
-              <>
-                <div className="relative">
-                  <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: ON_SURFACE_VARIANT }} />
-                  <input
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search Roam Contacts"
-                    className="h-12 w-full rounded-2xl border-none pl-11 pr-4 outline-none focus:ring-2 focus:ring-[#004ac6]"
-                    style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
-                  />
+            {manual && fullName.trim() ? (
+              <div
+                className="flex items-center gap-3 rounded-2xl p-4"
+                style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
+              >
+                <div
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold"
+                  style={{ backgroundColor: 'rgba(0,74,198,0.1)', color: PRIMARY }}
+                >
+                  {fullName.trim().slice(0, 2).toUpperCase()}
                 </div>
-
-                {groups.length > 0 ? (
-                  <div className="flex gap-2 overflow-x-auto pb-1">
-                    <button
-                      type="button"
-                      onClick={() => setGroupFilterId(null)}
-                      className="shrink-0 rounded-full px-3 py-1.5 text-sm font-medium"
-                      style={{
-                        backgroundColor: groupFilterId === null ? PRIMARY : SURFACE_LOW,
-                        color: groupFilterId === null ? '#fff' : ON_SURFACE,
-                      }}
-                    >
-                      All
-                    </button>
-                    {groups.map((g) => (
-                      <button
-                        key={g.id}
-                        type="button"
-                        onClick={() => setGroupFilterId(g.id)}
-                        className="shrink-0 rounded-full px-3 py-1.5 text-sm font-medium"
-                        style={{
-                          backgroundColor: groupFilterId === g.id ? PRIMARY : SURFACE_LOW,
-                          color: groupFilterId === g.id ? '#fff' : ON_SURFACE,
-                        }}
-                      >
-                        {g.name}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-
-                {loading ? (
-                  <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>Loading contacts…</p>
-                ) : filtered.length === 0 ? (
-                  <div
-                    className="space-y-4 rounded-[24px] p-6 text-center"
-                    style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
-                  >
-                    <UserPlus className="mx-auto h-10 w-10" style={{ color: PRIMARY }} aria-hidden />
-                    <p className="font-semibold">No Roam Contacts yet</p>
-                    <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-                      Import from your phone or add someone new.
-                    </p>
-                  </div>
-                ) : (
-                  <ul className="max-h-64 space-y-2 overflow-y-auto">
-                    {filtered.map((c) => (
-                      <li key={c.id}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelected(c);
-                            setSelectedPlaceId(null);
-                          }}
-                          className="flex w-full items-center gap-3 rounded-2xl p-4 text-left"
-                          style={{
-                            backgroundColor: SURFACE_LOWEST,
-                            boxShadow: CARD_SHADOW,
-                            borderWidth: 2,
-                            borderStyle: 'solid',
-                            borderColor: selected?.id === c.id ? PRIMARY : 'transparent',
-                          }}
-                        >
-                          <div>
-                            <p className="font-semibold">{c.display_name}</p>
-                            <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-                              {relationLabel(c.relation, c.relation_custom)}
-                              {c.groups?.length ? ` · ${c.groups.map((g) => g.name).join(', ')}` : ''}
-                            </p>
-                          </div>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-
-                {selected?.places?.length ? (
-                  <div className="space-y-2">
-                    <p className="text-xs font-bold tracking-wide" style={{ color: SECONDARY }}>
-                      USE SAVED PICKUP INSTEAD
-                    </p>
-                    {selected.places.map((p) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => setSelectedPlaceId(p.id)}
-                        className="block w-full rounded-xl p-3 text-left text-sm"
-                        style={{
-                          backgroundColor: selectedPlaceId === p.id ? 'rgba(0,74,198,0.08)' : SURFACE_LOW,
-                          borderWidth: 1,
-                          borderColor: selectedPlaceId === p.id ? PRIMARY : 'transparent',
-                        }}
-                      >
-                        <span className="font-semibold">{p.label}</span>
-                        <span className="block" style={{ color: ON_SURFACE_VARIANT }}>{p.address}</span>
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-
-                <button type="button" onClick={() => setManual(true)} className="text-sm font-semibold" style={{ color: PRIMARY }}>
-                  Enter details manually
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold">{fullName.trim()}</p>
+                  <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
+                    {phone || 'No phone'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setManualOpen(true)}
+                  className="text-xs font-semibold"
+                  style={{ color: PRIMARY }}
+                >
+                  Edit
                 </button>
-              </>
-            ) : (
-              <div className="space-y-4 rounded-[24px] p-5" style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}>
-                <input
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Full name"
-                  className="h-14 w-full rounded-xl border-none px-4"
-                  style={{ backgroundColor: SURFACE_LOW }}
-                />
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(formatGuestPhoneDisplay(e.target.value))}
-                  placeholder="(555) 000-0000"
-                  className="h-14 w-full rounded-xl border-none px-4"
-                  style={{ backgroundColor: SURFACE_LOW }}
-                />
-                <label className="flex items-center gap-3 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={saveToRoam}
-                    onChange={(e) => setSaveToRoam(e.target.checked)}
-                    className="h-4 w-4 rounded"
-                  />
-                  Save to Roam Contacts for next time
-                </label>
-                <button type="button" onClick={() => setManual(false)} className="text-sm font-semibold" style={{ color: PRIMARY }}>
-                  Back to Roam Contacts
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManual(false);
+                    setFullName('');
+                    setPhone('');
+                  }}
+                  className="text-xs font-semibold"
+                  style={{ color: ON_SURFACE_VARIANT }}
+                >
+                  Clear
                 </button>
               </div>
-            )}
+            ) : null}
 
-            <button
-              type="button"
-              onClick={() => void handleFinish()}
-              className="flex h-16 w-full items-center justify-center gap-2 rounded-2xl text-lg font-semibold"
-              style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_PRIMARY }}
-            >
-              Continue to ride options
-              <ArrowRight className="h-5 w-5" />
-            </button>
-          </>
+            {selected ? (
+              <div
+                className="flex items-center gap-3 rounded-2xl p-4"
+                style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
+              >
+                <div
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold"
+                  style={{ backgroundColor: 'rgba(0,74,198,0.1)', color: PRIMARY }}
+                >
+                  {selected.display_name.slice(0, 2).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold">{selected.display_name}</p>
+                  <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
+                    {selected.phone_e164}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelected(null);
+                    setSelectedPlaceId(null);
+                  }}
+                  className="text-xs font-semibold"
+                  style={{ color: ON_SURFACE_VARIANT }}
+                >
+                  Clear
+                </button>
+              </div>
+            ) : null}
+
+            {selected?.places?.length ? (
+              <div className="space-y-2">
+                <p className="text-xs font-bold tracking-wide" style={{ color: SECONDARY }}>
+                  USE SAVED PICKUP INSTEAD
+                </p>
+                {selected.places.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setSelectedPlaceId(p.id)}
+                    className="block w-full rounded-xl p-3 text-left text-sm"
+                    style={{
+                      backgroundColor: selectedPlaceId === p.id ? 'rgba(0,74,198,0.08)' : SURFACE_LOW,
+                      borderWidth: 1,
+                      borderColor: selectedPlaceId === p.id ? PRIMARY : 'transparent',
+                    }}
+                  >
+                    <span className="font-semibold">{p.label}</span>
+                    <span className="block" style={{ color: ON_SURFACE_VARIANT }}>{p.address}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
         )}
       </main>
+
+      {step === 'recipient' ? (
+        <div
+          className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] left-0 right-0 z-40 px-4 safe-x"
+        >
+          <button
+            type="button"
+            disabled={!hasRecipient}
+            onClick={() => void handleFinish()}
+            className="mx-auto flex h-16 w-full max-w-2xl items-center justify-center gap-2 rounded-2xl text-lg font-semibold disabled:opacity-50"
+            style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_PRIMARY, boxShadow: CARD_SHADOW }}
+          >
+            Continue to ride options
+            <ArrowRight className="h-5 w-5" />
+          </button>
+        </div>
+      ) : null}
+
+      <ManualRecipientSheet
+        open={manualOpen}
+        onClose={() => setManualOpen(false)}
+        fullName={fullName}
+        onFullNameChange={setFullName}
+        phone={phone}
+        onPhoneChange={setPhone}
+        saveToRoam={saveToRoam}
+        onSaveToRoamChange={setSaveToRoam}
+        onConfirm={() => {
+          setManual(true);
+          setManualOpen(false);
+        }}
+      />
+
+      <RoamContactsPickerSheet
+        open={contactsOpen}
+        onClose={() => setContactsOpen(false)}
+        contacts={contacts}
+        groups={groups}
+        loading={loading}
+        query={query}
+        onQueryChange={setQuery}
+        groupFilterId={groupFilterId}
+        onGroupFilterChange={setGroupFilterId}
+        selectedId={selected?.id ?? null}
+        onSelect={(contact) => {
+          setSelected(contact);
+          setSelectedPlaceId(null);
+          setRoamTagMatch(null);
+          setRoamTagInput('');
+          setManual(false);
+        }}
+      />
 
       <DeviceContactsPickerSheet
         open={devicePickerOpen}

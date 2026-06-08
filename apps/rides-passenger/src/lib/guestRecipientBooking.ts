@@ -5,6 +5,9 @@ export type GuestRecipientDraft = {
   countryCode: string;
   contactId?: string;
   selectedPlaceId?: string;
+  /** Roam account passenger when booked via @tag. */
+  passengerUserId?: string;
+  roamTagName?: string;
   /** Pre-set pickup from contact saved place (optional override). */
   pickupPreset?: {
     label: string;
@@ -39,7 +42,8 @@ export function readGuestRecipientDraft(): GuestRecipientDraft | null {
     const raw = sessionStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as GuestRecipientDraft;
-    if (!parsed?.fullName?.trim() || !parsed?.phone?.trim()) return null;
+    if (!parsed?.fullName?.trim()) return null;
+    if (!parsed.phone?.trim() && !parsed.passengerUserId) return null;
     return parsed;
   } catch {
     return null;
