@@ -72,6 +72,7 @@ import { autocompletePlaces, fetchPlaceDetails, isPlacesConfigured, reverseGeoco
 import { registerContactsRoutes } from "./contacts.ts";
 import { getRidesContactsDb } from "../_shared/ridesContactsDb.ts";
 import { registerPassengerInviteRoutes } from "./passengerInvites.ts";
+import { registerPassengerAuthorizationRoutes, consumePassengerAuthorization } from "./passengerAuthorizations.ts";
 import {
   registerBookingRequestRoutes,
   linkBookingRequestToRide,
@@ -84,7 +85,10 @@ import { registerPassengerProfileRoutes } from "./passengerProfile.ts";
 import { registerTripShareRoutes, maybeAutoShareWithTrustedContacts } from "./tripShare.ts";
 import {
   canAccessRide,
+  canCancelRide,
+  canChatOnRide,
   getRideParticipantRole,
+  isDelegatedBooking,
   shouldExposePinToUser,
 } from "./rideAccess.ts";
 import { notifyPassengerOfRideEvent } from "./rideNotifications.ts";
@@ -1489,6 +1493,43 @@ app.post("/v1/requests", async (c) => {
     insertRow.passenger_user_id = explicitPassengerId;
   }
 
+  const passengerAuthId = typeof body.passenger_authorization_id === "string"
+    ? body.passenger_authorization_id
+    : null;
+
+  const isDelegatedCreate = Boolean(
+    insertRow.guest_passenger_name ||
+      insertRow.guest_passenger_phone ||
+      insertRow.rider_contact_id ||
+      insertRow.booking_request_id ||
+      passengerAuthId,
+  );
+
+  if (isDelegatedCreate && !insertRow.passenger_user_id) {
+    return c.json({
+      error: "passenger_not_linked",
+      message: "The passenger must authorize before matching can start.",
+    }, 400);
+  }
+
+  if (passengerAuthId) {
+    const { db: contactsDb, tables: ct } = await getRidesContactsDb();
+    const { data: authRow } = await contactsDb.from(ct.passenger_authorizations)
+      .select("*")
+      .eq("id", passengerAuthId)
+      .eq("booker_user_id", auth.user.id)
+      .maybeSingle();
+    if (!authRow || authRow.status !== "claimed") {
+      return c.json({ error: "invalid_authorization" }, 400);
+    }
+    if (String(authRow.passenger_user_id) !== String(insertRow.passenger_user_id)) {
+      return c.json({ error: "authorization_passenger_mismatch" }, 400);
+    }
+    if (new Date(String(authRow.expires_at)) <= new Date()) {
+      return c.json({ error: "authorization_expired" }, 410);
+    }
+  }
+
   let ride: Record<string, unknown> | null = null;
   const { data: rpcRide, error: rpcError } = await pubSvc().rpc("rides_create_ride_request", {
     p_row: insertRow,
@@ -1537,6 +1578,15 @@ app.post("/v1/requests", async (c) => {
 
   if (bookingRequestId) {
     await linkBookingRequestToRide(getRidesContactsDb, bookingRequestId, ride.id as string);
+  }
+
+  if (passengerAuthId && insertRow.passenger_user_id) {
+    await consumePassengerAuthorization(
+      passengerAuthId,
+      auth.user.id,
+      String(insertRow.passenger_user_id),
+      ride.id as string,
+    );
   }
 
   const freshRide = await loadRideRequestById(ride.id as string);
@@ -1625,7 +1675,10 @@ app.get("/v1/requests/:id", async (c) => {
     wait_time: waitTimeInfo,
     rider_pin: pinEligible ? riderPin : null,
     participant_role: participantRole,
-    can_chat: isPassenger || isDriver,
+    can_chat: canChatOnRide(rideOut ?? ride, auth.user.id),
+    can_cancel: canCancelRide(rideOut ?? ride, auth.user.id),
+    is_delegated: isDelegatedBooking(rideOut ?? ride),
+    pin_enabled: isPinFeatureEnabled(settings),
   });
 });
 
@@ -1634,16 +1687,20 @@ app.post("/v1/requests/:id/cancel", async (c) => {
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
   const id = c.req.param("id");
   const body = await c.req.json().catch(() => ({}));
-  const db = svc();
   const ride = await loadRideRequestById(id);
   if (!ride) return c.json({ error: "not_found" }, 404);
-  if (ride.rider_user_id !== auth.user.id) return jsonEdgeForbidden(c, "forbidden");
+  if (!canAccessRide(ride, auth.user.id)) return jsonEdgeForbidden(c, "forbidden");
+  if (!canCancelRide(ride, auth.user.id)) {
+    return c.json({ error: "cancel_not_allowed", message: "You cannot cancel this ride at its current stage." }, 403);
+  }
 
   const terminal = ["completed", "cancelled"];
   if (terminal.includes(ride.status as string)) return c.json({ ride });
 
+  const participantRole = getRideParticipantRole(ride, auth.user.id);
   const cancelReason = typeof body.reason === "string" ? body.reason : null;
-  const patched = await cancelRideRequestRow(id, "rider", cancelReason);
+  const cancelledBy = participantRole === "driver" ? "driver" as const : "rider" as const;
+  const patched = await cancelRideRequestRow(id, cancelledBy, cancelReason);
   if (!patched) {
     return c.json({
       error: "update_failed",
@@ -1656,8 +1713,9 @@ app.post("/v1/requests/:id/cancel", async (c) => {
 
   const cellKey = gridCellKey(Number(ride.pickup_lat), Number(ride.pickup_lng));
   await bumpSurgeDemand(cellKey, -1);
-  await audit(id, auth.user.id, "ride_cancelled_rider", {});
-  logLine({ event: "ride_cancelled_rider", ride_id: id });
+  const auditEvent = participantRole === "passenger" ? "ride_cancelled_passenger" : "ride_cancelled_rider";
+  await audit(id, auth.user.id, auditEvent, { participant_role: participantRole });
+  logLine({ event: auditEvent, ride_id: id, participant_role: participantRole });
   await handleTerminalRideLedgerAndSync(id);
 
   const fresh = await loadRideRequestById(id);
@@ -2256,6 +2314,12 @@ registerPassengerInviteRoutes(app, {
   requireUser,
   loadRideRequestById,
   audit,
+});
+registerPassengerAuthorizationRoutes(app, {
+  getContactsDb: getRidesContactsDb,
+  requireUser,
+  audit,
+  rateLimit,
 });
 registerBookingRequestRoutes(app, { getContactsDb: getRidesContactsDb, requireUser, audit });
 registerRoamPassengerTagRoutes(app, { getContactsDb: getRidesContactsDb, requireUser });

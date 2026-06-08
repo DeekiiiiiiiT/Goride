@@ -4,6 +4,9 @@
 
 export type RideParticipantRole = "booker" | "passenger" | "driver" | "none";
 
+const TERMINAL_STATUSES = new Set(["completed", "cancelled"]);
+const BOOKER_CANCEL_BLOCKED_FROM = "driver_arrived_pickup";
+
 export function getRideParticipantRole(
   ride: Record<string, unknown>,
   userId: string,
@@ -21,14 +24,42 @@ export function canAccessRide(
   return getRideParticipantRole(ride, userId) !== "none";
 }
 
+/** Delegated booking: guest fields or passenger differs from booker. */
+export function isDelegatedBooking(ride: Record<string, unknown>): boolean {
+  if (ride.guest_passenger_phone) return true;
+  const passengerId = ride.passenger_user_id;
+  const bookerId = ride.rider_user_id;
+  if (passengerId && bookerId && passengerId !== bookerId) return true;
+  return false;
+}
+
 export function canChatOnRide(
   ride: Record<string, unknown>,
   userId: string,
 ): boolean {
   const role = getRideParticipantRole(ride, userId);
-  return role === "passenger" || role === "driver";
+  if (role === "driver" || role === "passenger") return true;
+  if (role === "booker") return true;
+  return false;
 }
 
+/** Booker may cancel until driver arrives; passenger may cancel any non-terminal ride. */
+export function canCancelRide(
+  ride: Record<string, unknown>,
+  userId: string,
+): boolean {
+  const status = String(ride.status ?? "");
+  if (TERMINAL_STATUSES.has(status)) return false;
+
+  const role = getRideParticipantRole(ride, userId);
+  if (role === "passenger") return true;
+  if (role === "booker") {
+    return status !== BOOKER_CANCEL_BLOCKED_FROM && status !== "on_trip";
+  }
+  return false;
+}
+
+/** @deprecated Use canCancelRide — booker-only legacy helper */
 export function canCancelRideAsRider(
   ride: Record<string, unknown>,
   userId: string,
@@ -105,6 +136,10 @@ export const PASSENGER_APP_ORIGIN = Deno.env.get("ROAM_RIDES_APP_ORIGIN") ?? "ht
 
 export function passengerInviteUrl(token: string): string {
   return `${PASSENGER_APP_ORIGIN}/ride/join/${token}`;
+}
+
+export function passengerAuthorizeUrl(token: string): string {
+  return `${PASSENGER_APP_ORIGIN}/ride/authorize/${token}`;
 }
 
 export function tripShareUrl(token: string): string {

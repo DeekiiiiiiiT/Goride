@@ -1,7 +1,11 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Search, X } from 'lucide-react';
 import type { RiderContactGroupRow, RiderContactRow } from '@roam/types/riderContacts';
+import { contactInitials, sortPinnedGroups } from '@/lib/contactGroups';
+import { PinnedGroupsFilterRow } from '@/components/contacts/PinnedGroupsFilterRow';
+import { GroupIconCircle } from '@/components/contacts/GroupIconCircle';
 import {
+  CARD_SHADOW,
   ON_SURFACE,
   ON_SURFACE_VARIANT,
   PRIMARY,
@@ -50,14 +54,26 @@ export function RoamContactsPickerSheet({
     };
   }, [open, onClose]);
 
-  if (!open) return null;
+  const pinnedGroups = useMemo(
+    () => groups.filter((g) => g.is_pinned).sort(sortPinnedGroups),
+    [groups],
+  );
 
-  const filtered = contacts.filter((c) => {
-    if (groupFilterId && !c.groups?.some((g) => g.id === groupFilterId)) return false;
-    if (!query.trim()) return true;
-    const q = query.toLowerCase();
-    return c.display_name.toLowerCase().includes(q) || c.phone_e164.includes(q);
-  });
+  const filtered = useMemo(() => {
+    let list = contacts;
+    if (groupFilterId) {
+      list = list.filter((c) => c.groups?.some((g) => g.id === groupFilterId));
+    }
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      list = list.filter(
+        (c) => c.display_name.toLowerCase().includes(q) || c.phone_e164.includes(q),
+      );
+    }
+    return [...list].sort((a, b) => a.display_name.localeCompare(b.display_name));
+  }, [contacts, groupFilterId, query]);
+
+  if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center">
@@ -72,7 +88,9 @@ export function RoamContactsPickerSheet({
         style={{ backgroundColor: SURFACE_LOWEST }}
       >
         <div className="flex items-center justify-between px-5 pb-2 pt-4">
-          <h2 className="text-lg font-bold" style={{ color: ON_SURFACE }}>Roam Contacts</h2>
+          <h2 className="text-lg font-bold" style={{ color: ON_SURFACE }}>
+            Roam Contacts
+          </h2>
           <button
             type="button"
             onClick={onClose}
@@ -84,7 +102,7 @@ export function RoamContactsPickerSheet({
           </button>
         </div>
 
-        <div className="px-5 pb-3">
+        <div className="space-y-4 px-4 pb-3">
           <div className="relative">
             <Search
               className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2"
@@ -93,44 +111,21 @@ export function RoamContactsPickerSheet({
             <input
               value={query}
               onChange={(e) => onQueryChange(e.target.value)}
-              placeholder="Search Roam Contacts"
-              className="h-12 w-full rounded-2xl pl-11 pr-4 outline-none focus:ring-2 focus:ring-[#004ac6]/30"
-              style={{ backgroundColor: SURFACE_LOW }}
+              placeholder="Search contacts"
+              className="h-12 w-full rounded-2xl border-none pl-11 pr-4 outline-none focus:ring-2 focus:ring-[#004ac6]"
+              style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
             />
           </div>
+
+          <PinnedGroupsFilterRow
+            pinnedGroups={pinnedGroups}
+            selectedGroupId={groupFilterId}
+            onSelectAll={() => onGroupFilterChange(null)}
+            onSelectGroup={(id) => onGroupFilterChange(groupFilterId === id ? null : id)}
+          />
         </div>
 
-        {groups.length > 0 ? (
-          <div className="flex gap-2 overflow-x-auto px-5 pb-3">
-            <button
-              type="button"
-              onClick={() => onGroupFilterChange(null)}
-              className="shrink-0 rounded-full px-3 py-1.5 text-sm font-medium"
-              style={{
-                backgroundColor: groupFilterId === null ? PRIMARY : SURFACE_LOW,
-                color: groupFilterId === null ? '#fff' : ON_SURFACE,
-              }}
-            >
-              All
-            </button>
-            {groups.map((g) => (
-              <button
-                key={g.id}
-                type="button"
-                onClick={() => onGroupFilterChange(g.id)}
-                className="shrink-0 rounded-full px-3 py-1.5 text-sm font-medium"
-                style={{
-                  backgroundColor: groupFilterId === g.id ? PRIMARY : SURFACE_LOW,
-                  color: groupFilterId === g.id ? '#fff' : ON_SURFACE,
-                }}
-              >
-                {g.name}
-              </button>
-            ))}
-          </div>
-        ) : null}
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))]">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))]">
           {loading ? (
             <p className="py-8 text-center text-sm" style={{ color: ON_SURFACE_VARIANT }}>
               Loading contacts…
@@ -149,26 +144,48 @@ export function RoamContactsPickerSheet({
                       onSelect(c);
                       onClose();
                     }}
-                    className="flex w-full items-center gap-3 rounded-2xl p-4 text-left"
+                    className="flex w-full items-center gap-4 rounded-2xl p-4 text-left"
                     style={{
-                      backgroundColor: SURFACE_LOW,
-                      borderWidth: 2,
-                      borderStyle: 'solid',
-                      borderColor: selectedId === c.id ? PRIMARY : 'transparent',
+                      backgroundColor: SURFACE_LOWEST,
+                      boxShadow: CARD_SHADOW,
+                      outline: selectedId === c.id ? `2px solid ${PRIMARY}` : '2px solid transparent',
                     }}
                   >
                     <div
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold"
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-bold"
                       style={{ backgroundColor: 'rgba(0,74,198,0.1)', color: PRIMARY }}
                     >
-                      {c.display_name.slice(0, 2).toUpperCase()}
+                      {contactInitials(c.display_name)}
                     </div>
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="truncate font-semibold">{c.display_name}</p>
-                      <p className="truncate text-sm" style={{ color: ON_SURFACE_VARIANT }}>
+                      <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
                         {c.phone_e164}
-                        {c.groups?.length ? ` · ${c.groups.map((g) => g.name).join(', ')}` : ''}
                       </p>
+                      {c.groups && c.groups.length > 0 ? (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {c.groups.slice(0, 2).map((g) => (
+                            <span
+                              key={g.id}
+                              className="inline-flex items-center gap-1 rounded-full py-0.5 pl-1 pr-2 text-[11px] font-medium"
+                              style={{ backgroundColor: SURFACE_LOW, color: ON_SURFACE_VARIANT }}
+                            >
+                              <GroupIconCircle
+                                emoji={g.emoji}
+                                color={g.color}
+                                size="sm"
+                                className="!h-4 !w-4 !text-[10px]"
+                              />
+                              {g.name}
+                            </span>
+                          ))}
+                          {c.groups.length > 2 ? (
+                            <span className="text-[11px]" style={{ color: ON_SURFACE_VARIANT }}>
+                              +{c.groups.length - 2}
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
                   </button>
                 </li>

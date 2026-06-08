@@ -34,6 +34,7 @@ export * from './vehicleCatalogPending';
 export * from './vendor';
 export * from './delivery';
 export * from './rides';
+export * from './passengerAuthorization';
 export * from './riderContacts';
 export * from './roamPassengerTag';
 export * from './passengerProfile';

@@ -30,6 +30,7 @@ import ContactGroupsPage from './pages/ContactGroupsPage';
 import ContactGroupDetailPage from './pages/ContactGroupDetailPage';
 import ContactDetailPage from './pages/ContactDetailPage';
 import PassengerInviteLandingPage from './pages/PassengerInviteLandingPage';
+import PassengerAuthorizePage from './pages/PassengerAuthorizePage';
 import RoamTagPage from './pages/RoamTagPage';
 import RoamTagClaimPage from './pages/RoamTagClaimPage';
 import WalletPage from './pages/WalletPage';
@@ -138,6 +139,7 @@ export default function App() {
 
       {/* Public delegated-booking entry (signup gate) */}
       <Route path="/ride/join/:token" element={<PassengerInviteLandingPage />} />
+      <Route path="/ride/authorize/:token" element={<PassengerAuthorizePage />} />
       <Route path="/trip/:token" element={<TripSharePublicPage />} />
       <Route path="/tag/:token" element={<RoamTagClaimPage />} />
 

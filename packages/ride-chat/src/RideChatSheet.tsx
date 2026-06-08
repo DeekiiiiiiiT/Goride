@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Loader2, Send, X } from 'lucide-react';
 import type { UseRideChatResult } from './useRideChat';
 import type { RideChatVariant } from './types';
+import type { RideMessageSenderRole } from '@roam/types/rides';
 
 const MAX_LEN = 500;
 
@@ -24,7 +25,19 @@ type Props = {
   enabled: boolean;
   currentUserId: string | null | undefined;
   chat: UseRideChatResult;
+  groupChat?: boolean;
 };
+
+function senderRoleLabel(role: RideMessageSenderRole): string {
+  switch (role) {
+    case 'driver':
+      return 'Driver';
+    case 'booker':
+      return 'Booker';
+    default:
+      return 'Passenger';
+  }
+}
 
 export function RideChatSheet({
   open,
@@ -34,6 +47,7 @@ export function RideChatSheet({
   enabled,
   currentUserId,
   chat,
+  groupChat,
 }: Props) {
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -129,6 +143,7 @@ export function RideChatSheet({
           ) : (
             messages.map((msg) => {
               const isMine = msg.sender_user_id === currentUserId;
+              const roleLabel = groupChat && !isMine ? senderRoleLabel(msg.sender_role) : null;
               return (
                 <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
                   <div
@@ -139,6 +154,11 @@ export function RideChatSheet({
                     }
                     style={isMine ? { backgroundColor: mineBg, color: mineText } : undefined}
                   >
+                    {roleLabel ? (
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide opacity-70">
+                        {roleLabel}
+                      </p>
+                    ) : null}
                     <p className="whitespace-pre-wrap break-words text-[15px] leading-snug">{msg.body}</p>
                     <p
                       className={`mt-1 text-[10px] tabular-nums ${

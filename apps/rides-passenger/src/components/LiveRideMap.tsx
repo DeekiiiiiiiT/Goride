@@ -42,7 +42,7 @@ export function LiveRideMap(props: Props) {
       <div
         className={
           isLive
-            ? 'absolute inset-0 overflow-hidden'
+            ? 'h-full w-full overflow-hidden'
             : 'relative h-[38dvh] min-h-[180px] w-full overflow-hidden rounded-b-3xl'
         }
       >
@@ -228,7 +228,7 @@ function GoogleLiveRideMap({
     <div
       className={
         isLive
-          ? 'absolute inset-0 overflow-hidden'
+          ? 'h-full w-full overflow-hidden'
           : 'relative h-[38dvh] min-h-[180px] w-full overflow-hidden rounded-b-3xl'
       }
     >

@@ -6,6 +6,8 @@ import {
   ArrowRight,
   AlertCircle,
   CircleDot,
+  Copy,
+  Loader2,
   MapPin,
   Navigation,
   Pencil,
@@ -17,7 +19,7 @@ import {
 import { supabase } from '@roam/auth-client';
 import type { RiderContactGroupRow, RiderContactRow } from '@roam/types/riderContacts';
 import { RoamPlaceField } from '@/components/RoamPlaceField';
-import { contactsCreate, contactsList, contactGroupsList } from '@/services/contactsEdge';
+import { contactsCreate, contactsList, contactGroupsList, createPassengerAuthorization, getPassengerAuthorizationById, lookupPassengerByPhone } from '@/services/contactsEdge';
 import {
   buildGuestPhoneE164,
   clearBookForSomeoneTrip,
@@ -92,14 +94,66 @@ export default function BookForSomeonePage() {
   const [roamTagLoading, setRoamTagLoading] = useState(false);
   const [roamTagError, setRoamTagError] = useState<string | null>(null);
   const [roamTagMatch, setRoamTagMatch] = useState<RoamPassengerTagBookingLookupDto | null>(null);
+  const [phoneProfileMatch, setPhoneProfileMatch] = useState<RoamPassengerTagBookingLookupDto | null>(null);
+  const [phoneLookupLoading, setPhoneLookupLoading] = useState(false);
+  const [recipientStatus, setRecipientStatus] = useState<'linked' | 'pending_authorization'>('linked');
+  const [passengerAuthorizationId, setPassengerAuthorizationId] = useState<string | null>(null);
+  const [authorizationUrl, setAuthorizationUrl] = useState<string | null>(null);
+  const [waitingForName, setWaitingForName] = useState<string | null>(null);
+  const [linkedPassengerUserId, setLinkedPassengerUserId] = useState<string | null>(null);
 
   const clearRecipientSelection = () => {
     setSelected(null);
     setSelectedPlaceId(null);
     setRoamTagMatch(null);
+    setPhoneProfileMatch(null);
     setRoamTagInput('');
     setFullName('');
     setPhone('');
+    setRecipientStatus('linked');
+    setPassengerAuthorizationId(null);
+    setAuthorizationUrl(null);
+    setWaitingForName(null);
+    setLinkedPassengerUserId(null);
+  };
+
+  const resolvePhoneRecipient = async (name: string, phoneDigits: string) => {
+    const e164 = buildGuestPhoneE164('+1', phoneDigits);
+    setPhoneLookupLoading(true);
+    try {
+      const result = await lookupPassengerByPhone(e164);
+      if (result.found && result.profile) {
+        setPhoneProfileMatch({
+          user_id: result.profile.user_id,
+          custom_tag_name: result.profile.custom_tag_name ?? '',
+          display_name: result.profile.display_name,
+          phone_e164: e164,
+          avatar_url: result.profile.avatar_url,
+        });
+        setRecipientStatus('linked');
+        setPassengerAuthorizationId(null);
+        setAuthorizationUrl(null);
+        setWaitingForName(null);
+        return;
+      }
+      const { authorization } = await createPassengerAuthorization({
+        recipient_name: name,
+        phone_e164: e164,
+        draft_trip_json: tripDraft ?? undefined,
+      });
+      setPhoneProfileMatch(null);
+      setRecipientStatus('pending_authorization');
+      setPassengerAuthorizationId(authorization.id);
+      setAuthorizationUrl(authorization.url);
+      setWaitingForName(name);
+      toast.message(`Waiting for ${name} to authorize`, {
+        description: 'Share the link so they can sign in and link their account.',
+      });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not resolve passenger');
+    } finally {
+      setPhoneLookupLoading(false);
+    }
   };
 
   const lookupRoamTag = async (raw: string) => {
@@ -154,9 +208,34 @@ export default function BookForSomeonePage() {
     void reloadContacts();
   }, [step, reloadContacts]);
 
+  useEffect(() => {
+    if (recipientStatus !== 'pending_authorization' || !passengerAuthorizationId) return;
+    const interval = setInterval(() => {
+      void getPassengerAuthorizationById(passengerAuthorizationId)
+        .then(({ authorization }) => {
+          if (authorization.status === 'claimed' && authorization.passenger_user_id) {
+            setRecipientStatus('linked');
+            setLinkedPassengerUserId(authorization.passenger_user_id);
+            toast.success(`${waitingForName ?? 'Passenger'} is linked — you can continue.`);
+          }
+        })
+        .catch(() => { /* ignore poll errors */ });
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [recipientStatus, passengerAuthorizationId, waitingForName]);
+
   const hasRecipient = Boolean(
-    roamTagMatch || (selected && !manual) || (manual && fullName.trim() && phone.replace(/\D/g, '').length >= 10),
+    roamTagMatch ||
+      phoneProfileMatch ||
+      linkedPassengerUserId ||
+      selected?.linked_user_id ||
+      (manual && fullName.trim() && phone.replace(/\D/g, '').length >= 10),
   );
+
+  const canContinue =
+    hasRecipient &&
+    recipientStatus === 'linked' &&
+    !phoneLookupLoading;
 
   const coordsReady = Boolean(pickup && dropoff);
 
@@ -278,10 +357,18 @@ export default function BookForSomeonePage() {
       draftPhone = roamTagMatch.phone_e164!.replace(/\D/g, '').slice(-10);
       passengerUserId = roamTagMatch.user_id;
       roamTagName = roamTagMatch.custom_tag_name;
+    } else if (phoneProfileMatch) {
+      draftName = phoneProfileMatch.display_name?.trim() || phoneProfileMatch.custom_tag_name;
+      draftPhone = phoneProfileMatch.phone_e164!.replace(/\D/g, '').slice(-10);
+      passengerUserId = phoneProfileMatch.user_id;
+      roamTagName = phoneProfileMatch.custom_tag_name;
     } else if (selected && !manual) {
       draftName = selected.display_name;
       draftPhone = selected.phone_e164.replace(/\D/g, '').slice(-10);
       contactId = selected.id;
+      if (selected.linked_user_id) {
+        passengerUserId = selected.linked_user_id;
+      }
       if (selectedPlaceId) {
         const place = selected.places?.find((p) => p.id === selectedPlaceId);
         if (place) {
@@ -302,8 +389,16 @@ export default function BookForSomeonePage() {
       }
     }
 
+    if (!passengerUserId && linkedPassengerUserId) {
+      passengerUserId = linkedPassengerUserId;
+    }
+
     if (!draftName || !draftPhone) {
       toast.error('Select a contact or enter recipient details.');
+      return;
+    }
+    if (!passengerUserId) {
+      toast.error('The passenger must authorize before you can book.');
       return;
     }
     if (!isValidGuestPhone(draftPhone)) {
@@ -342,6 +437,9 @@ export default function BookForSomeonePage() {
       pickupPreset,
       passengerUserId,
       roamTagName,
+      passengerAuthorizationId: passengerAuthorizationId ?? undefined,
+      authorizationUrl: authorizationUrl ?? undefined,
+      recipientStatus: passengerUserId ? 'linked' : recipientStatus,
     });
     toast.success(`Ready to book for ${draftName}.`);
     navigate('/');
@@ -479,11 +577,8 @@ export default function BookForSomeonePage() {
               </button>
             ) : null}
 
-            <section className="space-y-2">
+            <section>
               <h2 className="text-[30px] font-bold leading-tight">Who is roaming?</h2>
-              <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-                Use their Roam Tag, pick a contact, or enter details manually.
-              </p>
             </section>
 
             <div
@@ -628,6 +723,69 @@ export default function BookForSomeonePage() {
               </button>
             </div>
 
+            {recipientStatus === 'pending_authorization' && authorizationUrl ? (
+              <div
+                className="space-y-3 rounded-2xl p-4"
+                style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
+              >
+                <p className="text-sm font-semibold" style={{ color: PRIMARY }}>
+                  Waiting for {waitingForName ?? 'passenger'}
+                </p>
+                <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
+                  Share this link so they can sign in and authorize the ride.
+                </p>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      if (typeof navigator.share === 'function') {
+                        await navigator.share({ title: 'Authorize your Roam ride', url: authorizationUrl });
+                      } else {
+                        await navigator.clipboard.writeText(authorizationUrl);
+                        toast.success('Link copied');
+                      }
+                    } catch {
+                      /* user cancelled share */
+                    }
+                  }}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold"
+                  style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_PRIMARY }}
+                >
+                  <Copy className="h-4 w-4" />
+                  Copy authorization link
+                </button>
+              </div>
+            ) : null}
+
+            {phoneProfileMatch ? (
+              <div
+                className="flex items-center gap-3 rounded-2xl p-4"
+                style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
+              >
+                <div
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold"
+                  style={{ backgroundColor: 'rgba(0,74,198,0.1)', color: PRIMARY }}
+                >
+                  {(phoneProfileMatch.display_name ?? phoneProfileMatch.custom_tag_name).slice(0, 2).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold">
+                    {phoneProfileMatch.display_name ?? formatRoamTagDisplay(phoneProfileMatch.custom_tag_name)}
+                  </p>
+                  <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
+                    Roam member · {formatRoamTagDisplay(phoneProfileMatch.custom_tag_name)}
+                  </p>
+                </div>
+              </div>
+            ) : null}
+
+            {phoneLookupLoading ? (
+              <div className="flex items-center justify-center gap-2 py-4 text-sm" style={{ color: ON_SURFACE_VARIANT }}>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Looking up phone…
+              </div>
+            ) : null}
+
             {manual && fullName.trim() ? (
               <div
                 className="flex items-center gap-3 rounded-2xl p-4"
@@ -732,7 +890,7 @@ export default function BookForSomeonePage() {
         >
           <button
             type="button"
-            disabled={!hasRecipient}
+            disabled={!canContinue}
             onClick={() => void handleFinish()}
             className="mx-auto flex h-16 w-full max-w-2xl items-center justify-center gap-2 rounded-2xl text-lg font-semibold disabled:opacity-50"
             style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_PRIMARY, boxShadow: CARD_SHADOW }}
@@ -752,9 +910,16 @@ export default function BookForSomeonePage() {
         onPhoneChange={setPhone}
         saveToRoam={saveToRoam}
         onSaveToRoamChange={setSaveToRoam}
-        onConfirm={() => {
+        onConfirm={async () => {
           setManual(true);
           setManualOpen(false);
+          setSelected(null);
+          setRoamTagMatch(null);
+          setPhoneProfileMatch(null);
+          const digits = phone.replace(/\D/g, '');
+          if (fullName.trim() && digits.length >= 10) {
+            await resolvePhoneRecipient(fullName.trim(), digits);
+          }
         }}
       />
 
@@ -769,12 +934,24 @@ export default function BookForSomeonePage() {
         groupFilterId={groupFilterId}
         onGroupFilterChange={setGroupFilterId}
         selectedId={selected?.id ?? null}
-        onSelect={(contact) => {
+        onSelect={async (contact) => {
           setSelected(contact);
           setSelectedPlaceId(null);
           setRoamTagMatch(null);
           setRoamTagInput('');
           setManual(false);
+          setPhoneProfileMatch(null);
+          if (contact.linked_user_id) {
+            setRecipientStatus('linked');
+            setPassengerAuthorizationId(null);
+            setAuthorizationUrl(null);
+            setLinkedPassengerUserId(contact.linked_user_id);
+          } else {
+            await resolvePhoneRecipient(
+              contact.display_name,
+              contact.phone_e164.replace(/\D/g, '').slice(-10),
+            );
+          }
         }}
       />
 

@@ -16,6 +16,7 @@ import {
 } from '@roam/ui';
 import { supabase } from '@roam/auth-client';
 import { LiveRideView } from '@/components/LiveRideView';
+import { BookerTrackingView } from '@/components/BookerTrackingView';
 import { RideCancelledView } from '@/components/RideCancelledView';
 import { TripInProgressView } from '@/components/TripInProgressView';
 import { TripSummaryView } from '@/components/TripSummaryView';
@@ -50,12 +51,6 @@ function statusLabel(s: RideRequestStatus): string {
   }
 }
 
-const CANCELLABLE_STATUSES: RideRequestStatus[] = [
-  'matching',
-  'driver_assigned',
-  'driver_en_route_pickup',
-];
-
 const PICKUP_LIVE_STATUSES: RideRequestStatus[] = [
   'driver_assigned',
   'driver_en_route_pickup',
@@ -68,10 +63,6 @@ const LIVE_TRACKING_STATUSES: RideRequestStatus[] = [
   ...PICKUP_LIVE_STATUSES,
   ...TRIP_IN_PROGRESS_STATUSES,
 ];
-
-function isCancellable(status: RideRequestStatus | undefined): boolean {
-  return Boolean(status && CANCELLABLE_STATUSES.includes(status));
-}
 
 function isPickupLive(status: RideRequestStatus | undefined): boolean {
   return Boolean(status && PICKUP_LIVE_STATUSES.includes(status));
@@ -216,17 +207,11 @@ export default function RidePage() {
 
   const ride = data?.ride;
   const waitTime = data?.wait_time as WaitTimeInfo | null | undefined;
-  const canChat = data?.can_chat !== false;
+  const canChat = data?.can_chat === true;
+  const canCancel = data?.can_cancel === true;
+  const isDelegatedBooker = data?.participant_role === 'booker' && data?.is_delegated === true;
   const isBooker = data?.participant_role === 'booker';
-  const canShareWithPassenger =
-    Boolean(
-      ride &&
-        isBooker &&
-        ride.guest_passenger_phone &&
-        !ride.passenger_user_id &&
-        ride.status !== 'completed' &&
-        ride.status !== 'cancelled',
-    );
+  const canShareWithPassenger = false;
 
   const shareWithPassenger = async () => {
     if (!id || sharingInvite) return;
@@ -253,6 +238,8 @@ export default function RidePage() {
     if (!ride) return null;
     return resolveRiderPinDisplay(ride, data?.rider_pin);
   }, [data?.rider_pin, ride]);
+
+  const pinEnabled = data?.pin_enabled === true || Boolean(riderPin);
 
   const pinAwaitingPickup =
     ride != null &&
@@ -381,7 +368,7 @@ export default function RidePage() {
   };
 
   const handleBack = () => {
-    if (!ride || !isCancellable(ride.status)) {
+    if (!ride || !canCancel) {
       navigate('/');
       return;
     }
@@ -403,36 +390,135 @@ export default function RidePage() {
   );
 
   if (ride && isTripInProgress(ride.status)) {
+    if (isDelegatedBooker) {
+      return (
+        <>
+          {connectionBanner}
+          <div className="h-[100dvh] max-h-[100dvh] overflow-hidden">
+            <BookerTrackingView
+              ride={ride}
+              driverLocation={driverLocation}
+              driverHeading={liveData?.driver_location?.heading ?? ride.last_driver_heading ?? null}
+              passengerName={ride.guest_passenger_name}
+              isFetching={isFetching}
+              onBack={() => navigate('/')}
+              onCancelTrip={() => setCancelDialogOpen(true)}
+              cancelling={cancelling}
+              canChat={canChat}
+              canCancel={canCancel}
+            />
+          </div>
+          <RidePageDialogs
+            cancelDialogOpen={cancelDialogOpen}
+            setCancelDialogOpen={setCancelDialogOpen}
+            leaveDialogOpen={leaveDialogOpen}
+            setLeaveDialogOpen={setLeaveDialogOpen}
+            cancelling={cancelling}
+            cancelCopy={getCancelCopy(ride.status)}
+            onConfirmCancel={() => void performCancel()}
+          />
+        </>
+      );
+    }
     return (
       <>
         {connectionBanner}
-        <TripInProgressView
+        <div className="h-[100dvh] max-h-[100dvh] overflow-hidden">
+          <TripInProgressView
           ride={ride}
           driverLocation={driverLocation}
           driverHeading={liveData?.driver_location?.heading ?? ride.last_driver_heading ?? null}
           onBack={() => navigate('/')}
           canChat={canChat}
+          canCancel={canCancel}
         />
+        </div>
       </>
     );
   }
 
   if (ride && isPickupLive(ride.status)) {
+    if (isDelegatedBooker) {
+      return (
+        <>
+          {connectionBanner}
+          <div className="h-[100dvh] max-h-[100dvh] overflow-hidden">
+            <BookerTrackingView
+              ride={ride}
+              driverLocation={driverLocation}
+              driverHeading={liveData?.driver_location?.heading ?? ride.last_driver_heading ?? null}
+              passengerName={ride.guest_passenger_name}
+              isFetching={isFetching}
+              onBack={handleBack}
+              onCancelTrip={() => setCancelDialogOpen(true)}
+              cancelling={cancelling}
+              canChat={canChat}
+              canCancel={canCancel}
+            />
+          </div>
+          <RidePageDialogs
+            cancelDialogOpen={cancelDialogOpen}
+            setCancelDialogOpen={setCancelDialogOpen}
+            leaveDialogOpen={leaveDialogOpen}
+            setLeaveDialogOpen={setLeaveDialogOpen}
+            cancelling={cancelling}
+            cancelCopy={getCancelCopy(ride.status)}
+            onConfirmCancel={() => void performCancel()}
+          />
+        </>
+      );
+    }
     return (
       <>
         {connectionBanner}
-        <LiveRideView
+        <div className="h-[100dvh] max-h-[100dvh] overflow-hidden">
+          <LiveRideView
           ride={ride}
           driverLocation={driverLocation}
           driverHeading={liveData?.driver_location?.heading ?? ride.last_driver_heading ?? null}
           riderPin={riderPin}
+          pinEnabled={pinEnabled}
           waitTime={waitTime}
           isFetching={isFetching}
           onBack={handleBack}
           onCancelTrip={() => setCancelDialogOpen(true)}
+          onRetryPin={() => void refetch()}
           cancelling={cancelling}
           canChat={canChat}
+          canCancel={canCancel}
         />
+        </div>
+        <RidePageDialogs
+          cancelDialogOpen={cancelDialogOpen}
+          setCancelDialogOpen={setCancelDialogOpen}
+          leaveDialogOpen={leaveDialogOpen}
+          setLeaveDialogOpen={setLeaveDialogOpen}
+          cancelling={cancelling}
+          cancelCopy={getCancelCopy(ride.status)}
+          onConfirmCancel={() => void performCancel()}
+        />
+      </>
+    );
+  }
+
+  if (ride && isDelegatedBooker && (ride.status === 'matching' || showLiveTracking(ride.status))) {
+    return (
+      <>
+        {connectionBanner}
+        <div className="h-[100dvh] max-h-[100dvh] overflow-hidden">
+          <BookerTrackingView
+            ride={ride}
+            driverLocation={driverLocation}
+            driverHeading={liveData?.driver_location?.heading ?? ride.last_driver_heading ?? null}
+            passengerName={ride.guest_passenger_name}
+            isFetching={isFetching}
+            onBack={handleBack}
+            onCancelTrip={() => setCancelDialogOpen(true)}
+            cancelling={cancelling}
+            canChat={canChat}
+            canCancel={canCancel}
+          />
+        </div>
         <RidePageDialogs
           cancelDialogOpen={cancelDialogOpen}
           setCancelDialogOpen={setCancelDialogOpen}
@@ -535,7 +621,7 @@ export default function RidePage() {
               </button>
             )}
 
-            {isCancellable(ride.status) && (
+            {canCancel && (
               <button
                 type="button"
                 onClick={() => setCancelDialogOpen(true)}

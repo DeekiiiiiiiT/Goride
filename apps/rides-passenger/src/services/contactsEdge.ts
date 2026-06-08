@@ -22,6 +22,12 @@ import type {
   RiderContactGroupDetailResponse,
   AddRiderContactGroupMembersBody,
 } from '@roam/types/riderContacts';
+import type {
+  ClaimPassengerAuthorizationResponse,
+  CreatePassengerAuthorizationBody,
+  PassengerAuthorizationDto,
+  PassengerLookupResult,
+} from '@roam/types/passengerAuthorization';
 
 async function contactsHeaders(): Promise<HeadersInit> {
   const { data: { user } } = await supabase.auth.getUser();
@@ -293,6 +299,64 @@ export async function getBookingRequestPreview(token: string): Promise<BookingRe
 
 export async function claimBookingRequest(token: string): Promise<ClaimBookingRequestResponse> {
   const res = await fetch(`${base}/v1/booking-requests/${token}/claim`, {
+    method: 'POST',
+    headers: await contactsHeaders(),
+  });
+  if (!res.ok) await parseError(res);
+  return res.json();
+}
+
+export async function lookupPassengerByPhone(phoneE164: string): Promise<PassengerLookupResult> {
+  const params = new URLSearchParams({ phone_e164: phoneE164 });
+  const res = await fetch(`${base}/v1/passengers/lookup?${params}`, {
+    headers: await contactsHeaders(),
+  });
+  if (!res.ok) await parseError(res);
+  return res.json();
+}
+
+export async function createPassengerAuthorization(
+  body: CreatePassengerAuthorizationBody,
+): Promise<{ authorization: PassengerAuthorizationDto }> {
+  const res = await fetch(`${base}/v1/passenger-authorizations`, {
+    method: 'POST',
+    headers: await contactsHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await parseError(res);
+  return res.json();
+}
+
+export async function getPassengerAuthorizationById(
+  id: string,
+): Promise<{ authorization: PassengerAuthorizationDto }> {
+  const res = await fetch(`${base}/v1/passenger-authorizations/id/${id}`, {
+    headers: await contactsHeaders(),
+  });
+  if (!res.ok) await parseError(res);
+  return res.json();
+}
+
+export async function getPassengerAuthorizationPreview(token: string): Promise<{
+  authorization: {
+    token: string;
+    recipient_name: string;
+    phone_masked: string;
+    status: string;
+    expires_at: string;
+  };
+}> {
+  const res = await fetch(`${base}/v1/passenger-authorizations/${token}`, {
+    headers: { apikey: publicAnonKey },
+  });
+  if (!res.ok) await parseError(res);
+  return res.json();
+}
+
+export async function claimPassengerAuthorization(
+  token: string,
+): Promise<ClaimPassengerAuthorizationResponse> {
+  const res = await fetch(`${base}/v1/passenger-authorizations/${token}/claim`, {
     method: 'POST',
     headers: await contactsHeaders(),
   });

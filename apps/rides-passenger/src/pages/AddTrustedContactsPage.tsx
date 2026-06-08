@@ -84,15 +84,35 @@ export default function AddTrustedContactsPage() {
     }
   };
 
+  const handleBack = () => {
+    if (selected.size > 0) {
+      const ok = window.confirm(
+        `You selected ${selected.size} contact${selected.size === 1 ? '' : 's'}. Add them as trusted before leaving?`,
+      );
+      if (ok) {
+        void handleSubmit();
+        return;
+      }
+    }
+    navigate('/account/contacts/trusted');
+  };
+
   return (
-    <div className="flex min-h-[100dvh] flex-col pb-32" style={{ backgroundColor: PAGE_BG, color: ON_SURFACE }}>
+    <div
+      className="flex min-h-[100dvh] flex-col"
+      style={{
+        backgroundColor: PAGE_BG,
+        color: ON_SURFACE,
+        paddingBottom: 'calc(4.5rem + 5.5rem + env(safe-area-inset-bottom, 0px))',
+      }}
+    >
       <header
         className="sticky top-0 z-50 flex h-16 items-center justify-between px-5 safe-t"
         style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
       >
         <button
           type="button"
-          onClick={() => navigate('/account/contacts/trusted')}
+          onClick={handleBack}
           className="rounded-full p-2"
           style={{ color: PRIMARY }}
           aria-label="Back"
@@ -102,7 +122,19 @@ export default function AddTrustedContactsPage() {
         <h1 className="text-base font-bold uppercase tracking-tight" style={{ color: PRIMARY }}>
           Add Trusted Contacts
         </h1>
-        <div className="w-10" />
+        {selected.size > 0 ? (
+          <button
+            type="button"
+            onClick={() => void handleSubmit()}
+            disabled={saving}
+            className="rounded-full px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+            style={{ backgroundColor: PRIMARY }}
+          >
+            {saving ? 'Saving…' : `Add (${selected.size})`}
+          </button>
+        ) : (
+          <div className="w-10" />
+        )}
       </header>
 
       <main className="mx-auto w-full max-w-xl flex-1 px-5 pt-6 safe-x">
@@ -194,7 +226,10 @@ export default function AddTrustedContactsPage() {
         </div>
       </main>
 
-      <div className="fixed inset-x-0 bottom-0 z-50 bg-gradient-to-t from-[var(--passenger-page-bg)] via-[var(--passenger-page-bg)]/95 to-transparent p-5 pb-8 safe-x">
+      <div
+        className="fixed inset-x-0 z-[60] bg-gradient-to-t from-[var(--passenger-page-bg)] via-[var(--passenger-page-bg)] to-[var(--passenger-page-bg)]/80 p-5 safe-x"
+        style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))' }}
+      >
         <button
           type="button"
           disabled={!selected.size || saving}
@@ -203,7 +238,11 @@ export default function AddTrustedContactsPage() {
           style={{ backgroundColor: selected.size ? PRIMARY : '#1A1A1A' }}
         >
           <ShieldCheck className="h-5 w-5" aria-hidden />
-          {selected.size > 0 ? `Mark as Trusted (${selected.size})` : 'Select Contacts'}
+          {saving
+            ? 'Saving…'
+            : selected.size > 0
+              ? `Mark as Trusted (${selected.size})`
+              : 'Select contacts to continue'}
         </button>
       </div>
     </div>

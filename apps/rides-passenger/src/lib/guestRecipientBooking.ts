@@ -5,9 +5,13 @@ export type GuestRecipientDraft = {
   countryCode: string;
   contactId?: string;
   selectedPlaceId?: string;
-  /** Roam account passenger when booked via @tag. */
+  /** Roam account passenger when booked via @tag or phone lookup. */
   passengerUserId?: string;
   roamTagName?: string;
+  /** Pre-book authorization when passenger has no linked account. */
+  passengerAuthorizationId?: string;
+  authorizationUrl?: string;
+  recipientStatus?: 'linked' | 'pending_authorization';
   /** Pre-set pickup from contact saved place (optional override). */
   pickupPreset?: {
     label: string;

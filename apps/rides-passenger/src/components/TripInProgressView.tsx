@@ -26,6 +26,7 @@ type Props = {
   driverHeading: number | null;
   onBack: () => void;
   canChat?: boolean;
+  canCancel?: boolean;
 };
 
 const DEFAULT_DRIVER_PHOTO =
@@ -40,7 +41,14 @@ export function tripArrivalHeadline(ride: RideRequestRow): string {
   return 'Trip in progress';
 }
 
-export function TripInProgressView({ ride, driverLocation, driverHeading, onBack, canChat = true }: Props) {
+export function TripInProgressView({
+  ride,
+  driverLocation,
+  driverHeading,
+  onBack,
+  canChat = false,
+  canCancel = false,
+}: Props) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [safetyOpen, setSafetyOpen] = useState(false);
   const headline = tripArrivalHeadline(ride);
@@ -51,10 +59,14 @@ export function TripInProgressView({ ride, driverLocation, driverHeading, onBack
     ride.currency ?? 'JMD',
   );
 
+  const comingSoon = (label: string) => {
+    toast.message(label, { description: 'Coming soon' });
+  };
+
   return (
     <RiderRideChatWrap ride={ride}>
       {(openChat, { unreadCount }) => (
-    <div className="trip-progress-page">
+    <div className="trip-progress-page relative isolate flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden">
       <header className="trip-progress-header">
         <button type="button" className="trip-progress-header__btn" onClick={onBack} aria-label="Go back">
           <ArrowLeft className="size-6" strokeWidth={2} />
@@ -70,7 +82,7 @@ export function TripInProgressView({ ride, driverLocation, driverHeading, onBack
         </button>
       </header>
 
-      <main className="trip-progress-stage">
+      <main className="trip-progress-stage relative flex min-h-0 flex-1 overflow-hidden">
         <div className="trip-progress-map-layer">
           <LiveRideMap
             variant="trip"
@@ -84,7 +96,7 @@ export function TripInProgressView({ ride, driverLocation, driverHeading, onBack
         </div>
         <div className="trip-progress-map-gradient" aria-hidden />
 
-        <section className="trip-progress-sheet" aria-label="Trip status">
+        <section className="trip-progress-sheet z-40" aria-label="Trip status">
           <div className="trip-progress-sheet__handle" aria-hidden />
 
           <h2 className="trip-progress-sheet__status">{headline}</h2>

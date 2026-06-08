@@ -517,6 +517,13 @@ export default function HomePage() {
           }
 
           const tagDraft = readBookingRequestDraft();
+          if (guestRecipient && !guestRecipient.passengerUserId) {
+            const msg = 'The passenger must authorize before you can book.';
+            setBookError(msg);
+            toast.error(msg);
+            return;
+          }
+
           if (tagDraft && selectedPayment.ridePaymentMethod === 'cash') {
             const msg = 'Roam Tag bookings must be paid digitally (card or wallet).';
             setBookError(msg);
@@ -544,6 +551,9 @@ export default function HomePage() {
                   ...(guestRecipient.contactId ? { rider_contact_id: guestRecipient.contactId } : {}),
                   ...(guestRecipient.passengerUserId
                     ? { passenger_user_id: guestRecipient.passengerUserId }
+                    : {}),
+                  ...(guestRecipient.passengerAuthorizationId
+                    ? { passenger_authorization_id: guestRecipient.passengerAuthorizationId }
                     : {}),
                 }
               : {}),

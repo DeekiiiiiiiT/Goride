@@ -16,6 +16,7 @@ type Props = {
   variant: RideChatVariant;
   api: RideChatApi;
   supabase: SupabaseClient;
+  groupChat?: boolean;
   children: (openChat: () => void, ctx: RideChatContext) => React.ReactNode;
 };
 
@@ -34,6 +35,7 @@ export function RideChatHost({
   variant,
   api,
   supabase,
+  groupChat,
   children,
 }: Props) {
   const [open, setOpen] = useState(false);
@@ -92,6 +94,7 @@ export function RideChatHost({
         enabled={enabled}
         currentUserId={currentUserId}
         chat={chat}
+        groupChat={groupChat}
       />
     </>
   );

@@ -75,6 +75,14 @@
 .trip-progress-map-layer {
   position: absolute;
   inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.trip-progress-map-layer .leaflet-container,
+.trip-progress-map-layer .live-ride-map__canvas {
+  height: 100%;
+  width: 100%;
 }
 
 .trip-progress-map-gradient {

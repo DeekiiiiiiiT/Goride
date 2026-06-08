@@ -32,12 +32,15 @@ type Props = {
   driverLocation: LatLng | null;
   driverHeading: number | null;
   riderPin: string | null;
+  pinEnabled?: boolean;
   waitTime: WaitTimeInfo | null | undefined;
   isFetching?: boolean;
   onBack: () => void;
   onCancelTrip: () => void;
+  onRetryPin?: () => void;
   cancelling?: boolean;
   canChat?: boolean;
+  canCancel?: boolean;
 };
 
 const DEFAULT_DRIVER_PHOTO =
@@ -97,32 +100,39 @@ export function LiveRideView({
   driverLocation,
   driverHeading,
   riderPin,
+  pinEnabled = false,
   waitTime,
   isFetching,
   onBack,
   onCancelTrip,
+  onRetryPin,
   cancelling,
-  canChat = true,
+  canChat = false,
+  canCancel = false,
 }: Props) {
   const [safetyOpen, setSafetyOpen] = useState(false);
   const headline = liveRideStatusHeadline(ride.status, ride);
   const pickupShort = formatShortAddress(ride.pickup_address);
   const serviceLabel = vehicleTypeLabel(ride.vehicle_option);
   const showPin = Boolean(riderPin);
-  const pinAwaitingPickup =
-    isRiderPinTripPhase(ride.status) && !ride.pin_verified_at && !shouldShowRiderPin(ride);
-  const pinLoadingAtPickup = shouldShowRiderPin(ride) && !riderPin && !ride.pin_verified_at;
-  const cancellable =
-    ride.status === 'matching' ||
-    ride.status === 'driver_assigned' ||
-    ride.status === 'driver_en_route_pickup';
+  const pinPhase = pinEnabled && isRiderPinTripPhase(ride.status) && !ride.pin_verified_at;
+  const pinAwaitingPickup = pinPhase && !shouldShowRiderPin(ride);
+  const pinLoadingAtPickup =
+    pinEnabled && shouldShowRiderPin(ride) && !riderPin && !ride.pin_verified_at && Boolean(isFetching);
+  const pinUnavailable =
+    pinEnabled && shouldShowRiderPin(ride) && !riderPin && !ride.pin_verified_at && !isFetching;
+
+  const groupChat = Boolean(
+    ride.guest_passenger_phone ||
+      (ride.passenger_user_id && ride.passenger_user_id !== ride.rider_user_id),
+  );
 
   const comingSoon = (label: string) => {
     toast.message(label, { description: 'Coming soon' });
   };
 
   return (
-    <RiderRideChatWrap ride={ride}>
+    <RiderRideChatWrap ride={ride} groupChat={groupChat}>
       {(openChat, { unreadCount }) => (
     <div className="live-ride-page">
       <header className="live-ride-topbar">
@@ -141,23 +151,26 @@ export function LiveRideView({
       </header>
 
       <main className="live-ride-stage">
-        <LiveRideMap
-          variant="live"
-          pickup={{ lat: ride.pickup_lat, lng: ride.pickup_lng }}
-          dropoff={{ lat: ride.dropoff_lat, lng: ride.dropoff_lng }}
-          encodedPolyline={ride.route_polyline_encoded}
-          driverLocation={driverLocation}
-          driverHeading={driverHeading}
-          sheetInsetPx={400}
-        />
+        <div className="live-ride-map-pane">
+          <LiveRideMap
+            variant="live"
+            pickup={{ lat: ride.pickup_lat, lng: ride.pickup_lng }}
+            dropoff={{ lat: ride.dropoff_lat, lng: ride.dropoff_lng }}
+            encodedPolyline={ride.route_polyline_encoded}
+            driverLocation={driverLocation}
+            driverHeading={driverHeading}
+            sheetInsetPx={48}
+          />
+        </div>
+
         {isFetching && (
           <span className="sr-only" aria-live="polite">
             Syncing ride
           </span>
         )}
 
-        <section className="live-ride-card" aria-label="Driver and trip details">
-          <div className="live-ride-card__stack">
+        <section className="live-ride-panel" aria-label="Driver and trip details">
+          <div className="live-ride-panel__stack">
             <div>
               <h2 className="live-ride-card__status">{headline}</h2>
               <p className="live-ride-card__pickup">
@@ -251,10 +264,25 @@ export function LiveRideView({
               </div>
             )}
 
+            {pinUnavailable && (
+              <div className="live-ride-note">
+                <p className="mb-2">Could not load your trip PIN.</p>
+                {onRetryPin ? (
+                  <button
+                    type="button"
+                    className="font-semibold text-[var(--live-ride-brand)]"
+                    onClick={onRetryPin}
+                  >
+                    Tap to retry
+                  </button>
+                ) : null}
+              </div>
+            )}
+
             {(ride.status === 'driver_arrived_pickup' || ride.status === 'driver_en_route_pickup') &&
               waitTime && <RiderWaitTimeRow waitTime={waitTime} />}
 
-            {cancellable ? (
+            {canCancel ? (
               <button
                 type="button"
                 className="live-ride-cancel"

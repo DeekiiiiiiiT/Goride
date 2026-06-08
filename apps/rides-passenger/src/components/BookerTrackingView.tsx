@@ -1,0 +1,192 @@
+import React, { useState } from 'react';
+import {
+  ArrowLeft,
+  ArrowLeftRight,
+  MapPin,
+  MessageCircle,
+  MoreVertical,
+  Shield,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { vehicleTypeLabel } from '@roam/business-config/ridesVehicleTypes';
+import type { RideRequestRow, RideRequestStatus } from '@roam/types/rides';
+import { LiveRideMap } from '@/components/LiveRideMap';
+import { RideChatUnreadDot } from '@roam/ride-chat';
+import { RiderRideChatWrap } from '@/components/RiderRideChatWrap';
+import { ShareMyTripSheet } from '@/components/trusted-contacts/ShareMyTripSheet';
+import { formatShortAddress } from '@/lib/formatRideAddress';
+import { liveRideStatusHeadline } from '@/components/LiveRideView';
+
+type LatLng = { lat: number; lng: number };
+
+type Props = {
+  ride: RideRequestRow;
+  driverLocation: LatLng | null;
+  driverHeading: number | null;
+  passengerName?: string | null;
+  isFetching?: boolean;
+  onBack: () => void;
+  onCancelTrip: () => void;
+  cancelling?: boolean;
+  canChat?: boolean;
+  canCancel?: boolean;
+};
+
+const DEFAULT_DRIVER_PHOTO =
+  'https://lh3.googleusercontent.com/aida-public/AB6AXuCZXJaKjzUahPFtn_kc0z6cep2KPKb-SRt6C82Jf5Wb_QcXpkDchP-XLOzCLpQ_ZCSYX_hKaY3SOy_eU3DI9Aw-mPvQXY_msvtgtg8mygaRhuUztTvwyPJs_WF8hPUfcfCXgGgqNFSkWNT4-LUTbDIeZQ5npAXE9r7X07puWio3_zSV55EVQblkv_c1GGLN92BkCOL4WbeqmtVgi03Bwotpi_jOTvtFCL8miF6A7bM4_4t4Bxabz8VOLfioyWC7jgw_DdS5VynI4EB7';
+
+function matchingHeadline(status: RideRequestStatus): string {
+  if (status === 'matching') return 'Finding a driver…';
+  return liveRideStatusHeadline(status, {} as RideRequestRow);
+}
+
+export function BookerTrackingView({
+  ride,
+  driverLocation,
+  driverHeading,
+  passengerName,
+  isFetching,
+  onBack,
+  onCancelTrip,
+  cancelling,
+  canChat = false,
+  canCancel = false,
+}: Props) {
+  const [safetyOpen, setSafetyOpen] = useState(false);
+  const isMatching = ride.status === 'matching';
+  const headline = isMatching ? matchingHeadline(ride.status) : liveRideStatusHeadline(ride.status, ride);
+  const pickupShort = formatShortAddress(ride.pickup_address);
+  const serviceLabel = vehicleTypeLabel(ride.vehicle_option);
+
+  const comingSoon = (label: string) => {
+    toast.message(label, { description: 'Coming soon' });
+  };
+
+  return (
+    <RiderRideChatWrap ride={ride} groupChat>
+      {(openChat, { unreadCount }) => (
+        <div className="live-ride-page">
+          <header className="live-ride-topbar">
+            <button type="button" className="live-ride-topbar__btn" onClick={onBack} aria-label="Go back">
+              <ArrowLeft className="size-6" strokeWidth={2} />
+            </button>
+            <h1 className="live-ride-topbar__brand">Roam</h1>
+            <button
+              type="button"
+              className="live-ride-topbar__btn"
+              onClick={() => comingSoon('Trip options')}
+              aria-label="More options"
+            >
+              <MoreVertical className="size-6" strokeWidth={2} />
+            </button>
+          </header>
+
+          <main className="live-ride-stage">
+            <div className="live-ride-map-pane">
+              <LiveRideMap
+                variant="live"
+                pickup={{ lat: ride.pickup_lat, lng: ride.pickup_lng }}
+                dropoff={{ lat: ride.dropoff_lat, lng: ride.dropoff_lng }}
+                encodedPolyline={ride.route_polyline_encoded}
+                driverLocation={driverLocation}
+                driverHeading={driverHeading}
+                sheetInsetPx={48}
+              />
+            </div>
+
+            {isFetching && (
+              <span className="sr-only" aria-live="polite">
+                Syncing ride
+              </span>
+            )}
+
+            <section className="live-ride-panel" aria-label="Trip tracker">
+              <div className="live-ride-panel__stack">
+                {passengerName ? (
+                  <p className="rounded-2xl bg-blue-50 px-4 py-3 text-sm font-medium text-blue-900">
+                    Ride booked for {passengerName}
+                  </p>
+                ) : null}
+
+                <div>
+                  <h2 className="live-ride-card__status">{headline}</h2>
+                  <p className="live-ride-card__pickup">
+                    <MapPin className="size-4" strokeWidth={2} aria-hidden />
+                    <span>{pickupShort}</span>
+                  </p>
+                </div>
+
+                {!isMatching ? (
+                  <div className="live-ride-driver">
+                    <div className="live-ride-driver__left">
+                      <div className="live-ride-driver__avatar-wrap">
+                        <img src={DEFAULT_DRIVER_PHOTO} alt="Driver" className="live-ride-driver__avatar" />
+                        <span className="live-ride-driver__rating">
+                          4.9 <span className="live-ride-driver__rating-star" aria-hidden>★</span>
+                        </span>
+                      </div>
+                      <div>
+                        <p className="live-ride-driver__name">Driver</p>
+                        <p className="live-ride-driver__vehicle">{serviceLabel}</p>
+                      </div>
+                    </div>
+                    <div className="live-ride-driver__plate-col">
+                      <span className="live-ride-driver__plate-icon" aria-hidden>
+                        <ArrowLeftRight className="size-6" strokeWidth={2} />
+                      </span>
+                      <p className="live-ride-driver__plate">—</p>
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="live-ride-actions" role="group" aria-label="Contact and safety">
+                  {canChat ? (
+                    <button
+                      type="button"
+                      className="live-ride-action"
+                      onClick={openChat}
+                      aria-label={unreadCount > 0 ? `Message, ${unreadCount} unread` : 'Message'}
+                    >
+                      <span className="live-ride-action__circle relative">
+                        <MessageCircle className="size-6" strokeWidth={2} />
+                        <RideChatUnreadDot show={unreadCount > 0} className="right-1 top-1" />
+                      </span>
+                      <span className="live-ride-action__label">Message</span>
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="live-ride-action live-ride-action--safety"
+                    onClick={() => setSafetyOpen(true)}
+                  >
+                    <span className="live-ride-action__circle">
+                      <Shield className="size-6" strokeWidth={2} />
+                    </span>
+                    <span className="live-ride-action__label">Safety</span>
+                  </button>
+                </div>
+
+                {canCancel ? (
+                  <button
+                    type="button"
+                    className="live-ride-cancel"
+                    onClick={onCancelTrip}
+                    disabled={cancelling}
+                  >
+                    {cancelling ? 'Cancelling…' : isMatching ? 'Cancel search' : 'Cancel ride'}
+                  </button>
+                ) : null}
+              </div>
+            </section>
+          </main>
+          <ShareMyTripSheet
+            open={safetyOpen}
+            onClose={() => setSafetyOpen(false)}
+            rideId={ride.id}
+            onShared={() => toast.success('Trip shared.')}
+          />
+        </div>
+      )}
+    </RiderRideChatWrap>
+  );
+}

@@ -171,7 +171,10 @@ export async function ridesGetRequest(id: string): Promise<{
   offers: DriverOfferRow[];
   wait_time?: Record<string, unknown> | null;
   rider_pin?: string | null;
+  pin_enabled?: boolean;
   can_chat?: boolean;
+  can_cancel?: boolean;
+  is_delegated?: boolean;
   participant_role?: 'booker' | 'passenger' | 'driver' | 'none';
 }> {
   const res = await ridesFetch(`${base}/v1/requests/${id}`, { headers: await ridesHeaders() });

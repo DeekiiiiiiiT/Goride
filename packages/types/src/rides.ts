@@ -29,7 +29,7 @@ export function isRideChatEnabled(status: RideRequestStatus | string): boolean {
   return isDriverActiveRideStatus(status);
 }
 
-export type RideMessageSenderRole = 'rider' | 'driver';
+export type RideMessageSenderRole = 'rider' | 'driver' | 'booker';
 
 export interface RideMessageDto {
   id: string;
@@ -240,6 +240,7 @@ export interface CreateRideBody {
   guest_passenger_phone?: string;
   rider_contact_id?: string;
   passenger_user_id?: string;
+  passenger_authorization_id?: string;
   booking_request_id?: string;
 }
 
