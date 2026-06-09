@@ -278,12 +278,14 @@ function canBookerAccessIntent(
   if (row.requester_user_id === bookerUserId) {
     return { ok: false, reason: "cannot_book_self" };
   }
+  const targetUser = row.target_booker_user_id as string | null;
+  const targetPhone = row.target_booker_phone_e164 as string | null;
+  const hasDirectedPayer = Boolean(targetUser) || Boolean(targetPhone);
+  if (targetUser && targetUser === bookerUserId) return { ok: true };
+  if (targetPhone && bookerPhone && phonesMatch(targetPhone, bookerPhone)) return { ok: true };
+  if (hasDirectedPayer) return { ok: false, reason: "not_targeted" };
   const audience = String(row.audience ?? "any_booker");
   if (audience === "any_booker") return { ok: true };
-  const targetUser = row.target_booker_user_id as string | null;
-  if (targetUser && targetUser === bookerUserId) return { ok: true };
-  const targetPhone = row.target_booker_phone_e164 as string | null;
-  if (targetPhone && bookerPhone && phonesMatch(targetPhone, bookerPhone)) return { ok: true };
   return { ok: false, reason: "not_targeted" };
 }
 
@@ -296,9 +298,9 @@ export async function listTripIntentsTargetingBooker(
 ): Promise<Record<string, unknown>[]> {
   const openStatuses = ["published", "claimed"] as const;
   const queries = [
+    // Match by payer user id even if audience was left as any_booker (legacy / partial saves).
     db.from(table).select("*")
       .eq("target_booker_user_id", bookerUserId)
-      .eq("audience", "targeted")
       .in("status", [...openStatuses]),
     db.from(table).select("*")
       .eq("claimed_by_user_id", bookerUserId)
@@ -345,7 +347,8 @@ export async function listTripIntentsTargetingBooker(
         continue;
       }
       if (rowStatus === "published" && openStatuses.includes(rowStatus as typeof openStatuses[number])) {
-        if (String(row.audience) === "targeted") {
+        const directedPayer = Boolean(row.target_booker_user_id) || Boolean(row.target_booker_phone_e164);
+        if (String(row.audience) === "targeted" || directedPayer) {
           const access = canBookerAccessIntent(row, bookerUserId, bookerPhone);
           if (!access.ok) continue;
         }
@@ -629,6 +632,7 @@ export function registerTripIntentRoutes(app: Hono, deps: TripIntentDeps) {
       }
       patch.target_booker_user_id = resolved.target_booker_user_id;
       patch.target_booker_phone_e164 = resolved.target_booker_phone_e164;
+      patch.audience = "targeted";
     } else if (body.audience === "any_booker") {
       patch.target_booker_user_id = null;
       patch.target_booker_phone_e164 = null;
@@ -704,7 +708,8 @@ export function registerTripIntentRoutes(app: Hono, deps: TripIntentDeps) {
       if (err) return c.json({ error: err }, 400);
     }
 
-    if (String(row.audience) === "targeted") {
+    const hasDirectedPayer = Boolean(row.target_booker_user_id) || Boolean(row.target_booker_phone_e164);
+    if (String(row.audience) === "targeted" || hasDirectedPayer) {
       const resolved = await resolveTargetedBooker(db, t, gate.user!.id, {
         audience: "targeted",
         target_booker_user_id: row.target_booker_user_id as string | null,
@@ -713,27 +718,24 @@ export function registerTripIntentRoutes(app: Hono, deps: TripIntentDeps) {
       if ("error" in resolved) {
         return c.json({ error: resolved.error, message: resolved.message }, 400);
       }
-      if (
-        resolved.target_booker_user_id !== row.target_booker_user_id
-        || resolved.target_booker_phone_e164 !== row.target_booker_phone_e164
-      ) {
-        await db.from(t.booking_requests).update({
-          target_booker_user_id: resolved.target_booker_user_id,
-          target_booker_phone_e164: resolved.target_booker_phone_e164,
-          updated_at: new Date().toISOString(),
-        }).eq("id", id);
-        row.target_booker_user_id = resolved.target_booker_user_id;
-        row.target_booker_phone_e164 = resolved.target_booker_phone_e164;
-      }
+      row.target_booker_user_id = resolved.target_booker_user_id;
+      row.target_booker_phone_e164 = resolved.target_booker_phone_e164;
+      row.audience = "targeted";
     }
 
     const now = new Date().toISOString();
-    const { data, error } = await db.from(t.booking_requests).update({
+    const publishPatch: Record<string, unknown> = {
       status: "published",
       published_at: now,
       expires_at: new Date(Date.now() + TRIP_INTENT_TTL_HOURS * 3600_000).toISOString(),
       updated_at: now,
-    }).eq("id", id).select("*").single();
+    };
+    if (hasDirectedPayer || String(row.audience) === "targeted") {
+      publishPatch.audience = "targeted";
+      publishPatch.target_booker_user_id = row.target_booker_user_id;
+      publishPatch.target_booker_phone_e164 = row.target_booker_phone_e164;
+    }
+    const { data, error } = await db.from(t.booking_requests).update(publishPatch).eq("id", id).select("*").single();
     if (error || !data) return c.json({ error: "publish_failed" }, 500);
     await deps.audit(null, gate.user!.id, "trip_intent_published", { trip_intent_id: id });
     return c.json({ trip_intent: data });

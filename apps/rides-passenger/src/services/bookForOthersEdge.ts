@@ -111,8 +111,19 @@ function injectActiveRideIntoHub(
 
 async function bookForOthersGetActivityFromApi(): Promise<BookForOthersActivityResponse | null> {
   const res = await fetch(`${base}/v1/book-for-others/activity`, { headers: await headers() });
-  if (!res.ok) return null;
-  return res.json();
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    console.warn('[book-for-others] activity API failed', res.status, errText);
+    // #region agent log
+    fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b9f75'},body:JSON.stringify({sessionId:'5b9f75',location:'bookForOthersEdge.ts:activityApi',message:'activity API not ok',data:{status:res.status,errorPreview:errText.slice(0,200)},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    return null;
+  }
+  const json = await res.json() as BookForOthersActivityResponse;
+  // #region agent log
+  fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b9f75'},body:JSON.stringify({sessionId:'5b9f75',location:'bookForOthersEdge.ts:activityApi',message:'activity API ok',data:{someoneCount:json.book_for_someone?.length??0,meCount:json.book_for_me?.length??0,someoneIntentIds:json.book_for_someone?.filter(i=>i.kind==='trip_intent').map(i=>i.intent_id):[]},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
+  // #endregion
+  return json;
 }
 
 function intentToActivityItem(
@@ -391,6 +402,12 @@ async function reconcileStaleSomeoneIntents(
 
 /** Loads hub activity — active ride tracker is the primary source of truth. */
 export async function loadBookForOthersActivity(): Promise<BookForOthersActivityResponse> {
+  const { data: { user } } = await supabase.auth.getUser();
+  const meta = user?.user_metadata ?? {};
+  // #region agent log
+  fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b9f75'},body:JSON.stringify({sessionId:'5b9f75',location:'bookForOthersEdge.ts:loadStart',message:'load activity start',data:{userId:user?.id??null,surface:typeof meta.surface==='string'?meta.surface:null,role:typeof meta.role==='string'?meta.role:null},timestamp:Date.now(),hypothesisId:'D'})}).catch(()=>{});
+  // #endregion
+
   const activeRide = await resolveActiveRideForHub();
   let hub = injectActiveRideIntoHub(
     { book_for_someone: [], book_for_me: [] },
@@ -409,14 +426,30 @@ export async function loadBookForOthersActivity(): Promise<BookForOthersActivity
   const targetingIntents =
     targetingResult.status === 'fulfilled' ? targetingResult.value.trip_intents : [];
 
+  // #region agent log
+  fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b9f75'},body:JSON.stringify({sessionId:'5b9f75',location:'bookForOthersEdge.ts:loadSettled',message:'parallel fetch settled',data:{apiStatus:apiResult.status,apiReason:apiResult.status==='rejected'?String(apiResult.reason):null,targetingStatus:targetingResult.status,targetingReason:targetingResult.status==='rejected'?String(targetingResult.reason):null,targetingCount:targetingIntents.length,targetingIntentIds:targetingIntents.map(i=>i.intent_id),myActiveIntentId:intent?.id??null,myActiveAudience:intent?.audience??null},timestamp:Date.now(),hypothesisId:'A,D'})}).catch(()=>{});
+  // #endregion
+
+  if (apiResult.status === 'rejected') {
+    console.warn('[book-for-others] activity API error', apiResult.reason);
+  }
+  if (targetingResult.status === 'rejected') {
+    console.warn('[book-for-others] targeting-me error', targetingResult.reason);
+  }
+
   hub = mergeBookForOthersActivity(fromApi, intent, targetingIntents, activeRide);
+  const afterMergeSomeone = hub.book_for_someone.length;
   hub.book_for_me = await promoteBookedIntentsToRides(hub.book_for_me, () => null);
   hub.book_for_someone = await promoteBookedIntentsToRides(
     hub.book_for_someone,
     (item) => item.requester_name?.trim() ?? null,
   );
   hub.book_for_me = await reconcileStaleMeIntents(hub.book_for_me);
+  const beforeReconcileSomeone = hub.book_for_someone.length;
   hub.book_for_someone = await reconcileStaleSomeoneIntents(hub.book_for_someone);
+  // #region agent log
+  fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b9f75'},body:JSON.stringify({sessionId:'5b9f75',location:'bookForOthersEdge.ts:loadEnd',message:'load activity end',data:{afterMergeSomeone,beforeReconcileSomeone,finalSomeone:hub.book_for_someone.length,finalMe:hub.book_for_me.length,finalSomeoneKinds:hub.book_for_someone.map(i=>i.kind==='trip_intent'?`intent:${i.intent_id}:${i.status}`:`ride:${i.ride_id}`)},timestamp:Date.now(),hypothesisId:'B,C'})}).catch(()=>{});
+  // #endregion
 
   const activeAgain = activeRide ?? await resolveActiveRideForHub();
   return injectActiveRideIntoHub(hub, activeAgain);

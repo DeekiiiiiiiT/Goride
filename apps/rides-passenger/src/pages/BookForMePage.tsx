@@ -320,23 +320,27 @@ export default function BookForMePage() {
     return res.trip_intent;
   };
 
+  const hasTargetPayer = Boolean(targetContact || targetPhone || targetTag);
+  /** A selected payer always wins — avoids publishing as any_booker while a tag is still shown. */
+  const effectiveAudience: TripIntentAudience = hasTargetPayer ? 'targeted' : audience;
+
   const handlePublish = async () => {
     setLoading(true);
     try {
       await refresh(true);
       let row = await ensureDraftIntent();
-      if (audience === 'targeted' && !targetContact && !targetPhone && !targetTag) {
+      if (effectiveAudience === 'targeted' && !hasTargetPayer) {
         throw new Error('Choose who should pay — pick a contact, search a Roam tag, or enter a phone.');
       }
 
       row = (await tripIntentUpdate(row.id, {
         roam_mode: roamMode,
-        audience,
-        target_contact_id: audience === 'targeted' && targetContact ? targetContact.id : null,
-        target_booker_user_id: audience === 'targeted'
+        audience: effectiveAudience,
+        target_contact_id: effectiveAudience === 'targeted' && targetContact ? targetContact.id : null,
+        target_booker_user_id: effectiveAudience === 'targeted'
           ? targetTag?.user_id ?? (targetContact?.linked_user_id ?? null)
           : null,
-        target_booker_phone_e164: audience === 'targeted'
+        target_booker_phone_e164: effectiveAudience === 'targeted'
           ? targetContact?.phone_e164
             ?? (targetPhone ? buildGuestPhoneE164('+1', targetPhone) : null)
             ?? targetTag?.phone_e164
@@ -356,9 +360,18 @@ export default function BookForMePage() {
       }
 
       const published = (await tripIntentPublish(row.id)).trip_intent;
+      // #region agent log
+      fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b9f75'},body:JSON.stringify({sessionId:'5b9f75',location:'BookForMePage.tsx:handlePublish',message:'trip published',data:{intentId:published.id,audience:published.audience??null,targetBookerUserId:published.target_booker_user_id??null,effectiveAudience,targetTagUserId:targetTag?.user_id??null},timestamp:Date.now(),hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
       setIntent(published);
+      setAudience(published.audience ?? effectiveAudience);
       setStep('published');
-      toast.success('Your trip is live on your tag');
+      await queryClient.invalidateQueries({ queryKey: ['book-for-others', 'activity'] });
+      toast.success(
+        effectiveAudience === 'targeted'
+          ? 'Trip sent — your payer will see it in Active trips'
+          : 'Your trip is live on your tag',
+      );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not publish');
     } finally {
@@ -408,7 +421,18 @@ export default function BookForMePage() {
             <p className="font-semibold">{liveIntentHeadline(intent.status)}</p>
             <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
               {intent.status === 'published' ? (
-                <>Tell them to search <strong>{displayTag}</strong> in Roam</>
+                intent.audience === 'targeted' ? (
+                  targetTag ? (
+                    <>
+                      <strong>{formatRoamTagDisplay(targetTag.custom_tag_name)}</strong> will see this under{' '}
+                      <strong>Book for others → Active trips → For someone</strong>.
+                    </>
+                  ) : (
+                    <>Your payer will see this under <strong>Active trips → For someone</strong>.</>
+                  )
+                ) : (
+                  <>Tell them to search <strong>{displayTag}</strong> in Roam</>
+                )
               ) : (
                 liveIntentDetail(intent.status)
               )}
@@ -422,7 +446,7 @@ export default function BookForMePage() {
                 {intent.dropoff_address ? ` → ${formatShortAddress(intent.dropoff_address)}` : ''}
               </p>
             ) : null}
-            {intent.status === 'published' ? (
+            {intent.status === 'published' && intent.audience !== 'targeted' ? (
               <button type="button" onClick={() => void copyTag()} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl font-semibold" style={{ backgroundColor: PRIMARY, color: '#fff' }}>
                 <Copy className="h-4 w-4" /> Copy tag
               </button>
@@ -550,7 +574,14 @@ export default function BookForMePage() {
               <button
                 key={a}
                 type="button"
-                onClick={() => setAudience(a)}
+                onClick={() => {
+                  setAudience(a);
+                  if (a === 'any_booker') {
+                    setTargetContact(null);
+                    setTargetPhone('');
+                    setTargetTag(null);
+                  }
+                }}
                 className="flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left"
                 style={{ borderColor: audience === a ? PRIMARY : 'rgba(0,0,0,0.08)' }}
               >
@@ -586,23 +617,29 @@ export default function BookForMePage() {
                 </button>
               </div>
             ) : null}
-            {targetTag ? (
+            {audience === 'targeted' && targetTag ? (
               <TripIntentPayerRow>
                 <PayerTagChip tagName={targetTag.custom_tag_name} />
               </TripIntentPayerRow>
             ) : null}
-            {!targetTag && targetContact ? (
+            {audience === 'targeted' && !targetTag && targetContact ? (
               <TripIntentPayerRow>
                 <PayerNameChip name={targetContact.display_name} />
               </TripIntentPayerRow>
             ) : null}
-            {!targetTag && !targetContact && targetPhone ? (
+            {audience === 'targeted' && !targetTag && !targetContact && targetPhone ? (
               <TripIntentPayerRow>
                 <PayerNameChip name={formatGuestPhoneDisplay(targetPhone)} />
               </TripIntentPayerRow>
             ) : null}
             <button type="button" disabled={loading} onClick={() => void handlePublish()} className="h-14 w-full rounded-2xl font-semibold disabled:opacity-50" style={{ backgroundColor: PRIMARY, color: ON_PRIMARY }}>
-              {loading ? 'Publishing…' : 'Publish on my tag'}
+              {loading
+                ? 'Publishing…'
+                : effectiveAudience === 'targeted' && targetTag
+                  ? `Send to ${formatRoamTagDisplay(targetTag.custom_tag_name)}`
+                  : effectiveAudience === 'targeted'
+                    ? 'Send to payer'
+                    : 'Publish on my tag'}
             </button>
           </div>
         ) : null}
@@ -646,6 +683,7 @@ export default function BookForMePage() {
         description="Search for the person who will pay using their Roam tag."
         confirmLabel="Select payer"
         onSelect={(tag) => {
+          setAudience('targeted');
           setTargetTag(tag);
           setTargetContact(null);
           setTargetPhone('');
