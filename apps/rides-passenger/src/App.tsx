@@ -38,6 +38,7 @@ import ShadowTripReceiptPage from './pages/ShadowTripReceiptPage';
 import WalletPage from './pages/WalletPage';
 import ManagePaymentMethodsPage from './pages/ManagePaymentMethodsPage';
 import AppSettingsPage from './pages/AppSettingsPage';
+import ProfilePage from './pages/ProfilePage';
 import { WrongRidesSurfaceGate } from './components/auth/WrongRidesSurfaceGate';
 import { RidesAdminLayout } from './admin/RidesAdminLayout';
 import { RidesAdminDashboard } from './admin/pages/RidesAdminDashboard';
@@ -175,6 +176,7 @@ export default function App() {
         <Route path="/account/wallet" element={<WalletPage />} />
         <Route path="/account/wallet/payment-methods" element={<ManagePaymentMethodsPage />} />
         <Route path="/account/settings" element={<AppSettingsPage />} />
+        <Route path="/account/profile" element={<ProfilePage />} />
       </Route>
       <Route
         path="/ride/:id"

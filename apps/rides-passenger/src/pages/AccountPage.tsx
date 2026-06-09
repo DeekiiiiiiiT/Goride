@@ -11,6 +11,7 @@ import {
   Settings,
   Siren,
   Tag,
+  User,
 } from 'lucide-react';
 import { supabase } from '@roam/auth-client';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
@@ -158,6 +159,12 @@ export default function AccountPage() {
 
       <main className="mx-auto w-full max-w-xl flex-1 space-y-4 px-5 pt-4 safe-x">
         <section className="flex flex-col items-center space-y-2 text-center">
+          <button
+            type="button"
+            onClick={() => navigate('/account/profile')}
+            className="group relative rounded-full transition-transform active:scale-[0.98]"
+            aria-label="View profile"
+          >
           <div className="relative">
             <div
               className="h-20 w-20 overflow-hidden rounded-full border-4"
@@ -190,7 +197,12 @@ export default function AccountPage() {
               <Pencil className="h-3 w-3" strokeWidth={2.5} />
             </div>
           </div>
-          <div>
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/account/profile')}
+            className="transition-opacity active:opacity-80"
+          >
             <h2 className="text-lg font-bold leading-tight" style={{ color: ON_SURFACE }}>
               {displayName}
             </h2>
@@ -200,8 +212,16 @@ export default function AccountPage() {
             >
               {handle}
             </span>
-          </div>
+          </button>
         </section>
+
+        <GroupCard title="Profile">
+          <AccountListRow
+            icon={<User className="h-5 w-5" style={{ color: PRIMARY }} />}
+            label="Personal Information"
+            onClick={() => navigate('/account/profile')}
+          />
+        </GroupCard>
 
         <div className="grid grid-cols-1 gap-3">
           <button
