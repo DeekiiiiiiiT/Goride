@@ -10,7 +10,7 @@ import {
 import { toast } from 'sonner';
 import { vehicleTypeLabel } from '@roam/business-config/ridesVehicleTypes';
 import type { AssignedDriverSummaryDto } from '@roam/types/delegatedRide';
-import { buildDelegatedRiderListItems } from '@roam/types/delegatedRide';
+import { buildDelegatedRiderListItems, isOpenDelegatedBooking } from '@roam/types/delegatedRide';
 import type { RideRequestRow, RideRequestStatus } from '@roam/types/rides';
 import { LiveRideMap } from '@/components/LiveRideMap';
 import { RideChatUnreadDot } from '@roam/ride-chat';
@@ -71,6 +71,7 @@ export function BookerTrackingView({
   const pickupShort = formatShortAddress(ride.pickup_address);
   const serviceLabel = vehicleTypeLabel(ride.vehicle_option);
   const riderItems = useMemo(() => buildDelegatedRiderListItems(ride), [ride]);
+  const showRiderUpdates = isOpenDelegatedBooking(ride) && riderItems.length > 0;
 
   const driverPhoto = assignedDriver?.profile_photo_url?.trim() || DEFAULT_DRIVER_PHOTO;
   const driverName = assignedDriver?.display_name?.trim() || 'Driver';
@@ -137,7 +138,9 @@ export function BookerTrackingView({
                   </p>
                 ) : null}
 
-                <DelegatedRidersPanel riders={riderItems} />
+                {showRiderUpdates ? (
+                  <DelegatedRidersPanel riders={riderItems} variant="booker" defaultOpen={false} />
+                ) : null}
 
                 <div>
                   <h2 className="live-ride-card__status">{headline}</h2>

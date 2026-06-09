@@ -21,7 +21,10 @@ export function usePassengerActiveRideRedirect() {
       if (document.visibilityState !== 'visible') return;
 
       const minimized = readMinimizedRideSession();
-      if (minimized?.rideId) return;
+      if (minimized?.rideId) {
+        promptedRideId.current = minimized.rideId;
+        return;
+      }
 
       try {
         const { summary } = await ridesGetMyActiveRideSummary();

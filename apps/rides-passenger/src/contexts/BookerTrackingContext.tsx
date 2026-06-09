@@ -4,6 +4,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -42,21 +43,17 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
   const [minimizedSession, setMinimizedSession] = useState<MinimizedRideSession | null>(() =>
     readMinimizedRideSession(),
   );
+  const minimizingRef = useRef(false);
+  const prevPathnameRef = useRef(pathname);
 
   const minimizedRideId = minimizedSession?.rideId ?? null;
   const minimizedRole = minimizedSession?.role ?? null;
   const rideIdFromPath = parseRideIdFromPath(pathname);
 
+  /** On ride route = full tracker; off ride with session = minimized chip. */
   const mode: BookerTrackingMode = useMemo(() => {
-    if (rideIdFromPath && (!minimizedRideId || minimizedRideId !== rideIdFromPath)) {
-      return 'full';
-    }
-    if (minimizedRideId && rideIdFromPath !== minimizedRideId) {
-      return 'minimized';
-    }
-    if (minimizedRideId && !rideIdFromPath) {
-      return 'minimized';
-    }
+    if (rideIdFromPath) return 'full';
+    if (minimizedRideId) return 'minimized';
     return 'off';
   }, [rideIdFromPath, minimizedRideId]);
 
@@ -91,6 +88,7 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
 
   const minimize = useCallback(
     (rideId: string, role: MinimizedRideRole) => {
+      minimizingRef.current = true;
       persistMinimizedRide(rideId, role);
       setMinimizedSession({ rideId, role });
       void queryClient.cancelQueries({ queryKey: ['ride', rideId] });
@@ -116,11 +114,28 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
   }, [clearSummary]);
 
   useEffect(() => {
-    if (rideIdFromPath && minimizedRideId === rideIdFromPath) {
+    if (!parseRideIdFromPath(pathname)) {
+      minimizingRef.current = false;
+    }
+  }, [pathname]);
+
+  /** Re-open full tracker when navigating to /ride/:id from elsewhere (not minimize). */
+  useEffect(() => {
+    const prev = prevPathnameRef.current;
+    prevPathnameRef.current = pathname;
+    if (minimizingRef.current) return;
+
+    const currentRideId = parseRideIdFromPath(pathname);
+    const prevRideId = parseRideIdFromPath(prev);
+    if (
+      currentRideId &&
+      minimizedRideId === currentRideId &&
+      prevRideId !== currentRideId
+    ) {
       clearBookerMinimized();
       setMinimizedSession(null);
     }
-  }, [rideIdFromPath, minimizedRideId]);
+  }, [pathname, minimizedRideId]);
 
   const value = useMemo(
     () => ({

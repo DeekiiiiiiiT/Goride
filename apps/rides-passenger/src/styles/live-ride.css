@@ -353,6 +353,122 @@
   color: #64748b;
 }
 
+/* Booker — rider pickup status dropdown (book-for-someone) */
+.live-ride-riders {
+  border-radius: 1rem;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  overflow: hidden;
+}
+
+.live-ride-riders__toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.live-ride-riders__toggle:active {
+  background: #f1f5f9;
+}
+
+.live-ride-riders__toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.live-ride-riders__toggle-label {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--live-ride-brand);
+}
+
+.live-ride-riders__toggle-summary {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--live-ride-muted);
+}
+
+.live-ride-riders__chevron {
+  flex-shrink: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--live-ride-brand);
+  transition: transform 0.2s ease;
+}
+
+.live-ride-riders__chevron--open {
+  transform: rotate(180deg);
+}
+
+.live-ride-riders__list {
+  margin: 0;
+  padding: 0 0.5rem 0.5rem;
+  list-style: none;
+  border-top: 1px solid #e2e8f0;
+}
+
+.live-ride-riders__item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.5rem;
+  border-radius: 0.75rem;
+}
+
+.live-ride-riders__item + .live-ride-riders__item {
+  border-top: 1px solid #eef2f6;
+}
+
+.live-ride-riders__dot {
+  flex-shrink: 0;
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 9999px;
+}
+
+.live-ride-riders__dot--picked-up {
+  background: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+}
+
+.live-ride-riders__dot--arrived,
+.live-ride-riders__dot--en-route {
+  background: #fbbf24;
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.25);
+}
+
+.live-ride-riders__dot--waiting {
+  background: #cbd5e1;
+}
+
+.live-ride-riders__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--live-ride-text);
+}
+
+.live-ride-riders__status {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--live-ride-muted);
+}
+
 .live-ride-map__shimmer {
   position: absolute;
   inset: 0;
