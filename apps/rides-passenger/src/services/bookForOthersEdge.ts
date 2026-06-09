@@ -21,6 +21,28 @@ import { readAnyActiveRideId, readRiderRideCache } from '@/utils/riderActiveRide
 
 const base = API_ENDPOINTS.rides;
 
+// #region agent log
+function agentDebugLog(
+  location: string,
+  message: string,
+  data: Record<string, unknown>,
+  hypothesisId: string,
+): void {
+  fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '5b9f75' },
+    body: JSON.stringify({
+      sessionId: '5b9f75',
+      location,
+      message,
+      data,
+      timestamp: Date.now(),
+      hypothesisId,
+    }),
+  }).catch(() => {});
+}
+// #endregion
+
 const HUB_INTENT_STATUSES = new Set(['draft', 'published', 'claimed', 'booked', 'pending']);
 
 async function headers(): Promise<HeadersInit> {
@@ -114,15 +136,20 @@ async function bookForOthersGetActivityFromApi(): Promise<BookForOthersActivityR
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
     console.warn('[book-for-others] activity API failed', res.status, errText);
-    // #region agent log
-    fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b9f75'},body:JSON.stringify({sessionId:'5b9f75',location:'bookForOthersEdge.ts:activityApi',message:'activity API not ok',data:{status:res.status,errorPreview:errText.slice(0,200)},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
+    agentDebugLog('bookForOthersEdge.ts:activityApi', 'activity API not ok', {
+      status: res.status,
+      errorPreview: errText.slice(0, 200),
+    }, 'A');
     return null;
   }
   const json = await res.json() as BookForOthersActivityResponse;
-  // #region agent log
-  fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b9f75'},body:JSON.stringify({sessionId:'5b9f75',location:'bookForOthersEdge.ts:activityApi',message:'activity API ok',data:{someoneCount:json.book_for_someone?.length??0,meCount:json.book_for_me?.length??0,someoneIntentIds:json.book_for_someone?.filter(i=>i.kind==='trip_intent').map(i=>i.intent_id):[]},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
-  // #endregion
+  agentDebugLog('bookForOthersEdge.ts:activityApi', 'activity API ok', {
+    someoneCount: json.book_for_someone?.length ?? 0,
+    meCount: json.book_for_me?.length ?? 0,
+    someoneIntentIds: (json.book_for_someone ?? [])
+      .filter((i) => i.kind === 'trip_intent')
+      .map((i) => i.intent_id),
+  }, 'B');
   return json;
 }
 
@@ -404,9 +431,11 @@ async function reconcileStaleSomeoneIntents(
 export async function loadBookForOthersActivity(): Promise<BookForOthersActivityResponse> {
   const { data: { user } } = await supabase.auth.getUser();
   const meta = user?.user_metadata ?? {};
-  // #region agent log
-  fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b9f75'},body:JSON.stringify({sessionId:'5b9f75',location:'bookForOthersEdge.ts:loadStart',message:'load activity start',data:{userId:user?.id??null,surface:typeof meta.surface==='string'?meta.surface:null,role:typeof meta.role==='string'?meta.role:null},timestamp:Date.now(),hypothesisId:'D'})}).catch(()=>{});
-  // #endregion
+  agentDebugLog('bookForOthersEdge.ts:loadStart', 'load activity start', {
+    userId: user?.id ?? null,
+    surface: typeof meta.surface === 'string' ? meta.surface : null,
+    role: typeof meta.role === 'string' ? meta.role : null,
+  }, 'D');
 
   const activeRide = await resolveActiveRideForHub();
   let hub = injectActiveRideIntoHub(
@@ -426,9 +455,16 @@ export async function loadBookForOthersActivity(): Promise<BookForOthersActivity
   const targetingIntents =
     targetingResult.status === 'fulfilled' ? targetingResult.value.trip_intents : [];
 
-  // #region agent log
-  fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b9f75'},body:JSON.stringify({sessionId:'5b9f75',location:'bookForOthersEdge.ts:loadSettled',message:'parallel fetch settled',data:{apiStatus:apiResult.status,apiReason:apiResult.status==='rejected'?String(apiResult.reason):null,targetingStatus:targetingResult.status,targetingReason:targetingResult.status==='rejected'?String(targetingResult.reason):null,targetingCount:targetingIntents.length,targetingIntentIds:targetingIntents.map(i=>i.intent_id),myActiveIntentId:intent?.id??null,myActiveAudience:intent?.audience??null},timestamp:Date.now(),hypothesisId:'A,D'})}).catch(()=>{});
-  // #endregion
+  agentDebugLog('bookForOthersEdge.ts:loadSettled', 'parallel fetch settled', {
+    apiStatus: apiResult.status,
+    apiReason: apiResult.status === 'rejected' ? String(apiResult.reason) : null,
+    targetingStatus: targetingResult.status,
+    targetingReason: targetingResult.status === 'rejected' ? String(targetingResult.reason) : null,
+    targetingCount: targetingIntents.length,
+    targetingIntentIds: targetingIntents.map((i) => i.intent_id),
+    myActiveIntentId: intent?.id ?? null,
+    myActiveAudience: intent?.audience ?? null,
+  }, 'A,D');
 
   if (apiResult.status === 'rejected') {
     console.warn('[book-for-others] activity API error', apiResult.reason);
@@ -447,9 +483,15 @@ export async function loadBookForOthersActivity(): Promise<BookForOthersActivity
   hub.book_for_me = await reconcileStaleMeIntents(hub.book_for_me);
   const beforeReconcileSomeone = hub.book_for_someone.length;
   hub.book_for_someone = await reconcileStaleSomeoneIntents(hub.book_for_someone);
-  // #region agent log
-  fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b9f75'},body:JSON.stringify({sessionId:'5b9f75',location:'bookForOthersEdge.ts:loadEnd',message:'load activity end',data:{afterMergeSomeone,beforeReconcileSomeone,finalSomeone:hub.book_for_someone.length,finalMe:hub.book_for_me.length,finalSomeoneKinds:hub.book_for_someone.map(i=>i.kind==='trip_intent'?`intent:${i.intent_id}:${i.status}`:`ride:${i.ride_id}`)},timestamp:Date.now(),hypothesisId:'B,C'})}).catch(()=>{});
-  // #endregion
+  agentDebugLog('bookForOthersEdge.ts:loadEnd', 'load activity end', {
+    afterMergeSomeone,
+    beforeReconcileSomeone,
+    finalSomeone: hub.book_for_someone.length,
+    finalMe: hub.book_for_me.length,
+    finalSomeoneKinds: hub.book_for_someone.map((i) =>
+      i.kind === 'trip_intent' ? `intent:${i.intent_id}:${i.status}` : `ride:${i.ride_id}`,
+    ),
+  }, 'B,C');
 
   const activeAgain = activeRide ?? await resolveActiveRideForHub();
   return injectActiveRideIntoHub(hub, activeAgain);
