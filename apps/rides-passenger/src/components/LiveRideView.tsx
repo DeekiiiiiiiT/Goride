@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import {
-  ArrowLeftRight,
   ChevronDown,
   Loader2,
   MapPin,
@@ -11,8 +10,10 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { vehicleTypeLabel } from '@roam/business-config/ridesVehicleTypes';
+import type { AssignedDriverSummaryDto } from '@roam/types/delegatedRide';
 import type { RideRequestRow, RideRequestStatus } from '@roam/types/rides';
 import { LiveRideMap } from '@/components/LiveRideMap';
+import { LiveRideDriverCard } from '@/components/LiveRideDriverCard';
 import { RideChatUnreadDot } from '@roam/ride-chat';
 import { RiderRideChatWrap } from '@/components/RiderRideChatWrap';
 import { ShareMyTripSheet } from '@/components/trusted-contacts/ShareMyTripSheet';
@@ -31,6 +32,7 @@ type Props = {
   ride: RideRequestRow;
   driverLocation: LatLng | null;
   driverHeading: number | null;
+  assignedDriver?: AssignedDriverSummaryDto | null;
   riderPin: string | null;
   pinEnabled?: boolean;
   waitTime: WaitTimeInfo | null | undefined;
@@ -43,9 +45,6 @@ type Props = {
   canCancel?: boolean;
   participantRole?: 'booker' | 'passenger' | 'driver' | 'none' | null;
 };
-
-const DEFAULT_DRIVER_PHOTO =
-  'https://lh3.googleusercontent.com/aida-public/AB6AXuCZXJaKjzUahPFtn_kc0z6cep2KPKb-SRt6C82Jf5Wb_QcXpkDchP-XLOzCLpQ_ZCSYX_hKaY3SOy_eU3DI9Aw-mPvQXY_msvtgtg8mygaRhuUztTvwyPJs_WF8hPUfcfCXgGgqNFSkWNT4-LUTbDIeZQ5npAXE9r7X07puWio3_zSV55EVQblkv_c1GGLN92BkCOL4WbeqmtVgi03Bwotpi_jOTvtFCL8miF6A7bM4_4t4Bxabz8VOLfioyWC7jgw_DdS5VynI4EB7';
 
 function formatSeconds(secs: number): string {
   const mins = Math.floor(secs / 60);
@@ -100,6 +99,7 @@ export function LiveRideView({
   ride,
   driverLocation,
   driverHeading,
+  assignedDriver,
   riderPin,
   pinEnabled = false,
   waitTime,
@@ -186,30 +186,7 @@ export function LiveRideView({
               </p>
             </div>
 
-            <div className="live-ride-driver">
-              <div className="live-ride-driver__left">
-                <div className="live-ride-driver__avatar-wrap">
-                  <img
-                    src={DEFAULT_DRIVER_PHOTO}
-                    alt="Driver"
-                    className="live-ride-driver__avatar"
-                  />
-                  <span className="live-ride-driver__rating">
-                    4.9 <span className="live-ride-driver__rating-star" aria-hidden>★</span>
-                  </span>
-                </div>
-                <div>
-                  <p className="live-ride-driver__name">Your driver</p>
-                  <p className="live-ride-driver__vehicle">{serviceLabel}</p>
-                </div>
-              </div>
-              <div className="live-ride-driver__plate-col">
-                <span className="live-ride-driver__plate-icon" aria-hidden>
-                  <ArrowLeftRight className="size-6" strokeWidth={2} />
-                </span>
-                <p className="live-ride-driver__plate">—</p>
-              </div>
-            </div>
+            <LiveRideDriverCard assignedDriver={assignedDriver} serviceLabel={serviceLabel} />
 
             <div className="live-ride-actions" role="group" aria-label="Contact and safety">
               {canChat ? (

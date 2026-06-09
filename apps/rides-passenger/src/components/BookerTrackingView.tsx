@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import {
-  ArrowLeftRight,
   ChevronDown,
   MapPin,
   MessageCircle,
@@ -13,6 +12,7 @@ import type { AssignedDriverSummaryDto } from '@roam/types/delegatedRide';
 import { buildDelegatedRiderListItems, isOpenDelegatedBooking } from '@roam/types/delegatedRide';
 import type { RideRequestRow, RideRequestStatus } from '@roam/types/rides';
 import { LiveRideMap } from '@/components/LiveRideMap';
+import { LiveRideDriverCard } from '@/components/LiveRideDriverCard';
 import { RideChatUnreadDot } from '@roam/ride-chat';
 import { RiderRideChatWrap } from '@/components/RiderRideChatWrap';
 import { ShareMyTripSheet } from '@/components/trusted-contacts/ShareMyTripSheet';
@@ -35,9 +35,6 @@ type Props = {
   canChat?: boolean;
   canCancel?: boolean;
 };
-
-const DEFAULT_DRIVER_PHOTO =
-  'https://lh3.googleusercontent.com/aida-public/AB6AXuCZXJaKjzUahPFtn_kc0z6cep2KPKb-SRt6C82Jf5Wb_QcXpkDchP-XLOzCLpQ_ZCSYX_hKaY3SOy_eU3DI9Aw-mPvQXY_msvtgtg8mygaRhuUztTvwyPJs_WF8hPUfcfCXgGgqNFSkWNT4-LUTbDIeZQ5npAXE9r7X07puWio3_zSV55EVQblkv_c1GGLN92BkCOL4WbeqmtVgi03Bwotpi_jOTvtFCL8miF6A7bM4_4t4Bxabz8VOLfioyWC7jgw_DdS5VynI4EB7';
 
 function matchingHeadline(status: RideRequestStatus): string {
   if (status === 'matching') return 'Finding a driver…';
@@ -63,7 +60,6 @@ export function BookerTrackingView({
   canCancel = false,
 }: Props) {
   const [safetyOpen, setSafetyOpen] = useState(false);
-  const [vehicleDetailMode, setVehicleDetailMode] = useState<'plate' | 'vehicle'>('plate');
   const isMatching = ride.status === 'matching';
   const headline = isMatching
     ? matchingHeadline(ride.status)
@@ -72,16 +68,6 @@ export function BookerTrackingView({
   const serviceLabel = vehicleTypeLabel(ride.vehicle_option);
   const riderItems = useMemo(() => buildDelegatedRiderListItems(ride), [ride]);
   const showRiderUpdates = isOpenDelegatedBooking(ride) && riderItems.length > 0;
-
-  const driverPhoto = assignedDriver?.profile_photo_url?.trim() || DEFAULT_DRIVER_PHOTO;
-  const driverName = assignedDriver?.display_name?.trim() || 'Driver';
-  const licensePlate = assignedDriver?.license_plate?.trim() || null;
-  const vehicleLabel = assignedDriver?.vehicle_label?.trim() || serviceLabel;
-  const plateDisplay = licensePlate ?? '—';
-  const vehicleSecondary =
-    vehicleDetailMode === 'plate'
-      ? vehicleLabel
-      : licensePlate ?? 'Plate unavailable';
 
   const comingSoon = (label: string) => {
     toast.message(label, { description: 'Coming soon' });
@@ -151,39 +137,11 @@ export function BookerTrackingView({
                 </div>
 
                 {!isMatching ? (
-                  <div className="live-ride-driver">
-                    <div className="live-ride-driver__left">
-                      <div className="live-ride-driver__avatar-wrap">
-                        <img src={driverPhoto} alt="Driver" className="live-ride-driver__avatar" />
-                        <span className="live-ride-driver__rating">
-                          4.9 <span className="live-ride-driver__rating-star" aria-hidden>★</span>
-                        </span>
-                      </div>
-                      <div>
-                        <p className="live-ride-driver__name">{driverName}</p>
-                        <p className="live-ride-driver__vehicle">{vehicleSecondary}</p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      className="live-ride-driver__plate-col touch-manipulation active:opacity-80"
-                      onClick={() =>
-                        setVehicleDetailMode((mode) => (mode === 'plate' ? 'vehicle' : 'plate'))
-                      }
-                      aria-label={
-                        vehicleDetailMode === 'plate'
-                          ? 'Show vehicle details'
-                          : 'Show license plate'
-                      }
-                    >
-                      <span className="live-ride-driver__plate-icon" aria-hidden>
-                        <ArrowLeftRight className="size-6" strokeWidth={2} />
-                      </span>
-                      <p className="live-ride-driver__plate">
-                        {vehicleDetailMode === 'plate' ? plateDisplay : vehicleLabel}
-                      </p>
-                    </button>
-                  </div>
+                  <LiveRideDriverCard
+                    assignedDriver={assignedDriver}
+                    serviceLabel={serviceLabel}
+                    nameFallback="Driver"
+                  />
                 ) : null}
 
                 <div className="live-ride-actions" role="group" aria-label="Contact and safety">

@@ -42,8 +42,6 @@ export type BookerTrackingMode = 'full' | 'minimized' | 'off';
 
 export const TERMINAL_RIDE_STATUSES: RideRequestStatus[] = ['completed', 'cancelled'];
 
-export const BOOKER_CHIP_HEIGHT_PX = 56;
-
 export function isDelegatedBookerRole(
   participantRole: string | null | undefined,
   isDelegated: boolean | undefined,

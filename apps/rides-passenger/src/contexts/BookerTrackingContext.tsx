@@ -24,7 +24,6 @@ import {
   readMinimizedRideSession,
   setMinimizeExitPending,
 } from '@/lib/bookerTracking';
-import { debugMinimizeLog } from '@/lib/debugMinimizeLog';
 
 type BookerTrackingContextValue = {
   mode: BookerTrackingMode;
@@ -101,15 +100,6 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
       setExitPendingRideId(rideId);
       persistMinimizedRide(rideId, role);
       setMinimizedSession({ rideId, role });
-      const stored = readMinimizedRideSession();
-      debugMinimizeLog('BookerTrackingContext.tsx:minimize', 'minimize invoked', {
-        rideId,
-        role,
-        storedAfterPersist: stored?.rideId ?? null,
-        pathname: window.location.pathname,
-        minimizingRef: minimizingRef.current,
-        exitPending: rideId,
-      }, 'B');
       void queryClient.cancelQueries({ queryKey: ['ride', rideId] });
       void queryClient.cancelQueries({ queryKey: ['ride-live', rideId] });
       navigate('/', { replace: true });
@@ -137,20 +127,11 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
   }, [clearSummary]);
 
   useEffect(() => {
-    debugMinimizeLog('BookerTrackingContext.tsx:pathname', 'route changed', {
-      pathname,
-      rideIdFromPath,
-      minimizedRideId,
-      mode,
-      sessionStored: readMinimizedRideSession()?.rideId ?? null,
-      exitPending: readMinimizeExitPending(),
-      minimizingRef: minimizingRef.current,
-    }, 'D');
     if (pathname === '/' || !parseRideIdFromPath(pathname)) {
       clearMinimizeExitPending();
       setExitPendingRideId(null);
     }
-  }, [pathname, rideIdFromPath, minimizedRideId, mode]);
+  }, [pathname]);
 
   useEffect(() => {
     if (!parseRideIdFromPath(pathname)) {
@@ -171,13 +152,6 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
       minimizedRideId === currentRideId &&
       prevRideId !== currentRideId
     ) {
-      debugMinimizeLog('BookerTrackingContext.tsx:pathnameEffect', 'clearing minimized on ride open', {
-        pathname,
-        prev,
-        currentRideId,
-        minimizedRideId,
-        minimizingRef: minimizingRef.current,
-      }, 'B');
       clearMinimizeExitPending();
       setExitPendingRideId(null);
       clearBookerMinimized();

@@ -69,9 +69,13 @@ export default function App() {
   const [splashMinElapsed, setSplashMinElapsed] = useState(false);
 
   useEffect(() => {
+    if (isAdminPath) {
+      setSplashMinElapsed(true);
+      return;
+    }
     const timer = window.setTimeout(() => setSplashMinElapsed(true), SPLASH_MIN_MS);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [isAdminPath]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
@@ -99,7 +103,7 @@ export default function App() {
     })();
   }, [session?.user?.id, isAdminPath]);
 
-  if (loading || !splashMinElapsed) {
+  if (!isAdminPath && (loading || !splashMinElapsed)) {
     return <SplashScreen />;
   }
 

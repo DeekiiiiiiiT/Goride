@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ChevronDown, Loader2, Clock, Share2 } from 'lucide-react';
@@ -31,8 +31,7 @@ import {
 } from '@/utils/riderActiveRideSession';
 import type { AssignedDriverSummaryDto } from '@roam/types/delegatedRide';
 import { useBookerTrackingOptional } from '@/contexts/BookerTrackingContext';
-import { persistMinimizedRide, setMinimizeExitPending } from '@/lib/bookerTracking';
-import { debugMinimizeLog } from '@/lib/debugMinimizeLog';
+import { persistMinimizedRide, readMinimizeExitPending, setMinimizeExitPending } from '@/lib/bookerTracking';
 
 function statusLabel(s: RideRequestStatus): string {
   switch (s) {
@@ -187,16 +186,17 @@ export default function RidePage() {
   const { isOnline, justReconnected } = useRiderOnline();
   const bookerTracking = useBookerTrackingOptional();
   const trackingMode = bookerTracking?.mode ?? 'full';
-  const exitPending = Boolean(id && bookerTracking?.exitPendingRideId === id);
+  const exitPending = Boolean(
+    id &&
+      (bookerTracking?.exitPendingRideId === id || readMinimizeExitPending() === id),
+  );
   const heavyTrackingEnabled = trackingMode === 'full' && !exitPending;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!id || !exitPending) return;
-    debugMinimizeLog('RidePage.tsx:exitGuard', 'forcing exit to home — minimize pending', {
-      rideId: id,
-      pathname: window.location.pathname,
-    }, 'D');
-    navigate('/', { replace: true });
+    if (window.location.pathname.startsWith('/ride/')) {
+      navigate('/', { replace: true });
+    }
   }, [id, exitPending, navigate]);
 
   const { data, error, refetch, isFetching } = useQuery({
@@ -241,6 +241,14 @@ export default function RidePage() {
   const isBooker = data?.participant_role === 'booker';
   const assignedDriver = data?.assigned_driver ?? null;
   const canShareWithPassenger = false;
+
+  useEffect(() => {
+    if (!ride || !id || ride.status !== 'completed' || !isDelegatedBooker) return;
+    bookerTracking?.clear();
+    const name = ride.guest_passenger_name;
+    toast.message(name ? `Ride for ${name} completed` : 'Your booked ride completed');
+    navigate('/', { replace: true });
+  }, [ride, id, isDelegatedBooker, navigate, bookerTracking]);
 
   const shareWithPassenger = async () => {
     if (!id || sharingInvite) return;
@@ -405,12 +413,6 @@ export default function RidePage() {
 
   const handleMinimize = (role: 'booker' | 'passenger') => {
     if (!id) return;
-    debugMinimizeLog('RidePage.tsx:handleMinimize', 'minimize clicked', {
-      rideId: id,
-      role,
-      hasBookerTracking: Boolean(bookerTracking),
-      pathname: window.location.pathname,
-    }, 'A');
     if (bookerTracking) {
       bookerTracking.minimize(id, role);
       return;
@@ -425,7 +427,18 @@ export default function RidePage() {
 
   if (!id) return null;
 
+  if (exitPending) {
+    return <Navigate to="/" replace />;
+  }
+
   if (ride?.status === 'completed') {
+    if (!data || isDelegatedBooker) {
+      return (
+        <div className="min-h-[100dvh] flex items-center justify-center bg-zinc-100 text-zinc-500">
+          <Loader2 className="w-8 h-8 animate-spin" aria-hidden />
+        </div>
+      );
+    }
     return <TripSummaryView ride={ride} />;
   }
 
@@ -478,6 +491,7 @@ export default function RidePage() {
           ride={ride}
           driverLocation={driverLocation}
           driverHeading={liveData?.driver_location?.heading ?? ride.last_driver_heading ?? null}
+          assignedDriver={assignedDriver}
           onMinimize={handlePassengerMinimize}
           canChat={canChat}
           canCancel={canCancel}
@@ -529,6 +543,7 @@ export default function RidePage() {
           ride={ride}
           driverLocation={driverLocation}
           driverHeading={liveData?.driver_location?.heading ?? ride.last_driver_heading ?? null}
+          assignedDriver={assignedDriver}
           riderPin={riderPin}
           pinEnabled={pinEnabled}
           waitTime={waitTime}

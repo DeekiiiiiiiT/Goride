@@ -6,13 +6,14 @@ import {
   MoreVertical,
   Share2,
   Shield,
-  Star,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { vehicleTypeLabel } from '@roam/business-config/ridesVehicleTypes';
+import type { AssignedDriverSummaryDto } from '@roam/types/delegatedRide';
 import type { RideRequestRow } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
 import { LiveRideMap } from '@/components/LiveRideMap';
+import { LiveRideDriverCard } from '@/components/LiveRideDriverCard';
 import { RideChatUnreadDot } from '@roam/ride-chat';
 import { RiderRideChatWrap } from '@/components/RiderRideChatWrap';
 import { ShareMyTripSheet } from '@/components/trusted-contacts/ShareMyTripSheet';
@@ -24,14 +25,12 @@ type Props = {
   ride: RideRequestRow;
   driverLocation: LatLng | null;
   driverHeading: number | null;
+  assignedDriver?: AssignedDriverSummaryDto | null;
   onMinimize: () => void;
   canChat?: boolean;
   canCancel?: boolean;
   participantRole?: 'booker' | 'passenger' | 'driver' | 'none' | null;
 };
-
-const DEFAULT_DRIVER_PHOTO =
-  'https://lh3.googleusercontent.com/aida-public/AB6AXuAdWvx2EJFAKdiJFUQnGtej_Q4tWVIdT9fz67e2AVND-xQu1bJdINh8eIU1psQPKZWUW0vbh8sAyswWJdaSOgIZ4GpDvRxZ1PcXpJRAUdxTUmdL6W14p9f-12C-H6vjHymVBnSizwaq-rsUC4YQnVHfzlmehj5kY0dGpxKcu7-vrd65iaR7QNI5kd_zeCqptx6DFOaoblpjfWY6QbFjYgEjQnBUU_PEOqF0-kfjgaLfhOGiUMPk5EJG3sMhxp5s6PKVwrdIrixrebdMu';
 
 export function tripArrivalHeadline(ride: RideRequestRow): string {
   const mins = ride.duration_estimate_minutes;
@@ -46,6 +45,7 @@ export function TripInProgressView({
   ride,
   driverLocation,
   driverHeading,
+  assignedDriver,
   onMinimize,
   canChat = false,
   canCancel = false,
@@ -112,22 +112,7 @@ export function TripInProgressView({
             <span>{destShort}</span>
           </p>
 
-          <div className="trip-progress-driver">
-            <div className="trip-progress-driver__left">
-              <img src={DEFAULT_DRIVER_PHOTO} alt="Driver" className="trip-progress-driver__avatar" />
-              <div>
-                <div className="trip-progress-driver__name-row">
-                  <h3 className="trip-progress-driver__name">Your driver</h3>
-                  <span className="trip-progress-driver__rating">
-                    <Star aria-hidden />
-                    4.9
-                  </span>
-                </div>
-                <p className="trip-progress-driver__vehicle">{serviceLabel}</p>
-              </div>
-            </div>
-            <p className="trip-progress-driver__plate">—</p>
-          </div>
+          <LiveRideDriverCard assignedDriver={assignedDriver} serviceLabel={serviceLabel} />
 
           <div className="trip-progress-actions" role="group" aria-label="Trip actions">
             {canChat ? (

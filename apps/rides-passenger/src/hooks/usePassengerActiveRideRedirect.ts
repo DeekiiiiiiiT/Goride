@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ridesGetMyActiveRideSummary } from '@/services/ridesEdge';
 import { readMinimizedRideSession } from '@/lib/bookerTracking';
-import { debugMinimizeLog } from '@/lib/debugMinimizeLog';
 
 /**
  * Auto-opens the live ride screen for delegated passengers only.
@@ -24,10 +23,6 @@ export function usePassengerActiveRideRedirect() {
       const minimized = readMinimizedRideSession();
       if (minimized?.rideId) {
         promptedRideId.current = minimized.rideId;
-        debugMinimizeLog('usePassengerActiveRideRedirect.ts:check', 'skip redirect — minimized', {
-          pathname,
-          minimizedRideId: minimized.rideId,
-        }, 'C');
         return;
       }
 
@@ -37,12 +32,6 @@ export function usePassengerActiveRideRedirect() {
         if (readMinimizedRideSession()?.rideId) return;
         if (promptedRideId.current === summary.ride_id) return;
 
-        debugMinimizeLog('usePassengerActiveRideRedirect.ts:check', 'redirecting to active ride', {
-          pathname,
-          rideId: summary.ride_id,
-          promptedRideId: promptedRideId.current,
-          sessionMinimized: readMinimizedRideSession()?.rideId ?? null,
-        }, 'C');
         promptedRideId.current = summary.ride_id;
         navigate(`/ride/${summary.ride_id}`, { replace: true });
       } catch {

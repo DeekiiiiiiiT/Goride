@@ -202,6 +202,17 @@
   text-align: right;
 }
 
+button.live-ride-driver__plate-col {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
 .live-ride-driver__plate-icon {
   display: inline-flex;
   align-items: center;

@@ -8,7 +8,6 @@ import {
   isDelegatedBookerRole,
   isTerminalRideStatus,
 } from '@/lib/bookerTracking';
-import { debugMinimizeLog } from '@/lib/debugMinimizeLog';
 
 type Options = {
   mode: BookerTrackingMode;
@@ -67,13 +66,9 @@ export function useBookerActiveRideSummary({
   const [loading, setLoading] = useState(false);
 
   const clearMinimized = useCallback(() => {
-    debugMinimizeLog('useBookerActiveRideSummary.ts:clearMinimized', 'clearing minimized session', {
-      minimizedRideId,
-      mode,
-    }, 'E');
     clearBookerMinimized();
     onClearMinimized?.();
-  }, [onClearMinimized, minimizedRideId, mode]);
+  }, [onClearMinimized]);
 
   const refresh = useCallback(async () => {
     if (document.visibilityState !== 'visible') return;

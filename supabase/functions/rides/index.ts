@@ -1806,8 +1806,7 @@ app.get("/v1/requests/:id", async (c) => {
   if (
     driverUserId &&
     bookerVis !== "shadow" &&
-    (isBooker || isPassenger) &&
-    isDelegatedBooking(rideForParticipant)
+    (isBooker || isPassenger)
   ) {
     assignedDriver = await loadAssignedDriverSummary(pubSvc(), driverUserId);
   }

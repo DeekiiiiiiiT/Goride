@@ -1,20 +1,162 @@
-import React from 'react';
-import { Eye, Loader2 } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { useBookerTracking } from '@/contexts/BookerTrackingContext';
-import {
-  bookerChipStatusLabel,
-  BOOKER_CHIP_HEIGHT_PX,
-  passengerChipStatusLabel,
-} from '@/lib/bookerTracking';
-import { PRIMARY, PRIMARY_CONTAINER, ON_PRIMARY, ON_SURFACE, ON_SURFACE_VARIANT } from '@/lib/passengerTheme';
+import { bookerChipStatusLabel, passengerChipStatusLabel } from '@/lib/bookerTracking';
+
+const FAB_WIDTH_PX = 128;
+const FAB_HEIGHT_PX = 44;
+const FAB_STORAGE_KEY = 'roam:active-trip-fab-position-v2';
+const DRAG_THRESHOLD_PX = 8;
+
+type Point = { x: number; y: number };
+
+function safeTopInset(): number {
+  if (typeof window === 'undefined') return 0;
+  return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('env(safe-area-inset-top)')) || 0;
+}
+
+function safeBottomInset(): number {
+  if (typeof window === 'undefined') return 0;
+  return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('env(safe-area-inset-bottom)')) || 0;
+}
+
+/** Right side, mid-screen — just above the home “Where to?” sheet. */
+function defaultFabPosition(): Point {
+  if (typeof window === 'undefined') return { x: 16, y: 280 };
+  const pad = 12;
+  const bottomNav = 56 + safeBottomInset();
+  const sheetTop = window.innerHeight - bottomNav - Math.min(window.innerHeight * 0.46, 420);
+  const y = Math.round(sheetTop - FAB_HEIGHT_PX - 20);
+  return {
+    x: Math.max(pad, window.innerWidth - FAB_WIDTH_PX - pad),
+    y: Math.max(minimumFabY(), y),
+  };
+}
+
+function minimumFabY(): number {
+  if (typeof window === 'undefined') return 96;
+  return Math.round(72 + safeTopInset());
+}
+
+function clampFabPosition(point: Point): Point {
+  if (typeof window === 'undefined') return point;
+  const pad = 8;
+  const maxX = window.innerWidth - FAB_WIDTH_PX - pad;
+  const maxY = window.innerHeight - FAB_HEIGHT_PX - pad - safeBottomInset();
+  return {
+    x: Math.min(Math.max(pad, point.x), maxX),
+    y: Math.min(Math.max(minimumFabY(), point.y), maxY),
+  };
+}
+
+function readStoredFabPosition(): Point | null {
+  try {
+    const raw = localStorage.getItem(FAB_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Point;
+    if (typeof parsed.x !== 'number' || typeof parsed.y !== 'number') return null;
+    if (parsed.y < minimumFabY()) return null;
+    return clampFabPosition(parsed);
+  } catch {
+    return null;
+  }
+}
+
+function persistFabPosition(point: Point): void {
+  try {
+    localStorage.setItem(FAB_STORAGE_KEY, JSON.stringify(point));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Routes where active-trip FAB is redundant (hub already lists live trips). */
+export function shouldHideActiveTripFab(pathname: string): boolean {
+  return pathname.startsWith('/services/book-for-others');
+}
 
 /**
- * Floating chip when booker or rider minimized the live tracker.
- * Refreshes status only on app/tab focus (via BookerTrackingContext).
+ * Draggable floating pill when booker or rider minimized the live tracker.
  */
 export function BookerActiveTripChip() {
   const { mode, minimizedRideId, minimizedRole, summary, summaryLoading, openFull } =
     useBookerTracking();
+  const [position, setPosition] = useState<Point>(() =>
+    readStoredFabPosition() ?? defaultFabPosition(),
+  );
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+    dragging: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    const onResize = () => setPosition((p) => clampFabPosition(p));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const onPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      if (event.button !== 0) return;
+      dragRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        originX: position.x,
+        originY: position.y,
+        dragging: false,
+      };
+      event.currentTarget.setPointerCapture(event.pointerId);
+    },
+    [position.x, position.y],
+  );
+
+  const onPointerMove = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (!drag.dragging && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
+
+    drag.dragging = true;
+    setPosition(
+      clampFabPosition({
+        x: drag.originX + dx,
+        y: drag.originY + dy,
+      }),
+    );
+  }, []);
+
+  const onPointerUp = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      const drag = dragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+
+      if (drag.dragging) {
+        const next = clampFabPosition({
+          x: drag.originX + (event.clientX - drag.startX),
+          y: drag.originY + (event.clientY - drag.startY),
+        });
+        setPosition(next);
+        persistFabPosition(next);
+      } else if (minimizedRideId) {
+        openFull(minimizedRideId);
+      }
+
+      dragRef.current = null;
+      try {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      } catch {
+        /* ignore */
+      }
+    },
+    [minimizedRideId, openFull],
+  );
 
   if (mode !== 'minimized' || !minimizedRideId) return null;
 
@@ -25,52 +167,29 @@ export function BookerActiveTripChip() {
     ? isBooker
       ? bookerChipStatusLabel(summary.status)
       : passengerChipStatusLabel(summary.status)
-    : 'Tap to open trip';
+    : 'In progress';
+  const label = isBooker ? 'View ride' : 'View trip';
 
   return (
-    <div
-      className="pointer-events-auto fixed inset-x-0 z-40 px-4 safe-x"
-      style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))' }}
-      role="region"
-      aria-label={title}
+    <button
+      type="button"
+      className="active-trip-fab touch-manipulation"
+      style={{ left: position.x, top: position.y }}
+      aria-label={`${title}. ${statusLabel}. Tap to open. Drag to move.`}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
     >
-      <button
-        type="button"
-        onClick={() => openFull(minimizedRideId)}
-        className="mx-auto flex w-full max-w-xl items-center gap-3 rounded-2xl border px-4 py-3 text-left shadow-lg touch-manipulation active:scale-[0.99]"
-        style={{
-          minHeight: BOOKER_CHIP_HEIGHT_PX,
-          backgroundColor: PRIMARY_CONTAINER,
-          borderColor: 'rgba(0,74,198,0.15)',
-          color: ON_SURFACE,
-        }}
-      >
-        <span
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
-          style={{ backgroundColor: 'rgba(255,255,255,0.9)', color: PRIMARY }}
-          aria-hidden
-        >
-          {summaryLoading && !summary ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
-          ) : (
-            <Eye className="h-5 w-5" strokeWidth={2} />
-          )}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold" style={{ color: ON_SURFACE }}>
-            {title}
-          </span>
-          <span className="block truncate text-xs" style={{ color: ON_SURFACE_VARIANT }}>
-            {statusLabel}
-          </span>
-        </span>
-        <span
-          className="shrink-0 rounded-xl px-3 py-1.5 text-xs font-semibold"
-          style={{ backgroundColor: PRIMARY, color: ON_PRIMARY }}
-        >
-          View
-        </span>
-      </button>
-    </div>
+      <span className="active-trip-fab__pulse-ring" aria-hidden />
+      <span className="active-trip-fab__live-dot" aria-hidden />
+      <span className="active-trip-fab__content">
+        {summaryLoading && !summary ? (
+          <Loader2 className="active-trip-fab__spinner" strokeWidth={2.5} aria-hidden />
+        ) : null}
+        <span className="active-trip-fab__label">{label}</span>
+        <span className="active-trip-fab__status">{statusLabel}</span>
+      </span>
+    </button>
   );
 }

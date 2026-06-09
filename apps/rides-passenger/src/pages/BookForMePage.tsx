@@ -10,6 +10,8 @@ import { RoamPlaceField } from '@/components/RoamPlaceField';
 import { RoamModePicker } from '@/components/trip-intent/RoamModePicker';
 import { RoamContactsPickerSheet } from '@/components/contacts/RoamContactsPickerSheet';
 import { DeviceContactsPickerSheet } from '@/components/contacts/DeviceContactsPickerSheet';
+import { RoamTagLookupSheet } from '@/components/contacts/RoamTagLookupSheet';
+import type { RoamPassengerTagBookingLookupDto } from '@roam/types/roamPassengerTag';
 import { useRoamPassengerTag } from '@/hooks/useRoamPassengerTag';
 import { useRidesVehicleTypes } from '@/hooks/useRidesVehicleTypes';
 import {
@@ -48,6 +50,46 @@ import {
 
 type Step = 'mode' | 'trip' | 'payer' | 'published';
 
+function TripIntentPayerRow({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="flex items-center gap-3 rounded-2xl border px-3.5 py-2.5"
+      style={{ borderColor: 'rgba(0,74,198,0.12)', backgroundColor: 'rgba(0,74,198,0.04)' }}
+    >
+      <span
+        className="shrink-0 text-xs font-bold uppercase tracking-wider"
+        style={{ color: ON_SURFACE_VARIANT }}
+      >
+        Payer
+      </span>
+      {children}
+    </div>
+  );
+}
+
+function PayerTagChip({ tagName }: { tagName: string }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-sm font-semibold shadow-sm ring-1 ring-[rgba(0,74,198,0.2)]"
+      style={{ color: PRIMARY }}
+    >
+      <Tag className="h-3.5 w-3.5 shrink-0 opacity-75" strokeWidth={2.25} aria-hidden />
+      {formatRoamTagDisplay(tagName)}
+    </span>
+  );
+}
+
+function PayerNameChip({ name }: { name: string }) {
+  return (
+    <span
+      className="inline-flex max-w-full items-center truncate rounded-full bg-white px-3 py-1.5 text-sm font-semibold shadow-sm ring-1 ring-black/8"
+      style={{ color: ON_SURFACE }}
+    >
+      {name}
+    </span>
+  );
+}
+
 export default function BookForMePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -68,9 +110,10 @@ export default function BookForMePage() {
   const [dropoffAddress, setDropoffAddress] = useState('');
   const [dropoff, setDropoff] = useState<{ lat: number; lng: number } | null>(null);
   const [vehicleOption, setVehicleOption] = useState(DEFAULT_VEHICLE_OPTION);
-  const [audience, setAudience] = useState<TripIntentAudience>('any_booker');
+  const [audience, setAudience] = useState<TripIntentAudience>('targeted');
   const [targetContact, setTargetContact] = useState<RiderContactRow | null>(null);
   const [targetPhone, setTargetPhone] = useState('');
+  const [targetTag, setTargetTag] = useState<RoamPassengerTagBookingLookupDto | null>(null);
   const [intent, setIntent] = useState<TripIntentRow | null>(null);
   const [loading, setLoading] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
@@ -78,6 +121,7 @@ export default function BookForMePage() {
   const [countdownTick, setCountdownTick] = useState(0);
   const [roamPickerOpen, setRoamPickerOpen] = useState(false);
   const [devicePickerOpen, setDevicePickerOpen] = useState(false);
+  const [tagPickerOpen, setTagPickerOpen] = useState(false);
   const [contacts, setContacts] = useState<RiderContactRow[]>([]);
   const [groups, setGroups] = useState<RiderContactGroupRow[]>([]);
   const [contactsLoading, setContactsLoading] = useState(false);
@@ -281,22 +325,23 @@ export default function BookForMePage() {
     try {
       await refresh(true);
       let row = await ensureDraftIntent();
-      if (audience === 'targeted' && !targetContact && !targetPhone) {
-        throw new Error('Choose who should pay — pick a Roam contact or phone contact.');
+      if (audience === 'targeted' && !targetContact && !targetPhone && !targetTag) {
+        throw new Error('Choose who should pay — pick a contact, search a Roam tag, or enter a phone.');
       }
 
       row = (await tripIntentUpdate(row.id, {
         roam_mode: roamMode,
         audience,
         target_contact_id: audience === 'targeted' && targetContact ? targetContact.id : null,
-        target_booker_user_id: audience === 'targeted' && targetContact?.linked_user_id
-          ? targetContact.linked_user_id
+        target_booker_user_id: audience === 'targeted'
+          ? targetTag?.user_id ?? (targetContact?.linked_user_id ?? null)
           : null,
-        target_booker_phone_e164: audience === 'targeted' && targetContact
-          ? targetContact.phone_e164
-          : audience === 'targeted' && targetPhone
-            ? buildGuestPhoneE164('+1', targetPhone)
-            : null,
+        target_booker_phone_e164: audience === 'targeted'
+          ? targetContact?.phone_e164
+            ?? (targetPhone ? buildGuestPhoneE164('+1', targetPhone) : null)
+            ?? targetTag?.phone_e164
+            ?? null
+          : null,
         pickup_lat: pickup?.lat,
         pickup_lng: pickup?.lng,
         pickup_address: pickupAddress || undefined,
@@ -501,7 +546,7 @@ export default function BookForMePage() {
         {step === 'payer' && intent?.status !== 'claimed' && intent?.status !== 'booked' ? (
           <div className="space-y-3 rounded-[24px] p-5" style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}>
             <p className="font-semibold">Who should pay?</p>
-            {(['any_booker', 'targeted'] as const).map((a) => (
+            {(['targeted', 'any_booker'] as const).map((a) => (
               <button
                 key={a}
                 type="button"
@@ -514,20 +559,47 @@ export default function BookForMePage() {
               </button>
             ))}
             {audience === 'targeted' ? (
-              <div className="flex gap-2">
-                <button type="button" onClick={() => setRoamPickerOpen(true)} className="flex-1 rounded-xl py-3 text-sm font-semibold" style={{ backgroundColor: SURFACE_LOW, color: PRIMARY }}>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRoamPickerOpen(true)}
+                  className="rounded-xl px-2 py-3 text-xs font-semibold sm:text-sm"
+                  style={{ backgroundColor: SURFACE_LOW, color: PRIMARY }}
+                >
                   Roam contact
                 </button>
-                <button type="button" onClick={() => setDevicePickerOpen(true)} className="flex-1 rounded-xl py-3 text-sm font-semibold" style={{ backgroundColor: SURFACE_LOW, color: PRIMARY }}>
+                <button
+                  type="button"
+                  onClick={() => setDevicePickerOpen(true)}
+                  className="rounded-xl px-2 py-3 text-xs font-semibold sm:text-sm"
+                  style={{ backgroundColor: SURFACE_LOW, color: PRIMARY }}
+                >
                   Phone contact
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTagPickerOpen(true)}
+                  className="rounded-xl px-2 py-3 text-xs font-semibold sm:text-sm"
+                  style={{ backgroundColor: SURFACE_LOW, color: PRIMARY }}
+                >
+                  Roam tag
                 </button>
               </div>
             ) : null}
-            {targetContact ? (
-              <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-                Selected: {targetContact.display_name}
-                {targetContact.roam_account_linked ? ' · Roam member' : ' · No Roam account on this phone'}
-              </p>
+            {targetTag ? (
+              <TripIntentPayerRow>
+                <PayerTagChip tagName={targetTag.custom_tag_name} />
+              </TripIntentPayerRow>
+            ) : null}
+            {!targetTag && targetContact ? (
+              <TripIntentPayerRow>
+                <PayerNameChip name={targetContact.display_name} />
+              </TripIntentPayerRow>
+            ) : null}
+            {!targetTag && !targetContact && targetPhone ? (
+              <TripIntentPayerRow>
+                <PayerNameChip name={formatGuestPhoneDisplay(targetPhone)} />
+              </TripIntentPayerRow>
             ) : null}
             <button type="button" disabled={loading} onClick={() => void handlePublish()} className="h-14 w-full rounded-2xl font-semibold disabled:opacity-50" style={{ backgroundColor: PRIMARY, color: ON_PRIMARY }}>
               {loading ? 'Publishing…' : 'Publish on my tag'}
@@ -550,6 +622,7 @@ export default function BookForMePage() {
         onSelect={(c) => {
           setTargetContact(c);
           setTargetPhone('');
+          setTargetTag(null);
           setRoamPickerOpen(false);
         }}
       />
@@ -561,7 +634,21 @@ export default function BookForMePage() {
           if (first?.phone_e164) {
             setTargetPhone(first.phone_e164.replace(/\D/g, '').slice(-10));
           }
+          setTargetContact(null);
+          setTargetTag(null);
           setDevicePickerOpen(false);
+        }}
+      />
+      <RoamTagLookupSheet
+        open={tagPickerOpen}
+        onClose={() => setTagPickerOpen(false)}
+        title="Who should pay?"
+        description="Search for the person who will pay using their Roam tag."
+        confirmLabel="Select payer"
+        onSelect={(tag) => {
+          setTargetTag(tag);
+          setTargetContact(null);
+          setTargetPhone('');
         }}
       />
 
