@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ChevronRight, Tag, UserPlus } from 'lucide-react';
+import { BookForOthersActiveTripBanner } from '@/components/book-for-others/BookForOthersActiveTripBanner';
 import { BookForOthersActivitySections } from '@/components/book-for-others/BookForOthersActivitySections';
 import { useBookForOthersActivity } from '@/hooks/useBookForOthersActivity';
 import {
@@ -107,6 +108,8 @@ export default function BookForOthersHubPage() {
             onClick={() => navigate('/services/book-for-me')}
           />
         </div>
+
+        <BookForOthersActiveTripBanner />
 
         <BookForOthersActivitySections
           bookForSomeone={bookForSomeone}

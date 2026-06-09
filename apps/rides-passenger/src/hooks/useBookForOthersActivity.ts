@@ -8,6 +8,6 @@ export function useBookForOthersActivity() {
     refetchOnWindowFocus: true,
     refetchOnMount: 'always',
     staleTime: 5_000,
-    refetchInterval: () => (document.visibilityState === 'visible' ? 15_000 : false),
+    refetchInterval: () => (document.visibilityState === 'visible' ? 8_000 : false),
   });
 }

@@ -2,7 +2,13 @@ import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { allowsPassengerSurface, jsonEdgeForbidden } from "../_shared/authEdge.ts";
 import type { RidesContactsDb } from "../_shared/ridesContactsDb.ts";
-import { ACTIVE_RIDE_STATUSES, isDelegatedBooking } from "./rideAccess.ts";
+import { ACTIVE_RIDE_STATUSES } from "./rideAccess.ts";
+import {
+  isHubDelegatedRide,
+  loadHubActiveRideForUser,
+  loadRideRowById,
+  queryRideRequestsList,
+} from "./rideHubQueries.ts";
 import {
   listTripIntentsTargetingBooker,
   mapTripIntentHubItem,
@@ -17,6 +23,7 @@ const INTENT_HUB_STATUSES = ["draft", "published", "claimed", "booked", "pending
 
 export type BookForOthersActivityDeps = {
   svc: () => SupabaseClient;
+  pubSvc: () => SupabaseClient;
   getContactsDb: () => Promise<RidesContactsDb>;
   requireUser: (authHeader: string | undefined) => Promise<
     { user: { id: string } } | { error: string; status: 401 }
@@ -100,6 +107,7 @@ async function loadDisplayNamesForUsers(
 async function loadLiveRidesFromBookedIntents(
   contactsDb: SupabaseClient,
   rideDb: SupabaseClient,
+  publicDb: SupabaseClient,
   table: string,
   tagsTable: string,
   userId: string,
@@ -110,7 +118,7 @@ async function loadLiveRidesFromBookedIntents(
   const { data: intents } = await contactsDb.from(table)
     .select("id, ride_request_id, requester_name, claimed_by_user_id")
     .eq(ownerCol, userId)
-    .in("status", ["booked", "consumed"])
+    .in("status", ["booked", "consumed", "claimed"])
     .not("ride_request_id", "is", null)
     .order("created_at", { ascending: false })
     .limit(10);
@@ -123,11 +131,12 @@ async function loadLiveRidesFromBookedIntents(
   )];
   if (rideIds.length === 0) return [];
 
-  const { data: rides } = await rideDb.from("ride_requests")
-    .select(RIDE_COLUMNS)
-    .in("id", rideIds)
-    .in("status", [...statuses]);
-  if (!rides?.length) return [];
+  const rides: Record<string, unknown>[] = [];
+  for (const rideId of rideIds) {
+    const row = await loadRideRowById(rideDb, publicDb, rideId, RIDE_COLUMNS);
+    if (row && statuses.includes(String(row.status))) rides.push(row);
+  }
+  if (!rides.length) return [];
 
   const rideById = new Map(
     rides.map((row) => [String((row as Record<string, unknown>).id), row as Record<string, unknown>]),
@@ -215,38 +224,31 @@ export function registerBookForOthersActivityRoutes(
 
     const userId = auth.user.id;
     const db = deps.svc();
+    const pub = deps.pubSvc();
     const statuses = [...ACTIVE_RIDE_STATUSES];
 
-    const [{ data: asBooker }, { data: asPassenger }] = await Promise.all([
-      db.from("ride_requests")
-        .select(RIDE_COLUMNS)
-        .eq("rider_user_id", userId)
-        .in("status", statuses)
-        .order("created_at", { ascending: false })
-        .limit(20),
-      db.from("ride_requests")
-        .select(RIDE_COLUMNS)
-        .eq("passenger_user_id", userId)
-        .in("status", statuses)
-        .order("created_at", { ascending: false })
-        .limit(20),
+    const [asBooker, asPassenger] = await Promise.all([
+      queryRideRequestsList(db, pub, {
+        columns: RIDE_COLUMNS,
+        rider_user_id: userId,
+        statuses,
+        limit: 20,
+      }),
+      queryRideRequestsList(db, pub, {
+        columns: RIDE_COLUMNS,
+        passenger_user_id: userId,
+        statuses,
+        limit: 20,
+      }),
     ]);
 
-    let bookForSomeoneRides = (asBooker ?? [])
-      .filter((row) => {
-        const ride = row as Record<string, unknown>;
-        return isDelegatedBooking(ride) ||
-          (typeof ride.booking_request_id === "string" && ride.booking_request_id.length > 0);
-      })
-      .map((row) => mapRideAsBooker(row as Record<string, unknown>));
+    let bookForSomeoneRides = asBooker
+      .filter((ride) => isHubDelegatedRide(ride))
+      .map((row) => mapRideAsBooker(row));
 
-    let bookForMeRides = (asPassenger ?? [])
-      .filter((row) => {
-        const ride = row as Record<string, unknown>;
-        return isDelegatedBooking(ride) ||
-          (typeof ride.booking_request_id === "string" && ride.booking_request_id.length > 0);
-      })
-      .map((row) => mapRideAsPassenger(row as Record<string, unknown>));
+    let bookForMeRides = asPassenger
+      .filter((ride) => isHubDelegatedRide(ride))
+      .map((row) => mapRideAsPassenger(row));
 
     let bookForMeIntents: ReturnType<typeof mapIntent>[] = [];
     let targetedIntents: ReturnType<typeof mapIntent>[] = [];
@@ -262,6 +264,7 @@ export function registerBookForOthersActivityRoutes(
           loadLiveRidesFromBookedIntents(
             contactsDb,
             db,
+            pub,
             t.booking_requests,
             t.roam_passenger_tags,
             userId,
@@ -271,6 +274,7 @@ export function registerBookForOthersActivityRoutes(
           loadLiveRidesFromBookedIntents(
             contactsDb,
             db,
+            pub,
             t.booking_requests,
             t.roam_passenger_tags,
             userId,
@@ -320,12 +324,13 @@ export function registerBookForOthersActivityRoutes(
         ...payerBookedIntentIds,
       ];
       if (linkedIntentIds.length > 0) {
-        const { data: linkedRides } = await db.from("ride_requests")
-          .select(RIDE_COLUMNS)
-          .in("booking_request_id", [...linkedIntentIds])
-          .in("status", statuses);
-        for (const row of linkedRides ?? []) {
-          const ride = row as Record<string, unknown>;
+        const linkedRides = await queryRideRequestsList(db, pub, {
+          columns: RIDE_COLUMNS,
+          booking_request_ids: [...linkedIntentIds],
+          statuses,
+          limit: 20,
+        });
+        for (const ride of linkedRides) {
           const intentId = String(ride.booking_request_id ?? "");
           const item = requesterBookedIntentIds.has(intentId)
             ? mapRideAsPassenger(ride)
@@ -359,8 +364,8 @@ export function registerBookForOthersActivityRoutes(
     }
 
     const linkedIntentIds = new Set([
-      ...(asPassenger ?? [])
-        .map((row) => (row as Record<string, unknown>).booking_request_id)
+      ...asPassenger
+        .map((row) => row.booking_request_id)
         .filter((id): id is string => typeof id === "string" && id.length > 0),
       ...requesterBookedIntentIds,
     ]);
@@ -369,13 +374,13 @@ export function registerBookForOthersActivityRoutes(
       (item) => !linkedIntentIds.has(item.intent_id),
     );
 
-    const bookForMe = [...bookForMeRides, ...intentsWithoutRide].sort(
+    let bookForMe = [...bookForMeRides, ...intentsWithoutRide].sort(
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     );
 
     const intentsWithLiveRide = new Set([
-      ...(asBooker ?? [])
-        .map((row) => (row as Record<string, unknown>).booking_request_id)
+      ...asBooker
+        .map((row) => row.booking_request_id)
         .filter((id): id is string => typeof id === "string" && id.length > 0),
       ...payerBookedIntentIds,
     ]);
@@ -383,9 +388,28 @@ export function registerBookForOthersActivityRoutes(
       (item) => !intentsWithLiveRide.has(String(item.intent_id)),
     );
 
-    const bookForSomeone = [...bookForSomeoneRides, ...targetedIntentsVisible].sort(
+    let bookForSomeone = [...bookForSomeoneRides, ...targetedIntentsVisible].sort(
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     );
+
+    const hubActive = await loadHubActiveRideForUser(
+      db,
+      pub,
+      deps.getContactsDb,
+      userId,
+    );
+    if (hubActive) {
+      const rideItem = hubActive.participant_role === "booker"
+        ? mapRideAsBooker(hubActive.ride)
+        : mapRideAsPassenger(hubActive.ride);
+      if (hubActive.participant_role === "booker") {
+        if (!bookForSomeone.some((row) => row.kind === "ride" && row.ride_id === rideItem.ride_id)) {
+          bookForSomeone = [rideItem, ...bookForSomeone];
+        }
+      } else if (!bookForMe.some((row) => row.kind === "ride" && row.ride_id === rideItem.ride_id)) {
+        bookForMe = [rideItem, ...bookForMe];
+      }
+    }
 
     return c.json({
       book_for_someone: bookForSomeone,

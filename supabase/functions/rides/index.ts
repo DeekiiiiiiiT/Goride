@@ -84,6 +84,7 @@ import {
 import { registerRoamPassengerTagRoutes } from "./roamPassengerTag.ts";
 import { registerTripIntentRoutes } from "./tripIntents.ts";
 import { registerBookForOthersActivityRoutes } from "./bookForOthersActivity.ts";
+import { loadHubActiveRideForUser } from "./rideHubQueries.ts";
 import { createRideFromTripIntent } from "./tripIntentFulfill.ts";
 import {
   bookerVisibilityForRide,
@@ -1677,85 +1678,11 @@ app.post("/v1/requests", async (c) => {
   });
 });
 
-function isHubDelegatedRide(ride: Record<string, unknown>): boolean {
-  return isDelegatedBooking(ride) ||
-    (typeof ride.booking_request_id === "string" && ride.booking_request_id.length > 0);
-}
-
 async function loadActiveRideForUser(userId: string): Promise<{
   ride: Record<string, unknown>;
   participant_role: "booker" | "passenger";
 } | null> {
-  const statuses = [...ACTIVE_RIDE_STATUSES];
-  const db = svc();
-
-  const [{ data: asPassenger }, { data: asBooker }] = await Promise.all([
-    db.from("ride_requests")
-      .select("*")
-      .eq("passenger_user_id", userId)
-      .in("status", statuses)
-      .order("created_at", { ascending: false })
-      .limit(10),
-    db.from("ride_requests")
-      .select("*")
-      .eq("rider_user_id", userId)
-      .in("status", statuses)
-      .order("created_at", { ascending: false })
-      .limit(10),
-  ]);
-
-  for (const row of asPassenger ?? []) {
-    const ride = row as Record<string, unknown>;
-    if (isHubDelegatedRide(ride)) {
-      return { ride, participant_role: "passenger" };
-    }
-  }
-  for (const row of asBooker ?? []) {
-    const ride = row as Record<string, unknown>;
-    if (isHubDelegatedRide(ride)) {
-      return { ride, participant_role: "booker" };
-    }
-  }
-
-  const firstPassenger = asPassenger?.[0] as Record<string, unknown> | undefined;
-  if (firstPassenger) {
-    return { ride: firstPassenger, participant_role: "passenger" };
-  }
-
-  const firstBooker = asBooker?.[0] as Record<string, unknown> | undefined;
-  if (firstBooker) {
-    return { ride: firstBooker, participant_role: "booker" };
-  }
-
-  try {
-    const { db: contactsDb, tables: t } = await getRidesContactsDb();
-    const { data: intent } = await contactsDb.from(t.booking_requests)
-      .select("ride_request_id")
-      .eq("requester_user_id", userId)
-      .in("status", ["booked", "consumed"])
-      .not("ride_request_id", "is", null)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const linkedRideId = intent?.ride_request_id ? String(intent.ride_request_id) : null;
-    if (linkedRideId) {
-      const { data: ride } = await db.from("ride_requests")
-        .select("*")
-        .eq("id", linkedRideId)
-        .in("status", statuses)
-        .maybeSingle();
-      if (ride) {
-        return {
-          ride: ride as Record<string, unknown>,
-          participant_role: "passenger",
-        };
-      }
-    }
-  } catch {
-    /* contacts db optional */
-  }
-
-  return null;
+  return loadHubActiveRideForUser(svc(), pubSvc(), getRidesContactsDb, userId);
 }
 
 app.get("/v1/requests/me/active", async (c) => {
@@ -2623,6 +2550,7 @@ registerTripIntentRoutes(app, {
 
 registerBookForOthersActivityRoutes(app, {
   svc,
+  pubSvc,
   getContactsDb: getRidesContactsDb,
   requireUser,
 });

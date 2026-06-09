@@ -17,6 +17,7 @@ import {
   tripIntentGetTargetingMe,
   tripIntentWithdraw,
 } from '@/services/tripIntentEdge';
+import { readAnyActiveRideId, readRiderRideCache } from '@/utils/riderActiveRideSession';
 
 const base = API_ENDPOINTS.rides;
 
@@ -40,20 +41,50 @@ async function headers(): Promise<HeadersInit> {
   };
 }
 
-function isDelegatedHubRide(ride: ActiveRideResponse['ride']): boolean {
-  if (!ride) return false;
-  return Boolean(
-    ride.booking_request_id
-    || ride.guest_passenger_phone
-    || (ride.passenger_user_id && ride.rider_user_id && ride.passenger_user_id !== ride.rider_user_id),
-  );
+const TERMINAL_RIDE_STATUSES = new Set(['cancelled', 'completed']);
+
+function isLiveHubRide(ride: ActiveRideResponse['ride']): boolean {
+  return Boolean(ride && !TERMINAL_RIDE_STATUSES.has(ride.status));
+}
+
+/** Same source as the live ride tracker — with session cache fallback. */
+export async function resolveActiveRideForHub(): Promise<ActiveRideResponse | null> {
+  try {
+    const active = await ridesGetMyActiveRide();
+    if (active?.ride && isLiveHubRide(active.ride)) return active;
+  } catch {
+    /* fall through */
+  }
+
+  const cachedId = readAnyActiveRideId();
+  if (!cachedId) return null;
+
+  try {
+    const res = await ridesGetRequest(cachedId);
+    if (!isLiveHubRide(res.ride)) return null;
+    const role = res.participant_role;
+    if (role !== 'booker' && role !== 'passenger') return null;
+    return {
+      ride: res.ride,
+      participant_role: role,
+      is_delegated: res.is_delegated ?? true,
+    };
+  } catch {
+    const cached = readRiderRideCache(cachedId);
+    if (!cached?.ride || !isLiveHubRide(cached.ride)) return null;
+    return {
+      ride: cached.ride,
+      participant_role: 'passenger',
+      is_delegated: true,
+    };
+  }
 }
 
 function injectActiveRideIntoHub(
   merged: BookForOthersActivityResponse,
   activeRide: ActiveRideResponse | null,
 ): BookForOthersActivityResponse {
-  if (!activeRide?.ride || !isDelegatedHubRide(activeRide.ride)) return merged;
+  if (!activeRide?.ride || !isLiveHubRide(activeRide.ride)) return merged;
 
   const next = {
     book_for_someone: [...merged.book_for_someone],
@@ -183,7 +214,7 @@ function mergeBookForOthersActivity(
     }
   }
 
-  if (activeRide?.ride && isDelegatedHubRide(activeRide.ride)) {
+  if (activeRide?.ride && isLiveHubRide(activeRide.ride)) {
     if (activeRide.participant_role === 'booker') {
       const item = rideToSomeoneItem(activeRide.ride);
       if (!bookForSomeone.some((entry) => entry.kind === 'ride' && entry.ride_id === item.ride_id)) {
@@ -358,13 +389,18 @@ async function reconcileStaleSomeoneIntents(
   return kept;
 }
 
-/** Loads hub activity from the list API plus live trip-intent / active-ride endpoints. */
+/** Loads hub activity — active ride tracker is the primary source of truth. */
 export async function loadBookForOthersActivity(): Promise<BookForOthersActivityResponse> {
-  const [apiResult, intentResult, targetingResult, rideResult] = await Promise.allSettled([
+  const activeRide = await resolveActiveRideForHub();
+  let hub = injectActiveRideIntoHub(
+    { book_for_someone: [], book_for_me: [] },
+    activeRide,
+  );
+
+  const [apiResult, intentResult, targetingResult] = await Promise.allSettled([
     bookForOthersGetActivityFromApi(),
     tripIntentGetMyActive(),
     tripIntentGetTargetingMe(),
-    ridesGetMyActiveRide(),
   ]);
 
   const fromApi = apiResult.status === 'fulfilled' ? apiResult.value : null;
@@ -372,24 +408,16 @@ export async function loadBookForOthersActivity(): Promise<BookForOthersActivity
     intentResult.status === 'fulfilled' ? intentResult.value.trip_intent : null;
   const targetingIntents =
     targetingResult.status === 'fulfilled' ? targetingResult.value.trip_intents : [];
-  const activeRide = rideResult.status === 'fulfilled' ? rideResult.value : null;
 
-  const merged = mergeBookForOthersActivity(fromApi, intent, targetingIntents, activeRide);
-  merged.book_for_me = await promoteBookedIntentsToRides(
-    merged.book_for_me,
-    () => null,
-  );
-  merged.book_for_someone = await promoteBookedIntentsToRides(
-    merged.book_for_someone,
+  hub = mergeBookForOthersActivity(fromApi, intent, targetingIntents, activeRide);
+  hub.book_for_me = await promoteBookedIntentsToRides(hub.book_for_me, () => null);
+  hub.book_for_someone = await promoteBookedIntentsToRides(
+    hub.book_for_someone,
     (item) => item.requester_name?.trim() ?? null,
   );
-  merged.book_for_me = await reconcileStaleMeIntents(merged.book_for_me);
-  merged.book_for_someone = await reconcileStaleSomeoneIntents(merged.book_for_someone);
+  hub.book_for_me = await reconcileStaleMeIntents(hub.book_for_me);
+  hub.book_for_someone = await reconcileStaleSomeoneIntents(hub.book_for_someone);
 
-  let activeForHub = activeRide;
-  if (!activeForHub?.ride) {
-    const retry = await Promise.allSettled([ridesGetMyActiveRide()]);
-    if (retry[0].status === 'fulfilled') activeForHub = retry[0].value;
-  }
-  return injectActiveRideIntoHub(merged, activeForHub);
+  const activeAgain = activeRide ?? await resolveActiveRideForHub();
+  return injectActiveRideIntoHub(hub, activeAgain);
 }
