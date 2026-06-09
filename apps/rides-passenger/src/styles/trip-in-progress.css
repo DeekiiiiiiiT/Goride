@@ -27,15 +27,16 @@
   top: 0;
   left: 0;
   right: 0;
-  z-index: 50;
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 1rem 1.25rem;
   padding-top: max(1rem, env(safe-area-inset-top, 0px));
-  background: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  pointer-events: auto;
 }
 
 .trip-progress-header__brand {
@@ -49,12 +50,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
   padding: 0.5rem;
   border: none;
   border-radius: 9999px;
   background: transparent;
   color: var(--trip-progress-primary);
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   transition: background 0.15s ease, transform 0.1s ease;
 }
 
@@ -70,6 +75,7 @@
   position: relative;
   flex: 1;
   min-height: 0;
+  padding-top: calc(3.5rem + env(safe-area-inset-top, 0px));
 }
 
 .trip-progress-map-layer {

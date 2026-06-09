@@ -16,8 +16,9 @@
 }
 
 .live-ride-topbar {
+  position: relative;
   flex-shrink: 0;
-  z-index: 20;
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -25,6 +26,7 @@
   padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
   background: var(--live-ride-surface);
   border-bottom: 1px solid #f3f4f6;
+  pointer-events: auto;
 }
 
 .live-ride-topbar__brand {
@@ -38,11 +40,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
   padding: 0.5rem;
   border: none;
   background: transparent;
   color: var(--live-ride-brand);
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   border-radius: 0.5rem;
   transition: background 0.15s ease;
 }

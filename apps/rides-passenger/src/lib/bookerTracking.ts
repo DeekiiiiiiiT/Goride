@@ -29,6 +29,7 @@ import type { RideRequestRow, RideRequestStatus } from '@roam/types/rides';
 import { liveRideStatusHeadline } from '@/components/LiveRideView';
 
 export const BOOKER_TRACKING_SESSION_KEY = 'roam:booker-tracking-minimized';
+export const MINIMIZE_EXIT_PENDING_KEY = 'roam:minimize-exit-pending';
 
 export type MinimizedRideRole = 'booker' | 'passenger';
 
@@ -71,6 +72,30 @@ export function persistMinimizedRide(rideId: string, role: MinimizedRideRole): v
   }
 }
 
+export function setMinimizeExitPending(rideId: string): void {
+  try {
+    sessionStorage.setItem(MINIMIZE_EXIT_PENDING_KEY, rideId);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function readMinimizeExitPending(): string | null {
+  try {
+    return sessionStorage.getItem(MINIMIZE_EXIT_PENDING_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function clearMinimizeExitPending(): void {
+  try {
+    sessionStorage.removeItem(MINIMIZE_EXIT_PENDING_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 /** @deprecated Use persistMinimizedRide — kept for call-site clarity. */
 export function persistBookerMinimized(rideId: string): void {
   persistMinimizedRide(rideId, 'booker');
@@ -106,6 +131,7 @@ export function isMinimizedRideActive(): boolean {
 export function clearBookerMinimized(): void {
   try {
     sessionStorage.removeItem(BOOKER_TRACKING_SESSION_KEY);
+    sessionStorage.removeItem(MINIMIZE_EXIT_PENDING_KEY);
   } catch {
     /* ignore */
   }

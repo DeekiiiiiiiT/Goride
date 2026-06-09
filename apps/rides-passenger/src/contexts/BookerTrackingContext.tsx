@@ -17,9 +17,12 @@ import {
   type MinimizedRideRole,
   type MinimizedRideSession,
   clearBookerMinimized,
+  clearMinimizeExitPending,
   parseRideIdFromPath,
   persistMinimizedRide,
+  readMinimizeExitPending,
   readMinimizedRideSession,
+  setMinimizeExitPending,
 } from '@/lib/bookerTracking';
 import { debugMinimizeLog } from '@/lib/debugMinimizeLog';
 
@@ -27,6 +30,7 @@ type BookerTrackingContextValue = {
   mode: BookerTrackingMode;
   minimizedRideId: string | null;
   minimizedRole: MinimizedRideRole | null;
+  exitPendingRideId: string | null;
   summary: ActiveRideSummaryDto | null;
   summaryLoading: boolean;
   minimize: (rideId: string, role: MinimizedRideRole) => void;
@@ -43,6 +47,9 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
   const queryClient = useQueryClient();
   const [minimizedSession, setMinimizedSession] = useState<MinimizedRideSession | null>(() =>
     readMinimizedRideSession(),
+  );
+  const [exitPendingRideId, setExitPendingRideId] = useState<string | null>(() =>
+    readMinimizeExitPending(),
   );
   const minimizingRef = useRef(false);
   const prevPathnameRef = useRef(pathname);
@@ -90,6 +97,8 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
   const minimize = useCallback(
     (rideId: string, role: MinimizedRideRole) => {
       minimizingRef.current = true;
+      setMinimizeExitPending(rideId);
+      setExitPendingRideId(rideId);
       persistMinimizedRide(rideId, role);
       setMinimizedSession({ rideId, role });
       const stored = readMinimizedRideSession();
@@ -99,6 +108,7 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
         storedAfterPersist: stored?.rideId ?? null,
         pathname: window.location.pathname,
         minimizingRef: minimizingRef.current,
+        exitPending: rideId,
       }, 'B');
       void queryClient.cancelQueries({ queryKey: ['ride', rideId] });
       void queryClient.cancelQueries({ queryKey: ['ride-live', rideId] });
@@ -109,6 +119,8 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
 
   const openFull = useCallback(
     (rideId: string) => {
+      clearMinimizeExitPending();
+      setExitPendingRideId(null);
       clearBookerMinimized();
       setMinimizedSession(null);
       navigate(`/ride/${rideId}`);
@@ -117,6 +129,8 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
   );
 
   const clear = useCallback(() => {
+    clearMinimizeExitPending();
+    setExitPendingRideId(null);
     clearBookerMinimized();
     setMinimizedSession(null);
     clearSummary();
@@ -129,8 +143,13 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
       minimizedRideId,
       mode,
       sessionStored: readMinimizedRideSession()?.rideId ?? null,
+      exitPending: readMinimizeExitPending(),
       minimizingRef: minimizingRef.current,
     }, 'D');
+    if (pathname === '/' || !parseRideIdFromPath(pathname)) {
+      clearMinimizeExitPending();
+      setExitPendingRideId(null);
+    }
   }, [pathname, rideIdFromPath, minimizedRideId, mode]);
 
   useEffect(() => {
@@ -159,6 +178,8 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
         minimizedRideId,
         minimizingRef: minimizingRef.current,
       }, 'B');
+      clearMinimizeExitPending();
+      setExitPendingRideId(null);
       clearBookerMinimized();
       setMinimizedSession(null);
     }
@@ -169,6 +190,7 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
       mode,
       minimizedRideId,
       minimizedRole,
+      exitPendingRideId,
       summary,
       summaryLoading,
       minimize,
@@ -180,6 +202,7 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
       mode,
       minimizedRideId,
       minimizedRole,
+      exitPendingRideId,
       summary,
       summaryLoading,
       minimize,

@@ -31,7 +31,7 @@ import {
 } from '@/utils/riderActiveRideSession';
 import type { AssignedDriverSummaryDto } from '@roam/types/delegatedRide';
 import { useBookerTrackingOptional } from '@/contexts/BookerTrackingContext';
-import { persistMinimizedRide } from '@/lib/bookerTracking';
+import { persistMinimizedRide, setMinimizeExitPending } from '@/lib/bookerTracking';
 import { debugMinimizeLog } from '@/lib/debugMinimizeLog';
 
 function statusLabel(s: RideRequestStatus): string {
@@ -187,7 +187,17 @@ export default function RidePage() {
   const { isOnline, justReconnected } = useRiderOnline();
   const bookerTracking = useBookerTrackingOptional();
   const trackingMode = bookerTracking?.mode ?? 'full';
-  const heavyTrackingEnabled = trackingMode === 'full';
+  const exitPending = Boolean(id && bookerTracking?.exitPendingRideId === id);
+  const heavyTrackingEnabled = trackingMode === 'full' && !exitPending;
+
+  useEffect(() => {
+    if (!id || !exitPending) return;
+    debugMinimizeLog('RidePage.tsx:exitGuard', 'forcing exit to home — minimize pending', {
+      rideId: id,
+      pathname: window.location.pathname,
+    }, 'D');
+    navigate('/', { replace: true });
+  }, [id, exitPending, navigate]);
 
   const { data, error, refetch, isFetching } = useQuery({
     queryKey: ['ride', id],
@@ -405,6 +415,7 @@ export default function RidePage() {
       bookerTracking.minimize(id, role);
       return;
     }
+    setMinimizeExitPending(id);
     persistMinimizedRide(id, role);
     navigate('/', { replace: true });
   };
