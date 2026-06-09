@@ -32,6 +32,7 @@ import {
 import type { AssignedDriverSummaryDto } from '@roam/types/delegatedRide';
 import { useBookerTrackingOptional } from '@/contexts/BookerTrackingContext';
 import { persistMinimizedRide } from '@/lib/bookerTracking';
+import { debugMinimizeLog } from '@/lib/debugMinimizeLog';
 
 function statusLabel(s: RideRequestStatus): string {
   switch (s) {
@@ -394,6 +395,12 @@ export default function RidePage() {
 
   const handleMinimize = (role: 'booker' | 'passenger') => {
     if (!id) return;
+    debugMinimizeLog('RidePage.tsx:handleMinimize', 'minimize clicked', {
+      rideId: id,
+      role,
+      hasBookerTracking: Boolean(bookerTracking),
+      pathname: window.location.pathname,
+    }, 'A');
     if (bookerTracking) {
       bookerTracking.minimize(id, role);
       return;

@@ -21,6 +21,7 @@ import {
   persistMinimizedRide,
   readMinimizedRideSession,
 } from '@/lib/bookerTracking';
+import { debugMinimizeLog } from '@/lib/debugMinimizeLog';
 
 type BookerTrackingContextValue = {
   mode: BookerTrackingMode;
@@ -91,6 +92,14 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
       minimizingRef.current = true;
       persistMinimizedRide(rideId, role);
       setMinimizedSession({ rideId, role });
+      const stored = readMinimizedRideSession();
+      debugMinimizeLog('BookerTrackingContext.tsx:minimize', 'minimize invoked', {
+        rideId,
+        role,
+        storedAfterPersist: stored?.rideId ?? null,
+        pathname: window.location.pathname,
+        minimizingRef: minimizingRef.current,
+      }, 'B');
       void queryClient.cancelQueries({ queryKey: ['ride', rideId] });
       void queryClient.cancelQueries({ queryKey: ['ride-live', rideId] });
       navigate('/', { replace: true });
@@ -114,6 +123,17 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
   }, [clearSummary]);
 
   useEffect(() => {
+    debugMinimizeLog('BookerTrackingContext.tsx:pathname', 'route changed', {
+      pathname,
+      rideIdFromPath,
+      minimizedRideId,
+      mode,
+      sessionStored: readMinimizedRideSession()?.rideId ?? null,
+      minimizingRef: minimizingRef.current,
+    }, 'D');
+  }, [pathname, rideIdFromPath, minimizedRideId, mode]);
+
+  useEffect(() => {
     if (!parseRideIdFromPath(pathname)) {
       minimizingRef.current = false;
     }
@@ -132,6 +152,13 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
       minimizedRideId === currentRideId &&
       prevRideId !== currentRideId
     ) {
+      debugMinimizeLog('BookerTrackingContext.tsx:pathnameEffect', 'clearing minimized on ride open', {
+        pathname,
+        prev,
+        currentRideId,
+        minimizedRideId,
+        minimizingRef: minimizingRef.current,
+      }, 'B');
       clearBookerMinimized();
       setMinimizedSession(null);
     }
