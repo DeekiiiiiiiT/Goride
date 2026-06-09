@@ -270,24 +270,38 @@ export async function syncBookingRequestAfterSystemRideCancel(
   }).eq("id", bookingRequestId);
 }
 
-/** If a Roam Tag ride is cancelled before payment, release the link for another attempt. */
+/** When a linked ride is cancelled, close the intent so all parties clear the hub. */
 export async function releaseBookingRequestAfterRideCancelled(
   getContactsDb: () => Promise<RidesContactsDb>,
   bookingRequestId: string,
 ): Promise<void> {
   const { db, tables: t } = await getContactsDb();
-  const { data: br } = await db.from(t.booking_requests).select("id, status, expires_at")
+  const { data: br } = await db.from(t.booking_requests).select("id, status, expires_at, committed_at")
     .eq("id", bookingRequestId).maybeSingle();
   if (!br || br.status === "consumed" || br.status === "cancelled") return;
+
+  const now = new Date().toISOString();
+  const wasLive = String(br.status) === "booked" || br.committed_at != null;
+
+  if (wasLive) {
+    await db.from(t.booking_requests).update({
+      status: "cancelled",
+      ride_request_id: null,
+      updated_at: now,
+    }).eq("id", bookingRequestId);
+    return;
+  }
+
   if (isExpired(String(br.expires_at))) {
-    await db.from(t.booking_requests).update({ status: "expired", updated_at: new Date().toISOString() })
+    await db.from(t.booking_requests).update({ status: "expired", updated_at: now })
       .eq("id", bookingRequestId);
     return;
   }
+
   await db.from(t.booking_requests).update({
     status: "claimed",
     ride_request_id: null,
-    updated_at: new Date().toISOString(),
+    updated_at: now,
   }).eq("id", bookingRequestId).in("status", ["claimed", "booked"]);
 }
 

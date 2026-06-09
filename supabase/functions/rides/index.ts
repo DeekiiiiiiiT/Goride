@@ -1714,6 +1714,34 @@ async function loadActiveRideForUser(userId: string): Promise<{
     };
   }
 
+  try {
+    const { db: contactsDb, tables: t } = await getRidesContactsDb();
+    const { data: intent } = await contactsDb.from(t.booking_requests)
+      .select("ride_request_id")
+      .eq("requester_user_id", userId)
+      .eq("status", "booked")
+      .not("ride_request_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const linkedRideId = intent?.ride_request_id ? String(intent.ride_request_id) : null;
+    if (linkedRideId) {
+      const { data: ride } = await db.from("ride_requests")
+        .select("*")
+        .eq("id", linkedRideId)
+        .in("status", statuses)
+        .maybeSingle();
+      if (ride) {
+        return {
+          ride: ride as Record<string, unknown>,
+          participant_role: "passenger",
+        };
+      }
+    }
+  } catch {
+    /* contacts db optional */
+  }
+
   return null;
 }
 
@@ -2496,6 +2524,7 @@ registerTripIntentRoutes(app, {
   getContactsDb: getRidesContactsDb,
   requireUser,
   audit,
+  rideSvc: svc,
   quoteIntent: async (params) => {
     const db = svc();
     const fareRulesAccess = await resolveFareRulesDbForQuote();

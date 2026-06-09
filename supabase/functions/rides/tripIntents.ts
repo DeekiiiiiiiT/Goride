@@ -54,6 +54,7 @@ export type TripIntentDeps = {
     rideId: string,
     requesterUserId: string,
   ) => Promise<{ ok: boolean; reason?: string }>;
+  rideSvc?: () => SupabaseClient;
 };
 
 function isExpired(expiresAt: string): boolean {
@@ -114,6 +115,53 @@ async function quoteTripIntentRoute(
 function withinBookWindow(row: Record<string, unknown>): boolean {
   const bookByAt = row.book_by_at ? String(row.book_by_at) : null;
   return Boolean(bookByAt && !isExpired(bookByAt));
+}
+
+/** Sync intent with linked ride; returns null when the intent should drop off hub lists. */
+export async function reconcileTripIntentWithRide(
+  rideSvc: SupabaseClient,
+  contactsDb: SupabaseClient,
+  table: string,
+  row: Record<string, unknown>,
+): Promise<Record<string, unknown> | null> {
+  const status = String(row.status);
+  if (!["claimed", "booked"].includes(status)) return row;
+
+  const intentId = String(row.id);
+  let linkedStatus: string | null = null;
+
+  if (row.ride_request_id) {
+    const { data: ride } = await rideSvc.from("ride_requests")
+      .select("id, status")
+      .eq("id", String(row.ride_request_id))
+      .maybeSingle();
+    linkedStatus = ride ? String(ride.status) : null;
+  } else {
+    const { data: rides } = await rideSvc.from("ride_requests")
+      .select("id, status")
+      .eq("booking_request_id", intentId)
+      .in("status", ["cancelled", "completed"])
+      .order("updated_at", { ascending: false })
+      .limit(1);
+    const terminal = rides?.[0] as Record<string, unknown> | undefined;
+    if (terminal) linkedStatus = String(terminal.status);
+  }
+
+  if (linkedStatus === "cancelled") {
+    const now = new Date().toISOString();
+    await contactsDb.from(table).update({
+      status: "cancelled",
+      ride_request_id: null,
+      updated_at: now,
+    }).eq("id", intentId);
+    return null;
+  }
+
+  if (linkedStatus === "completed" && status === "booked") {
+    return null;
+  }
+
+  return { ...row, linked_ride_status: linkedStatus };
 }
 
 export function mapTripIntentForRequester(row: Record<string, unknown>): Record<string, unknown> {
@@ -244,6 +292,7 @@ export async function listTripIntentsTargetingBooker(
   table: string,
   bookerUserId: string,
   bookerPhone?: string | null,
+  rideSvc?: SupabaseClient,
 ): Promise<Record<string, unknown>[]> {
   const openStatuses = ["published", "claimed"] as const;
   const queries = [
@@ -275,22 +324,32 @@ export async function listTripIntentsTargetingBooker(
       if (String(record.requester_user_id) === bookerUserId) continue;
       const fresh = await expireIfNeeded(db, table, record);
       const status = String(fresh.status);
-      const claimedByMe = String(fresh.claimed_by_user_id) === bookerUserId;
+      if (["cancelled", "expired", "consumed"].includes(status)) continue;
 
-      if (status === "booked" && claimedByMe) {
-        merged.set(String(fresh.id), fresh);
+      let row = fresh;
+      if (rideSvc && ["claimed", "booked"].includes(status)) {
+        const reconciled = await reconcileTripIntentWithRide(rideSvc, db, table, fresh);
+        if (!reconciled || String(reconciled.status) === "cancelled") continue;
+        row = reconciled;
+      }
+
+      const rowStatus = String(row.status);
+      const claimedByMe = String(row.claimed_by_user_id) === bookerUserId;
+
+      if (rowStatus === "booked" && claimedByMe) {
+        merged.set(String(row.id), row);
         continue;
       }
-      if (status === "claimed" && claimedByMe) {
-        merged.set(String(fresh.id), fresh);
+      if (rowStatus === "claimed" && claimedByMe) {
+        merged.set(String(row.id), row);
         continue;
       }
-      if (status === "published" && openStatuses.includes(status as typeof openStatuses[number])) {
-        if (String(fresh.audience) === "targeted") {
-          const access = canBookerAccessIntent(fresh, bookerUserId, bookerPhone);
+      if (rowStatus === "published" && openStatuses.includes(rowStatus as typeof openStatuses[number])) {
+        if (String(row.audience) === "targeted") {
+          const access = canBookerAccessIntent(row, bookerUserId, bookerPhone);
           if (!access.ok) continue;
         }
-        merged.set(String(fresh.id), fresh);
+        merged.set(String(row.id), row);
       }
     }
   }
@@ -309,7 +368,19 @@ export async function loadTripIntentBookerViewById(
   const { db, tables: t } = await deps.getContactsDb();
   const { data: row } = await db.from(t.booking_requests).select("*").eq("id", intentId).maybeSingle();
   if (!row) return null;
-  const fresh = await expireIfNeeded(db, t.booking_requests, row as Record<string, unknown>);
+  let fresh = await expireIfNeeded(db, t.booking_requests, row as Record<string, unknown>);
+
+  if (deps.rideSvc && ["claimed", "booked"].includes(String(fresh.status))) {
+    const reconciled = await reconcileTripIntentWithRide(
+      deps.rideSvc(),
+      db,
+      t.booking_requests,
+      fresh,
+    );
+    if (!reconciled || String(reconciled.status) === "cancelled") return null;
+    fresh = reconciled;
+  }
+
   const status = String(fresh.status);
   const claimedByMe = String(fresh.claimed_by_user_id) === bookerUserId;
   if (status === "booked") {
@@ -686,6 +757,7 @@ export function registerTripIntentRoutes(app: Hono, deps: TripIntentDeps) {
       t.booking_requests,
       gate.user!.id,
       bookerPhone,
+      deps.rideSvc?.(),
     );
     return c.json({
       trip_intents: rows.map((row) => mapTripIntentHubItem(row, "target_booker")),

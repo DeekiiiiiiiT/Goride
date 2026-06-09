@@ -273,9 +273,11 @@ function MeRideRow({
   item: BookForOthersRideActivityItem;
   onOpen: (item: BookForOthersMeActivityItem) => void;
 }) {
+  const payerName = item.counterparty_name?.trim();
+  const title = payerName ? `Ride · paid by ${payerName}` : 'Your ride';
   return (
     <ActivityRow
-      title="Your ride"
+      title={title}
       subtitle={rideStatusLabel(item.status as RideRequestStatus)}
       detail={formatShortAddress(item.pickup_address)}
       onClick={() => onOpen(item)}
@@ -383,12 +385,18 @@ export function BookForOthersActivitySections({
 
   useEffect(() => {
     if (userPickedTab || loading) return;
-    if (bookForMe.length > 0 && bookForSomeone.length === 0) {
+    const meHasLiveRide = bookForMe.some((item) => item.kind === 'ride');
+    const someoneHasLiveRide = bookForSomeone.some((item) => item.kind === 'ride');
+    if (meHasLiveRide && !someoneHasLiveRide) {
       setTab('me');
-    } else if (bookForSomeone.length > 0) {
+    } else if (someoneHasLiveRide && !meHasLiveRide) {
+      setTab('someone');
+    } else if (bookForMe.length > 0 && bookForSomeone.length === 0) {
+      setTab('me');
+    } else if (bookForSomeone.length > 0 && bookForMe.length === 0) {
       setTab('someone');
     }
-  }, [bookForSomeone.length, bookForMe.length, loading, userPickedTab]);
+  }, [bookForSomeone, bookForMe, loading, userPickedTab]);
 
   const openSomeoneRide = (item: BookForOthersRideActivityItem) => {
     if (item.roam_mode === 'shadow_roam') {
