@@ -104,6 +104,7 @@ import {
   PASSENGER_APP_ORIGIN,
   shouldExposePinToUser,
 } from "./rideAccess.ts";
+import { loadAssignedDriverSummary } from "./assignedDriverSummary.ts";
 import {
   notifyPassengerOfRideEvent,
   notifyShadowBookerOfTripCompleted,
@@ -1753,14 +1754,14 @@ app.get("/v1/requests/:id", async (c) => {
 
   const pinPrepStatuses = ["driver_assigned", "driver_en_route_pickup", "driver_arrived_pickup"];
   let riderPin: string | null = null;
-  const pinEligible = isBooker || isPassenger;
-  if (rideOut && pinEligible && isPinFeatureEnabled(settings) &&
-    pinPrepStatuses.includes(String(rideOut.status))) {
+  const pinEligible = rideOut &&
+    shouldExposePinToUser(rideOut, auth.user.id) &&
+    isPinFeatureEnabled(settings);
+  if (rideOut && pinEligible && pinPrepStatuses.includes(String(rideOut.status))) {
     rideOut = await ensureRideVerificationPin(id, rideOut, settings);
   }
-  const exposePin = rideOut && shouldExposePinToUser(rideOut, auth.user.id) &&
-    shouldExposeRiderPin(rideOut);
-  if (rideOut && pinEligible && isPinFeatureEnabled(settings) && exposePin) {
+  const exposePin = rideOut && pinEligible && shouldExposeRiderPin(rideOut);
+  if (rideOut && exposePin) {
     riderPin = normalizeVerificationPin(rideOut.verification_pin);
     if (!riderPin) {
       const { data: pinRow } = await svc().from("ride_requests").select("verification_pin").eq("id", id)
@@ -1798,18 +1799,32 @@ app.get("/v1/requests/:id", async (c) => {
     rideResponse = sanitizeRideForShadowBooker(rideResponse);
   }
 
+  let assignedDriver = null;
+  const driverUserId = rideForParticipant.assigned_driver_user_id
+    ? String(rideForParticipant.assigned_driver_user_id)
+    : null;
+  if (
+    driverUserId &&
+    bookerVis !== "shadow" &&
+    (isBooker || isPassenger) &&
+    isDelegatedBooking(rideForParticipant)
+  ) {
+    assignedDriver = await loadAssignedDriverSummary(pubSvc(), driverUserId);
+  }
+
   return c.json({
     ride: rideResponse,
     offers: bookerVis === "shadow" ? [] : offers,
     wait_time: bookerVis === "shadow" ? null : waitTimeInfo,
-    rider_pin: pinEligible ? riderPin : null,
+    rider_pin: exposePin ? riderPin : null,
     participant_role: participantRole,
     can_chat: canChatOnRide(rideForParticipant, auth.user.id),
     can_cancel: canCancelRide(rideForParticipant, auth.user.id),
     is_delegated: isDelegatedBooking(rideForParticipant),
-    pin_enabled: isPinFeatureEnabled(settings),
+    pin_enabled: isPinFeatureEnabled(settings) && Boolean(shouldExposePinToUser(rideForParticipant, auth.user.id)),
     booker_visibility: bookerVis === "none" ? undefined : bookerVis,
     roam_mode: rideForParticipant.roam_mode ?? null,
+    assigned_driver: assignedDriver,
   });
 });
 
@@ -2439,9 +2454,18 @@ app.post("/v1/internal/reconcile-active-rides", async (c) => {
   return c.json({ ok: true, rides: rideIds.length, no_show_cancelled: noShowCancelled, stale_alerts: staleAlerts });
 });
 
+async function loadRiderDisplayNameForChat(userId: string): Promise<string | null> {
+  const { data } = await pubSvc().from("rider_profiles")
+    .select("display_name")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return (data?.display_name as string | null) ?? null;
+}
+
 registerRideChatRoutes(app, {
   messageDb: pubSvc,
   loadRideRequestById,
+  loadRiderDisplayName: loadRiderDisplayNameForChat,
   requireUser,
   audit,
 });

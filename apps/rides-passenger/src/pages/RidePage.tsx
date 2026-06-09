@@ -29,6 +29,7 @@ import {
   persistRiderRideCache,
   readRiderRideCache,
 } from '@/utils/riderActiveRideSession';
+import type { AssignedDriverSummaryDto } from '@roam/types/delegatedRide';
 import { useBookerTrackingOptional } from '@/contexts/BookerTrackingContext';
 import { persistMinimizedRide } from '@/lib/bookerTracking';
 
@@ -227,6 +228,7 @@ export default function RidePage() {
   const canCancel = data?.can_cancel === true;
   const isDelegatedBooker = data?.participant_role === 'booker' && data?.is_delegated === true;
   const isBooker = data?.participant_role === 'booker';
+  const assignedDriver = data?.assigned_driver ?? null;
   const canShareWithPassenger = false;
 
   const shareWithPassenger = async () => {
@@ -302,14 +304,20 @@ export default function RidePage() {
       ride.status === 'driver_arrived_pickup' &&
       prevStatusRef.current !== 'driver_arrived_pickup'
     ) {
-      toast.success('Your driver has arrived', {
-        description: riderPin
-          ? 'Share your 4-digit PIN when they ask for it.'
-          : 'Your trip PIN will appear when they reach the pickup point.',
-      });
+      if (isDelegatedBooker) {
+        toast.success('Driver has arrived', {
+          description: 'Pickup is in progress for your rider.',
+        });
+      } else if (data?.participant_role === 'passenger' || !data?.is_delegated) {
+        toast.success('Your driver has arrived', {
+          description: riderPin
+            ? 'Share your 4-digit PIN when they ask for it.'
+            : 'Your trip PIN will appear when they reach the pickup point.',
+        });
+      }
     }
     prevStatusRef.current = ride.status;
-  }, [ride?.status, riderPin]);
+  }, [ride?.status, riderPin, isDelegatedBooker, data?.participant_role, data?.is_delegated]);
 
   useEffect(() => {
     if (!id || !heavyTrackingEnabled) return;
@@ -391,7 +399,7 @@ export default function RidePage() {
       return;
     }
     persistMinimizedRide(id, role);
-    navigate('/', { replace: false });
+    navigate('/', { replace: true });
   };
 
   const handleBookerMinimize = () => handleMinimize('booker');
@@ -422,6 +430,7 @@ export default function RidePage() {
               driverLocation={driverLocation}
               driverHeading={liveData?.driver_location?.heading ?? ride.last_driver_heading ?? null}
               passengerName={ride.guest_passenger_name}
+              assignedDriver={assignedDriver}
               isFetching={isFetching}
               onMinimize={handleBookerMinimize}
               onCancelTrip={() => setCancelDialogOpen(true)}
@@ -454,6 +463,7 @@ export default function RidePage() {
           onMinimize={handlePassengerMinimize}
           canChat={canChat}
           canCancel={canCancel}
+          participantRole={data?.participant_role}
         />
         </div>
       </>
@@ -471,6 +481,7 @@ export default function RidePage() {
               driverLocation={driverLocation}
               driverHeading={liveData?.driver_location?.heading ?? ride.last_driver_heading ?? null}
               passengerName={ride.guest_passenger_name}
+              assignedDriver={assignedDriver}
               isFetching={isFetching}
               onMinimize={handleBookerMinimize}
               onCancelTrip={() => setCancelDialogOpen(true)}
@@ -510,6 +521,7 @@ export default function RidePage() {
           cancelling={cancelling}
           canChat={canChat}
           canCancel={canCancel}
+          participantRole={data?.participant_role}
         />
         </div>
         <RidePageDialogs
@@ -536,6 +548,7 @@ export default function RidePage() {
             driverLocation={driverLocation}
             driverHeading={liveData?.driver_location?.heading ?? ride.last_driver_heading ?? null}
             passengerName={ride.guest_passenger_name}
+            assignedDriver={assignedDriver}
             isFetching={isFetching}
             onMinimize={handleBookerMinimize}
             onCancelTrip={() => setCancelDialogOpen(true)}

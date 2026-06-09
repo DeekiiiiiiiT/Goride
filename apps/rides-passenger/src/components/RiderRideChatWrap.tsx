@@ -1,6 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@roam/auth-client';
-import { RideChatHost, type RideChatContext } from '@roam/ride-chat';
+import {
+  RideChatHost,
+  type RideChatContext,
+  buildParticipantsFromRide,
+  isDelegatedTripChat,
+} from '@roam/ride-chat';
+import type { RideChatViewerRole } from '@roam/types/rides';
 import type { RideRequestRow } from '@roam/types/rides';
 import { ridesListMessages, ridesSendMessage } from '@/services/ridesEdge';
 
@@ -11,11 +17,21 @@ const riderChatApi = {
 
 type Props = {
   ride: RideRequestRow;
+  participantRole?: 'booker' | 'passenger' | 'driver' | 'none' | null;
   groupChat?: boolean;
   children: (openChat: () => void, ctx: RideChatContext) => React.ReactNode;
 };
 
-export function RiderRideChatWrap({ ride, groupChat, children }: Props) {
+function mapViewerRole(
+  participantRole: Props['participantRole'],
+): RideChatViewerRole | undefined {
+  if (participantRole === 'booker' || participantRole === 'passenger' || participantRole === 'driver') {
+    return participantRole;
+  }
+  return undefined;
+}
+
+export function RiderRideChatWrap({ ride, participantRole, groupChat, children }: Props) {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -28,14 +44,20 @@ export function RiderRideChatWrap({ ride, groupChat, children }: Props) {
     return () => subscription.unsubscribe();
   }, []);
 
+  const delegated = groupChat ?? isDelegatedTripChat(ride);
+  const initialParticipants = useMemo(() => buildParticipantsFromRide(ride), [ride]);
+  const initialViewerRole = mapViewerRole(participantRole);
+
   return (
     <RideChatHost
       rideId={ride.id}
       rideStatus={ride.status}
       currentUserId={currentUserId}
-      peerLabel={groupChat ? 'Trip chat' : 'Your driver'}
+      peerLabel={delegated ? 'Trip chat' : 'Your driver'}
       variant="rider"
-      groupChat={groupChat}
+      groupChat={delegated}
+      initialParticipants={initialParticipants}
+      initialViewerRole={initialViewerRole}
       api={riderChatApi}
       supabase={supabase}
     >

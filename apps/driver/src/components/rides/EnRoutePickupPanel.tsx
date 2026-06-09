@@ -9,6 +9,7 @@ import {
   User,
   XCircle,
 } from 'lucide-react';
+import { buildDelegatedRiderListItems, isOpenDelegatedBooking } from '@roam/types/delegatedRide';
 import type { RideRequestRow } from '@roam/types/rides';
 import { cn } from '@roam/ui';
 import type { RoutePoint } from '../../types/tripSession';
@@ -20,6 +21,7 @@ import { GracePeriodCountdown, isGracePeriodActive } from './GracePeriodCountdow
 import { RideChatUnreadDot } from '@roam/ride-chat';
 import { DriverRideChatWrap } from './DriverRideChatWrap';
 import { PickupArrivalCountdown } from './PickupArrivalCountdown';
+import { DelegatedRidersPanel } from './DelegatedRidersPanel';
 
 const CANCEL_REASONS = [
   { value: 'rider_no_show', label: 'Rider no-show' },
@@ -76,6 +78,12 @@ export function EnRoutePickupPanel({
   const graceActive = isGracePeriodActive(waitTimeInfo, ride.wait_time_started_at);
   const pickupAddress = shortAddress(ride.pickup_address);
   const pickupValid = isValidCoord(ride.pickup_lat, ride.pickup_lng);
+  const delegated = isOpenDelegatedBooking(ride);
+  const riderName = ride.guest_passenger_name?.trim() || 'Rider';
+  const riderItems = useMemo(
+    () => (delegated ? buildDelegatedRiderListItems(ride) : []),
+    [delegated, ride],
+  );
 
   const mapRoute = useMemo((): RoutePoint[] => {
     if (!pickupValid) return [];
@@ -161,13 +169,19 @@ export function EnRoutePickupPanel({
             </p>
           ) : null}
 
+          {delegated ? <DelegatedRidersPanel riders={riderItems} /> : null}
+
           <div className="mb-3 flex items-center gap-3">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-100 dark:bg-blue-950/50">
               <User className="h-5 w-5 text-blue-700 dark:text-blue-300" aria-hidden />
             </div>
             <div className="min-w-0 flex-1">
-              <h2 className="truncate text-base font-semibold text-slate-900 dark:text-white">Passenger</h2>
-              <p className="text-xs text-slate-500">Rider trip</p>
+              <h2 className="truncate text-base font-semibold text-slate-900 dark:text-white">
+                {delegated ? riderName : 'Passenger'}
+              </h2>
+              <p className="text-xs text-slate-500">
+                {delegated ? 'Book-for-someone pickup' : 'Rider trip'}
+              </p>
             </div>
             <div className="shrink-0 text-right">
               <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Arrival</p>

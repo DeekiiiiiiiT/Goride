@@ -194,6 +194,7 @@ export async function ridesGetRequest(id: string): Promise<{
   participant_role?: 'booker' | 'passenger' | 'driver' | 'none';
   booker_visibility?: 'shadow' | 'open';
   roam_mode?: 'open_roam' | 'shadow_roam' | null;
+  assigned_driver?: import('@roam/types/delegatedRide').AssignedDriverSummaryDto | null;
 }> {
   const res = await ridesFetch(`${base}/v1/requests/${id}`, { headers: await ridesHeaders() });
   if (!res.ok) await parseRidesError(res);

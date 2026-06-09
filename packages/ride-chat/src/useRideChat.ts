@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { RideMessageDto } from '@roam/types/rides';
+import type {
+  RideChatParticipantsDto,
+  RideChatViewerRole,
+  RideMessageDto,
+} from '@roam/types/rides';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getRideChatLastReadId, setRideChatLastReadId } from './rideChatStorage';
 import type { RideChatApi } from './types';
@@ -30,6 +34,8 @@ function countUnreadFromPeer(
 
 export type UseRideChatResult = {
   messages: RideMessageDto[];
+  participants: RideChatParticipantsDto | null;
+  viewerRole: RideChatViewerRole | null;
   loading: boolean;
   sending: boolean;
   error: string | null;
@@ -49,6 +55,8 @@ export function useRideChat(opts: {
 }): UseRideChatResult {
   const { rideId, enabled, open, currentUserId, api, supabase, onPeerMessage } = opts;
   const [messages, setMessages] = useState<RideMessageDto[]>([]);
+  const [participants, setParticipants] = useState<RideChatParticipantsDto | null>(null);
+  const [viewerRole, setViewerRole] = useState<RideChatViewerRole | null>(null);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -106,6 +114,8 @@ export function useRideChat(opts: {
       try {
         const res = await api.listMessages(rideId, { limit: 50 });
         setMessages(res.messages);
+        if (res.participants) setParticipants(res.participants);
+        if (res.viewer_role) setViewerRole(res.viewer_role);
         if (open) {
           markRead(res.messages);
         } else {
@@ -208,5 +218,15 @@ export function useRideChat(opts: {
     [api, enabled, rideId, refresh, handleIncoming],
   );
 
-  return { messages, loading, sending, error, unreadCount, send, refresh };
+  return {
+    messages,
+    participants,
+    viewerRole,
+    loading,
+    sending,
+    error,
+    unreadCount,
+    send,
+    refresh,
+  };
 }

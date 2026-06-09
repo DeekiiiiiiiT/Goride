@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Loader2, Send, X } from 'lucide-react';
+import type { RideChatParticipantsDto, RideChatViewerRole } from '@roam/types/rides';
 import type { UseRideChatResult } from './useRideChat';
 import type { RideChatVariant } from './types';
-import type { RideMessageSenderRole } from '@roam/types/rides';
+import { messageSenderLabel } from './chatLabels';
 
 const MAX_LEN = 500;
 
@@ -26,18 +27,9 @@ type Props = {
   currentUserId: string | null | undefined;
   chat: UseRideChatResult;
   groupChat?: boolean;
+  participants?: RideChatParticipantsDto | null;
+  viewerRole?: RideChatViewerRole | null;
 };
-
-function senderRoleLabel(role: RideMessageSenderRole): string {
-  switch (role) {
-    case 'driver':
-      return 'Driver';
-    case 'booker':
-      return 'Booker';
-    default:
-      return 'Passenger';
-  }
-}
 
 export function RideChatSheet({
   open,
@@ -48,6 +40,8 @@ export function RideChatSheet({
   currentUserId,
   chat,
   groupChat,
+  participants,
+  viewerRole,
 }: Props) {
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -85,6 +79,9 @@ export function RideChatSheet({
   if (!open) return null;
 
   const isDriver = variant === 'driver';
+  const labelParticipants = participants ?? chat.participants;
+  const labelViewerRole = viewerRole ?? chat.viewerRole;
+  const showLabels = Boolean(groupChat && labelParticipants && labelViewerRole);
 
   return createPortal(
     <div className="ride-chat-portal" role="presentation">
@@ -143,7 +140,12 @@ export function RideChatSheet({
           ) : (
             messages.map((msg) => {
               const isMine = msg.sender_user_id === currentUserId;
-              const roleLabel = groupChat && !isMine ? senderRoleLabel(msg.sender_role) : null;
+              const roleLabel =
+                showLabels && labelParticipants && labelViewerRole
+                  ? messageSenderLabel(msg, labelViewerRole, labelParticipants, currentUserId)
+                  : !showLabels && !isMine && msg.sender_role === 'driver'
+                    ? 'Driver'
+                    : null;
               return (
                 <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
                   <div

@@ -1,12 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
 import { ridesGetMyActiveRideSummary } from '@/services/ridesEdge';
 import { readMinimizedRideSession } from '@/lib/bookerTracking';
 
 /**
  * Auto-opens the live ride screen for delegated passengers only.
- * Skipped when the rider minimized the tracker — they can reopen from Active trips or the chip.
+ * Skipped whenever the user intentionally minimized an active trip.
  */
 export function usePassengerActiveRideRedirect() {
   const navigate = useNavigate();
@@ -20,19 +19,17 @@ export function usePassengerActiveRideRedirect() {
 
     const check = async () => {
       if (document.visibilityState !== 'visible') return;
+
       const minimized = readMinimizedRideSession();
-      if (minimized?.role === 'passenger') return;
+      if (minimized?.rideId) return;
+
       try {
         const { summary } = await ridesGetMyActiveRideSummary();
         if (cancelled || !summary?.ride_id || summary.participant_role !== 'passenger') return;
-        if (minimized?.rideId === summary.ride_id) return;
+        if (readMinimizedRideSession()?.rideId) return;
         if (promptedRideId.current === summary.ride_id) return;
 
         promptedRideId.current = summary.ride_id;
-        toast.message('Your ride is ready', {
-          description: 'Opening your trip — share your PIN with the driver when they arrive.',
-          duration: 4000,
-        });
         navigate(`/ride/${summary.ride_id}`, { replace: true });
       } catch {
         /* ignore */

@@ -31,6 +31,19 @@ export function isRideChatEnabled(status: RideRequestStatus | string): boolean {
 
 export type RideMessageSenderRole = 'rider' | 'driver' | 'booker';
 
+export interface RideChatParticipantDto {
+  user_id: string | null;
+  label: string;
+}
+
+export interface RideChatParticipantsDto {
+  driver: RideChatParticipantDto;
+  booker: RideChatParticipantDto;
+  passenger: RideChatParticipantDto;
+}
+
+export type RideChatViewerRole = 'driver' | 'booker' | 'passenger';
+
 export interface RideMessageDto {
   id: string;
   ride_request_id: string;
@@ -42,6 +55,8 @@ export interface RideMessageDto {
 
 export interface RideMessagesResponse {
   messages: RideMessageDto[];
+  participants?: RideChatParticipantsDto;
+  viewer_role?: RideChatViewerRole;
 }
 
 export interface SendRideMessageBody {

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Loader2, MapPin, MessageCircle, ShieldCheck, Star, User } from 'lucide-react';
+import { buildDelegatedRiderListItems, isOpenDelegatedBooking } from '@roam/types/delegatedRide';
 import type { RideRequestRow } from '@roam/types/rides';
 import type { RoutePoint } from '../../types/tripSession';
 import { LeafletMap } from '../maps/LeafletMap';
@@ -8,6 +9,7 @@ import { SwipeToStart } from './SwipeToStart';
 import { GracePeriodCountdown, isGracePeriodActive } from './GracePeriodCountdown';
 import { RideChatUnreadDot } from '@roam/ride-chat';
 import { DriverRideChatWrap } from './DriverRideChatWrap';
+import { DelegatedRidersPanel } from './DelegatedRidersPanel';
 
 type WaitTimeInfo = {
   wait_time_charge_enabled?: boolean;
@@ -39,6 +41,12 @@ export function ArrivedPickupPanel({ ride, onAdvance, trackingError, waitTimeInf
   const [pinError, setPinError] = useState<string | null>(null);
   const pinRequired = Boolean(ride.pin_verification_pending) && !ride.pin_verified_at;
   const graceActive = isGracePeriodActive(waitTimeInfo, ride.wait_time_started_at);
+  const delegated = isOpenDelegatedBooking(ride);
+  const riderName = ride.guest_passenger_name?.trim() || 'Rider';
+  const riderItems = useMemo(
+    () => (delegated ? buildDelegatedRiderListItems(ride) : []),
+    [delegated, ride],
+  );
 
   const mapRoute: RoutePoint[] = [
     {
@@ -99,12 +107,16 @@ export function ArrivedPickupPanel({ ride, onAdvance, trackingError, waitTimeInf
           </p>
         ) : null}
 
+        {delegated ? <DelegatedRidersPanel riders={riderItems} /> : null}
+
         <div className="mb-4 flex items-center gap-4">
           <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-950/50">
             <User className="h-7 w-7 text-blue-700 dark:text-blue-300" aria-hidden />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Passenger</h2>
+            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
+              {delegated ? riderName : 'Passenger'}
+            </h2>
             <div className="flex items-center gap-1 text-sm text-slate-500">
               <MapPin className="h-4 w-4 shrink-0" aria-hidden />
               {shortAddress(ride.pickup_address)}

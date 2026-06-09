@@ -27,6 +27,7 @@ type Props = {
   onMinimize: () => void;
   canChat?: boolean;
   canCancel?: boolean;
+  participantRole?: 'booker' | 'passenger' | 'driver' | 'none' | null;
 };
 
 const DEFAULT_DRIVER_PHOTO =
@@ -48,6 +49,7 @@ export function TripInProgressView({
   onMinimize,
   canChat = false,
   canCancel = false,
+  participantRole,
 }: Props) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [safetyOpen, setSafetyOpen] = useState(false);
@@ -64,7 +66,7 @@ export function TripInProgressView({
   };
 
   return (
-    <RiderRideChatWrap ride={ride}>
+    <RiderRideChatWrap ride={ride} participantRole={participantRole}>
       {(openChat, { unreadCount }) => (
     <div className="trip-progress-page relative isolate flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden">
       <header className="trip-progress-header">

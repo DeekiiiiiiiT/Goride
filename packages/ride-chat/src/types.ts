@@ -1,4 +1,6 @@
 import type {
+  RideChatParticipantsDto,
+  RideChatViewerRole,
   RideMessageDto,
   RideMessagesResponse,
   SendRideMessageBody,

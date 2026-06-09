@@ -95,10 +95,9 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
       setMinimizedSession({ rideId, role });
       void queryClient.cancelQueries({ queryKey: ['ride', rideId] });
       void queryClient.cancelQueries({ queryKey: ['ride-live', rideId] });
-      navigate('/', { replace: false });
-      void refreshSummary();
+      navigate('/', { replace: true });
     },
-    [navigate, queryClient, refreshSummary],
+    [navigate, queryClient],
   );
 
   const openFull = useCallback(

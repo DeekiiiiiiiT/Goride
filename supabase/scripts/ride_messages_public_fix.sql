@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS public.ride_messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   ride_request_id UUID NOT NULL REFERENCES rides.ride_requests(id) ON DELETE CASCADE,
   sender_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  sender_role TEXT NOT NULL CHECK (sender_role IN ('rider', 'driver')),
+  sender_role TEXT NOT NULL CHECK (sender_role IN ('rider', 'driver', 'booker')),
   body TEXT NOT NULL CHECK (char_length(body) >= 1 AND char_length(body) <= 500),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -37,7 +37,20 @@ CREATE POLICY ride_messages_participant_select ON public.ride_messages
     EXISTS (
       SELECT 1 FROM rides.ride_requests r
       WHERE r.id = ride_request_id
-        AND (r.rider_user_id = auth.uid() OR r.assigned_driver_user_id = auth.uid())
+        AND (
+          r.rider_user_id = auth.uid()
+          OR r.assigned_driver_user_id = auth.uid()
+          OR r.passenger_user_id = auth.uid()
+        )
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.rides_ride_requests r
+      WHERE r.id = ride_request_id
+        AND (
+          r.rider_user_id = auth.uid()
+          OR r.assigned_driver_user_id = auth.uid()
+          OR r.passenger_user_id = auth.uid()
+        )
     )
   );
 

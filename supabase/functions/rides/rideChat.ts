@@ -5,6 +5,7 @@ import { jsonEdgeForbidden } from "../_shared/authEdge.ts";
 import {
   canChatOnRide,
   getRideParticipantRole,
+  isDelegatedBooking,
   phonesMatch,
 } from "./rideAccess.ts";
 import { sendRideNotification } from "./rideNotifications.ts";
@@ -27,6 +28,19 @@ export type RideMessageRow = {
   created_at: string;
 };
 
+export type RideChatParticipant = {
+  user_id: string | null;
+  label: string;
+};
+
+export type RideChatParticipants = {
+  driver: RideChatParticipant;
+  booker: RideChatParticipant;
+  passenger: RideChatParticipant;
+};
+
+export type RideChatViewerRole = "driver" | "booker" | "passenger";
+
 export function toRideMessageDto(row: Record<string, unknown>): RideMessageRow {
   const role = String(row.sender_role ?? "rider");
   const senderRole: RideMessageSenderRole =
@@ -41,9 +55,58 @@ export function toRideMessageDto(row: Record<string, unknown>): RideMessageRow {
   };
 }
 
+function firstNameFromDisplayName(name: string | null | undefined): string {
+  const trimmed = name?.trim();
+  if (!trimmed) return "";
+  return trimmed.split(/\s+/)[0] ?? "";
+}
+
+function mapViewerRole(
+  ride: Record<string, unknown>,
+  userId: string,
+): RideChatViewerRole | null {
+  const role = getRideParticipantRole(ride, userId);
+  if (role === "driver" || role === "booker" || role === "passenger") return role;
+  return null;
+}
+
+async function resolveChatParticipants(
+  ride: Record<string, unknown>,
+  loadRiderDisplayName: (userId: string) => Promise<string | null>,
+): Promise<RideChatParticipants> {
+  const bookerId = ride.rider_user_id ? String(ride.rider_user_id) : null;
+  const passengerId = ride.passenger_user_id ? String(ride.passenger_user_id) : null;
+  const driverId = ride.assigned_driver_user_id ? String(ride.assigned_driver_user_id) : null;
+
+  const passengerName = firstNameFromDisplayName(
+    typeof ride.guest_passenger_name === "string" ? ride.guest_passenger_name : null,
+  );
+
+  let bookerLabel = "Booker";
+  if (bookerId) {
+    const bookerDisplay = await loadRiderDisplayName(bookerId);
+    const bookerFirst = firstNameFromDisplayName(bookerDisplay);
+    if (bookerFirst) bookerLabel = bookerFirst;
+  }
+
+  let passengerLabel = passengerName || "Rider";
+  if (!passengerName && passengerId) {
+    const passengerDisplay = await loadRiderDisplayName(passengerId);
+    const passengerFirst = firstNameFromDisplayName(passengerDisplay);
+    if (passengerFirst) passengerLabel = passengerFirst;
+  }
+
+  return {
+    driver: { user_id: driverId, label: "Driver" },
+    booker: { user_id: bookerId, label: bookerLabel },
+    passenger: { user_id: passengerId, label: passengerLabel },
+  };
+}
+
 type RideChatDeps = {
   messageDb: () => SupabaseClient;
   loadRideRequestById: (id: string) => Promise<Record<string, unknown> | null>;
+  loadRiderDisplayName: (userId: string) => Promise<string | null>;
   requireUser: (authHeader: string | undefined) => Promise<
     { user: { id: string } } | { error: string; status: 401 }
   >;
@@ -127,7 +190,15 @@ export function registerRideChatRoutes(app: Hono, deps: RideChatDeps) {
       .map((row) => toRideMessageDto(row as Record<string, unknown>))
       .reverse();
 
-    return c.json({ messages });
+    const participants = await resolveChatParticipants(ride, deps.loadRiderDisplayName);
+    const viewerRole = mapViewerRole(ride, auth.user.id);
+
+    return c.json({
+      messages,
+      participants,
+      viewer_role: viewerRole,
+      is_delegated: isDelegatedBooking(ride),
+    });
   });
 
   app.post("/v1/requests/:id/messages", async (c: Context) => {

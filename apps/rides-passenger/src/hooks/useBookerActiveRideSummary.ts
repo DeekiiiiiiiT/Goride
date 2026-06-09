@@ -53,6 +53,7 @@ function summaryFromRideResponse(
 
 /**
  * Focus-only refresh for the minimized trip chip — no background interval.
+ * Never clears minimized state except when the trip is confirmed terminal.
  */
 export function useBookerActiveRideSummary({
   mode,
@@ -87,36 +88,12 @@ export function useBookerActiveRideSummary({
           clearMinimized();
           return;
         }
-        if (minimizedRole === 'booker' && res.summary.roam_mode === 'shadow_roam') {
-          setSummary(null);
-          clearMinimized();
-          return;
-        }
         setSummary(res.summary);
         return;
       }
 
       const rideRes = await ridesGetRequest(minimizedRideId);
       const ride = rideRes.ride;
-      const participantRole = rideRes.participant_role;
-      const delegated = rideRes.is_delegated;
-
-      if (minimizedRole === 'booker') {
-        if (!isDelegatedBookerRole(participantRole, delegated)) {
-          setSummary(null);
-          clearMinimized();
-          return;
-        }
-        if (ride.roam_mode === 'shadow_roam') {
-          setSummary(null);
-          clearMinimized();
-          return;
-        }
-      } else if (participantRole !== 'passenger') {
-        setSummary(null);
-        clearMinimized();
-        return;
-      }
 
       if (isTerminalRideStatus(ride.status)) {
         onTerminal?.(ride.guest_passenger_name ?? null, minimizedRole);
@@ -125,9 +102,18 @@ export function useBookerActiveRideSummary({
         return;
       }
 
+      const participantRole = rideRes.participant_role;
+      const delegated = rideRes.is_delegated;
       setSummary(summaryFromRideResponse(minimizedRideId, minimizedRole, ride, delegated));
+
+      if (minimizedRole === 'booker' && !isDelegatedBookerRole(participantRole, delegated)) {
+        /* keep minimized — user explicitly chose to leave the tracker */
+      }
+      if (minimizedRole === 'passenger' && participantRole !== 'passenger') {
+        /* keep minimized */
+      }
     } catch {
-      /* keep last summary when offline */
+      /* keep minimized session + last summary when offline */
     } finally {
       setLoading(false);
     }

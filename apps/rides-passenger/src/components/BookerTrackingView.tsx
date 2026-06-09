@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ArrowLeftRight,
   ChevronDown,
@@ -9,11 +9,14 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { vehicleTypeLabel } from '@roam/business-config/ridesVehicleTypes';
+import type { AssignedDriverSummaryDto } from '@roam/types/delegatedRide';
+import { buildDelegatedRiderListItems } from '@roam/types/delegatedRide';
 import type { RideRequestRow, RideRequestStatus } from '@roam/types/rides';
 import { LiveRideMap } from '@/components/LiveRideMap';
 import { RideChatUnreadDot } from '@roam/ride-chat';
 import { RiderRideChatWrap } from '@/components/RiderRideChatWrap';
 import { ShareMyTripSheet } from '@/components/trusted-contacts/ShareMyTripSheet';
+import { DelegatedRidersPanel } from '@/components/delegated/DelegatedRidersPanel';
 import { formatShortAddress } from '@/lib/formatRideAddress';
 import { liveRideStatusHeadline } from '@/components/LiveRideView';
 
@@ -24,6 +27,7 @@ type Props = {
   driverLocation: LatLng | null;
   driverHeading: number | null;
   passengerName?: string | null;
+  assignedDriver?: AssignedDriverSummaryDto | null;
   isFetching?: boolean;
   onMinimize: () => void;
   onCancelTrip: () => void;
@@ -40,11 +44,17 @@ function matchingHeadline(status: RideRequestStatus): string {
   return liveRideStatusHeadline(status, {} as RideRequestRow);
 }
 
+function bookerArrivalHeadline(status: RideRequestStatus, ride: RideRequestRow): string {
+  if (status === 'driver_arrived_pickup') return 'Driver has arrived at pickup';
+  return liveRideStatusHeadline(status, ride);
+}
+
 export function BookerTrackingView({
   ride,
   driverLocation,
   driverHeading,
   passengerName,
+  assignedDriver,
   isFetching,
   onMinimize,
   onCancelTrip,
@@ -53,17 +63,31 @@ export function BookerTrackingView({
   canCancel = false,
 }: Props) {
   const [safetyOpen, setSafetyOpen] = useState(false);
+  const [vehicleDetailMode, setVehicleDetailMode] = useState<'plate' | 'vehicle'>('plate');
   const isMatching = ride.status === 'matching';
-  const headline = isMatching ? matchingHeadline(ride.status) : liveRideStatusHeadline(ride.status, ride);
+  const headline = isMatching
+    ? matchingHeadline(ride.status)
+    : bookerArrivalHeadline(ride.status, ride);
   const pickupShort = formatShortAddress(ride.pickup_address);
   const serviceLabel = vehicleTypeLabel(ride.vehicle_option);
+  const riderItems = useMemo(() => buildDelegatedRiderListItems(ride), [ride]);
+
+  const driverPhoto = assignedDriver?.profile_photo_url?.trim() || DEFAULT_DRIVER_PHOTO;
+  const driverName = assignedDriver?.display_name?.trim() || 'Driver';
+  const licensePlate = assignedDriver?.license_plate?.trim() || null;
+  const vehicleLabel = assignedDriver?.vehicle_label?.trim() || serviceLabel;
+  const plateDisplay = licensePlate ?? '—';
+  const vehicleSecondary =
+    vehicleDetailMode === 'plate'
+      ? vehicleLabel
+      : licensePlate ?? 'Plate unavailable';
 
   const comingSoon = (label: string) => {
     toast.message(label, { description: 'Coming soon' });
   };
 
   return (
-    <RiderRideChatWrap ride={ride} groupChat>
+    <RiderRideChatWrap ride={ride} participantRole="booker" groupChat>
       {(openChat, { unreadCount }) => (
         <div className="live-ride-page">
           <header className="live-ride-topbar">
@@ -113,6 +137,8 @@ export function BookerTrackingView({
                   </p>
                 ) : null}
 
+                <DelegatedRidersPanel riders={riderItems} />
+
                 <div>
                   <h2 className="live-ride-card__status">{headline}</h2>
                   <p className="live-ride-card__pickup">
@@ -125,22 +151,35 @@ export function BookerTrackingView({
                   <div className="live-ride-driver">
                     <div className="live-ride-driver__left">
                       <div className="live-ride-driver__avatar-wrap">
-                        <img src={DEFAULT_DRIVER_PHOTO} alt="Driver" className="live-ride-driver__avatar" />
+                        <img src={driverPhoto} alt="Driver" className="live-ride-driver__avatar" />
                         <span className="live-ride-driver__rating">
                           4.9 <span className="live-ride-driver__rating-star" aria-hidden>★</span>
                         </span>
                       </div>
                       <div>
-                        <p className="live-ride-driver__name">Driver</p>
-                        <p className="live-ride-driver__vehicle">{serviceLabel}</p>
+                        <p className="live-ride-driver__name">{driverName}</p>
+                        <p className="live-ride-driver__vehicle">{vehicleSecondary}</p>
                       </div>
                     </div>
-                    <div className="live-ride-driver__plate-col">
+                    <button
+                      type="button"
+                      className="live-ride-driver__plate-col touch-manipulation active:opacity-80"
+                      onClick={() =>
+                        setVehicleDetailMode((mode) => (mode === 'plate' ? 'vehicle' : 'plate'))
+                      }
+                      aria-label={
+                        vehicleDetailMode === 'plate'
+                          ? 'Show vehicle details'
+                          : 'Show license plate'
+                      }
+                    >
                       <span className="live-ride-driver__plate-icon" aria-hidden>
                         <ArrowLeftRight className="size-6" strokeWidth={2} />
                       </span>
-                      <p className="live-ride-driver__plate">—</p>
-                    </div>
+                      <p className="live-ride-driver__plate">
+                        {vehicleDetailMode === 'plate' ? plateDisplay : vehicleLabel}
+                      </p>
+                    </button>
                   </div>
                 ) : null}
 

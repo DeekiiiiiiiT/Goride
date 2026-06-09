@@ -6,6 +6,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { playChatPing, vibrateChatAlert } from './playChatPing';
 import { RideChatSheet } from './RideChatSheet';
 import type { RideChatApi, RideChatContext, RideChatVariant } from './types';
+import type { RideChatParticipantsDto, RideChatViewerRole } from '@roam/types/rides';
 import { useRideChat } from './useRideChat';
 
 type Props = {
@@ -17,6 +18,8 @@ type Props = {
   api: RideChatApi;
   supabase: SupabaseClient;
   groupChat?: boolean;
+  initialParticipants?: RideChatParticipantsDto;
+  initialViewerRole?: RideChatViewerRole;
   children: (openChat: () => void, ctx: RideChatContext) => React.ReactNode;
 };
 
@@ -36,6 +39,8 @@ export function RideChatHost({
   api,
   supabase,
   groupChat,
+  initialParticipants,
+  initialViewerRole,
   children,
 }: Props) {
   const [open, setOpen] = useState(false);
@@ -52,7 +57,6 @@ export function RideChatHost({
       playChatPing(isDriver ? 0.22 : 0.38);
       vibrateChatAlert();
 
-      // Rider: short in-app toast. Driver: badge + tone only (no popup while driving).
       if (!isDriver) {
         toast.message(peerLabel, {
           description: previewBody(msg.body),
@@ -83,6 +87,9 @@ export function RideChatHost({
     setOpen(true);
   };
 
+  const participants = chat.participants ?? initialParticipants ?? null;
+  const viewerRole = chat.viewerRole ?? initialViewerRole ?? null;
+
   return (
     <>
       {children(openChat, { unreadCount: chat.unreadCount })}
@@ -95,6 +102,8 @@ export function RideChatHost({
         currentUserId={currentUserId}
         chat={chat}
         groupChat={groupChat}
+        participants={participants}
+        viewerRole={viewerRole}
       />
     </>
   );

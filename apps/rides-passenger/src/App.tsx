@@ -57,6 +57,7 @@ import { RidersListPage } from './admin/pages/users/RidersListPage';
 import { RiderDetailPage } from './admin/pages/users/RiderDetailPage';
 import { SplashScreen } from './components/layout/SplashScreen';
 import { BookerTrackingProvider } from './contexts/BookerTrackingContext';
+import { PassengerShell } from './components/layout/PassengerShell';
 
 const SPLASH_MIN_MS = 2000;
 
@@ -151,45 +152,38 @@ export default function App() {
       <Route
         element={session ? <AuthenticatedPassengerRoute /> : <Navigate to="/login" replace />}
       >
-        <Route path="/" element={<HomePage />} />
-        <Route path="/services" element={<ServicesPage />} />
-        <Route path="/services/book-for-others" element={<BookForOthersHubPage />} />
-        <Route path="/services/book-for-someone" element={<BookForSomeonePage />} />
-        <Route path="/services/courier" element={<CourierServicePage />} />
-        <Route path="/services/schedule" element={<ScheduleRidePage />} />
-        <Route path="/services/event" element={<EventBookingPage />} />
-        <Route path="/services/book-for-me" element={<BookForMePage />} />
-        <Route path="/services/roam-tag" element={<Navigate to="/services/book-for-me" replace />} />
-        <Route path="/account" element={<AccountPage />} />
-        <Route path="/account/gift-cards" element={<GiftCardsPage />} />
-        <Route path="/account/emergency-assistance" element={<EmergencyAssistancePage />} />
-        <Route path="/account/promo-codes" element={<PromoCodesPage />} />
-        <Route path="/account/support" element={<SupportCenterPage />} />
-        <Route path="/account/trusted-contacts" element={<Navigate to="/account/contacts/trusted" replace />} />
-        <Route path="/account/contacts" element={<ContactsHubPage />} />
-        <Route path="/account/contacts/roam" element={<ContactsPage />} />
-        <Route path="/account/contacts/trusted" element={<TrustedContactsPage />} />
-        <Route path="/account/contacts/trusted/add" element={<AddTrustedContactsPage />} />
-        <Route path="/account/contacts/groups" element={<ContactGroupsPage />} />
-        <Route path="/account/contacts/groups/:id" element={<ContactGroupDetailPage />} />
-        <Route path="/account/contacts/:id" element={<ContactDetailPage />} />
-        <Route path="/account/wallet" element={<WalletPage />} />
-        <Route path="/account/wallet/payment-methods" element={<ManagePaymentMethodsPage />} />
-        <Route path="/account/settings" element={<AppSettingsPage />} />
-        <Route path="/account/profile" element={<ProfilePage />} />
+        <Route element={<PassengerShell />}>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/services" element={<ServicesPage />} />
+          <Route path="/services/book-for-others" element={<BookForOthersHubPage />} />
+          <Route path="/services/book-for-someone" element={<BookForSomeonePage />} />
+          <Route path="/services/courier" element={<CourierServicePage />} />
+          <Route path="/services/schedule" element={<ScheduleRidePage />} />
+          <Route path="/services/event" element={<EventBookingPage />} />
+          <Route path="/services/book-for-me" element={<BookForMePage />} />
+          <Route path="/services/roam-tag" element={<Navigate to="/services/book-for-me" replace />} />
+          <Route path="/account" element={<AccountPage />} />
+          <Route path="/account/gift-cards" element={<GiftCardsPage />} />
+          <Route path="/account/emergency-assistance" element={<EmergencyAssistancePage />} />
+          <Route path="/account/promo-codes" element={<PromoCodesPage />} />
+          <Route path="/account/support" element={<SupportCenterPage />} />
+          <Route path="/account/trusted-contacts" element={<Navigate to="/account/contacts/trusted" replace />} />
+          <Route path="/account/contacts" element={<ContactsHubPage />} />
+          <Route path="/account/contacts/roam" element={<ContactsPage />} />
+          <Route path="/account/contacts/trusted" element={<TrustedContactsPage />} />
+          <Route path="/account/contacts/trusted/add" element={<AddTrustedContactsPage />} />
+          <Route path="/account/contacts/groups" element={<ContactGroupsPage />} />
+          <Route path="/account/contacts/groups/:id" element={<ContactGroupDetailPage />} />
+          <Route path="/account/contacts/:id" element={<ContactDetailPage />} />
+          <Route path="/account/wallet" element={<WalletPage />} />
+          <Route path="/account/wallet/payment-methods" element={<ManagePaymentMethodsPage />} />
+          <Route path="/account/settings" element={<AppSettingsPage />} />
+          <Route path="/account/profile" element={<ProfilePage />} />
+        </Route>
+        <Route path="/ride/:id" element={<RidePage />} />
+        <Route path="/shadow-trip/:id/receipt" element={<ShadowTripReceiptPage />} />
+        <Route path="/shadow-trip/:id" element={<ShadowTripStatusPage />} />
       </Route>
-      <Route
-        path="/ride/:id"
-        element={session ? <RidePage /> : <Navigate to="/login" replace />}
-      />
-      <Route
-        path="/shadow-trip/:id/receipt"
-        element={session ? <ShadowTripReceiptPage /> : <Navigate to="/login" replace />}
-      />
-      <Route
-        path="/shadow-trip/:id"
-        element={session ? <ShadowTripStatusPage /> : <Navigate to="/login" replace />}
-      />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

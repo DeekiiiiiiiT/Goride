@@ -41,6 +41,7 @@ type Props = {
   cancelling?: boolean;
   canChat?: boolean;
   canCancel?: boolean;
+  participantRole?: 'booker' | 'passenger' | 'driver' | 'none' | null;
 };
 
 const DEFAULT_DRIVER_PHOTO =
@@ -109,6 +110,7 @@ export function LiveRideView({
   cancelling,
   canChat = false,
   canCancel = false,
+  participantRole,
 }: Props) {
   const [safetyOpen, setSafetyOpen] = useState(false);
   const headline = liveRideStatusHeadline(ride.status, ride);
@@ -132,7 +134,7 @@ export function LiveRideView({
   };
 
   return (
-    <RiderRideChatWrap ride={ride} groupChat={groupChat}>
+    <RiderRideChatWrap ride={ride} participantRole={participantRole} groupChat={groupChat}>
       {(openChat, { unreadCount }) => (
     <div className="live-ride-page">
       <header className="live-ride-topbar">
