@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { ArrowLeft, ChevronRight, Tag, UserPlus } from 'lucide-react';
 import { BookForOthersActiveTripBanner } from '@/components/book-for-others/BookForOthersActiveTripBanner';
 import { BookForOthersActivitySections } from '@/components/book-for-others/BookForOthersActivitySections';
@@ -54,7 +55,13 @@ function HubRow({
 
 export default function BookForOthersHubPage() {
   const navigate = useNavigate();
-  const { data, isLoading, isFetching } = useBookForOthersActivity();
+  const { data, isLoading, isFetching, error } = useBookForOthersActivity();
+
+  useEffect(() => {
+    if (error instanceof Error) {
+      toast.error(error.message);
+    }
+  }, [error]);
 
   const bookForSomeone = data?.book_for_someone ?? [];
   const bookForMe = data?.book_for_me ?? [];

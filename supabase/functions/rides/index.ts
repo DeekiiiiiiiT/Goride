@@ -474,8 +474,17 @@ async function handleTerminalRideLedgerAndSync(rideId: string): Promise<void> {
     await persistRideLedgerLinesForTerminalState(svc(), fresh);
     if (status === "completed") {
       await finalizeRideLedgerFields(svc(), rideId, fresh);
-      if (bookingRequestId && isDigitalRidePayment(fresh.payment_method)) {
-        await markBookingRequestConsumed(getRidesContactsDb, bookingRequestId, rideId);
+      if (bookingRequestId) {
+        const { db: contactsDb, tables: ct } = await getRidesContactsDb();
+        const { data: br } = await contactsDb.from(ct.booking_requests)
+          .select("status")
+          .eq("id", bookingRequestId)
+          .maybeSingle();
+        const intentStatus = br ? String(br.status) : "";
+        // Trip-intent rides (booked) always close; legacy tag links stay open for cash until digital pay.
+        if (intentStatus === "booked" || isDigitalRidePayment(fresh.payment_method)) {
+          await markBookingRequestConsumed(getRidesContactsDb, bookingRequestId, rideId);
+        }
       }
       if (fresh.roam_mode === "shadow_roam") {
         void notifyShadowBookerOfTripCompleted(pubSvc(), fresh).catch((e) =>

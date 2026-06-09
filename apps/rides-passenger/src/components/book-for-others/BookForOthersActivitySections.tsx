@@ -23,6 +23,7 @@ import {
   tripIntentWithdraw,
 } from '@/services/tripIntentEdge';
 import { OPEN_ROAM_LABEL, SHADOW_ROAM_LABEL } from '@/lib/tripIntentCopy';
+import { navigateToDelegatedRide } from '@/lib/delegatedRideNavigation';
 import {
   ERROR,
   ON_SURFACE,
@@ -399,16 +400,12 @@ export function BookForOthersActivitySections({
   }, [bookForSomeone, bookForMe, loading, userPickedTab]);
 
   const openSomeoneRide = (item: BookForOthersRideActivityItem) => {
-    if (item.roam_mode === 'shadow_roam') {
-      navigate(`/shadow-trip/${item.ride_id}`);
-      return;
-    }
-    navigate(`/ride/${item.ride_id}`);
+    navigateToDelegatedRide(navigate, item.ride_id, 'booker', item.roam_mode);
   };
 
   const openSomeoneIntent = (item: BookForOthersIntentActivityItem) => {
     if (item.status === 'booked' && item.ride_request_id) {
-      navigate(`/ride/${item.ride_request_id}`);
+      navigateToDelegatedRide(navigate, item.ride_request_id, 'booker', item.roam_mode);
       return;
     }
     if (item.status === 'claimed') {
@@ -475,13 +472,13 @@ export function BookForOthersActivitySections({
   const openMeItem = (item: BookForOthersMeActivityItem) => {
     if (item.kind === 'trip_intent') {
       if (item.status === 'booked' && item.ride_request_id && item.linked_ride_status !== 'cancelled') {
-        navigate(`/ride/${item.ride_request_id}`);
+        navigateToDelegatedRide(navigate, item.ride_request_id, 'passenger', item.roam_mode);
         return;
       }
       navigate('/services/book-for-me');
       return;
     }
-    navigate(`/ride/${item.ride_id}`);
+    navigateToDelegatedRide(navigate, item.ride_id, 'passenger', item.roam_mode);
   };
 
   const cancelMeIntent = async (item: BookForOthersIntentActivityItem) => {

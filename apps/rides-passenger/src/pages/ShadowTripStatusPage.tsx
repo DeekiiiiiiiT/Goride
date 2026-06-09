@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Loader2, CheckCircle2 } from 'lucide-react';
 import { ridesGetRequest } from '@/services/ridesEdge';
+import { delegatedRidePath, isShadowBookerTrip } from '@/lib/delegatedRideNavigation';
 import { ON_SURFACE, ON_SURFACE_VARIANT, PAGE_BG, PRIMARY, PRIMARY_CONTAINER } from '@/lib/passengerTheme';
 
 export default function ShadowTripStatusPage() {
@@ -9,6 +10,7 @@ export default function ShadowTripStatusPage() {
   const navigate = useNavigate();
   const [status, setStatus] = useState<string>('matching');
   const [passengerName, setPassengerName] = useState<string | null>(null);
+  const [authorized, setAuthorized] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -19,6 +21,15 @@ export default function ShadowTripStatusPage() {
       try {
         const res = await ridesGetRequest(id);
         if (cancelled) return;
+
+        const role = res.participant_role;
+        const roamMode = res.roam_mode ?? res.ride.roam_mode ?? null;
+        if (!isShadowBookerTrip(role, roamMode, res.booker_visibility)) {
+          navigate(delegatedRidePath(id, role, roamMode, res.booker_visibility), { replace: true });
+          return;
+        }
+
+        setAuthorized(true);
         setStatus(res.ride.status);
         setPassengerName(res.ride.guest_passenger_name ?? null);
         if (res.ride.status === 'completed') {
@@ -39,6 +50,14 @@ export default function ShadowTripStatusPage() {
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [id, navigate]);
+
+  if (!authorized) {
+    return (
+      <div className="flex min-h-[100dvh] items-center justify-center" style={{ backgroundColor: PAGE_BG }}>
+        <Loader2 className="h-10 w-10 animate-spin" style={{ color: PRIMARY }} />
+      </div>
+    );
+  }
 
   const done = status === 'completed';
   const label = passengerName ? `Trip for ${passengerName}` : 'Shadow trip';

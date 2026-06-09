@@ -32,6 +32,7 @@ import {
 import type { AssignedDriverSummaryDto } from '@roam/types/delegatedRide';
 import { useBookerTrackingOptional } from '@/contexts/BookerTrackingContext';
 import { persistMinimizedRide, readMinimizeExitPending, setMinimizeExitPending } from '@/lib/bookerTracking';
+import { isShadowBookerTrip, navigateToDelegatedRide } from '@/lib/delegatedRideNavigation';
 
 function statusLabel(s: RideRequestStatus): string {
   switch (s) {
@@ -225,11 +226,11 @@ export default function RidePage() {
 
   useEffect(() => {
     if (!data || !id) return;
-    const shadowBooker =
-      data.participant_role === 'booker' &&
-      (data.booker_visibility === 'shadow' || data.roam_mode === 'shadow_roam');
-    if (shadowBooker) {
-      navigate(`/shadow-trip/${id}`, { replace: true });
+    if (isShadowBookerTrip(data.participant_role, data.roam_mode ?? data.ride.roam_mode, data.booker_visibility)) {
+      navigateToDelegatedRide(navigate, id, data.participant_role, data.roam_mode ?? data.ride.roam_mode, {
+        replace: true,
+        bookerVisibility: data.booker_visibility,
+      });
     }
   }, [data, id, navigate]);
 

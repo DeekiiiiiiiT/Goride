@@ -158,6 +158,12 @@ export async function reconcileTripIntentWithRide(
   }
 
   if (linkedStatus === "completed" && status === "booked") {
+    const now = new Date().toISOString();
+    await contactsDb.from(table).update({
+      status: "consumed",
+      consumed_at: now,
+      updated_at: now,
+    }).eq("id", intentId).neq("status", "consumed");
     return null;
   }
 
@@ -312,7 +318,6 @@ export async function listTripIntentsTargetingBooker(
     queries.push(
       db.from(table).select("*")
         .eq("target_booker_phone_e164", normalizedPhone)
-        .eq("audience", "targeted")
         .in("status", [...openStatuses]),
     );
   }
@@ -328,31 +333,31 @@ export async function listTripIntentsTargetingBooker(
       const status = String(fresh.status);
       if (["cancelled", "expired", "consumed"].includes(status)) continue;
 
-      let row = fresh;
+      let resolved = fresh;
       if (rideSvc && ["claimed", "booked"].includes(status)) {
         const reconciled = await reconcileTripIntentWithRide(rideSvc, db, table, fresh);
         if (!reconciled || String(reconciled.status) === "cancelled") continue;
-        row = reconciled;
+        resolved = reconciled;
       }
 
-      const rowStatus = String(row.status);
-      const claimedByMe = String(row.claimed_by_user_id) === bookerUserId;
+      const rowStatus = String(resolved.status);
+      const claimedByMe = String(resolved.claimed_by_user_id) === bookerUserId;
 
       if (rowStatus === "booked" && claimedByMe) {
-        merged.set(String(row.id), row);
+        merged.set(String(resolved.id), resolved);
         continue;
       }
       if (rowStatus === "claimed" && claimedByMe) {
-        merged.set(String(row.id), row);
+        merged.set(String(resolved.id), resolved);
         continue;
       }
       if (rowStatus === "published" && openStatuses.includes(rowStatus as typeof openStatuses[number])) {
-        const directedPayer = Boolean(row.target_booker_user_id) || Boolean(row.target_booker_phone_e164);
-        if (String(row.audience) === "targeted" || directedPayer) {
-          const access = canBookerAccessIntent(row, bookerUserId, bookerPhone);
+        const directedPayer = Boolean(resolved.target_booker_user_id) || Boolean(resolved.target_booker_phone_e164);
+        if (String(resolved.audience) === "targeted" || directedPayer) {
+          const access = canBookerAccessIntent(resolved, bookerUserId, bookerPhone);
           if (!access.ok) continue;
         }
-        merged.set(String(row.id), row);
+        merged.set(String(resolved.id), resolved);
       }
     }
   }
@@ -745,7 +750,15 @@ export function registerTripIntentRoutes(app: Hono, deps: TripIntentDeps) {
     const gate = await requirePassenger(c);
     if (gate.response) return gate.response;
     const { db, tables: t } = await deps.getContactsDb();
-    const active = await findActiveForRequester(db, t.booking_requests, gate.user!.id);
+    let active = await findActiveForRequester(db, t.booking_requests, gate.user!.id);
+    if (active && deps.rideSvc && ["claimed", "booked"].includes(String(active.status))) {
+      active = await reconcileTripIntentWithRide(
+        deps.rideSvc(),
+        db,
+        t.booking_requests,
+        active,
+      );
+    }
     return c.json({ trip_intent: active ? mapTripIntentForRequester(active) : null });
   });
 

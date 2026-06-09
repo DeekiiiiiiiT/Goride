@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { ridesGetRequest } from '@/services/ridesEdge';
+import { delegatedRidePath, isShadowBookerTrip } from '@/lib/delegatedRideNavigation';
 import { formatFareMinor } from '@/services/tripIntentEdge';
 import { ON_SURFACE, ON_SURFACE_VARIANT, PAGE_BG, PRIMARY, SURFACE_LOWEST } from '@/lib/passengerTheme';
 
@@ -12,8 +13,18 @@ export default function ShadowTripReceiptPage() {
 
   useEffect(() => {
     if (!id) return;
-    void ridesGetRequest(id).then(setRide).catch(() => undefined);
-  }, [id]);
+    void ridesGetRequest(id)
+      .then((res) => {
+        const role = res.participant_role;
+        const roamMode = res.roam_mode ?? res.ride.roam_mode ?? null;
+        if (!isShadowBookerTrip(role, roamMode, res.booker_visibility)) {
+          navigate(delegatedRidePath(id, role, roamMode, res.booker_visibility), { replace: true });
+          return;
+        }
+        setRide(res);
+      })
+      .catch(() => undefined);
+  }, [id, navigate]);
 
   const r = ride?.ride;
 

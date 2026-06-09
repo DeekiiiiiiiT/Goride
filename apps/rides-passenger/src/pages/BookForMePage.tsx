@@ -183,22 +183,30 @@ export default function BookForMePage() {
   }, [intent?.status, intent?.book_by_at]);
 
   useEffect(() => {
-    if (intent?.status !== 'claimed') return;
+    if (intent?.status !== 'claimed' && intent?.status !== 'booked') return;
     const poll = window.setInterval(() => {
       void tripIntentGetMyActive().then((r) => {
         if (!r.trip_intent) {
           setIntent(null);
           setStep('mode');
+          void queryClient.invalidateQueries({ queryKey: ['book-for-others', 'activity'] });
+          return;
+        }
+        const { status } = r.trip_intent;
+        if (!['draft', 'published', 'claimed', 'booked'].includes(status)) {
+          setIntent(null);
+          setStep('mode');
+          void queryClient.invalidateQueries({ queryKey: ['book-for-others', 'activity'] });
           return;
         }
         setIntent(r.trip_intent);
-        if (!['claimed', 'booked'].includes(r.trip_intent.status)) {
+        if (!['claimed', 'booked'].includes(status)) {
           setStep('published');
         }
       }).catch(() => undefined);
     }, 15_000);
     return () => window.clearInterval(poll);
-  }, [intent?.status]);
+  }, [intent?.status, queryClient]);
 
   const bookCountdown = (() => {
     if (!intent?.book_by_at) return null;
@@ -253,11 +261,7 @@ export default function BookForMePage() {
       setIntent(res.trip_intent ?? { ...intent, status: 'booked', ride_request_id: res.ride.id });
       await queryClient.invalidateQueries({ queryKey: ['book-for-others', 'activity'] });
       toast.success('Ride booked — finding a driver');
-      if (res.roam_mode === 'shadow_roam') {
-        navigate(`/shadow-trip/${res.ride.id}`);
-      } else {
-        navigate(`/ride/${res.ride.id}`);
-      }
+      navigate(`/ride/${res.ride.id}`);
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Could not book ride';
       toast.error(message);
@@ -360,9 +364,6 @@ export default function BookForMePage() {
       }
 
       const published = (await tripIntentPublish(row.id)).trip_intent;
-      // #region agent log
-      fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b9f75'},body:JSON.stringify({sessionId:'5b9f75',location:'BookForMePage.tsx:handlePublish',message:'trip published',data:{intentId:published.id,audience:published.audience??null,targetBookerUserId:published.target_booker_user_id??null,effectiveAudience,targetTagUserId:targetTag?.user_id??null},timestamp:Date.now(),hypothesisId:'E'})}).catch(()=>{});
-      // #endregion
       setIntent(published);
       setAudience(published.audience ?? effectiveAudience);
       setStep('published');
