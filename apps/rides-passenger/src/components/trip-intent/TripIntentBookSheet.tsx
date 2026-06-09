@@ -53,7 +53,7 @@ export function TripIntentBookSheet({
   const fare = formatFareMinor(intent.fare_estimate_minor, intent.currency);
   const isShadow = intent.roam_mode === 'shadow_roam';
   const busy = accepting || rejecting;
-  const canAct = intent.can_fulfill && !busy;
+  const canAct = (intent.can_commit ?? intent.can_fulfill) && !busy;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 safe-x" role="dialog" aria-modal>
@@ -132,7 +132,7 @@ export function TripIntentBookSheet({
             )}
           </div>
 
-          {!intent.can_fulfill && intent.block_reason ? (
+          {!(intent.can_commit ?? intent.can_fulfill) && intent.block_reason ? (
             <p className="text-sm text-red-600" role="alert">
               {intent.block_reason === 'not_targeted'
                 ? 'This trip is for someone else.'
@@ -167,7 +167,7 @@ export function TripIntentBookSheet({
                 backgroundColor: PRIMARY,
                 color: ON_PRIMARY,
               }}
-              aria-label={isShadow ? 'Accept and pay for trip' : 'Accept and book trip'}
+              aria-label={isShadow ? 'Agree to pay for trip' : `Agree to pay ${fare}`}
             >
               {accepting ? (
                 <Loader2 className="h-7 w-7 animate-spin" aria-hidden />

@@ -50,6 +50,9 @@ function intentToActivityItem(
     intent_role: role,
     ride_request_id: row.ride_request_id ?? null,
     can_cancel: role === 'requester',
+    committed_at: row.committed_at ?? null,
+    book_by_at: row.book_by_at ?? null,
+    can_book: row.can_book ?? false,
   };
 }
 

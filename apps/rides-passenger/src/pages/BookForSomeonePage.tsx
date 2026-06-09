@@ -23,7 +23,6 @@ import { TRIP_INTENT_V2 } from '@/lib/tripIntentFlags';
 import {
   contactLookupIntent,
   roamTagLookupIntent,
-  tripIntentFulfill,
   tripIntentClaim,
   tripIntentGetBookerView,
   tripIntentReject,
@@ -119,29 +118,22 @@ export default function BookForSomeonePage() {
   const [rejecting, setRejecting] = useState(false);
 
   const openIntentSheet = (intent: TripIntentBookerViewDto | null | undefined): boolean => {
-    if (!TRIP_INTENT_V2 || !intent?.can_fulfill) return false;
+    const canCommit = intent?.can_commit ?? intent?.can_fulfill;
+    if (!TRIP_INTENT_V2 || !canCommit) return false;
     setPendingIntent(intent);
     setIntentSheetOpen(true);
     return true;
   };
 
-  const handleIntentFulfill = async (intent: TripIntentBookerViewDto) => {
+  const handleIntentCommit = async (intent: TripIntentBookerViewDto) => {
     setFulfilling(true);
     try {
-      await tripIntentClaim(intent.intent_id).catch(() => undefined);
-      const res = await tripIntentFulfill(intent.intent_id);
+      await tripIntentClaim(intent.intent_id);
       setIntentSheetOpen(false);
       setPendingIntent(null);
-      toast.success(
-        res.roam_mode === 'shadow_roam' ? 'Payment confirmed' : 'Ride booked — tracking now',
-      );
-      if (res.roam_mode === 'shadow_roam') {
-        navigate(`/shadow-trip/${res.ride.id}`);
-      } else {
-        navigate(`/ride/${res.ride.id}`);
-      }
+      toast.success('You agreed to pay for this trip');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not book trip');
+      toast.error(e instanceof Error ? e.message : 'Could not agree to pay');
     } finally {
       setFulfilling(false);
     }
@@ -1098,7 +1090,7 @@ export default function BookForSomeonePage() {
           setIntentSheetOpen(false);
           setPendingIntent(null);
         }}
-        onAccept={(intent) => void handleIntentFulfill(intent)}
+        onAccept={(intent) => void handleIntentCommit(intent)}
         onReject={(intent) => void handleIntentReject(intent)}
       />
 

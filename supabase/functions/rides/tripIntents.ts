@@ -16,8 +16,10 @@ import {
 } from "./tripIntentAccess.ts";
 import { isTripIntentV2Enabled } from "./tripIntentFlags.ts";
 import { linkBookingRequestToRide } from "./bookingRequests.ts";
+import { TRIP_INTENT_QUOTE_TTL_MS, verifyQuoteToken } from "./fare/quoteToken.ts";
 
 export const TRIP_INTENT_TTL_HOURS = 1;
+export const TRIP_INTENT_BOOK_WINDOW_MS = 15 * 60_000;
 
 const ACTIVE_REQUESTER_STATUSES = ["draft", "published", "claimed", "booked", "pending"] as const;
 const PUBLISHED_STATUSES = ["published", "claimed"] as const;
@@ -40,6 +42,7 @@ export type TripIntentDeps = {
     dropoff_lng: number;
     vehicle_option: string;
     userId: string;
+    quote_ttl_ms?: number;
   }) => Promise<{ quote_token: string; fare_estimate_minor: string; currency: string }>;
   fulfillIntent: (params: {
     bookerUserId: string;
@@ -61,10 +64,65 @@ async function expireIfNeeded(
   table: string,
   row: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  if (["expired", "consumed", "cancelled"].includes(String(row.status))) return row;
-  if (!row.expires_at || !isExpired(String(row.expires_at))) return row;
-  await db.from(table).update({ status: "expired", updated_at: new Date().toISOString() }).eq("id", row.id);
-  return { ...row, status: "expired" };
+  const status = String(row.status);
+  if (["expired", "consumed", "cancelled"].includes(status)) return row;
+
+  const now = new Date().toISOString();
+
+  if (status === "claimed" && row.book_by_at && isExpired(String(row.book_by_at))) {
+    await db.from(table).update({
+      status: "cancelled",
+      claimed_by_user_id: null,
+      updated_at: now,
+    }).eq("id", row.id);
+    return { ...row, status: "cancelled", claimed_by_user_id: null };
+  }
+
+  if (row.expires_at && isExpired(String(row.expires_at))) {
+    if (status === "claimed") return row;
+    await db.from(table).update({ status: "expired", updated_at: now }).eq("id", row.id);
+    return { ...row, status: "expired" };
+  }
+
+  return row;
+}
+
+async function quoteTripIntentRoute(
+  deps: TripIntentDeps,
+  row: Record<string, unknown>,
+  userId: string,
+): Promise<{ quote_token: string; fare_estimate_minor: string; currency: string } | null> {
+  const pickup_lat = Number(row.pickup_lat);
+  const pickup_lng = Number(row.pickup_lng);
+  const dropoff_lat = Number(row.dropoff_lat);
+  const dropoff_lng = Number(row.dropoff_lng);
+  if ([pickup_lat, pickup_lng, dropoff_lat, dropoff_lng].some((x) => Number.isNaN(x))) {
+    return null;
+  }
+  return deps.quoteIntent({
+    pickup_lat,
+    pickup_lng,
+    dropoff_lat,
+    dropoff_lng,
+    vehicle_option: String(row.vehicle_option ?? "uberx"),
+    userId,
+    quote_ttl_ms: TRIP_INTENT_QUOTE_TTL_MS,
+  });
+}
+
+function withinBookWindow(row: Record<string, unknown>): boolean {
+  const bookByAt = row.book_by_at ? String(row.book_by_at) : null;
+  return Boolean(bookByAt && !isExpired(bookByAt));
+}
+
+export function mapTripIntentForRequester(row: Record<string, unknown>): Record<string, unknown> {
+  const status = String(row.status);
+  return {
+    ...row,
+    committed_at: row.committed_at ?? null,
+    book_by_at: row.book_by_at ?? null,
+    can_book: status === "claimed" && withinBookWindow(row) && Boolean(row.claimed_by_user_id),
+  };
 }
 
 async function findActiveForRequester(
@@ -289,6 +347,9 @@ export function mapTripIntentHubItem(
     ride_request_id: row.ride_request_id != null ? String(row.ride_request_id) : null,
     linked_ride_status: row.linked_ride_status != null ? String(row.linked_ride_status) : null,
     can_cancel: row.can_cancel === true || role === "requester",
+    committed_at: row.committed_at != null ? String(row.committed_at) : null,
+    book_by_at: row.book_by_at != null ? String(row.book_by_at) : null,
+    can_book: role === "requester" && String(row.status) === "claimed" && withinBookWindow(row),
   };
 }
 
@@ -310,11 +371,16 @@ export async function buildTripIntentBookerView(
 ): Promise<Record<string, unknown>> {
   const roamMode = String(row.roam_mode ?? "open_roam") as RoamMode;
   const access = canBookerAccessIntent(row, bookerUserId, bookerPhone);
+  const status = String(row.status);
   const base = sanitizeTripIntentForBooker(row, roamMode);
   return {
     ...base,
     requester,
-    can_fulfill: access.ok && ["published", "claimed"].includes(String(row.status)),
+    committed_at: row.committed_at != null ? String(row.committed_at) : null,
+    book_by_at: row.book_by_at != null ? String(row.book_by_at) : null,
+    can_commit: access.ok && status === "published",
+    can_fulfill: false,
+    can_book: false,
     block_reason: access.ok ? null : access.reason ?? "unavailable",
   };
 }
@@ -509,6 +575,7 @@ export function registerTripIntentRoutes(app: Hono, deps: TripIntentDeps) {
       dropoff_lng,
       vehicle_option: vehicle,
       userId: gate.user!.id,
+      quote_ttl_ms: TRIP_INTENT_QUOTE_TTL_MS,
     });
 
     await db.from(t.booking_requests).update({
@@ -552,7 +619,7 @@ export function registerTripIntentRoutes(app: Hono, deps: TripIntentDeps) {
     if (gate.response) return gate.response;
     const { db, tables: t } = await deps.getContactsDb();
     const active = await findActiveForRequester(db, t.booking_requests, gate.user!.id);
-    return c.json({ trip_intent: active });
+    return c.json({ trip_intent: active ? mapTripIntentForRequester(active) : null });
   });
 
   app.get("/v1/trip-intents/me/targeting-me", async (c) => {
@@ -633,13 +700,28 @@ export function registerTripIntentRoutes(app: Hono, deps: TripIntentDeps) {
     const access = canBookerAccessIntent(row, gate.user!.id);
     if (!access.ok) return c.json({ error: access.reason ?? "forbidden" }, 403);
 
-    const now = new Date().toISOString();
+    const quote = await quoteTripIntentRoute(deps, row, gate.user!.id);
+    if (!quote) return c.json({ error: "route_required_for_quote" }, 400);
+
+    const committedAt = new Date();
+    const bookByAt = new Date(committedAt.getTime() + TRIP_INTENT_BOOK_WINDOW_MS);
+    const now = committedAt.toISOString();
     const { data: updated, error } = await db.from(t.booking_requests).update({
       status: "claimed",
       claimed_by_user_id: gate.user!.id,
+      committed_at: now,
+      book_by_at: bookByAt.toISOString(),
+      quote_token: quote.quote_token,
+      fare_estimate_minor: quote.fare_estimate_minor,
+      currency: quote.currency,
       updated_at: now,
     }).eq("id", id).eq("status", "published").select("*").single();
     if (error || !updated) return c.json({ error: "claim_failed" }, 409);
+
+    await deps.audit(null, gate.user!.id, "trip_intent_committed_by_booker", {
+      trip_intent_id: id,
+      book_by_at: bookByAt.toISOString(),
+    });
 
     const requester = await loadRequesterPublicProfile(
       db,
@@ -710,55 +792,100 @@ export function registerTripIntentRoutes(app: Hono, deps: TripIntentDeps) {
     return c.json({ ok: true, status: "cancelled" });
   });
 
-  app.post("/v1/trip-intents/:id/fulfill", async (c) => {
+  app.post("/v1/trip-intents/:id/book", async (c) => {
     const gate = await requirePassenger(c);
     if (gate.response) return gate.response;
     const id = c.req.param("id");
-    const body = await c.req.json().catch(() => ({}));
-    const paymentMethod = body.payment_method === "card" ? "card" : null;
-    if (paymentMethod !== "card") return c.json({ error: "digital_payment_required" }, 400);
-
     const { db, tables: t } = await deps.getContactsDb();
-    let { data: br } = await db.from(t.booking_requests).select("*").eq("id", id).maybeSingle();
+    const { data: br } = await db.from(t.booking_requests).select("*").eq("id", id).maybeSingle();
     if (!br) return c.json({ error: "not_found" }, 404);
+
     let row = await expireIfNeeded(db, t.booking_requests, br as Record<string, unknown>);
+    if (String(row.requester_user_id) !== gate.user!.id) {
+      return c.json({ error: "forbidden" }, 403);
+    }
 
-    if (String(row.status) === "published") {
-      const access = canBookerAccessIntent(row, gate.user!.id);
-      if (!access.ok) return c.json({ error: access.reason ?? "forbidden" }, 403);
+    const status = String(row.status);
+    if (status !== "claimed") {
+      return c.json({ error: "not_claimed", status }, 409);
+    }
+
+    if (!withinBookWindow(row)) {
       const now = new Date().toISOString();
-      const { data: claimed } = await db.from(t.booking_requests).update({
-        status: "claimed",
-        claimed_by_user_id: gate.user!.id,
+      await db.from(t.booking_requests).update({
+        status: "cancelled",
+        claimed_by_user_id: null,
         updated_at: now,
-      }).eq("id", id).eq("status", "published").select("*").single();
-      if (!claimed) return c.json({ error: "claim_failed" }, 409);
-      row = claimed as Record<string, unknown>;
+      }).eq("id", id);
+      return c.json({
+        error: "booking_window_expired",
+        message: "Booking window expired — publish your trip again",
+      }, 409);
     }
 
-    if (String(row.status) !== "claimed" || row.claimed_by_user_id !== gate.user!.id) {
-      return c.json({ error: "not_claimed_by_you" }, 403);
-    }
+    const claimedBy = row.claimed_by_user_id ? String(row.claimed_by_user_id) : null;
+    if (!claimedBy) return c.json({ error: "no_committed_payer" }, 409);
     if (!row.quote_token) return c.json({ error: "quote_required" }, 400);
 
-    const { ride } = await deps.fulfillIntent({
-      bookerUserId: gate.user!.id,
-      intent: row,
-      paymentMethod,
+    const pickup_lat = Number(row.pickup_lat);
+    const pickup_lng = Number(row.pickup_lng);
+    const dropoff_lat = Number(row.dropoff_lat);
+    const dropoff_lng = Number(row.dropoff_lng);
+    const vehicle_option = String(row.vehicle_option ?? "uberx");
+    const verified = await verifyQuoteToken(String(row.quote_token), {
+      pickup_lat,
+      pickup_lng,
+      dropoff_lat,
+      dropoff_lng,
+      vehicle_type: vehicle_option,
     });
 
-    await db.from(t.booking_requests).update({
+    if (!verified.ok) {
+      const now = new Date().toISOString();
+      await db.from(t.booking_requests).update({
+        status: "cancelled",
+        claimed_by_user_id: null,
+        updated_at: now,
+      }).eq("id", id);
+      return c.json({
+        error: "quote_expired_republish",
+        message: "Quote expired — publish again",
+      }, 409);
+    }
+
+    const { ride } = await deps.fulfillIntent({
+      bookerUserId: claimedBy,
+      intent: row,
+      paymentMethod: "card",
+    });
+
+    const { data: booked } = await db.from(t.booking_requests).update({
       status: "booked",
       ride_request_id: ride.id,
       updated_at: new Date().toISOString(),
-    }).eq("id", id);
+    }).eq("id", id).select("*").single();
     await linkBookingRequestToRide(deps.getContactsDb, id, String(ride.id));
+
+    await deps.audit(String(ride.id), gate.user!.id, "trip_intent_booked_by_requester", {
+      trip_intent_id: id,
+      payer_user_id: claimedBy,
+    });
 
     const roamMode = String(row.roam_mode ?? "open_roam") as RoamMode;
     return c.json({
       ride: { id: ride.id, status: ride.status, roam_mode: roamMode },
       roam_mode: roamMode,
+      trip_intent: booked ? mapTripIntentForRequester(booked as Record<string, unknown>) : null,
     });
+  });
+
+  app.post("/v1/trip-intents/:id/fulfill", async (c) => {
+    const gate = await requirePassenger(c);
+    if (gate.response) return gate.response;
+    return c.json({
+      error: "use_book_endpoint",
+      message: "Agree to pay first; the rider books the trip.",
+    }, 410);
   });
 
   app.get("/v1/roam-tag/:name/intent", async (c) => {

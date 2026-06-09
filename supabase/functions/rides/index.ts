@@ -2515,6 +2515,7 @@ registerTripIntentRoutes(app, {
       fareRulesDb: fareRulesAccess.db,
       fareRulesTable: fareRulesAccess.fareRulesTable,
       vehicleTypesTable: fareRulesAccess.vehicleTypesTable,
+      quoteTtlMs: params.quote_ttl_ms,
     });
     return {
       quote_token: quote.quoteToken,

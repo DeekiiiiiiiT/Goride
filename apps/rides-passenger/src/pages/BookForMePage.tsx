@@ -20,12 +20,14 @@ import {
 import {
   tripIntentCreate,
   tripIntentGetMyActive,
+  tripIntentBook,
   tripIntentPublish,
   tripIntentQuote,
   tripIntentUpdate,
   tripIntentWithdraw,
 } from '@/services/tripIntentEdge';
 import { buildGuestPhoneE164, formatGuestPhoneDisplay, isValidGuestPhone } from '@/lib/guestRecipientBooking';
+import { formatShortAddress } from '@/lib/formatRideAddress';
 import { formatFareMinor } from '@/services/tripIntentEdge';
 import {
   getCurrentPositionWithAccuracy,
@@ -72,6 +74,8 @@ export default function BookForMePage() {
   const [intent, setIntent] = useState<TripIntentRow | null>(null);
   const [loading, setLoading] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
+  const [booking, setBooking] = useState(false);
+  const [countdownTick, setCountdownTick] = useState(0);
   const [roamPickerOpen, setRoamPickerOpen] = useState(false);
   const [devicePickerOpen, setDevicePickerOpen] = useState(false);
   const [contacts, setContacts] = useState<RiderContactRow[]>([]);
@@ -120,6 +124,41 @@ export default function BookForMePage() {
     }).catch(() => undefined);
   }, []);
 
+  useEffect(() => {
+    if (intent?.status !== 'claimed' || !intent.book_by_at) return;
+    const id = window.setInterval(() => setCountdownTick((n) => n + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [intent?.status, intent?.book_by_at]);
+
+  useEffect(() => {
+    if (intent?.status !== 'claimed') return;
+    const poll = window.setInterval(() => {
+      void tripIntentGetMyActive().then((r) => {
+        if (!r.trip_intent) {
+          setIntent(null);
+          setStep('mode');
+          return;
+        }
+        setIntent(r.trip_intent);
+        if (!['claimed', 'booked'].includes(r.trip_intent.status)) {
+          setStep('published');
+        }
+      }).catch(() => undefined);
+    }, 15_000);
+    return () => window.clearInterval(poll);
+  }, [intent?.status]);
+
+  const bookCountdown = (() => {
+    if (!intent?.book_by_at) return null;
+    const ms = new Date(intent.book_by_at).getTime() - Date.now();
+    if (ms <= 0) return '0:00';
+    const totalSec = Math.floor(ms / 1000);
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    return `${min}:${sec.toString().padStart(2, '0')}`;
+  })();
+  void countdownTick;
+
   const handleWithdrawTrip = async () => {
     if (!intent?.id) return;
     setWithdrawing(true);
@@ -138,8 +177,8 @@ export default function BookForMePage() {
 
   const liveIntentHeadline = (status: TripIntentRow['status']) => {
     if (status === 'booked') return 'Finding a driver';
-    if (status === 'claimed') return 'Someone is booking your ride';
-    return 'Your trip is waiting for a booker';
+    if (status === 'claimed') return 'Payer agreed — book your ride';
+    return 'Your trip is waiting for a payer';
   };
 
   const liveIntentDetail = (status: TripIntentRow['status']) => {
@@ -147,9 +186,37 @@ export default function BookForMePage() {
       return 'Your booker paid — we are matching a driver. You can cancel below if plans changed.';
     }
     if (status === 'claimed') {
-      return 'A booker is completing payment. You can cancel if you no longer need the ride.';
+      return bookCountdown
+        ? `You have ${bookCountdown} left to book. Trip details are locked.`
+        : 'Book now — trip details are locked.';
     }
     return `Tell them to search ${displayTag ?? 'your tag'} in Roam`;
+  };
+
+  const handleBookTrip = async () => {
+    if (!intent?.id) return;
+    setBooking(true);
+    try {
+      const res = await tripIntentBook(intent.id);
+      setIntent(res.trip_intent ?? { ...intent, status: 'booked', ride_request_id: res.ride.id });
+      await queryClient.invalidateQueries({ queryKey: ['book-for-others', 'activity'] });
+      toast.success('Ride booked — finding a driver');
+      if (res.roam_mode === 'shadow_roam') {
+        navigate(`/shadow-trip/${res.ride.id}`);
+      } else {
+        navigate(`/ride/${res.ride.id}`);
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Could not book ride';
+      toast.error(message);
+      if (message.includes('publish again') || message.includes('Booking window')) {
+        setIntent(null);
+        setStep('mode');
+        await queryClient.invalidateQueries({ queryKey: ['book-for-others', 'activity'] });
+      }
+    } finally {
+      setBooking(false);
+    }
   };
 
   useEffect(() => {
@@ -289,9 +356,27 @@ export default function BookForMePage() {
             {intent.fare_estimate_minor ? (
               <p className="text-lg font-bold">{formatFareMinor(intent.fare_estimate_minor, intent.currency ?? 'JMD')}</p>
             ) : null}
+            {intent.status === 'claimed' && intent.pickup_address ? (
+              <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
+                {formatShortAddress(intent.pickup_address)}
+                {intent.dropoff_address ? ` → ${formatShortAddress(intent.dropoff_address)}` : ''}
+              </p>
+            ) : null}
             {intent.status === 'published' ? (
               <button type="button" onClick={() => void copyTag()} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl font-semibold" style={{ backgroundColor: PRIMARY, color: '#fff' }}>
                 <Copy className="h-4 w-4" /> Copy tag
+              </button>
+            ) : null}
+            {intent.status === 'claimed' && (intent.can_book !== false) ? (
+              <button
+                type="button"
+                disabled={booking || bookCountdown === '0:00'}
+                onClick={() => void handleBookTrip()}
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl font-semibold disabled:opacity-50"
+                style={{ backgroundColor: PRIMARY, color: '#fff' }}
+              >
+                {booking ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {booking ? 'Booking…' : 'Book ride'}
               </button>
             ) : null}
             {intent.status === 'booked' && intent.ride_request_id ? (
@@ -323,7 +408,7 @@ export default function BookForMePage() {
           </div>
         ) : null}
 
-        {step === 'mode' && (tagLocked || !tagLoading) ? (
+        {step === 'mode' && (tagLocked || !tagLoading) && intent?.status !== 'claimed' && intent?.status !== 'booked' ? (
           <div className="space-y-4">
             {tagLocked && displayTag ? (
               <p className="text-center text-sm" style={{ color: ON_SURFACE_VARIANT }}>
@@ -343,7 +428,7 @@ export default function BookForMePage() {
           </div>
         ) : null}
 
-        {step === 'trip' ? (
+        {step === 'trip' && intent?.status !== 'claimed' && intent?.status !== 'booked' ? (
           <div className="space-y-3 rounded-[24px] p-5" style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}>
             <div className="space-y-2">
               <RoamPlaceField
@@ -398,7 +483,7 @@ export default function BookForMePage() {
           </div>
         ) : null}
 
-        {step === 'payer' ? (
+        {step === 'payer' && intent?.status !== 'claimed' && intent?.status !== 'booked' ? (
           <div className="space-y-3 rounded-[24px] p-5" style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}>
             <p className="font-semibold">Who should pay?</p>
             {(['any_booker', 'targeted'] as const).map((a) => (

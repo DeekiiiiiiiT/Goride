@@ -206,6 +206,10 @@ export interface BookingRequestRow {
   fare_estimate_minor?: string | null;
   currency?: string | null;
   published_at?: string | null;
+  committed_at?: string | null;
+  book_by_at?: string | null;
+  /** Present on GET /me/active when requester can book. */
+  can_book?: boolean;
 }
 
 /** Trip intent row — same table as BookingRequestRow */
@@ -220,7 +224,13 @@ export interface TripIntentBookerViewDto {
   currency: string;
   has_route: boolean;
   expires_at: string;
+  committed_at?: string | null;
+  book_by_at?: string | null;
   can_fulfill: boolean;
+  /** Payer can agree to pay (commit) when published. */
+  can_commit?: boolean;
+  /** Requester can trigger ride booking when claimed and within book_by_at. */
+  can_book?: boolean;
   block_reason?: string | null;
   requester: BookingRequestRequesterPreview & {
     requester_name: string;
@@ -272,6 +282,10 @@ export interface FulfillTripIntentBody {
 export interface FulfillTripIntentResponse {
   ride: { id: string; status: string; roam_mode: RoamMode };
   roam_mode: RoamMode;
+}
+
+export interface BookTripIntentResponse extends FulfillTripIntentResponse {
+  trip_intent: TripIntentRow | null;
 }
 
 export interface BookingRequestRequesterPreview {
@@ -371,6 +385,10 @@ export interface BookForOthersIntentActivityItem {
   linked_ride_status?: string | null;
   /** Requester can cancel from the hub when true (default for live requester intents). */
   can_cancel?: boolean;
+  committed_at?: string | null;
+  book_by_at?: string | null;
+  /** Requester can book the ride when claimed and within book_by_at. */
+  can_book?: boolean;
 }
 
 export type BookForOthersMeActivityItem =

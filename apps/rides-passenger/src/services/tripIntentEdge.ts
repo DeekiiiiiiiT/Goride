@@ -2,6 +2,7 @@ import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
 import { supabase } from '@roam/auth-client';
 import type {
   BookForOthersIntentActivityItem,
+  BookTripIntentResponse,
   CreateTripIntentBody,
   FulfillTripIntentResponse,
   TripIntentBookerViewDto,
@@ -45,6 +46,20 @@ async function parseError(res: Response): Promise<never> {
     }
   }
   if (res.status === 409) {
+    try {
+      const body = JSON.parse(text) as { message?: string; error?: string };
+      if (body.error === 'quote_expired_republish') {
+        throw new Error(body.message ?? 'Quote expired — publish again');
+      }
+      if (body.error === 'booking_window_expired') {
+        throw new Error(body.message ?? 'Booking window expired — publish your trip again');
+      }
+      message = body.message ?? body.error ?? message;
+    } catch (e) {
+      if (e instanceof Error && (e.message.includes('Quote expired') || e.message.includes('Booking window'))) {
+        throw e;
+      }
+    }
     if (message === 'not_draft') {
       throw new Error('You already have a live trip on your tag. Withdraw it first, then publish again.');
     }
@@ -185,6 +200,16 @@ export async function tripIntentReject(id: string): Promise<{ ok: boolean; statu
   return res.json();
 }
 
+export async function tripIntentBook(id: string): Promise<BookTripIntentResponse> {
+  const res = await fetch(`${base}/v1/trip-intents/${id}/book`, {
+    method: 'POST',
+    headers: await headers(),
+  });
+  if (!res.ok) await parseError(res);
+  return res.json();
+}
+
+/** @deprecated Payer commits via tripIntentClaim; requester books via tripIntentBook. */
 export async function tripIntentFulfill(id: string): Promise<FulfillTripIntentResponse> {
   const res = await fetch(`${base}/v1/trip-intents/${id}/fulfill`, {
     method: 'POST',

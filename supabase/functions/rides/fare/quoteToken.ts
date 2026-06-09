@@ -3,6 +3,8 @@
 import type { FareBreakdown } from "./compute.ts";
 
 const QUOTE_TTL_MS = 10 * 60_000;
+/** Trip-intent commit/book window — aligned with book_by_at (15 min). */
+export const TRIP_INTENT_QUOTE_TTL_MS = 15 * 60_000;
 
 export interface QuotePayload {
   pickup_lat: number;
@@ -58,7 +60,10 @@ function decodePayload(encoded: string): QuotePayload | null {
   }
 }
 
-export async function mintQuoteToken(payload: Omit<QuotePayload, "expires_at">): Promise<string> {
+export async function mintQuoteToken(
+  payload: Omit<QuotePayload, "expires_at">,
+  ttlMs = QUOTE_TTL_MS,
+): Promise<string> {
   const sec = secret();
   const full: QuotePayload = {
     ...payload,
@@ -66,7 +71,7 @@ export async function mintQuoteToken(payload: Omit<QuotePayload, "expires_at">):
     pickup_lng: roundCoord(payload.pickup_lng),
     dropoff_lat: roundCoord(payload.dropoff_lat),
     dropoff_lng: roundCoord(payload.dropoff_lng),
-    expires_at: new Date(Date.now() + QUOTE_TTL_MS).toISOString(),
+    expires_at: new Date(Date.now() + ttlMs).toISOString(),
   };
   const body = encodePayload(full);
   if (!sec) return `unsigned.${body}`;

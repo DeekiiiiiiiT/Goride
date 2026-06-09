@@ -46,6 +46,8 @@ export async function buildFareQuote(
     fareRulesDb?: SupabaseClient;
     fareRulesTable?: string;
     vehicleTypesTable?: string;
+    /** Override quote token TTL (trip intents use 15 min). */
+    quoteTtlMs?: number;
   },
 ): Promise<BuiltFareQuote> {
   const vehicleType = params.vehicleType || "uberx";
@@ -93,7 +95,7 @@ export async function buildFareQuote(
     fare_estimate_minor: Number(fareMinor),
     currency: rules.currency,
     fare_breakdown: breakdown,
-  });
+  }, params.quoteTtlMs);
 
   const pickupEta = await resolvePickupEta(db, params.pickupLat, params.pickupLng, {
     allowedBodyTypeSlugs: params.allowedBodyTypeSlugs,

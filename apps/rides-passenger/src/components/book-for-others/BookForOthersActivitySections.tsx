@@ -18,7 +18,6 @@ import { formatShortAddress } from '@/lib/formatRideAddress';
 import {
   formatFareMinor,
   tripIntentClaim,
-  tripIntentFulfill,
   tripIntentGetBookerView,
   tripIntentReject,
   tripIntentWithdraw,
@@ -40,18 +39,31 @@ function rideStatusLabel(status: RideRequestStatus): string {
   return liveRideStatusHeadline(status, {} as RideRequestRow);
 }
 
-function intentStatusLabel(status: string, linkedRideStatus?: string | null): string {
+function formatBookCountdown(bookByAt: string | null | undefined): string | null {
+  if (!bookByAt) return null;
+  const ms = new Date(bookByAt).getTime() - Date.now();
+  if (ms <= 0) return '0:00';
+  const totalSec = Math.floor(ms / 1000);
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  return `${min}:${sec.toString().padStart(2, '0')}`;
+}
+
+function intentStatusLabel(status: string, linkedRideStatus?: string | null, bookByAt?: string | null): string {
   if (status === 'booked' && linkedRideStatus === 'cancelled') return 'Ride ended — cancel to remove';
   if (status === 'draft') return 'Finish setting up your trip';
-  if (status === 'published') return 'Waiting for someone to pay';
-  if (status === 'claimed') return 'Someone is booking your ride';
+  if (status === 'published') return 'Waiting for payer to agree';
+  if (status === 'claimed') {
+    const countdown = formatBookCountdown(bookByAt);
+    return countdown ? `Payer agreed — book within ${countdown}` : 'Payer agreed — book your ride';
+  }
   if (status === 'booked') return 'Finding a driver';
   return 'Trip request live';
 }
 
 function bookerIntentStatusLabel(status: string): string {
   if (status === 'published') return 'Requested you to pay';
-  if (status === 'claimed') return 'Ready for you to pay';
+  if (status === 'claimed') return 'Agreed — waiting for rider to book';
   if (status === 'booked') return 'Finding a driver';
   return 'Payment requested';
 }
@@ -194,7 +206,7 @@ function MeIntentRow({
     item.fare_estimate_minor && item.currency
       ? formatFareMinor(item.fare_estimate_minor, item.currency)
       : null;
-  const statusLine = intentStatusLabel(item.status, item.linked_ride_status);
+  const statusLine = intentStatusLabel(item.status, item.linked_ride_status, item.book_by_at);
   const subtitle = fare ? `${statusLine} · ${fare}` : statusLine;
   const showCancel = item.can_cancel !== false;
   const staleRide = item.linked_ride_status === 'cancelled';
@@ -357,6 +369,17 @@ export function BookForOthersActivitySections({
   const [intentLoading, setIntentLoading] = useState(false);
   const [fulfilling, setFulfilling] = useState(false);
   const [rejecting, setRejecting] = useState(false);
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    const hasClaimed = [...bookForSomeone, ...bookForMe].some(
+      (item) => item.kind === 'trip_intent' && item.status === 'claimed' && item.book_by_at,
+    );
+    if (!hasClaimed) return;
+    const id = window.setInterval(() => setTick((n) => n + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [bookForSomeone, bookForMe]);
+  void tick;
 
   useEffect(() => {
     if (userPickedTab || loading) return;
@@ -380,6 +403,10 @@ export function BookForOthersActivitySections({
       navigate(`/ride/${item.ride_request_id}`);
       return;
     }
+    if (item.status === 'claimed') {
+      toast.message('Waiting for the rider to book this trip');
+      return;
+    }
     if (!TRIP_INTENT_V2) {
       navigate('/services/book-for-someone', { state: { tripIntentId: item.intent_id } });
       return;
@@ -388,7 +415,8 @@ export function BookForOthersActivitySections({
     setIntentLoading(true);
     void tripIntentGetBookerView(item.intent_id)
       .then((res) => {
-        if (!res.trip_intent?.can_fulfill) {
+        const canCommit = res.trip_intent?.can_commit ?? res.trip_intent?.can_fulfill;
+        if (!canCommit) {
           toast.error('This trip is no longer available to pay for.');
           return;
         }
@@ -408,23 +436,15 @@ export function BookForOthersActivitySections({
     setPendingIntent(null);
   };
 
-  const handleIntentFulfill = async (intent: TripIntentBookerViewDto) => {
+  const handleIntentCommit = async (intent: TripIntentBookerViewDto) => {
     setFulfilling(true);
     try {
-      await tripIntentClaim(intent.intent_id).catch(() => undefined);
-      const res = await tripIntentFulfill(intent.intent_id);
+      await tripIntentClaim(intent.intent_id);
       closeIntentSheet();
       await queryClient.invalidateQueries({ queryKey: ['book-for-others', 'activity'] });
-      toast.success(
-        res.roam_mode === 'shadow_roam' ? 'Payment confirmed' : 'Ride booked — tracking now',
-      );
-      if (res.roam_mode === 'shadow_roam') {
-        navigate(`/shadow-trip/${res.ride.id}`);
-      } else {
-        navigate(`/ride/${res.ride.id}`);
-      }
+      toast.success('You agreed to pay for this trip');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Could not book trip');
+      toast.error(error instanceof Error ? error.message : 'Could not agree to pay');
     } finally {
       setFulfilling(false);
     }
@@ -549,7 +569,7 @@ export function BookForOthersActivitySections({
         accepting={fulfilling || intentLoading}
         rejecting={rejecting}
         onClose={closeIntentSheet}
-        onAccept={(intent) => void handleIntentFulfill(intent)}
+        onAccept={(intent) => void handleIntentCommit(intent)}
         onReject={(intent) => void handleIntentReject(intent)}
       />
     </section>
