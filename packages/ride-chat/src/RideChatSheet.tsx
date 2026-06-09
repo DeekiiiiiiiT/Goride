@@ -100,10 +100,10 @@ export function RideChatSheet({
           bottom: isDriver ? 'var(--driver-bottom-nav-total, 0px)' : 0,
           maxHeight: isDriver
             ? 'min(78dvh, calc(100dvh - var(--driver-bottom-nav-total, 4rem) - 1rem))'
-            : 'min(85dvh, 640px)',
+            : 'min(48dvh, 400px)',
           height: isDriver
             ? 'min(78dvh, calc(100dvh - var(--driver-bottom-nav-total, 4rem) - 1rem))'
-            : 'min(85dvh, 640px)',
+            : 'min(48dvh, 400px)',
         }}
         role="dialog"
         aria-labelledby="ride-chat-title"

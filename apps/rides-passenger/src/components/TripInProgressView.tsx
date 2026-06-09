@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  ArrowLeft,
+  ChevronDown,
   MapPin,
   MessageCircle,
   MoreVertical,
@@ -24,7 +24,7 @@ type Props = {
   ride: RideRequestRow;
   driverLocation: LatLng | null;
   driverHeading: number | null;
-  onBack: () => void;
+  onMinimize: () => void;
   canChat?: boolean;
   canCancel?: boolean;
 };
@@ -45,7 +45,7 @@ export function TripInProgressView({
   ride,
   driverLocation,
   driverHeading,
-  onBack,
+  onMinimize,
   canChat = false,
   canCancel = false,
 }: Props) {
@@ -68,8 +68,13 @@ export function TripInProgressView({
       {(openChat, { unreadCount }) => (
     <div className="trip-progress-page relative isolate flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden">
       <header className="trip-progress-header">
-        <button type="button" className="trip-progress-header__btn" onClick={onBack} aria-label="Go back">
-          <ArrowLeft className="size-6" strokeWidth={2} />
+        <button
+          type="button"
+          className="trip-progress-header__btn"
+          onClick={onMinimize}
+          aria-label="Minimize tracker"
+        >
+          <ChevronDown className="size-6" strokeWidth={2} />
         </button>
         <h1 className="trip-progress-header__brand">Roam</h1>
         <button

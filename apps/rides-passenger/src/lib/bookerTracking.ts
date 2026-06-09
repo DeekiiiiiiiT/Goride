@@ -30,6 +30,13 @@ import { liveRideStatusHeadline } from '@/components/LiveRideView';
 
 export const BOOKER_TRACKING_SESSION_KEY = 'roam:booker-tracking-minimized';
 
+export type MinimizedRideRole = 'booker' | 'passenger';
+
+export type MinimizedRideSession = {
+  rideId: string;
+  role: MinimizedRideRole;
+};
+
 export type BookerTrackingMode = 'full' | 'minimized' | 'off';
 
 export const TERMINAL_RIDE_STATUSES: RideRequestStatus[] = ['completed', 'cancelled'];
@@ -55,20 +62,45 @@ export function bookerChipStatusLabel(
   return liveRideStatusHeadline(status, (ride ?? {}) as RideRequestRow);
 }
 
-export function persistBookerMinimized(rideId: string): void {
+export function persistMinimizedRide(rideId: string, role: MinimizedRideRole): void {
   try {
-    sessionStorage.setItem(BOOKER_TRACKING_SESSION_KEY, rideId);
+    const payload: MinimizedRideSession = { rideId, role };
+    sessionStorage.setItem(BOOKER_TRACKING_SESSION_KEY, JSON.stringify(payload));
   } catch {
     /* ignore */
   }
 }
 
-export function readBookerMinimizedRideId(): string | null {
+/** @deprecated Use persistMinimizedRide — kept for call-site clarity. */
+export function persistBookerMinimized(rideId: string): void {
+  persistMinimizedRide(rideId, 'booker');
+}
+
+export function readMinimizedRideSession(): MinimizedRideSession | null {
   try {
-    return sessionStorage.getItem(BOOKER_TRACKING_SESSION_KEY);
+    const raw = sessionStorage.getItem(BOOKER_TRACKING_SESSION_KEY);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw) as MinimizedRideSession;
+      if (parsed?.rideId && (parsed.role === 'booker' || parsed.role === 'passenger')) {
+        return parsed;
+      }
+    } catch {
+      /* legacy: plain ride id string */
+    }
+    if (raw.length > 0) return { rideId: raw, role: 'booker' };
+    return null;
   } catch {
     return null;
   }
+}
+
+export function readBookerMinimizedRideId(): string | null {
+  return readMinimizedRideSession()?.rideId ?? null;
+}
+
+export function isMinimizedRideActive(): boolean {
+  return readMinimizedRideSession() != null;
 }
 
 export function clearBookerMinimized(): void {
@@ -77,6 +109,21 @@ export function clearBookerMinimized(): void {
   } catch {
     /* ignore */
   }
+}
+
+export function passengerChipStatusLabel(
+  status: RideRequestStatus,
+  ride?: Pick<RideRequestRow, 'eta_pickup_seconds_estimate' | 'duration_estimate_minutes'>,
+): string {
+  if (status === 'on_trip') {
+    const mins = ride?.duration_estimate_minutes;
+    if (mins != null && mins > 0) {
+      const rounded = Math.max(1, Math.round(mins));
+      return `Arriving in ${rounded} min${rounded === 1 ? '' : 's'}`;
+    }
+    return 'Trip in progress';
+  }
+  return bookerChipStatusLabel(status, ride);
 }
 
 export function parseRideIdFromPath(pathname: string): string | null {

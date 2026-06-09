@@ -2,10 +2,11 @@ import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ridesGetMyActiveRideSummary } from '@/services/ridesEdge';
+import { readMinimizedRideSession } from '@/lib/bookerTracking';
 
 /**
  * Auto-opens the live ride screen for delegated passengers only.
- * Bookers use BookerActiveTripChip — never auto-redirected.
+ * Skipped when the rider minimized the tracker — they can reopen from Active trips or the chip.
  */
 export function usePassengerActiveRideRedirect() {
   const navigate = useNavigate();
@@ -19,9 +20,12 @@ export function usePassengerActiveRideRedirect() {
 
     const check = async () => {
       if (document.visibilityState !== 'visible') return;
+      const minimized = readMinimizedRideSession();
+      if (minimized?.role === 'passenger') return;
       try {
         const { summary } = await ridesGetMyActiveRideSummary();
         if (cancelled || !summary?.ride_id || summary.participant_role !== 'passenger') return;
+        if (minimized?.rideId === summary.ride_id) return;
         if (promptedRideId.current === summary.ride_id) return;
 
         promptedRideId.current = summary.ride_id;

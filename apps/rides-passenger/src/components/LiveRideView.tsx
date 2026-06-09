@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
-  ArrowLeft,
   ArrowLeftRight,
+  ChevronDown,
   Loader2,
   MapPin,
   MessageCircle,
@@ -35,7 +35,7 @@ type Props = {
   pinEnabled?: boolean;
   waitTime: WaitTimeInfo | null | undefined;
   isFetching?: boolean;
-  onBack: () => void;
+  onMinimize: () => void;
   onCancelTrip: () => void;
   onRetryPin?: () => void;
   cancelling?: boolean;
@@ -103,7 +103,7 @@ export function LiveRideView({
   pinEnabled = false,
   waitTime,
   isFetching,
-  onBack,
+  onMinimize,
   onCancelTrip,
   onRetryPin,
   cancelling,
@@ -136,8 +136,13 @@ export function LiveRideView({
       {(openChat, { unreadCount }) => (
     <div className="live-ride-page">
       <header className="live-ride-topbar">
-        <button type="button" className="live-ride-topbar__btn" onClick={onBack} aria-label="Go back">
-          <ArrowLeft className="size-6" strokeWidth={2} />
+        <button
+          type="button"
+          className="live-ride-topbar__btn"
+          onClick={onMinimize}
+          aria-label="Minimize tracker"
+        >
+          <ChevronDown className="size-6" strokeWidth={2} />
         </button>
         <h1 className="live-ride-topbar__brand">Roam</h1>
         <button

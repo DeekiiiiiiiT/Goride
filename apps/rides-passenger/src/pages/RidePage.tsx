@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ArrowLeft, Loader2, Clock, Share2 } from 'lucide-react';
+import { ChevronDown, Loader2, Clock, Share2 } from 'lucide-react';
 import type { RideRequestStatus, RideRequestRow } from '@roam/types/rides';
 import {
   AlertDialog,
@@ -30,6 +30,7 @@ import {
   readRiderRideCache,
 } from '@/utils/riderActiveRideSession';
 import { useBookerTrackingOptional } from '@/contexts/BookerTrackingContext';
+import { persistMinimizedRide } from '@/lib/bookerTracking';
 
 function statusLabel(s: RideRequestStatus): string {
   switch (s) {
@@ -383,18 +384,18 @@ export default function RidePage() {
     }
   };
 
-  const handleBack = () => {
-    if (!ride || !canCancel) {
-      navigate('/');
+  const handleMinimize = (role: 'booker' | 'passenger') => {
+    if (!id) return;
+    if (bookerTracking) {
+      bookerTracking.minimize(id, role);
       return;
     }
-    setLeaveDialogOpen(true);
+    persistMinimizedRide(id, role);
+    navigate('/', { replace: false });
   };
 
-  const handleBookerMinimize = () => {
-    if (!id) return;
-    bookerTracking?.minimize(id);
-  };
+  const handleBookerMinimize = () => handleMinimize('booker');
+  const handlePassengerMinimize = () => handleMinimize('passenger');
 
   if (!id) return null;
 
@@ -450,7 +451,7 @@ export default function RidePage() {
           ride={ride}
           driverLocation={driverLocation}
           driverHeading={liveData?.driver_location?.heading ?? ride.last_driver_heading ?? null}
-          onBack={() => navigate('/')}
+          onMinimize={handlePassengerMinimize}
           canChat={canChat}
           canCancel={canCancel}
         />
@@ -503,7 +504,7 @@ export default function RidePage() {
           pinEnabled={pinEnabled}
           waitTime={waitTime}
           isFetching={isFetching}
-          onBack={handleBack}
+          onMinimize={handlePassengerMinimize}
           onCancelTrip={() => setCancelDialogOpen(true)}
           onRetryPin={() => void refetch()}
           cancelling={cancelling}
@@ -514,11 +515,12 @@ export default function RidePage() {
         <RidePageDialogs
           cancelDialogOpen={cancelDialogOpen}
           setCancelDialogOpen={setCancelDialogOpen}
-          leaveDialogOpen={leaveDialogOpen}
+          leaveDialogOpen={false}
           setLeaveDialogOpen={setLeaveDialogOpen}
           cancelling={cancelling}
           cancelCopy={getCancelCopy(ride.status)}
           onConfirmCancel={() => void performCancel()}
+          showLeaveDialog={false}
         />
       </>
     );
@@ -564,11 +566,11 @@ export default function RidePage() {
         <div className="max-w-lg mx-auto safe-x px-4 py-3 flex items-center gap-2">
           <button
             type="button"
-            onClick={handleBack}
+            onClick={handlePassengerMinimize}
             className="btn-touch inline-flex items-center justify-center rounded-2xl border border-zinc-200 bg-white px-3 hover:bg-zinc-50 touch-manipulation active:scale-[0.98]"
-            aria-label="Back to home"
+            aria-label="Minimize tracker"
           >
-            <ArrowLeft className="w-5 h-5 text-zinc-800" />
+            <ChevronDown className="w-5 h-5 text-zinc-800" />
           </button>
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-zinc-900 truncate">Live ride</p>
@@ -663,11 +665,12 @@ export default function RidePage() {
       <RidePageDialogs
         cancelDialogOpen={cancelDialogOpen}
         setCancelDialogOpen={setCancelDialogOpen}
-        leaveDialogOpen={leaveDialogOpen}
+        leaveDialogOpen={false}
         setLeaveDialogOpen={setLeaveDialogOpen}
         cancelling={cancelling}
         cancelCopy={cancelCopy}
         onConfirmCancel={() => void performCancel()}
+        showLeaveDialog={false}
       />
     </div>
   );

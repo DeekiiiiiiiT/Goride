@@ -13,18 +13,21 @@ import type { ActiveRideSummaryDto } from '@roam/types/rides';
 import { useBookerActiveRideSummary } from '@/hooks/useBookerActiveRideSummary';
 import {
   type BookerTrackingMode,
+  type MinimizedRideRole,
+  type MinimizedRideSession,
   clearBookerMinimized,
   parseRideIdFromPath,
-  persistBookerMinimized,
-  readBookerMinimizedRideId,
+  persistMinimizedRide,
+  readMinimizedRideSession,
 } from '@/lib/bookerTracking';
 
 type BookerTrackingContextValue = {
   mode: BookerTrackingMode;
   minimizedRideId: string | null;
+  minimizedRole: MinimizedRideRole | null;
   summary: ActiveRideSummaryDto | null;
   summaryLoading: boolean;
-  minimize: (rideId: string) => void;
+  minimize: (rideId: string, role: MinimizedRideRole) => void;
   openFull: (rideId: string) => void;
   clear: () => void;
   refreshSummary: () => Promise<void>;
@@ -36,10 +39,12 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const queryClient = useQueryClient();
-  const [minimizedRideId, setMinimizedRideId] = useState<string | null>(() =>
-    readBookerMinimizedRideId(),
+  const [minimizedSession, setMinimizedSession] = useState<MinimizedRideSession | null>(() =>
+    readMinimizedRideSession(),
   );
 
+  const minimizedRideId = minimizedSession?.rideId ?? null;
+  const minimizedRole = minimizedSession?.role ?? null;
   const rideIdFromPath = parseRideIdFromPath(pathname);
 
   const mode: BookerTrackingMode = useMemo(() => {
@@ -56,16 +61,19 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
   }, [rideIdFromPath, minimizedRideId]);
 
   const handleTerminal = useCallback(
-    (name: string | null) => {
-      if (minimizedRideId) {
+    (name: string | null, role: MinimizedRideRole) => {
+      if (!minimizedRideId) return;
+      if (role === 'booker') {
         toast.message(name ? `Ride for ${name} ended` : 'Your booked ride ended');
+      } else {
+        toast.message('Your ride ended');
       }
     },
     [minimizedRideId],
   );
 
   const handleClearMinimized = useCallback(() => {
-    setMinimizedRideId(null);
+    setMinimizedSession(null);
   }, []);
 
   const {
@@ -76,14 +84,15 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
   } = useBookerActiveRideSummary({
     mode,
     minimizedRideId,
+    minimizedRole,
     onTerminal: handleTerminal,
     onClearMinimized: handleClearMinimized,
   });
 
   const minimize = useCallback(
-    (rideId: string) => {
-      persistBookerMinimized(rideId);
-      setMinimizedRideId(rideId);
+    (rideId: string, role: MinimizedRideRole) => {
+      persistMinimizedRide(rideId, role);
+      setMinimizedSession({ rideId, role });
       void queryClient.cancelQueries({ queryKey: ['ride', rideId] });
       void queryClient.cancelQueries({ queryKey: ['ride-live', rideId] });
       navigate('/', { replace: false });
@@ -95,7 +104,7 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
   const openFull = useCallback(
     (rideId: string) => {
       clearBookerMinimized();
-      setMinimizedRideId(null);
+      setMinimizedSession(null);
       navigate(`/ride/${rideId}`);
     },
     [navigate],
@@ -103,14 +112,14 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
 
   const clear = useCallback(() => {
     clearBookerMinimized();
-    setMinimizedRideId(null);
+    setMinimizedSession(null);
     clearSummary();
   }, [clearSummary]);
 
   useEffect(() => {
     if (rideIdFromPath && minimizedRideId === rideIdFromPath) {
       clearBookerMinimized();
-      setMinimizedRideId(null);
+      setMinimizedSession(null);
     }
   }, [rideIdFromPath, minimizedRideId]);
 
@@ -118,6 +127,7 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
     () => ({
       mode,
       minimizedRideId,
+      minimizedRole,
       summary,
       summaryLoading,
       minimize,
@@ -125,7 +135,17 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
       clear,
       refreshSummary,
     }),
-    [mode, minimizedRideId, summary, summaryLoading, minimize, openFull, clear, refreshSummary],
+    [
+      mode,
+      minimizedRideId,
+      minimizedRole,
+      summary,
+      summaryLoading,
+      minimize,
+      openFull,
+      clear,
+      refreshSummary,
+    ],
   );
 
   return (
