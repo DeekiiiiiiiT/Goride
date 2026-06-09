@@ -13,7 +13,7 @@ type Props = {
   iconBg: string;
   iconColor: string;
   title: string;
-  description: string;
+  description?: string;
   disabled?: boolean;
 };
 
@@ -43,9 +43,11 @@ export function SafetyPreferenceToggle({
           <p className="font-semibold" style={{ color: ON_SURFACE }}>
             {title}
           </p>
-          <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-            {description}
-          </p>
+          {description ? (
+            <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
+              {description}
+            </p>
+          ) : null}
         </div>
       </div>
       <button

@@ -45,6 +45,20 @@ async function parseError(res: Response): Promise<never> {
       );
     }
   }
+  if (res.status === 400) {
+    try {
+      const body = JSON.parse(text) as { message?: string; error?: string };
+      if (body.error === 'target_booker_not_found' || body.error === 'target_booker_required') {
+        throw new Error(body.message ?? 'That person needs a Roam account before they can pay for your trip.');
+      }
+      if (body.error === 'cannot_target_self') {
+        throw new Error(body.message ?? 'You cannot publish a trip for yourself to pay.');
+      }
+      message = body.message ?? body.error ?? message;
+    } catch (e) {
+      if (e instanceof Error && e.message.includes('Roam account')) throw e;
+    }
+  }
   if (res.status === 409) {
     try {
       const body = JSON.parse(text) as { message?: string; error?: string };

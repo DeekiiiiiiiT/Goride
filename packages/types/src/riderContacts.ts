@@ -82,6 +82,8 @@ export interface RiderContactRow {
   relation_custom: string | null;
   source: RiderContactSource;
   linked_user_id: string | null;
+  /** True when phone resolves to a Roam passenger account (linked_user_id set). */
+  roam_account_linked?: boolean;
   bookable: boolean;
   trusted_for_safety: boolean;
   last_shared_at?: string | null;
@@ -263,6 +265,8 @@ export interface CreateTripIntentBody {
 export interface UpdateTripIntentBody {
   roam_mode?: RoamMode;
   audience?: TripIntentAudience;
+  /** Owner's Roam contact — server resolves linked Roam account from phone. */
+  target_contact_id?: string | null;
   target_booker_user_id?: string | null;
   target_booker_phone_e164?: string | null;
   pickup_lat?: number;

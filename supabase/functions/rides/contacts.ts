@@ -13,6 +13,11 @@ import {
 } from "./contactGroupHelpers.ts";
 import { isTripIntentV2Enabled } from "./tripIntentFlags.ts";
 import { loadActiveTripIntentSummary } from "./tripIntents.ts";
+import {
+  maybeRelinkContactRow,
+  resolveContactRoamLink,
+  withRoamLinkFlag,
+} from "./contactRoamLink.ts";
 
 const VALID_RELATIONS = new Set([
   "father", "mother", "sibling", "spouse", "friend", "colleague", "other",
@@ -103,16 +108,17 @@ async function enrichContact(
   tables: RidesContactsTables,
   row: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  const id = row.id as string;
+  const linkedRow = await maybeRelinkContactRow(db, tables, row);
+  const id = linkedRow.id as string;
   const [groups, places, intentSummary] = await Promise.all([
     loadContactGroupsForContact(db, tables, id),
     loadPlacesForContact(db, tables, id),
-    isTripIntentV2Enabled() && row.linked_user_id
-      ? loadActiveTripIntentSummary(db, tables.booking_requests, String(row.linked_user_id))
+    isTripIntentV2Enabled() && linkedRow.linked_user_id
+      ? loadActiveTripIntentSummary(db, tables.booking_requests, String(linkedRow.linked_user_id))
       : Promise.resolve(null),
   ]);
   return {
-    ...row,
+    ...withRoamLinkFlag(linkedRow),
     groups,
     places,
     ...(intentSummary ? { active_trip_intent_summary: intentSummary } : {}),
@@ -195,12 +201,13 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
     const relationCustom = typeof body.relation_custom === "string" ? body.relation_custom.trim() : null;
     const relErr = validateRelation(relation, relationCustom);
     if (relErr) return c.json({ error: relErr }, 400);
-    const linkedUserId = typeof body.linked_user_id === "string" && body.linked_user_id.trim()
+    const explicitLinked = typeof body.linked_user_id === "string" && body.linked_user_id.trim()
       ? body.linked_user_id.trim()
       : null;
-    const source = linkedUserId
-      ? "roam_user"
-      : (typeof body.source === "string" ? body.source : "manual");
+    const fallbackSource = typeof body.source === "string" ? body.source : "manual";
+    const link = await resolveContactRoamLink(phoneRaw, explicitLinked, fallbackSource);
+    const linkedUserId = link.linked_user_id;
+    const source = link.source;
 
     const { db, tables: t } = await deps.getContactsDb();
 
@@ -222,7 +229,7 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
     const insertRow = {
       owner_user_id: gate.user!.id,
       display_name: displayName,
-      phone_e164: normalizePhoneE164(phoneRaw),
+      phone_e164: link.phone_e164,
       relation,
       relation_custom: relation === "other" ? relationCustom : null,
       source,
@@ -267,7 +274,8 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
         skipped++;
         continue;
       }
-      const phoneE164 = normalizePhoneE164(phoneRaw);
+      const link = await resolveContactRoamLink(phoneRaw, null, "device_import");
+      const phoneE164 = link.phone_e164;
       const { data: existing } = await db.from(t.rider_contacts).select("id")
         .eq("owner_user_id", gate.user!.id)
         .eq("phone_e164", phoneE164)
@@ -276,7 +284,8 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
       if (existing?.id) {
         const { data, error } = await db.from(t.rider_contacts).update({
           display_name: displayName,
-          source: "device_import",
+          source: link.roam_account_linked ? "roam_user" : "device_import",
+          linked_user_id: link.linked_user_id,
           bookable: true,
           updated_at: new Date().toISOString(),
         }).eq("id", existing.id).select("*").single();
@@ -296,7 +305,8 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
         phone_e164: phoneE164,
         relation,
         relation_custom: relation === "other" ? relationCustom : null,
-        source: "device_import",
+        source: link.roam_account_linked ? "roam_user" : "device_import",
+        linked_user_id: link.linked_user_id,
         bookable: true,
         updated_at: new Date().toISOString(),
       }).select("*").single();
@@ -343,7 +353,21 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
 
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (typeof body.display_name === "string") patch.display_name = body.display_name.trim();
-    if (typeof body.phone_e164 === "string") patch.phone_e164 = normalizePhoneE164(body.phone_e164);
+    const phoneChanging = typeof body.phone_e164 === "string";
+    if (phoneChanging) patch.phone_e164 = normalizePhoneE164(body.phone_e164);
+    if (typeof body.linked_user_id === "string" && body.linked_user_id.trim()) {
+      patch.linked_user_id = body.linked_user_id.trim();
+      patch.source = "roam_user";
+    } else if (phoneChanging) {
+      const link = await resolveContactRoamLink(
+        String(body.phone_e164),
+        null,
+        String(existing.source ?? "manual"),
+      );
+      patch.linked_user_id = link.linked_user_id;
+      patch.source = link.roam_account_linked ? "roam_user" : existing.source;
+      patch.phone_e164 = link.phone_e164;
+    }
     if (typeof body.relation === "string") patch.relation = body.relation;
     if (body.relation_custom !== undefined) {
       patch.relation_custom = typeof body.relation_custom === "string" ? body.relation_custom.trim() : null;

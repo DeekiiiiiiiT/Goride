@@ -17,6 +17,7 @@ import {
   SURFACE_LOWEST,
 } from '@/lib/passengerTheme';
 import { DeviceContactsPickerSheet } from '@/components/contacts/DeviceContactsPickerSheet';
+import { DeviceContactImportConfirmSheet } from '@/components/contacts/DeviceContactImportConfirmSheet';
 import { AddRoamTagContactSheet } from '@/components/contacts/AddRoamTagContactSheet';
 import {
   canUseBrowserContactPicker,
@@ -24,6 +25,10 @@ import {
   importDeviceContactSelection,
   pickDeviceContactsFromBrowser,
 } from '@/utils/deviceContactsImport';
+import {
+  previewDeviceContactsOnRoam,
+  type DeviceContactRoamPreview,
+} from '@/utils/deviceContactRoamPreview';
 
 export default function ContactsPage() {
   const navigate = useNavigate();
@@ -35,6 +40,9 @@ export default function ContactsPage() {
   const [devicePickerOpen, setDevicePickerOpen] = useState(false);
   const [roamTagSheetOpen, setRoamTagSheetOpen] = useState(false);
   const [groupFilterId, setGroupFilterId] = useState<string | null>(null);
+  const [browserConfirmOpen, setBrowserConfirmOpen] = useState(false);
+  const [browserConfirmLoading, setBrowserConfirmLoading] = useState(false);
+  const [browserConfirmPreviews, setBrowserConfirmPreviews] = useState<DeviceContactRoamPreview[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -109,7 +117,27 @@ export default function ContactsPage() {
         toast.message('No contact selected.');
         return;
       }
-      const result = await importDeviceContactSelection(picked);
+      setBrowserConfirmOpen(true);
+      setBrowserConfirmLoading(true);
+      setBrowserConfirmPreviews([]);
+      const previews = await previewDeviceContactsOnRoam(picked);
+      setBrowserConfirmPreviews(previews);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Import failed');
+      setBrowserConfirmOpen(false);
+    } finally {
+      setBrowserConfirmLoading(false);
+      setImporting(false);
+    }
+  };
+
+  const handleBrowserConfirmImport = async () => {
+    const toImport = browserConfirmPreviews.filter((p) => p.found).map((p) => p.device);
+    if (!toImport.length) return;
+    setImporting(true);
+    try {
+      const result = await importDeviceContactSelection(toImport);
+      setBrowserConfirmOpen(false);
       await handleDeviceImportResult(result);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Import failed');
@@ -269,6 +297,19 @@ export default function ContactsPage() {
           toast.success('Contact added to Roam Contacts');
           void load();
         }}
+      />
+
+      <DeviceContactImportConfirmSheet
+        open={browserConfirmOpen}
+        loading={browserConfirmLoading}
+        previews={browserConfirmPreviews}
+        submitting={importing && !browserConfirmLoading}
+        onBack={() => {
+          if (importing) return;
+          setBrowserConfirmOpen(false);
+          setBrowserConfirmPreviews([]);
+        }}
+        onConfirm={() => void handleBrowserConfirmImport()}
       />
     </div>
   );

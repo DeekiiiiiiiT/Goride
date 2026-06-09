@@ -6,6 +6,11 @@ import {
   type DeviceContactOption,
 } from '@/utils/deviceContactsImport';
 import {
+  previewDeviceContactsOnRoam,
+  type DeviceContactRoamPreview,
+} from '@/utils/deviceContactRoamPreview';
+import { DeviceContactImportConfirmSheet } from '@/components/contacts/DeviceContactImportConfirmSheet';
+import {
   ON_SURFACE,
   ON_SURFACE_VARIANT,
   PAGE_BG,
@@ -36,6 +41,9 @@ export function DeviceContactsPickerSheet({ open, onClose, onImported }: Props) 
   const [query, setQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmLoading, setConfirmLoading] = useState(false);
+  const [confirmPreviews, setConfirmPreviews] = useState<DeviceContactRoamPreview[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -83,9 +91,27 @@ export function DeviceContactsPickerSheet({ open, onClose, onImported }: Props) 
   const handleAdd = async () => {
     const selected = contacts.filter((c) => selectedIds.has(c.deviceId));
     if (!selected.length) return;
+    setConfirmOpen(true);
+    setConfirmLoading(true);
+    setConfirmPreviews([]);
+    try {
+      const previews = await previewDeviceContactsOnRoam(selected);
+      setConfirmPreviews(previews);
+    } catch (e) {
+      setConfirmOpen(false);
+      setError(e instanceof Error ? e.message : 'Could not verify Roam account');
+    } finally {
+      setConfirmLoading(false);
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    const toImport = confirmPreviews.filter((p) => p.found).map((p) => p.device);
+    if (!toImport.length) return;
     setSubmitting(true);
     try {
-      const result = await importDeviceContactSelection(selected);
+      const result = await importDeviceContactSelection(toImport);
+      setConfirmOpen(false);
       onImported(result);
       onClose();
     } catch (e) {
@@ -93,6 +119,12 @@ export function DeviceContactsPickerSheet({ open, onClose, onImported }: Props) 
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const closeConfirm = () => {
+    if (submitting) return;
+    setConfirmOpen(false);
+    setConfirmPreviews([]);
   };
 
   if (!open) return null;
@@ -219,19 +251,28 @@ export function DeviceContactsPickerSheet({ open, onClose, onImported }: Props) 
           ) : null}
           <button
             type="button"
-            disabled={submitting || selectedCount === 0}
+            disabled={submitting || confirmLoading || selectedCount === 0}
             onClick={() => void handleAdd()}
             className="flex h-12 w-full items-center justify-center rounded-2xl text-base font-semibold disabled:opacity-50"
             style={{ backgroundColor: PRIMARY, color: '#fff' }}
           >
-            {submitting
-              ? 'Adding…'
+            {submitting || confirmLoading
+              ? 'Checking…'
               : selectedCount === 0
                 ? 'Select contacts to add'
                 : `Add ${selectedCount} contact${selectedCount === 1 ? '' : 's'}`}
           </button>
         </div>
       </div>
+
+      <DeviceContactImportConfirmSheet
+        open={confirmOpen}
+        loading={confirmLoading}
+        previews={confirmPreviews}
+        submitting={submitting}
+        onBack={closeConfirm}
+        onConfirm={() => void handleConfirmImport()}
+      />
     </div>
   );
 }

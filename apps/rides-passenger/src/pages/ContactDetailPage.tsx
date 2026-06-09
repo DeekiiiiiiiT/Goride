@@ -1,13 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { ArrowLeft, MapPin, Shield, Trash2 } from 'lucide-react';
-import type { RiderContactRow } from '@roam/types/riderContacts';
+import { ArrowLeft, Shield } from 'lucide-react';
 import {
-  contactGroupCreate,
   contactGroupsList,
-  contactPlaceCreate,
-  contactPlaceDelete,
   contactsCreate,
   contactsDelete,
   contactsGet,
@@ -17,7 +13,6 @@ import {
 import { ContactGroupPicker } from '@/components/contacts/ContactGroupPicker';
 import { SafetyPreferenceToggle } from '@/components/trusted-contacts/SafetyPreferenceToggle';
 import { MAX_TRUSTED_CONTACTS } from '@/services/trustedContactsEdge';
-import { RoamPlaceField } from '@/components/RoamPlaceField';
 import {
   buildGuestPhoneE164,
   formatGuestPhoneDisplay,
@@ -33,7 +28,6 @@ import {
   PAGE_BG,
   PRIMARY,
   PRIMARY_CONTAINER,
-  SECONDARY,
   SURFACE_LOW,
   SURFACE_LOWEST,
 } from '@/lib/passengerTheme';
@@ -50,10 +44,6 @@ export default function ContactDetailPage() {
   const [trusted, setTrusted] = useState(false);
   const [groupIds, setGroupIds] = useState<string[]>([]);
   const [groups, setGroups] = useState<Awaited<ReturnType<typeof contactGroupsList>>['groups']>([]);
-  const [places, setPlaces] = useState<NonNullable<RiderContactRow['places']>>([]);
-  const [placeLabel, setPlaceLabel] = useState('Home');
-  const [placeAddress, setPlaceAddress] = useState('');
-  const [placeCoords, setPlaceCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   const loadGroups = useCallback(async () => {
     try {
@@ -73,7 +63,6 @@ export default function ContactDetailPage() {
       setPhone(formatGuestPhoneDisplay(contact.phone_e164.replace(/^\+1/, '')));
       setTrusted(contact.trusted_for_safety);
       setGroupIds(contact.groups?.map((g) => g.id) ?? []);
-      setPlaces(contact.places ?? []);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Contact not found');
       navigate('/account/contacts/roam');
@@ -131,31 +120,6 @@ export default function ContactDetailPage() {
     }
   };
 
-  const handleAddPlace = async () => {
-    if (isNew || !id) {
-      toast.error('Save the contact first.');
-      return;
-    }
-    if (!placeCoords || !placeAddress.trim()) {
-      toast.error('Pick an address from suggestions.');
-      return;
-    }
-    try {
-      const { place } = await contactPlaceCreate(id, {
-        label: placeLabel.trim() || 'Place',
-        address: placeAddress,
-        lat: placeCoords.lat,
-        lng: placeCoords.lng,
-      });
-      setPlaces((prev) => [...prev, place]);
-      setPlaceAddress('');
-      setPlaceCoords(null);
-      toast.success('Place saved');
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not add place');
-    }
-  };
-
   const handleBookForContact = () => {
     if (!id || isNew) return;
     persistGuestRecipientDraft({
@@ -165,24 +129,6 @@ export default function ContactDetailPage() {
       contactId: id,
     });
     navigate('/services/book-for-someone');
-  };
-
-  const handleBookWithPlace = (place: NonNullable<RiderContactRow['places']>[number]) => {
-    if (!id || isNew) return;
-    persistGuestRecipientDraft({
-      fullName: displayName.trim(),
-      phone: phone.replace(/\D/g, ''),
-      countryCode: '+1',
-      contactId: id,
-      selectedPlaceId: place.id,
-      pickupPreset: {
-        label: place.label,
-        address: place.address,
-        lat: place.lat,
-        lng: place.lng,
-      },
-    });
-    navigate('/');
   };
 
   if (loading) {
@@ -225,16 +171,7 @@ export default function ContactDetailPage() {
               style={{ backgroundColor: SURFACE_LOW, color: ON_SURFACE }}
             />
           </div>
-          <ContactGroupPicker
-            groups={groups}
-            selectedIds={groupIds}
-            onChange={setGroupIds}
-            onCreateGroup={async (name) => {
-              const { group } = await contactGroupCreate({ name });
-              setGroups((prev) => [...prev, group]);
-              setGroupIds((prev) => [...prev, group.id]);
-            }}
-          />
+          <ContactGroupPicker groups={groups} selectedIds={groupIds} onChange={setGroupIds} />
           <div
             className="overflow-hidden rounded-2xl"
             style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
@@ -246,65 +183,9 @@ export default function ContactDetailPage() {
               iconBg="rgba(0, 74, 198, 0.1)"
               iconColor={PRIMARY}
               title="Trusted contact for safety"
-              description="Receive live trip updates via SMS"
             />
           </div>
-          <p className="text-xs" style={{ color: ON_SURFACE_VARIANT }}>
-            Manage all trusted contacts in Account → Contacts → Trusted Contacts.
-          </p>
         </div>
-
-        {!isNew && id ? (
-          <div className="space-y-3 rounded-[24px] p-5" style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}>
-            <p className="text-xs font-bold tracking-wide" style={{ color: ON_SURFACE_VARIANT }}>SAVED PLACES</p>
-            {places.map((place) => (
-              <div key={place.id} className="flex items-start gap-3 rounded-xl p-3" style={{ backgroundColor: SURFACE_LOW }}>
-                <MapPin className="mt-0.5 h-4 w-4 shrink-0" style={{ color: PRIMARY }} />
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold">{place.label}</p>
-                  <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>{place.address}</p>
-                  <button type="button" onClick={() => handleBookWithPlace(place)} className="mt-2 text-sm font-semibold" style={{ color: PRIMARY }}>
-                    Book ride from here
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void contactPlaceDelete(id, place.id).then(() => {
-                    setPlaces((prev) => prev.filter((p) => p.id !== place.id));
-                  })}
-                  aria-label="Remove place"
-                  style={{ color: ERROR }}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
-            <div className="space-y-2 pt-2">
-              <input
-                value={placeLabel}
-                onChange={(e) => setPlaceLabel(e.target.value)}
-                placeholder="Label (Home, Work…)"
-                className="h-10 w-full rounded-xl border-none px-3 text-sm"
-                style={{ backgroundColor: SURFACE_LOW }}
-              />
-              <RoamPlaceField
-                label="Address"
-                value={placeAddress}
-                onChangeText={(text) => {
-                  setPlaceAddress(text);
-                  setPlaceCoords(null);
-                }}
-                onResolved={({ address, lat, lng }) => {
-                  setPlaceAddress(address);
-                  setPlaceCoords({ lat, lng });
-                }}
-              />
-              <button type="button" onClick={() => void handleAddPlace()} className="text-sm font-semibold" style={{ color: PRIMARY }}>
-                Add place
-              </button>
-            </div>
-          </div>
-        ) : null}
 
         <button
           type="button"

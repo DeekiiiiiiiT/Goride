@@ -102,7 +102,7 @@ export default function BookForMePage() {
     }
   }, [services, vehicleOption]);
 
-  useEffect(() => {
+  const reloadContacts = () => {
     setContactsLoading(true);
     void Promise.all([contactsList(), contactGroupsList()])
       .then(([c, g]) => {
@@ -111,7 +111,15 @@ export default function BookForMePage() {
       })
       .catch(() => undefined)
       .finally(() => setContactsLoading(false));
+  };
+
+  useEffect(() => {
+    reloadContacts();
   }, []);
+
+  useEffect(() => {
+    if (step === 'payer') reloadContacts();
+  }, [step]);
 
   useEffect(() => {
     void tripIntentGetMyActive().then((r) => {
@@ -273,15 +281,22 @@ export default function BookForMePage() {
     try {
       await refresh(true);
       let row = await ensureDraftIntent();
+      if (audience === 'targeted' && !targetContact && !targetPhone) {
+        throw new Error('Choose who should pay — pick a Roam contact or phone contact.');
+      }
+
       row = (await tripIntentUpdate(row.id, {
         roam_mode: roamMode,
         audience,
+        target_contact_id: audience === 'targeted' && targetContact ? targetContact.id : null,
         target_booker_user_id: audience === 'targeted' && targetContact?.linked_user_id
           ? targetContact.linked_user_id
           : null,
-        target_booker_phone_e164: audience === 'targeted' && targetPhone
-          ? buildGuestPhoneE164('+1', targetPhone)
-          : null,
+        target_booker_phone_e164: audience === 'targeted' && targetContact
+          ? targetContact.phone_e164
+          : audience === 'targeted' && targetPhone
+            ? buildGuestPhoneE164('+1', targetPhone)
+            : null,
         pickup_lat: pickup?.lat,
         pickup_lng: pickup?.lng,
         pickup_address: pickupAddress || undefined,
@@ -509,7 +524,10 @@ export default function BookForMePage() {
               </div>
             ) : null}
             {targetContact ? (
-              <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>Selected: {targetContact.display_name}</p>
+              <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
+                Selected: {targetContact.display_name}
+                {targetContact.roam_account_linked ? ' · Roam member' : ' · No Roam account on this phone'}
+              </p>
             ) : null}
             <button type="button" disabled={loading} onClick={() => void handlePublish()} className="h-14 w-full rounded-2xl font-semibold disabled:opacity-50" style={{ backgroundColor: PRIMARY, color: ON_PRIMARY }}>
               {loading ? 'Publishing…' : 'Publish on my tag'}
@@ -531,6 +549,7 @@ export default function BookForMePage() {
         selectedId={targetContact?.id ?? null}
         onSelect={(c) => {
           setTargetContact(c);
+          setTargetPhone('');
           setRoamPickerOpen(false);
         }}
       />

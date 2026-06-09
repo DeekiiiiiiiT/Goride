@@ -1,13 +1,8 @@
 import type { Context, Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { jsonEdgeForbidden, ridesUserSurfaceRole } from "../_shared/authEdge.ts";
-import { getRidesAdminDb } from "../_shared/ridesAdminDb.ts";
 import type { RidesContactsDb } from "../_shared/ridesContactsDb.ts";
-import {
-  isPassengerVerified,
-  REQUIRE_PHONE_SMS_VERIFICATION,
-  resolvePassengerPhone,
-} from "./passengerProfile.ts";
+import { resolveRoamUserByPhone } from "./resolveRoamUserByPhone.ts";
 import {
   generateToken,
   normalizePhoneE164,
@@ -69,69 +64,24 @@ export async function lookupPassengerByPhone(phoneE164: string): Promise<{
   profile?: Record<string, unknown>;
 }> {
   const normalized = normalizePhoneE164(phoneE164);
-  const { db, tables } = await getRidesAdminDb();
-  const { data: profiles } = await db.from(tables.rider_profiles)
-    .select("user_id, display_name, phone, phone_verified_at")
-    .not("phone", "is", null);
-
-  let matchedUserId: string | null = null;
-  let matchedProfile: Record<string, unknown> | null = null;
-
-  for (const row of profiles ?? []) {
-    const profilePhone = row.phone ? normalizePhoneE164(String(row.phone)) : null;
-    if (profilePhone && phonesMatch(profilePhone, normalized)) {
-      matchedUserId = String(row.user_id);
-      matchedProfile = row as Record<string, unknown>;
-      break;
-    }
-  }
-
-  if (!matchedUserId) {
+  const resolved = await resolveRoamUserByPhone(normalized);
+  if (!resolved) {
     return { found: false };
   }
 
-  const phone = await resolvePassengerPhone(db, tables.rider_profiles, matchedUserId);
-  const verified = isPassengerVerified(
-    matchedProfile as { user_id: string; display_name: string | null; phone: string | null; phone_verified_at?: string | null },
-    phone,
-    REQUIRE_PHONE_SMS_VERIFICATION,
-  );
-  if (!verified) {
-    return { found: false };
-  }
-
-  let displayName = (matchedProfile?.display_name as string | null) ?? null;
   let avatarUrl: string | null = null;
-  let customTagName: string | null = null;
-
-  try {
-    const { getContactsDb } = await import("../_shared/ridesContactsDb.ts");
-    const { db: contactsDb, tables: ct } = await getContactsDb();
-    const { data: tagRow } = await contactsDb.from(ct.roam_passenger_tags)
-      .select("custom_tag_name")
-      .eq("user_id", matchedUserId)
-      .maybeSingle();
-    customTagName = (tagRow?.custom_tag_name as string | null) ?? null;
-  } catch {
-    /* optional */
-  }
 
   try {
     const svc = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
-    const { data: authData } = await svc.auth.admin.getUserById(matchedUserId);
+    const { data: authData } = await svc.auth.admin.getUserById(resolved.user_id);
     const meta = authData.user?.user_metadata as Record<string, unknown> | undefined;
     avatarUrl =
       (typeof meta?.avatar_url === "string" && meta.avatar_url.trim()) ||
       (typeof meta?.picture === "string" && meta.picture.trim()) ||
       null;
-    if (!displayName) {
-      displayName =
-        (typeof meta?.full_name === "string" ? meta.full_name : null) ??
-        (typeof meta?.name === "string" ? meta.name : null);
-    }
   } catch {
     /* optional */
   }
@@ -139,9 +89,9 @@ export async function lookupPassengerByPhone(phoneE164: string): Promise<{
   return {
     found: true,
     profile: {
-      user_id: matchedUserId,
-      display_name: displayName,
-      custom_tag_name: customTagName,
+      user_id: resolved.user_id,
+      display_name: resolved.display_name,
+      custom_tag_name: resolved.custom_tag_name,
       avatar_url: avatarUrl,
       phone_masked: maskPhone(normalized),
     },

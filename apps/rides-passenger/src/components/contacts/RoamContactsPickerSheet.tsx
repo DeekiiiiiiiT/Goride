@@ -161,6 +161,7 @@ export function RoamContactsPickerSheet({
                       <p className="truncate font-semibold">{c.display_name}</p>
                       <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
                         {c.phone_e164}
+                        {c.roam_account_linked ? ' · Roam member' : ''}
                       </p>
                       {c.groups && c.groups.length > 0 ? (
                         <div className="mt-1 flex flex-wrap gap-1">

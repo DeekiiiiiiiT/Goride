@@ -17,6 +17,7 @@ import {
 import { isTripIntentV2Enabled } from "./tripIntentFlags.ts";
 import { linkBookingRequestToRide } from "./bookingRequests.ts";
 import { TRIP_INTENT_QUOTE_TTL_MS, verifyQuoteToken } from "./fare/quoteToken.ts";
+import { resolveTargetedBooker } from "./tripIntentTargeting.ts";
 
 export const TRIP_INTENT_TTL_HOURS = 1;
 export const TRIP_INTENT_BOOK_WINDOW_MS = 15 * 60_000;
@@ -531,9 +532,39 @@ export function registerTripIntentRoutes(app: Hono, deps: TripIntentDeps) {
 
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (body.roam_mode === "shadow_roam" || body.roam_mode === "open_roam") patch.roam_mode = body.roam_mode;
+    const nextAudience = body.audience === "targeted" || body.audience === "any_booker"
+      ? body.audience
+      : String(row.audience ?? "any_booker");
     if (body.audience === "targeted" || body.audience === "any_booker") patch.audience = body.audience;
-    if (body.target_booker_user_id !== undefined) patch.target_booker_user_id = body.target_booker_user_id;
-    if (body.target_booker_phone_e164 !== undefined) {
+
+    const targetingTouched = body.audience === "targeted"
+      || body.target_contact_id !== undefined
+      || body.target_booker_user_id !== undefined
+      || body.target_booker_phone_e164 !== undefined;
+
+    if (nextAudience === "targeted" && targetingTouched) {
+      const resolved = await resolveTargetedBooker(db, t, gate.user!.id, {
+        audience: "targeted",
+        target_contact_id: typeof body.target_contact_id === "string" ? body.target_contact_id : null,
+        target_booker_user_id: body.target_booker_user_id !== undefined
+          ? (body.target_booker_user_id as string | null)
+          : (row.target_booker_user_id as string | null),
+        target_booker_phone_e164: body.target_booker_phone_e164 !== undefined
+          ? (body.target_booker_phone_e164 as string | null)
+          : (row.target_booker_phone_e164 as string | null),
+      });
+      if ("error" in resolved) {
+        return c.json({ error: resolved.error, message: resolved.message }, 400);
+      }
+      patch.target_booker_user_id = resolved.target_booker_user_id;
+      patch.target_booker_phone_e164 = resolved.target_booker_phone_e164;
+    } else if (body.audience === "any_booker") {
+      patch.target_booker_user_id = null;
+      patch.target_booker_phone_e164 = null;
+    } else if (body.target_booker_user_id !== undefined) {
+      patch.target_booker_user_id = body.target_booker_user_id;
+    }
+    if (body.target_booker_phone_e164 !== undefined && nextAudience !== "targeted") {
       patch.target_booker_phone_e164 = body.target_booker_phone_e164
         ? normalizePhoneE164(String(body.target_booker_phone_e164))
         : null;
@@ -600,6 +631,29 @@ export function registerTripIntentRoutes(app: Hono, deps: TripIntentDeps) {
     if (String(row.roam_mode) === "shadow_roam") {
       const err = validateShadowPublish(row as Record<string, unknown>);
       if (err) return c.json({ error: err }, 400);
+    }
+
+    if (String(row.audience) === "targeted") {
+      const resolved = await resolveTargetedBooker(db, t, gate.user!.id, {
+        audience: "targeted",
+        target_booker_user_id: row.target_booker_user_id as string | null,
+        target_booker_phone_e164: row.target_booker_phone_e164 as string | null,
+      });
+      if ("error" in resolved) {
+        return c.json({ error: resolved.error, message: resolved.message }, 400);
+      }
+      if (
+        resolved.target_booker_user_id !== row.target_booker_user_id
+        || resolved.target_booker_phone_e164 !== row.target_booker_phone_e164
+      ) {
+        await db.from(t.booking_requests).update({
+          target_booker_user_id: resolved.target_booker_user_id,
+          target_booker_phone_e164: resolved.target_booker_phone_e164,
+          updated_at: new Date().toISOString(),
+        }).eq("id", id);
+        row.target_booker_user_id = resolved.target_booker_user_id;
+        row.target_booker_phone_e164 = resolved.target_booker_phone_e164;
+      }
     }
 
     const now = new Date().toISOString();
