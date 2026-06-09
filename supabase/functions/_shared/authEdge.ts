@@ -22,6 +22,14 @@ export function ridesUserSurfaceRole(user: {
   return typeof r === "string" ? r : undefined;
 }
 
+/** Passenger app routes — allow missing surface (legacy JWTs) but block driver-only sessions. */
+export function allowsPassengerSurface(user: {
+  user_metadata?: Record<string, unknown>;
+}): boolean {
+  const role = ridesUserSurfaceRole(user);
+  return !role || role === "passenger";
+}
+
 /** All roles on JWT: app_metadata.roles[], else primary, else user_metadata.role */
 export function getJwtRoles(user: {
   user_metadata?: Record<string, unknown>;

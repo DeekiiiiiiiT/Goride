@@ -1,6 +1,6 @@
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { jsonEdgeForbidden, ridesUserSurfaceRole } from "../_shared/authEdge.ts";
+import { allowsPassengerSurface, jsonEdgeForbidden } from "../_shared/authEdge.ts";
 import type { RidesContactsDb } from "../_shared/ridesContactsDb.ts";
 import {
   generatePublicCode,
@@ -496,7 +496,7 @@ export function registerTripIntentRoutes(app: Hono, deps: TripIntentDeps) {
     }
     const auth = await deps.requireUser(c.req.header("Authorization"));
     if ("error" in auth) return { response: c.json({ error: auth.error }, auth.status) };
-    if (ridesUserSurfaceRole(auth.user) !== "passenger") {
+    if (!allowsPassengerSurface(auth.user)) {
       return { response: jsonEdgeForbidden(c as never, "forbidden_role") };
     }
     return { user: auth.user, response: null };

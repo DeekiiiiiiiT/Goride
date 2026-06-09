@@ -1677,6 +1677,11 @@ app.post("/v1/requests", async (c) => {
   });
 });
 
+function isHubDelegatedRide(ride: Record<string, unknown>): boolean {
+  return isDelegatedBooking(ride) ||
+    (typeof ride.booking_request_id === "string" && ride.booking_request_id.length > 0);
+}
+
 async function loadActiveRideForUser(userId: string): Promise<{
   ride: Record<string, unknown>;
   participant_role: "booker" | "passenger";
@@ -1684,34 +1689,42 @@ async function loadActiveRideForUser(userId: string): Promise<{
   const statuses = [...ACTIVE_RIDE_STATUSES];
   const db = svc();
 
-  const { data: asPassenger } = await db.from("ride_requests")
-    .select("*")
-    .eq("passenger_user_id", userId)
-    .in("status", statuses)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const [{ data: asPassenger }, { data: asBooker }] = await Promise.all([
+    db.from("ride_requests")
+      .select("*")
+      .eq("passenger_user_id", userId)
+      .in("status", statuses)
+      .order("created_at", { ascending: false })
+      .limit(10),
+    db.from("ride_requests")
+      .select("*")
+      .eq("rider_user_id", userId)
+      .in("status", statuses)
+      .order("created_at", { ascending: false })
+      .limit(10),
+  ]);
 
-  if (asPassenger) {
-    return {
-      ride: asPassenger as Record<string, unknown>,
-      participant_role: "passenger",
-    };
+  for (const row of asPassenger ?? []) {
+    const ride = row as Record<string, unknown>;
+    if (isHubDelegatedRide(ride)) {
+      return { ride, participant_role: "passenger" };
+    }
+  }
+  for (const row of asBooker ?? []) {
+    const ride = row as Record<string, unknown>;
+    if (isHubDelegatedRide(ride)) {
+      return { ride, participant_role: "booker" };
+    }
   }
 
-  const { data: asBooker } = await db.from("ride_requests")
-    .select("*")
-    .eq("rider_user_id", userId)
-    .in("status", statuses)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const firstPassenger = asPassenger?.[0] as Record<string, unknown> | undefined;
+  if (firstPassenger) {
+    return { ride: firstPassenger, participant_role: "passenger" };
+  }
 
-  if (asBooker) {
-    return {
-      ride: asBooker as Record<string, unknown>,
-      participant_role: "booker",
-    };
+  const firstBooker = asBooker?.[0] as Record<string, unknown> | undefined;
+  if (firstBooker) {
+    return { ride: firstBooker, participant_role: "booker" };
   }
 
   try {
@@ -1719,7 +1732,7 @@ async function loadActiveRideForUser(userId: string): Promise<{
     const { data: intent } = await contactsDb.from(t.booking_requests)
       .select("ride_request_id")
       .eq("requester_user_id", userId)
-      .eq("status", "booked")
+      .in("status", ["booked", "consumed"])
       .not("ride_request_id", "is", null)
       .order("created_at", { ascending: false })
       .limit(1)

@@ -1,5 +1,6 @@
 import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
 import { supabase } from '@roam/auth-client';
+import { withTimeout } from '@/lib/withTimeout';
 import type { ActiveRideResponse } from '@roam/types/rides';
 import type {
   BookForOthersActivityResponse,
@@ -23,11 +24,57 @@ const HUB_INTENT_STATUSES = new Set(['draft', 'published', 'claimed', 'booked', 
 
 async function headers(): Promise<HeadersInit> {
   const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token ?? publicAnonKey;
+  let token = session?.access_token ?? null;
+  if (!token) {
+    const refreshed = await withTimeout(
+      supabase.auth.refreshSession(),
+      12_000,
+      'Session refresh timed out — sign in again.',
+    );
+    token = refreshed.data.session?.access_token ?? null;
+  }
   return {
-    Authorization: `Bearer ${token}`,
+    Authorization: `Bearer ${token ?? publicAnonKey}`,
     apikey: publicAnonKey,
     'Content-Type': 'application/json',
+  };
+}
+
+function isDelegatedHubRide(ride: ActiveRideResponse['ride']): boolean {
+  if (!ride) return false;
+  return Boolean(
+    ride.booking_request_id
+    || ride.guest_passenger_phone
+    || (ride.passenger_user_id && ride.rider_user_id && ride.passenger_user_id !== ride.rider_user_id),
+  );
+}
+
+function injectActiveRideIntoHub(
+  merged: BookForOthersActivityResponse,
+  activeRide: ActiveRideResponse | null,
+): BookForOthersActivityResponse {
+  if (!activeRide?.ride || !isDelegatedHubRide(activeRide.ride)) return merged;
+
+  const next = {
+    book_for_someone: [...merged.book_for_someone],
+    book_for_me: [...merged.book_for_me],
+  };
+
+  if (activeRide.participant_role === 'booker') {
+    const item = rideToSomeoneItem(activeRide.ride);
+    if (!next.book_for_someone.some((entry) => entry.kind === 'ride' && entry.ride_id === item.ride_id)) {
+      next.book_for_someone.unshift(item);
+    }
+  } else if (activeRide.participant_role === 'passenger') {
+    const item = rideToMeItem(activeRide.ride);
+    if (!next.book_for_me.some((entry) => entry.kind === 'ride' && entry.ride_id === item.ride_id)) {
+      next.book_for_me.unshift(item);
+    }
+  }
+
+  return {
+    book_for_someone: sortSomeoneItems(next.book_for_someone),
+    book_for_me: sortMeItems(next.book_for_me),
   };
 }
 
@@ -136,18 +183,13 @@ function mergeBookForOthersActivity(
     }
   }
 
-  if (activeRide?.ride && activeRide.participant_role === 'booker' && activeRide.is_delegated) {
-    const item = rideToSomeoneItem(activeRide.ride);
-    if (!bookForSomeone.some((entry) => entry.kind === 'ride' && entry.ride_id === item.ride_id)) {
-      bookForSomeone.unshift(item);
-    }
-  }
-
-  if (activeRide?.ride && activeRide.participant_role === 'passenger') {
-    const delegated =
-      activeRide.is_delegated === true
-      || Boolean(activeRide.ride.booking_request_id);
-    if (delegated) {
+  if (activeRide?.ride && isDelegatedHubRide(activeRide.ride)) {
+    if (activeRide.participant_role === 'booker') {
+      const item = rideToSomeoneItem(activeRide.ride);
+      if (!bookForSomeone.some((entry) => entry.kind === 'ride' && entry.ride_id === item.ride_id)) {
+        bookForSomeone.unshift(item);
+      }
+    } else if (activeRide.participant_role === 'passenger') {
       const item = rideToMeItem(activeRide.ride);
       if (!bookForMe.some((entry) => entry.kind === 'ride' && entry.ride_id === item.ride_id)) {
         bookForMe.unshift(item);
@@ -343,5 +385,11 @@ export async function loadBookForOthersActivity(): Promise<BookForOthersActivity
   );
   merged.book_for_me = await reconcileStaleMeIntents(merged.book_for_me);
   merged.book_for_someone = await reconcileStaleSomeoneIntents(merged.book_for_someone);
-  return merged;
+
+  let activeForHub = activeRide;
+  if (!activeForHub?.ride) {
+    const retry = await Promise.allSettled([ridesGetMyActiveRide()]);
+    if (retry[0].status === 'fulfilled') activeForHub = retry[0].value;
+  }
+  return injectActiveRideIntoHub(merged, activeForHub);
 }

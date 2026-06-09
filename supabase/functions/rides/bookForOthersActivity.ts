@@ -1,6 +1,6 @@
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { jsonEdgeForbidden, ridesUserSurfaceRole } from "../_shared/authEdge.ts";
+import { allowsPassengerSurface, jsonEdgeForbidden } from "../_shared/authEdge.ts";
 import type { RidesContactsDb } from "../_shared/ridesContactsDb.ts";
 import { ACTIVE_RIDE_STATUSES, isDelegatedBooking } from "./rideAccess.ts";
 import {
@@ -110,7 +110,7 @@ async function loadLiveRidesFromBookedIntents(
   const { data: intents } = await contactsDb.from(table)
     .select("id, ride_request_id, requester_name, claimed_by_user_id")
     .eq(ownerCol, userId)
-    .eq("status", "booked")
+    .in("status", ["booked", "consumed"])
     .not("ride_request_id", "is", null)
     .order("created_at", { ascending: false })
     .limit(10);
@@ -150,7 +150,6 @@ async function loadLiveRidesFromBookedIntents(
     if (!ride) continue;
 
     if (role === "payer") {
-      if (!isDelegatedBooking(ride)) continue;
       items.push(mapRideAsBooker(ride));
       continue;
     }
@@ -210,7 +209,7 @@ export function registerBookForOthersActivityRoutes(
   app.get("/v1/book-for-others/activity", async (c) => {
     const auth = await deps.requireUser(c.req.header("Authorization"));
     if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-    if (ridesUserSurfaceRole(auth.user) !== "passenger") {
+    if (!allowsPassengerSurface(auth.user)) {
       return jsonEdgeForbidden(c, "forbidden_role");
     }
 
@@ -234,7 +233,11 @@ export function registerBookForOthersActivityRoutes(
     ]);
 
     let bookForSomeoneRides = (asBooker ?? [])
-      .filter((row) => isDelegatedBooking(row as Record<string, unknown>))
+      .filter((row) => {
+        const ride = row as Record<string, unknown>;
+        return isDelegatedBooking(ride) ||
+          (typeof ride.booking_request_id === "string" && ride.booking_request_id.length > 0);
+      })
       .map((row) => mapRideAsBooker(row as Record<string, unknown>));
 
     let bookForMeRides = (asPassenger ?? [])
@@ -297,7 +300,7 @@ export function registerBookForOthersActivityRoutes(
       const { data: requesterBooked } = await contactsDb.from(t.booking_requests)
         .select("id")
         .eq("requester_user_id", userId)
-        .eq("status", "booked")
+        .in("status", ["booked", "consumed"])
         .not("ride_request_id", "is", null);
       requesterBookedIntentIds = new Set(
         (requesterBooked ?? []).map((row) => String((row as Record<string, unknown>).id)),
@@ -306,11 +309,34 @@ export function registerBookForOthersActivityRoutes(
       const { data: payerBooked } = await contactsDb.from(t.booking_requests)
         .select("id")
         .eq("claimed_by_user_id", userId)
-        .eq("status", "booked")
+        .in("status", ["booked", "consumed"])
         .not("ride_request_id", "is", null);
       payerBookedIntentIds = new Set(
         (payerBooked ?? []).map((row) => String((row as Record<string, unknown>).id)),
       );
+
+      const linkedIntentIds = [
+        ...requesterBookedIntentIds,
+        ...payerBookedIntentIds,
+      ];
+      if (linkedIntentIds.length > 0) {
+        const { data: linkedRides } = await db.from("ride_requests")
+          .select(RIDE_COLUMNS)
+          .in("booking_request_id", [...linkedIntentIds])
+          .in("status", statuses);
+        for (const row of linkedRides ?? []) {
+          const ride = row as Record<string, unknown>;
+          const intentId = String(ride.booking_request_id ?? "");
+          const item = requesterBookedIntentIds.has(intentId)
+            ? mapRideAsPassenger(ride)
+            : mapRideAsBooker(ride);
+          if (requesterBookedIntentIds.has(intentId)) {
+            bookForMeRides = dedupeRideRows([...bookForMeRides, item]);
+          } else if (payerBookedIntentIds.has(intentId)) {
+            bookForSomeoneRides = dedupeRideRows([...bookForSomeoneRides, item]);
+          }
+        }
+      }
 
       if (intentsError) {
         console.error("[book_for_others] intents_query_failed", intentsError.message);
@@ -349,7 +375,6 @@ export function registerBookForOthersActivityRoutes(
 
     const intentsWithLiveRide = new Set([
       ...(asBooker ?? [])
-        .filter((row) => isDelegatedBooking(row as Record<string, unknown>))
         .map((row) => (row as Record<string, unknown>).booking_request_id)
         .filter((id): id is string => typeof id === "string" && id.length > 0),
       ...payerBookedIntentIds,
