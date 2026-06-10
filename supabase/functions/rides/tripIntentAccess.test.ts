@@ -5,6 +5,8 @@ import {
   canShadowBookerChat,
   isShadowBooker,
   isShadowRoamRide,
+  sanitizeActivityIntentForTargetBooker,
+  sanitizeActivityRideForBooker,
   sanitizeRideForShadowBooker,
   sanitizeTripIntentForBooker,
 } from "./tripIntentAccess.ts";
@@ -53,11 +55,45 @@ Deno.test("canShadowBookerChat and live access", () => {
 });
 
 Deno.test("sanitizeRideForShadowBooker strips locations", () => {
-  const out = sanitizeRideForShadowBooker(shadowRide())!;
+  const out = sanitizeRideForShadowBooker(shadowRide({
+    guest_passenger_name: "Alex",
+    eta_pickup_seconds_estimate: 300,
+    assigned_driver_user_id: "driver-uuid",
+  }))!;
   assertEquals("pickup_lat" in out, false);
   assertEquals("pickup_address" in out, false);
   assertEquals("route_polyline_encoded" in out, false);
+  assertEquals("eta_pickup_seconds_estimate" in out, false);
+  assertEquals("assigned_driver_user_id" in out, false);
   assertEquals(out.status, "on_trip");
+  assertEquals(out.guest_passenger_name, "Alex");
+});
+
+Deno.test("sanitizeActivityRideForBooker — shadow vs open", () => {
+  const shadow = sanitizeActivityRideForBooker({
+    roam_mode: "shadow_roam",
+    pickup_address: "Secret St",
+    dropoff_address: "Hidden Ave",
+  });
+  assertEquals(shadow.pickup_address, null);
+  assertEquals(shadow.dropoff_address, null);
+
+  const open = sanitizeActivityRideForBooker({
+    roam_mode: "open_roam",
+    pickup_address: "Open St",
+    dropoff_address: "Open Ave",
+  });
+  assertEquals(open.pickup_address, "Open St");
+  assertEquals(open.dropoff_address, "Open Ave");
+});
+
+Deno.test("sanitizeActivityIntentForTargetBooker — shadow target booker", () => {
+  const shadow = sanitizeActivityIntentForTargetBooker(
+    { roam_mode: "shadow_roam", pickup_address: "Secret St", dropoff_address: "Hidden Ave" },
+    "target_booker",
+  );
+  assertEquals(shadow.pickup_address, null);
+  assertEquals(shadow.dropoff_address, null);
 });
 
 Deno.test("sanitizeTripIntentForBooker — shadow has no coords", () => {

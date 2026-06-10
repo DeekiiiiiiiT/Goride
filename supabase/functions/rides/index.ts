@@ -1730,8 +1730,13 @@ app.get("/v1/requests/me/active", async (c) => {
 
   if (!active) return c.json({ ride: null, participant_role: null });
 
+  let rideOut = active.ride;
+  if (active.participant_role === "booker" && active.ride.roam_mode === "shadow_roam") {
+    rideOut = sanitizeRideForShadowBooker(sanitizeRideForRider(active.ride))!;
+  }
+
   return c.json({
-    ride: active.ride,
+    ride: rideOut,
     participant_role: active.participant_role,
     is_delegated: isDelegatedBooking(active.ride),
   });
@@ -2602,11 +2607,15 @@ app.get("/v1/wallet/transactions", async (c) => {
     .limit(50);
   const transactions = (rides ?? []).map((r: Record<string, unknown>) => {
     const isShadow = r.roam_mode === "shadow_roam";
+    const passengerName = typeof r.guest_passenger_name === "string"
+      ? r.guest_passenger_name.trim()
+      : "";
+    const shadowTitle = passengerName ? `Trip for ${passengerName}` : "Shadow trip";
     const amount = r.fare_estimate_minor != null ? `-${r.fare_estimate_minor}` : "0";
     return {
       id: String(r.id),
       kind: isShadow ? "shadow_trip" : "open_trip",
-      title: isShadow ? "Shadow trip" : `Ride for ${r.guest_passenger_name ?? "passenger"}`,
+      title: isShadow ? shadowTitle : `Ride for ${r.guest_passenger_name ?? "passenger"}`,
       amount_minor: String(amount).replace(/^-/, ""),
       currency: r.currency ?? "JMD",
       date: r.updated_at ?? r.created_at,

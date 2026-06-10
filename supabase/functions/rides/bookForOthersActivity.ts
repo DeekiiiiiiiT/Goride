@@ -14,6 +14,7 @@ import {
   mapTripIntentHubItem,
   reconcileTripIntentWithRide,
 } from "./tripIntents.ts";
+import { sanitizeActivityRideForBooker } from "./shadowBookerPrivacy.ts";
 
 const RIDE_COLUMNS =
   "id, status, roam_mode, guest_passenger_name, guest_passenger_phone, passenger_user_id, rider_user_id, pickup_address, dropoff_address, created_at, booking_request_id";
@@ -36,7 +37,7 @@ function isExpired(expiresAt: string | null | undefined): boolean {
 }
 
 function mapRideAsBooker(row: Record<string, unknown>) {
-  return {
+  return sanitizeActivityRideForBooker({
     kind: "ride" as const,
     ride_id: String(row.id),
     status: String(row.status),
@@ -46,7 +47,7 @@ function mapRideAsBooker(row: Record<string, unknown>) {
     pickup_address: typeof row.pickup_address === "string" ? row.pickup_address : null,
     dropoff_address: typeof row.dropoff_address === "string" ? row.dropoff_address : null,
     created_at: String(row.created_at),
-  };
+  });
 }
 
 function mapRideAsPassenger(

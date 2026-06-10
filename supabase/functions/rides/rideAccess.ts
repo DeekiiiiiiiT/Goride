@@ -2,6 +2,11 @@
  * Shared ride participant access checks for delegated booking.
  */
 
+import {
+  canBookerCancelShadowRide,
+  canShadowBookerChat,
+} from "./tripIntentAccess.ts";
+
 export type RideParticipantRole = "booker" | "passenger" | "driver" | "none";
 
 const TERMINAL_STATUSES = new Set(["completed", "cancelled"]);
@@ -37,7 +42,7 @@ export function canChatOnRide(
   ride: Record<string, unknown>,
   userId: string,
 ): boolean {
-  if (ride.roam_mode === "shadow_roam" && ride.rider_user_id === userId) return false;
+  if (!canShadowBookerChat(ride, userId)) return false;
   const role = getRideParticipantRole(ride, userId);
   if (role === "driver" || role === "passenger") return true;
   if (role === "booker") return true;
@@ -55,7 +60,7 @@ export function canCancelRide(
   const role = getRideParticipantRole(ride, userId);
   if (role === "passenger") return true;
   if (role === "booker") {
-    if (ride.roam_mode === "shadow_roam") return false;
+    if (!canBookerCancelShadowRide(ride, userId)) return false;
     return status !== BOOKER_CANCEL_BLOCKED_FROM && status !== "on_trip";
   }
   return false;

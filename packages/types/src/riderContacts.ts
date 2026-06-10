@@ -364,7 +364,9 @@ export interface BookForOthersRideActivityItem {
   status: import('./rides').RideRequestStatus;
   roam_mode: RoamMode;
   counterparty_name: string | null;
+  /** Null for shadow_roam payer-facing hub items (locations private). */
   pickup_address: string | null;
+  /** Null for shadow_roam payer-facing hub items (locations private). */
   dropoff_address: string | null;
   created_at: string;
 }
@@ -375,7 +377,9 @@ export interface BookForOthersIntentActivityItem {
   intent_id: string;
   status: BookingRequestStatus;
   roam_mode: RoamMode;
+  /** Null for shadow_roam payer-facing hub items (locations private). */
   pickup_address: string | null;
+  /** Null for shadow_roam payer-facing hub items (locations private). */
   dropoff_address: string | null;
   fare_estimate_minor: string | null;
   currency: string | null;

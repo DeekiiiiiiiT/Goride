@@ -24,6 +24,7 @@ import {
   readMinimizedRideSession,
   setMinimizeExitPending,
 } from '@/lib/bookerTracking';
+import { isShadowBookerTrip, navigateToDelegatedRide } from '@/lib/delegatedRideNavigation';
 
 type BookerTrackingContextValue = {
   mode: BookerTrackingMode;
@@ -95,6 +96,11 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
 
   const minimize = useCallback(
     (rideId: string, role: MinimizedRideRole) => {
+      const roamMode = summary?.roam_mode ?? null;
+      if (role === 'booker' && isShadowBookerTrip(role, roamMode)) {
+        navigateToDelegatedRide(navigate, rideId, role, roamMode, { replace: true });
+        return;
+      }
       minimizingRef.current = true;
       setMinimizeExitPending(rideId);
       setExitPendingRideId(rideId);
@@ -104,7 +110,7 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
       void queryClient.cancelQueries({ queryKey: ['ride-live', rideId] });
       navigate('/', { replace: true });
     },
-    [navigate, queryClient],
+    [navigate, queryClient, summary?.roam_mode],
   );
 
   const openFull = useCallback(
@@ -113,9 +119,11 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
       setExitPendingRideId(null);
       clearBookerMinimized();
       setMinimizedSession(null);
-      navigate(`/ride/${rideId}`);
+      const role = minimizedRole ?? 'booker';
+      const roamMode = summary?.roam_mode ?? null;
+      navigateToDelegatedRide(navigate, rideId, role, roamMode);
     },
-    [navigate],
+    [navigate, minimizedRole, summary?.roam_mode],
   );
 
   const clear = useCallback(() => {

@@ -1,9 +1,11 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRight, Loader2, Navigation } from 'lucide-react';
+import { ChevronRight, Clock, Loader2, Navigation } from 'lucide-react';
 import { liveRideStatusHeadline } from '@/components/LiveRideView';
 import { formatShortAddress } from '@/lib/formatRideAddress';
+import { navigateToDelegatedRide } from '@/lib/delegatedRideNavigation';
+import { shadowBookerBannerCopy } from '@/lib/shadowBookerPrivacy';
 import { ON_SURFACE, ON_SURFACE_VARIANT, PRIMARY, PRIMARY_CONTAINER } from '@/lib/passengerTheme';
 import { resolveActiveRideForHub } from '@/services/bookForOthersEdge';
 import type { RideRequestRow, RideRequestStatus } from '@roam/types/rides';
@@ -23,15 +25,35 @@ export function BookForOthersActiveTripBanner() {
 
   const ride = data.ride;
   const isBooker = data.participant_role === 'booker';
+  const roamMode = ride.roam_mode ?? null;
   const passengerName = ride.guest_passenger_name?.trim() || 'Passenger';
-  const title = isBooker ? `Live trip for ${passengerName}` : 'Your live trip';
-  const subtitle = liveRideStatusHeadline(ride.status as RideRequestStatus, ride as RideRequestRow);
-  const detail = formatShortAddress(ride.pickup_address);
+  const shadowCopy = shadowBookerBannerCopy(isBooker, passengerName, roamMode);
+  const isShadowBooker = isBooker && roamMode === 'shadow_roam';
+
+  const title = isShadowBooker
+    ? shadowCopy.title
+    : isBooker
+      ? `Live trip for ${passengerName}`
+      : 'Your live trip';
+  const subtitle = isShadowBooker
+    ? shadowCopy.subtitle
+    : liveRideStatusHeadline(ride.status as RideRequestStatus, ride as RideRequestRow);
+  const detail = isShadowBooker
+    ? null
+    : formatShortAddress(ride.pickup_address);
+
+  const handleOpen = () => {
+    if (isBooker) {
+      navigateToDelegatedRide(navigate, ride.id, data.participant_role, roamMode);
+      return;
+    }
+    navigate(`/ride/${ride.id}`);
+  };
 
   return (
     <button
       type="button"
-      onClick={() => navigate(`/ride/${ride.id}`)}
+      onClick={handleOpen}
       className="mb-4 flex w-full items-center gap-3 rounded-2xl border px-4 py-3.5 text-left touch-manipulation active:scale-[0.99]"
       style={{
         backgroundColor: PRIMARY_CONTAINER,
@@ -45,6 +67,8 @@ export function BookForOthersActiveTripBanner() {
       >
         {isLoading ? (
           <Loader2 className="h-5 w-5 animate-spin" />
+        ) : isShadowBooker ? (
+          <Clock className="h-5 w-5" strokeWidth={2} />
         ) : (
           <Navigation className="h-5 w-5" strokeWidth={2} />
         )}
@@ -53,7 +77,10 @@ export function BookForOthersActiveTripBanner() {
         <span className="block truncate text-[14px] font-semibold" style={{ color: ON_SURFACE }}>
           {title}
         </span>
-        <span className="block truncate text-[12px] font-medium" style={{ color: PRIMARY }}>
+        <span
+          className={`block text-[12px] font-medium ${isShadowBooker ? 'whitespace-normal leading-snug' : 'truncate'}`}
+          style={{ color: isShadowBooker ? ON_SURFACE_VARIANT : PRIMARY }}
+        >
           {subtitle}
         </span>
         {detail ? (

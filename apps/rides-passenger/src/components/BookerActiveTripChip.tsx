@@ -160,6 +160,10 @@ export function BookerActiveTripChip() {
 
   if (mode !== 'minimized' || !minimizedRideId) return null;
 
+  if (minimizedRole === 'booker' && summary?.roam_mode === 'shadow_roam') {
+    return null;
+  }
+
   const isBooker = minimizedRole === 'booker';
   const passengerName = summary?.guest_passenger_name?.trim() || 'Passenger';
   const title = isBooker ? `Ride for ${passengerName}` : 'Your active trip';

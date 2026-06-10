@@ -79,7 +79,9 @@ export default function ShadowTripStatusPage() {
         <p className="rounded-2xl px-4 py-3 text-sm" style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_SURFACE }}>
           {done
             ? 'The rider has been dropped off. View your receipt in Wallet.'
-            : 'Payment confirmed. You will be notified when the rider is dropped off — no live tracking.'}
+            : passengerName
+              ? `You'll be notified when ${passengerName}'s trip finishes — no live tracking.`
+              : "You'll be notified when the trip finishes — no live tracking."}
         </p>
         {!done ? (
           <p className="text-xs" style={{ color: ON_SURFACE_VARIANT }}>

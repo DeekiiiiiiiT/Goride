@@ -18,6 +18,11 @@ import {
   tripIntentWithdraw,
 } from '@/services/tripIntentEdge';
 import { readAnyActiveRideId, readRiderRideCache } from '@/utils/riderActiveRideSession';
+import {
+  redactActiveRideResponseForShadowBooker,
+  sanitizeSomeoneIntentItem,
+  sanitizeSomeoneRideItem,
+} from '@/lib/shadowBookerPrivacy';
 
 const base = API_ENDPOINTS.rides;
 
@@ -51,7 +56,9 @@ function isLiveHubRide(ride: ActiveRideResponse['ride']): boolean {
 export async function resolveActiveRideForHub(): Promise<ActiveRideResponse | null> {
   try {
     const active = await ridesGetMyActiveRide();
-    if (active?.ride && isLiveHubRide(active.ride)) return active;
+    if (active?.ride && isLiveHubRide(active.ride)) {
+      return redactActiveRideResponseForShadowBooker(active);
+    }
   } catch {
     /* fall through */
   }
@@ -64,19 +71,19 @@ export async function resolveActiveRideForHub(): Promise<ActiveRideResponse | nu
     if (!isLiveHubRide(res.ride)) return null;
     const role = res.participant_role;
     if (role !== 'booker' && role !== 'passenger') return null;
-    return {
+    return redactActiveRideResponseForShadowBooker({
       ride: res.ride,
       participant_role: role,
       is_delegated: res.is_delegated ?? true,
-    };
+    });
   } catch {
     const cached = readRiderRideCache(cachedId);
     if (!cached?.ride || !isLiveHubRide(cached.ride)) return null;
-    return {
+    return redactActiveRideResponseForShadowBooker({
       ride: cached.ride,
-      participant_role: 'passenger',
+      participant_role: cached.participant_role ?? 'passenger',
       is_delegated: true,
-    };
+    });
   }
 }
 
@@ -126,7 +133,7 @@ function intentToActivityItem(
   row: TripIntentRow,
   role: 'requester' | 'target_booker' = 'requester',
 ): BookForOthersIntentActivityItem {
-  return {
+  const item: BookForOthersIntentActivityItem = {
     kind: 'trip_intent',
     intent_id: row.id,
     status: row.status,
@@ -144,10 +151,11 @@ function intentToActivityItem(
     book_by_at: row.book_by_at ?? null,
     can_book: row.can_book ?? false,
   };
+  return role === 'target_booker' ? sanitizeSomeoneIntentItem(item) : item;
 }
 
 function rideToSomeoneItem(ride: NonNullable<ActiveRideResponse['ride']>): BookForOthersRideActivityItem {
-  return {
+  return sanitizeSomeoneRideItem({
     kind: 'ride',
     ride_id: ride.id,
     status: ride.status,
@@ -156,7 +164,7 @@ function rideToSomeoneItem(ride: NonNullable<ActiveRideResponse['ride']>): BookF
     pickup_address: ride.pickup_address ?? null,
     dropoff_address: ride.dropoff_address ?? null,
     created_at: ride.created_at,
-  };
+  });
 }
 
 function rideToMeItem(ride: NonNullable<ActiveRideResponse['ride']>): BookForOthersRideActivityItem {
@@ -261,7 +269,7 @@ async function promoteBookedIntentsToRides<T extends HubSomeoneItem | HubMeItem>
     try {
       const res = await ridesGetRequest(item.ride_request_id);
       if (res.ride.status === 'cancelled' || res.ride.status === 'completed') continue;
-      const rideItem: HubRideItem = {
+      const rideItem: HubRideItem = sanitizeSomeoneRideItem({
         kind: 'ride',
         ride_id: res.ride.id,
         status: res.ride.status,
@@ -270,7 +278,7 @@ async function promoteBookedIntentsToRides<T extends HubSomeoneItem | HubMeItem>
         pickup_address: res.ride.pickup_address ?? null,
         dropoff_address: res.ride.dropoff_address ?? null,
         created_at: res.ride.created_at,
-      };
+      });
       promoted.push(rideItem as T);
     } catch {
       promoted.push(item);
@@ -444,5 +452,10 @@ export async function loadBookForOthersActivity(): Promise<BookForOthersActivity
     throw reason;
   }
 
-  return result;
+  return {
+    book_for_someone: result.book_for_someone.map((item) =>
+      item.kind === 'ride' ? sanitizeSomeoneRideItem(item) : sanitizeSomeoneIntentItem(item),
+    ),
+    book_for_me: result.book_for_me,
+  };
 }

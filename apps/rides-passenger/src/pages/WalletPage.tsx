@@ -54,6 +54,11 @@ function formatTxDate(iso: string): string {
   }
 }
 
+function shadowTxTitle(tx: WalletTransactionDto): string {
+  if (tx.kind !== 'shadow_trip') return tx.title;
+  return tx.title?.trim() || 'Shadow trip';
+}
+
 function txIcon(tx: WalletTransactionDto) {
   if (tx.kind === 'topup') {
     return { Icon: Wallet, iconBg: PRIMARY_FIXED, iconColor: PRIMARY_CONTAINER, positive: true };
@@ -277,7 +282,7 @@ export default function WalletPage() {
                       </div>
                       <div>
                         <p className="font-bold" style={{ color: ON_SURFACE }}>
-                          {tx.title}
+                          {shadowTxTitle(tx)}
                         </p>
                         <p className="text-sm" style={{ color: SECONDARY }}>
                           {formatTxDate(tx.date)}

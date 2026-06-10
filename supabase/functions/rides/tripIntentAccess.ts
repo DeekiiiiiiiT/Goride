@@ -3,25 +3,18 @@
  */
 
 import { getRideParticipantRole } from "./rideAccess.ts";
+import {
+  isShadowRoamMode,
+  sanitizeRideForShadowBooker,
+  type RoamMode,
+} from "./shadowBookerPrivacy.ts";
 
-export type RoamMode = "open_roam" | "shadow_roam";
-
-const LOCATION_KEYS = [
-  "pickup_lat",
-  "pickup_lng",
-  "pickup_address",
-  "dropoff_lat",
-  "dropoff_lng",
-  "dropoff_address",
-  "route_polyline_encoded",
-  "last_driver_lat",
-  "last_driver_lng",
-  "last_driver_heading",
-] as const;
-
-export function isShadowRoamMode(mode: unknown): boolean {
-  return mode === "shadow_roam";
-}
+export type { RoamMode } from "./shadowBookerPrivacy.ts";
+export {
+  sanitizeActivityIntentForTargetBooker,
+  sanitizeActivityRideForBooker,
+  sanitizeRideForShadowBooker,
+} from "./shadowBookerPrivacy.ts";
 
 export function isShadowRoamRide(ride: Record<string, unknown>): boolean {
   return isShadowRoamMode(ride.roam_mode);
@@ -47,18 +40,6 @@ export function canShadowBookerChat(ride: Record<string, unknown>, userId: strin
 
 export function canShadowBookerAccessLive(ride: Record<string, unknown>, userId: string): boolean {
   return !isShadowBooker(ride, userId);
-}
-
-export function sanitizeRideForShadowBooker(
-  ride: Record<string, unknown> | null,
-): Record<string, unknown> | null {
-  if (!ride) return null;
-  const out = { ...ride } as Record<string, unknown>;
-  for (const key of LOCATION_KEYS) {
-    delete out[key];
-  }
-  delete out.verification_pin;
-  return out;
 }
 
 export type TripIntentRowLike = Record<string, unknown>;

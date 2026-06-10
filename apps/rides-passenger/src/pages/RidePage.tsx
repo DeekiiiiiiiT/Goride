@@ -33,6 +33,7 @@ import type { AssignedDriverSummaryDto } from '@roam/types/delegatedRide';
 import { useBookerTrackingOptional } from '@/contexts/BookerTrackingContext';
 import { persistMinimizedRide, readMinimizeExitPending, setMinimizeExitPending } from '@/lib/bookerTracking';
 import { isShadowBookerTrip, navigateToDelegatedRide } from '@/lib/delegatedRideNavigation';
+import { shouldHideLocationsForBooker } from '@/lib/shadowBookerPrivacy';
 
 function statusLabel(s: RideRequestStatus): string {
   switch (s) {
@@ -205,7 +206,12 @@ export default function RidePage() {
     enabled: Boolean(id),
     queryFn: async () => {
       const res = await ridesGetRequest(id!);
-      persistRiderRideCache(id!, res);
+      persistRiderRideCache(id!, {
+        ride: res.ride,
+        rider_pin: res.rider_pin,
+        wait_time: res.wait_time ?? null,
+        participant_role: res.participant_role,
+      });
       return res;
     },
     placeholderData: () => (id ? readRiderRideCache(id) : undefined),
@@ -224,7 +230,7 @@ export default function RidePage() {
     },
   });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!data || !id) return;
     if (isShadowBookerTrip(data.participant_role, data.roam_mode ?? data.ride.roam_mode, data.booker_visibility)) {
       navigateToDelegatedRide(navigate, id, data.participant_role, data.roam_mode ?? data.ride.roam_mode, {
@@ -233,6 +239,21 @@ export default function RidePage() {
       });
     }
   }, [data, id, navigate]);
+
+  const isShadowBooker = Boolean(
+    data
+      && isShadowBookerTrip(
+        data.participant_role,
+        data.roam_mode ?? data.ride.roam_mode,
+        data.booker_visibility,
+      ),
+  );
+
+  const cachedRide = id ? readRiderRideCache(id) : undefined;
+  const pendingShadowGate = !data && cachedRide?.ride.roam_mode === 'shadow_roam' && (
+    !cachedRide.participant_role
+    || shouldHideLocationsForBooker(cachedRide.ride.roam_mode, cachedRide.participant_role)
+  );
 
   const ride = data?.ride;
   const waitTime = data?.wait_time as WaitTimeInfo | null | undefined;
@@ -414,6 +435,14 @@ export default function RidePage() {
 
   const handleMinimize = (role: 'booker' | 'passenger') => {
     if (!id) return;
+    const roamMode = data?.roam_mode ?? data?.ride.roam_mode ?? null;
+    if (role === 'booker' && isShadowBookerTrip(role, roamMode, data?.booker_visibility)) {
+      navigateToDelegatedRide(navigate, id, role, roamMode, {
+        replace: true,
+        bookerVisibility: data?.booker_visibility,
+      });
+      return;
+    }
     if (bookerTracking) {
       bookerTracking.minimize(id, role);
       return;
@@ -427,6 +456,14 @@ export default function RidePage() {
   const handlePassengerMinimize = () => handleMinimize('passenger');
 
   if (!id) return null;
+
+  if (isShadowBooker || pendingShadowGate) {
+    return (
+      <div className="min-h-[100dvh] flex items-center justify-center bg-zinc-100 text-zinc-500">
+        <Loader2 className="w-8 h-8 animate-spin" aria-hidden />
+      </div>
+    );
+  }
 
   if (exitPending) {
     return <Navigate to="/" replace />;

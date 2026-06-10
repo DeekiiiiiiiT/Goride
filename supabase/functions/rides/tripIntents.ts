@@ -14,6 +14,7 @@ import {
   type RoamMode,
   sanitizeTripIntentForBooker,
 } from "./tripIntentAccess.ts";
+import { sanitizeActivityIntentForTargetBooker } from "./shadowBookerPrivacy.ts";
 import { isTripIntentV2Enabled } from "./tripIntentFlags.ts";
 import { linkBookingRequestToRide } from "./bookingRequests.ts";
 import { TRIP_INTENT_QUOTE_TTL_MS, verifyQuoteToken } from "./fare/quoteToken.ts";
@@ -412,7 +413,7 @@ export function mapTripIntentHubItem(
   row: Record<string, unknown>,
   role: "requester" | "target_booker",
 ): Record<string, unknown> {
-  return {
+  return sanitizeActivityIntentForTargetBooker({
     kind: "trip_intent",
     intent_id: String(row.id),
     status: String(row.status),
@@ -430,7 +431,7 @@ export function mapTripIntentHubItem(
     committed_at: row.committed_at != null ? String(row.committed_at) : null,
     book_by_at: row.book_by_at != null ? String(row.book_by_at) : null,
     can_book: role === "requester" && String(row.status) === "claimed" && withinBookWindow(row),
-  };
+  }, role);
 }
 
 function resolveBookerPhone(user: {

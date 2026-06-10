@@ -1,4 +1,8 @@
 import type { RideRequestRow } from '@roam/types/rides';
+import {
+  redactRideRowForShadowBooker,
+  shouldHideLocationsForBooker,
+} from '@/lib/shadowBookerPrivacy';
 
 const snapshotKey = (rideId: string) => `roam:rider:ride-snapshot:${rideId}`;
 
@@ -6,11 +10,31 @@ export type RiderRideCache = {
   ride: RideRequestRow;
   rider_pin?: string | null;
   wait_time?: Record<string, unknown> | null;
+  participant_role?: 'booker' | 'passenger' | 'driver' | 'none' | null;
 };
 
-export function persistRiderRideCache(rideId: string, data: RiderRideCache): void {
+function sanitizeCachePayload(data: RiderRideCache): RiderRideCache {
+  const role = data.participant_role ?? null;
+  if (!shouldHideLocationsForBooker(data.ride.roam_mode, role)) return data;
+  return {
+    ...data,
+    ride: redactRideRowForShadowBooker(data.ride),
+    rider_pin: null,
+    wait_time: null,
+  };
+}
+
+export function persistRiderRideCache(
+  rideId: string,
+  data: RiderRideCache,
+  options?: { participantRole?: RiderRideCache['participant_role'] },
+): void {
   try {
-    sessionStorage.setItem(snapshotKey(rideId), JSON.stringify(data));
+    const payload: RiderRideCache = {
+      ...data,
+      participant_role: options?.participantRole ?? data.participant_role ?? null,
+    };
+    sessionStorage.setItem(snapshotKey(rideId), JSON.stringify(sanitizeCachePayload(payload)));
   } catch {
     /* ignore */
   }
@@ -20,7 +44,8 @@ export function readRiderRideCache(rideId: string): RiderRideCache | undefined {
   try {
     const raw = sessionStorage.getItem(snapshotKey(rideId));
     if (!raw) return undefined;
-    return JSON.parse(raw) as RiderRideCache;
+    const parsed = JSON.parse(raw) as RiderRideCache;
+    return sanitizeCachePayload(parsed);
   } catch {
     return undefined;
   }
