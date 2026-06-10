@@ -99,6 +99,16 @@ export async function createRideFromTripIntent(
     ride = data as Record<string, unknown>;
   }
 
+  if (
+    ride
+    && ride.roam_mode !== "shadow_roam"
+    && ride.roam_mode !== "open_roam"
+    && insertRow.roam_mode
+  ) {
+    await deps.patchRideRequest(String(ride.id), { roam_mode: insertRow.roam_mode });
+    ride = { ...ride, roam_mode: insertRow.roam_mode };
+  }
+
   const reqId = crypto.randomUUID();
   await deps.audit(ride.id as string, bookerUserId, "ride_created", { trip_intent_id: intent.id });
   await deps.runMatchingWave(ride.id as string, ride, 1, reqId);

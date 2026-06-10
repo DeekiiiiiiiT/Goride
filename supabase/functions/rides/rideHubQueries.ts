@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { RidesContactsDb } from "../_shared/ridesContactsDb.ts";
 import { ACTIVE_RIDE_STATUSES, isDelegatedBooking } from "./rideAccess.ts";
+import { enrichRideRoamModeFromBooking } from "./roamModeResolve.ts";
 
 const NATIVE_TABLE = "ride_requests";
 const PUBLIC_TABLE = "rides_ride_requests";
@@ -70,6 +71,16 @@ export async function loadRideRowById(
   return (pub as Record<string, unknown> | null) ?? null;
 }
 
+async function hubReturnRide(
+  ride: Record<string, unknown>,
+  participant_role: "booker" | "passenger",
+  getContactsDb: () => Promise<RidesContactsDb>,
+  nativeDb: SupabaseClient,
+): Promise<{ ride: Record<string, unknown>; participant_role: "booker" | "passenger" }> {
+  const enriched = await enrichRideRoamModeFromBooking(ride, getContactsDb, nativeDb);
+  return { ride: enriched, participant_role };
+}
+
 export async function loadHubActiveRideForUser(
   nativeDb: SupabaseClient,
   publicDb: SupabaseClient,
@@ -96,12 +107,12 @@ export async function loadHubActiveRideForUser(
 
   for (const ride of asPassenger) {
     if (isHubDelegatedRide(ride)) {
-      return { ride, participant_role: "passenger" };
+      return hubReturnRide(ride, "passenger", getContactsDb, nativeDb);
     }
   }
   for (const ride of asBooker) {
     if (isHubDelegatedRide(ride)) {
-      return { ride, participant_role: "booker" };
+      return hubReturnRide(ride, "booker", getContactsDb, nativeDb);
     }
   }
 
@@ -132,7 +143,7 @@ export async function loadHubActiveRideForUser(
     if (requesterRideId) {
       const ride = await loadRideRowById(nativeDb, publicDb, requesterRideId);
       if (ride && statuses.includes(String(ride.status))) {
-        return { ride, participant_role: "passenger" };
+        return hubReturnRide(ride, "passenger", getContactsDb, nativeDb);
       }
     }
 
@@ -142,7 +153,7 @@ export async function loadHubActiveRideForUser(
     if (payerRideId) {
       const ride = await loadRideRowById(nativeDb, publicDb, payerRideId);
       if (ride && statuses.includes(String(ride.status))) {
-        return { ride, participant_role: "booker" };
+        return hubReturnRide(ride, "booker", getContactsDb, nativeDb);
       }
     }
   } catch {
@@ -151,12 +162,12 @@ export async function loadHubActiveRideForUser(
 
   const firstPassenger = asPassenger[0];
   if (firstPassenger && isHubDelegatedRide(firstPassenger)) {
-    return { ride: firstPassenger, participant_role: "passenger" };
+    return hubReturnRide(firstPassenger, "passenger", getContactsDb, nativeDb);
   }
 
   const firstBooker = asBooker[0];
   if (firstBooker && isHubDelegatedRide(firstBooker)) {
-    return { ride: firstBooker, participant_role: "booker" };
+    return hubReturnRide(firstBooker, "booker", getContactsDb, nativeDb);
   }
 
   return null;

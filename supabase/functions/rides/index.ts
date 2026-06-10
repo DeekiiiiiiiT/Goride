@@ -85,6 +85,7 @@ import { registerRoamPassengerTagRoutes } from "./roamPassengerTag.ts";
 import { registerTripIntentRoutes } from "./tripIntents.ts";
 import { registerBookForOthersActivityRoutes } from "./bookForOthersActivity.ts";
 import { loadHubActiveRideForUser } from "./rideHubQueries.ts";
+import { enrichRideRoamModeFromBooking } from "./roamModeResolve.ts";
 import { createRideFromTripIntent } from "./tripIntentFulfill.ts";
 import {
   bookerVisibilityForRide,
@@ -225,6 +226,8 @@ async function loadRideRequestById(id: string): Promise<Record<string, unknown> 
       ride = { ...ride, ...pinRow };
     }
   }
+
+  ride = await enrichRideRoamModeFromBooking(ride, getRidesContactsDb, svc());
 
   return ride;
 }

@@ -556,7 +556,8 @@ export function registerTripIntentRoutes(app: Hono, deps: TripIntentDeps) {
     const { db, tables: t } = await deps.getContactsDb();
     const existing = await findActiveForRequester(db, t.booking_requests, gate.user!.id);
     if (existing) {
-      if (String(existing.status) === "pending") {
+      const existingStatus = String(existing.status);
+      if (existingStatus === "pending") {
         const { data: upgraded, error: upgradeErr } = await db.from(t.booking_requests).update({
           status: "draft",
           roam_mode: body.roam_mode === "shadow_roam" ? "shadow_roam" : "open_roam",
@@ -572,7 +573,15 @@ export function registerTripIntentRoutes(app: Hono, deps: TripIntentDeps) {
         }
         return c.json({ trip_intent: upgraded, reused: true });
       }
-      if (String(existing.status) === "published") {
+      if (existingStatus === "draft") {
+        const roamMode = body.roam_mode === "shadow_roam" ? "shadow_roam" : "open_roam";
+        const { data: refreshed } = await db.from(t.booking_requests).update({
+          roam_mode: roamMode,
+          updated_at: new Date().toISOString(),
+        }).eq("id", existing.id).select("*").single();
+        return c.json({ trip_intent: refreshed ?? existing, reused: true });
+      }
+      if (existingStatus === "published") {
         const { data: upgraded, error: upgradeErr } = await db.from(t.booking_requests).update({
           status: "draft",
           updated_at: new Date().toISOString(),
@@ -581,7 +590,21 @@ export function registerTripIntentRoutes(app: Hono, deps: TripIntentDeps) {
           return c.json({ trip_intent: upgraded, reused: true });
         }
       }
-      return c.json({ trip_intent: existing, reused: true });
+      if (existingStatus === "claimed" || existingStatus === "booked") {
+        const reconciled = deps.rideSvc
+          ? await reconcileTripIntentWithRide(deps.rideSvc(), db, t.booking_requests, existing)
+          : existing;
+        if (reconciled) {
+          return c.json({
+            error: "active_intent_exists",
+            message: "You already have a live trip. Cancel it before starting a new one.",
+            trip_intent: mapTripIntentForRequester(reconciled),
+          }, 409);
+        }
+        /* linked ride finished — allow a new draft insert below */
+      } else if (existingStatus !== "draft" && existingStatus !== "published") {
+        return c.json({ trip_intent: existing, reused: true });
+      }
     }
 
     const roamMode = body.roam_mode === "shadow_roam" ? "shadow_roam" : "open_roam";

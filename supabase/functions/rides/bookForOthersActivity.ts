@@ -15,6 +15,7 @@ import {
   reconcileTripIntentWithRide,
 } from "./tripIntents.ts";
 import { sanitizeActivityRideForBooker } from "./shadowBookerPrivacy.ts";
+import { enrichRideRoamModeFromBooking } from "./roamModeResolve.ts";
 
 const RIDE_COLUMNS =
   "id, status, roam_mode, guest_passenger_name, guest_passenger_phone, passenger_user_id, rider_user_id, pickup_address, dropoff_address, created_at, booking_request_id";
@@ -106,15 +107,16 @@ async function loadDisplayNamesForUsers(
 
 /** Live rides linked via booked trip intents (covers book-for-me when passenger_user_id is unset). */
 async function loadLiveRidesFromBookedIntents(
-  contactsDb: SupabaseClient,
+  getContactsDb: () => Promise<RidesContactsDb>,
   rideDb: SupabaseClient,
   publicDb: SupabaseClient,
-  table: string,
-  tagsTable: string,
   userId: string,
   role: "requester" | "payer",
   statuses: readonly string[],
 ): Promise<ReturnType<typeof mapRideAsBooker>[]> {
+  const { db: contactsDb, tables: t } = await getContactsDb();
+  const table = t.booking_requests;
+  const tagsTable = t.roam_passenger_tags;
   const ownerCol = role === "requester" ? "requester_user_id" : "claimed_by_user_id";
   const { data: intents } = await contactsDb.from(table)
     .select("id, ride_request_id, requester_name, claimed_by_user_id")
@@ -135,7 +137,14 @@ async function loadLiveRidesFromBookedIntents(
   const rides: Record<string, unknown>[] = [];
   for (const rideId of rideIds) {
     const row = await loadRideRowById(rideDb, publicDb, rideId, RIDE_COLUMNS);
-    if (row && statuses.includes(String(row.status))) rides.push(row);
+    if (row && statuses.includes(String(row.status))) {
+      const enriched = await enrichRideRoamModeFromBooking(
+        row as Record<string, unknown>,
+        getContactsDb,
+        rideDb,
+      );
+      rides.push(enriched);
+    }
   }
   if (!rides.length) return [];
 
@@ -243,11 +252,17 @@ export function registerBookForOthersActivityRoutes(
       }),
     ]);
 
-    let bookForSomeoneRides = asBooker
+    const enrichRide = (row: Record<string, unknown>) =>
+      enrichRideRoamModeFromBooking(row, deps.getContactsDb, db);
+
+    const enrichedBooker = await Promise.all(asBooker.map((row) => enrichRide(row)));
+    const enrichedPassenger = await Promise.all(asPassenger.map((row) => enrichRide(row)));
+
+    let bookForSomeoneRides = enrichedBooker
       .filter((ride) => isHubDelegatedRide(ride))
       .map((row) => mapRideAsBooker(row));
 
-    let bookForMeRides = asPassenger
+    let bookForMeRides = enrichedPassenger
       .filter((ride) => isHubDelegatedRide(ride))
       .map((row) => mapRideAsPassenger(row));
 
@@ -263,21 +278,17 @@ export function registerBookForOthersActivityRoutes(
       const [intentRideLoads, { data: intents, error: intentsError }, targetingRows] = await Promise.all([
         Promise.all([
           loadLiveRidesFromBookedIntents(
-            contactsDb,
+            deps.getContactsDb,
             db,
             pub,
-            t.booking_requests,
-            t.roam_passenger_tags,
             userId,
             "requester",
             statuses,
           ),
           loadLiveRidesFromBookedIntents(
-            contactsDb,
+            deps.getContactsDb,
             db,
             pub,
-            t.booking_requests,
-            t.roam_passenger_tags,
             userId,
             "payer",
             statuses,

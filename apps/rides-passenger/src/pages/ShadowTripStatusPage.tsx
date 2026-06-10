@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Loader2, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { ridesGetRequest } from '@/services/ridesEdge';
 import { delegatedRidePath, isShadowBookerTrip } from '@/lib/delegatedRideNavigation';
 import {
@@ -12,8 +12,6 @@ import { ON_SURFACE, ON_SURFACE_VARIANT, PAGE_BG, PRIMARY, PRIMARY_CONTAINER } f
 export default function ShadowTripStatusPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [status, setStatus] = useState<string>('matching');
-  const [authorized, setAuthorized] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -32,8 +30,6 @@ export default function ShadowTripStatusPage() {
           return;
         }
 
-        setAuthorized(true);
-        setStatus(res.ride.status);
         if (res.ride.status === 'completed') {
           navigate(`/shadow-trip/${id}/receipt`, { replace: true });
         }
@@ -53,38 +49,36 @@ export default function ShadowTripStatusPage() {
     };
   }, [id, navigate]);
 
-  if (!authorized) {
-    return (
-      <div className="flex min-h-[100dvh] items-center justify-center" style={{ backgroundColor: PAGE_BG }}>
-        <Loader2 className="h-10 w-10 animate-spin" style={{ color: PRIMARY }} />
-      </div>
-    );
-  }
-
-  const done = status === 'completed';
-
   return (
-    <div className="flex min-h-[100dvh] flex-col items-center justify-center px-6 safe-x" style={{ backgroundColor: PAGE_BG }}>
-      <div className="w-full max-w-md space-y-6 text-center">
-        {done ? (
-          <CheckCircle2 className="mx-auto h-16 w-16" style={{ color: PRIMARY }} />
-        ) : (
-          <Loader2 className="mx-auto h-16 w-16 animate-spin" style={{ color: PRIMARY }} />
-        )}
-        <h1 className="text-2xl font-bold" style={{ color: ON_SURFACE }}>
-          {done ? 'Dropped off' : SHADOW_PAYER_ACTIVE_TITLE}
-        </h1>
-        <p className="rounded-2xl px-4 py-3 text-sm" style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_SURFACE }}>
-          {done
-            ? 'The rider has been dropped off. View your receipt in Wallet.'
-            : SHADOW_PAYER_ACTIVE_SUBTITLE}
-        </p>
-        {!done ? (
-          <p className="text-xs" style={{ color: ON_SURFACE_VARIANT }}>
+    <div className="flex min-h-[100dvh] flex-col" style={{ backgroundColor: PAGE_BG }}>
+      <header className="flex h-16 shrink-0 items-center px-4 safe-t">
+        <button
+          type="button"
+          onClick={() => navigate('/services/book-for-others')}
+          className="rounded-full p-2 touch-manipulation"
+          style={{ color: PRIMARY }}
+          aria-label="Back to Book for others"
+        >
+          <ArrowLeft className="h-6 w-6" />
+        </button>
+      </header>
+
+      <main className="flex flex-1 flex-col items-center justify-center px-6 pb-16 safe-x">
+        <div className="w-full max-w-md space-y-6 text-center">
+          <h1 className="text-2xl font-bold" style={{ color: ON_SURFACE }}>
+            {SHADOW_PAYER_ACTIVE_TITLE}
+          </h1>
+          <p
+            className="rounded-2xl px-4 py-3 text-sm leading-relaxed"
+            style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_SURFACE }}
+          >
+            {SHADOW_PAYER_ACTIVE_SUBTITLE}
+          </p>
+          <p className="text-xs leading-relaxed" style={{ color: ON_SURFACE_VARIANT }}>
             Need help? Contact support — trips cannot be cancelled after payment.
           </p>
-        ) : null}
-      </div>
+        </div>
+      </main>
     </div>
   );
 }

@@ -37,7 +37,7 @@ async function parseError(res: Response): Promise<never> {
       throw new Error('Book for me is not enabled on the server yet. Set TRIP_INTENT_V2=1 on the rides function.');
     }
     if (message === 'not_editable' || message === 'not_found') {
-      throw new Error('That trip request is no longer available. Withdraw any old trip and try again.');
+      throw new Error('You already have a live trip in progress. Open Book for others and cancel it first, then try again.');
     }
     if (/not found/i.test(message)) {
       throw new Error(
@@ -67,6 +67,9 @@ async function parseError(res: Response): Promise<never> {
       }
       if (body.error === 'booking_window_expired') {
         throw new Error(body.message ?? 'Booking window expired — publish your trip again');
+      }
+      if (body.error === 'active_intent_exists') {
+        throw new Error(body.message ?? 'You already have a live trip. Cancel it before starting a new one.');
       }
       message = body.message ?? body.error ?? message;
     } catch (e) {

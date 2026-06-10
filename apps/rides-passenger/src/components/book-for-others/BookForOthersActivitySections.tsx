@@ -17,11 +17,19 @@ import { TRIP_INTENT_V2 } from '@/lib/tripIntentFlags';
 import { formatShortAddress } from '@/lib/formatRideAddress';
 import {
   formatFareMinor,
+  tripIntentBook,
   tripIntentClaim,
   tripIntentGetBookerView,
+  tripIntentGetMyActive,
   tripIntentReject,
   tripIntentWithdraw,
 } from '@/services/tripIntentEdge';
+import { BookForMeRiderActionSheet } from '@/components/trip-intent/BookForMeRiderActionSheet';
+import {
+  bookForMeHubSideAction,
+  bookForMeHubStatusLabel,
+  isLiveLinkedRideStatus,
+} from '@/lib/bookForMeIntentUi';
 import { OPEN_ROAM_LABEL, SHADOW_ROAM_LABEL } from '@/lib/tripIntentCopy';
 import { navigateToDelegatedRide } from '@/lib/delegatedRideNavigation';
 import { bookerVisibleAddress } from '@/lib/shadowBookerPrivacy';
@@ -50,18 +58,6 @@ function formatBookCountdown(bookByAt: string | null | undefined): string | null
   const min = Math.floor(totalSec / 60);
   const sec = totalSec % 60;
   return `${min}:${sec.toString().padStart(2, '0')}`;
-}
-
-function intentStatusLabel(status: string, linkedRideStatus?: string | null, bookByAt?: string | null): string {
-  if (status === 'booked' && linkedRideStatus === 'cancelled') return 'Ride ended — cancel to remove';
-  if (status === 'draft') return 'Finish setting up your trip';
-  if (status === 'published') return 'Waiting for payer to agree';
-  if (status === 'claimed') {
-    const countdown = formatBookCountdown(bookByAt);
-    return countdown ? `Payer agreed — book within ${countdown}` : 'Payer agreed — book your ride';
-  }
-  if (status === 'booked') return 'Finding a driver';
-  return 'Trip request live';
 }
 
 function bookerIntentStatusLabel(status: string): string {
@@ -184,21 +180,27 @@ function SomeoneItemRow({
 function MeItemRow({
   item,
   onOpen,
+  onOpenActions,
   onCancelIntent,
-  cancellingIntentId,
+  onDismissIntent,
+  actionIntentId,
 }: {
   item: BookForOthersMeActivityItem;
   onOpen: (item: BookForOthersMeActivityItem) => void;
+  onOpenActions: (item: BookForOthersIntentActivityItem) => void;
   onCancelIntent: (item: BookForOthersIntentActivityItem) => void;
-  cancellingIntentId: string | null;
+  onDismissIntent: (item: BookForOthersIntentActivityItem) => void;
+  actionIntentId: string | null;
 }) {
   if (item.kind === 'trip_intent') {
     return (
       <MeIntentRow
         item={item}
         onOpen={onOpen}
+        onOpenActions={onOpenActions}
         onCancel={onCancelIntent}
-        cancelling={cancellingIntentId === item.intent_id}
+        onDismiss={onDismissIntent}
+        actionBusy={actionIntentId === item.intent_id}
       />
     );
   }
@@ -208,21 +210,27 @@ function MeItemRow({
 function MeIntentRow({
   item,
   onOpen,
+  onOpenActions,
   onCancel,
-  cancelling,
+  onDismiss,
+  actionBusy,
 }: {
   item: BookForOthersIntentActivityItem;
   onOpen: (item: BookForOthersMeActivityItem) => void;
+  onOpenActions: (item: BookForOthersIntentActivityItem) => void;
   onCancel: (item: BookForOthersIntentActivityItem) => void;
-  cancelling: boolean;
+  onDismiss: (item: BookForOthersIntentActivityItem) => void;
+  actionBusy: boolean;
 }) {
   const fare =
     item.fare_estimate_minor && item.currency
       ? formatFareMinor(item.fare_estimate_minor, item.currency)
       : null;
-  const statusLine = intentStatusLabel(item.status, item.linked_ride_status, item.book_by_at);
+  const statusLine = bookForMeHubStatusLabel(item, {
+    bookCountdown: formatBookCountdown(item.book_by_at),
+  });
   const subtitle = fare ? `${statusLine} · ${fare}` : statusLine;
-  const showCancel = item.can_cancel !== false;
+  const sideAction = bookForMeHubSideAction(item);
   const staleRide = item.linked_ride_status === 'cancelled';
 
   return (
@@ -249,12 +257,32 @@ function MeIntentRow({
             </p>
           ) : null}
         </div>
-        <ChevronRight className="h-5 w-5 shrink-0" style={{ color: OUTLINE_VARIANT }} aria-hidden />
+        {sideAction !== 'actions' ? (
+          <ChevronRight className="h-5 w-5 shrink-0" style={{ color: OUTLINE_VARIANT }} aria-hidden />
+        ) : null}
       </button>
-      {showCancel ? (
+      {sideAction === 'actions' ? (
         <button
           type="button"
-          disabled={cancelling}
+          disabled={actionBusy}
+          onClick={(event) => {
+            event.stopPropagation();
+            onOpenActions(item);
+          }}
+          className="flex shrink-0 items-center justify-center rounded-xl px-2.5 py-2 touch-manipulation transition-colors active:opacity-80 disabled:opacity-50"
+          style={{ color: PRIMARY }}
+          aria-label="Book or cancel trip"
+        >
+          {actionBusy ? (
+            <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
+          ) : (
+            <ChevronRight className="h-5 w-5" aria-hidden />
+          )}
+        </button>
+      ) : sideAction === 'cancel' ? (
+        <button
+          type="button"
+          disabled={actionBusy}
           onClick={(event) => {
             event.stopPropagation();
             onCancel(item);
@@ -266,13 +294,34 @@ function MeIntentRow({
           }}
           aria-label="Cancel trip"
         >
-          {cancelling ? (
+          {actionBusy ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
           ) : (
             <>
               <X className="h-4 w-4" aria-hidden />
               <span>Cancel</span>
             </>
+          )}
+        </button>
+      ) : sideAction === 'dismiss' ? (
+        <button
+          type="button"
+          disabled={actionBusy}
+          onClick={(event) => {
+            event.stopPropagation();
+            onDismiss(item);
+          }}
+          className="flex shrink-0 items-center justify-center rounded-xl px-3 py-2 text-[11px] font-semibold touch-manipulation transition-colors active:opacity-80 disabled:opacity-50"
+          style={{
+            color: PRIMARY,
+            backgroundColor: 'rgba(0, 74, 198, 0.08)',
+          }}
+          aria-label="Back to home"
+        >
+          {actionBusy ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          ) : (
+            <span>Done</span>
           )}
         </button>
       ) : null}
@@ -379,7 +428,10 @@ export function BookForOthersActivitySections({
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<ActivityTab>('someone');
   const [userPickedTab, setUserPickedTab] = useState(false);
-  const [cancellingIntentId, setCancellingIntentId] = useState<string | null>(null);
+  const [actionIntentId, setActionIntentId] = useState<string | null>(null);
+  const [riderSheetOpen, setRiderSheetOpen] = useState(false);
+  const [riderSheetItem, setRiderSheetItem] = useState<BookForOthersIntentActivityItem | null>(null);
+  const [bookingRiderIntent, setBookingRiderIntent] = useState(false);
   const [intentSheetOpen, setIntentSheetOpen] = useState(false);
   const [pendingIntent, setPendingIntent] = useState<TripIntentBookerViewDto | null>(null);
   const [intentLoading, setIntentLoading] = useState(false);
@@ -484,7 +536,11 @@ export function BookForOthersActivitySections({
 
   const openMeItem = (item: BookForOthersMeActivityItem) => {
     if (item.kind === 'trip_intent') {
-      if (item.status === 'booked' && item.ride_request_id && item.linked_ride_status !== 'cancelled') {
+      if (
+        item.status === 'booked'
+        && item.ride_request_id
+        && isLiveLinkedRideStatus(item.linked_ride_status)
+      ) {
         navigateToDelegatedRide(navigate, item.ride_request_id, 'passenger', item.roam_mode);
         return;
       }
@@ -494,16 +550,63 @@ export function BookForOthersActivitySections({
     navigateToDelegatedRide(navigate, item.ride_id, 'passenger', item.roam_mode);
   };
 
+  const closeRiderSheet = () => {
+    setRiderSheetOpen(false);
+    setRiderSheetItem(null);
+  };
+
+  const openRiderActions = (item: BookForOthersIntentActivityItem) => {
+    setRiderSheetItem(item);
+    setRiderSheetOpen(true);
+  };
+
+  const dismissMeIntent = async (item: BookForOthersIntentActivityItem) => {
+    setActionIntentId(item.intent_id);
+    try {
+      await tripIntentGetMyActive();
+      await queryClient.invalidateQueries({ queryKey: ['book-for-others', 'activity'] });
+      toast.message(
+        item.linked_ride_status === 'completed'
+          ? 'Trip complete — thanks for riding with Roam'
+          : 'Trip cleared',
+      );
+      navigate('/');
+    } catch {
+      await queryClient.invalidateQueries({ queryKey: ['book-for-others', 'activity'] });
+      navigate('/');
+    } finally {
+      setActionIntentId(null);
+    }
+  };
+
   const cancelMeIntent = async (item: BookForOthersIntentActivityItem) => {
-    setCancellingIntentId(item.intent_id);
+    setActionIntentId(item.intent_id);
     try {
       await tripIntentWithdraw(item.intent_id);
+      closeRiderSheet();
       await queryClient.invalidateQueries({ queryKey: ['book-for-others', 'activity'] });
       toast.message('Trip cancelled');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not cancel trip');
     } finally {
-      setCancellingIntentId(null);
+      setActionIntentId(null);
+    }
+  };
+
+  const bookMeIntent = async (item: BookForOthersIntentActivityItem) => {
+    setActionIntentId(item.intent_id);
+    setBookingRiderIntent(true);
+    try {
+      const res = await tripIntentBook(item.intent_id);
+      closeRiderSheet();
+      await queryClient.invalidateQueries({ queryKey: ['book-for-others', 'activity'] });
+      toast.success('Ride booked — finding a driver');
+      navigate(`/ride/${res.ride.id}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not book ride');
+    } finally {
+      setBookingRiderIntent(false);
+      setActionIntentId(null);
     }
   };
 
@@ -573,8 +676,10 @@ export function BookForOthersActivitySections({
               <MeItemRow
                 item={item}
                 onOpen={openMeItem}
+                onOpenActions={openRiderActions}
                 onCancelIntent={cancelMeIntent}
-                cancellingIntentId={cancellingIntentId}
+                onDismissIntent={dismissMeIntent}
+                actionIntentId={actionIntentId}
               />
             </React.Fragment>
           ))}
@@ -589,6 +694,16 @@ export function BookForOthersActivitySections({
         onClose={closeIntentSheet}
         onAccept={(intent) => void handleIntentCommit(intent)}
         onReject={(intent) => void handleIntentReject(intent)}
+      />
+
+      <BookForMeRiderActionSheet
+        open={riderSheetOpen}
+        item={riderSheetItem}
+        booking={bookingRiderIntent}
+        cancelling={actionIntentId === riderSheetItem?.intent_id && !bookingRiderIntent}
+        onClose={closeRiderSheet}
+        onBook={(intent) => void bookMeIntent(intent)}
+        onCancel={(intent) => void cancelMeIntent(intent)}
       />
     </section>
   );
