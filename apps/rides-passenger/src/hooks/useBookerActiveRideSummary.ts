@@ -8,6 +8,7 @@ import {
   isDelegatedBookerRole,
   isTerminalRideStatus,
 } from '@/lib/bookerTracking';
+import { isShadowBookerTrip } from '@/lib/delegatedRideNavigation';
 
 type Options = {
   mode: BookerTrackingMode;
@@ -79,6 +80,15 @@ export function useBookerActiveRideSummary({
     try {
       const res = await ridesGetMyActiveRideSummary();
       if (
+        res.summary
+        && minimizedRole === 'booker'
+        && isShadowBookerTrip('booker', res.summary.roam_mode)
+      ) {
+        setSummary(null);
+        clearMinimized();
+        return;
+      }
+      if (
         res.summary &&
         summaryMatchesMinimized(res.summary, minimizedRideId, minimizedRole)
       ) {
@@ -94,6 +104,19 @@ export function useBookerActiveRideSummary({
 
       const rideRes = await ridesGetRequest(minimizedRideId);
       const ride = rideRes.ride;
+
+      if (
+        minimizedRole === 'booker'
+        && isShadowBookerTrip(
+          rideRes.participant_role,
+          ride.roam_mode ?? rideRes.roam_mode,
+          rideRes.booker_visibility,
+        )
+      ) {
+        setSummary(null);
+        clearMinimized();
+        return;
+      }
 
       if (isTerminalRideStatus(ride.status)) {
         onTerminal?.(ride.guest_passenger_name ?? null, minimizedRole);

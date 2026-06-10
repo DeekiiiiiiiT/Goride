@@ -36,6 +36,8 @@ export type MinimizedRideRole = 'booker' | 'passenger';
 export type MinimizedRideSession = {
   rideId: string;
   role: MinimizedRideRole;
+  /** Persisted so chip can hide before summary API returns. */
+  roamMode?: 'open_roam' | 'shadow_roam' | null;
 };
 
 export type BookerTrackingMode = 'full' | 'minimized' | 'off';
@@ -61,13 +63,25 @@ export function bookerChipStatusLabel(
   return liveRideStatusHeadline(status, (ride ?? {}) as RideRequestRow);
 }
 
-export function persistMinimizedRide(rideId: string, role: MinimizedRideRole): void {
+export function persistMinimizedRide(
+  rideId: string,
+  role: MinimizedRideRole,
+  roamMode?: 'open_roam' | 'shadow_roam' | null,
+): void {
   try {
-    const payload: MinimizedRideSession = { rideId, role };
+    const payload: MinimizedRideSession = {
+      rideId,
+      role,
+      ...(roamMode != null ? { roamMode } : {}),
+    };
     sessionStorage.setItem(BOOKER_TRACKING_SESSION_KEY, JSON.stringify(payload));
   } catch {
     /* ignore */
   }
+}
+
+export function isShadowMinimizedBookerSession(session: MinimizedRideSession | null): boolean {
+  return session?.role === 'booker' && session.roamMode === 'shadow_roam';
 }
 
 export function setMinimizeExitPending(rideId: string): void {

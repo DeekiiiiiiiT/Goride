@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useBookerTracking } from '@/contexts/BookerTrackingContext';
 import { bookerChipStatusLabel, passengerChipStatusLabel } from '@/lib/bookerTracking';
+import { isShadowBookerTrip } from '@/lib/delegatedRideNavigation';
 
 const FAB_WIDTH_PX = 128;
 const FAB_HEIGHT_PX = 44;
@@ -79,7 +80,7 @@ export function shouldHideActiveTripFab(pathname: string): boolean {
  * Draggable floating pill when booker or rider minimized the live tracker.
  */
 export function BookerActiveTripChip() {
-  const { mode, minimizedRideId, minimizedRole, summary, summaryLoading, openFull } =
+  const { mode, minimizedRideId, minimizedRole, minimizedRoamMode, summary, summaryLoading, openFull } =
     useBookerTracking();
   const [position, setPosition] = useState<Point>(() =>
     readStoredFabPosition() ?? defaultFabPosition(),
@@ -160,7 +161,10 @@ export function BookerActiveTripChip() {
 
   if (mode !== 'minimized' || !minimizedRideId) return null;
 
-  if (minimizedRole === 'booker' && summary?.roam_mode === 'shadow_roam') {
+  if (
+    minimizedRole === 'booker'
+    && isShadowBookerTrip('booker', summary?.roam_mode ?? minimizedRoamMode)
+  ) {
     return null;
   }
 

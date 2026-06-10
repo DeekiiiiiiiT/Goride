@@ -60,6 +60,7 @@ export function sanitizeActivityRideForBooker(
     ...item,
     pickup_address: null,
     dropoff_address: null,
+    counterparty_name: null,
   };
 }
 
@@ -69,9 +70,12 @@ export function sanitizeActivityIntentForTargetBooker(
   role: "requester" | "target_booker",
 ): Record<string, unknown> {
   if (role !== "target_booker" || !isShadowRoamMode(item.roam_mode)) return item;
+  const status = String(item.status ?? "");
+  const hideIdentity = status === "booked";
   return {
     ...item,
     pickup_address: null,
     dropoff_address: null,
+    requester_name: hideIdentity ? null : item.requester_name ?? null,
   };
 }

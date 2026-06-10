@@ -3,13 +3,16 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Loader2, CheckCircle2 } from 'lucide-react';
 import { ridesGetRequest } from '@/services/ridesEdge';
 import { delegatedRidePath, isShadowBookerTrip } from '@/lib/delegatedRideNavigation';
+import {
+  SHADOW_PAYER_ACTIVE_SUBTITLE,
+  SHADOW_PAYER_ACTIVE_TITLE,
+} from '@/lib/shadowPayerCopy';
 import { ON_SURFACE, ON_SURFACE_VARIANT, PAGE_BG, PRIMARY, PRIMARY_CONTAINER } from '@/lib/passengerTheme';
 
 export default function ShadowTripStatusPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [status, setStatus] = useState<string>('matching');
-  const [passengerName, setPassengerName] = useState<string | null>(null);
   const [authorized, setAuthorized] = useState(false);
 
   useEffect(() => {
@@ -31,7 +34,6 @@ export default function ShadowTripStatusPage() {
 
         setAuthorized(true);
         setStatus(res.ride.status);
-        setPassengerName(res.ride.guest_passenger_name ?? null);
         if (res.ride.status === 'completed') {
           navigate(`/shadow-trip/${id}/receipt`, { replace: true });
         }
@@ -60,7 +62,6 @@ export default function ShadowTripStatusPage() {
   }
 
   const done = status === 'completed';
-  const label = passengerName ? `Trip for ${passengerName}` : 'Shadow trip';
 
   return (
     <div className="flex min-h-[100dvh] flex-col items-center justify-center px-6 safe-x" style={{ backgroundColor: PAGE_BG }}>
@@ -71,17 +72,12 @@ export default function ShadowTripStatusPage() {
           <Loader2 className="mx-auto h-16 w-16 animate-spin" style={{ color: PRIMARY }} />
         )}
         <h1 className="text-2xl font-bold" style={{ color: ON_SURFACE }}>
-          {done ? 'Dropped off' : 'Trip in progress'}
+          {done ? 'Dropped off' : SHADOW_PAYER_ACTIVE_TITLE}
         </h1>
-        <p className="text-base" style={{ color: ON_SURFACE_VARIANT }}>
-          {label}
-        </p>
         <p className="rounded-2xl px-4 py-3 text-sm" style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_SURFACE }}>
           {done
             ? 'The rider has been dropped off. View your receipt in Wallet.'
-            : passengerName
-              ? `You'll be notified when ${passengerName}'s trip finishes — no live tracking.`
-              : "You'll be notified when the trip finishes — no live tracking."}
+            : SHADOW_PAYER_ACTIVE_SUBTITLE}
         </p>
         {!done ? (
           <p className="text-xs" style={{ color: ON_SURFACE_VARIANT }}>

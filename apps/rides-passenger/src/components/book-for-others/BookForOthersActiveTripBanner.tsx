@@ -5,7 +5,7 @@ import { ChevronRight, Clock, Loader2, Navigation } from 'lucide-react';
 import { liveRideStatusHeadline } from '@/components/LiveRideView';
 import { formatShortAddress } from '@/lib/formatRideAddress';
 import { navigateToDelegatedRide } from '@/lib/delegatedRideNavigation';
-import { shadowBookerBannerCopy } from '@/lib/shadowBookerPrivacy';
+import { shadowPayerHubBannerCopy } from '@/lib/shadowPayerCopy';
 import { ON_SURFACE, ON_SURFACE_VARIANT, PRIMARY, PRIMARY_CONTAINER } from '@/lib/passengerTheme';
 import { resolveActiveRideForHub } from '@/services/bookForOthersEdge';
 import type { RideRequestRow, RideRequestStatus } from '@roam/types/rides';
@@ -27,16 +27,16 @@ export function BookForOthersActiveTripBanner() {
   const isBooker = data.participant_role === 'booker';
   const roamMode = ride.roam_mode ?? null;
   const passengerName = ride.guest_passenger_name?.trim() || 'Passenger';
-  const shadowCopy = shadowBookerBannerCopy(isBooker, passengerName, roamMode);
-  const isShadowBooker = isBooker && roamMode === 'shadow_roam';
+  const shadowHub = shadowPayerHubBannerCopy(isBooker, roamMode, ride.status);
+  const isShadowBooker = shadowHub.isShadow;
 
   const title = isShadowBooker
-    ? shadowCopy.title
+    ? shadowHub.title
     : isBooker
       ? `Live trip for ${passengerName}`
       : 'Your live trip';
   const subtitle = isShadowBooker
-    ? shadowCopy.subtitle
+    ? shadowHub.subtitle
     : liveRideStatusHeadline(ride.status as RideRequestStatus, ride as RideRequestRow);
   const detail = isShadowBooker
     ? null

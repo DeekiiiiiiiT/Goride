@@ -41,7 +41,7 @@ Deno.test("sanitizeActivityRideForBooker — shadow nulls addresses, open unchan
   });
   assertEquals(shadow.pickup_address, null);
   assertEquals(shadow.dropoff_address, null);
-  assertEquals(shadow.counterparty_name, "Alex");
+  assertEquals(shadow.counterparty_name, null);
 
   const open = sanitizeActivityRideForBooker({
     kind: "ride",
@@ -51,6 +51,31 @@ Deno.test("sanitizeActivityRideForBooker — shadow nulls addresses, open unchan
   });
   assertEquals(open.pickup_address, "Open St");
   assertEquals(open.dropoff_address, "Open Ave");
+});
+
+Deno.test("sanitizeActivityIntentForTargetBooker — shadow booked hides requester name", () => {
+  const booked = sanitizeActivityIntentForTargetBooker(
+    {
+      kind: "trip_intent",
+      roam_mode: "shadow_roam",
+      status: "booked",
+      pickup_address: "Secret St",
+      requester_name: "Alex",
+    },
+    "target_booker",
+  );
+  assertEquals(booked.requester_name, null);
+  assertEquals(booked.pickup_address, null);
+
+  const published = sanitizeActivityIntentForTargetBooker(
+    {
+      roam_mode: "shadow_roam",
+      status: "published",
+      requester_name: "Alex",
+    },
+    "target_booker",
+  );
+  assertEquals(published.requester_name, "Alex");
 });
 
 Deno.test("sanitizeActivityIntentForTargetBooker — shadow target booker only", () => {

@@ -18,6 +18,7 @@ import {
   type MinimizedRideSession,
   clearBookerMinimized,
   clearMinimizeExitPending,
+  isShadowMinimizedBookerSession,
   parseRideIdFromPath,
   persistMinimizedRide,
   readMinimizeExitPending,
@@ -30,6 +31,7 @@ type BookerTrackingContextValue = {
   mode: BookerTrackingMode;
   minimizedRideId: string | null;
   minimizedRole: MinimizedRideRole | null;
+  minimizedRoamMode: 'open_roam' | 'shadow_roam' | null;
   exitPendingRideId: string | null;
   summary: ActiveRideSummaryDto | null;
   summaryLoading: boolean;
@@ -94,6 +96,16 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
     onClearMinimized: handleClearMinimized,
   });
 
+  const minimizedRoamMode = minimizedSession?.roamMode ?? summary?.roam_mode ?? null;
+
+  useEffect(() => {
+    const session = readMinimizedRideSession();
+    if (isShadowMinimizedBookerSession(session)) {
+      clearBookerMinimized();
+      setMinimizedSession(null);
+    }
+  }, []);
+
   const minimize = useCallback(
     (rideId: string, role: MinimizedRideRole) => {
       const roamMode = summary?.roam_mode ?? null;
@@ -104,8 +116,8 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
       minimizingRef.current = true;
       setMinimizeExitPending(rideId);
       setExitPendingRideId(rideId);
-      persistMinimizedRide(rideId, role);
-      setMinimizedSession({ rideId, role });
+      persistMinimizedRide(rideId, role, roamMode);
+      setMinimizedSession({ rideId, role, roamMode: roamMode ?? undefined });
       void queryClient.cancelQueries({ queryKey: ['ride', rideId] });
       void queryClient.cancelQueries({ queryKey: ['ride-live', rideId] });
       navigate('/', { replace: true });
@@ -172,6 +184,7 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
       mode,
       minimizedRideId,
       minimizedRole,
+      minimizedRoamMode,
       exitPendingRideId,
       summary,
       summaryLoading,
@@ -184,6 +197,7 @@ export function BookerTrackingProvider({ children }: { children: React.ReactNode
       mode,
       minimizedRideId,
       minimizedRole,
+      minimizedRoamMode,
       exitPendingRideId,
       summary,
       summaryLoading,

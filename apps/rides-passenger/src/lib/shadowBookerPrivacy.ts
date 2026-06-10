@@ -58,46 +58,18 @@ export function bookerVisibleAddress(
   return trimmed || null;
 }
 
-export function shadowBookerStatusCopy(passengerName: string | null | undefined): string {
-  const name = passengerName?.trim();
-  if (name) {
-    return `In progress — you'll be notified when ${name}'s trip finishes`;
-  }
-  return "In progress — you'll be notified when the trip finishes";
-}
-
-export function shadowBookerBannerCopy(
-  isBooker: boolean,
-  passengerName: string | null | undefined,
-  roamMode: RoamMode,
-): { title: string; subtitle: string; detail: string | null; hideLiveIcon: boolean } {
-  const name = passengerName?.trim() || 'Passenger';
-  if (isBooker && roamMode === 'shadow_roam') {
-    return {
-      title: `Trip for ${name}`,
-      subtitle: shadowBookerStatusCopy(passengerName),
-      detail: null,
-      hideLiveIcon: true,
-    };
-  }
-  return {
-    title: isBooker ? `Live trip for ${name}` : 'Your live trip',
-    subtitle: '',
-    detail: null,
-    hideLiveIcon: false,
-  };
-}
-
 export function sanitizeSomeoneRideItem<T extends {
   roam_mode?: RoamMode;
   pickup_address?: string | null;
   dropoff_address?: string | null;
+  counterparty_name?: string | null;
 }>(item: T): T {
   if (item.roam_mode !== 'shadow_roam') return item;
   return {
     ...item,
     pickup_address: null,
     dropoff_address: null,
+    counterparty_name: null,
   };
 }
 
@@ -105,13 +77,17 @@ export function sanitizeSomeoneIntentItem<T extends {
   roam_mode?: RoamMode;
   pickup_address?: string | null;
   dropoff_address?: string | null;
+  requester_name?: string | null;
+  status?: string | null;
   intent_role?: 'requester' | 'target_booker';
 }>(item: T): T {
   if (item.intent_role === 'requester' || item.roam_mode !== 'shadow_roam') return item;
+  const hideIdentity = item.status === 'booked';
   return {
     ...item,
     pickup_address: null,
     dropoff_address: null,
+    requester_name: hideIdentity ? null : item.requester_name ?? null,
   };
 }
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -28,6 +28,7 @@ import {
   tripIntentUpdate,
   tripIntentWithdraw,
 } from '@/services/tripIntentEdge';
+import { ridesGetRequest } from '@/services/ridesEdge';
 import { buildGuestPhoneE164, formatGuestPhoneDisplay, isValidGuestPhone } from '@/lib/guestRecipientBooking';
 import { formatShortAddress } from '@/lib/formatRideAddress';
 import { formatFareMinor } from '@/services/tripIntentEdge';
@@ -49,6 +50,19 @@ import {
 } from '@/lib/passengerTheme';
 
 type Step = 'mode' | 'trip' | 'payer' | 'published';
+
+const ACTIVE_INTENT_UI_STATUSES = new Set<TripIntentRow['status']>([
+  'draft',
+  'published',
+  'claimed',
+  'booked',
+]);
+
+const TERMINAL_LINKED_RIDE_STATUSES = new Set(['completed', 'cancelled']);
+
+function isLiveLinkedRideStatus(status: string | null | undefined): boolean {
+  return Boolean(status && !TERMINAL_LINKED_RIDE_STATUSES.has(status));
+}
 
 function TripIntentPayerRow({ children }: { children: React.ReactNode }) {
   return (
@@ -165,48 +179,91 @@ export default function BookForMePage() {
     if (step === 'payer') reloadContacts();
   }, [step]);
 
-  useEffect(() => {
-    void tripIntentGetMyActive().then((r) => {
-      if (!r.trip_intent) return;
-      const { status } = r.trip_intent;
-      if (!['draft', 'published', 'claimed', 'booked'].includes(status)) return;
-      setIntent(r.trip_intent);
-      if (status === 'draft') return;
-      setStep('published');
-    }).catch(() => undefined);
-  }, []);
+  const clearActiveIntent = useCallback(() => {
+    setIntent(null);
+    setStep('mode');
+    void queryClient.invalidateQueries({ queryKey: ['book-for-others', 'activity'] });
+  }, [queryClient]);
+
+  const applyActiveIntent = useCallback(
+    (trip: TripIntentRow | null) => {
+      if (!trip) {
+        clearActiveIntent();
+        return;
+      }
+
+      const linked = trip.linked_ride_status ?? null;
+      if (linked && TERMINAL_LINKED_RIDE_STATUSES.has(linked)) {
+        clearActiveIntent();
+        return;
+      }
+
+      if (!ACTIVE_INTENT_UI_STATUSES.has(trip.status)) {
+        clearActiveIntent();
+        return;
+      }
+
+      setIntent(trip);
+      if (trip.status !== 'draft') {
+        setStep('published');
+      }
+    },
+    [clearActiveIntent],
+  );
+
+  const refreshActiveIntent = useCallback(async () => {
+    try {
+      const r = await tripIntentGetMyActive();
+      let trip = r.trip_intent;
+
+      if (
+        trip?.status === 'booked'
+        && trip.ride_request_id
+        && (!trip.linked_ride_status || !TERMINAL_LINKED_RIDE_STATUSES.has(trip.linked_ride_status))
+      ) {
+        try {
+          const rideRes = await ridesGetRequest(trip.ride_request_id);
+          const rideStatus = rideRes.ride.status;
+          if (TERMINAL_LINKED_RIDE_STATUSES.has(rideStatus)) {
+            applyActiveIntent(null);
+            return;
+          }
+          trip = { ...trip, linked_ride_status: rideStatus };
+        } catch {
+          /* keep server intent */
+        }
+      }
+
+      applyActiveIntent(trip);
+    } catch {
+      /* ignore */
+    }
+  }, [applyActiveIntent]);
 
   useEffect(() => {
-    if (intent?.status !== 'claimed' || !intent.book_by_at) return;
-    const id = window.setInterval(() => setCountdownTick((n) => n + 1), 1000);
-    return () => window.clearInterval(id);
-  }, [intent?.status, intent?.book_by_at]);
+    void refreshActiveIntent();
+  }, [refreshActiveIntent]);
 
   useEffect(() => {
     if (intent?.status !== 'claimed' && intent?.status !== 'booked') return;
+
+    void refreshActiveIntent();
     const poll = window.setInterval(() => {
-      void tripIntentGetMyActive().then((r) => {
-        if (!r.trip_intent) {
-          setIntent(null);
-          setStep('mode');
-          void queryClient.invalidateQueries({ queryKey: ['book-for-others', 'activity'] });
-          return;
-        }
-        const { status } = r.trip_intent;
-        if (!['draft', 'published', 'claimed', 'booked'].includes(status)) {
-          setIntent(null);
-          setStep('mode');
-          void queryClient.invalidateQueries({ queryKey: ['book-for-others', 'activity'] });
-          return;
-        }
-        setIntent(r.trip_intent);
-        if (!['claimed', 'booked'].includes(status)) {
-          setStep('published');
-        }
-      }).catch(() => undefined);
-    }, 15_000);
-    return () => window.clearInterval(poll);
-  }, [intent?.status, queryClient]);
+      void refreshActiveIntent();
+    }, 8_000);
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshActiveIntent();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      window.clearInterval(poll);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [intent?.status, refreshActiveIntent]);
 
   const bookCountdown = (() => {
     if (!intent?.book_by_at) return null;
@@ -224,9 +281,7 @@ export default function BookForMePage() {
     setWithdrawing(true);
     try {
       await tripIntentWithdraw(intent.id);
-      setIntent(null);
-      setStep('mode');
-      await queryClient.invalidateQueries({ queryKey: ['book-for-others', 'activity'] });
+      clearActiveIntent();
       toast.message('Trip cancelled');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not cancel trip');
@@ -235,17 +290,29 @@ export default function BookForMePage() {
     }
   };
 
-  const liveIntentHeadline = (status: TripIntentRow['status']) => {
-    if (status === 'booked') return 'Finding a driver';
-    if (status === 'claimed') return 'Payer agreed — book your ride';
+  useEffect(() => {
+    if (intent?.status !== 'claimed' || !intent.book_by_at) return;
+    const id = window.setInterval(() => setCountdownTick((n) => n + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [intent?.status, intent?.book_by_at]);
+
+  const liveIntentHeadline = (item: TripIntentRow) => {
+    if (item.status === 'booked') {
+      if (isLiveLinkedRideStatus(item.linked_ride_status)) return 'Trip in progress';
+      return 'Finding a driver';
+    }
+    if (item.status === 'claimed') return 'Payer agreed — book your ride';
     return 'Your trip is waiting for a payer';
   };
 
-  const liveIntentDetail = (status: TripIntentRow['status']) => {
-    if (status === 'booked') {
+  const liveIntentDetail = (item: TripIntentRow) => {
+    if (item.status === 'booked') {
+      if (isLiveLinkedRideStatus(item.linked_ride_status)) {
+        return 'Your ride is underway. Open the live trip to track your driver.';
+      }
       return 'Your booker paid — we are matching a driver. You can cancel below if plans changed.';
     }
-    if (status === 'claimed') {
+    if (item.status === 'claimed') {
       return bookCountdown
         ? `You have ${bookCountdown} left to book. Trip details are locked.`
         : 'Book now — trip details are locked.';
@@ -419,7 +486,7 @@ export default function BookForMePage() {
       <main className="mx-auto w-full max-w-2xl space-y-4 px-4 py-4 safe-x">
         {step === 'published' && intent ? (
           <div className="space-y-4 rounded-[24px] p-5" style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}>
-            <p className="font-semibold">{liveIntentHeadline(intent.status)}</p>
+            <p className="font-semibold">{liveIntentHeadline(intent)}</p>
             <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
               {intent.status === 'published' ? (
                 intent.audience === 'targeted' ? (
@@ -435,7 +502,7 @@ export default function BookForMePage() {
                   <>Tell them to search <strong>{displayTag}</strong> in Roam</>
                 )
               ) : (
-                liveIntentDetail(intent.status)
+                liveIntentDetail(intent)
               )}
             </p>
             {intent.fare_estimate_minor ? (

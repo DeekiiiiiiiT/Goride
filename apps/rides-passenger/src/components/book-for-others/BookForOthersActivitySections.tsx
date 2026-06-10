@@ -25,6 +25,7 @@ import {
 import { OPEN_ROAM_LABEL, SHADOW_ROAM_LABEL } from '@/lib/tripIntentCopy';
 import { navigateToDelegatedRide } from '@/lib/delegatedRideNavigation';
 import { bookerVisibleAddress } from '@/lib/shadowBookerPrivacy';
+import { shadowPayerActivityRowCopy } from '@/lib/shadowPayerCopy';
 import {
   ERROR,
   ON_SURFACE,
@@ -118,16 +119,16 @@ function SomeoneRideRow({
   onOpen: (item: BookForOthersRideActivityItem) => void;
 }) {
   const name = item.counterparty_name?.trim() || 'Passenger';
-  const isShadow = item.roam_mode === 'shadow_roam';
-  const route = isShadow
-    ? 'Locations private'
+  const shadowRow = shadowPayerActivityRowCopy(item.roam_mode, item.status, 'ride');
+  const route = shadowRow.useShadowCopy
+    ? null
     : bookerVisibleAddress(item.roam_mode, 'booker', item.pickup_address)
       ? formatShortAddress(item.pickup_address)
       : null;
   return (
     <ActivityRow
-      title={`Ride for ${name}`}
-      subtitle={isShadow ? 'Trip in progress' : rideStatusLabel(item.status as RideRequestStatus)}
+      title={shadowRow.useShadowCopy ? shadowRow.title : `Ride for ${name}`}
+      subtitle={shadowRow.useShadowCopy ? shadowRow.subtitle : rideStatusLabel(item.status as RideRequestStatus)}
       detail={route}
       onClick={() => onOpen(item)}
     />
@@ -142,7 +143,7 @@ function SomeoneIntentRow({
   onOpen: (item: BookForOthersIntentActivityItem) => void;
 }) {
   const name = item.requester_name?.trim() || 'Rider';
-  const isShadow = item.roam_mode === 'shadow_roam';
+  const shadowRow = shadowPayerActivityRowCopy(item.roam_mode, item.status, 'trip_intent');
   const fare =
     item.fare_estimate_minor && item.currency
       ? formatFareMinor(item.fare_estimate_minor, item.currency)
@@ -150,15 +151,15 @@ function SomeoneIntentRow({
   const subtitle = fare
     ? `${bookerIntentStatusLabel(item.status)} · ${fare}`
     : bookerIntentStatusLabel(item.status);
-  const detail = isShadow
-    ? 'Locations private'
+  const detail = shadowRow.useShadowCopy
+    ? null
     : bookerVisibleAddress(item.roam_mode, 'booker', item.pickup_address)
       ? formatShortAddress(item.pickup_address)
       : null;
   return (
     <ActivityRow
-      title={`Pay for ${name}`}
-      subtitle={subtitle}
+      title={shadowRow.useShadowCopy ? shadowRow.title : `Pay for ${name}`}
+      subtitle={shadowRow.useShadowCopy ? shadowRow.subtitle : subtitle}
       detail={detail}
       onClick={() => onOpen(item)}
     />

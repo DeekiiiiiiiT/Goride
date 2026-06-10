@@ -460,49 +460,66 @@ async function cancelRideRequestRow(
   });
 }
 
+async function syncBookingRequestForTerminalRide(
+  fresh: Record<string, unknown>,
+  status: "completed" | "cancelled",
+): Promise<void> {
+  const bookingRequestId = typeof fresh.booking_request_id === "string"
+    ? fresh.booking_request_id
+    : null;
+  if (!bookingRequestId) return;
+
+  const rideId = String(fresh.id);
+
+  try {
+    if (status === "completed") {
+      const { db: contactsDb, tables: ct } = await getRidesContactsDb();
+      const { data: br } = await contactsDb.from(ct.booking_requests)
+        .select("status")
+        .eq("id", bookingRequestId)
+        .maybeSingle();
+      const intentStatus = br ? String(br.status) : "";
+      if (intentStatus === "booked" || isDigitalRidePayment(fresh.payment_method)) {
+        await markBookingRequestConsumed(getRidesContactsDb, bookingRequestId, rideId);
+      }
+      return;
+    }
+
+    const cancelledBy = String(fresh.cancelled_by ?? "");
+    if (cancelledBy === "system") {
+      await syncBookingRequestAfterSystemRideCancel(getRidesContactsDb, bookingRequestId);
+    } else {
+      await releaseBookingRequestAfterRideCancelled(getRidesContactsDb, bookingRequestId);
+    }
+  } catch (e) {
+    console.error("[rides] booking request sync failed:", e);
+  }
+}
+
 async function handleTerminalRideLedgerAndSync(rideId: string): Promise<void> {
   const fresh = await loadRideRequestById(rideId);
   if (!fresh) return;
   const status = String(fresh.status ?? "");
   if (status !== "completed" && status !== "cancelled") return;
 
-  const bookingRequestId = typeof fresh.booking_request_id === "string"
-    ? fresh.booking_request_id
-    : null;
-
   try {
     await persistRideLedgerLinesForTerminalState(svc(), fresh);
     if (status === "completed") {
       await finalizeRideLedgerFields(svc(), rideId, fresh);
-      if (bookingRequestId) {
-        const { db: contactsDb, tables: ct } = await getRidesContactsDb();
-        const { data: br } = await contactsDb.from(ct.booking_requests)
-          .select("status")
-          .eq("id", bookingRequestId)
-          .maybeSingle();
-        const intentStatus = br ? String(br.status) : "";
-        // Trip-intent rides (booked) always close; legacy tag links stay open for cash until digital pay.
-        if (intentStatus === "booked" || isDigitalRidePayment(fresh.payment_method)) {
-          await markBookingRequestConsumed(getRidesContactsDb, bookingRequestId, rideId);
-        }
-      }
       if (fresh.roam_mode === "shadow_roam") {
         void notifyShadowBookerOfTripCompleted(pubSvc(), fresh).catch((e) =>
           logLine({ event: "shadow_booker_notify_failed", error: String(e) })
         );
       }
     }
-    if (status === "cancelled" && bookingRequestId) {
-      const cancelledBy = String(fresh.cancelled_by ?? "");
-      if (cancelledBy === "system") {
-        await syncBookingRequestAfterSystemRideCancel(getRidesContactsDb, bookingRequestId);
-      } else {
-        await releaseBookingRequestAfterRideCancelled(getRidesContactsDb, bookingRequestId);
-      }
-    }
   } catch (e) {
     console.error("[rides] ledger line persist failed:", e);
   }
+
+  await syncBookingRequestForTerminalRide(
+    fresh,
+    status as "completed" | "cancelled",
+  );
 
   try {
     await syncRideToFleetKv(fresh);

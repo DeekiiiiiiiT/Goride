@@ -118,6 +118,41 @@ function withinBookWindow(row: Record<string, unknown>): boolean {
   return Boolean(bookByAt && !isExpired(bookByAt));
 }
 
+/** Resolve linked ride status — prefers ride_request_id, falls back to booking_request_id. */
+export async function resolveLinkedRideForIntent(
+  rideSvc: SupabaseClient,
+  intentId: string,
+  rideRequestId: unknown,
+): Promise<{ linkedStatus: string | null; resolvedRideId: string | null }> {
+  if (rideRequestId != null && String(rideRequestId).length > 0) {
+    const { data: ride } = await rideSvc.from("ride_requests")
+      .select("id, status")
+      .eq("id", String(rideRequestId))
+      .maybeSingle();
+    if (ride) {
+      return {
+        linkedStatus: String(ride.status),
+        resolvedRideId: String(ride.id),
+      };
+    }
+  }
+
+  const { data: rides } = await rideSvc.from("ride_requests")
+    .select("id, status")
+    .eq("booking_request_id", intentId)
+    .order("updated_at", { ascending: false })
+    .limit(1);
+  const latest = rides?.[0] as Record<string, unknown> | undefined;
+  if (latest) {
+    return {
+      linkedStatus: String(latest.status),
+      resolvedRideId: String(latest.id),
+    };
+  }
+
+  return { linkedStatus: null, resolvedRideId: null };
+}
+
 /** Sync intent with linked ride; returns null when the intent should drop off hub lists. */
 export async function reconcileTripIntentWithRide(
   rideSvc: SupabaseClient,
@@ -129,23 +164,21 @@ export async function reconcileTripIntentWithRide(
   if (!["claimed", "booked"].includes(status)) return row;
 
   const intentId = String(row.id);
-  let linkedStatus: string | null = null;
+  const { linkedStatus, resolvedRideId } = await resolveLinkedRideForIntent(
+    rideSvc,
+    intentId,
+    row.ride_request_id,
+  );
 
-  if (row.ride_request_id) {
-    const { data: ride } = await rideSvc.from("ride_requests")
-      .select("id, status")
-      .eq("id", String(row.ride_request_id))
-      .maybeSingle();
-    linkedStatus = ride ? String(ride.status) : null;
-  } else {
-    const { data: rides } = await rideSvc.from("ride_requests")
-      .select("id, status")
-      .eq("booking_request_id", intentId)
-      .in("status", ["cancelled", "completed"])
-      .order("updated_at", { ascending: false })
-      .limit(1);
-    const terminal = rides?.[0] as Record<string, unknown> | undefined;
-    if (terminal) linkedStatus = String(terminal.status);
+  if (
+    resolvedRideId &&
+    String(row.ride_request_id ?? "") !== resolvedRideId
+  ) {
+    await contactsDb.from(table).update({
+      ride_request_id: resolvedRideId,
+      updated_at: new Date().toISOString(),
+    }).eq("id", intentId);
+    row = { ...row, ride_request_id: resolvedRideId };
   }
 
   if (linkedStatus === "cancelled") {

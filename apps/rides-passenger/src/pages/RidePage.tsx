@@ -448,7 +448,7 @@ export default function RidePage() {
       return;
     }
     setMinimizeExitPending(id);
-    persistMinimizedRide(id, role);
+    persistMinimizedRide(id, role, roamMode);
     navigate('/', { replace: true });
   };
 
