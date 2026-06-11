@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Loader2, Smartphone, Tag, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { RiderContactGroupRow, RiderContactRow } from '@roam/types/riderContacts';
@@ -112,91 +113,82 @@ export function RiderPickupPickerSheet({ open, onClose, onSelect }: Props) {
     }
   }, [open]);
 
-  if (!open) return null;
-
   const filteredDevice = deviceContacts.filter((c) => {
     const q = deviceQuery.trim().toLowerCase();
     if (!q) return true;
     return c.name.toLowerCase().includes(q) || c.phoneLabel.includes(q);
   });
 
-  return (
-    <>
-      <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/40 safe-x" role="dialog" aria-modal>
-        <button type="button" className="absolute inset-0" aria-label="Close" onClick={closeAll} />
+  const mainSheet = open && typeof document !== 'undefined'
+    ? createPortal(
         <div
-          className="relative w-full max-w-lg rounded-t-3xl px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-5 shadow-2xl"
-          style={{ backgroundColor: SURFACE_LOWEST }}
+          className="fixed inset-0 z-[200] flex items-end justify-center safe-x"
+          role="dialog"
+          aria-modal
+          aria-labelledby="rider-pickup-picker-title"
         >
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-bold" style={{ color: ON_SURFACE }}>Who are you picking up?</h2>
-            <button type="button" onClick={closeAll} className="rounded-full p-2" aria-label="Close">
-              <X className="h-5 w-5" style={{ color: ON_SURFACE_VARIANT }} />
-            </button>
-          </div>
-          <p className="mb-4 text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-            We&apos;ll ask them to share their current location for pickup.
-          </p>
-          <div className="space-y-2">
-            <button
-              type="button"
-              onClick={() => setTagOpen(true)}
-              className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left"
-              style={{ backgroundColor: SURFACE_LOW, color: PRIMARY }}
-            >
-              <Tag className="h-5 w-5 shrink-0" aria-hidden />
-              <span className="font-semibold">Search Roam tag</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setRoamOpen(true)}
-              className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left"
-              style={{ backgroundColor: SURFACE_LOW, color: PRIMARY }}
-            >
-              <Users className="h-5 w-5 shrink-0" aria-hidden />
-              <span className="font-semibold">Roam contacts</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setPhoneOpen(true)}
-              className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left"
-              style={{ backgroundColor: SURFACE_LOW, color: PRIMARY }}
-            >
-              <Smartphone className="h-5 w-5 shrink-0" aria-hidden />
-              <span className="font-semibold">Phone contacts</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <RoamTagLookupSheet
-        open={tagOpen}
-        onClose={() => setTagOpen(false)}
-        title="Who are you picking up?"
-        description="Search for the rider using their Roam tag."
-        confirmLabel="Request location"
-        onSelect={handleTagSelect}
-      />
-
-      <RoamContactsPickerSheet
-        open={roamOpen}
-        onClose={() => setRoamOpen(false)}
-        contacts={contacts}
-        groups={groups}
-        loading={contactsLoading}
-        query={contactQuery}
-        onQueryChange={setContactQuery}
-        groupFilterId={groupFilterId}
-        onGroupFilterChange={setGroupFilterId}
-        selectedId={null}
-        onSelect={handleContactSelect}
-      />
-
-      {phoneOpen ? (
-        <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/40 safe-x" role="dialog" aria-modal>
-          <button type="button" className="absolute inset-0" aria-label="Close" onClick={() => setPhoneOpen(false)} />
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            aria-label="Close"
+            onClick={closeAll}
+          />
           <div
-            className="relative flex max-h-[85dvh] w-full max-w-lg flex-col rounded-t-3xl shadow-2xl safe-b"
+            className="relative z-10 w-full max-w-lg rounded-t-3xl px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-5 shadow-2xl"
+            style={{ backgroundColor: SURFACE_LOWEST }}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h2 id="rider-pickup-picker-title" className="text-lg font-bold" style={{ color: ON_SURFACE }}>
+                Who are you picking up?
+              </h2>
+              <button type="button" onClick={closeAll} className="rounded-full p-2" aria-label="Close">
+                <X className="h-5 w-5" style={{ color: ON_SURFACE_VARIANT }} />
+              </button>
+            </div>
+            <p className="mb-4 text-sm" style={{ color: ON_SURFACE_VARIANT }}>
+              We&apos;ll ask them to share their current location for pickup.
+            </p>
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => setTagOpen(true)}
+                className="btn-touch flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left touch-manipulation"
+                style={{ backgroundColor: SURFACE_LOW, color: PRIMARY }}
+              >
+                <Tag className="h-5 w-5 shrink-0" aria-hidden />
+                <span className="font-semibold">Search Roam tag</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setRoamOpen(true)}
+                className="btn-touch flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left touch-manipulation"
+                style={{ backgroundColor: SURFACE_LOW, color: PRIMARY }}
+              >
+                <Users className="h-5 w-5 shrink-0" aria-hidden />
+                <span className="font-semibold">Roam contacts</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPhoneOpen(true)}
+                className="btn-touch flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left touch-manipulation"
+                style={{ backgroundColor: SURFACE_LOW, color: PRIMARY }}
+              >
+                <Smartphone className="h-5 w-5 shrink-0" aria-hidden />
+                <span className="font-semibold">Phone contacts</span>
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )
+    : null;
+
+  const phoneSheet = phoneOpen && typeof document !== 'undefined'
+    ? createPortal(
+        <div className="fixed inset-0 z-[210] flex items-end justify-center safe-x" role="dialog" aria-modal>
+          <button type="button" className="absolute inset-0 bg-black/40" aria-label="Close" onClick={() => setPhoneOpen(false)} />
+          <div
+            className="relative z-10 flex max-h-[85dvh] w-full max-w-lg flex-col rounded-t-3xl shadow-2xl safe-b"
             style={{ backgroundColor: SURFACE_LOWEST }}
           >
             <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
@@ -243,8 +235,41 @@ export function RiderPickupPickerSheet({ open, onClose, onSelect }: Props) {
               )}
             </div>
           </div>
-        </div>
-      ) : null}
+        </div>,
+        document.body,
+      )
+    : null;
+
+  if (!open && !tagOpen && !roamOpen && !phoneOpen) return null;
+
+  return (
+    <>
+      {mainSheet}
+      {phoneSheet}
+
+      <RoamTagLookupSheet
+        open={tagOpen}
+        onClose={() => setTagOpen(false)}
+        title="Who are you picking up?"
+        description="Search for the rider using their Roam tag."
+        confirmLabel="Request location"
+        onSelect={handleTagSelect}
+      />
+
+      <RoamContactsPickerSheet
+        open={roamOpen}
+        onClose={() => setRoamOpen(false)}
+        contacts={contacts}
+        groups={groups}
+        loading={contactsLoading}
+        query={contactQuery}
+        onQueryChange={setContactQuery}
+        groupFilterId={groupFilterId}
+        onGroupFilterChange={setGroupFilterId}
+        selectedId={null}
+        onSelect={handleContactSelect}
+      />
+
     </>
   );
 }

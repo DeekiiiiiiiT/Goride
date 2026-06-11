@@ -73,7 +73,7 @@ import {
 import { PICKUP_LOCATION_REQUEST } from '@/lib/pickupLocationRequestFlags';
 import type { RiderPickupTarget } from '@/lib/riderPickupTarget';
 import { RiderPickupPickerSheet } from '@/components/pickup-location/RiderPickupPickerSheet';
-import { PickupLocationRequestStatus } from '@/components/pickup-location/PickupLocationRequestStatus';
+import { PickupLocationActivityPanel } from '@/components/pickup-location/PickupLocationActivityPanel';
 import {
   consumePickupLocationRequest,
   createPickupLocationRequest,
@@ -130,6 +130,10 @@ export default function BookForSomeonePage() {
   const [pickupRequestLoading, setPickupRequestLoading] = useState(false);
   const [consumedPickupRequestId, setConsumedPickupRequestId] = useState<string | null>(null);
   const [pickupSharedViaRequest, setPickupSharedViaRequest] = useState(false);
+  const [pickupSharedSummary, setPickupSharedSummary] = useState<{
+    riderName: string;
+    address: string;
+  } | null>(null);
 
   const openIntentSheet = (intent: TripIntentBookerViewDto | null | undefined): boolean => {
     const canCommit = intent?.can_commit ?? intent?.can_fulfill;
@@ -344,6 +348,10 @@ export default function BookForSomeonePage() {
     setPickupRequestRider(null);
   };
 
+  const openRiderPicker = () => {
+    setRiderPickerOpen(true);
+  };
+
   const handleRiderPickupTargetSelected = async (target: RiderPickupTarget) => {
     if (!target.phone_e164) {
       toast.error('This rider needs a phone number to receive the location request.');
@@ -358,6 +366,7 @@ export default function BookForSomeonePage() {
         rider_user_id: target.user_id ?? null,
         rider_contact_id: target.contact_id ?? null,
       });
+      setPickupSharedSummary(null);
       setPickupRequestId(request.id);
       setPickupRequestRider(target);
       if (!sms_sent) {
@@ -675,31 +684,13 @@ export default function BookForSomeonePage() {
                     <button
                       type="button"
                       disabled={pickupRequestLoading || Boolean(pickupRequestId)}
-                      onClick={() => setRiderPickerOpen(true)}
-                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition-opacity disabled:opacity-50"
+                      onClick={openRiderPicker}
+                      className="btn-touch flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition-opacity touch-manipulation disabled:opacity-50"
                       style={{ color: PRIMARY, backgroundColor: 'rgba(0,74,198,0.08)' }}
                     >
                       <UserPlus className="h-4 w-4 shrink-0" aria-hidden />
                       {pickupRequestLoading ? 'Sending request…' : "Get rider's location"}
                     </button>
-                    {pickupRequestId && pickupRequestRider ? (
-                      <PickupLocationRequestStatus
-                        requestId={pickupRequestId}
-                        riderName={pickupRequestRider.name}
-                        riderTarget={pickupRequestRider}
-                        onShared={({ lat, lng, address }) => {
-                          setPickup({ lat, lng });
-                          setPickupAddress(address);
-                          setConsumedPickupRequestId(pickupRequestId);
-                          setPickupSharedViaRequest(true);
-                          clearPickupLocationRequest();
-                          toast.success('Pickup location received');
-                        }}
-                        onCancelled={clearPickupLocationRequest}
-                        onDeclined={clearPickupLocationRequest}
-                        onExpired={clearPickupLocationRequest}
-                      />
-                    ) : null}
                   </>
                 ) : null}
                 <button
@@ -745,6 +736,23 @@ export default function BookForSomeonePage() {
               Continue
               <ArrowRight className="h-5 w-5" />
             </button>
+
+            {PICKUP_LOCATION_REQUEST ? (
+              <PickupLocationActivityPanel
+                pendingRequestId={pickupRequestId}
+                pendingRider={pickupRequestRider}
+                sharedSummary={pickupSharedSummary}
+                onShared={({ lat, lng, address }) => {
+                  setPickup({ lat, lng });
+                  setPickupAddress(address);
+                  setPickupSharedViaRequest(true);
+                  if (pickupRequestId) setConsumedPickupRequestId(pickupRequestId);
+                  toast.success('Pickup location received');
+                }}
+                onPendingCleared={clearPickupLocationRequest}
+                onSharedSummary={setPickupSharedSummary}
+              />
+            ) : null}
           </>
         ) : (
           <div className="space-y-5">
@@ -1190,13 +1198,11 @@ export default function BookForSomeonePage() {
         onImported={(result) => void handleDeviceImportResult(result)}
       />
 
-      {PICKUP_LOCATION_REQUEST ? (
-        <RiderPickupPickerSheet
-          open={riderPickerOpen}
-          onClose={() => setRiderPickerOpen(false)}
-          onSelect={(target) => void handleRiderPickupTargetSelected(target)}
-        />
-      ) : null}
+      <RiderPickupPickerSheet
+        open={PICKUP_LOCATION_REQUEST && riderPickerOpen}
+        onClose={() => setRiderPickerOpen(false)}
+        onSelect={(target) => void handleRiderPickupTargetSelected(target)}
+      />
     </div>
   );
 }
