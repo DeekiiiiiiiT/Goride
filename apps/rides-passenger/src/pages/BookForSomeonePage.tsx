@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   ArrowRight,
   AlertCircle,
+  ChevronDown,
   CircleDot,
   Copy,
   Loader2,
@@ -63,13 +64,16 @@ import {
   ON_PRIMARY,
   ON_SURFACE,
   ON_SURFACE_VARIANT,
+  OUTLINE,
   PAGE_BG,
   PRIMARY,
   PRIMARY_CONTAINER,
   SECONDARY,
+  SURFACE_CONTAINER,
   SURFACE_LOW,
   SURFACE_LOWEST,
 } from '@/lib/passengerTheme';
+import '@/styles/book-for-someone.css';
 import { PICKUP_LOCATION_REQUEST } from '@/lib/pickupLocationRequestFlags';
 import { pickupLocationRequestCreatedToast } from '@/lib/pickupLocationRequestCopy';
 import type { PickupLocationDeliveryChannel } from '@roam/types/pickupLocationRequest';
@@ -136,7 +140,12 @@ export default function BookForSomeonePage() {
   const [pickupSharedSummary, setPickupSharedSummary] = useState<{
     riderName: string;
     address: string;
+    lat: number;
+    lng: number;
   } | null>(null);
+  /** Rider chosen via "Get rider's location" — kept after the request panel clears. */
+  const [pickupIdentifiedRider, setPickupIdentifiedRider] = useState<RiderPickupTarget | null>(null);
+  const [locationsContinueLoading, setLocationsContinueLoading] = useState(false);
 
   const openIntentSheet = (intent: TripIntentBookerViewDto | null | undefined): boolean => {
     const canCommit = intent?.can_commit ?? intent?.can_fulfill;
@@ -346,6 +355,17 @@ export default function BookForSomeonePage() {
 
   const coordsReady = Boolean(pickup && dropoff);
 
+  const canSkipRecipientStep =
+    PICKUP_LOCATION_REQUEST &&
+    Boolean(pickupIdentifiedRider) &&
+    pickupSharedViaRequest &&
+    coordsReady;
+
+  const clearRiderPickupFlow = () => {
+    setPickupIdentifiedRider(null);
+    setPickupSharedViaRequest(false);
+  };
+
   const clearPickupLocationRequest = () => {
     setPickupRequestId(null);
     setPickupRequestRider(null);
@@ -373,6 +393,7 @@ export default function BookForSomeonePage() {
       setPickupSharedSummary(null);
       setPickupRequestId(request.id);
       setPickupRequestRider(target);
+      setPickupIdentifiedRider(target);
       setPickupDeliveryChannel(delivery_channel);
       toast.message(pickupLocationRequestCreatedToast(target.name, delivery_channel, sms_sent));
     } catch (e) {
@@ -389,6 +410,7 @@ export default function BookForSomeonePage() {
   };
 
   const handleUseMyLocationForPickup = async () => {
+    clearRiderPickupFlow();
     setPickupLocLoading(true);
     try {
       const position = await getCurrentPositionWithAccuracy();
@@ -404,19 +426,109 @@ export default function BookForSomeonePage() {
     }
   };
 
-  const handleLocationsContinue = () => {
+  const persistBookingDraftsAndNavigate = async (params: {
+    finalTrip: BookForSomeoneTripDraft;
+    draftName: string;
+    draftPhone: string;
+    passengerUserId: string;
+    contactId?: string;
+    roamTagName?: string;
+  }) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error('Sign in to book a ride for someone else.');
+      navigate('/login');
+      return false;
+    }
+
+    persistBookForSomeoneTrip(params.finalTrip);
+    persistGuestRecipientDraft({
+      fullName: params.draftName,
+      phone: params.draftPhone.length > 10 ? params.draftPhone.slice(-10) : params.draftPhone,
+      countryCode: '+1',
+      contactId: params.contactId,
+      passengerUserId: params.passengerUserId,
+      roamTagName: params.roamTagName,
+      recipientStatus: 'linked',
+      pickupLocationRequestId: consumedPickupRequestId ?? undefined,
+      pickupSharedViaRequest: pickupSharedViaRequest || undefined,
+    });
+    if (consumedPickupRequestId && PICKUP_LOCATION_REQUEST) {
+      void consumePickupLocationRequest(consumedPickupRequestId).catch(() => undefined);
+    }
+    toast.success(`Ready to book for ${params.draftName}.`);
+    navigate('/');
+    return true;
+  };
+
+  const handleLocationsContinue = async () => {
     if (!pickup || !dropoff || !pickupAddress.trim() || !dropoffAddress.trim()) {
       toast.error('Enter pickup and drop-off locations.');
       return;
     }
-    setTripDraft({
+
+    const trip: BookForSomeoneTripDraft = {
       pickupAddress: pickupAddress.trim(),
       pickupLat: pickup.lat,
       pickupLng: pickup.lng,
       dropoffAddress: dropoffAddress.trim(),
       dropoffLat: dropoff.lat,
       dropoffLng: dropoff.lng,
-    });
+    };
+
+    if (canSkipRecipientStep && pickupIdentifiedRider) {
+      setLocationsContinueLoading(true);
+      try {
+        const rider = pickupIdentifiedRider;
+        const draftPhone = rider.phone_e164.replace(/\D/g, '').slice(-10);
+        if (!isValidGuestPhone(draftPhone)) {
+          toast.error('This rider needs a valid phone number to book.');
+          return;
+        }
+
+        let passengerUserId = rider.user_id ?? undefined;
+        let roamTagName: string | undefined;
+
+        if (!passengerUserId) {
+          const result = await lookupPassengerByPhone(rider.phone_e164);
+          if (result.found && result.profile) {
+            passengerUserId = result.profile.user_id;
+            roamTagName = result.profile.custom_tag_name ?? undefined;
+          }
+        }
+
+        if (!passengerUserId) {
+          setTripDraft(trip);
+          setFullName(rider.name);
+          setPhone(draftPhone);
+          setManual(false);
+          setSelected(null);
+          setRoamTagMatch(null);
+          setPhoneProfileMatch(null);
+          setStep('recipient');
+          void resolvePhoneRecipient(rider.name, draftPhone);
+          toast.message(`Confirm details for ${rider.name} to continue.`);
+          return;
+        }
+
+        setTripDraft(trip);
+        await persistBookingDraftsAndNavigate({
+          finalTrip: trip,
+          draftName: rider.name,
+          draftPhone,
+          passengerUserId,
+          contactId: rider.contact_id ?? undefined,
+          roamTagName,
+        });
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Could not continue to booking');
+      } finally {
+        setLocationsContinueLoading(false);
+      }
+      return;
+    }
+
+    setTripDraft(trip);
     setStep('recipient');
   };
 
@@ -611,66 +723,104 @@ export default function BookForSomeonePage() {
 
   const tripSummary = tripDraft;
 
+  const placeFieldInputClass = 'book-for-someone-input w-full';
+  const placeFieldSuggestionClass =
+    'book-for-someone-suggestion flex w-full items-start gap-2 px-3 py-2.5 text-left text-sm disabled:opacity-50';
+  const placeFieldSuggestionsListClass = 'book-for-someone-suggestions';
+
   return (
     <div
-      className="flex min-h-[100dvh] flex-col"
+      className={`flex min-h-[100dvh] flex-col ${
+        step === 'locations' ? 'book-for-someone-page--locations' : 'book-for-someone-page--recipient'
+      }`}
       style={{
         backgroundColor: PAGE_BG,
         color: ON_SURFACE,
-        paddingBottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))',
+        paddingBottom:
+          step === 'recipient'
+            ? 'calc(8.5rem + env(safe-area-inset-bottom, 0px))'
+            : 'calc(4.5rem + env(safe-area-inset-bottom, 0px))',
       }}
     >
-      <header className="sticky top-0 z-50 flex h-16 items-center bg-[#f7f9fb] px-4 safe-t">
-        <button type="button" onClick={handleBack} className="rounded-full p-2" style={{ color: PRIMARY }}>
+      <div className="book-for-someone-ambient" aria-hidden />
+
+      <header className="book-for-someone-header sticky top-0 z-50 safe-t">
+        <button
+          type="button"
+          onClick={handleBack}
+          className="flex h-10 w-10 items-center justify-center rounded-full transition-colors active:scale-95"
+          style={{ color: PRIMARY }}
+          aria-label="Back"
+        >
           <ArrowLeft className="h-6 w-6" />
         </button>
-        <h1 className="ml-2 text-xl font-semibold" style={{ color: PRIMARY }}>Book for Someone Else</h1>
+        <h1 className="ml-1 flex-1 text-center text-xl font-bold" style={{ color: PRIMARY }}>
+          Book for Someone Else
+        </h1>
+        <div className="w-10 shrink-0" aria-hidden />
       </header>
 
-      <div className="mx-auto flex w-full max-w-2xl gap-2 px-4 pt-2 safe-x">
+      <div
+        className={`relative z-[1] mx-auto w-full max-w-2xl space-y-1.5 px-4 safe-x ${
+          step === 'locations' ? 'book-for-someone-progress' : 'pt-3'
+        }`}
+      >
+        <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: ON_SURFACE_VARIANT }}>
+          {step === 'locations' ? 'Step 1 of 2 · Trip' : 'Step 2 of 2 · Passenger'}
+        </span>
         <div
-          className="h-1 flex-1 rounded-full"
-          style={{ backgroundColor: PRIMARY }}
-          aria-hidden
-        />
-        <div
-          className="h-1 flex-1 rounded-full"
-          style={{ backgroundColor: step === 'recipient' ? PRIMARY : SURFACE_LOW }}
-          aria-hidden
-        />
+          className="h-1.5 w-full overflow-hidden rounded-full"
+          style={{ backgroundColor: SURFACE_CONTAINER }}
+          role="progressbar"
+          aria-valuenow={step === 'locations' ? 50 : 100}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        >
+          <div
+            className={`h-full rounded-full transition-all duration-500 ${
+              step === 'locations' ? 'w-1/2' : 'w-full'
+            }`}
+            style={{ backgroundColor: PRIMARY_CONTAINER }}
+          />
+        </div>
       </div>
-      <p className="mx-auto w-full max-w-2xl px-4 pt-2 text-xs font-semibold uppercase tracking-wide safe-x" style={{ color: ON_SURFACE_VARIANT }}>
-        Step {step === 'locations' ? '1 of 2 · Trip' : '2 of 2 · Passenger'}
-      </p>
 
-      <main className="mx-auto w-full max-w-2xl min-h-0 flex-1 overflow-y-auto px-4 py-4 safe-x">
+      <main
+        className={
+          step === 'locations'
+            ? 'book-for-someone-locations-main relative z-[1] mx-auto w-full max-w-2xl min-h-0 flex-1 overflow-y-auto px-4 safe-x'
+            : 'relative z-[1] mx-auto w-full max-w-2xl min-h-0 flex-1 overflow-y-auto space-y-6 px-4 py-5 safe-x'
+        }
+      >
         {step === 'locations' ? (
           <>
-            <section className="space-y-2">
-              <h2 className="text-[30px] font-bold leading-tight">Where is the ride?</h2>
-              <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-                Set pickup and drop-off first. You&apos;ll choose who is riding next.
-              </p>
-            </section>
+            <h2 className="book-for-someone-locations-title">Locate roamer!</h2>
 
-            <div
-              className="space-y-4 rounded-[24px] p-5"
-              style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
-            >
-              <div className="space-y-2">
+            <div className="book-for-someone-glass book-for-someone-glass--compact">
+              <section className="book-for-someone-section-block">
+                <div className="book-for-someone-section-label">
+                  <div className="book-for-someone-section-icon book-for-someone-section-icon--pickup">
+                    <CircleDot className="h-4 w-4" aria-hidden />
+                  </div>
+                  <span
+                    className="text-sm font-semibold uppercase tracking-widest"
+                    style={{ color: OUTLINE }}
+                  >
+                    Pickup
+                  </span>
+                </div>
+
                 <RoamPlaceField
-                  label={
-                    <span className="flex items-center gap-2 text-sm font-semibold">
-                      <CircleDot className="h-4 w-4" style={{ color: PRIMARY }} aria-hidden />
-                      Pickup
-                    </span>
-                  }
+                  label="Pickup"
+                  hideLabel
                   value={pickupAddress}
                   onChangeText={(text) => {
+                    clearRiderPickupFlow();
                     setPickupAddress(text);
                     if (!text.trim()) setPickup(null);
                   }}
                   onResolved={({ address, lat, lng }) => {
+                    clearRiderPickupFlow();
                     setPickupAddress(address);
                     setPickup({ lat, lng });
                   }}
@@ -679,70 +829,108 @@ export default function BookForSomeonePage() {
                   showLocationButton
                   onLocationClick={() => void handleUseMyLocationForPickup()}
                   locationLoading={pickupLocLoading}
+                  inputClassName={placeFieldInputClass}
+                  suggestionButtonClassName={placeFieldSuggestionClass}
+                  suggestionsListClassName={placeFieldSuggestionsListClass}
+                  portalSuggestions
                 />
-                {PICKUP_LOCATION_REQUEST ? (
-                  <>
+
+                <div className="book-for-someone-quick-actions">
+                  {PICKUP_LOCATION_REQUEST ? (
                     <button
                       type="button"
                       disabled={pickupRequestLoading || Boolean(pickupRequestId)}
                       onClick={openRiderPicker}
-                      className="btn-touch flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition-opacity touch-manipulation disabled:opacity-50"
-                      style={{ color: PRIMARY, backgroundColor: 'rgba(0,74,198,0.08)' }}
+                      className="book-for-someone-quick-action"
                     >
-                      <UserPlus className="h-4 w-4 shrink-0" aria-hidden />
-                      {pickupRequestLoading ? 'Sending request…' : "Get rider's location"}
+                      <div className="book-for-someone-quick-action__icon">
+                        <UserPlus aria-hidden />
+                      </div>
+                      <span className="book-for-someone-quick-action__label" style={{ color: ON_SURFACE }}>
+                        {pickupRequestLoading ? 'Sending…' : "Get rider's location"}
+                      </span>
                     </button>
-                  </>
-                ) : null}
-                <button
-                  type="button"
-                  disabled={pickupLocLoading}
-                  onClick={() => void handleUseMyLocationForPickup()}
-                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition-opacity disabled:opacity-50"
-                  style={{ color: PRIMARY, backgroundColor: SURFACE_LOW }}
-                >
-                  <Navigation className="h-4 w-4 shrink-0" aria-hidden />
-                  {pickupLocLoading ? 'Getting your location…' : "Use my location (I'm at pickup)"}
-                </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    disabled={pickupLocLoading}
+                    onClick={() => void handleUseMyLocationForPickup()}
+                    className={`book-for-someone-quick-action ${PICKUP_LOCATION_REQUEST ? '' : 'col-span-2'}`}
+                    aria-label={pickupLocLoading ? 'Getting location' : 'Use my current location'}
+                  >
+                    <div className="book-for-someone-quick-action__icon">
+                      <Navigation aria-hidden />
+                    </div>
+                    <span className="book-for-someone-quick-action__label" style={{ color: ON_SURFACE }}>
+                      {pickupLocLoading ? 'Getting location…' : 'Use my current location'}
+                    </span>
+                  </button>
+                </div>
+              </section>
+
+              <div className="book-for-someone-divider">
+                <div className="book-for-someone-divider-badge">
+                  <ChevronDown className="h-3 w-3" aria-hidden />
+                </div>
               </div>
 
-              <RoamPlaceField
-                label={
-                  <span className="flex items-center gap-2 text-sm font-semibold">
-                    <MapPin className="h-4 w-4" style={{ color: SECONDARY }} aria-hidden />
+              <section className="book-for-someone-section-block">
+                <div className="book-for-someone-section-label">
+                  <div className="book-for-someone-section-icon book-for-someone-section-icon--dropoff">
+                    <MapPin className="h-4 w-4" aria-hidden />
+                  </div>
+                  <span
+                    className="text-sm font-semibold uppercase tracking-widest"
+                    style={{ color: OUTLINE }}
+                  >
                     Drop-off
                   </span>
-                }
-                value={dropoffAddress}
-                onChangeText={(text) => {
-                  setDropoffAddress(text);
-                  if (!text.trim()) setDropoff(null);
-                }}
-                onResolved={({ address, lat, lng }) => {
-                  setDropoffAddress(address);
-                  setDropoff({ lat, lng });
-                }}
-                placeholder="Where are they going?"
-                clearable
-              />
+                </div>
+
+                <RoamPlaceField
+                  label="Drop-off"
+                  hideLabel
+                  value={dropoffAddress}
+                  onChangeText={(text) => {
+                    setDropoffAddress(text);
+                    if (!text.trim()) setDropoff(null);
+                  }}
+                  onResolved={({ address, lat, lng }) => {
+                    setDropoffAddress(address);
+                    setDropoff({ lat, lng });
+                  }}
+                  placeholder="Where are they going?"
+                  clearable
+                  inputClassName={placeFieldInputClass}
+                  suggestionButtonClassName={placeFieldSuggestionClass}
+                  suggestionsListClassName={placeFieldSuggestionsListClass}
+                  portalSuggestions
+                />
+              </section>
             </div>
 
             <button
               type="button"
-              onClick={handleLocationsContinue}
-              disabled={!coordsReady}
-              className="flex h-16 w-full items-center justify-center gap-2 rounded-2xl text-lg font-semibold disabled:opacity-50"
+              onClick={() => void handleLocationsContinue()}
+              disabled={!coordsReady || locationsContinueLoading}
+              className="book-for-someone-continue"
               style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_PRIMARY }}
             >
-              Continue
-              <ArrowRight className="h-5 w-5" />
+              {locationsContinueLoading ? (
+                <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
+              ) : (
+                <>
+                  Continue
+                  <ArrowRight className="h-5 w-5" aria-hidden />
+                </>
+              )}
             </button>
 
             {PICKUP_LOCATION_REQUEST ? (
               <PickupLocationActivityPanel
+                compact
                 pendingRequestId={pickupRequestId}
                 pendingRider={pickupRequestRider}
-                deliveryChannel={pickupDeliveryChannel}
                 sharedSummary={pickupSharedSummary}
                 onShared={({ lat, lng, address }) => {
                   setPickup({ lat, lng });
@@ -753,17 +941,22 @@ export default function BookForSomeonePage() {
                 }}
                 onPendingCleared={clearPickupLocationRequest}
                 onSharedSummary={setPickupSharedSummary}
+                onRestoreShared={({ lat, lng, address }) => {
+                  setPickup({ lat, lng });
+                  setPickupAddress(address);
+                  setPickupSharedViaRequest(true);
+                  toast.message('Pickup restored');
+                }}
               />
             ) : null}
           </>
         ) : (
-          <div className="space-y-5">
+          <div className="space-y-6 pb-4">
             {tripSummary ? (
               <button
                 type="button"
                 onClick={() => setStep('locations')}
-                className="flex items-center gap-2 text-sm font-semibold"
-                style={{ color: PRIMARY }}
+                className="book-for-someone-edit-address"
               >
                 <Pencil className="h-4 w-4" aria-hidden />
                 Edit address
@@ -771,20 +964,17 @@ export default function BookForSomeonePage() {
             ) : null}
 
             <section>
-              <h2 className="text-[30px] font-bold leading-tight">Who is roaming?</h2>
+              <h2 className="text-3xl font-extrabold leading-tight tracking-tight">Who is roaming?</h2>
             </section>
 
-            <div
-              className="space-y-3 rounded-[24px] p-4"
-              style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
-            >
-              <p className="text-xs font-bold uppercase tracking-wide" style={{ color: ON_SURFACE_VARIANT }}>
+            <div className="book-for-someone-card space-y-4 p-6">
+              <p className="text-[11px] font-bold uppercase tracking-widest" style={{ color: ON_SURFACE_VARIANT }}>
                 Roam Tag
               </p>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-3">
                 <div className="relative min-w-0 flex-1">
                   <span
-                    className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 font-semibold"
+                    className="pointer-events-none absolute inset-y-0 left-4 flex items-center font-medium"
                     style={{ color: ON_SURFACE_VARIANT }}
                   >
                     @
@@ -801,16 +991,14 @@ export default function BookForSomeonePage() {
                     }}
                     placeholder="theirname"
                     maxLength={24}
-                    className="h-12 w-full rounded-xl pl-9 pr-4 outline-none focus:ring-2 focus:ring-[#004ac6]/30"
-                    style={{ backgroundColor: SURFACE_LOW }}
+                    className="book-for-someone-roam-tag-input"
                   />
                 </div>
                 <button
                   type="button"
                   disabled={roamTagLoading || roamTagInput.length < 3}
                   onClick={() => void lookupRoamTag(roamTagInput)}
-                  className="shrink-0 rounded-xl px-4 text-sm font-semibold disabled:opacity-50"
-                  style={{ backgroundColor: PRIMARY, color: '#fff' }}
+                  className="book-for-someone-find-btn"
                 >
                   {roamTagLoading ? '…' : 'Find'}
                 </button>
@@ -867,25 +1055,29 @@ export default function BookForSomeonePage() {
               ) : null}
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="book-for-someone-action-grid">
               <button
                 type="button"
                 onClick={() => void handleImportFromPhone()}
                 disabled={importing}
-                className="flex flex-col items-center gap-1.5 rounded-2xl px-2 py-3 text-center text-xs font-semibold disabled:opacity-50"
-                style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW, color: PRIMARY }}
+                className="book-for-someone-action-tile"
               >
-                <Smartphone className="h-5 w-5" aria-hidden />
-                {importing ? 'Importing…' : 'From phone'}
+                <div className="book-for-someone-action-tile__icon">
+                  <Smartphone className="h-8 w-8" aria-hidden />
+                </div>
+                <span className="book-for-someone-action-tile__label">
+                  {importing ? 'Importing…' : 'From phone'}
+                </span>
               </button>
               <button
                 type="button"
                 onClick={() => navigate('/account/contacts/new')}
-                className="flex flex-col items-center gap-1.5 rounded-2xl px-2 py-3 text-center text-xs font-semibold"
-                style={{ backgroundColor: PRIMARY, color: '#fff' }}
+                className="book-for-someone-action-tile book-for-someone-action-tile--primary"
               >
-                <Plus className="h-5 w-5" aria-hidden />
-                Add contact
+                <div className="book-for-someone-action-tile__icon">
+                  <Plus className="h-8 w-8" strokeWidth={2.5} aria-hidden />
+                </div>
+                <span className="book-for-someone-action-tile__label">Add contact</span>
               </button>
               <button
                 type="button"
@@ -899,28 +1091,27 @@ export default function BookForSomeonePage() {
                   setManual(false);
                   setManualOpen(true);
                 }}
-                className="flex flex-col items-center gap-1.5 rounded-2xl px-2 py-3 text-center text-xs font-semibold"
-                style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW, color: PRIMARY }}
+                className="book-for-someone-action-tile"
               >
-                <UserPlus className="h-5 w-5" aria-hidden />
-                Enter manually
+                <div className="book-for-someone-action-tile__icon">
+                  <UserPlus className="h-8 w-8" aria-hidden />
+                </div>
+                <span className="book-for-someone-action-tile__label">Enter manually</span>
               </button>
               <button
                 type="button"
                 onClick={() => setContactsOpen(true)}
-                className="flex flex-col items-center gap-1.5 rounded-2xl px-2 py-3 text-center text-xs font-semibold"
-                style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW, color: PRIMARY }}
+                className="book-for-someone-action-tile"
               >
-                <Users className="h-5 w-5" aria-hidden />
-                Roam Contacts
+                <div className="book-for-someone-action-tile__icon">
+                  <Users className="h-8 w-8" aria-hidden />
+                </div>
+                <span className="book-for-someone-action-tile__label">Roam Contacts</span>
               </button>
             </div>
 
             {recipientStatus === 'pending_authorization' && authorizationUrl ? (
-              <div
-                className="space-y-3 rounded-2xl p-4"
-                style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
-              >
+              <div className="book-for-someone-result-card space-y-3 p-4">
                 <div className="flex items-start gap-3">
                   <div
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold"
@@ -969,10 +1160,7 @@ export default function BookForSomeonePage() {
             ) : null}
 
             {phoneProfileMatch ? (
-              <div
-                className="flex items-center gap-3 rounded-2xl p-4"
-                style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
-              >
+              <div className="book-for-someone-result-card flex items-center gap-3 p-4">
                 <div
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold"
                   style={{ backgroundColor: 'rgba(0,74,198,0.1)', color: PRIMARY }}
@@ -998,10 +1186,7 @@ export default function BookForSomeonePage() {
             ) : null}
 
             {manual && fullName.trim() && recipientStatus !== 'pending_authorization' ? (
-              <div
-                className="flex items-center gap-3 rounded-2xl p-4"
-                style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
-              >
+              <div className="book-for-someone-result-card flex items-center gap-3 p-4">
                 <div
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold"
                   style={{ backgroundColor: 'rgba(0,74,198,0.1)', color: PRIMARY }}
@@ -1038,10 +1223,7 @@ export default function BookForSomeonePage() {
             ) : null}
 
             {selected ? (
-              <div
-                className="flex items-center gap-3 rounded-2xl p-4"
-                style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
-              >
+              <div className="book-for-someone-result-card flex items-center gap-3 p-4">
                 <div
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold"
                   style={{ backgroundColor: 'rgba(0,74,198,0.1)', color: PRIMARY }}
@@ -1096,21 +1278,18 @@ export default function BookForSomeonePage() {
       </main>
 
       {step === 'recipient' ? (
-        <footer
-          className="shrink-0 border-t border-black/5 bg-[#f7f9fb] px-4 py-3 safe-x"
-          style={{ boxShadow: '0 -4px 20px rgba(0,0,0,0.04)' }}
-        >
+        <div className="book-for-someone-footer-cta safe-x">
           <button
             type="button"
             disabled={!canContinue}
             onClick={() => void handleFinish()}
-            className="mx-auto flex h-14 w-full max-w-2xl items-center justify-center gap-2 rounded-2xl text-lg font-semibold disabled:opacity-50"
-            style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_PRIMARY, boxShadow: CARD_SHADOW }}
+            className="book-for-someone-continue mx-auto max-w-2xl shadow-lg"
+            style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_PRIMARY }}
           >
             Continue to ride options
-            <ArrowRight className="h-5 w-5" />
+            <ArrowRight className="h-5 w-5" aria-hidden />
           </button>
-        </footer>
+        </div>
       ) : null}
 
       <ManualRecipientSheet

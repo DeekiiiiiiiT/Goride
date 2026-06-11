@@ -26,6 +26,7 @@ type Props = {
   onCancelled: () => void;
   onDeclined: () => void;
   onExpired: () => void;
+  className?: string;
 };
 
 export function PickupLocationRequestStatus({
@@ -36,6 +37,7 @@ export function PickupLocationRequestStatus({
   onCancelled,
   onDeclined,
   onExpired,
+  className,
 }: Props) {
   const [cancelling, setCancelling] = useState(false);
   const [resending, setResending] = useState(false);
@@ -129,7 +131,7 @@ export function PickupLocationRequestStatus({
 
   return (
     <div
-      className="flex flex-col gap-2 rounded-xl px-3.5 py-3"
+      className={`flex flex-col gap-2 rounded-xl px-3.5 py-3 ${className ?? ''}`}
       style={{ backgroundColor: SURFACE_LOW, border: '1px solid rgba(0,74,198,0.12)' }}
     >
       <div className="flex items-center gap-2">

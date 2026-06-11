@@ -228,7 +228,13 @@ export function RoamPlaceField({
             onClick={() => void handleSelect(suggestion)}
           >
             <MapPin
-              className={`mt-0.5 h-4 w-4 shrink-0 ${suggestionButtonClassName?.includes('home-suggestion') ? 'home-suggestion-pin' : 'text-emerald-600'}`}
+              className={`mt-0.5 h-4 w-4 shrink-0 ${
+                suggestionButtonClassName?.includes('home-suggestion')
+                  ? 'home-suggestion-pin'
+                  : suggestionButtonClassName?.includes('book-for-someone-suggestion')
+                    ? 'book-for-someone-suggestion-pin'
+                    : 'text-emerald-600'
+              }`}
               aria-hidden
             />
             <span className="leading-snug">{suggestion.display_name}</span>

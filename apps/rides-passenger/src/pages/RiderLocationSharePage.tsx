@@ -13,6 +13,7 @@ import {
   resolveAddressFromCoordinates,
 } from '@/services/locationService';
 import {
+  ERROR,
   ON_SURFACE,
   ON_SURFACE_VARIANT,
   PAGE_BG,
@@ -28,8 +29,6 @@ export default function RiderLocationSharePage() {
   const navigate = useNavigate();
   const [phase, setPhase] = useState<Phase>('loading');
   const [bookerName, setBookerName] = useState<string | null>(null);
-  const [riderName, setRiderName] = useState<string | null>(null);
-  const [phoneMasked, setPhoneMasked] = useState<string | null>(null);
   const [sharedAddress, setSharedAddress] = useState<string | null>(null);
   const [declining, setDeclining] = useState(false);
 
@@ -38,8 +37,6 @@ export default function RiderLocationSharePage() {
     void getPickupLocationRequestPreview(token)
       .then((r) => {
         setBookerName(r.preview.booker_name);
-        setRiderName(r.preview.rider_name);
-        setPhoneMasked(r.preview.phone_masked ?? null);
         if (r.preview.status === 'shared') {
           setPhase('success');
           return;
@@ -133,14 +130,8 @@ export default function RiderLocationSharePage() {
           <>
             <h1 className="text-2xl font-bold" style={{ color: PRIMARY }}>Share pickup location</h1>
             <p className="text-lg">
-              {bookerName ?? 'Someone'} needs your current location for a Roam pickup
-              {riderName ? ` (${riderName})` : ''}.
+              {bookerName ?? 'Someone'} needs your current location for a Roam pickup.
             </p>
-            {phoneMasked ? (
-              <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-                Sign in with {phoneMasked} to share your location.
-              </p>
-            ) : null}
             <button
               type="button"
               disabled={phase === 'sharing'}
@@ -159,10 +150,14 @@ export default function RiderLocationSharePage() {
               type="button"
               disabled={declining || phase === 'sharing'}
               onClick={() => void handleDecline()}
-              className="w-full text-sm font-medium disabled:opacity-50"
-              style={{ color: ON_SURFACE_VARIANT }}
+              className="h-14 w-full rounded-2xl border text-lg font-semibold disabled:opacity-50"
+              style={{
+                borderColor: ERROR,
+                color: ERROR,
+                backgroundColor: 'rgba(186, 26, 26, 0.08)',
+              }}
             >
-              {declining ? 'Declining…' : 'Not now'}
+              {declining ? 'Rejecting…' : 'Reject'}
             </button>
           </>
         ) : null}

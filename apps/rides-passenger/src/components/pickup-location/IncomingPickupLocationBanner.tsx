@@ -52,7 +52,9 @@ export function IncomingPickupLocationBanner({ request, moreCount, onDismiss }: 
   return (
     <div
       className="pointer-events-none fixed inset-x-0 z-[45] px-4 safe-x"
-      style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px) + 0.5rem)' }}
+      style={{
+        top: 'calc(4rem + max(0.75rem, env(safe-area-inset-top, 0px)) + 0.5rem)',
+      }}
       role="region"
       aria-label="Pickup location request"
     >

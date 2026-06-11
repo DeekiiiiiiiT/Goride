@@ -15,7 +15,7 @@ function shouldHideIncomingBanner(pathname: string): boolean {
   return false;
 }
 
-/** App-wide incoming pickup location banner — flag-gated, above bottom nav. */
+/** App-wide incoming pickup location banner — flag-gated, below top header. */
 export function IncomingPickupLocationShellGate() {
   const { pathname } = useLocation();
   const { requests } = useIncomingPickupLocationRequests(PICKUP_LOCATION_REQUEST);
