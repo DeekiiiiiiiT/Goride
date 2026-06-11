@@ -22,6 +22,7 @@ import type {
   CreatePassengerAuthorizationBody,
   PassengerAuthorizationDto,
   PassengerLookupResult,
+  UpdatePassengerAuthorizationPhoneResponse,
 } from '@roam/types/passengerAuthorization';
 
 async function contactsHeaders(): Promise<HeadersInit> {
@@ -317,6 +318,28 @@ export async function claimPassengerAuthorization(
   const res = await fetch(`${base}/v1/passenger-authorizations/${token}/claim`, {
     method: 'POST',
     headers: await contactsHeaders(),
+  });
+  if (!res.ok) await parseError(res);
+  return res.json();
+}
+
+export async function cancelPassengerAuthorization(id: string): Promise<{ ok: boolean }> {
+  const res = await fetch(`${base}/v1/passenger-authorizations/id/${id}/cancel`, {
+    method: 'POST',
+    headers: await contactsHeaders(),
+  });
+  if (!res.ok) await parseError(res);
+  return res.json();
+}
+
+export async function updatePassengerAuthorizationPhone(
+  id: string,
+  phoneE164: string,
+): Promise<UpdatePassengerAuthorizationPhoneResponse> {
+  const res = await fetch(`${base}/v1/passenger-authorizations/id/${id}/update-phone`, {
+    method: 'POST',
+    headers: await contactsHeaders(),
+    body: JSON.stringify({ phone_e164: phoneE164 }),
   });
   if (!res.ok) await parseError(res);
   return res.json();

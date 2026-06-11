@@ -2,6 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { AlertCircle, Tag, X } from 'lucide-react';
 import type { RoamPassengerTagBookingLookupDto } from '@roam/types/roamPassengerTag';
 import { contactsCreate } from '@/services/contactsEdge';
+import { createRoamConnectionRequest } from '@/services/roamConnectionsEdge';
+import { ROAM_CONNECTIONS } from '@/lib/roamConnectionFlags';
+import { CONNECTION_REQUEST_SENT_COPY } from '@/lib/roamConnectionCopy';
+import { toast } from 'sonner';
 import {
   formatRoamTagDisplay,
   lookupRoamPassengerTagForBooking,
@@ -80,20 +84,30 @@ export function AddRoamTagContactSheet({ open, onClose, onAdded }: Props) {
     setSaving(true);
     setError(null);
     try {
-      await contactsCreate({
-        display_name: match.display_name?.trim() || match.custom_tag_name,
-        phone_e164: match.phone_e164,
-        source: 'roam_user',
-        linked_user_id: match.user_id,
-      });
+      if (ROAM_CONNECTIONS) {
+        await createRoamConnectionRequest({
+          target_display_name: match.display_name?.trim() || match.custom_tag_name,
+          phone_e164: match.phone_e164,
+          target_user_id: match.user_id,
+          source: 'roam_tag',
+        });
+        toast.message(CONNECTION_REQUEST_SENT_COPY);
+      } else {
+        await contactsCreate({
+          display_name: match.display_name?.trim() || match.custom_tag_name,
+          phone_e164: match.phone_e164,
+          source: 'roam_user',
+          linked_user_id: match.user_id,
+        });
+      }
       onAdded();
       onClose();
     } catch (e) {
       const code = e instanceof Error ? e.message : 'insert_failed';
       if (code === 'duplicate_phone') {
         setError('This person is already in your Roam Contacts.');
-      } else if (code === 'duplicate_roam_user') {
-        setError('This Roam user is already in your contacts.');
+      } else if (code === 'duplicate_roam_user' || code === 'duplicate_pending' || code === 'already_connected') {
+        setError('This Roam user is already in your contacts or has a pending request.');
       } else {
         setError('Could not add contact. Try again.');
       }

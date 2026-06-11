@@ -7,9 +7,12 @@ import { PassengerBottomNav } from './PassengerBottomNav';
 import { ensureRoamPassengerTag } from '@/services/roamTagEdge';
 import { usePassengerActiveRideRedirect } from '@/hooks/usePassengerActiveRideRedirect';
 import { IncomingPickupLocationShellGate } from '@/components/pickup-location/IncomingPickupLocationShellGate';
+import { IncomingConnectionRequestShellGate } from '@/components/connections/IncomingConnectionRequestShellGate';
+import { useSyncPhoneConnectionRequests } from '@/hooks/useSyncPhoneConnectionRequests';
 
 function PassengerShellInner() {
   usePassengerActiveRideRedirect();
+  useSyncPhoneConnectionRequests();
   const { pathname } = useLocation();
   const isHome = pathname === '/';
   const { tripPickerActive } = useHomeTripPicker();
@@ -26,6 +29,7 @@ function PassengerShellInner() {
       </div>
       {chipVisible && <BookerActiveTripChip />}
       <IncomingPickupLocationShellGate />
+      <IncomingConnectionRequestShellGate />
       {!tripPickerActive && <PassengerBottomNav />}
     </div>
   );

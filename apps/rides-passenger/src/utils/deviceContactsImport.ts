@@ -2,7 +2,9 @@ import type { ContactPayload } from '@capacitor-community/contacts';
 import { Capacitor } from '@capacitor/core';
 import { isNativeCapacitorPlatform } from '@roam/types';
 import type { BatchImportContactsResponse } from '@roam/types/riderContacts';
-import { contactsBatchImport } from '@/services/contactsEdge';
+import { contactsBatchImport, lookupPassengerByPhone } from '@/services/contactsEdge';
+import { createRoamConnectionRequest } from '@/services/roamConnectionsEdge';
+import { ROAM_CONNECTIONS } from '@/lib/roamConnectionFlags';
 import { buildGuestPhoneE164, digitsOnly } from '@/lib/guestRecipientBooking';
 import { withTimeout } from '@/lib/withTimeout';
 import { isContactPickerSupported, pickContactsFromDevice } from '@/utils/contactPicker';
@@ -124,6 +126,32 @@ export async function importDeviceContactSelection(
 ): Promise<BatchImportContactsResponse & { failed: number; updated: number; error?: string }> {
   if (!selected.length) {
     return { imported: 0, updated: 0, skipped: 0, failed: 0, contacts: [] };
+  }
+
+  if (ROAM_CONNECTIONS) {
+    let sent = 0;
+    let failed = 0;
+    let skipped = 0;
+    for (const c of selected) {
+      try {
+        const lookup = await lookupPassengerByPhone(c.phoneE164);
+        await createRoamConnectionRequest({
+          target_display_name: c.name,
+          phone_e164: c.phoneE164,
+          target_user_id: lookup.profile?.user_id,
+          source: 'device_import',
+        });
+        sent++;
+      } catch (e) {
+        const code = e instanceof Error ? e.message : '';
+        if (code === 'duplicate_pending' || code === 'already_connected') {
+          skipped++;
+        } else {
+          failed++;
+        }
+      }
+    }
+    return { imported: sent, updated: 0, skipped, failed, contacts: [] };
   }
 
   const res = await contactsBatchImport({

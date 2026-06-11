@@ -74,6 +74,7 @@ import { getRidesContactsDb } from "../_shared/ridesContactsDb.ts";
 import { registerPassengerInviteRoutes } from "./passengerInvites.ts";
 import { registerPassengerAuthorizationRoutes, consumePassengerAuthorization } from "./passengerAuthorizations.ts";
 import { registerPickupLocationRequestRoutes } from "./pickupLocationRequests.ts";
+import { registerRoamConnectionRoutes } from "./roamConnectionRequests.ts";
 import {
   registerBookingRequestRoutes,
   linkBookingRequestToRide,
@@ -2519,6 +2520,12 @@ registerPassengerAuthorizationRoutes(app, {
   rateLimit,
 });
 registerPickupLocationRequestRoutes(app, {
+  getContactsDb: getRidesContactsDb,
+  requireUser,
+  audit,
+  rateLimit,
+});
+registerRoamConnectionRoutes(app, {
   getContactsDb: getRidesContactsDb,
   requireUser,
   audit,

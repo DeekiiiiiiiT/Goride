@@ -271,11 +271,6 @@ export default function AccountPage() {
 
           <GroupCard title="Promotions & Credits">
             <AccountListRow
-              icon={<Tag className="h-5 w-5" style={{ color: PRIMARY }} />}
-              label="Book for me"
-              onClick={() => navigate('/services/book-for-me')}
-            />
-            <AccountListRow
               icon={<Gift className="h-5 w-5" style={{ color: ON_SURFACE_VARIANT }} />}
               label="Gift Cards"
               onClick={() => navigate('/account/gift-cards')}

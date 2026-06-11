@@ -19,6 +19,7 @@ import {
 import { DeviceContactsPickerSheet } from '@/components/contacts/DeviceContactsPickerSheet';
 import { DeviceContactImportConfirmSheet } from '@/components/contacts/DeviceContactImportConfirmSheet';
 import { AddRoamTagContactSheet } from '@/components/contacts/AddRoamTagContactSheet';
+import { ROAM_CONNECTIONS } from '@/lib/roamConnectionFlags';
 import {
   canUseBrowserContactPicker,
   canUseInAppDeviceContactPicker,
@@ -72,6 +73,9 @@ export default function ContactsPage() {
 
   const sorted = useMemo(() => {
     let list = contacts;
+    if (ROAM_CONNECTIONS) {
+      list = list.filter((c) => !c.linked_user_id || c.roam_account_linked);
+    }
     if (groupFilterId) {
       list = list.filter((c) => c.groups?.some((g) => g.id === groupFilterId));
     }
@@ -92,8 +96,16 @@ export default function ContactsPage() {
     }
     const saved = result.imported + result.updated;
     if (saved > 0) {
-      toast.success(`Added ${saved} contact${saved === 1 ? '' : 's'} to Roam Contacts`);
+      toast.success(
+        ROAM_CONNECTIONS
+          ? `Sent ${saved} connection request${saved === 1 ? '' : 's'}`
+          : `Added ${saved} contact${saved === 1 ? '' : 's'} to Roam Contacts`,
+      );
       await load();
+      return;
+    }
+    if (result.skipped > 0 && ROAM_CONNECTIONS) {
+      toast.message('Some contacts already have pending requests.');
       return;
     }
     toast.message('No contacts were added.');
@@ -294,7 +306,9 @@ export default function ContactsPage() {
         open={roamTagSheetOpen}
         onClose={() => setRoamTagSheetOpen(false)}
         onAdded={() => {
-          toast.success('Contact added to Roam Contacts');
+          toast.success(
+            ROAM_CONNECTIONS ? 'Connection request sent' : 'Contact added to Roam Contacts',
+          );
           void load();
         }}
       />

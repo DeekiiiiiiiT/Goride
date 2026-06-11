@@ -41,3 +41,4 @@ export * from './riderContacts';
 export * from './roamPassengerTag';
 export * from './passengerProfile';
 export * from './tripShare';
+export * from './roamConnections';

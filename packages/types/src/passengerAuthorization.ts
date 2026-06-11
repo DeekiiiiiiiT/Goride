@@ -38,3 +38,16 @@ export interface ClaimPassengerAuthorizationResponse {
   authorization_id: string;
   passenger_user_id: string;
 }
+
+export interface PassengerAuthorizationListResponse {
+  authorizations: PassengerAuthorizationDto[];
+}
+
+export interface UpdatePassengerAuthorizationPhoneBody {
+  phone_e164: string;
+}
+
+export interface UpdatePassengerAuthorizationPhoneResponse {
+  authorization: PassengerAuthorizationDto;
+  cancelled_authorization_id: string;
+}

@@ -1,6 +1,12 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronRight, Contact, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Clock, Contact, ShieldCheck } from 'lucide-react';
+import { ROAM_CONNECTIONS } from '@/lib/roamConnectionFlags';
+import {
+  listIncomingConnectionRequests,
+  listOutgoingConnectionRequests,
+  listOutgoingPassengerAuthorizations,
+} from '@/services/roamConnectionsEdge';
 import {
   CARD_SHADOW,
   ON_SURFACE,
@@ -48,6 +54,27 @@ function HubRow({
 
 export default function ContactsHubPage() {
   const navigate = useNavigate();
+  const [pendingBadge, setPendingBadge] = useState(0);
+
+  useEffect(() => {
+    if (!ROAM_CONNECTIONS) return;
+    void (async () => {
+      try {
+        const [outgoing, incoming, auths] = await Promise.all([
+          listOutgoingConnectionRequests(),
+          listIncomingConnectionRequests(),
+          listOutgoingPassengerAuthorizations('active'),
+        ]);
+        const count =
+          outgoing.requests.filter((r) => r.status === 'pending').length +
+          incoming.requests.length +
+          auths.authorizations.filter((a) => a.status === 'pending' || a.status === 'claimed').length;
+        setPendingBadge(count);
+      } catch {
+        /* non-blocking */
+      }
+    })();
+  }, []);
 
   return (
     <div className="flex min-h-[100dvh] flex-col pb-28" style={{ backgroundColor: PAGE_BG, color: ON_SURFACE }}>
@@ -81,6 +108,28 @@ export default function ContactsHubPage() {
             description="People you book rides for"
             onClick={() => navigate('/account/contacts/roam')}
           />
+          {ROAM_CONNECTIONS ? (
+            <>
+              <div className="mx-5 h-px" style={{ backgroundColor: 'rgba(0,0,0,0.06)' }} />
+              <div className="relative">
+                <HubRow
+                  icon={<Clock className="h-5 w-5" />}
+                  iconColor={PRIMARY}
+                  label="Pending"
+                  description="Requests and ride approvals"
+                  onClick={() => navigate('/account/contacts/pending')}
+                />
+                {pendingBadge > 0 ? (
+                  <span
+                    className="absolute right-12 top-1/2 -translate-y-1/2 rounded-full px-2 py-0.5 text-xs font-semibold"
+                    style={{ backgroundColor: 'var(--passenger-primary-container)', color: 'var(--passenger-on-primary)' }}
+                  >
+                    {pendingBadge}
+                  </span>
+                ) : null}
+              </div>
+            </>
+          ) : null}
           <div className="mx-5 h-px" style={{ backgroundColor: 'rgba(0,0,0,0.06)' }} />
           <HubRow
             icon={<ShieldCheck className="h-5 w-5" />}

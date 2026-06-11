@@ -2,6 +2,8 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { RidesContactsTables } from "../_shared/ridesContactsDb.ts";
 import { normalizePhoneE164 } from "./rideAccess.ts";
 import { resolveRoamUserByPhone } from "./resolveRoamUserByPhone.ts";
+import { isRoamConnectionsEnabled } from "./roamConnectionFlags.ts";
+import { areUsersConnected } from "./roamConnectionHelpers.ts";
 
 export type ContactLinkFields = {
   linked_user_id: string | null;
@@ -64,8 +66,18 @@ export async function maybeRelinkContactRow(
 
   const phone = String(row.phone_e164 ?? "");
   const link = await resolveContactRoamLink(phone, null, String(row.source ?? "manual"));
-  if (!link.roam_account_linked) {
+  if (!link.roam_account_linked || !link.linked_user_id) {
     return { ...row, roam_account_linked: false };
+  }
+
+  if (isRoamConnectionsEnabled()) {
+    const ownerId = String(row.owner_user_id ?? "");
+    const connected = ownerId
+      ? await areUsersConnected(db, tables, ownerId, link.linked_user_id)
+      : false;
+    if (!connected) {
+      return { ...row, roam_account_linked: false };
+    }
   }
 
   const now = new Date().toISOString();

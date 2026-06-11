@@ -18,6 +18,8 @@ import {
   resolveContactRoamLink,
   withRoamLinkFlag,
 } from "./contactRoamLink.ts";
+import { isRoamConnectionsEnabled } from "./roamConnectionFlags.ts";
+import { areUsersConnected } from "./roamConnectionHelpers.ts";
 
 const VALID_RELATIONS = new Set([
   "father", "mother", "sibling", "spouse", "friend", "colleague", "other",
@@ -211,6 +213,19 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
 
     const { db, tables: t } = await deps.getContactsDb();
 
+    if (isRoamConnectionsEnabled()) {
+      if (linkedUserId || link.roam_account_linked) {
+        return c.json({
+          error: "connection_required",
+          message: "Send a connection request instead of adding this Roam user directly.",
+        }, 409);
+      }
+      return c.json({
+        error: "invite_required",
+        message: "Send a connection invite instead of saving this contact directly.",
+      }, 409);
+    }
+
     if (body.trusted_for_safety === true) {
       const limitErr = await assertTrustedLimit(db, t, gate.user!.id, 1);
       if (limitErr) return c.json({ error: limitErr, message: `Maximum ${MAX_TRUSTED_CONTACTS} trusted contacts` }, 409);
@@ -251,6 +266,12 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
   app.post("/v1/contacts/batch-import", async (c) => {
     const gate = await requirePassenger(c);
     if (gate.response) return gate.response;
+    if (isRoamConnectionsEnabled()) {
+      return c.json({
+        error: "invite_required",
+        message: "Use connection requests for device import when Roam connections are enabled.",
+      }, 409);
+    }
     const body = await c.req.json().catch(() => ({}));
     const items = Array.isArray(body.contacts) ? body.contacts : [];
     const { db, tables: t } = await deps.getContactsDb();
@@ -356,6 +377,9 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
     const phoneChanging = typeof body.phone_e164 === "string";
     if (phoneChanging) patch.phone_e164 = normalizePhoneE164(body.phone_e164);
     if (typeof body.linked_user_id === "string" && body.linked_user_id.trim()) {
+      if (isRoamConnectionsEnabled()) {
+        return c.json({ error: "connection_required" }, 409);
+      }
       patch.linked_user_id = body.linked_user_id.trim();
       patch.source = "roam_user";
     } else if (phoneChanging) {
@@ -364,6 +388,9 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
         null,
         String(existing.source ?? "manual"),
       );
+      if (isRoamConnectionsEnabled() && link.roam_account_linked) {
+        return c.json({ error: "connection_required" }, 409);
+      }
       patch.linked_user_id = link.linked_user_id;
       patch.source = link.roam_account_linked ? "roam_user" : existing.source;
       patch.phone_e164 = link.phone_e164;

@@ -21,6 +21,7 @@ import { supabase } from '@roam/auth-client';
 import type { RiderContactGroupRow, RiderContactRow, TripIntentBookerViewDto } from '@roam/types/riderContacts';
 import { TripIntentBookSheet } from '@/components/trip-intent/TripIntentBookSheet';
 import { TRIP_INTENT_V2 } from '@/lib/tripIntentFlags';
+import { ROAM_CONNECTIONS } from '@/lib/roamConnectionFlags';
 import {
   contactLookupIntent,
   roamTagLookupIntent,
@@ -29,7 +30,7 @@ import {
   tripIntentReject,
 } from '@/services/tripIntentEdge';
 import { RoamPlaceField } from '@/components/RoamPlaceField';
-import { contactsCreate, contactsList, contactGroupsList, createPassengerAuthorization, getPassengerAuthorizationById, lookupPassengerByPhone } from '@/services/contactsEdge';
+import { contactsList, contactGroupsList, createPassengerAuthorization, getPassengerAuthorizationById, lookupPassengerByPhone } from '@/services/contactsEdge';
 import {
   buildGuestPhoneE164,
   clearBookForSomeoneTrip,
@@ -39,9 +40,9 @@ import {
   readGuestRecipientDraft,
   type BookForSomeoneTripDraft,
 } from '@/lib/guestRecipientBooking';
+import { AddContactSheet } from '@/components/contacts/AddContactSheet';
 import { DeviceContactsPickerSheet } from '@/components/contacts/DeviceContactsPickerSheet';
 import { RoamContactsPickerSheet } from '@/components/contacts/RoamContactsPickerSheet';
-import { ManualRecipientSheet } from '@/components/contacts/ManualRecipientSheet';
 import {
   canUseBrowserContactPicker,
   canUseInAppDeviceContactPicker,
@@ -106,14 +107,10 @@ export default function BookForSomeonePage() {
   const [importing, setImporting] = useState(false);
   const [devicePickerOpen, setDevicePickerOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [manual, setManual] = useState(false);
-  const [manualOpen, setManualOpen] = useState(false);
-  const [fullName, setFullName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [saveToRoam, setSaveToRoam] = useState(true);
   const [selected, setSelected] = useState<RiderContactRow | null>(null);
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const [contactsOpen, setContactsOpen] = useState(false);
+  const [addContactOpen, setAddContactOpen] = useState(false);
   const [roamTagInput, setRoamTagInput] = useState('');
   const [roamTagLoading, setRoamTagLoading] = useState(false);
   const [roamTagError, setRoamTagError] = useState<string | null>(null);
@@ -216,9 +213,6 @@ export default function BookForSomeonePage() {
     setRoamTagMatch(null);
     setPhoneProfileMatch(null);
     setRoamTagInput('');
-    setFullName('');
-    setPhone('');
-    setManual(false);
     setRecipientStatus('linked');
     setPassengerAuthorizationId(null);
     setAuthorizationUrl(null);
@@ -265,6 +259,39 @@ export default function BookForSomeonePage() {
     }
   };
 
+  const handleRecipientContactSelected = useCallback(async (contact: RiderContactRow) => {
+    setRoamTagMatch(null);
+    setRoamTagInput('');
+    setPhoneProfileMatch(null);
+    if (TRIP_INTENT_V2 && contact.linked_user_id) {
+      setIntentLoading(true);
+      try {
+        const { intent } = await contactLookupIntent(contact.id);
+        if (openIntentSheet(intent ?? undefined)) {
+          setSelected(contact);
+          return;
+        }
+      } catch {
+        /* fall through to standard flow */
+      } finally {
+        setIntentLoading(false);
+      }
+    }
+    setSelected(contact);
+    setSelectedPlaceId(null);
+    if (contact.linked_user_id) {
+      setRecipientStatus('linked');
+      setPassengerAuthorizationId(null);
+      setAuthorizationUrl(null);
+      setLinkedPassengerUserId(contact.linked_user_id);
+    } else {
+      await resolvePhoneRecipient(
+        contact.display_name,
+        contact.phone_e164.replace(/\D/g, '').slice(-10),
+      );
+    }
+  }, [tripDraft]);
+
   const lookupRoamTag = async (raw: string) => {
     const normalized = normalizeRoamTagInput(raw);
     if (normalized.length < 3) {
@@ -285,7 +312,6 @@ export default function BookForSomeonePage() {
       setRoamTagMatch(tag);
       setSelected(null);
       setSelectedPlaceId(null);
-      setManual(false);
     } catch (e) {
       setRoamTagMatch(null);
       const code = e instanceof Error ? e.message : 'lookup_failed';
@@ -308,7 +334,10 @@ export default function BookForSomeonePage() {
         contactsList(),
         contactGroupsList().catch(() => ({ groups: [] as RiderContactGroupRow[] })),
       ]);
-      setContacts(listRes.contacts);
+      const list = ROAM_CONNECTIONS
+        ? listRes.contacts.filter((c) => c.linked_user_id && c.roam_account_linked)
+        : listRes.contacts;
+      setContacts(list);
       setGroups(groupsRes.groups);
       return true;
     } catch (e) {
@@ -344,8 +373,7 @@ export default function BookForSomeonePage() {
     roamTagMatch ||
       phoneProfileMatch ||
       linkedPassengerUserId ||
-      selected?.linked_user_id ||
-      (manual && fullName.trim() && phone.replace(/\D/g, '').length >= 10),
+      selected?.linked_user_id,
   );
 
   const canContinue =
@@ -499,9 +527,6 @@ export default function BookForSomeonePage() {
 
         if (!passengerUserId) {
           setTripDraft(trip);
-          setFullName(rider.name);
-          setPhone(draftPhone);
-          setManual(false);
           setSelected(null);
           setRoamTagMatch(null);
           setPhoneProfileMatch(null);
@@ -543,8 +568,8 @@ export default function BookForSomeonePage() {
     if (result.failed > 0) {
       toast.error(
         result.error?.includes('schema')
-          ? 'Contacts could not be saved — Roam server needs an update. Try Add contact manually.'
-          : result.error ?? 'Could not save contacts. Try Add contact manually.',
+          ? 'Contacts could not be saved — Roam server needs an update. Try Add contact instead.'
+          : result.error ?? 'Could not save contacts. Try Add contact instead.',
       );
       return;
     }
@@ -558,7 +583,11 @@ export default function BookForSomeonePage() {
     };
 
     if (saved > 0) {
-      toast.success(`Added ${saved} contact${saved === 1 ? '' : 's'} to Roam Contacts.`);
+      toast.success(
+        ROAM_CONNECTIONS
+          ? `Sent ${saved} connection request${saved === 1 ? '' : 's'}.`
+          : `Added ${saved} contact${saved === 1 ? '' : 's'} to Roam Contacts.`,
+      );
       await reloadContacts();
       setContacts((prev) => mergeImported(prev));
       return;
@@ -604,8 +633,8 @@ export default function BookForSomeonePage() {
       return;
     }
 
-    let draftName = fullName.trim();
-    let draftPhone = phone.replace(/\D/g, '');
+    let draftName = '';
+    let draftPhone = '';
     let contactId: string | undefined;
     let passengerUserId: string | undefined;
     let roamTagName: string | undefined;
@@ -623,7 +652,7 @@ export default function BookForSomeonePage() {
       draftPhone = phoneProfileMatch.phone_e164!.replace(/\D/g, '').slice(-10);
       passengerUserId = phoneProfileMatch.user_id;
       roamTagName = phoneProfileMatch.custom_tag_name;
-    } else if (selected && !manual) {
+    } else if (selected) {
       draftName = selected.display_name;
       draftPhone = selected.phone_e164.replace(/\D/g, '').slice(-10);
       contactId = selected.id;
@@ -672,20 +701,6 @@ export default function BookForSomeonePage() {
       toast.error('Sign in to book a ride for someone else.');
       navigate('/login');
       return;
-    }
-
-    if (manual && saveToRoam && !contactId) {
-      try {
-        const { contact } = await contactsCreate({
-          display_name: draftName,
-          phone_e164: buildGuestPhoneE164('+1', draftPhone),
-        });
-        contactId = contact.id;
-        toast.success(`${draftName} saved to Roam Contacts`);
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Could not save contact');
-        return;
-      }
     }
 
     persistBookForSomeoneTrip(finalTrip);
@@ -1071,7 +1086,7 @@ export default function BookForSomeonePage() {
               </button>
               <button
                 type="button"
-                onClick={() => navigate('/account/contacts/new')}
+                onClick={() => setAddContactOpen(true)}
                 className="book-for-someone-action-tile book-for-someone-action-tile--primary"
               >
                 <div className="book-for-someone-action-tile__icon">
@@ -1081,27 +1096,8 @@ export default function BookForSomeonePage() {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setSelected(null);
-                  setSelectedPlaceId(null);
-                  setRoamTagMatch(null);
-                  setRoamTagInput('');
-                  setFullName('');
-                  setPhone('');
-                  setManual(false);
-                  setManualOpen(true);
-                }}
-                className="book-for-someone-action-tile"
-              >
-                <div className="book-for-someone-action-tile__icon">
-                  <UserPlus className="h-8 w-8" aria-hidden />
-                </div>
-                <span className="book-for-someone-action-tile__label">Enter manually</span>
-              </button>
-              <button
-                type="button"
                 onClick={() => setContactsOpen(true)}
-                className="book-for-someone-action-tile"
+                className="book-for-someone-action-tile col-span-2"
               >
                 <div className="book-for-someone-action-tile__icon">
                   <Users className="h-8 w-8" aria-hidden />
@@ -1148,6 +1144,16 @@ export default function BookForSomeonePage() {
                   <Copy className="h-4 w-4" />
                   Copy authorization link
                 </button>
+                {ROAM_CONNECTIONS ? (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/account/contacts/pending')}
+                    className="w-full py-1 text-center text-xs font-semibold"
+                    style={{ color: PRIMARY }}
+                  >
+                    View in Pending
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={clearRecipientSelection}
@@ -1182,43 +1188,6 @@ export default function BookForSomeonePage() {
               <div className="flex items-center justify-center gap-2 py-4 text-sm" style={{ color: ON_SURFACE_VARIANT }}>
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Looking up phone…
-              </div>
-            ) : null}
-
-            {manual && fullName.trim() && recipientStatus !== 'pending_authorization' ? (
-              <div className="book-for-someone-result-card flex items-center gap-3 p-4">
-                <div
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold"
-                  style={{ backgroundColor: 'rgba(0,74,198,0.1)', color: PRIMARY }}
-                >
-                  {fullName.trim().slice(0, 2).toUpperCase()}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold">{fullName.trim()}</p>
-                  <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-                    {phone || 'No phone'}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setManualOpen(true)}
-                  className="text-xs font-semibold"
-                  style={{ color: PRIMARY }}
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setManual(false);
-                    setFullName('');
-                    setPhone('');
-                  }}
-                  className="text-xs font-semibold"
-                  style={{ color: ON_SURFACE_VARIANT }}
-                >
-                  Clear
-                </button>
               </div>
             ) : null}
 
@@ -1292,25 +1261,37 @@ export default function BookForSomeonePage() {
         </div>
       ) : null}
 
-      <ManualRecipientSheet
-        open={manualOpen}
-        onClose={() => setManualOpen(false)}
-        fullName={fullName}
-        onFullNameChange={setFullName}
-        phone={phone}
-        onPhoneChange={setPhone}
-        saveToRoam={saveToRoam}
-        onSaveToRoamChange={setSaveToRoam}
-        onConfirm={async () => {
-          setManual(true);
-          setManualOpen(false);
-          setSelected(null);
-          setRoamTagMatch(null);
-          setPhoneProfileMatch(null);
-          const digits = phone.replace(/\D/g, '');
-          if (fullName.trim() && digits.length >= 10) {
-            await resolvePhoneRecipient(fullName.trim(), digits);
+      <AddContactSheet
+        open={addContactOpen}
+        onClose={() => setAddContactOpen(false)}
+        onComplete={async (result) => {
+          if (result.saved && result.contact) {
+            setContacts((prev) => {
+              const byId = new Map(prev.map((c) => [c.id, c]));
+              byId.set(result.contact!.id, result.contact!);
+              return [...byId.values()].sort((a, b) => a.display_name.localeCompare(b.display_name));
+            });
+            toast.success(`${result.contact.display_name} added to Roam Contacts`);
+            await handleRecipientContactSelected(result.contact);
+            return;
           }
+
+          if (result.saved && !result.contact) {
+            setSelected(null);
+            setSelectedPlaceId(null);
+            setRoamTagMatch(null);
+            setRoamTagInput('');
+            setPhoneProfileMatch(null);
+            await resolvePhoneRecipient(result.name, result.phoneDigits);
+            return;
+          }
+
+          setSelected(null);
+          setSelectedPlaceId(null);
+          setRoamTagMatch(null);
+          setRoamTagInput('');
+          setPhoneProfileMatch(null);
+          await resolvePhoneRecipient(result.name, result.phoneDigits);
         }}
       />
 
@@ -1325,39 +1306,7 @@ export default function BookForSomeonePage() {
         groupFilterId={groupFilterId}
         onGroupFilterChange={setGroupFilterId}
         selectedId={selected?.id ?? null}
-        onSelect={async (contact) => {
-          setRoamTagMatch(null);
-          setRoamTagInput('');
-          setManual(false);
-          setPhoneProfileMatch(null);
-          if (TRIP_INTENT_V2 && contact.linked_user_id) {
-            setIntentLoading(true);
-            try {
-              const { intent } = await contactLookupIntent(contact.id);
-              if (openIntentSheet(intent ?? undefined)) {
-                setSelected(contact);
-                return;
-              }
-            } catch {
-              /* fall through to standard flow */
-            } finally {
-              setIntentLoading(false);
-            }
-          }
-          setSelected(contact);
-          setSelectedPlaceId(null);
-          if (contact.linked_user_id) {
-            setRecipientStatus('linked');
-            setPassengerAuthorizationId(null);
-            setAuthorizationUrl(null);
-            setLinkedPassengerUserId(contact.linked_user_id);
-          } else {
-            await resolvePhoneRecipient(
-              contact.display_name,
-              contact.phone_e164.replace(/\D/g, '').slice(-10),
-            );
-          }
-        }}
+        onSelect={(contact) => void handleRecipientContactSelected(contact)}
       />
 
       <TripIntentBookSheet

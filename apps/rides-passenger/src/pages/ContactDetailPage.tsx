@@ -9,7 +9,9 @@ import {
   contactsGet,
   contactsList,
   contactsUpdate,
+  lookupPassengerByPhone,
 } from '@/services/contactsEdge';
+import { ContactFormFields } from '@/components/contacts/ContactFormFields';
 import { ContactGroupPicker } from '@/components/contacts/ContactGroupPicker';
 import { SafetyPreferenceToggle } from '@/components/trusted-contacts/SafetyPreferenceToggle';
 import { MAX_TRUSTED_CONTACTS } from '@/services/trustedContactsEdge';
@@ -19,6 +21,9 @@ import {
   isValidGuestPhone,
   persistGuestRecipientDraft,
 } from '@/lib/guestRecipientBooking';
+import { createRoamConnectionRequest } from '@/services/roamConnectionsEdge';
+import { ROAM_CONNECTIONS } from '@/lib/roamConnectionFlags';
+import { CONNECTION_INVITE_SENT_COPY, CONNECTION_REQUEST_SENT_COPY } from '@/lib/roamConnectionCopy';
 import {
   CARD_SHADOW,
   ERROR,
@@ -105,9 +110,23 @@ export default function ContactDetailPage() {
         group_ids: groupIds,
       };
       if (isNew) {
-        const { contact } = await contactsCreate(body);
-        toast.success('Contact saved');
-        navigate(`/account/contacts/${contact.id}`, { replace: true });
+        if (ROAM_CONNECTIONS) {
+          const lookup = await lookupPassengerByPhone(body.phone_e164);
+          await createRoamConnectionRequest({
+            target_display_name: body.display_name,
+            phone_e164: body.phone_e164,
+            target_user_id: lookup.profile?.user_id,
+            source: 'contacts_page',
+          });
+          toast.message(
+            lookup.found ? CONNECTION_REQUEST_SENT_COPY : CONNECTION_INVITE_SENT_COPY,
+          );
+          navigate('/account/contacts/pending', { replace: true });
+        } else {
+          const { contact } = await contactsCreate(body);
+          toast.success('Contact saved');
+          navigate(`/account/contacts/${contact.id}`, { replace: true });
+        }
       } else if (id) {
         await contactsUpdate(id, body);
         toast.success('Contact updated');
@@ -152,25 +171,12 @@ export default function ContactDetailPage() {
 
       <main className="mx-auto w-full max-w-2xl space-y-4 px-4 py-4 safe-x">
         <div className="space-y-4 rounded-[24px] p-5" style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}>
-          <div>
-            <label className="mb-2 block text-xs font-bold tracking-wide" style={{ color: ON_SURFACE_VARIANT }}>NAME</label>
-            <input
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              className="h-12 w-full rounded-xl border-none px-4 outline-none focus:ring-2 focus:ring-[#004ac6]"
-              style={{ backgroundColor: SURFACE_LOW, color: ON_SURFACE }}
-            />
-          </div>
-          <div>
-            <label className="mb-2 block text-xs font-bold tracking-wide" style={{ color: ON_SURFACE_VARIANT }}>PHONE</label>
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(formatGuestPhoneDisplay(e.target.value))}
-              className="h-12 w-full rounded-xl border-none px-4 outline-none focus:ring-2 focus:ring-[#004ac6]"
-              style={{ backgroundColor: SURFACE_LOW, color: ON_SURFACE }}
-            />
-          </div>
+          <ContactFormFields
+            displayName={displayName}
+            onDisplayNameChange={setDisplayName}
+            phone={phone}
+            onPhoneChange={setPhone}
+          />
           <ContactGroupPicker groups={groups} selectedIds={groupIds} onChange={setGroupIds} />
           <div
             className="overflow-hidden rounded-2xl"

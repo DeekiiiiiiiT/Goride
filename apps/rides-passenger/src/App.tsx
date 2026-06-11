@@ -30,6 +30,7 @@ import ContactsPage from './pages/ContactsPage';
 import ContactGroupsPage from './pages/ContactGroupsPage';
 import ContactGroupDetailPage from './pages/ContactGroupDetailPage';
 import ContactDetailPage from './pages/ContactDetailPage';
+import PendingContactsPage from './pages/PendingContactsPage';
 import PassengerInviteLandingPage from './pages/PassengerInviteLandingPage';
 import PassengerAuthorizePage from './pages/PassengerAuthorizePage';
 import RiderLocationSharePage from './pages/RiderLocationSharePage';
@@ -175,6 +176,7 @@ export default function App() {
           <Route path="/account/support" element={<SupportCenterPage />} />
           <Route path="/account/trusted-contacts" element={<Navigate to="/account/contacts/trusted" replace />} />
           <Route path="/account/contacts" element={<ContactsHubPage />} />
+          <Route path="/account/contacts/pending" element={<PendingContactsPage />} />
           <Route path="/account/contacts/roam" element={<ContactsPage />} />
           <Route path="/account/contacts/trusted" element={<TrustedContactsPage />} />
           <Route path="/account/contacts/trusted/add" element={<AddTrustedContactsPage />} />
