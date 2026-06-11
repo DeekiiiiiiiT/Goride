@@ -38,6 +38,7 @@ import BookForMePage from './pages/BookForMePage';
 import ShadowTripStatusPage from './pages/ShadowTripStatusPage';
 import ShadowTripReceiptPage from './pages/ShadowTripReceiptPage';
 import WalletPage from './pages/WalletPage';
+import ActivityPage from './pages/ActivityPage';
 import ManagePaymentMethodsPage from './pages/ManagePaymentMethodsPage';
 import AppSettingsPage from './pages/AppSettingsPage';
 import ProfilePage from './pages/ProfilePage';
@@ -162,6 +163,7 @@ export default function App() {
         <Route element={<PassengerShell />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/services" element={<ServicesPage />} />
+          <Route path="/activity" element={<ActivityPage />} />
           <Route path="/services/book-for-others" element={<BookForOthersHubPage />} />
           <Route path="/services/book-for-someone" element={<BookForSomeonePage />} />
           <Route path="/services/courier" element={<CourierServicePage />} />

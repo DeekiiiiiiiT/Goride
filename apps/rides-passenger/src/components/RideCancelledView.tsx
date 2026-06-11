@@ -121,7 +121,7 @@ export function RideCancelledView({ ride }: Props) {
           <button
             type="button"
             className="ride-cancelled-action-btn"
-            onClick={() => toast.message('Ride history', { description: 'Coming soon.' })}
+            onClick={() => navigate('/activity')}
           >
             <History className="size-6" strokeWidth={2} />
             Ride History

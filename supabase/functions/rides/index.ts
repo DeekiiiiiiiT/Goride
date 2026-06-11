@@ -86,6 +86,8 @@ import {
 import { registerRoamPassengerTagRoutes } from "./roamPassengerTag.ts";
 import { registerTripIntentRoutes } from "./tripIntents.ts";
 import { registerBookForOthersActivityRoutes } from "./bookForOthersActivity.ts";
+import { registerPassengerActivityHistoryRoutes } from "./passengerActivityHistory.ts";
+import { registerPassengerActivityUpcomingRoutes } from "./passengerActivityUpcoming.ts";
 import { loadHubActiveRideForUser } from "./rideHubQueries.ts";
 import { enrichRideRoamModeFromBooking } from "./roamModeResolve.ts";
 import { createRideFromTripIntent } from "./tripIntentFulfill.ts";
@@ -2620,6 +2622,20 @@ registerTripIntentRoutes(app, {
 });
 
 registerBookForOthersActivityRoutes(app, {
+  svc,
+  pubSvc,
+  getContactsDb: getRidesContactsDb,
+  requireUser,
+});
+
+registerPassengerActivityHistoryRoutes(app, {
+  svc,
+  pubSvc,
+  getContactsDb: getRidesContactsDb,
+  requireUser,
+});
+
+registerPassengerActivityUpcomingRoutes(app, {
   svc,
   pubSvc,
   getContactsDb: getRidesContactsDb,

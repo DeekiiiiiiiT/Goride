@@ -1,0 +1,22 @@
+/** QA checklist for Activity tab rollout. */
+export const ACTIVITY_TRIPS_QA = [
+  'Flag OFF (default): bottom nav shows Home, Services, Account only',
+  'Flag OFF: /activity direct URL loads Recent trips',
+  'Flag ON (VITE_ACTIVITY_TAB=1): bottom nav shows Activity tab between Services and Account',
+  'Recent trips lists completed and cancelled rides only (no live matching/on_trip)',
+  'Filter chips: All, Booked for others, For me',
+  'Completed open ride opens /ride/:id TripSummary',
+  'Completed shadow booker opens /shadow-trip/:id/receipt',
+  'Cancelled ride opens correct detail screen',
+  'RideCancelledView Ride History button navigates to /activity',
+  'Shadow booker history rows hide addresses and counterparty name',
+  'Pipeline blocks at top only when user has scheduled/courier/event bookings',
+  'Pipeline block tap opens detail sheet (not service hub navigation)',
+  'No pipeline blocks when nothing is booked',
+  'Recent trips limited to last 5 days',
+  'Load more appends next page when next_cursor is present',
+  'Wallet /v1/wallet/transactions unchanged',
+  'Book for others /v1/book-for-others/activity unchanged (live trips only)',
+  'Deploy: redeploy rides edge function for GET /v1/activity/trips',
+  'Prod nav: set VITE_ACTIVITY_TAB=1 at client build time when QA passes',
+] as const;

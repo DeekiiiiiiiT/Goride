@@ -467,6 +467,53 @@ export interface RiderDetailDto {
   }>;
 }
 
+/** Terminal ride history for the Activity tab (completed / cancelled only). */
+export type ActivityTripParticipantRole = 'booker' | 'passenger';
+
+export type ActivityTripCategory = 'for_others' | 'for_me' | 'self';
+
+export interface ActivityTripHistoryItem {
+  kind: 'ride';
+  ride_id: string;
+  status: 'completed' | 'cancelled';
+  roam_mode: 'open_roam' | 'shadow_roam';
+  participant_role: ActivityTripParticipantRole;
+  trip_category: ActivityTripCategory;
+  counterparty_name: string | null;
+  /** Null for shadow_roam payer-facing history items (locations private). */
+  pickup_address: string | null;
+  /** Null for shadow_roam payer-facing history items (locations private). */
+  dropoff_address: string | null;
+  fare_estimate_minor: string | null;
+  currency: string | null;
+  created_at: string;
+  ended_at: string;
+}
+
+export interface ActivityTripsResponse {
+  trips: ActivityTripHistoryItem[];
+  next_cursor: string | null;
+  window_days: number;
+}
+
+export type ActivityPipelineKind = 'schedule' | 'courier' | 'event';
+
+export interface ActivityPipelineItem {
+  kind: ActivityPipelineKind;
+  id: string;
+  title: string;
+  subtitle: string | null;
+  scheduled_at: string | null;
+  pickup_address: string | null;
+  dropoff_address: string | null;
+  status: string;
+  detail_lines: string[];
+}
+
+export interface ActivityUpcomingResponse {
+  items: ActivityPipelineItem[];
+}
+
 /** Format minor currency units (JMD cents) for display. */
 export function formatMoneyMinor(
   minor: bigint | number | string | null | undefined,

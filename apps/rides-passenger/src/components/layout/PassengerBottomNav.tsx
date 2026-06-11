@@ -1,17 +1,30 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Home, LayoutGrid, User } from 'lucide-react';
+import { History, Home, LayoutGrid, User } from 'lucide-react';
+import { ACTIVITY_TAB_ENABLED } from '@/lib/activityTabFlags';
 
 const NAV_ACTIVE = 'var(--home-nav-active, #006d43)';
 const NAV_INACTIVE = 'var(--home-nav-inactive, #5d5e61)';
 
-const NAV_ITEMS = [
+const BASE_NAV_ITEMS = [
   { to: '/', label: 'Home', icon: Home, end: true },
   { to: '/services', label: 'Services', icon: LayoutGrid, end: false },
   { to: '/account', label: 'Account', icon: User, end: false },
 ] as const;
 
 export function PassengerBottomNav() {
+  const navItems = useMemo(() => {
+    if (!ACTIVITY_TAB_ENABLED) return [...BASE_NAV_ITEMS];
+    return [
+      BASE_NAV_ITEMS[0],
+      BASE_NAV_ITEMS[1],
+      { to: '/activity', label: 'Activity', icon: History, end: false },
+      BASE_NAV_ITEMS[2],
+    ];
+  }, []);
+
+  const compactNav = navItems.length > 3;
+
   return (
     <nav
       className="home-bottom-nav fixed bottom-0 left-0 right-0 z-50 border-t safe-x shadow-[0px_-4px_20px_rgba(0,0,0,0.08)]"
@@ -28,12 +41,12 @@ export function PassengerBottomNav() {
           borderColor: 'var(--home-sheet-border, rgba(188, 202, 190, 0.35))',
         }}
       >
-        {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
+        {navItems.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
             to={to}
             end={end}
-            className="flex min-w-[4.5rem] flex-col items-center justify-center gap-0.5 px-3 py-1 touch-manipulation"
+            className={`flex ${compactNav ? 'min-w-[4rem] px-2' : 'min-w-[4.5rem] px-3'} flex-col items-center justify-center gap-0.5 py-1 touch-manipulation`}
           >
             {({ isActive }) => (
               <>
@@ -45,7 +58,7 @@ export function PassengerBottomNav() {
                   aria-hidden
                 />
                 <span
-                  className="mt-0.5 text-[10px] font-bold tracking-wide"
+                  className={`mt-0.5 font-bold tracking-wide ${compactNav ? 'text-[9px]' : 'text-[10px]'}`}
                   style={{ color: isActive ? NAV_ACTIVE : NAV_INACTIVE }}
                 >
                   {label}

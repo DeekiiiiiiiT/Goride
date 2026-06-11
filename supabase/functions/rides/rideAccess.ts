@@ -9,7 +9,9 @@ import {
 
 export type RideParticipantRole = "booker" | "passenger" | "driver" | "none";
 
-const TERMINAL_STATUSES = new Set(["completed", "cancelled"]);
+export const TERMINAL_RIDE_STATUSES = ["completed", "cancelled"] as const;
+
+const TERMINAL_STATUSES = new Set<string>(TERMINAL_RIDE_STATUSES);
 const BOOKER_CANCEL_BLOCKED_FROM = "driver_arrived_pickup";
 
 export function getRideParticipantRole(
