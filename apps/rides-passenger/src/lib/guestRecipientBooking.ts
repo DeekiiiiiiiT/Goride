@@ -19,6 +19,9 @@ export type GuestRecipientDraft = {
     lat: number;
     lng: number;
   };
+  /** Closed after booking when pickup came from a location request. */
+  pickupLocationRequestId?: string;
+  pickupSharedViaRequest?: boolean;
 };
 
 export type BookForSomeoneTripDraft = {

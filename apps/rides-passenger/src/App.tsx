@@ -32,6 +32,7 @@ import ContactGroupDetailPage from './pages/ContactGroupDetailPage';
 import ContactDetailPage from './pages/ContactDetailPage';
 import PassengerInviteLandingPage from './pages/PassengerInviteLandingPage';
 import PassengerAuthorizePage from './pages/PassengerAuthorizePage';
+import RiderLocationSharePage from './pages/RiderLocationSharePage';
 import BookForMePage from './pages/BookForMePage';
 import ShadowTripStatusPage from './pages/ShadowTripStatusPage';
 import ShadowTripReceiptPage from './pages/ShadowTripReceiptPage';
@@ -149,6 +150,7 @@ export default function App() {
       {/* Public delegated-booking entry (signup gate) */}
       <Route path="/ride/join/:token" element={<PassengerInviteLandingPage />} />
       <Route path="/ride/authorize/:token" element={<PassengerAuthorizePage />} />
+      <Route path="/location-share/:token" element={<RiderLocationSharePage />} />
       <Route path="/trip/:token" element={<TripSharePublicPage />} />
 
       {/* Passenger app routes */}

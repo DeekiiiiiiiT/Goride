@@ -70,6 +70,14 @@ import {
   SURFACE_LOW,
   SURFACE_LOWEST,
 } from '@/lib/passengerTheme';
+import { PICKUP_LOCATION_REQUEST } from '@/lib/pickupLocationRequestFlags';
+import type { RiderPickupTarget } from '@/lib/riderPickupTarget';
+import { RiderPickupPickerSheet } from '@/components/pickup-location/RiderPickupPickerSheet';
+import { PickupLocationRequestStatus } from '@/components/pickup-location/PickupLocationRequestStatus';
+import {
+  consumePickupLocationRequest,
+  createPickupLocationRequest,
+} from '@/services/pickupLocationRequestEdge';
 
 type Step = 'locations' | 'recipient';
 
@@ -116,6 +124,12 @@ export default function BookForSomeonePage() {
   const [intentLoading, setIntentLoading] = useState(false);
   const [fulfilling, setFulfilling] = useState(false);
   const [rejecting, setRejecting] = useState(false);
+  const [riderPickerOpen, setRiderPickerOpen] = useState(false);
+  const [pickupRequestId, setPickupRequestId] = useState<string | null>(null);
+  const [pickupRequestRider, setPickupRequestRider] = useState<RiderPickupTarget | null>(null);
+  const [pickupRequestLoading, setPickupRequestLoading] = useState(false);
+  const [consumedPickupRequestId, setConsumedPickupRequestId] = useState<string | null>(null);
+  const [pickupSharedViaRequest, setPickupSharedViaRequest] = useState(false);
 
   const openIntentSheet = (intent: TripIntentBookerViewDto | null | undefined): boolean => {
     const canCommit = intent?.can_commit ?? intent?.can_fulfill;
@@ -325,6 +339,45 @@ export default function BookForSomeonePage() {
 
   const coordsReady = Boolean(pickup && dropoff);
 
+  const clearPickupLocationRequest = () => {
+    setPickupRequestId(null);
+    setPickupRequestRider(null);
+  };
+
+  const handleRiderPickupTargetSelected = async (target: RiderPickupTarget) => {
+    if (!target.phone_e164) {
+      toast.error('This rider needs a phone number to receive the location request.');
+      return;
+    }
+    setPickupRequestLoading(true);
+    try {
+      const { request, sms_sent } = await createPickupLocationRequest({
+        rider_name: target.name,
+        rider_phone_e164: target.phone_e164,
+        rider_source: target.source,
+        rider_user_id: target.user_id ?? null,
+        rider_contact_id: target.contact_id ?? null,
+      });
+      setPickupRequestId(request.id);
+      setPickupRequestRider(target);
+      if (!sms_sent) {
+        toast.message('Request sent — SMS may be delayed. They can open the link from Roam.');
+      } else {
+        toast.message(`Location request sent to ${target.name}`);
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Could not request location';
+      if (message.includes('pickup_location_request_disabled')) return;
+      if (message.includes('rate_limited')) {
+        toast.error('Too many requests — try again in a few minutes.');
+      } else {
+        toast.error(message);
+      }
+    } finally {
+      setPickupRequestLoading(false);
+    }
+  };
+
   const handleUseMyLocationForPickup = async () => {
     setPickupLocLoading(true);
     try {
@@ -526,7 +579,12 @@ export default function BookForSomeonePage() {
       passengerAuthorizationId: passengerAuthorizationId ?? undefined,
       authorizationUrl: authorizationUrl ?? undefined,
       recipientStatus: passengerUserId ? 'linked' : recipientStatus,
+      pickupLocationRequestId: consumedPickupRequestId ?? undefined,
+      pickupSharedViaRequest: pickupSharedViaRequest || undefined,
     });
+    if (consumedPickupRequestId && PICKUP_LOCATION_REQUEST) {
+      void consumePickupLocationRequest(consumedPickupRequestId).catch(() => undefined);
+    }
     toast.success(`Ready to book for ${draftName}.`);
     navigate('/');
   };
@@ -612,6 +670,38 @@ export default function BookForSomeonePage() {
                   onLocationClick={() => void handleUseMyLocationForPickup()}
                   locationLoading={pickupLocLoading}
                 />
+                {PICKUP_LOCATION_REQUEST ? (
+                  <>
+                    <button
+                      type="button"
+                      disabled={pickupRequestLoading || Boolean(pickupRequestId)}
+                      onClick={() => setRiderPickerOpen(true)}
+                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition-opacity disabled:opacity-50"
+                      style={{ color: PRIMARY, backgroundColor: 'rgba(0,74,198,0.08)' }}
+                    >
+                      <UserPlus className="h-4 w-4 shrink-0" aria-hidden />
+                      {pickupRequestLoading ? 'Sending request…' : "Get rider's location"}
+                    </button>
+                    {pickupRequestId && pickupRequestRider ? (
+                      <PickupLocationRequestStatus
+                        requestId={pickupRequestId}
+                        riderName={pickupRequestRider.name}
+                        riderTarget={pickupRequestRider}
+                        onShared={({ lat, lng, address }) => {
+                          setPickup({ lat, lng });
+                          setPickupAddress(address);
+                          setConsumedPickupRequestId(pickupRequestId);
+                          setPickupSharedViaRequest(true);
+                          clearPickupLocationRequest();
+                          toast.success('Pickup location received');
+                        }}
+                        onCancelled={clearPickupLocationRequest}
+                        onDeclined={clearPickupLocationRequest}
+                        onExpired={clearPickupLocationRequest}
+                      />
+                    ) : null}
+                  </>
+                ) : null}
                 <button
                   type="button"
                   disabled={pickupLocLoading}
@@ -620,7 +710,7 @@ export default function BookForSomeonePage() {
                   style={{ color: PRIMARY, backgroundColor: SURFACE_LOW }}
                 >
                   <Navigation className="h-4 w-4 shrink-0" aria-hidden />
-                  {pickupLocLoading ? 'Getting your location…' : 'Use my current location'}
+                  {pickupLocLoading ? 'Getting your location…' : "Use my location (I'm at pickup)"}
                 </button>
               </div>
 
@@ -1099,6 +1189,14 @@ export default function BookForSomeonePage() {
         onClose={() => setDevicePickerOpen(false)}
         onImported={(result) => void handleDeviceImportResult(result)}
       />
+
+      {PICKUP_LOCATION_REQUEST ? (
+        <RiderPickupPickerSheet
+          open={riderPickerOpen}
+          onClose={() => setRiderPickerOpen(false)}
+          onSelect={(target) => void handleRiderPickupTargetSelected(target)}
+        />
+      ) : null}
     </div>
   );
 }

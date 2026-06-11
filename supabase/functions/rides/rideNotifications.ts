@@ -13,7 +13,8 @@ export type RideNotificationTemplate =
   | "shadow_trip_completed"
   | "trip_share"
   | "trip_share_emergency"
-  | "trip_share_test";
+  | "trip_share_test"
+  | "pickup_location_request";
 
 type NotificationPayload = {
   to: string;
@@ -63,6 +64,11 @@ function buildMessage(template: RideNotificationTemplate, payload: Record<string
       const name = payload.rider_name ? String(payload.rider_name) : "Someone";
       const url = String(payload.url ?? "");
       return `This is a test safety alert from Roam. When ${name} rides, you'll get links like this: ${url}`;
+    }
+    case "pickup_location_request": {
+      const booker = payload.booker_name ? String(payload.booker_name) : "Someone";
+      const url = String(payload.url ?? "");
+      return `${booker} needs your pickup location for a Roam ride. Share it here: ${url}`;
     }
     default:
       return "You have a Roam ride update.";

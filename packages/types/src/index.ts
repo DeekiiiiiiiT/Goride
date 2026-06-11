@@ -36,6 +36,7 @@ export * from './delivery';
 export * from './rides';
 export * from './delegatedRide';
 export * from './passengerAuthorization';
+export * from './pickupLocationRequest';
 export * from './riderContacts';
 export * from './roamPassengerTag';
 export * from './passengerProfile';

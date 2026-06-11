@@ -53,6 +53,8 @@ import {
   readGuestRecipientDraft,
   type GuestRecipientDraft,
 } from '@/lib/guestRecipientBooking';
+import { PICKUP_LOCATION_REQUEST } from '@/lib/pickupLocationRequestFlags';
+import { consumePickupLocationRequest } from '@/services/pickupLocationRequestEdge';
 import { createIdempotencyKey } from '@/lib/idempotencyKey';
 import { formatRoamTagDisplay } from '@/services/roamTagEdge';
 import { withTimeout } from '@/lib/withTimeout';
@@ -518,6 +520,11 @@ export default function HomePage() {
               activeQuote.quote_token,
               activeQuote.route_polyline_encoded,
             );
+            if (PICKUP_LOCATION_REQUEST && guestRecipient?.pickupLocationRequestId) {
+              void consumePickupLocationRequest(guestRecipient.pickupLocationRequestId).catch(
+                () => undefined,
+              );
+            }
             clearDelegatedBookingDrafts();
             toast.success('Searching for a driver…');
             navigate(`/ride/${ride.id}`);
@@ -537,6 +544,11 @@ export default function HomePage() {
               activeQuote.quote_token,
               activeQuote.route_polyline_encoded,
             );
+            if (PICKUP_LOCATION_REQUEST && guestRecipient?.pickupLocationRequestId) {
+              void consumePickupLocationRequest(guestRecipient.pickupLocationRequestId).catch(
+                () => undefined,
+              );
+            }
             clearDelegatedBookingDrafts();
             toast.success('Searching for a driver…');
             navigate(`/ride/${ride.id}`);

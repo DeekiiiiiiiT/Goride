@@ -563,7 +563,14 @@ export function BookForOthersActivitySections({
   const dismissMeIntent = async (item: BookForOthersIntentActivityItem) => {
     setActionIntentId(item.intent_id);
     try {
-      await tripIntentGetMyActive();
+      try {
+        await tripIntentWithdraw(item.intent_id);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : '';
+        if (!message.includes('already ended') && !message.includes('no longer be cancelled')) {
+          throw e;
+        }
+      }
       await queryClient.invalidateQueries({ queryKey: ['book-for-others', 'activity'] });
       toast.message(
         item.linked_ride_status === 'completed'
@@ -572,6 +579,11 @@ export function BookForOthersActivitySections({
       );
       navigate('/');
     } catch {
+      try {
+        await tripIntentGetMyActive();
+      } catch {
+        /* best-effort reconcile */
+      }
       await queryClient.invalidateQueries({ queryKey: ['book-for-others', 'activity'] });
       navigate('/');
     } finally {

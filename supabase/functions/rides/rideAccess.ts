@@ -168,3 +168,7 @@ export function passengerAuthorizeUrl(token: string): string {
 export function tripShareUrl(token: string): string {
   return `${PASSENGER_APP_ORIGIN}/trip/${token}`;
 }
+
+export function pickupLocationShareUrl(token: string): string {
+  return `${PASSENGER_APP_ORIGIN}/location-share/${token}`;
+}

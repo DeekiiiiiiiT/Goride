@@ -15,6 +15,7 @@ export type RidesContactsTables = {
   booking_requests: string;
   roam_passenger_tags: string;
   passenger_authorizations: string;
+  pickup_location_requests: string;
 };
 
 const NATIVE_TABLES: RidesContactsTables = {
@@ -28,6 +29,7 @@ const NATIVE_TABLES: RidesContactsTables = {
   booking_requests: "booking_requests",
   roam_passenger_tags: "roam_passenger_tags",
   passenger_authorizations: "passenger_authorizations",
+  pickup_location_requests: "pickup_location_requests",
 };
 
 const PUBLIC_TABLES: RidesContactsTables = {
@@ -41,6 +43,7 @@ const PUBLIC_TABLES: RidesContactsTables = {
   booking_requests: "rides_booking_requests",
   roam_passenger_tags: "rides_roam_passenger_tags",
   passenger_authorizations: "rides_passenger_authorizations",
+  pickup_location_requests: "rides_pickup_location_requests",
 };
 
 export type RidesContactsDb = {

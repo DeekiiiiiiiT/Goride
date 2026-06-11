@@ -313,17 +313,35 @@ export default function BookForMePage() {
   };
 
   const handleDismissTrip = async () => {
+    if (!intent?.id) {
+      clearActiveIntent();
+      navigate('/');
+      return;
+    }
     setWithdrawing(true);
     try {
-      await tripIntentGetMyActive();
+      try {
+        await tripIntentWithdraw(intent.id);
+      } catch (e) {
+        // Terminal rides may already be closed server-side; still clear local UI.
+        const message = e instanceof Error ? e.message : '';
+        if (!message.includes('already ended') && !message.includes('no longer be cancelled')) {
+          throw e;
+        }
+      }
       clearActiveIntent();
       toast.message(
-        intent?.linked_ride_status === 'completed'
+        intent.linked_ride_status === 'completed'
           ? 'Trip complete — thanks for riding with Roam'
           : 'Trip cleared',
       );
       navigate('/');
     } catch {
+      try {
+        await tripIntentGetMyActive();
+      } catch {
+        /* best-effort reconcile */
+      }
       clearActiveIntent();
       navigate('/');
     } finally {
