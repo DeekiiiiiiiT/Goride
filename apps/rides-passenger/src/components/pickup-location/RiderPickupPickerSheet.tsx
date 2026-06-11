@@ -119,7 +119,9 @@ export function RiderPickupPickerSheet({ open, onClose, onSelect }: Props) {
     return c.name.toLowerCase().includes(q) || c.phoneLabel.includes(q);
   });
 
-  const mainSheet = open && typeof document !== 'undefined'
+  const showMainMenu = open && !tagOpen && !roamOpen && !phoneOpen;
+
+  const mainSheet = showMainMenu && typeof document !== 'undefined'
     ? createPortal(
         <div
           className="fixed inset-0 z-[200] flex items-end justify-center safe-x"
@@ -240,36 +242,49 @@ export function RiderPickupPickerSheet({ open, onClose, onSelect }: Props) {
       )
     : null;
 
+  const tagSheet =
+    tagOpen && typeof document !== 'undefined'
+      ? createPortal(
+          <RoamTagLookupSheet
+            open={tagOpen}
+            onClose={() => setTagOpen(false)}
+            title="Who are you picking up?"
+            description="Search for the rider using their Roam tag."
+            confirmLabel="Request location"
+            onSelect={handleTagSelect}
+          />,
+          document.body,
+        )
+      : null;
+
+  const roamSheet =
+    roamOpen && typeof document !== 'undefined'
+      ? createPortal(
+          <RoamContactsPickerSheet
+            open={roamOpen}
+            onClose={() => setRoamOpen(false)}
+            contacts={contacts}
+            groups={groups}
+            loading={contactsLoading}
+            query={contactQuery}
+            onQueryChange={setContactQuery}
+            groupFilterId={groupFilterId}
+            onGroupFilterChange={setGroupFilterId}
+            selectedId={null}
+            onSelect={handleContactSelect}
+          />,
+          document.body,
+        )
+      : null;
+
   if (!open && !tagOpen && !roamOpen && !phoneOpen) return null;
 
   return (
     <>
       {mainSheet}
       {phoneSheet}
-
-      <RoamTagLookupSheet
-        open={tagOpen}
-        onClose={() => setTagOpen(false)}
-        title="Who are you picking up?"
-        description="Search for the rider using their Roam tag."
-        confirmLabel="Request location"
-        onSelect={handleTagSelect}
-      />
-
-      <RoamContactsPickerSheet
-        open={roamOpen}
-        onClose={() => setRoamOpen(false)}
-        contacts={contacts}
-        groups={groups}
-        loading={contactsLoading}
-        query={contactQuery}
-        onQueryChange={setContactQuery}
-        groupFilterId={groupFilterId}
-        onGroupFilterChange={setGroupFilterId}
-        selectedId={null}
-        onSelect={handleContactSelect}
-      />
-
+      {tagSheet}
+      {roamSheet}
     </>
   );
 }

@@ -2,6 +2,8 @@ import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
 import { supabase } from '@roam/auth-client';
 import type {
   CreatePickupLocationRequestBody,
+  CreatePickupLocationRequestResponse,
+  IncomingPickupLocationRequestDto,
   PickupLocationRequestDto,
   PickupLocationRequestPreviewDto,
   SharePickupLocationBody,
@@ -33,12 +35,29 @@ async function parseError(res: Response): Promise<never> {
 
 export async function createPickupLocationRequest(
   body: CreatePickupLocationRequestBody,
-): Promise<{ request: PickupLocationRequestDto; sms_sent: boolean }> {
+): Promise<CreatePickupLocationRequestResponse> {
   const res = await fetch(`${base}/v1/pickup-location-requests`, {
     method: 'POST',
     headers: await headers(),
     body: JSON.stringify(body),
   });
+  if (!res.ok) await parseError(res);
+  return res.json();
+}
+
+export async function listIncomingPickupLocationRequests(): Promise<{
+  requests: IncomingPickupLocationRequestDto[];
+}> {
+  const res = await fetch(`${base}/v1/pickup-location-requests/incoming`, {
+    headers: await headers(),
+  });
+  if (res.status === 404) {
+    const text = await res.text();
+    if (text.includes('pickup_location_request_disabled')) {
+      return { requests: [] };
+    }
+    throw new Error(text || 'HTTP 404');
+  }
   if (!res.ok) await parseError(res);
   return res.json();
 }

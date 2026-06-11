@@ -71,6 +71,8 @@ import {
   SURFACE_LOWEST,
 } from '@/lib/passengerTheme';
 import { PICKUP_LOCATION_REQUEST } from '@/lib/pickupLocationRequestFlags';
+import { pickupLocationRequestCreatedToast } from '@/lib/pickupLocationRequestCopy';
+import type { PickupLocationDeliveryChannel } from '@roam/types/pickupLocationRequest';
 import type { RiderPickupTarget } from '@/lib/riderPickupTarget';
 import { RiderPickupPickerSheet } from '@/components/pickup-location/RiderPickupPickerSheet';
 import { PickupLocationActivityPanel } from '@/components/pickup-location/PickupLocationActivityPanel';
@@ -128,6 +130,7 @@ export default function BookForSomeonePage() {
   const [pickupRequestId, setPickupRequestId] = useState<string | null>(null);
   const [pickupRequestRider, setPickupRequestRider] = useState<RiderPickupTarget | null>(null);
   const [pickupRequestLoading, setPickupRequestLoading] = useState(false);
+  const [pickupDeliveryChannel, setPickupDeliveryChannel] = useState<PickupLocationDeliveryChannel | null>(null);
   const [consumedPickupRequestId, setConsumedPickupRequestId] = useState<string | null>(null);
   const [pickupSharedViaRequest, setPickupSharedViaRequest] = useState(false);
   const [pickupSharedSummary, setPickupSharedSummary] = useState<{
@@ -346,6 +349,7 @@ export default function BookForSomeonePage() {
   const clearPickupLocationRequest = () => {
     setPickupRequestId(null);
     setPickupRequestRider(null);
+    setPickupDeliveryChannel(null);
   };
 
   const openRiderPicker = () => {
@@ -359,7 +363,7 @@ export default function BookForSomeonePage() {
     }
     setPickupRequestLoading(true);
     try {
-      const { request, sms_sent } = await createPickupLocationRequest({
+      const { request, delivery_channel, sms_sent } = await createPickupLocationRequest({
         rider_name: target.name,
         rider_phone_e164: target.phone_e164,
         rider_source: target.source,
@@ -369,11 +373,8 @@ export default function BookForSomeonePage() {
       setPickupSharedSummary(null);
       setPickupRequestId(request.id);
       setPickupRequestRider(target);
-      if (!sms_sent) {
-        toast.message('Request sent — SMS may be delayed. They can open the link from Roam.');
-      } else {
-        toast.message(`Location request sent to ${target.name}`);
-      }
+      setPickupDeliveryChannel(delivery_channel);
+      toast.message(pickupLocationRequestCreatedToast(target.name, delivery_channel, sms_sent));
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Could not request location';
       if (message.includes('pickup_location_request_disabled')) return;
@@ -741,6 +742,7 @@ export default function BookForSomeonePage() {
               <PickupLocationActivityPanel
                 pendingRequestId={pickupRequestId}
                 pendingRider={pickupRequestRider}
+                deliveryChannel={pickupDeliveryChannel}
                 sharedSummary={pickupSharedSummary}
                 onShared={({ lat, lng, address }) => {
                   setPickup({ lat, lng });

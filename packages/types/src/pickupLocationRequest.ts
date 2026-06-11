@@ -8,6 +8,8 @@ export type PickupLocationRequestStatus =
 
 export type PickupLocationRiderSource = 'roam_tag' | 'roam_contact' | 'phone_contact';
 
+export type PickupLocationDeliveryChannel = 'sms' | 'in_app';
+
 export interface PickupLocationRequestDto {
   id: string;
   token: string;
@@ -33,6 +35,23 @@ export interface CreatePickupLocationRequestBody {
   rider_source: PickupLocationRiderSource;
   rider_user_id?: string | null;
   rider_contact_id?: string | null;
+}
+
+export interface CreatePickupLocationRequestResponse {
+  request: PickupLocationRequestDto;
+  delivery_channel: PickupLocationDeliveryChannel;
+  sms_attempted: boolean;
+  sms_sent: boolean;
+}
+
+/** Rider-facing pending request (no booker/rider phone PII). */
+export interface IncomingPickupLocationRequestDto {
+  id: string;
+  token: string;
+  booker_name: string | null;
+  status: PickupLocationRequestStatus;
+  expires_at: string;
+  created_at: string;
 }
 
 export interface SharePickupLocationBody {

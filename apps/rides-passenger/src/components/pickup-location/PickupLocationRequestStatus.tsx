@@ -8,6 +8,7 @@ import {
 } from '@/services/pickupLocationRequestEdge';
 import { usePickupLocationRequestPoll } from '@/hooks/usePickupLocationRequestPoll';
 import type { RiderPickupTarget } from '@/lib/riderPickupTarget';
+import { pickupLocationRequestCreatedToast } from '@/lib/pickupLocationRequestCopy';
 import { ON_SURFACE_VARIANT, PRIMARY, SURFACE_LOW } from '@/lib/passengerTheme';
 
 export type SharedPickupCoords = {
@@ -104,16 +105,14 @@ export function PickupLocationRequestStatus({
       } catch {
         /* may already be terminal */
       }
-      const { request, sms_sent } = await createPickupLocationRequest({
+      const { request, delivery_channel, sms_sent } = await createPickupLocationRequest({
         rider_name: riderTarget.name,
         rider_phone_e164: riderTarget.phone_e164,
         rider_source: riderTarget.source,
         rider_user_id: riderTarget.user_id ?? null,
         rider_contact_id: riderTarget.contact_id ?? null,
       });
-      if (!sms_sent) {
-        toast.message('Request sent — SMS may be delayed. Rider can use the in-app link.');
-      }
+      toast.message(pickupLocationRequestCreatedToast(riderTarget.name, delivery_channel, sms_sent));
       handledRef.current = false;
       setActiveId(request.id);
     } catch (e) {

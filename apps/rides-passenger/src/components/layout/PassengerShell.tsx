@@ -6,6 +6,7 @@ import { BookerActiveTripChip, shouldHideActiveTripFab } from '@/components/Book
 import { PassengerBottomNav } from './PassengerBottomNav';
 import { ensureRoamPassengerTag } from '@/services/roamTagEdge';
 import { usePassengerActiveRideRedirect } from '@/hooks/usePassengerActiveRideRedirect';
+import { IncomingPickupLocationShellGate } from '@/components/pickup-location/IncomingPickupLocationShellGate';
 
 function PassengerShellInner() {
   usePassengerActiveRideRedirect();
@@ -24,6 +25,7 @@ function PassengerShellInner() {
         <Outlet />
       </div>
       {chipVisible && <BookerActiveTripChip />}
+      <IncomingPickupLocationShellGate />
       {!tripPickerActive && <PassengerBottomNav />}
     </div>
   );

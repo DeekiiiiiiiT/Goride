@@ -1,6 +1,11 @@
 import React from 'react';
 import { CheckCircle2, MapPin, Radio } from 'lucide-react';
+import type { PickupLocationDeliveryChannel } from '@roam/types/pickupLocationRequest';
 import type { RiderPickupTarget } from '@/lib/riderPickupTarget';
+import {
+  PICKUP_LOCATION_ACTIVITY_HINT,
+  pickupLocationPendingChannelLabel,
+} from '@/lib/pickupLocationRequestCopy';
 import { PickupLocationRequestStatus } from '@/components/pickup-location/PickupLocationRequestStatus';
 import {
   CARD_SHADOW,
@@ -18,6 +23,7 @@ type SharedSummary = {
 type Props = {
   pendingRequestId: string | null;
   pendingRider: RiderPickupTarget | null;
+  deliveryChannel?: PickupLocationDeliveryChannel | null;
   sharedSummary: SharedSummary | null;
   onShared: (coords: { lat: number; lng: number; address: string }) => void;
   onPendingCleared: () => void;
@@ -28,6 +34,7 @@ type Props = {
 export function PickupLocationActivityPanel({
   pendingRequestId,
   pendingRider,
+  deliveryChannel,
   sharedSummary,
   onShared,
   onPendingCleared,
@@ -36,6 +43,7 @@ export function PickupLocationActivityPanel({
   const showPending = Boolean(pendingRequestId && pendingRider);
   const showShared = Boolean(sharedSummary);
   const showHint = !showPending && !showShared;
+  const pendingChannelLabel = pickupLocationPendingChannelLabel(deliveryChannel);
 
   return (
     <section
@@ -53,11 +61,17 @@ export function PickupLocationActivityPanel({
       {showHint ? (
         <p className="text-sm leading-snug" style={{ color: ON_SURFACE_VARIANT }}>
           Tap <strong style={{ color: ON_SURFACE }}>Get rider&apos;s location</strong> above to choose
-          someone. They&apos;ll get a text to share their current pickup point.
+          someone. {PICKUP_LOCATION_ACTIVITY_HINT}
         </p>
       ) : null}
 
       {showPending && pendingRequestId && pendingRider ? (
+        <>
+          {pendingChannelLabel ? (
+            <p className="text-xs font-medium" style={{ color: ON_SURFACE_VARIANT }}>
+              {pendingChannelLabel}
+            </p>
+          ) : null}
         <PickupLocationRequestStatus
           requestId={pendingRequestId}
           riderName={pendingRider.name}
@@ -71,6 +85,7 @@ export function PickupLocationActivityPanel({
           onDeclined={onPendingCleared}
           onExpired={onPendingCleared}
         />
+        </>
       ) : null}
 
       {showShared && sharedSummary ? (

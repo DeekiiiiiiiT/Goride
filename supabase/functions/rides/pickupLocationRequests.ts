@@ -16,6 +16,9 @@ import { sendRideNotification } from "./rideNotifications.ts";
 export const PICKUP_LOCATION_REQUEST_TTL_MS = 15 * 60_000;
 
 const TERMINAL_STATUSES = new Set(["shared", "declined", "expired", "cancelled", "consumed"]);
+const INCOMING_LIST_LIMIT = 5;
+
+export type PickupLocationDeliveryChannel = "sms" | "in_app";
 
 export type PickupLocationRequestDeps = {
   getContactsDb: () => Promise<RidesContactsDb>;
@@ -29,7 +32,46 @@ export type PickupLocationRequestDeps = {
     payload: Record<string, unknown>,
   ) => Promise<void>;
   rateLimit?: (key: string, max: number, windowMs: number) => boolean;
+  sendNotification?: typeof sendRideNotification;
 };
+
+export function resolveDeliveryChannel(riderUserId: string | null): PickupLocationDeliveryChannel {
+  return riderUserId ? "in_app" : "sms";
+}
+
+export async function notifyRiderForPickupLocationRequest(opts: {
+  deliveryChannel: PickupLocationDeliveryChannel;
+  phoneE164: string;
+  bookerName: string;
+  shareUrl: string;
+  sendNotification?: typeof sendRideNotification;
+}): Promise<{ sms_attempted: boolean; sms_sent: boolean }> {
+  if (opts.deliveryChannel === "in_app") {
+    return { sms_attempted: false, sms_sent: false };
+  }
+  const send = opts.sendNotification ?? sendRideNotification;
+  const smsOk = await send({
+    to: opts.phoneE164,
+    template: "pickup_location_request",
+    payload: {
+      booker_name: opts.bookerName,
+      url: opts.shareUrl,
+    },
+  });
+  return { sms_attempted: true, sms_sent: smsOk };
+}
+
+export function buildCreatePickupLocationResponse(
+  row: Record<string, unknown>,
+  delivery: { delivery_channel: PickupLocationDeliveryChannel; sms_attempted: boolean; sms_sent: boolean },
+) {
+  return {
+    request: toPickupLocationRequestDto(row),
+    delivery_channel: delivery.delivery_channel,
+    sms_attempted: delivery.sms_attempted,
+    sms_sent: delivery.sms_sent,
+  };
+}
 
 function isExpired(expiresAt: string): boolean {
   return new Date(expiresAt) <= new Date();
@@ -47,6 +89,20 @@ function bookerFirstName(user: { user_metadata?: Record<string, unknown> }): str
     "";
   if (!full) return "Someone";
   return full.split(/\s+/)[0] ?? full;
+}
+
+export function toIncomingPickupLocationRequestDto(
+  row: Record<string, unknown>,
+  bookerName: string | null,
+) {
+  return {
+    id: String(row.id),
+    token: String(row.token),
+    booker_name: bookerName,
+    status: String(row.status),
+    expires_at: String(row.expires_at),
+    created_at: String(row.created_at),
+  };
 }
 
 export function toPickupLocationRequestDto(row: Record<string, unknown>) {
@@ -97,6 +153,30 @@ async function resolveAuthUserPhone(userId: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+async function resolveBookerDisplayName(bookerUserId: string): Promise<string | null> {
+  try {
+    const svc = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    );
+    const { data: booker } = await svc.auth.admin.getUserById(bookerUserId);
+    if (!booker.user) return null;
+    return bookerFirstName(booker.user);
+  } catch {
+    return null;
+  }
+}
+
+export function rowMatchesIncomingRider(
+  row: Record<string, unknown>,
+  userId: string,
+  userPhoneE164: string | null,
+): boolean {
+  if (row.rider_user_id && String(row.rider_user_id) === userId) return true;
+  if (!userPhoneE164) return false;
+  return phonesMatch(String(row.rider_phone_e164), userPhoneE164);
 }
 
 async function cancelPriorPendingForPair(
@@ -190,26 +270,106 @@ export function registerPickupLocationRequestRoutes(app: Hono, deps: PickupLocat
     if (error || !row) return c.json({ error: "insert_failed" }, 500);
 
     const shareUrl = pickupLocationShareUrl(token);
-    const smsOk = await sendRideNotification({
-      to: phoneE164,
-      template: "pickup_location_request",
-      payload: {
-        booker_name: bookerFirstName(gate.user!),
-        url: shareUrl,
-      },
+    const deliveryChannel = resolveDeliveryChannel(riderUserId);
+    const notify = await notifyRiderForPickupLocationRequest({
+      deliveryChannel,
+      phoneE164: phoneE164,
+      bookerName: bookerFirstName(gate.user!),
+      shareUrl,
+      sendNotification: deps.sendNotification,
     });
 
     await deps.audit(null, gate.user!.id, "pickup_location_request_created", {
       request_id: row.id,
       token,
       rider_user_id: riderUserId,
-      sms_sent: smsOk,
+      delivery_channel: deliveryChannel,
+      sms_attempted: notify.sms_attempted,
+      sms_sent: notify.sms_sent,
     });
 
-    return c.json({
-      request: toPickupLocationRequestDto(row as Record<string, unknown>),
-      sms_sent: smsOk,
-    });
+    return c.json(buildCreatePickupLocationResponse(row as Record<string, unknown>, {
+      delivery_channel: deliveryChannel,
+      sms_attempted: notify.sms_attempted,
+      sms_sent: notify.sms_sent,
+    }));
+  });
+
+  app.get("/v1/pickup-location-requests/incoming", async (c) => {
+    const gate = await requirePassenger(c);
+    if (gate.response) return gate.response;
+
+    if (deps.rateLimit) {
+      const limited = !deps.rateLimit(`${gate.user!.id}:pickup_location_incoming`, 60, 60_000);
+      if (limited) return c.json({ error: "rate_limited" }, 429);
+    }
+
+    const userId = gate.user!.id;
+    let userPhoneE164: string | null = null;
+    const rawPhone = gate.user!.phone;
+    if (rawPhone) {
+      try {
+        userPhoneE164 = normalizePhoneE164(rawPhone);
+      } catch {
+        userPhoneE164 = null;
+      }
+    }
+    if (!userPhoneE164) {
+      userPhoneE164 = await resolveAuthUserPhone(userId);
+    }
+
+    const { db, tables: t } = await deps.getContactsDb();
+    const nowIso = new Date().toISOString();
+
+    const queries: Promise<{ data: Record<string, unknown>[] | null }>[] = [
+      db.from(t.pickup_location_requests)
+        .select("*")
+        .eq("status", "pending")
+        .gt("expires_at", nowIso)
+        .eq("rider_user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(INCOMING_LIST_LIMIT),
+    ];
+
+    if (userPhoneE164) {
+      queries.push(
+        db.from(t.pickup_location_requests)
+          .select("*")
+          .eq("status", "pending")
+          .gt("expires_at", nowIso)
+          .eq("rider_phone_e164", userPhoneE164)
+          .order("created_at", { ascending: false })
+          .limit(INCOMING_LIST_LIMIT),
+      );
+    }
+
+    const results = await Promise.all(queries);
+    const merged = new Map<string, Record<string, unknown>>();
+    for (const result of results) {
+      for (const row of result.data ?? []) {
+        const record = row as Record<string, unknown>;
+        if (!rowMatchesIncomingRider(record, userId, userPhoneE164)) continue;
+        merged.set(String(record.id), record);
+      }
+    }
+
+    const sorted = [...merged.values()].sort((a, b) =>
+      String(b.created_at).localeCompare(String(a.created_at))
+    ).slice(0, INCOMING_LIST_LIMIT);
+
+    const requests = [];
+    for (const row of sorted) {
+      const fresh = await expirePickupLocationRequestIfNeeded(
+        db,
+        t.pickup_location_requests,
+        row,
+      );
+      if (String(fresh.status) !== "pending") continue;
+      const bookerName = await resolveBookerDisplayName(String(fresh.booker_user_id));
+      requests.push(toIncomingPickupLocationRequestDto(fresh, bookerName));
+    }
+
+    return c.json({ requests });
   });
 
   app.get("/v1/pickup-location-requests/:id", async (c) => {
@@ -324,17 +484,7 @@ export function registerPickupLocationRequestRoutes(app: Hono, deps: PickupLocat
       return c.json({ error: "unavailable", status }, 410);
     }
 
-    let bookerName: string | null = null;
-    try {
-      const svc = createClient(
-        Deno.env.get("SUPABASE_URL") ?? "",
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-      );
-      const { data: booker } = await svc.auth.admin.getUserById(String(fresh.booker_user_id));
-      if (booker.user) bookerName = bookerFirstName(booker.user);
-    } catch {
-      /* optional */
-    }
+    const bookerName = await resolveBookerDisplayName(String(fresh.booker_user_id));
 
     return c.json({
       preview: {
