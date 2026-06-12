@@ -4,6 +4,7 @@ import { ridesDriverActiveRide, ridesDriverGetRequest } from '../services/ridesD
 import {
   isDriverActiveRideStatus,
   isActiveTripUiSuppressed,
+  clearSuppressActiveTripUi,
   persistActiveRideId,
   persistActiveRideSnapshot,
   readPersistedActiveRideId,
@@ -28,6 +29,22 @@ const ActiveRideRecoveryContext = createContext<ActiveRideRecoveryContextValue>(
 });
 
 async function fetchActiveRideFromServer(): Promise<RideRequestRow | null> {
+  try {
+    const { ride: mandatoryCashRide } = await ridesDriverActiveRide();
+    if (
+      mandatoryCashRide &&
+      mandatoryCashRide.status === 'awaiting_cash_settlement' &&
+      isDriverActiveRideStatus(mandatoryCashRide.status)
+    ) {
+      clearSuppressActiveTripUi();
+      persistActiveRideId(mandatoryCashRide.id);
+      persistActiveRideSnapshot(mandatoryCashRide);
+      return mandatoryCashRide;
+    }
+  } catch {
+    /* fall through */
+  }
+
   if (isActiveTripUiSuppressed()) {
     return null;
   }
@@ -118,6 +135,8 @@ export function ActiveRideRecoveryProvider({ children }: { children: React.React
       void refreshActiveRide();
     };
     const onExitTripUi = () => {
+      const snapshot = readPersistedActiveRideSnapshot();
+      if (snapshot?.status === 'awaiting_cash_settlement') return;
       setActiveRideState(null);
       persistActiveRideId(null);
       persistActiveRideSnapshot(null);

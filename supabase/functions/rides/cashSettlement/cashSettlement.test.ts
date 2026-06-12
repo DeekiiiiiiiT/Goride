@@ -11,6 +11,7 @@ import {
   fareLockPatch,
 } from "./cashSettlementLifecycle.ts";
 import { hashSettlementRequest } from "./requestHash.ts";
+import { resolveOwedFareMinor } from "./processCashSettlement.ts";
 
 Deno.test("computeCashSettlementOutcome exact", () => {
   const r = computeCashSettlementOutcome(150000, 150000);
@@ -82,6 +83,12 @@ Deno.test("canTransitionToCashSettlement requires flag and cash", () => {
   assertEquals(canTransitionToCashSettlement("on_trip", "cash", true), true);
   assertEquals(canTransitionToCashSettlement("on_trip", "card", true), false);
   assertEquals(canTransitionToCashSettlement("on_trip", "cash", false), false);
+});
+
+Deno.test("resolveOwedFareMinor prefers locked fare then estimate", () => {
+  assertEquals(resolveOwedFareMinor({ fare_final_minor: 1200 }), 1200);
+  assertEquals(resolveOwedFareMinor({ fare_estimate_minor: 800 }), 800);
+  assertEquals(resolveOwedFareMinor({}), null);
 });
 
 Deno.test("fareLockPatch sets awaiting status", () => {

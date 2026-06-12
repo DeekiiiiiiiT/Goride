@@ -4,7 +4,11 @@ import { Session } from '@supabase/supabase-js';
 import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatMoneyMinor } from '@roam/types/rides';
-import { listPlatformLedgerTrips, type PlatformLedgerTripRow } from '../services/ridesAdminService';
+import {
+  adminForceCompleteRide,
+  listPlatformLedgerTrips,
+  type PlatformLedgerTripRow,
+} from '../services/ridesAdminService';
 
 interface OutletContext {
   session: Session;
@@ -30,6 +34,7 @@ export function TripLedgerPage() {
   const [status, setStatus] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
   const [lineKind, setLineKind] = useState('');
+  const [completingId, setCompletingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -57,6 +62,30 @@ export function TripLedgerPage() {
     void load();
   }, [load]);
 
+  const runComplete = async (trip: PlatformLedgerTripRow) => {
+    if (trip.status !== 'awaiting_cash_settlement' && trip.status !== 'on_trip') {
+      toast.error('Complete is only for on-trip or awaiting cash settlement rides');
+      return;
+    }
+    if (
+      !window.confirm(
+        `Mark ride ${trip.id.slice(0, 8)}… completed? Use only if the passenger was dropped off.`,
+      )
+    ) {
+      return;
+    }
+    setCompletingId(trip.id);
+    try {
+      await adminForceCompleteRide(token, trip.id);
+      toast.success('Ride marked completed');
+      await load();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Complete failed');
+    } finally {
+      setCompletingId(null);
+    }
+  };
+
   return (
     <div className="space-y-6 text-slate-200">
       <div>
@@ -78,6 +107,7 @@ export function TripLedgerPage() {
           <option value="">All statuses</option>
           <option value="completed">Completed</option>
           <option value="cancelled">Cancelled</option>
+          <option value="awaiting_cash_settlement">Awaiting cash settlement</option>
         </select>
         <select
           value={paymentMethod}
@@ -167,9 +197,30 @@ export function TripLedgerPage() {
                         {t.status.replace(/_/g, ' ')}
                       </td>
                     </tr>
-                    {expanded && lines.length > 0 && (
+                    {expanded && (
                       <tr className="bg-slate-900/40">
-                        <td colSpan={7} className="px-6 py-3">
+                        <td colSpan={8} className="px-6 py-3 space-y-3">
+                          {(trip.status === 'awaiting_cash_settlement' || trip.status === 'on_trip') && (
+                            <div className="flex flex-wrap items-center gap-3">
+                              <p className="text-xs text-amber-300/90">
+                                {trip.status === 'awaiting_cash_settlement'
+                                  ? 'Cash settlement pending — complete here if the driver cannot confirm payment in the app.'
+                                  : 'Ride still active — complete only if the passenger was dropped off.'}
+                              </p>
+                              <button
+                                type="button"
+                                disabled={completingId === trip.id}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void runComplete(trip);
+                                }}
+                                className="rounded-md border border-emerald-700/60 px-2.5 py-1 text-xs text-emerald-300 hover:bg-emerald-950/40 disabled:opacity-50"
+                              >
+                                {completingId === trip.id ? 'Completing…' : 'Mark completed'}
+                              </button>
+                            </div>
+                          )}
+                          {lines.length > 0 ? (
                           <table className="w-full text-xs">
                             <thead>
                               <tr className="text-slate-500 text-left">
@@ -190,6 +241,9 @@ export function TripLedgerPage() {
                               ))}
                             </tbody>
                           </table>
+                          ) : (
+                            <p className="text-xs text-slate-500">No ledger lines yet.</p>
+                          )}
                         </td>
                       </tr>
                     )}

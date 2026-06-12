@@ -14,6 +14,7 @@ import { gridCellKey } from "../fare/buildQuote.ts";
 import { cleanupRideLiveState } from "../rideGeofence.ts";
 import { applyRideTransition, type ApplyTransitionDeps, type RideStatus } from "../rideLifecycle.ts";
 import { isCashSettlementEnabled } from "../cashSettlement/flags.ts";
+import { computeFinalFareFromRide } from "../cashSettlement/computeFinalFare.ts";
 import { processCashSettlement } from "../cashSettlement/processCashSettlement.ts";
 
 const SUPPORT_PRODUCTS: ProductKey[] = ["rides", "driver"];
@@ -396,9 +397,30 @@ export function registerRideOperationsAdminRoutes(
         }
       }
 
-      const freshForSettle = await loadRideRequestById(rideId);
+      let freshForSettle = await loadRideRequestById(rideId);
       if (!freshForSettle || String(freshForSettle.status) !== "awaiting_cash_settlement") {
         return c.json({ error: "invalid_status_for_cash_settlement", status: freshForSettle?.status }, 409);
+      }
+
+      const lockedFare = Number(freshForSettle.fare_final_minor);
+      if (!Number.isFinite(lockedFare) || lockedFare < 0) {
+        const fareResult = computeFinalFareFromRide(freshForSettle);
+        if ("error" in fareResult) {
+          return c.json({ error: fareResult.error, message: "Could not lock fare for cash settlement" }, 400);
+        }
+        const nowIso = new Date().toISOString();
+        const locked = await patchRideRequest(rideId, {
+          fare_final_minor: fareResult.fareMinor,
+          fare_final_breakdown: fareResult.fareFinalBreakdown,
+          platform_fee_minor: 0,
+          driver_net_minor: fareResult.fareMinor,
+          fare_locked_at: nowIso,
+          cash_settlement_status: "pending",
+        });
+        if (!locked) {
+          return c.json({ error: "fare_lock_failed", message: "Could not lock fare for cash settlement" }, 500);
+        }
+        freshForSettle = await loadRideRequestById(rideId) ?? freshForSettle;
       }
 
       const fareMinor = Number(
@@ -413,11 +435,17 @@ export function registerRideOperationsAdminRoutes(
           cashReceivedMinor: Math.max(0, fareMinor),
           idempotencyKey: `admin-force:${rideId}`,
           actorUserId: adminUser.id,
+          opsBypass: true,
         },
       );
 
       if (!settleResult.ok) {
-        return c.json({ error: settleResult.error, status: settleResult.status }, settleResult.status as 409);
+        return c.json({
+          error: settleResult.error,
+          message: settleResult.error === "forbidden"
+            ? "Cash settlement requires the assigned driver or admin bypass"
+            : undefined,
+        }, settleResult.status);
       }
 
       await handleTerminalRideLedgerAndSync(rideId);

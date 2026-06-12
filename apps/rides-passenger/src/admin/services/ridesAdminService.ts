@@ -154,6 +154,15 @@ async function parseError(res: Response): Promise<string> {
         ? `Select a valid service. Active services: ${list}`
         : 'Select a valid service (Transport Solutions → Services) before saving this rule.';
     }
+    if (body.error === 'forbidden') {
+      return 'Not allowed to settle this ride (driver assignment mismatch).';
+    }
+    if (body.error === 'fare_not_locked') {
+      return 'Fare could not be locked for cash settlement. Check fare estimate on the ride.';
+    }
+    if (body.error === 'invalid_status_for_cash_settlement') {
+      return 'Ride is not in awaiting cash settlement status.';
+    }
     if (body.error === 'city_and_vehicle_required') {
       return 'Location and vehicle type are required. Redeploy the rides Edge function, then hard-refresh this page.';
     }

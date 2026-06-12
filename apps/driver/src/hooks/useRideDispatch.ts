@@ -143,13 +143,14 @@ export function useRideDispatch() {
 
   useEffect(() => {
     const onExitTripUi = () => {
+      if (activeRide?.status === 'awaiting_cash_settlement') return;
       suppressActiveTripUi();
       syncActiveRide(null);
       dispatchResetErrorBoundary();
     };
     window.addEventListener(ROAM_EXIT_TRIP_UI_EVENT, onExitTripUi);
     return () => window.removeEventListener(ROAM_EXIT_TRIP_UI_EVENT, onExitTripUi);
-  }, [syncActiveRide]);
+  }, [syncActiveRide, activeRide?.status]);
 
   useEffect(() => {
     audioRef.current = new Audio(OFFER_SOUND_URL);

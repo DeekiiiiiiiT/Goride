@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { computeFinalFareFromRide } from "./computeFinalFare.ts";
 import { computeCashSettlementOutcome } from "./computeOutcome.ts";
 import {
   buildJournalLineSpecs,
@@ -15,6 +16,21 @@ export interface ProcessCashSettlementParams {
   tipReceivedMinor?: number;
   idempotencyKey: string;
   actorUserId: string;
+  /** Admin force-complete: skip assigned-driver check; journal still attributes to actorUserId. */
+  opsBypass?: boolean;
+}
+
+export function resolveOwedFareMinor(ride: Record<string, unknown>): number | null {
+  const locked = Number(ride.fare_final_minor);
+  if (Number.isFinite(locked) && locked >= 0) return locked;
+
+  const computed = computeFinalFareFromRide(ride);
+  if (!("error" in computed)) return computed.fareMinor;
+
+  const estimate = Number(ride.fare_estimate_minor);
+  if (Number.isFinite(estimate) && estimate >= 0) return estimate;
+
+  return null;
 }
 
 export type ProcessCashSettlementResult =
@@ -34,12 +50,15 @@ export async function processCashSettlement(
   if (status !== "awaiting_cash_settlement") {
     return { ok: false, error: "invalid_status", status: 409 };
   }
-  if (String(ride.assigned_driver_user_id) !== params.actorUserId) {
+  if (
+    !params.opsBypass &&
+    String(ride.assigned_driver_user_id) !== params.actorUserId
+  ) {
     return { ok: false, error: "forbidden", status: 403 };
   }
 
-  const owedMinor = Number(ride.fare_final_minor);
-  if (!Number.isFinite(owedMinor) || owedMinor < 0) {
+  const owedMinor = resolveOwedFareMinor(ride);
+  if (owedMinor == null) {
     return { ok: false, error: "fare_not_locked", status: 400 };
   }
 

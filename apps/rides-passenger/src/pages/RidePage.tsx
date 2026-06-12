@@ -22,7 +22,6 @@ import { RideCancelledView } from '@/components/RideCancelledView';
 import { TripInProgressView } from '@/components/TripInProgressView';
 import { CashSettlementRiderView } from '@/components/CashSettlementRiderView';
 import { TripSummaryView } from '@/components/TripSummaryView';
-import { CASH_SETTLEMENT_ENABLED } from '@/lib/cashSettlementFlags';
 import { isAwaitingCashSettlement, isCashRide } from '@/lib/cashSettlementUi';
 import { ridesCancelRequest, ridesGetLive, ridesGetRequest } from '@/services/ridesEdge';
 import { createPassengerInvite } from '@/services/contactsEdge';
@@ -405,7 +404,6 @@ export default function RidePage() {
       }
     }
     if (
-      CASH_SETTLEMENT_ENABLED &&
       ride.status === 'completed' &&
       prevStatusRef.current === 'awaiting_cash_settlement' &&
       ride.payment_method === 'cash' &&
