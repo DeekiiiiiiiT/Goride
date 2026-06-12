@@ -10,7 +10,9 @@ export function DriverCashSettlementOverlay() {
   const { activeRide, submitCashSettlement } = useRideDispatchContext();
   const [submitting, setSubmitting] = useState(false);
 
-  const show = isAwaitingCashSettlement(activeRide);
+  const show =
+    Boolean(activeRide?.status === 'awaiting_cash_settlement') ||
+    isAwaitingCashSettlement(activeRide);
 
   if (!show || !activeRide) return null;
 

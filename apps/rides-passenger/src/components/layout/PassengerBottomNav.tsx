@@ -49,7 +49,9 @@ export function PassengerBottomNav() {
             className={`flex ${compactNav ? 'min-w-[4rem] px-2' : 'min-w-[4.5rem] px-3'} flex-col items-center justify-center gap-0.5 py-1 touch-manipulation`}
           >
             {({ isActive }) => (
-              <>
+              <span
+                className={`flex flex-col items-center justify-center gap-0.5 rounded-xl px-3 py-1 transition-colors ${isActive ? 'bg-[color-mix(in_srgb,var(--home-nav-active)_10%,transparent)]' : ''}`}
+              >
                 <Icon
                   className="h-5 w-5"
                   strokeWidth={2}
@@ -63,7 +65,7 @@ export function PassengerBottomNav() {
                 >
                   {label}
                 </span>
-              </>
+              </span>
             )}
           </NavLink>
         ))}

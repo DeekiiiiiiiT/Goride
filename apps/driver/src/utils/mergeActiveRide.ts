@@ -6,8 +6,9 @@ const STATUS_ORDER: Record<RideRequestStatus, number> = {
   driver_en_route_pickup: 2,
   driver_arrived_pickup: 3,
   on_trip: 4,
-  completed: 5,
-  cancelled: 5,
+  awaiting_cash_settlement: 5,
+  completed: 6,
+  cancelled: 6,
 };
 
 type RideWithOptionalPin = RideRequestRow & { verification_pin?: string | null };
@@ -34,7 +35,11 @@ export function mergeDriverActiveRide(
   const next = normalizeDriverRide(incoming);
   if (!prev || prev.id !== next.id) return next;
 
-  if (next.status === 'cancelled' || next.status === 'completed') {
+  if (
+    next.status === 'cancelled' ||
+    next.status === 'completed' ||
+    next.status === 'awaiting_cash_settlement'
+  ) {
     return next;
   }
 

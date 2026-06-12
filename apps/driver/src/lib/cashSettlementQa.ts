@@ -4,5 +4,6 @@ export const CASH_SETTLEMENT_QA = [
   'Driver: cash entry overlay blocks other UI until submitted',
   'Driver: on_trip cash card hides fare until settlement',
   'Driver: relaunch during awaiting_cash_settlement restores overlay',
+  'Driver: trip history awaiting_cash_settlement tap resumes cash entry overlay',
   'Driver: card trip Complete trip → completed (no settlement)',
 ] as const;

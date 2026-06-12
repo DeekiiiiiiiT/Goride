@@ -202,7 +202,9 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
       className={cn(
         'flex min-h-[100dvh] flex-col overflow-x-hidden',
         mintDriverLayout
-          ? 'bg-[#f7f9fb] dark:bg-slate-950'
+          ? mintHomeLayout
+            ? 'bg-[#f7f9fb] dark:bg-[#121312]'
+            : 'bg-[#f7f9fb] dark:bg-slate-950'
           : 'bg-gradient-to-br from-slate-100 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900',
       )}
     >
@@ -212,7 +214,9 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
         className={cn(
           'sticky top-0 z-40 border-b safe-t backdrop-blur-lg',
           mintDriverLayout
-            ? 'border-slate-200/90 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900'
+            ? mintHomeLayout
+              ? 'border-slate-200/90 bg-white shadow-sm dark:border-white/5 dark:bg-[#121312]'
+              : 'border-slate-200/90 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900'
             : 'border-slate-200 bg-white/90 dark:border-slate-800 dark:bg-slate-900/80',
         )}
       >
@@ -270,6 +274,11 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
               </button>
             ) : mintDriverLayout ? (
               <>
+                {mintHomeLayout ? (
+                  <div className="rounded-full border border-[#006d43]/30 bg-[#006d43]/20 px-3 py-1 text-xs font-bold text-[#006d43] dark:text-[#59de9b]">
+                    PREMIUM
+                  </div>
+                ) : null}
                 {mintEarningsLayout && (
                   <button
                     type="button"
@@ -282,25 +291,27 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
                     <RefreshCw className="h-5 w-5" />
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage('profile')}
-                  className={cn(
-                    'h-10 w-10 overflow-hidden rounded-full border-2 object-cover',
-                    mintEarningsLayout
-                      ? 'border-emerald-500 dark:border-emerald-400'
-                      : 'border-slate-200 dark:border-slate-700',
-                  )}
-                  aria-label="Profile"
-                >
-                  {avatarUrl ? (
-                    <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <span className="flex h-full w-full items-center justify-center bg-emerald-100 text-sm font-bold text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
-                      {profileInitial}
-                    </span>
-                  )}
-                </button>
+                {!mintHomeLayout ? (
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage('profile')}
+                    className={cn(
+                      'h-10 w-10 overflow-hidden rounded-full border-2 object-cover',
+                      mintEarningsLayout
+                        ? 'border-emerald-500 dark:border-emerald-400'
+                        : 'border-slate-200 dark:border-slate-700',
+                    )}
+                    aria-label="Profile"
+                  >
+                    {avatarUrl ? (
+                      <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="flex h-full w-full items-center justify-center bg-emerald-100 text-sm font-bold text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                        {profileInitial}
+                      </span>
+                    )}
+                  </button>
+                ) : null}
               </>
             ) : (
               <>
@@ -332,7 +343,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
         <div
           className={cn(
             'mx-auto w-full min-w-0 max-w-lg safe-x sm:max-w-2xl md:max-w-3xl lg:max-w-4xl',
-            mintDriverLayout ? 'py-6' : 'py-4',
+            mintHomeLayout ? 'py-0' : mintDriverLayout ? 'py-6' : 'py-4',
           )}
         >
           {renderPage()}
@@ -343,7 +354,9 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
         className={cn(
           'fixed bottom-0 left-0 right-0 z-40 border-t safe-b backdrop-blur-lg',
           mintDriverLayout
-            ? 'border-slate-200/90 bg-white dark:border-slate-800 dark:bg-slate-900'
+            ? mintHomeLayout
+              ? 'border-white/5 bg-white/95 dark:border-white/5 dark:bg-[#121312]/80'
+              : 'border-slate-200/90 bg-white dark:border-slate-800 dark:bg-slate-900'
             : 'border-slate-200 bg-white/95 dark:border-slate-800 dark:bg-slate-900/95',
         )}
       >

@@ -35,14 +35,10 @@ function AuthLoadingScreen() {
 function AuthenticatedDriverRouteInner() {
   const { user } = useAuth();
   const { profile, loading } = useDriver();
-  const { hasActiveRide, recoveryLoaded } = useActiveRideRecovery();
+  const { recoveryLoaded } = useActiveRideRecovery();
 
   if (loading || !recoveryLoaded) {
     return <AuthLoadingScreen />;
-  }
-
-  if (hasActiveRide) {
-    return <DriverShell forcePassengerRides />;
   }
 
   if (needsGoogleExtendedSignup(user, profile)) {

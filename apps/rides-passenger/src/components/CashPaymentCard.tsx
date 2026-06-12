@@ -7,6 +7,14 @@ import {
   getCashPaymentCardMode,
   resolveLockedFareMinor,
 } from '@roam/types/cashSettlementDisplay';
+import {
+  ON_SURFACE,
+  ON_SURFACE_VARIANT,
+  OUTLINE_VARIANT,
+  PRIMARY,
+  PRIMARY_CONTAINER,
+  PRIMARY_FIXED,
+} from '@/lib/passengerTheme';
 
 interface CashPaymentCardProps {
   ride: RideRequestRow;
@@ -29,20 +37,34 @@ export function CashPaymentCard({ ride, variant = 'default' }: CashPaymentCardPr
     const outcome = ride.cash_settlement_outcome;
     if (outcome === 'exact') {
       return (
-        <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 text-center">
-          <p className="text-lg font-bold text-emerald-800">Payment confirmed</p>
-          <p className="mt-1 text-sm text-emerald-700">Thanks for riding with Roam</p>
+        <div
+          className="cash-settlement-glass rounded-[1.5rem] p-8 text-center"
+          style={{ borderColor: 'color-mix(in srgb, var(--passenger-primary-container) 20%, transparent)' }}
+        >
+          <p className="text-lg font-bold" style={{ color: ON_SURFACE }}>
+            Payment confirmed
+          </p>
+          <p className="mt-1 text-sm" style={{ color: ON_SURFACE_VARIANT }}>
+            Thanks for riding with Roam
+          </p>
         </div>
       );
     }
     if (outcome === 'overpay' && computed) {
       return (
-        <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 text-center space-y-2">
-          <p className="text-lg font-bold text-emerald-800">Change credited</p>
-          <p className="text-3xl font-bold tabular-nums text-emerald-900">
+        <div
+          className="cash-settlement-glass space-y-2 rounded-[1.5rem] p-8 text-center"
+          style={{ borderColor: 'color-mix(in srgb, var(--passenger-primary-container) 20%, transparent)' }}
+        >
+          <p className="text-lg font-bold" style={{ color: ON_SURFACE }}>
+            Change credited
+          </p>
+          <p className="text-3xl font-bold tabular-nums" style={{ color: PRIMARY }}>
             {formatMoneyMinor(computed.change_credit_minor, currency)}
           </p>
-          <p className="text-sm text-emerald-700">Added to your Roam wallet</p>
+          <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
+            Added to your Roam wallet
+          </p>
         </div>
       );
     }
@@ -64,44 +86,60 @@ export function CashPaymentCard({ ride, variant = 'default' }: CashPaymentCardPr
   if (amountMinor == null || !Number.isFinite(amountMinor)) return null;
 
   return (
-    <div className="rounded-3xl bg-gradient-to-br from-emerald-50 to-white border border-emerald-200 p-5 space-y-4">
+    <div
+      className="space-y-4 rounded-3xl border p-5"
+      style={{
+        background: `linear-gradient(to bottom right, color-mix(in srgb, var(--passenger-primary-fixed) 35%, var(--passenger-surface)), var(--passenger-surface))`,
+        borderColor: 'color-mix(in srgb, var(--passenger-primary-container) 20%, transparent)',
+      }}
+    >
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+        <div
+          className="flex h-10 w-10 items-center justify-center rounded-full"
+          style={{ backgroundColor: PRIMARY_FIXED }}
+        >
           {mode === 'summary_arrears' ? (
-            <Receipt className="w-5 h-5 text-amber-600" />
+            <Receipt className="h-5 w-5" style={{ color: PRIMARY_CONTAINER }} />
           ) : (
-            <Banknote className="w-5 h-5 text-emerald-600" />
+            <Banknote className="h-5 w-5" style={{ color: PRIMARY }} />
           )}
         </div>
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: PRIMARY }}>
             Cash Payment
           </p>
-          <p className="text-xs text-zinc-500">{title}</p>
+          <p className="text-xs" style={{ color: ON_SURFACE_VARIANT }}>
+            {title}
+          </p>
         </div>
       </div>
 
-      <div className="text-center py-3">
-        <p className="text-4xl font-bold tabular-nums text-zinc-900">
+      <div className="py-3 text-center">
+        <p className="text-4xl font-bold tabular-nums" style={{ color: ON_SURFACE }}>
           {formatMoneyMinor(amountMinor, currency)}
         </p>
         {mode === 'awaiting_payment' && lockedMinor != null && (
-          <p className="mt-1 text-xs text-zinc-500">Fare due at drop-off</p>
+          <p className="mt-1 text-xs" style={{ color: ON_SURFACE_VARIANT }}>
+            Fare due at drop-off
+          </p>
         )}
       </div>
 
       {hasExtras && (
-        <div className="space-y-2 pt-3 border-t border-emerald-100">
+        <div
+          className="space-y-2 border-t pt-3"
+          style={{ borderColor: OUTLINE_VARIANT }}
+        >
           <div className="flex justify-between text-sm">
-            <span className="text-zinc-500">Trip fare</span>
-            <span className="text-zinc-700 tabular-nums">
+            <span style={{ color: ON_SURFACE_VARIANT }}>Trip fare</span>
+            <span className="tabular-nums" style={{ color: ON_SURFACE }}>
               {formatMoneyMinor(baseFareMinor, currency)}
             </span>
           </div>
           {actualTollsMinor > 0 && (
             <div className="flex justify-between text-sm">
-              <span className="text-zinc-500">Tolls</span>
-              <span className="text-zinc-700 tabular-nums">
+              <span style={{ color: ON_SURFACE_VARIANT }}>Tolls</span>
+              <span className="tabular-nums" style={{ color: ON_SURFACE }}>
                 +{formatMoneyMinor(actualTollsMinor, currency)}
               </span>
             </div>
@@ -110,7 +148,7 @@ export function CashPaymentCard({ ride, variant = 'default' }: CashPaymentCardPr
       )}
 
       {mode === 'awaiting_payment' && (
-        <p className="text-xs text-center font-medium text-emerald-700">
+        <p className="text-center text-xs font-medium" style={{ color: PRIMARY }}>
           Hand this amount to your driver now
         </p>
       )}

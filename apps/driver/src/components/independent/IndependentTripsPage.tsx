@@ -17,11 +17,13 @@ import type { RideRequestRow } from '@roam/types/rides';
 import { DateRange } from 'react-day-picker';
 import { endOfDay, startOfDay, subDays } from 'date-fns';
 import { useIndependentTrips } from '../../hooks/useIndependentTrips';
+import { useRideDispatchContext } from '../../contexts/RideDispatchContext';
 import { TripDetailsSheet } from '../trips/TripDetailsSheet';
 import { TripHistoryCard } from '../trips/TripHistoryCard';
 import { tripWhen } from '../trips/tripDetailsUtils';
 
 export function IndependentTripsPage() {
+  const { resumeCashSettlement } = useRideDispatchContext();
   const { trips, loading, error, loadAll, total } = useIndependentTrips();
   const [searchTerm, setSearchTerm] = useState('');
   const [date, setDate] = useState<DateRange | undefined>(undefined);
@@ -138,7 +140,13 @@ export function IndependentTripsPage() {
               key={trip.id}
               trip={trip}
               faded={index >= 3}
-              onClick={() => setSelectedTrip(trip)}
+              onClick={() => {
+                if (trip.status === 'awaiting_cash_settlement') {
+                  void resumeCashSettlement(trip.id);
+                  return;
+                }
+                setSelectedTrip(trip);
+              }}
             />
           ))}
         </div>
@@ -167,6 +175,7 @@ export function IndependentTripsPage() {
         trip={selectedTrip}
         open={!!selectedTrip}
         onOpenChange={(open) => !open && setSelectedTrip(null)}
+        onCollectCash={resumeCashSettlement}
       />
     </div>
   );

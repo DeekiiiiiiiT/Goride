@@ -13,5 +13,6 @@ export function shouldCollectCashAtDropoff(ride: Pick<RideRequestRow, 'payment_m
 export function isAwaitingCashSettlement(
   ride: Pick<RideRequestRow, 'status' | 'payment_method'> | null | undefined,
 ): boolean {
-  return Boolean(ride && ride.status === 'awaiting_cash_settlement' && isCashRide(ride));
+  if (!ride || ride.status !== 'awaiting_cash_settlement') return false;
+  return isCashRide(ride);
 }

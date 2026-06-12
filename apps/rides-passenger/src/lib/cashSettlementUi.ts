@@ -10,5 +10,5 @@ export function isCashRide(
 export function isAwaitingCashSettlement(
   ride: Pick<RideRequestRow, 'status' | 'payment_method'> | null | undefined,
 ): boolean {
-  return Boolean(ride && ride.status === 'awaiting_cash_settlement' && isCashRideShared(ride));
+  return Boolean(ride && ride.status === 'awaiting_cash_settlement' && isCashRide(ride));
 }

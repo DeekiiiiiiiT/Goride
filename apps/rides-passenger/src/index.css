@@ -14,6 +14,7 @@
 @import "./styles/active-trip-fab.css";
 @import "./styles/ride-cancelled.css";
 @import "./styles/splash.css";
+@import "./styles/cash-settlement.css";
 
 :root {
   --font-sans: system-ui, -apple-system, "Segoe UI", "Inter", sans-serif;

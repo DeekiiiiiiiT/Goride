@@ -82,9 +82,13 @@ export function useRideDispatch() {
     refreshActiveRide,
   } = useActiveRideRecovery();
 
+  const isActiveDriverRide = useCallback((status: RideRequestRow['status']) => {
+    return isDriverActiveRideStatus(status) || status === 'awaiting_cash_settlement';
+  }, []);
+
   const syncActiveRide = useCallback(
     (ride: RideRequestRow | null) => {
-      if (!ride || !isDriverActiveRideStatus(ride.status)) {
+      if (!ride || !isActiveDriverRide(ride.status)) {
         setActiveRide(null);
         setActiveRideWaitTime(null);
         setRideLocationLive(null);
@@ -103,7 +107,7 @@ export function useRideDispatch() {
         return next;
       });
     },
-    [setRecoveredRide],
+    [setRecoveredRide, isActiveDriverRide],
   );
 
   const { permissions } = useDriverPermissionPolicy();
@@ -426,6 +430,12 @@ export function useRideDispatch() {
   }, [online, postPresenceFromCoords, clearGeoWatch]);
 
   useEffect(() => {
+    if (activeRide?.status === 'awaiting_cash_settlement' && activeRide.id) {
+      void pollActiveRide(activeRide.id);
+    }
+  }, [activeRide?.id, activeRide?.status, pollActiveRide]);
+
+  useEffect(() => {
     if (!activeRide?.id) return;
     const pollMs =
       activeRide.status === 'driver_arrived_pickup' ||
@@ -456,7 +466,7 @@ export function useRideDispatch() {
         (payload) => {
           const row = payload.new as RideRequestRow;
           if (!row?.id) return;
-          if (!isDriverActiveRideStatus(row.status)) {
+          if (!isActiveDriverRide(row.status)) {
             syncActiveRide(null);
             return;
           }
@@ -468,7 +478,7 @@ export function useRideDispatch() {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [activeRide?.id, syncActiveRide]);
+  }, [activeRide?.id, syncActiveRide, isActiveDriverRide]);
 
   useEffect(() => {
     const handleUnload = () => {
@@ -725,6 +735,26 @@ export function useRideDispatch() {
     });
   }, [activeRide?.id, activeRide?.status, submitCashSettlement]);
 
+  const resumeCashSettlement = useCallback(
+    async (rideId: string): Promise<boolean> => {
+      try {
+        const { ride } = await ridesDriverGetRequest(rideId);
+        if (ride.status !== 'awaiting_cash_settlement') {
+          toast.error('This trip is no longer awaiting cash settlement');
+          return false;
+        }
+        clearSuppressActiveTripUi();
+        syncActiveRide(ride);
+        toast.message('Enter the cash amount received');
+        return true;
+      } catch (e: unknown) {
+        toast.error(e instanceof Error ? e.message : 'Could not open cash settlement');
+        return false;
+      }
+    },
+    [syncActiveRide],
+  );
+
   return {
     online,
     offers,
@@ -744,6 +774,7 @@ export function useRideDispatch() {
     decline,
     advance,
     submitCashSettlement,
+    resumeCashSettlement,
     refreshOffers,
     permissions,
     permissionOnboardingOpen,

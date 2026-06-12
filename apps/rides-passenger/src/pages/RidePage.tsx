@@ -92,7 +92,9 @@ function isCashSettlement(
   status: RideRequestStatus | undefined,
   ride: RideRequestRow | undefined,
 ): boolean {
-  return Boolean(ride && status && isAwaitingCashSettlement({ ...ride, status }));
+  if (!ride || !status) return false;
+  if (status === 'awaiting_cash_settlement') return true;
+  return isAwaitingCashSettlement({ ...ride, status });
 }
 
 function showLiveTracking(status: RideRequestStatus | undefined): boolean {
@@ -533,6 +535,7 @@ export default function RidePage() {
           assignedDriver={assignedDriver}
           onMinimize={handlePassengerMinimize}
           isFetching={isFetching}
+          canChat={canChat}
           onContinueToSummary={() => setCashResultDismissed(true)}
         />
       );
@@ -557,6 +560,7 @@ export default function RidePage() {
           assignedDriver={assignedDriver}
           onMinimize={handlePassengerMinimize}
           isFetching={isFetching}
+          canChat={canChat}
         />
       </>
     );

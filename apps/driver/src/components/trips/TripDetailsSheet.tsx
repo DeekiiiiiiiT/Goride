@@ -30,6 +30,7 @@ type Props = {
   trip: RideRequestRow | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCollectCash?: (rideId: string) => void | Promise<void>;
 };
 
 function LocationRow({
@@ -53,9 +54,10 @@ function LocationRow({
   );
 }
 
-export function TripDetailsSheet({ trip, open, onOpenChange }: Props) {
+export function TripDetailsSheet({ trip, open, onOpenChange, onCollectCash }: Props) {
   if (!trip) return null;
 
+  const awaitingCash = trip.status === 'awaiting_cash_settlement';
   const pickupAt = tripPickupTime(trip);
   const dropoffAt = tripDropoffTime(trip);
   const fareLines = buildFareLines(trip);
@@ -175,6 +177,19 @@ export function TripDetailsSheet({ trip, open, onOpenChange }: Props) {
               <MetadataTile label="Date" value={format(tripWhen(trip), 'MMM d, yyyy')} />
               <MetadataTile label="Duration" value={formatTripDuration(trip)} />
             </div>
+
+            {awaitingCash && onCollectCash ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onOpenChange(false);
+                  void onCollectCash(trip.id);
+                }}
+                className="mb-3 flex w-full items-center justify-center rounded-2xl bg-emerald-600 py-4 text-base font-bold text-white transition-colors hover:bg-emerald-500 active:scale-[0.98]"
+              >
+                Enter cash received
+              </button>
+            ) : null}
 
             <button
               type="button"

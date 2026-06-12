@@ -1,0 +1,54 @@
+.cash-settlement-page {
+  --cash-settlement-glow: 0 10px 40px -10px color-mix(in srgb, var(--passenger-primary) 10%, transparent);
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background-color: var(--passenger-page-bg);
+  color: var(--passenger-on-surface);
+}
+
+.cash-settlement-glass {
+  background: color-mix(in srgb, var(--passenger-surface) 95%, transparent);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid color-mix(in srgb, var(--passenger-primary-container) 10%, transparent);
+  box-shadow: var(--cash-settlement-glow);
+}
+
+.cash-settlement-watermark {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  opacity: 0.03;
+  color: var(--passenger-primary);
+}
+
+.cash-settlement-orbit {
+  animation: cash-settlement-orbit 1.5s linear infinite;
+}
+
+@keyframes cash-settlement-orbit {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.cash-settlement-pulse {
+  animation: cash-settlement-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes cash-settlement-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
