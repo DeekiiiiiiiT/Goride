@@ -5,6 +5,7 @@ import {
   riderAccountKeyForUser,
   type JournalLineSpec,
 } from "../rides/cashSettlement/buildJournalEntries.ts";
+import { getRidesPaymentDb } from "./ridesPaymentDb.ts";
 
 export interface PaymentAccountRow {
   id: string;
@@ -23,13 +24,18 @@ export interface WalletBalanceView {
   credit_minor: number;
 }
 
+async function paymentDb(): Promise<Awaited<ReturnType<typeof getRidesPaymentDb>>> {
+  return getRidesPaymentDb();
+}
+
 export async function getAccountByKey(
-  db: SupabaseClient,
+  db: SupabaseClient | undefined,
   accountKey: string,
   currency: string,
 ): Promise<PaymentAccountRow | null> {
-  const { data, error } = await db
-    .from("payment_accounts")
+  const { db: client, tables } = await paymentDb();
+  const { data, error } = await client
+    .from(tables.accounts)
     .select("*")
     .eq("account_key", accountKey)
     .eq("currency", currency)
@@ -39,7 +45,7 @@ export async function getAccountByKey(
 }
 
 export async function ensurePaymentAccount(
-  db: SupabaseClient,
+  db: SupabaseClient | undefined,
   opts: {
     userId: string | null;
     role: "rider" | "driver" | "system";
@@ -50,8 +56,9 @@ export async function ensurePaymentAccount(
   const existing = await getAccountByKey(db, opts.accountKey, opts.currency);
   if (existing) return existing;
 
-  const { data, error } = await db
-    .from("payment_accounts")
+  const { db: client, tables } = await paymentDb();
+  const { data, error } = await client
+    .from(tables.accounts)
     .insert({
       user_id: opts.userId,
       role: opts.role,
@@ -122,7 +129,7 @@ export function walletBalanceFromMinor(balanceMinor: number, currency: string): 
 }
 
 export async function getWalletBalance(
-  db: SupabaseClient,
+  db: SupabaseClient | undefined,
   userId: string,
   role: "rider" | "driver",
   currency: string,
@@ -153,13 +160,14 @@ export interface PostJournalParams {
 }
 
 export async function postPaymentJournal(
-  db: SupabaseClient,
+  db: SupabaseClient | undefined,
   params: PostJournalParams,
 ): Promise<PostJournalResult> {
   const { rideId, idempotencyKey, requestHash, currency, lines, createdByUserId } = params;
+  const { db: client, tables } = await paymentDb();
 
-  const { data: existing } = await db
-    .from("payment_journal_entries")
+  const { data: existing } = await client
+    .from(tables.journal)
     .select("id, request_hash")
     .eq("ride_request_id", rideId)
     .eq("idempotency_key", idempotencyKey)
@@ -210,7 +218,7 @@ export async function postPaymentJournal(
     const debit = await resolveAccountKey(line.debit_account_key);
     const credit = await resolveAccountKey(line.credit_account_key);
 
-    const { error: insertError } = await db.from("payment_journal_entries").insert({
+    const { error: insertError } = await client.from(tables.journal).insert({
       ride_request_id: rideId,
       idempotency_key: idempotencyKey,
       entry_type: line.entry_type,
@@ -225,8 +233,8 @@ export async function postPaymentJournal(
 
     if (insertError) {
       if (String(insertError.code) === "23505") {
-        const { data: dup } = await db
-          .from("payment_journal_entries")
+        const { data: dup } = await client
+          .from(tables.journal)
           .select("request_hash")
           .eq("ride_request_id", rideId)
           .eq("idempotency_key", idempotencyKey)
@@ -242,14 +250,14 @@ export async function postPaymentJournal(
     const newDebitBalance = Number(debit.balance_minor) - line.amount_minor;
     const newCreditBalance = Number(credit.balance_minor) + line.amount_minor;
 
-    const { error: debitErr } = await db
-      .from("payment_accounts")
+    const { error: debitErr } = await client
+      .from(tables.accounts)
       .update({ balance_minor: newDebitBalance })
       .eq("id", debit.id);
     if (debitErr) throw new Error(debitErr.message);
 
-    const { error: creditErr } = await db
-      .from("payment_accounts")
+    const { error: creditErr } = await client
+      .from(tables.accounts)
       .update({ balance_minor: newCreditBalance })
       .eq("id", credit.id);
     if (creditErr) throw new Error(creditErr.message);
@@ -263,7 +271,7 @@ export async function postPaymentJournal(
 }
 
 export async function listJournalForAccount(
-  db: SupabaseClient,
+  db: SupabaseClient | undefined,
   userId: string,
   role: "rider" | "driver",
   currency: string,
@@ -275,15 +283,16 @@ export async function listJournalForAccount(
   const account = await getAccountByKey(db, accountKey, currency);
   if (!account) return [];
 
-  const { data: debits } = await db
-    .from("payment_journal_entries")
+  const { db: client, tables } = await paymentDb();
+  const { data: debits } = await client
+    .from(tables.journal)
     .select("*")
     .eq("debit_account_id", account.id)
     .order("created_at", { ascending: false })
     .limit(limit);
 
-  const { data: credits } = await db
-    .from("payment_journal_entries")
+  const { data: credits } = await client
+    .from(tables.journal)
     .select("*")
     .eq("credit_account_id", account.id)
     .order("created_at", { ascending: false })
