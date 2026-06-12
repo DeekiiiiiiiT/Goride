@@ -22,6 +22,8 @@ export function RideDispatchPage() {
   } = useRideDispatchContext();
 
   const showActiveRide = activeRide && isDriverActiveRideStatus(activeRide.status);
+  const awaitingCashSettlement = activeRide?.status === 'awaiting_cash_settlement';
+  const showActiveRidePanel = showActiveRide && !awaitingCashSettlement;
   const retractSlider = shouldRetractOnlineSlider(!!showActiveRide, offers.length);
 
   return (
@@ -53,7 +55,7 @@ export function RideDispatchPage() {
           </section>
         )}
 
-        {showActiveRide && (
+        {showActiveRidePanel && (
           <ActiveRidePanel
             ride={activeRide}
             onAdvance={advance}

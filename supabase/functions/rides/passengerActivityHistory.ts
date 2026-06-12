@@ -12,7 +12,10 @@ import { sanitizeActivityRideForBooker } from "./shadowBookerPrivacy.ts";
 import { enrichRideRoamModeFromBooking } from "./roamModeResolve.ts";
 
 export const HISTORY_RIDE_COLUMNS =
-  "id, status, roam_mode, guest_passenger_name, guest_passenger_phone, passenger_user_id, rider_user_id, pickup_address, dropoff_address, created_at, updated_at, fare_estimate_minor, currency, booking_request_id";
+  "id, status, roam_mode, guest_passenger_name, guest_passenger_phone, passenger_user_id, rider_user_id, pickup_address, dropoff_address, created_at, updated_at, completed_at, fare_estimate_minor, fare_final_minor, currency, booking_request_id";
+
+const HISTORY_RIDE_COLUMNS_FALLBACK =
+  "id, status, guest_passenger_name, passenger_user_id, rider_user_id, pickup_address, dropoff_address, created_at, updated_at, completed_at, fare_estimate_minor, fare_final_minor, currency";
 
 const TERMINAL_STATUS_SET = new Set<string>(TERMINAL_RIDE_STATUSES);
 const INTENT_TERMINAL_STATUSES = ["consumed", "booked"] as const;
@@ -186,8 +189,9 @@ export function mapRideToHistoryItem(
   const roamMode = String(ride.roam_mode ?? "open_roam") as "open_roam" | "shadow_roam";
   const counterpartyName = resolveCounterpartyName(ride, participantRole, counterpartyNames);
   const tripCategory = classifyTripCategory(ride, userId, participantRole);
-  const endedAt = String(ride.updated_at ?? ride.created_at ?? "");
-  const fareMinor = ride.fare_estimate_minor != null ? String(ride.fare_estimate_minor) : null;
+  const endedAt = String(ride.completed_at ?? ride.updated_at ?? ride.created_at ?? "");
+  const fareRaw = ride.fare_final_minor ?? ride.fare_estimate_minor;
+  const fareMinor = fareRaw != null ? String(fareRaw) : null;
   const currency = typeof ride.currency === "string" ? ride.currency : null;
 
   const base = {
@@ -237,41 +241,73 @@ async function loadDisplayNamesForUsers(
   return names;
 }
 
+async function queryTerminalRidesForUserOnTable(
+  db: SupabaseClient,
+  table: string,
+  userId: string,
+  columns: string,
+): Promise<{ rows: Record<string, unknown>[]; error: string | null }> {
+  const statuses = [...TERMINAL_RIDE_STATUSES];
+
+  const runRole = async (roleCol: "rider_user_id" | "passenger_user_id") => {
+    const { data, error } = await db.from(table)
+      .select(columns)
+      .in("status", statuses)
+      .eq(roleCol, userId)
+      .order("updated_at", { ascending: false })
+      .limit(FETCH_CAP);
+    return { data: (data ?? []) as Record<string, unknown>[], error };
+  };
+
+  const [asRider, asPassenger] = await Promise.all([
+    runRole("rider_user_id"),
+    runRole("passenger_user_id"),
+  ]);
+
+  const error = asRider.error?.message ?? asPassenger.error?.message ?? null;
+  if (error) {
+    return { rows: [], error };
+  }
+
+  const byId = new Map<string, Record<string, unknown>>();
+  for (const row of [...asRider.data, ...asPassenger.data]) {
+    byId.set(String(row.id), row);
+  }
+  return { rows: [...byId.values()], error: null };
+}
+
 async function queryUserTerminalRidesSince(
   nativeDb: SupabaseClient,
   publicDb: SupabaseClient,
   userId: string,
-  sinceIso: string,
 ): Promise<Record<string, unknown>[]> {
-  const statuses = [...TERMINAL_RIDE_STATUSES];
-  const orFilter = `rider_user_id.eq.${userId},passenger_user_id.eq.${userId}`;
+  const byId = new Map<string, Record<string, unknown>>();
 
-  const run = async (
-    db: SupabaseClient,
-    table: string,
-  ): Promise<Record<string, unknown>[]> => {
-    const { data, error } = await db.from(table)
-      .select(HISTORY_RIDE_COLUMNS)
-      .in("status", statuses)
-      .or(orFilter)
-      .gte("updated_at", sinceIso)
-      .order("updated_at", { ascending: false })
-      .limit(FETCH_CAP);
-    if (error) {
-      console.error("[activity_history] terminal_rides_query_failed", table, error.message);
-      return [];
+  const ingest = (rows: Record<string, unknown>[]) => {
+    for (const row of rows) {
+      byId.set(String(row.id), row);
     }
-    return (data ?? []) as Record<string, unknown>[];
   };
 
-  const byId = new Map<string, Record<string, unknown>>();
-  for (const row of await run(nativeDb, NATIVE_TABLE)) {
-    byId.set(String(row.id), row);
+  for (const columns of [HISTORY_RIDE_COLUMNS, HISTORY_RIDE_COLUMNS_FALLBACK]) {
+    const [native, pub] = await Promise.all([
+      queryTerminalRidesForUserOnTable(nativeDb, NATIVE_TABLE, userId, columns),
+      queryTerminalRidesForUserOnTable(publicDb, PUBLIC_TABLE, userId, columns),
+    ]);
+
+    if (!native.error) ingest(native.rows);
+    if (!pub.error) ingest(pub.rows);
+
+    if (byId.size > 0 || (!native.error && !pub.error)) {
+      return [...byId.values()];
+    }
+
+    console.error(
+      "[activity_history] terminal_rides_query_failed",
+      native.error ?? pub.error,
+    );
   }
-  for (const row of await run(publicDb, PUBLIC_TABLE)) {
-    const id = String(row.id);
-    if (!byId.has(id)) byId.set(id, row);
-  }
+
   return [...byId.values()];
 }
 
@@ -363,10 +399,9 @@ export async function buildActivityTripHistory(
 ): Promise<{ trips: ActivityTripHistoryItem[]; next_cursor: string | null; window_days: number }> {
   const db = deps.svc();
   const pub = deps.pubSvc();
-  const sinceIso = historyWindowSinceIso(windowDays);
 
   const [terminalRides, intentCandidates] = await Promise.all([
-    queryUserTerminalRidesSince(db, pub, userId, sinceIso),
+    queryUserTerminalRidesSince(db, pub, userId),
     loadTerminalRidesFromIntents(deps.getContactsDb, db, pub, userId),
   ]);
 
@@ -403,7 +438,7 @@ export async function buildActivityTripHistory(
   }
 
   const merged = mergeHistoryCandidates(candidates, userId, counterpartyNames)
-    .filter((item) => isWithinHistoryWindow(item.ended_at, windowDays));
+    .filter((item) => item.ended_at && isWithinHistoryWindow(item.ended_at, windowDays));
   const page = paginateActivityTrips(merged, limit, cursor);
   return { ...page, window_days: windowDays };
 }

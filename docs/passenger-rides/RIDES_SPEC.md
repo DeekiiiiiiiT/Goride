@@ -23,6 +23,7 @@ Canonical statuses (`rides.ride_requests.status`):
 | `driver_en_route_pickup` | Driver is navigating to pickup. |
 | `driver_arrived_pickup` | Driver at pickup point. |
 | `on_trip` | Passenger onboard en route to dropoff. |
+| `awaiting_cash_settlement` | **(Flag-gated)** Cash fare locked; driver must confirm cash received. Not active until `CASH_SETTLEMENT_ENABLED=1`. |
 | `completed` | Trip finished; receipt available. |
 | `cancelled` | Terminal cancel (rider, driver, or system). |
 
@@ -30,7 +31,24 @@ Canonical statuses (`rides.ride_requests.status`):
 
 - `matching` → `driver_assigned` — driver **`accept`** on pending non-expired offer (exclusive winner).
 - `driver_assigned` → `driver_en_route_pickup` → `driver_arrived_pickup` → `on_trip` → `completed` — driver **`PATCH`** status (`driver_transition`).
+- **Cash settlement (flag-gated):** `on_trip` → `awaiting_cash_settlement` → `POST /v1/requests/:id/cash-settlement` → `completed`. Card trips skip settlement.
 - Any active → `cancelled` — rider **`cancel`** or driver **`cancel`** with rules below.
+
+### Cash settlement & wallet (flag-gated)
+
+**Flags (default OFF):** server `CASH_SETTLEMENT_ENABLED=1` on the rides edge function; client `VITE_CASH_SETTLEMENT=1` on passenger and driver builds. Do not enable in production until staging QA passes.
+
+When enabled:
+
+- Cash trips: `on_trip` → **`awaiting_cash_settlement`** (fare locked) → driver **`POST /v1/requests/:id/cash-settlement`** → **`completed`**. Card trips skip settlement (`on_trip` → `completed`).
+- Driver confirms **`cash_received_minor`** (fare only; tips stored separately). Idempotent via **`idempotency_key`** (`409` on same key + different amount).
+- Outcomes: **exact**, **underpay** (rider arrears), **overpay** (change credit to rider wallet), **unpaid** (ops backstop after 7 days).
+- Double-entry wallet: `rides.payment_accounts` + `rides.payment_journal_entries`; system accounts **`platform:receivable`**, **`platform:clearing`**.
+- **`driver_net_minor`** always reflects full fare; underpay does not reduce driver earnings.
+- Wallet read APIs: **`GET /v1/wallet`**, **`GET /v1/wallet/journal`** (rider); **`GET /v1/drivers/me/wallet`**, **`GET /v1/drivers/me/wallet/journal`** (driver). Legacy **`GET /v1/wallet/transactions`** ride list remains when flag OFF; use **`?legacy=1`** during transition if needed.
+- Driver cannot accept new trips while status is **`awaiting_cash_settlement`**; app relaunch routes to mandatory settlement screen.
+- Ops backstop: **`public.rides_run_cash_settlement_timeout()`** (pg_cron daily) auto-completes stale settlement rows as **unpaid**.
+- Deploy: run migrations, then `pnpm deploy:rides` from repo root.
 
 ---
 

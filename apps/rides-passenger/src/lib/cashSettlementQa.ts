@@ -1,0 +1,21 @@
+/** Manual QA matrix for cash settlement rollout (flag OFF vs ON). */
+export const CASH_SETTLEMENT_QA = [
+  'Flag OFF: cash trip on_trip → completed (legacy path)',
+  'Flag OFF: card trip completes normally',
+  'Flag OFF: Activity tab shows only completed/cancelled',
+  'Flag OFF: wallet API unchanged / legacy transactions',
+  'Flag OFF: earnings API and fleet sync unchanged',
+  'Flag ON: cash trip → awaiting_cash_settlement → driver submits → completed',
+  'Flag ON: exact / underpay / overpay / unpaid outcomes post correct journal',
+  'Flag ON: driver blocked from new offers until settlement',
+  'Flag ON: driver app relaunch routes to settlement screen',
+  'Flag ON: rider sees same fare_final_minor during settlement',
+  'Flag ON: rider sees outcome toast after driver confirms',
+  'Flag ON: driver_net_minor unchanged when rider underpays',
+  'Flag ON: ledger cash_collection line matches cash_received_minor',
+  'Flag ON: idempotency replay 200; same key different amount 409',
+  'Flag ON: wallet shows arrears_minor after underpay',
+  'Flag ON: wallet shows credit_minor after overpay',
+  'Flag ON: payment method sheet warns when arrears_minor > 0',
+  'Flag ON: 7-day timeout auto-unpaid in staging (ops backstop only)',
+] as const;

@@ -3,7 +3,8 @@ import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ChevronDown, Loader2, Clock, Share2 } from 'lucide-react';
-import type { RideRequestStatus, RideRequestRow } from '@roam/types/rides';
+import type { CashSettlementOutcome, RideRequestStatus, RideRequestRow } from '@roam/types/rides';
+import { formatMoneyMinor } from '@roam/types/rides';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,7 +20,9 @@ import { LiveRideView } from '@/components/LiveRideView';
 import { BookerTrackingView } from '@/components/BookerTrackingView';
 import { RideCancelledView } from '@/components/RideCancelledView';
 import { TripInProgressView } from '@/components/TripInProgressView';
+import { CashSettlementRiderView } from '@/components/CashSettlementRiderView';
 import { TripSummaryView } from '@/components/TripSummaryView';
+import { CASH_SETTLEMENT_ENABLED } from '@/lib/cashSettlementFlags';
 import { ridesCancelRequest, ridesGetLive, ridesGetRequest } from '@/services/ridesEdge';
 import { createPassengerInvite } from '@/services/contactsEdge';
 import { RiderConnectionBanner } from '@/components/RiderConnectionBanner';
@@ -47,6 +50,8 @@ function statusLabel(s: RideRequestStatus): string {
       return 'Driver has arrived';
     case 'on_trip':
       return 'On trip';
+    case 'awaiting_cash_settlement':
+      return 'Pay your driver';
     case 'completed':
       return 'Trip completed';
     case 'cancelled':
@@ -64,9 +69,12 @@ const PICKUP_LIVE_STATUSES: RideRequestStatus[] = [
 
 const TRIP_IN_PROGRESS_STATUSES: RideRequestStatus[] = ['on_trip'];
 
+const CASH_SETTLEMENT_STATUSES: RideRequestStatus[] = ['awaiting_cash_settlement'];
+
 const LIVE_TRACKING_STATUSES: RideRequestStatus[] = [
   ...PICKUP_LIVE_STATUSES,
   ...TRIP_IN_PROGRESS_STATUSES,
+  ...(CASH_SETTLEMENT_ENABLED ? CASH_SETTLEMENT_STATUSES : []),
 ];
 
 function isPickupLive(status: RideRequestStatus | undefined): boolean {
@@ -75,6 +83,37 @@ function isPickupLive(status: RideRequestStatus | undefined): boolean {
 
 function isTripInProgress(status: RideRequestStatus | undefined): boolean {
   return Boolean(status && TRIP_IN_PROGRESS_STATUSES.includes(status));
+}
+
+function isCashSettlement(status: RideRequestStatus | undefined): boolean {
+  return Boolean(
+    CASH_SETTLEMENT_ENABLED && status && CASH_SETTLEMENT_STATUSES.includes(status),
+  );
+}
+
+function cashSettlementOutcomeMessage(
+  outcome: CashSettlementOutcome,
+  ride: RideRequestRow,
+): string {
+  const currency = ride.currency ?? 'JMD';
+  switch (outcome) {
+    case 'exact':
+      return 'Payment confirmed — thanks for riding with Roam';
+    case 'underpay':
+      return 'Payment recorded. You have an outstanding balance on your wallet.';
+    case 'overpay': {
+      const received = Number(ride.cash_received_minor ?? 0);
+      const owed = Number(ride.fare_final_minor ?? 0);
+      const credit = Math.max(0, received - owed);
+      return credit > 0
+        ? `${formatMoneyMinor(credit, currency)} credit added to your wallet`
+        : 'Payment confirmed — change credited to your wallet';
+    }
+    case 'unpaid':
+      return 'Trip marked unpaid — please settle your balance in Wallet';
+    default:
+      return 'Trip completed';
+  }
 }
 
 function showLiveTracking(status: RideRequestStatus | undefined): boolean {
@@ -221,7 +260,13 @@ export default function RidePage() {
       if (!heavyTrackingEnabled) return false;
       const st = q.state.data?.ride.status;
       if (!st || st === 'completed' || st === 'cancelled') return false;
-      if (st === 'driver_arrived_pickup' || st === 'on_trip') return RIDE_ARRIVED_SYNC_MS;
+      if (
+        st === 'driver_arrived_pickup' ||
+        st === 'on_trip' ||
+        st === 'awaiting_cash_settlement'
+      ) {
+        return RIDE_ARRIVED_SYNC_MS;
+      }
       if (st === 'driver_en_route_pickup') {
         const r = q.state.data?.ride;
         if (q.state.data?.wait_time || r?.wait_time_started_at) return RIDE_ARRIVED_SYNC_MS;
@@ -357,8 +402,17 @@ export default function RidePage() {
         });
       }
     }
+    if (
+      CASH_SETTLEMENT_ENABLED &&
+      ride.status === 'completed' &&
+      prevStatusRef.current === 'awaiting_cash_settlement' &&
+      ride.payment_method === 'cash' &&
+      ride.cash_settlement_outcome
+    ) {
+      toast.success(cashSettlementOutcomeMessage(ride.cash_settlement_outcome, ride));
+    }
     prevStatusRef.current = ride.status;
-  }, [ride?.status, riderPin, isDelegatedBooker, data?.participant_role, data?.is_delegated]);
+  }, [ride, riderPin, isDelegatedBooker, data?.participant_role, data?.is_delegated]);
 
   useEffect(() => {
     if (!id || !heavyTrackingEnabled) return;
@@ -487,6 +541,20 @@ export default function RidePage() {
   const connectionBanner = (
     <RiderConnectionBanner isOnline={isOnline} reconnecting={justReconnected} />
   );
+
+  if (ride && isCashSettlement(ride.status)) {
+    return (
+      <>
+        {connectionBanner}
+        <CashSettlementRiderView
+          ride={ride}
+          assignedDriver={assignedDriver}
+          onMinimize={handlePassengerMinimize}
+          isFetching={isFetching}
+        />
+      </>
+    );
+  }
 
   if (ride && isTripInProgress(ride.status)) {
     if (isDelegatedBooker) {

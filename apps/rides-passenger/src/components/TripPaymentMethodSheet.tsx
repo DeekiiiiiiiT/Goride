@@ -1,6 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Check, ChevronRight, PlusCircle, X } from 'lucide-react';
+import { formatMoneyMinor } from '@roam/types/rides';
+import { CASH_SETTLEMENT_ENABLED } from '@/lib/cashSettlementFlags';
+import { walletGetBalance } from '@/services/walletEdge';
 import {
   TRIP_PAYMENT_METHODS,
   type TripPaymentMethodId,
@@ -62,9 +65,29 @@ function MethodRow({
 
 export function TripPaymentMethodSheet({ open, selectedId, onClose, onSelect, excludeIds }: Props) {
   const navigate = useNavigate();
+  const [arrearsMinor, setArrearsMinor] = useState(0);
+  const [arrearsCurrency, setArrearsCurrency] = useState('JMD');
   const methods = excludeIds?.length
     ? TRIP_PAYMENT_METHODS.filter((m) => !excludeIds.includes(m.id))
     : TRIP_PAYMENT_METHODS;
+
+  useEffect(() => {
+    if (!open || !CASH_SETTLEMENT_ENABLED) return;
+    let cancelled = false;
+    void walletGetBalance()
+      .then((res) => {
+        if (!cancelled) {
+          setArrearsMinor(res.wallet.arrears_minor);
+          setArrearsCurrency(res.wallet.currency);
+        }
+      })
+      .catch(() => {
+        /* non-blocking */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -122,6 +145,20 @@ export function TripPaymentMethodSheet({ open, selectedId, onClose, onSelect, ex
         <p className="mb-3 text-sm" style={{ color: 'var(--home-on-surface-muted)' }}>
           Choose how you want to pay for this trip.
         </p>
+
+        {CASH_SETTLEMENT_ENABLED && arrearsMinor > 0 && (
+          <p
+            className="mb-3 rounded-2xl border px-3 py-2.5 text-sm"
+            style={{
+              color: 'var(--home-on-surface)',
+              borderColor: 'color-mix(in srgb, #f59e0b 35%, transparent)',
+              backgroundColor: 'color-mix(in srgb, #f59e0b 10%, var(--home-card-bg))',
+            }}
+          >
+            You have {formatMoneyMinor(arrearsMinor, arrearsCurrency)} outstanding from a prior cash
+            trip. Please pay your driver the full fare.
+          </p>
+        )}
 
         <div className="space-y-2 max-h-[min(50dvh,360px)] overflow-y-auto">
           {methods.map((method) => (

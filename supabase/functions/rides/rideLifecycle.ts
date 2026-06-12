@@ -6,6 +6,8 @@ import type { DispatchSettings } from "./fare/dispatchSettings.ts";
 import { gridCellKey } from "./fare/buildQuote.ts";
 import { calculateWaitTimeFee, getWaitTimeGraceAnchor } from "./fare/waitTime.ts";
 import { verifyRidePin, generatePin } from "./fare/pinVerification.ts";
+import { isCashSettlementEnabled } from "./cashSettlement/flags.ts";
+import { computeFinalFareFromRide, completionFinancialPatch } from "./cashSettlement/computeFinalFare.ts";
 
 export type RideStatus =
   | "matching"
@@ -13,20 +15,32 @@ export type RideStatus =
   | "driver_en_route_pickup"
   | "driver_arrived_pickup"
   | "on_trip"
+  | "awaiting_cash_settlement"
   | "completed"
   | "cancelled";
 
 export type TransitionSource = "manual" | "geofence" | "system";
 
-export const DRIVER_TRANSITIONS: Record<RideStatus, RideStatus[]> = {
-  matching: [],
-  driver_assigned: ["driver_en_route_pickup", "cancelled"],
-  driver_en_route_pickup: ["driver_arrived_pickup", "cancelled"],
-  driver_arrived_pickup: ["on_trip", "cancelled"],
-  on_trip: ["completed", "cancelled"],
-  completed: [],
-  cancelled: [],
-};
+export function driverTransitionsFor(
+  cashSettlementEnabled = isCashSettlementEnabled(),
+): Record<RideStatus, RideStatus[]> {
+  const onTripTargets: RideStatus[] = cashSettlementEnabled
+    ? ["awaiting_cash_settlement", "completed", "cancelled"]
+    : ["completed", "cancelled"];
+  return {
+    matching: [],
+    driver_assigned: ["driver_en_route_pickup", "cancelled"],
+    driver_en_route_pickup: ["driver_arrived_pickup", "cancelled"],
+    driver_arrived_pickup: ["on_trip", "cancelled"],
+    on_trip: onTripTargets,
+    awaiting_cash_settlement: [],
+    completed: [],
+    cancelled: [],
+  };
+}
+
+/** @deprecated Use driverTransitionsFor() for flag-aware checks. */
+export const DRIVER_TRANSITIONS: Record<RideStatus, RideStatus[]> = driverTransitionsFor(false);
 
 export interface ApplyTransitionDeps {
   loadRideRequestById: (id: string) => Promise<Record<string, unknown> | null>;
@@ -100,9 +114,19 @@ export async function applyRideTransition(
     return { ok: true, ride, skipped: true, current };
   }
 
-  const allowed = DRIVER_TRANSITIONS[current];
+  const cashEnabled = isCashSettlementEnabled();
+  const paymentMethod = String(ride.payment_method ?? "cash");
+  const allowed = driverTransitionsFor(cashEnabled)[current];
   if (!allowed?.includes(params.next)) {
     return { ok: false, error: "invalid_transition", current, ride };
+  }
+  if (
+    cashEnabled &&
+    paymentMethod === "cash" &&
+    current === "on_trip" &&
+    params.next === "completed"
+  ) {
+    return { ok: false, error: "cash_settlement_required", current, ride };
   }
 
   const nowIso = new Date().toISOString();
@@ -155,30 +179,26 @@ export async function applyRideTransition(
     }
   }
 
-  if (params.next === "completed") {
-    const baseFareMinor = Number(ride.fare_estimate_minor ?? 0);
-    const waitTimeFeeMinor = Number(ride.wait_time_fee_minor ?? 0);
-    const actualTollsMinor = Number(ride.actual_tolls_minor ?? 0);
-    const estimatedTollsMinor = Number((ride.fare_breakdown as Record<string, unknown>)?.estimated_tolls_minor ?? 0);
-    const tollAdjustment = actualTollsMinor - estimatedTollsMinor;
-    const fareMinor = baseFareMinor + waitTimeFeeMinor + Math.max(0, tollAdjustment);
-    if (!Number.isFinite(fareMinor) || fareMinor < 0) {
-      return { ok: false, error: "invalid_fare", current };
+  if (params.next === "awaiting_cash_settlement") {
+    const fareResult = computeFinalFareFromRide(ride);
+    if ("error" in fareResult) {
+      return { ok: false, error: fareResult.error, current };
     }
-    patch.fare_final_minor = fareMinor;
-    patch.completed_at = nowIso;
-    
-    const breakdown = (ride.fare_breakdown ?? {}) as Record<string, unknown>;
-    patch.fare_final_breakdown = {
-      ...breakdown,
-      wait_time_fee_minor: waitTimeFeeMinor,
-      actual_tolls_minor: actualTollsMinor,
-      toll_adjustment_minor: tollAdjustment,
-    };
+    patch.fare_final_minor = fareResult.fareMinor;
+    patch.fare_final_breakdown = fareResult.fareFinalBreakdown;
     patch.platform_fee_minor = 0;
-    patch.tip_minor = 0;
-    patch.driver_net_minor = fareMinor;
+    patch.driver_net_minor = fareResult.fareMinor;
+    patch.fare_locked_at = nowIso;
+    patch.cash_settlement_status = "pending";
     if (!ride.payment_method) patch.payment_method = "cash";
+  }
+
+  if (params.next === "completed") {
+    const fareResult = computeFinalFareFromRide(ride);
+    if ("error" in fareResult) {
+      return { ok: false, error: fareResult.error, current };
+    }
+    Object.assign(patch, completionFinancialPatch(ride, fareResult, nowIso));
   }
 
   if (params.next === "cancelled") {
@@ -200,6 +220,8 @@ export async function applyRideTransition(
     ? "ride_completed"
     : params.next === "cancelled"
     ? "ride_cancelled"
+    : params.next === "awaiting_cash_settlement"
+    ? "cash_settlement_pending"
     : "driver_transition";
 
   const auditPayload: Record<string, unknown> = {
@@ -208,6 +230,10 @@ export async function applyRideTransition(
     source: params.source,
   };
   if (params.next === "completed") {
+    auditPayload.payment_method = patch.payment_method ?? ride.payment_method;
+  }
+  if (params.next === "awaiting_cash_settlement") {
+    auditPayload.fare_final_minor = patch.fare_final_minor;
     auditPayload.payment_method = patch.payment_method ?? ride.payment_method;
   }
 

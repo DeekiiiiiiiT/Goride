@@ -12,8 +12,11 @@ import {
   Smartphone,
   Wallet,
 } from 'lucide-react';
-import type { WalletTransactionDto } from '@roam/types/rides';
+import type { WalletBalanceDto, WalletTransactionDto } from '@roam/types/rides';
+import { formatMoneyMinor } from '@roam/types/rides';
 import { walletGetTransactions, formatFareMinor } from '@/services/tripIntentEdge';
+import { walletGetBalance } from '@/services/walletEdge';
+import { CASH_SETTLEMENT_ENABLED } from '@/lib/cashSettlementFlags';
 
 import {
   CARD_SHADOW,
@@ -39,7 +42,7 @@ import { AddFundsSheet } from '@/components/wallet/AddFundsSheet';
 const PROMO_BANNER_URL =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuD0UhK5VtLTpy4UHuvfJVFirezfOFH8aVxjOc4xktbQT5pwx1qbyTm-1WnbSsefL9Wi0oVIw8xkhGB-M23OqRkM8nzib-4ZdM6dNXqr697Y74RBMdSaNwcbD1T-KNqHDZLZthBKomvCPZGNz5SxlisRDu3A3Uq0dj1GhoL0wn6Bf9DgGZ6Z4R79Abe0tlHvDx4axkEXUEOIL1d1-6axQwvJ7qYZEZysz7DB_d8-FN_Aqsd_NrdFdklLYBgPoWE-swsr6v2WeuC7e5zq';
 
-const BALANCE = 42.5;
+const LEGACY_BALANCE_USD = 42.5;
 
 function formatTxDate(iso: string): string {
   try {
@@ -66,6 +69,15 @@ function txIcon(tx: WalletTransactionDto) {
   if (tx.kind === 'shadow_trip') {
     return { Icon: Wallet, iconBg: PRIMARY_FIXED, iconColor: PRIMARY_CONTAINER, positive: false };
   }
+  if (tx.kind === 'journal') {
+    const isCredit = tx.meta?.includes('credit') ?? false;
+    return {
+      Icon: Wallet,
+      iconBg: isCredit ? PRIMARY_FIXED : SURFACE_CONTAINER_HIGH,
+      iconColor: isCredit ? PRIMARY_CONTAINER : ON_SURFACE_VARIANT,
+      positive: isCredit,
+    };
+  }
   return { Icon: Car, iconBg: SURFACE_CONTAINER_HIGH, iconColor: ON_SURFACE_VARIANT, positive: false };
 }
 
@@ -73,20 +85,28 @@ export default function WalletPage() {
   const navigate = useNavigate();
   const [addFundsOpen, setAddFundsOpen] = useState(false);
   const [transactions, setTransactions] = useState<WalletTransactionDto[]>([]);
+  const [wallet, setWallet] = useState<WalletBalanceDto | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    void walletGetTransactions()
-      .then((res) => {
-        if (!cancelled) setTransactions(res.transactions);
-      })
-      .catch((e) => {
-        if (!cancelled) toast.error(e instanceof Error ? e.message : 'Could not load transactions');
-      })
-      .finally(() => {
+    const load = async () => {
+      try {
+        const txRes = await walletGetTransactions();
+        if (!cancelled) setTransactions(txRes.transactions);
+        if (CASH_SETTLEMENT_ENABLED) {
+          const balRes = await walletGetBalance();
+          if (!cancelled) setWallet(balRes.wallet);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          toast.error(e instanceof Error ? e.message : 'Could not load wallet');
+        }
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    };
+    void load();
     return () => {
       cancelled = true;
     };
@@ -138,22 +158,52 @@ export default function WalletPage() {
       </header>
 
       <main className="mx-auto w-full max-w-xl flex-1 space-y-6 px-4 py-6 safe-x">
+        {CASH_SETTLEMENT_ENABLED && wallet && wallet.arrears_minor > 0 && (
+          <div
+            className="rounded-2xl border px-4 py-3 text-sm"
+            style={{
+              backgroundColor: 'color-mix(in srgb, #ef4444 8%, var(--passenger-surface-lowest, #fff))',
+              borderColor: 'color-mix(in srgb, #ef4444 25%, transparent)',
+              color: ON_SURFACE,
+            }}
+          >
+            <p className="font-semibold">Outstanding balance</p>
+            <p className="mt-0.5" style={{ color: ON_SURFACE_VARIANT }}>
+              You owe {formatMoneyMinor(wallet.arrears_minor, wallet.currency)} from a previous cash
+              trip. Pay your driver in full on your next ride or contact support.
+            </p>
+          </div>
+        )}
+
         <section
           className="relative overflow-hidden rounded-[24px] p-6"
           style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
         >
           <div className="relative z-10">
             <p className="mb-1 text-xs font-bold uppercase tracking-wide" style={{ color: SECONDARY }}>
-              Current balance
+              {CASH_SETTLEMENT_ENABLED && wallet ? 'Wallet balance' : 'Current balance'}
             </p>
             <div className="flex items-baseline gap-1">
-              <span className="text-[30px] font-bold tracking-tight" style={{ color: PRIMARY }}>
-                ${BALANCE.toFixed(2)}
-              </span>
-              <span className="text-sm" style={{ color: SECONDARY }}>
-                USD
-              </span>
+              {CASH_SETTLEMENT_ENABLED && wallet ? (
+                <span className="text-[30px] font-bold tracking-tight tabular-nums" style={{ color: PRIMARY }}>
+                  {formatMoneyMinor(wallet.balance_minor, wallet.currency)}
+                </span>
+              ) : (
+                <>
+                  <span className="text-[30px] font-bold tracking-tight" style={{ color: PRIMARY }}>
+                    ${LEGACY_BALANCE_USD.toFixed(2)}
+                  </span>
+                  <span className="text-sm" style={{ color: SECONDARY }}>
+                    USD
+                  </span>
+                </>
+              )}
             </div>
+            {CASH_SETTLEMENT_ENABLED && wallet && wallet.credit_minor > 0 && (
+              <p className="mt-2 text-xs" style={{ color: SECONDARY }}>
+                Includes {formatMoneyMinor(wallet.credit_minor, wallet.currency)} ride credit
+              </p>
+            )}
             <div className="mt-8">
               <button
                 type="button"
@@ -335,7 +385,7 @@ export default function WalletPage() {
       <AddFundsSheet
         open={addFundsOpen}
         onClose={() => setAddFundsOpen(false)}
-        balanceUsd={BALANCE}
+        balanceUsd={LEGACY_BALANCE_USD}
       />
     </>
   );

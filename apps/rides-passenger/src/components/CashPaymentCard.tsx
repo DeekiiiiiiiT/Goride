@@ -9,10 +9,11 @@ interface CashPaymentCardProps {
 
 export function CashPaymentCard({ ride }: CashPaymentCardProps) {
   if (ride.payment_method !== 'cash') return null;
-  if (!['on_trip', 'completed'].includes(ride.status)) return null;
+  if (!['on_trip', 'awaiting_cash_settlement', 'completed'].includes(ride.status)) return null;
 
   const currency = ride.currency ?? 'JMD';
   const totalMinor = Number(ride.fare_final_minor ?? ride.fare_estimate_minor ?? 0);
+  const isSettlement = ride.status === 'awaiting_cash_settlement';
   const actualTollsMinor = Number(ride.actual_tolls_minor ?? 0);
   const baseFareMinor = Number(ride.fare_estimate_minor ?? 0);
 
@@ -29,7 +30,11 @@ export function CashPaymentCard({ ride }: CashPaymentCardProps) {
             Cash Payment
           </p>
           <p className="text-xs text-zinc-500">
-            {ride.status === 'completed' ? 'Amount paid' : 'Amount to pay driver'}
+            {ride.status === 'completed'
+              ? 'Amount paid'
+              : isSettlement
+                ? 'Pay your driver'
+                : 'Amount to pay driver'}
           </p>
         </div>
       </div>
@@ -57,6 +62,12 @@ export function CashPaymentCard({ ride }: CashPaymentCardProps) {
             </div>
           )}
         </div>
+      )}
+
+      {isSettlement && (
+        <p className="text-xs text-center font-medium text-emerald-700">
+          Hand this amount to your driver now
+        </p>
       )}
 
       {ride.status === 'on_trip' && (

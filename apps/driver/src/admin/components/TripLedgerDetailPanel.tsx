@@ -115,6 +115,21 @@ export function TripLedgerDetailPanel({ trip, colSpan }: TripLedgerDetailPanelPr
             {tipMinor != null && tipMinor > 0 && (
               <DetailField label="Tip" value={formatMoneyMinor(tipMinor, trip.currency)} />
             )}
+            {trip.cash_received_minor != null && (
+              <DetailField
+                label="Cash received"
+                value={formatMoneyMinor(trip.cash_received_minor, trip.currency)}
+              />
+            )}
+            {trip.cash_settlement_outcome && (
+              <DetailField label="Cash outcome" value={trip.cash_settlement_outcome} />
+            )}
+            {trip.cash_settlement_status && (
+              <DetailField label="Settlement status" value={trip.cash_settlement_status} />
+            )}
+            {trip.settled_at && (
+              <DetailField label="Settled at" value={formatWhen(trip.settled_at)} />
+            )}
             <DetailField
               label="Driver net"
               value={

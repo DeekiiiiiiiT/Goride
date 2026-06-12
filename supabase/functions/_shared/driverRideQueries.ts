@@ -148,6 +148,7 @@ const DRIVER_ACTIVE_RIDE_STATUSES = [
   "driver_en_route_pickup",
   "driver_arrived_pickup",
   "on_trip",
+  "awaiting_cash_settlement",
 ];
 
 /** Ignore stale in-progress rows left over from crashed/test sessions. */

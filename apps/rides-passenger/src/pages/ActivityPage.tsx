@@ -1,13 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Loader2, RefreshCw } from 'lucide-react';
 import type { ActivityPipelineItem, ActivityTripCategory, ActivityTripHistoryItem } from '@roam/types/rides';
 import { ActivityPipelineBlocks } from '@/components/activity/ActivityPipelineBlocks';
 import { ActivityPipelineSheet } from '@/components/activity/ActivityPipelineSheet';
+import { ActivityTripDetailsSheet } from '@/components/activity/ActivityTripDetailsSheet';
 import { ActivityTripRow } from '@/components/activity/ActivityTripRow';
 import { useActivityTrips } from '@/hooks/useActivityTrips';
 import { useActivityUpcoming } from '@/hooks/useActivityUpcoming';
-import { navigateToActivityTrip } from '@/lib/activityTripNavigation';
 import { ACTIVITY_HISTORY_WINDOW_DAYS } from '@/services/activityEdge';
 import {
   CARD_SHADOW,
@@ -29,11 +28,11 @@ const FILTERS: { key: FilterKey; label: string }[] = [
 
 function ActivityTripSkeleton() {
   return (
-    <div className="space-y-2 px-4 py-3">
+    <div className="space-y-2.5">
       {[0, 1, 2].map((i) => (
         <div
           key={i}
-          className="h-[4.25rem] animate-pulse rounded-2xl"
+          className="h-[7.5rem] animate-pulse rounded-[20px]"
           style={{ backgroundColor: 'var(--passenger-surface-low)' }}
         />
       ))}
@@ -42,9 +41,9 @@ function ActivityTripSkeleton() {
 }
 
 export default function ActivityPage() {
-  const navigate = useNavigate();
   const [filter, setFilter] = useState<FilterKey>('all');
   const [pipelineItem, setPipelineItem] = useState<ActivityPipelineItem | null>(null);
+  const [selectedTrip, setSelectedTrip] = useState<ActivityTripHistoryItem | null>(null);
   const upcomingQuery = useActivityUpcoming();
   const {
     data,
@@ -67,10 +66,6 @@ export default function ActivityPage() {
   }, [data?.pages, filter]);
 
   const windowDays = data?.pages[0]?.window_days ?? ACTIVITY_HISTORY_WINDOW_DAYS;
-
-  const openTrip = (trip: ActivityTripHistoryItem) => {
-    navigateToActivityTrip(navigate, trip);
-  };
 
   const refreshAll = () => {
     void refetch();
@@ -147,68 +142,68 @@ export default function ActivityPage() {
             })}
           </div>
 
-          <div
-            className="overflow-hidden rounded-[20px]"
-            style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
-          >
-            {isLoading ? (
-              <ActivityTripSkeleton />
-            ) : isError ? (
-              <div className="space-y-3 px-4 py-8 text-center">
-                <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-                  {error instanceof Error ? error.message : 'Could not load trips'}
-                </p>
-                <p className="text-xs" style={{ color: ON_SURFACE_VARIANT }}>
-                  If this persists, redeploy the rides edge function.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => void refetch()}
-                  className="text-sm font-semibold"
-                  style={{ color: PRIMARY }}
-                >
-                  Try again
-                </button>
-              </div>
-            ) : trips.length === 0 ? (
-              <p className="px-4 py-10 text-center text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-                No trips in the last {windowDays} days
+          {isLoading ? (
+            <ActivityTripSkeleton />
+          ) : isError ? (
+            <div
+              className="space-y-3 rounded-[20px] px-4 py-8 text-center"
+              style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
+            >
+              <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
+                {error instanceof Error ? error.message : 'Could not load trips'}
               </p>
-            ) : (
-              <ul role="list" className="divide-y" style={{ borderColor: OUTLINE_VARIANT }}>
-                {trips.map((trip) => (
-                  <li key={trip.ride_id}>
-                    <ActivityTripRow trip={trip} onOpen={openTrip} />
-                  </li>
-                ))}
-              </ul>
-            )}
+              <p className="text-xs" style={{ color: ON_SURFACE_VARIANT }}>
+                If this persists, redeploy the rides edge function.
+              </p>
+              <button
+                type="button"
+                onClick={() => void refetch()}
+                className="text-sm font-semibold"
+                style={{ color: PRIMARY }}
+              >
+                Try again
+              </button>
+            </div>
+          ) : trips.length === 0 ? (
+            <p
+              className="rounded-[20px] px-4 py-10 text-center text-sm"
+              style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW, color: ON_SURFACE_VARIANT }}
+            >
+              No trips in the last {windowDays} days
+            </p>
+          ) : (
+            <ul role="list" className="space-y-2.5">
+              {trips.map((trip) => (
+                <li key={trip.ride_id}>
+                  <ActivityTripRow trip={trip} onOpen={setSelectedTrip} />
+                </li>
+              ))}
+            </ul>
+          )}
 
-            {hasNextPage ? (
-              <div className="border-t px-4 py-3" style={{ borderColor: OUTLINE_VARIANT }}>
-                <button
-                  type="button"
-                  onClick={() => void fetchNextPage()}
-                  disabled={isFetchingNextPage}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold disabled:opacity-60"
-                  style={{ color: PRIMARY }}
-                >
-                  {isFetchingNextPage ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                      Loading…
-                    </>
-                  ) : (
-                    'Load more'
-                  )}
-                </button>
-              </div>
-            ) : null}
-          </div>
+          {hasNextPage ? (
+            <button
+              type="button"
+              onClick={() => void fetchNextPage()}
+              disabled={isFetchingNextPage}
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold disabled:opacity-60"
+              style={{ color: PRIMARY }}
+            >
+              {isFetchingNextPage ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  Loading…
+                </>
+              ) : (
+                'Load more'
+              )}
+            </button>
+          ) : null}
         </section>
       </main>
 
       <ActivityPipelineSheet item={pipelineItem} onClose={() => setPipelineItem(null)} />
+      <ActivityTripDetailsSheet trip={selectedTrip} onClose={() => setSelectedTrip(null)} />
     </div>
   );
 }

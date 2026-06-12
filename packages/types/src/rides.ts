@@ -9,8 +9,66 @@ export type RideRequestStatus =
   | 'driver_en_route_pickup'
   | 'driver_arrived_pickup'
   | 'on_trip'
+  /** Flag-gated (`CASH_SETTLEMENT_ENABLED`): cash fare locked; driver must confirm cash received. */
+  | 'awaiting_cash_settlement'
   | 'completed'
   | 'cancelled';
+
+export type CashSettlementOutcome = 'exact' | 'underpay' | 'overpay' | 'unpaid';
+
+export type CashSettlementStatus = 'pending' | 'settled' | 'disputed';
+
+export type PaymentAccountRole = 'rider' | 'driver' | 'system';
+
+export type PaymentJournalEntryType =
+  | 'cash_trip_arrears'
+  | 'cash_change_credit'
+  | 'cash_change_debit'
+  | 'wallet_topup'
+  | 'wallet_adjustment'
+  | 'cash_settlement_confirmed';
+
+export interface WalletBalanceDto {
+  currency: string;
+  balance_minor: number;
+  available_minor: number;
+  arrears_minor: number;
+  credit_minor: number;
+}
+
+export interface WalletBalanceResponse {
+  wallet: WalletBalanceDto;
+}
+
+export interface PaymentJournalEntryDto {
+  id: string;
+  ride_request_id: string | null;
+  entry_type: PaymentJournalEntryType;
+  amount_minor: number;
+  currency: string;
+  description: string;
+  created_at: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface WalletJournalTransactionsResponse {
+  transactions: PaymentJournalEntryDto[];
+}
+
+export interface CashSettlementRequest {
+  cash_received_minor: number;
+  idempotency_key: string;
+  tip_received_minor?: number;
+}
+
+export interface CashSettlementResponse {
+  ride: RideRequestRow;
+  outcome: CashSettlementOutcome;
+  owed_minor: number;
+  cash_received_minor: number;
+  arrears_minor: number;
+  change_credit_minor: number;
+}
 
 /** Assigned to driver and not yet completed/cancelled. */
 export const DRIVER_ACTIVE_RIDE_STATUSES: readonly RideRequestStatus[] = [
@@ -18,6 +76,7 @@ export const DRIVER_ACTIVE_RIDE_STATUSES: readonly RideRequestStatus[] = [
   'driver_en_route_pickup',
   'driver_arrived_pickup',
   'on_trip',
+  'awaiting_cash_settlement',
 ] as const;
 
 export function isDriverActiveRideStatus(status: RideRequestStatus | string): boolean {
@@ -165,6 +224,13 @@ export interface RideRequestRow {
   booking_request_id?: string | null;
   /** Open Roam (full tracking) or Shadow Roam (pay-only booker). */
   roam_mode?: 'open_roam' | 'shadow_roam' | null;
+  /** Cash settlement (flag-gated): amount driver reported receiving. */
+  cash_received_minor?: number | null;
+  tip_received_minor?: number | null;
+  cash_settlement_status?: CashSettlementStatus | null;
+  cash_settlement_outcome?: CashSettlementOutcome | null;
+  fare_locked_at?: string | null;
+  settled_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -259,7 +325,7 @@ export interface ActiveRideSummaryResponse {
   summary: ActiveRideSummaryDto | null;
 }
 
-export type WalletTransactionKind = 'shadow_trip' | 'open_trip' | 'topup';
+export type WalletTransactionKind = 'shadow_trip' | 'open_trip' | 'topup' | 'journal';
 
 export interface WalletTransactionDto {
   id: string;

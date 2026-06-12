@@ -32,17 +32,39 @@ async function headers(): Promise<HeadersInit> {
   };
 }
 
-function isActivityTripHistoryItem(value: unknown): value is ActivityTripHistoryItem {
-  if (!value || typeof value !== 'object') return false;
-  const row = value as Record<string, unknown>;
-  return row.kind === 'ride'
-    && typeof row.ride_id === 'string'
-    && (row.status === 'completed' || row.status === 'cancelled')
-    && (row.roam_mode === 'open_roam' || row.roam_mode === 'shadow_roam')
-    && (row.participant_role === 'booker' || row.participant_role === 'passenger')
-    && (row.trip_category === 'for_others' || row.trip_category === 'for_me' || row.trip_category === 'self')
-    && typeof row.created_at === 'string'
-    && typeof row.ended_at === 'string';
+function normalizeActivityTrip(row: unknown): ActivityTripHistoryItem | null {
+  if (!row || typeof row !== 'object') return null;
+  const raw = row as Record<string, unknown>;
+  const rideId = typeof raw.ride_id === 'string' ? raw.ride_id : null;
+  const status = raw.status === 'completed' || raw.status === 'cancelled' ? raw.status : null;
+  if (!rideId || !status) return null;
+
+  const roamMode = raw.roam_mode === 'shadow_roam' ? 'shadow_roam' : 'open_roam';
+  const participantRole = raw.participant_role === 'passenger' ? 'passenger' : 'booker';
+  const tripCategory = raw.trip_category === 'for_others' || raw.trip_category === 'for_me'
+    ? raw.trip_category
+    : 'self';
+
+  const createdAt = typeof raw.created_at === 'string' ? raw.created_at : new Date().toISOString();
+  const endedAt = typeof raw.ended_at === 'string'
+    ? raw.ended_at
+    : createdAt;
+
+  return {
+    kind: 'ride',
+    ride_id: rideId,
+    status,
+    roam_mode: roamMode,
+    participant_role: participantRole,
+    trip_category: tripCategory,
+    counterparty_name: typeof raw.counterparty_name === 'string' ? raw.counterparty_name : null,
+    pickup_address: typeof raw.pickup_address === 'string' ? raw.pickup_address : null,
+    dropoff_address: typeof raw.dropoff_address === 'string' ? raw.dropoff_address : null,
+    fare_estimate_minor: raw.fare_estimate_minor != null ? String(raw.fare_estimate_minor) : null,
+    currency: typeof raw.currency === 'string' ? raw.currency : null,
+    created_at: createdAt,
+    ended_at: endedAt,
+  };
 }
 
 function parseActivityTripsResponse(payload: unknown): ActivityTripsResponse {
@@ -50,11 +72,20 @@ function parseActivityTripsResponse(payload: unknown): ActivityTripsResponse {
     return { trips: [], next_cursor: null, window_days: ACTIVITY_HISTORY_WINDOW_DAYS };
   }
   const body = payload as Record<string, unknown>;
+  if (body.error && !Array.isArray(body.trips)) {
+    console.warn('[activity] API error payload', body.error);
+    return { trips: [], next_cursor: null, window_days: ACTIVITY_HISTORY_WINDOW_DAYS };
+  }
   const rawTrips = Array.isArray(body.trips) ? body.trips : [];
-  const trips = rawTrips.filter(isActivityTripHistoryItem);
+  const trips = rawTrips
+    .map(normalizeActivityTrip)
+    .filter((trip): trip is ActivityTripHistoryItem => trip != null);
   if (trips.length !== rawTrips.length && !parseWarned) {
     parseWarned = true;
-    console.warn('[activity] dropped invalid trip rows from API response');
+    console.warn('[activity] dropped invalid trip rows from API response', {
+      raw: rawTrips.length,
+      kept: trips.length,
+    });
   }
   const next_cursor = typeof body.next_cursor === 'string' ? body.next_cursor : null;
   const window_days = typeof body.window_days === 'number' ? body.window_days : ACTIVITY_HISTORY_WINDOW_DAYS;
@@ -102,6 +133,9 @@ export async function activityTripsList(options?: {
     console.warn('[activity] trips API failed', res.status, errText);
     if (res.status === 403) {
       throw new Error('Activity is unavailable for this account role.');
+    }
+    if (res.status === 404) {
+      throw new Error('Activity API not found — redeploy the rides edge function.');
     }
     throw new Error(`Activity failed to load (${res.status})`);
   }

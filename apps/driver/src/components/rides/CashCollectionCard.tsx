@@ -10,7 +10,13 @@ interface CashCollectionCardProps {
 
 export function CashCollectionCard({ ride, compact = false }: CashCollectionCardProps) {
   if (ride.payment_method !== 'cash') return null;
-  if (ride.status !== 'completed' && ride.status !== 'on_trip') return null;
+  if (
+    ride.status !== 'completed' &&
+    ride.status !== 'on_trip' &&
+    ride.status !== 'awaiting_cash_settlement'
+  ) {
+    return null;
+  }
 
   const currency = ride.currency ?? 'JMD';
   const totalMinor = Number(ride.fare_final_minor ?? ride.fare_estimate_minor ?? 0);
@@ -31,7 +37,11 @@ export function CashCollectionCard({ ride, compact = false }: CashCollectionCard
         </div>
         <div>
           <h3 className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
-            {ride.status === 'completed' ? 'Cash Collected' : 'Cash to Collect'}
+            {ride.status === 'completed'
+              ? 'Cash Collected'
+              : ride.status === 'awaiting_cash_settlement'
+                ? 'Cash to Collect'
+                : 'Cash to Collect'}
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400">
             From rider

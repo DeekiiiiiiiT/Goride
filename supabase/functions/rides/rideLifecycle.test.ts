@@ -1,6 +1,7 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   applyRideTransition,
+  driverTransitionsFor,
   type ApplyTransitionDeps,
   type RideStatus,
 } from "./rideLifecycle.ts";
@@ -73,6 +74,81 @@ Deno.test("applyRideTransition sets lifecycle timestamps", async () => {
   });
   assertEquals(result.ok, true);
   assertEquals(typeof patched.en_route_at, "string");
+});
+
+Deno.test("driverTransitionsFor flag OFF allows on_trip to completed", () => {
+  const transitions = driverTransitionsFor(false);
+  assertEquals(transitions.on_trip.includes("completed"), true);
+  assertEquals(transitions.on_trip.includes("awaiting_cash_settlement"), false);
+});
+
+Deno.test("driverTransitionsFor flag ON allows cash settlement path", () => {
+  const transitions = driverTransitionsFor(true);
+  assertEquals(transitions.on_trip.includes("awaiting_cash_settlement"), true);
+  assertEquals(transitions.on_trip.includes("completed"), true);
+});
+
+Deno.test("applyRideTransition blocks cash on_trip to completed when flag ON", async () => {
+  const original = Deno.env.get("CASH_SETTLEMENT_ENABLED");
+  Deno.env.set("CASH_SETTLEMENT_ENABLED", "1");
+  try {
+    const deps = mockDeps({
+      id: "r1",
+      status: "on_trip",
+      payment_method: "cash",
+      pickup_lat: 18,
+      pickup_lng: -77,
+      fare_estimate_minor: 1500,
+      assigned_driver_user_id: "d1",
+      rider_user_id: "u1",
+    });
+    const result = await applyRideTransition(deps, {
+      rideId: "r1",
+      next: "completed",
+      actorUserId: "d1",
+      source: "manual",
+    });
+    assertEquals(result.ok, false);
+    assertEquals(result.error, "cash_settlement_required");
+  } finally {
+    if (original === undefined) Deno.env.delete("CASH_SETTLEMENT_ENABLED");
+    else Deno.env.set("CASH_SETTLEMENT_ENABLED", original);
+  }
+});
+
+Deno.test("applyRideTransition allows card on_trip to completed when flag ON", async () => {
+  const original = Deno.env.get("CASH_SETTLEMENT_ENABLED");
+  Deno.env.set("CASH_SETTLEMENT_ENABLED", "1");
+  try {
+    let patched: Record<string, unknown> = {};
+    const deps = mockDeps(
+      {
+        id: "r1",
+        status: "on_trip",
+        payment_method: "card",
+        pickup_lat: 18,
+        pickup_lng: -77,
+        fare_estimate_minor: 1500,
+        assigned_driver_user_id: "d1",
+        rider_user_id: "u1",
+      },
+      async (_id, patch) => {
+        patched = patch;
+        return true;
+      },
+    );
+    const result = await applyRideTransition(deps, {
+      rideId: "r1",
+      next: "completed",
+      actorUserId: "d1",
+      source: "manual",
+    });
+    assertEquals(result.ok, true);
+    assertEquals(patched.status, "completed");
+  } finally {
+    if (original === undefined) Deno.env.delete("CASH_SETTLEMENT_ENABLED");
+    else Deno.env.set("CASH_SETTLEMENT_ENABLED", original);
+  }
 });
 
 Deno.test("applyRideTransition respects expectedFrom guard", async () => {

@@ -1,6 +1,8 @@
 import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
 import { supabase } from '../utils/supabase/client';
 import type {
+  CashSettlementRequest,
+  CashSettlementResponse,
   DriverActiveRideResponse,
   DriverEarningsPeriod,
   DriverEarningsSummary,
@@ -14,6 +16,7 @@ import type {
   RideRequestRow,
   SendRideMessageBody,
   SendRideMessageResponse,
+  WalletBalanceResponse,
 } from '@roam/types/rides';
 
 async function ridesHeaders(): Promise<HeadersInit> {
@@ -154,6 +157,39 @@ export async function ridesDriverMyTrips(
   if (opts.limit != null) sp.set('limit', String(opts.limit));
   const qs = sp.toString();
   const res = await fetch(`${base}/v1/drivers/me/trips${qs ? `?${qs}` : ''}`, {
+    headers: await ridesHeaders(),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function ridesDriverCashSettlement(
+  rideId: string,
+  body: CashSettlementRequest,
+): Promise<CashSettlementResponse> {
+  const res = await fetch(`${base}/v1/requests/${rideId}/cash-settlement`, {
+    method: 'POST',
+    headers: await ridesHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (res.status === 409) {
+    throw new Error('Amount conflict — adjust the cash received and try again.');
+  }
+  if (!res.ok) {
+    const text = await res.text();
+    try {
+      const parsed = JSON.parse(text) as { error?: string; message?: string };
+      throw new Error(parsed.message ?? parsed.error ?? text);
+    } catch (e) {
+      if (e instanceof Error && e.message !== text) throw e;
+      throw new Error(text || 'Cash settlement failed');
+    }
+  }
+  return res.json();
+}
+
+export async function ridesDriverWalletBalance(currency = 'JMD'): Promise<WalletBalanceResponse> {
+  const res = await fetch(`${base}/v1/drivers/me/wallet?currency=${encodeURIComponent(currency)}`, {
     headers: await ridesHeaders(),
   });
   if (!res.ok) throw new Error(await res.text());

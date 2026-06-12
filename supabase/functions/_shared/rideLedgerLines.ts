@@ -51,6 +51,11 @@ export function buildRideLedgerLineInserts(ride: Record<string, unknown>): RideL
   const breakdown = breakdownFromRide(ride, fareMinor);
 
   const lines: RideLedgerLineInsert[] = [];
+  const settledCash = ride.cash_settlement_status === "settled"
+    && ride.cash_received_minor != null;
+  const cashReceivedMinor = settledCash
+    ? Math.max(0, Number(ride.cash_received_minor) || 0)
+    : 0;
 
   lines.push({
     ride_request_id: rideId,
@@ -59,7 +64,7 @@ export function buildRideLedgerLineInserts(ride: Record<string, unknown>): RideL
     reporting_at: completedAt,
     paid_to_you_minor: driverNetMinor,
     earnings_gross_minor: fareMinor,
-    cash_collected_minor: paymentMethod === "cash" ? -fareMinor : 0,
+    cash_collected_minor: paymentMethod === "cash" && !settledCash ? -fareMinor : 0,
     bank_transferred_minor: paymentMethod === "card" ? fareMinor : 0,
     fare_breakdown: breakdown,
     payment_method: paymentMethod,
@@ -67,6 +72,27 @@ export function buildRideLedgerLineInserts(ride: Record<string, unknown>): RideL
     rider_user_id: riderUserId,
     idempotency_key: `ride:${rideId}|fare_earning`,
   });
+
+  if (paymentMethod === "cash" && settledCash) {
+    lines.push({
+      ride_request_id: rideId,
+      line_kind: "cash_collection",
+      description: "Cash collected from rider",
+      reporting_at: completedAt,
+      paid_to_you_minor: 0,
+      earnings_gross_minor: cashReceivedMinor,
+      cash_collected_minor: cashReceivedMinor,
+      bank_transferred_minor: 0,
+      fare_breakdown: {
+        cash_received_minor: cashReceivedMinor,
+        fare_final_minor: fareMinor,
+      },
+      payment_method: paymentMethod,
+      driver_user_id: driverUserId,
+      rider_user_id: riderUserId,
+      idempotency_key: `ride:${rideId}|cash_collection`,
+    });
+  }
 
   if (tipMinor > 0) {
     lines.push({

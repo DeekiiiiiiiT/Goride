@@ -5,6 +5,8 @@ import { Share2, Star, X } from 'lucide-react';
 import { vehicleTypeLabel } from '@roam/business-config/ridesVehicleTypes';
 import type { RideRequestRow } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
+import { CashPaymentCard } from '@/components/CashPaymentCard';
+import { CASH_SETTLEMENT_ENABLED } from '@/lib/cashSettlementFlags';
 import { TripSummaryMap } from '@/components/TripSummaryMap';
 
 const KM_TO_MI = 0.621371;
@@ -130,6 +132,22 @@ export function TripSummaryView({ ride }: Props) {
             <span className="trip-summary-stats__value">{distance}</span>
           </div>
         </section>
+
+        {CASH_SETTLEMENT_ENABLED && ride.payment_method === 'cash' && ride.cash_settlement_outcome ? (
+          <div className="px-4">
+            <CashPaymentCard ride={ride} />
+            {ride.cash_settlement_outcome === 'underpay' && (
+              <p className="mt-2 text-center text-sm text-amber-700">
+                You paid less than the fare — check Wallet for your balance.
+              </p>
+            )}
+            {ride.cash_settlement_outcome === 'overpay' && (
+              <p className="mt-2 text-center text-sm text-emerald-700">
+                Change credited to your Roam wallet.
+              </p>
+            )}
+          </div>
+        ) : null}
 
         <section className="trip-summary-card" aria-label="Rate your driver">
           <div className="trip-summary-rating__avatar" aria-hidden>

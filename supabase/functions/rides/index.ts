@@ -61,9 +61,12 @@ import {
 import { syncRideToFleetKv } from "../_shared/rideToFleetTrip.ts";
 import {
   applyRideTransition,
+  driverTransitionsFor,
   maybeAutoEnRouteOnAccept,
   type ApplyTransitionDeps,
 } from "./rideLifecycle.ts";
+import { registerCashSettlementRoutes } from "./cashSettlement/registerCashSettlementRoutes.ts";
+import { isCashSettlementEnabled } from "./cashSettlement/flags.ts";
 import { evaluateGeofenceTransitions, cleanupRideLiveState } from "./rideGeofence.ts";
 import { loadAppPermissionPolicy, policyDto } from "../_shared/appPermissionPolicy.ts";
 import type { AppPermissionSurface } from "../_shared/appPermissionCatalog.ts";
@@ -126,6 +129,7 @@ type RideStatus =
   | "driver_en_route_pickup"
   | "driver_arrived_pickup"
   | "on_trip"
+  | "awaiting_cash_settlement"
   | "completed"
   | "cancelled";
 
@@ -2179,15 +2183,9 @@ app.get("/v1/drivers/me/earnings", async (c) => {
   return c.json(result);
 });
 
-const DRIVER_TRANSITIONS: Record<RideStatus, RideStatus[]> = {
-  matching: [],
-  driver_assigned: ["driver_en_route_pickup", "cancelled"],
-  driver_en_route_pickup: ["driver_arrived_pickup", "cancelled"],
-  driver_arrived_pickup: ["on_trip", "cancelled"],
-  on_trip: ["completed", "cancelled"],
-  completed: [],
-  cancelled: [],
-};
+function driverTransitions(): Record<RideStatus, RideStatus[]> {
+  return driverTransitionsFor(isCashSettlementEnabled()) as Record<RideStatus, RideStatus[]>;
+}
 
 app.post("/v1/drivers/ride-location", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
@@ -2343,7 +2341,7 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
   if (ride.assigned_driver_user_id !== auth.user.id) return jsonEdgeForbidden(c, "forbidden");
 
   const current = ride.status as RideStatus;
-  if (!DRIVER_TRANSITIONS[current]?.includes(next)) {
+  if (!driverTransitions()[current]?.includes(next)) {
     return c.json({ error: "invalid_transition", current, next }, 400);
   }
 
@@ -2378,6 +2376,13 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
     if (result.error?.startsWith("pin_")) {
       const pinError = result.error.replace("pin_", "");
       return c.json({ error: result.error, message: `PIN verification failed: ${pinError}`, pin_required: true }, 400);
+    }
+    if (result.error === "cash_settlement_required") {
+      return c.json({
+        error: "cash_settlement_required",
+        message: "Use Collect payment to confirm cash before completing this trip",
+        current: result.current,
+      }, 400);
     }
     return c.json({ error: result.error ?? "transition_failed", current: result.current }, 400);
   }
@@ -2642,11 +2647,40 @@ registerPassengerActivityUpcomingRoutes(app, {
   requireUser,
 });
 
+registerCashSettlementRoutes(app, {
+  svc,
+  requireUser,
+  ridesUserSurfaceRole,
+  loadRideRequestById,
+  patchRideRequest,
+  handleTerminalRideLedgerAndSync,
+  cleanupLiveState: async (rideId: string) => cleanupRideLiveState(svc(), rideId),
+  audit,
+  sanitizeRideForDriver,
+  loadDispatchSettingsForRides,
+});
+
 app.get("/v1/wallet/transactions", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
   if (ridesUserSurfaceRole(auth.user) !== "passenger") {
     return jsonEdgeForbidden(c, "forbidden_role");
+  }
+  if (isCashSettlementEnabled() && c.req.query("legacy") !== "1") {
+    const currency = c.req.query("currency")?.trim() || "JMD";
+    const { listJournalForAccount } = await import("../_shared/paymentAccounts.ts");
+    const rows = await listJournalForAccount(svc(), auth.user.id, "rider", currency);
+    const transactions = rows.map((row) => ({
+      id: String(row.id),
+      kind: "journal" as const,
+      title: String(row.entry_type).replace(/_/g, " "),
+      amount_minor: String(row.amount_minor),
+      currency: String(row.currency),
+      date: String(row.created_at),
+      meta: String(row.entry_type),
+      ride_id: row.ride_request_id ? String(row.ride_request_id) : undefined,
+    }));
+    return c.json({ transactions });
   }
   const db = svc();
   const { data: rides } = await db.from("ride_requests")

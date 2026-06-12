@@ -9,10 +9,16 @@ import {
   ridesDriverGetRequest,
   ridesDriverPendingOffers,
   ridesDriverPresence,
+  ridesDriverCashSettlement,
   ridesDriverTransition,
   type DriverWaitTimeInfo,
   type DriverRideLocationLive,
 } from '../services/ridesDriverEdge';
+import { CASH_SETTLEMENT_ENABLED } from '../lib/cashSettlementFlags';
+import {
+  clearCashSettlementPending,
+  readCashSettlementPending,
+} from '../utils/cashSettlementPendingStorage';
 import { slugFromBodyLabel } from '../components/rides/rideDispatchUtils';
 import { useActiveRideTracking } from './useActiveRideTracking';
 import { openExternalNavigation } from '../utils/rideNavigation';
@@ -481,6 +487,10 @@ export function useRideDispatch() {
   }, [online, clearGeoWatch, postOfflinePresence]);
 
   const goOnline = useCallback(async () => {
+    if (activeRide?.status === 'awaiting_cash_settlement') {
+      toast.message('Complete cash settlement before going online');
+      return;
+    }
     if (!vehicleReady) {
       toast.message('Loading your profile… try again in a moment.');
       return;
@@ -513,7 +523,7 @@ export function useRideDispatch() {
     setPresenceError(null);
     pendingGoOnlineAfterSettings.current = false;
     setOnline(true);
-  }, [vehicleReady]);
+  }, [vehicleReady, activeRide?.status]);
 
   useEffect(() => {
     if (!isNativeCapacitorPlatform()) return;
@@ -638,6 +648,8 @@ export function useRideDispatch() {
             lng: ride.dropoff_lng,
             address: ride.dropoff_address,
           });
+        } else if (status === 'awaiting_cash_settlement') {
+          toast.message('Enter the cash amount received');
         } else {
           toast.success('Updated');
         }
@@ -651,6 +663,35 @@ export function useRideDispatch() {
       throw e;
     }
   }, [activeRide, syncActiveRide, pollActiveRide]);
+
+  const submitCashSettlement = useCallback(
+    async (cashReceivedMinor: number, idempotencyKey: string) => {
+      if (!activeRide) return;
+      const result = await ridesDriverCashSettlement(activeRide.id, {
+        cash_received_minor: cashReceivedMinor,
+        idempotency_key: idempotencyKey,
+      });
+      syncActiveRide(null);
+      clearCashSettlementPending();
+      window.dispatchEvent(new Event('roam-driver-trip-completed'));
+      toast.success(
+        result.outcome === 'exact'
+          ? 'Payment confirmed'
+          : `Payment recorded (${result.outcome})`,
+      );
+    },
+    [activeRide, syncActiveRide],
+  );
+
+  useEffect(() => {
+    if (!CASH_SETTLEMENT_ENABLED || !activeRide) return;
+    if (activeRide.status !== 'awaiting_cash_settlement') return;
+    const pending = readCashSettlementPending();
+    if (!pending || pending.rideId !== activeRide.id) return;
+    void submitCashSettlement(pending.cashReceivedMinor, pending.idempotencyKey).catch(() => {
+      // user can retry manually
+    });
+  }, [activeRide?.id, activeRide?.status, submitCashSettlement]);
 
   return {
     online,
@@ -670,6 +711,7 @@ export function useRideDispatch() {
     accept,
     decline,
     advance,
+    submitCashSettlement,
     refreshOffers,
     permissions,
     permissionOnboardingOpen,

@@ -19,6 +19,7 @@ import { formatOfferDistanceMi } from './rideDispatchUtils';
 import { RIDE_CANCEL_REASONS } from './rideCancelReasons';
 import { RideCancelSheet } from './RideCancelSheet';
 import { canCompleteTrip } from './rideGeofenceClient';
+import { CASH_SETTLEMENT_ENABLED } from '../../lib/cashSettlementFlags';
 import { RideChatUnreadDot } from '@roam/ride-chat';
 import { DriverRideChatWrap } from './DriverRideChatWrap';
 
@@ -63,6 +64,8 @@ export function OnTripPanel({ ride, onAdvance, trackingError }: Props) {
   const moreRef = useRef<HTMLDivElement>(null);
 
   const completeReady = canCompleteTrip(ride);
+  const isCashTrip = (ride.payment_method ?? 'cash') === 'cash';
+  const useCashSettlement = CASH_SETTLEMENT_ENABLED && isCashTrip;
   const dropoffAddress = shortAddress(ride.dropoff_address);
   const tripMiles = formatOfferDistanceMi(ride.distance_estimate_km);
   const { title: navTitle, sub: navSub } = droppingOffMeta(ride);
@@ -259,18 +262,18 @@ export function OnTripPanel({ ride, onAdvance, trackingError }: Props) {
           <button
             type="button"
             disabled={advancing || !completeReady}
-            onClick={() => void runAdvance('completed')}
+            onClick={() => void runAdvance(useCashSettlement ? 'awaiting_cash_settlement' : 'completed')}
             className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#2DD4BF] py-3.5 text-base font-bold text-white shadow-lg shadow-[#2DD4BF]/20 transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45"
           >
             {advancing ? (
               <>
                 <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
-                Completing…
+                {useCashSettlement ? 'Opening…' : 'Completing…'}
               </>
             ) : (
               <>
                 <CheckCircle2 className="h-5 w-5" aria-hidden />
-                Complete trip
+                {useCashSettlement ? 'Collect payment' : 'Complete trip'}
               </>
             )}
           </button>

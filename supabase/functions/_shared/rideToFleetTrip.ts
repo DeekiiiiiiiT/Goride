@@ -76,7 +76,13 @@ export function rideRequestToFleetTrip(
     status: isCancelled ? "Cancelled" : "Completed",
     pickupLocation: ride.pickup_address ?? "",
     dropoffLocation: ride.dropoff_address ?? "",
-    cashCollected: isCancelled ? 0 : (paymentMethod === "Cash" ? amount : 0),
+    cashCollected: isCancelled
+      ? 0
+      : (paymentMethod === "Cash"
+        ? (ride.cash_received_minor != null
+          ? Number(ride.cash_received_minor) / 100
+          : amount)
+        : 0),
     fareBreakdown,
     isLiveRecorded: true,
     serviceCategory: "ride",
