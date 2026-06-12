@@ -141,6 +141,41 @@ Document payment state separately from ride state; never dual-write totals witho
 
 ---
 
+## 5.1 Scheduled / Reserve rides (feature-flagged)
+
+**Flags:** Edge `SCHEDULED_RIDES_ENABLED=1`; passenger `VITE_SCHEDULED_RIDES=1`.
+
+| Concept | Value |
+|---------|--------|
+| Status before dispatch | `scheduled` (not in `ACTIVE_RIDE_STATUSES`) |
+| Booking window | 30 min – 7 days (`America/Jamaica`) |
+| Pickup window | Default 10 minutes (`pickup_window_minutes`) |
+| Pre-dispatch buffer | Cron activates ~20 min before `scheduled_pickup_at` |
+| Fare | Locked at book on row; surge bump only at activation |
+| Disclaimer | Not a guaranteed driver assignment upfront |
+
+### Scheduled state machine
+
+- `scheduled` → `matching` — internal dispatch cron + `startMatchingForRide`
+- `scheduled` → `cancelled` — rider cancel (free anytime while scheduled)
+- After `matching`, same lifecycle as on-demand (§2)
+
+### Scheduled API (`/v1/scheduled-rides/*`)
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/v1/scheduled-rides/quote` | Fare quote for future pickup (`departure_time` = scheduled) |
+| POST | `/v1/scheduled-rides` | Create scheduled booking |
+| GET | `/v1/scheduled-rides` | Rider upcoming list |
+| GET | `/v1/scheduled-rides/:id` | Detail + pickup window |
+| POST | `/v1/scheduled-rides/:id/cancel` | Cancel while `scheduled` |
+
+Internal: `POST /v1/internal/dispatch-scheduled-rides` (cron secret) — activates due rows.
+
+On-demand `POST /v1/quote` and `POST /v1/requests` are **unchanged**.
+
+---
+
 ## 6. Auth & roles
 
 - **Rider**: Supabase Auth user with `user_metadata.role === 'passenger'` (set at signup or admin migration). Edge rejects drivers calling rider-only routes and vice versa.

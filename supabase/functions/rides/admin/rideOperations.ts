@@ -174,6 +174,10 @@ function isActiveStatus(status: unknown): boolean {
   return ACTIVE_STATUSES.includes(status as RideStatus);
 }
 
+function isAdminCancellableStatus(status: unknown): boolean {
+  return isActiveStatus(status) || status === "scheduled";
+}
+
 function parseSupportReason(body: Record<string, unknown>): {
   reason: string;
   support_reason_code: string | null;
@@ -329,8 +333,28 @@ export function registerRideOperationsAdminRoutes(
     if (status === "completed" || status === "cancelled") {
       return c.json({ ride, skipped: true });
     }
-    if (!isActiveStatus(status)) {
+    if (!isAdminCancellableStatus(status)) {
       return c.json({ error: "not_active", status }, 409);
+    }
+
+    if (status === "scheduled") {
+      const ok = await cancelRideRequestRow(rideId, "system", reason);
+      if (!ok) return c.json({ error: "cancel_failed" }, 500);
+
+      const resolved = await ridesDbOrResponse(c);
+      if (!(resolved instanceof Response)) {
+        await adminAudit(resolved.db, resolved.tables, adminUser.id, "scheduled_ride_cancelled", {
+          ride_id: rideId,
+          reason,
+          support_reason_code,
+          support_note,
+          actor: "admin",
+        });
+      }
+
+      const fresh = await loadRideRequestById(rideId);
+      const [enriched] = await enrichDriverNames([fresh ?? ride]);
+      return c.json({ ride: enriched });
     }
 
     const ok = await cancelRideRequestRow(rideId, "system", reason);

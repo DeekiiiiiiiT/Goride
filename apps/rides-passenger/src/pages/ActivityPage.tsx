@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Loader2, RefreshCw } from 'lucide-react';
 import type { ActivityPipelineItem, ActivityTripCategory, ActivityTripHistoryItem } from '@roam/types/rides';
 import { ActivityPipelineBlocks } from '@/components/activity/ActivityPipelineBlocks';
@@ -7,6 +8,7 @@ import { ActivityTripDetailsSheet } from '@/components/activity/ActivityTripDeta
 import { ActivityTripRow } from '@/components/activity/ActivityTripRow';
 import { useActivityTrips } from '@/hooks/useActivityTrips';
 import { useActivityUpcoming } from '@/hooks/useActivityUpcoming';
+import { useScheduledRideReminders } from '@/hooks/useScheduledRideReminders';
 import { ACTIVITY_HISTORY_WINDOW_DAYS } from '@/services/activityEdge';
 import {
   CARD_SHADOW,
@@ -41,6 +43,7 @@ function ActivityTripSkeleton() {
 }
 
 export default function ActivityPage() {
+  const location = useLocation();
   const [filter, setFilter] = useState<FilterKey>('all');
   const [pipelineItem, setPipelineItem] = useState<ActivityPipelineItem | null>(null);
   const [selectedTrip, setSelectedTrip] = useState<ActivityTripHistoryItem | null>(null);
@@ -58,6 +61,14 @@ export default function ActivityPage() {
   } = useActivityTrips();
 
   const pipelineItems = upcomingQuery.data?.items ?? [];
+  useScheduledRideReminders(pipelineItems.some((item) => item.kind === 'schedule'));
+
+  useEffect(() => {
+    const scheduledRideId = (location.state as { scheduledRideId?: string } | null)?.scheduledRideId;
+    if (!scheduledRideId || pipelineItems.length === 0) return;
+    const match = pipelineItems.find((item) => item.id === scheduledRideId);
+    if (match) setPipelineItem(match);
+  }, [location.state, pipelineItems]);
 
   const trips = useMemo(() => {
     const all = data?.pages.flatMap((page) => page.trips) ?? [];
@@ -202,7 +213,11 @@ export default function ActivityPage() {
         </section>
       </main>
 
-      <ActivityPipelineSheet item={pipelineItem} onClose={() => setPipelineItem(null)} />
+      <ActivityPipelineSheet
+        item={pipelineItem}
+        onClose={() => setPipelineItem(null)}
+        onCancelled={() => void upcomingQuery.refetch()}
+      />
       <ActivityTripDetailsSheet trip={selectedTrip} onClose={() => setSelectedTrip(null)} />
     </div>
   );

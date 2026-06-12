@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
+import { isScheduledRidesEnabled } from '@/lib/scheduledRidesFlags';
 import {
   BADGE_BG,
   BADGE_TEXT,
@@ -107,6 +108,10 @@ function ServiceMenuCard({
 
 export default function ServicesPage() {
   const navigate = useNavigate();
+  const scheduledEnabled = isScheduledRidesEnabled();
+  const menuItems = scheduledEnabled
+    ? SERVICE_MENU
+    : SERVICE_MENU.filter((item) => item.id !== 'schedule');
 
   return (
     <div
@@ -137,7 +142,7 @@ export default function ServicesPage() {
       <main className="mx-auto w-full max-w-lg flex-1 safe-x px-4 pt-5 pb-6">
         <nav aria-label="Roam services">
           <ul className="grid grid-cols-2 gap-4">
-            {SERVICE_MENU.map((item) => (
+            {menuItems.map((item) => (
               <ServiceMenuCard
                 key={item.id}
                 item={item}

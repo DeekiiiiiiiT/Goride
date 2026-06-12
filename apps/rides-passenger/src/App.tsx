@@ -16,6 +16,7 @@ import BookForSomeonePage from './pages/BookForSomeonePage';
 import BookForOthersHubPage from './pages/BookForOthersHubPage';
 import CourierServicePage from './pages/CourierServicePage';
 import ScheduleRidePage from './pages/ScheduleRidePage';
+import ScheduledRideConfirmPage from './pages/ScheduledRideConfirmPage';
 import EventBookingPage from './pages/EventBookingPage';
 import AccountPage from './pages/AccountPage';
 import GiftCardsPage from './pages/GiftCardsPage';
@@ -168,6 +169,7 @@ export default function App() {
           <Route path="/services/book-for-someone" element={<BookForSomeonePage />} />
           <Route path="/services/courier" element={<CourierServicePage />} />
           <Route path="/services/schedule" element={<ScheduleRidePage />} />
+          <Route path="/services/schedule/confirmed" element={<ScheduledRideConfirmPage />} />
           <Route path="/services/event" element={<EventBookingPage />} />
           <Route path="/services/book-for-me" element={<BookForMePage />} />
           <Route path="/services/roam-tag" element={<Navigate to="/services/book-for-me" replace />} />

@@ -5,6 +5,8 @@ import type { FareBreakdown } from "./compute.ts";
 const QUOTE_TTL_MS = 10 * 60_000;
 /** Trip-intent commit/book window — aligned with book_by_at (15 min). */
 export const TRIP_INTENT_QUOTE_TTL_MS = 15 * 60_000;
+/** Scheduled ride quote at book time (30 min). */
+export const SCHEDULED_QUOTE_TTL_MS = 30 * 60_000;
 
 export interface QuotePayload {
   pickup_lat: number;

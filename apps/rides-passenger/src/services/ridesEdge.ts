@@ -11,6 +11,10 @@ import type {
   RideMessageDto,
   RideMessagesResponse,
   RideRequestRow,
+  ScheduledRideCreateBody,
+  ScheduledRideDetailResponse,
+  ScheduledRideListResponse,
+  ScheduledRideQuoteBody,
   SendRideMessageBody,
   SendRideMessageResponse,
 } from '@roam/types/rides';
@@ -73,6 +77,18 @@ type RidesErrorBody = {
 function throwRidesErrorBody(body: RidesErrorBody, status: number, rawText: string): never {
   if (body.error === 'quote_stale') {
     throw new Error('Price expired — tap Fare estimate to refresh.');
+  }
+  if (body.error === 'feature_disabled') {
+    throw new Error('Scheduled rides are not available yet.');
+  }
+  if (body.error === 'scheduled_too_soon') {
+    throw new Error('Pick a time at least 30 minutes from now.');
+  }
+  if (body.error === 'scheduled_too_far') {
+    throw new Error('Scheduled rides can be booked up to 7 days ahead.');
+  }
+  if (body.error === 'too_many_scheduled_rides') {
+    throw new Error('You have too many upcoming scheduled rides. Cancel one to book another.');
   }
   if (body.error === 'Unauthorized' || status === 401) {
     throw new Error('Session expired — sign in again to book.');
@@ -163,6 +179,52 @@ export async function ridesCreateRequest(body: CreateRideBody): Promise<{ ride: 
     method: 'POST',
     headers: await ridesHeaders(),
     body: JSON.stringify(body),
+  });
+  if (!res.ok) await parseRidesError(res);
+  return res.json();
+}
+
+export async function ridesScheduledQuote(
+  body: ScheduledRideQuoteBody,
+): Promise<FareQuoteResponse & { scheduled_pickup_at: string }> {
+  const res = await ridesFetch(`${base}/v1/scheduled-rides/quote`, {
+    method: 'POST',
+    headers: await ridesHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await parseRidesError(res);
+  return res.json();
+}
+
+export async function ridesCreateScheduled(
+  body: ScheduledRideCreateBody,
+): Promise<ScheduledRideDetailResponse> {
+  const res = await ridesFetch(`${base}/v1/scheduled-rides`, {
+    method: 'POST',
+    headers: await ridesHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await parseRidesError(res);
+  return res.json();
+}
+
+export async function ridesListScheduled(): Promise<ScheduledRideListResponse> {
+  const res = await ridesFetch(`${base}/v1/scheduled-rides`, { headers: await ridesHeaders() });
+  if (!res.ok) await parseRidesError(res);
+  return res.json();
+}
+
+export async function ridesGetScheduled(id: string): Promise<ScheduledRideDetailResponse> {
+  const res = await ridesFetch(`${base}/v1/scheduled-rides/${id}`, { headers: await ridesHeaders() });
+  if (!res.ok) await parseRidesError(res);
+  return res.json();
+}
+
+export async function ridesCancelScheduled(id: string): Promise<{ ride: RideRequestRow }> {
+  const res = await ridesFetch(`${base}/v1/scheduled-rides/${id}/cancel`, {
+    method: 'POST',
+    headers: await ridesHeaders(),
+    body: JSON.stringify({}),
   });
   if (!res.ok) await parseRidesError(res);
   return res.json();

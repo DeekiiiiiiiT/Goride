@@ -117,6 +117,7 @@ import {
   notifyPassengerOfRideEvent,
   notifyShadowBookerOfTripCompleted,
 } from "./rideNotifications.ts";
+import { registerScheduledRidesRoutes } from "./scheduledRides/scheduledRidesRoutes.ts";
 
 /** Match Supabase path prefix: .../functions/v1/rides/<route> → /rides/<route> */
 const app = new Hono().basePath("/rides");
@@ -124,6 +125,7 @@ const app = new Hono().basePath("/rides");
 const AVG_SPEED_KMH = 25;
 
 type RideStatus =
+  | "scheduled"
   | "matching"
   | "driver_assigned"
   | "driver_en_route_pickup"
@@ -446,13 +448,19 @@ async function cancelRideRequestRow(
   id: string,
   cancelledBy: "rider" | "driver" | "system",
   reason: string | null,
+  extraPatch?: Record<string, unknown>,
 ): Promise<boolean> {
   const { data: cancelData, error: cancelError } = await pubSvc().rpc("rides_cancel_ride_request", {
     p_id: id,
     p_cancelled_by: cancelledBy,
     p_cancel_reason: reason,
   });
-  if (!cancelError && cancelData != null) return true;
+  if (!cancelError && cancelData != null) {
+    if (extraPatch && Object.keys(extraPatch).length > 0) {
+      await patchRideRequest(id, { ...extraPatch, updated_at: new Date().toISOString() });
+    }
+    return true;
+  }
 
   if (cancelError && !isMissingDbRpc(cancelError)) {
     logLine({
@@ -468,7 +476,17 @@ async function cancelRideRequestRow(
     cancelled_by: cancelledBy,
     cancel_reason: reason,
     updated_at: new Date().toISOString(),
+    ...extraPatch,
   });
+}
+
+async function startMatchingForRide(
+  rideId: string,
+  ride: Record<string, unknown>,
+  reqId?: string,
+): Promise<void> {
+  await runMatchingWave(rideId, ride, 1, reqId);
+  await reconcileMatching(rideId, reqId);
 }
 
 async function syncBookingRequestForTerminalRide(
@@ -1674,8 +1692,7 @@ app.post("/v1/requests", async (c) => {
     surge_multiplier: locked.surge_multiplier,
   });
 
-  await runMatchingWave(ride.id, ride, 1, reqId);
-  await reconcileMatching(ride.id as string, reqId);
+  await startMatchingForRide(ride.id as string, ride, reqId);
 
   if (bookingRequestId) {
     await linkBookingRequestToRide(getRidesContactsDb, bookingRequestId, ride.id as string);
@@ -2645,6 +2662,26 @@ registerPassengerActivityUpcomingRoutes(app, {
   pubSvc,
   getContactsDb: getRidesContactsDb,
   requireUser,
+});
+
+registerScheduledRidesRoutes(app, {
+  svc,
+  pubSvc,
+  requireUser,
+  ridesUserSurfaceRole,
+  audit,
+  readSurgeMultiplier,
+  resolveFareRulesDbForQuote,
+  getRidesAdminDb,
+  loadRideRequestById,
+  loadRideRequestByIdempotencyKey,
+  patchRideRequest,
+  cancelRideRequestRow,
+  gridCellKey,
+  bumpSurgeDemand,
+  startMatchingForRide,
+  clientIp,
+  rateLimit,
 });
 
 registerCashSettlementRoutes(app, {

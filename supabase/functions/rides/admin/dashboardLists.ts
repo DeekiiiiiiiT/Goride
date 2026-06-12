@@ -91,6 +91,16 @@ export function registerDashboardListRoutes(
       return c.json({ rides: data ?? [] });
     }
 
+    if (view === "scheduled_rides") {
+      const { data, error } = await db.from(tables.ride_requests)
+        .select("*")
+        .eq("status", "scheduled")
+        .order("scheduled_pickup_at", { ascending: true })
+        .limit(LIST_LIMIT);
+      if (error) return c.json({ error: "list_failed", message: error.message }, 500);
+      return c.json({ rides: data ?? [] });
+    }
+
     if (view === "drivers_online") {
       try {
         const driverResolved = await getDriverAdminDb();
@@ -159,7 +169,7 @@ export function registerDashboardListRoutes(
 
     return c.json({
       error: "invalid_view",
-      allowed: ["active_rides", "riders_on_trip", "todays_rides", "cancelled_rides", "drivers_online"],
+      allowed: ["active_rides", "riders_on_trip", "todays_rides", "cancelled_rides", "scheduled_rides", "drivers_online"],
     }, 400);
   });
 }

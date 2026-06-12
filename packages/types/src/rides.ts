@@ -3,7 +3,16 @@
  * @see docs/passenger-rides/RIDES_SPEC.md
  */
 
+export type RideBookingKind = 'immediate' | 'scheduled';
+
+export type ScheduledCancelReason =
+  | 'rider'
+  | 'system_no_drivers'
+  | 'system_rider_busy'
+  | 'system_missed_window';
+
 export type RideRequestStatus =
+  | 'scheduled'
   | 'matching'
   | 'driver_assigned'
   | 'driver_en_route_pickup'
@@ -86,6 +95,15 @@ export function isDriverActiveRideStatus(status: RideRequestStatus | string): bo
 /** P2P in-app chat is available only during active driver–rider trip phases. */
 export function isRideChatEnabled(status: RideRequestStatus | string): boolean {
   return isDriverActiveRideStatus(status);
+}
+
+/** Pre-dispatch scheduled booking — not an active on-demand trip. */
+export function isScheduledRideStatus(status: RideRequestStatus | string): boolean {
+  return status === 'scheduled';
+}
+
+export function isPreDispatchStatus(status: RideRequestStatus | string): boolean {
+  return status === 'scheduled';
 }
 
 export type RideMessageSenderRole = 'rider' | 'driver' | 'booker';
@@ -231,6 +249,11 @@ export interface RideRequestRow {
   cash_settlement_outcome?: CashSettlementOutcome | null;
   fare_locked_at?: string | null;
   settled_at?: string | null;
+  booking_kind?: RideBookingKind;
+  scheduled_pickup_at?: string | null;
+  pickup_window_minutes?: number;
+  scheduled_dispatched_at?: string | null;
+  scheduled_cancel_reason?: ScheduledCancelReason | null;
   created_at: string;
   updated_at: string;
 }
@@ -343,6 +366,42 @@ export interface WalletTransactionDto {
 
 export interface WalletTransactionsResponse {
   transactions: WalletTransactionDto[];
+}
+
+export interface ScheduledRideQuoteBody {
+  pickup_lat: number;
+  pickup_lng: number;
+  dropoff_lat: number;
+  dropoff_lng: number;
+  vehicle_option?: string;
+  scheduled_pickup_at: string;
+}
+
+export interface ScheduledRideCreateBody {
+  pickup_lat: number;
+  pickup_lng: number;
+  dropoff_lat: number;
+  dropoff_lng: number;
+  pickup_address?: string;
+  dropoff_address?: string;
+  vehicle_option?: string;
+  scheduled_pickup_at: string;
+  quote_token: string;
+  idempotency_key?: string;
+  pickup_window_minutes?: number;
+  route_polyline_encoded?: string;
+  payment_method?: RidePaymentMethod;
+}
+
+export interface ScheduledRideListResponse {
+  rides: RideRequestRow[];
+}
+
+export interface ScheduledRideDetailResponse {
+  ride: RideRequestRow;
+  pickup_window_start: string;
+  pickup_window_end: string;
+  cancellation_policy: string;
 }
 
 export interface CreateRideBody {

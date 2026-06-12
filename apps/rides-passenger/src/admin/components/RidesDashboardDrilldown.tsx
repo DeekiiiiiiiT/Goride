@@ -29,6 +29,10 @@ const TAB_META: Record<RidesDashboardTab, { label: string; description: string }
     label: 'Cancellations',
     description: 'Recently cancelled rides (up to 100, newest first).',
   },
+  scheduled_rides: {
+    label: 'Scheduled rides',
+    description: 'Upcoming reserve rides awaiting dispatch (pickup time ascending).',
+  },
   drivers_online: {
     label: 'Drivers online',
     description: 'Available for dispatch (fresh GPS, not on another trip).',
@@ -152,6 +156,8 @@ export function RidesDashboardDrilldown({ accessToken, activeTab, onTabChange }:
         <DriversTable drivers={drivers} />
       ) : activeTab === 'cancelled_rides' ? (
         <CancelledRidesTable rides={rides} />
+      ) : activeTab === 'scheduled_rides' ? (
+        <ScheduledRidesTable rides={rides} />
       ) : (
         <RidesTable rides={rides} showRiderLink />
       )}
@@ -179,6 +185,55 @@ export function RidesDashboardDrilldown({ accessToken, activeTab, onTabChange }:
           )}
         </p>
       )}
+    </div>
+  );
+}
+
+function ScheduledRidesTable({ rides }: { rides: RideRequestRow[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-slate-800 text-left text-slate-500">
+            <th className="px-4 py-3 font-medium">Pickup at</th>
+            <th className="px-4 py-3 font-medium">Pickup</th>
+            <th className="px-4 py-3 font-medium">Drop-off</th>
+            <th className="px-4 py-3 font-medium">Fare est.</th>
+            <th className="px-4 py-3 font-medium">Rider</th>
+            <th className="px-4 py-3 font-medium">Vehicle</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rides.map((r) => (
+            <tr
+              key={r.id}
+              className="border-b border-slate-800/60 hover:bg-slate-800/40 transition-colors"
+            >
+              <td className="px-4 py-3 text-slate-300 whitespace-nowrap">
+                {formatWhen(r.scheduled_pickup_at)}
+              </td>
+              <td className="px-4 py-3 text-slate-400 max-w-[140px] truncate" title={r.pickup_address ?? undefined}>
+                {truncate(r.pickup_address)}
+              </td>
+              <td className="px-4 py-3 text-slate-400 max-w-[140px] truncate" title={r.dropoff_address ?? undefined}>
+                {truncate(r.dropoff_address)}
+              </td>
+              <td className="px-4 py-3 text-slate-300 whitespace-nowrap">
+                {formatMoneyMinor(r.fare_estimate_minor, r.currency ?? 'JMD')}
+              </td>
+              <td className="px-4 py-3">
+                <Link
+                  to={`/admin/users/${r.rider_user_id}`}
+                  className="text-violet-400 hover:text-violet-300 text-xs font-mono"
+                >
+                  {r.rider_user_id.slice(0, 8)}…
+                </Link>
+              </td>
+              <td className="px-4 py-3 text-slate-400">{r.vehicle_option}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
-import { Activity, Car, Loader2, MapPin, TrendingUp, Users, XCircle } from 'lucide-react';
+import { Activity, CalendarClock, Car, Loader2, MapPin, TrendingUp, Users, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { getRidesAdminStats, type RidesDashboardTab } from '../services/ridesAdminService';
 import { RidesDashboardDrilldown } from '../components/RidesDashboardDrilldown';
@@ -16,6 +16,7 @@ type RidesAdminStats = {
   riders_on_trip: number;
   todays_completed_rides: number;
   cancelled_rides_today: number;
+  upcoming_scheduled_rides: number;
   online_drivers: number;
   drivers_on_trip: number;
   avg_surge_multiplier: number;
@@ -57,6 +58,13 @@ const CARD_TABS: Array<{
     icon: <XCircle className="w-5 h-5 text-rose-400" />,
   },
   {
+    tab: 'scheduled_rides',
+    title: 'Scheduled',
+    subtitle: 'Upcoming reserve rides',
+    statKey: 'upcoming_scheduled_rides',
+    icon: <CalendarClock className="w-5 h-5 text-teal-400" />,
+  },
+  {
     tab: 'drivers_online',
     title: 'Drivers Online',
     subtitle: 'Available for dispatch',
@@ -80,6 +88,7 @@ export function RidesAdminDashboard() {
     riders_on_trip: 0,
     todays_completed_rides: 0,
     cancelled_rides_today: 0,
+    upcoming_scheduled_rides: 0,
     online_drivers: 0,
     drivers_on_trip: 0,
     avg_surge_multiplier: 1,
@@ -94,6 +103,7 @@ export function RidesAdminDashboard() {
         setStats({
           ...s,
           cancelled_rides_today: s.cancelled_rides_today ?? 0,
+          upcoming_scheduled_rides: s.upcoming_scheduled_rides ?? 0,
         }),
       )
       .catch((e: unknown) => {

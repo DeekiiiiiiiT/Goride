@@ -1,7 +1,11 @@
-import React from 'react';
-import { X } from 'lucide-react';
+import React, { useState } from 'react';
+import { Loader2, X } from 'lucide-react';
+import { toast } from 'sonner';
 import type { ActivityPipelineItem } from '@roam/types/rides';
+import { formatMoneyMinor } from '@roam/types/rides';
 import { formatShortAddress } from '@/lib/formatRideAddress';
+import { formatScheduledWhen } from '@/lib/formatScheduledWhen';
+import { ridesCancelScheduled } from '@/services/ridesEdge';
 import {
   ON_SURFACE,
   ON_SURFACE_VARIANT,
@@ -13,28 +17,36 @@ import {
 type ActivityPipelineSheetProps = {
   item: ActivityPipelineItem | null;
   onClose: () => void;
+  onCancelled?: () => void;
 };
 
-function formatWhen(iso: string | null): string | null {
-  if (!iso) return null;
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
+export function ActivityPipelineSheet({ item, onClose, onCancelled }: ActivityPipelineSheetProps) {
+  const [cancelling, setCancelling] = useState(false);
 
-export function ActivityPipelineSheet({ item, onClose }: ActivityPipelineSheetProps) {
   if (!item) return null;
 
-  const when = formatWhen(item.scheduled_at);
+  const when = formatScheduledWhen(item.scheduled_at);
   const route = item.pickup_address || item.dropoff_address
     ? `${formatShortAddress(item.pickup_address)} → ${formatShortAddress(item.dropoff_address)}`
     : null;
+
+  const canCancel = item.kind === 'schedule' && item.status === 'scheduled';
+
+  const handleCancel = async () => {
+    if (!canCancel) return;
+    if (!window.confirm('Cancel this scheduled ride? You can book again anytime.')) return;
+    setCancelling(true);
+    try {
+      await ridesCancelScheduled(item.id);
+      toast.success('Scheduled ride cancelled');
+      onCancelled?.();
+      onClose();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not cancel ride.');
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 safe-x" role="presentation">
@@ -66,7 +78,7 @@ export function ActivityPipelineSheet({ item, onClose }: ActivityPipelineSheetPr
             <p style={{ color: ON_SURFACE_VARIANT }}>{item.subtitle}</p>
           ) : null}
           <p style={{ color: PRIMARY }}>
-            Status: {item.status}
+            Status: {item.status.replace(/_/g, ' ')}
           </p>
           {when ? (
             <p style={{ color: ON_SURFACE }}>
@@ -77,11 +89,36 @@ export function ActivityPipelineSheet({ item, onClose }: ActivityPipelineSheetPr
             <p style={{ color: ON_SURFACE_VARIANT }}>{route}</p>
           ) : null}
           {item.detail_lines.map((line) => (
-            <p key={line} style={{ color: ON_SURFACE_VARIANT }}>{line}</p>
+            <p key={line} style={{ color: ON_SURFACE_VARIANT }}>
+              {line.includes('JMD') || line.includes('USD') ? formatMoneyMinorFromLine(line) : line}
+            </p>
           ))}
+          {item.kind === 'schedule' ? (
+            <p className="text-xs leading-relaxed" style={{ color: ON_SURFACE_VARIANT }}>
+              Free cancellation anytime before we start matching a driver.
+            </p>
+          ) : null}
         </div>
 
-        <div className="mt-6 border-t pt-4" style={{ borderColor: OUTLINE_VARIANT }}>
+        <div className="mt-6 space-y-3 border-t pt-4" style={{ borderColor: OUTLINE_VARIANT }}>
+          {canCancel ? (
+            <button
+              type="button"
+              onClick={() => void handleCancel()}
+              disabled={cancelling}
+              className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold disabled:opacity-50"
+              style={{ color: '#b42318', border: '1px solid color-mix(in srgb, #b42318 35%, transparent)' }}
+            >
+              {cancelling ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  Cancelling…
+                </>
+              ) : (
+                'Cancel scheduled ride'
+              )}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onClose}
@@ -94,4 +131,11 @@ export function ActivityPipelineSheet({ item, onClose }: ActivityPipelineSheetPr
       </div>
     </div>
   );
+}
+
+function formatMoneyMinorFromLine(line: string): string {
+  const match = line.match(/^(JMD|USD)\s+([\d.]+)\s+estimated$/i);
+  if (!match) return line;
+  const minor = Math.round(Number(match[2]) * 100);
+  return `${formatMoneyMinor(minor, match[1])} estimated`;
 }

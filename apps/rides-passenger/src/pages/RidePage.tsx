@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ChevronDown, Loader2, Clock, Share2 } from 'lucide-react';
 import type { RideRequestStatus, RideRequestRow } from '@roam/types/rides';
+import { isPreDispatchStatus } from '@roam/types/rides';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -59,6 +60,8 @@ function statusLabel(s: RideRequestStatus): string {
       return 'Trip completed';
     case 'cancelled':
       return 'Cancelled';
+    case 'scheduled':
+      return 'Scheduled';
     default:
       return s;
   }
@@ -514,6 +517,10 @@ export default function RidePage() {
 
   if (exitPending) {
     return <Navigate to="/" replace />;
+  }
+
+  if (ride?.status && isPreDispatchStatus(ride.status)) {
+    return <Navigate to="/activity" replace state={{ scheduledRideId: ride.id }} />;
   }
 
   if (ride?.status === 'completed') {

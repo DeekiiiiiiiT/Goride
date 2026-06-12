@@ -64,13 +64,14 @@ export async function fetchGoogleDirectionsRoute(
   dropoffLat: number,
   dropoffLng: number,
   fetchFn: typeof fetch = fetch,
+  departureTimeUnix?: number,
 ): Promise<RouteEstimate | null> {
   const apiKey = googleMapsRidesApiKey();
   if (!apiKey) return null;
 
   const origin = `${pickupLat},${pickupLng}`;
   const destination = `${dropoffLat},${dropoffLng}`;
-  const departureTime = Math.floor(Date.now() / 1000);
+  const departureTime = departureTimeUnix ?? Math.floor(Date.now() / 1000);
   const url =
     `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&mode=driving&region=jm&departure_time=${departureTime}&key=${encodeURIComponent(apiKey)}`;
 
@@ -111,8 +112,16 @@ async function googleDirectionsRoute(
   pickupLng: number,
   dropoffLat: number,
   dropoffLng: number,
+  departureTimeUnix?: number,
 ): Promise<RouteEstimate | null> {
-  return fetchGoogleDirectionsRoute(pickupLat, pickupLng, dropoffLat, dropoffLng);
+  return fetchGoogleDirectionsRoute(
+    pickupLat,
+    pickupLng,
+    dropoffLat,
+    dropoffLng,
+    fetch,
+    departureTimeUnix,
+  );
 }
 
 export async function getRouteEstimate(
@@ -120,20 +129,31 @@ export async function getRouteEstimate(
   pickupLng: number,
   dropoffLat: number,
   dropoffLng: number,
+  departureTimeUnix?: number,
 ): Promise<RouteEstimate> {
   const key = cacheKey(pickupLat, pickupLng, dropoffLat, dropoffLng);
   const hit = routeCache.get(key);
-  if (hit && Date.now() - hit.at < ROUTE_CACHE_TTL_MS) return hit.value;
+  if (hit && Date.now() - hit.at < ROUTE_CACHE_TTL_MS && departureTimeUnix == null) {
+    return hit.value;
+  }
 
   let estimate: RouteEstimate;
   try {
-    const routed = await googleDirectionsRoute(pickupLat, pickupLng, dropoffLat, dropoffLng);
+    const routed = await googleDirectionsRoute(
+      pickupLat,
+      pickupLng,
+      dropoffLat,
+      dropoffLng,
+      departureTimeUnix,
+    );
     estimate = routed ?? haversineFallback(pickupLat, pickupLng, dropoffLat, dropoffLng);
   } catch {
     estimate = haversineFallback(pickupLat, pickupLng, dropoffLat, dropoffLng);
   }
 
-  routeCache.set(key, { value: estimate, at: Date.now() });
+  if (departureTimeUnix == null) {
+    routeCache.set(key, { value: estimate, at: Date.now() });
+  }
   return estimate;
 }
 

@@ -1,6 +1,8 @@
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { allowsPassengerSurface, jsonEdgeForbidden } from "../_shared/authEdge.ts";
 import type { PassengerActivityHistoryDeps } from "./passengerActivityHistory.ts";
+import { loadScheduledPipelineItems } from "./scheduledRides/activityPipeline.ts";
+import { isScheduledRidesEnabled } from "./scheduledRides/flags.ts";
 
 export type ActivityPipelineKind = "schedule" | "courier" | "event";
 
@@ -16,12 +18,17 @@ export type ActivityPipelineItem = {
   detail_lines: string[];
 };
 
-/** Future scheduled / courier / event bookings — none persisted in v1 yet. */
+/** Future scheduled / courier / event bookings. */
 export async function buildActivityPipelineItems(
-  _deps: PassengerActivityHistoryDeps,
-  _userId: string,
+  deps: PassengerActivityHistoryDeps,
+  userId: string,
 ): Promise<ActivityPipelineItem[]> {
-  return [];
+  const items: ActivityPipelineItem[] = [];
+  if (isScheduledRidesEnabled()) {
+    const scheduled = await loadScheduledPipelineItems(deps.svc, deps.pubSvc, userId);
+    items.push(...scheduled);
+  }
+  return items;
 }
 
 export function registerPassengerActivityUpcomingRoutes(

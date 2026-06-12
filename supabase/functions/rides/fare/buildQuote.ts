@@ -48,6 +48,8 @@ export async function buildFareQuote(
     vehicleTypesTable?: string;
     /** Override quote token TTL (trip intents use 15 min). */
     quoteTtlMs?: number;
+    /** Unix seconds for Directions departure_time (scheduled rides). */
+    departureTimeUnix?: number;
   },
 ): Promise<BuiltFareQuote> {
   const vehicleType = params.vehicleType || "uberx";
@@ -68,6 +70,7 @@ export async function buildFareQuote(
     params.pickupLng,
     params.dropoffLat,
     params.dropoffLng,
+    params.departureTimeUnix,
   );
 
   const cellKey = gridCellKey(params.pickupLat, params.pickupLng);
@@ -104,10 +107,14 @@ export async function buildFareQuote(
   const etaPickupSeconds = pickupEta.pickupSeconds ?? 0;
   const etaArrivalAt = pickupEta.driversAvailable && pickupEta.pickupSeconds != null
     ? new Date(
-      Date.now() +
+      (params.departureTimeUnix != null
+        ? params.departureTimeUnix * 1000
+        : Date.now()) +
         pickupEta.pickupSeconds * 1000 +
         durationMinutes * 60 * 1000,
     ).toISOString()
+    : params.departureTimeUnix != null
+    ? new Date(params.departureTimeUnix * 1000 + durationMinutes * 60 * 1000).toISOString()
     : undefined;
 
   return {
