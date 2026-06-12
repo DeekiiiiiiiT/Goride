@@ -1,6 +1,6 @@
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { allowsPassengerSurface, jsonEdgeForbidden } from "../_shared/authEdge.ts";
+import { jsonEdgeForbidden } from "../../_shared/authEdge.ts";
 import { assertRiderCanBook } from "../fare/riderAccount.ts";
 import { buildFareQuote } from "../fare/buildQuote.ts";
 import { DEFAULT_DISPATCH_SETTINGS, loadDispatchSettings } from "../fare/dispatchSettings.ts";
