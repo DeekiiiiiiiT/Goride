@@ -1,7 +1,8 @@
 import React from 'react';
-import { Banknote, Receipt } from 'lucide-react';
+import { Banknote } from 'lucide-react';
 import type { RideRequestRow } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
+import { resolveLockedFareMinor } from '@roam/types/cashSettlementDisplay';
 
 interface CashCollectionCardProps {
   ride: RideRequestRow;
@@ -19,11 +20,11 @@ export function CashCollectionCard({ ride, compact = false }: CashCollectionCard
   }
 
   const currency = ride.currency ?? 'JMD';
-  const totalMinor = Number(ride.fare_final_minor ?? ride.fare_estimate_minor ?? 0);
+  const lockedMinor = resolveLockedFareMinor(ride);
+  const showAmount = ride.status === 'awaiting_cash_settlement' || ride.status === 'completed';
   const actualTollsMinor = Number(ride.actual_tolls_minor ?? 0);
   const baseFareMinor = Number(ride.fare_estimate_minor ?? 0);
-
-  const hasExtras = actualTollsMinor > 0;
+  const hasExtras = actualTollsMinor > 0 && showAmount;
 
   return (
     <section
@@ -41,21 +42,27 @@ export function CashCollectionCard({ ride, compact = false }: CashCollectionCard
               ? 'Cash Collected'
               : ride.status === 'awaiting_cash_settlement'
                 ? 'Cash to Collect'
-                : 'Cash to Collect'}
+                : 'Cash trip'}
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            From rider
+            {ride.status === 'on_trip' ? 'Amount shown at drop-off' : 'From rider'}
           </p>
         </div>
       </div>
 
-      <div className="text-center py-2">
-        <p className="text-3xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
-          {formatMoneyMinor(totalMinor, currency)}
+      {showAmount && lockedMinor != null ? (
+        <div className="text-center py-2">
+          <p className="text-3xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
+            {formatMoneyMinor(lockedMinor, currency)}
+          </p>
+        </div>
+      ) : ride.status === 'on_trip' ? (
+        <p className="text-center text-sm text-slate-600 dark:text-slate-300 py-2">
+          Fare is locked when you tap Collect payment at drop-off.
         </p>
-      </div>
+      ) : null}
 
-      {hasExtras && (
+      {hasExtras && lockedMinor != null && (
         <div className="space-y-1.5 pt-2 border-t border-emerald-200 dark:border-emerald-800/50">
           <div className="flex justify-between text-xs">
             <span className="text-slate-500 dark:text-slate-400">Base fare</span>
@@ -74,9 +81,9 @@ export function CashCollectionCard({ ride, compact = false }: CashCollectionCard
         </div>
       )}
 
-      {ride.status === 'on_trip' && (
+      {ride.status === 'awaiting_cash_settlement' && (
         <p className="text-xs text-center text-emerald-700 dark:text-emerald-400 font-medium pt-1">
-          Collect this amount when you arrive at drop-off
+          Enter the amount you received below
         </p>
       )}
     </section>

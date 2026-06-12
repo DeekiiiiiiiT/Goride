@@ -3,8 +3,7 @@ import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ChevronDown, Loader2, Clock, Share2 } from 'lucide-react';
-import type { CashSettlementOutcome, RideRequestStatus, RideRequestRow } from '@roam/types/rides';
-import { formatMoneyMinor } from '@roam/types/rides';
+import type { RideRequestStatus, RideRequestRow } from '@roam/types/rides';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,6 +22,10 @@ import { TripInProgressView } from '@/components/TripInProgressView';
 import { CashSettlementRiderView } from '@/components/CashSettlementRiderView';
 import { TripSummaryView } from '@/components/TripSummaryView';
 import { isAwaitingCashSettlement, isCashRide } from '@/lib/cashSettlementUi';
+import {
+  cashSettlementOutcomeMessage,
+  showSettlementResultOnTripScreen,
+} from '@roam/types/cashSettlementDisplay';
 import { ridesCancelRequest, ridesGetLive, ridesGetRequest } from '@/services/ridesEdge';
 import { createPassengerInvite } from '@/services/contactsEdge';
 import { RiderConnectionBanner } from '@/components/RiderConnectionBanner';
@@ -90,31 +93,6 @@ function isCashSettlement(
   ride: RideRequestRow | undefined,
 ): boolean {
   return Boolean(ride && status && isAwaitingCashSettlement({ ...ride, status }));
-}
-
-function cashSettlementOutcomeMessage(
-  outcome: CashSettlementOutcome,
-  ride: RideRequestRow,
-): string {
-  const currency = ride.currency ?? 'JMD';
-  switch (outcome) {
-    case 'exact':
-      return 'Payment confirmed — thanks for riding with Roam';
-    case 'underpay':
-      return 'Payment recorded. You have an outstanding balance on your wallet.';
-    case 'overpay': {
-      const received = Number(ride.cash_received_minor ?? 0);
-      const owed = Number(ride.fare_final_minor ?? 0);
-      const credit = Math.max(0, received - owed);
-      return credit > 0
-        ? `${formatMoneyMinor(credit, currency)} credit added to your wallet`
-        : 'Payment confirmed — change credited to your wallet';
-    }
-    case 'unpaid':
-      return 'Trip marked unpaid — please settle your balance in Wallet';
-    default:
-      return 'Trip completed';
-  }
 }
 
 function showLiveTracking(status: RideRequestStatus | undefined): boolean {
@@ -225,6 +203,7 @@ export default function RidePage() {
   const [cancelling, setCancelling] = useState(false);
   const [sharingInvite, setSharingInvite] = useState(false);
   const prevStatusRef = useRef<RideRequestStatus | null>(null);
+  const [cashResultDismissed, setCashResultDismissed] = useState(false);
   const { isOnline, justReconnected } = useRiderOnline();
   const bookerTracking = useBookerTrackingOptional();
   const trackingMode = bookerTracking?.mode ?? 'full';
@@ -411,6 +390,18 @@ export default function RidePage() {
     ) {
       toast.success(cashSettlementOutcomeMessage(ride.cash_settlement_outcome, ride));
     }
+    if (
+      ride.status === 'completed' &&
+      prevStatusRef.current === 'awaiting_cash_settlement' &&
+      isCashRide(ride) &&
+      ride.cash_settlement_outcome &&
+      !showSettlementResultOnTripScreen(ride.cash_settlement_outcome)
+    ) {
+      setCashResultDismissed(true);
+    }
+    if (ride.status === 'awaiting_cash_settlement') {
+      setCashResultDismissed(false);
+    }
     prevStatusRef.current = ride.status;
   }, [ride, riderPin, isDelegatedBooker, data?.participant_role, data?.is_delegated]);
 
@@ -529,6 +520,21 @@ export default function RidePage() {
         <div className="min-h-[100dvh] flex items-center justify-center bg-zinc-100 text-zinc-500">
           <Loader2 className="w-8 h-8 animate-spin" aria-hidden />
         </div>
+      );
+    }
+    const showCashResultScreen =
+      isCashRide(ride) &&
+      showSettlementResultOnTripScreen(ride.cash_settlement_outcome) &&
+      !cashResultDismissed;
+    if (showCashResultScreen) {
+      return (
+        <CashSettlementRiderView
+          ride={ride}
+          assignedDriver={assignedDriver}
+          onMinimize={handlePassengerMinimize}
+          isFetching={isFetching}
+          onContinueToSummary={() => setCashResultDismissed(true)}
+        />
       );
     }
     return <TripSummaryView ride={ride} />;

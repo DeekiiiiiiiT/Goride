@@ -4,8 +4,13 @@ import { Session } from '@supabase/supabase-js';
 import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatMoneyMinor } from '@roam/types/rides';
+import type { RideRequestRow } from '@roam/types/rides';
+import { AdminCashSettleModal } from '../components/AdminCashSettleModal';
+import { AdminCashTripActions } from '../components/AdminCashTripActions';
 import {
   adminForceCompleteRide,
+  adminReleaseCashSettlement,
+  adminSettleCashRide,
   listPlatformLedgerTrips,
   type PlatformLedgerTripRow,
 } from '../services/ridesAdminService';
@@ -34,7 +39,8 @@ export function TripLedgerPage() {
   const [status, setStatus] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
   const [lineKind, setLineKind] = useState('');
-  const [completingId, setCompletingId] = useState<string | null>(null);
+  const [actingId, setActingId] = useState<string | null>(null);
+  const [settleRide, setSettleRide] = useState<RideRequestRow | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -62,11 +68,27 @@ export function TripLedgerPage() {
     void load();
   }, [load]);
 
-  const runComplete = async (trip: PlatformLedgerTripRow) => {
-    if (trip.status !== 'awaiting_cash_settlement' && trip.status !== 'on_trip') {
-      toast.error('Complete is only for on-trip or awaiting cash settlement rides');
+  const runRelease = async (trip: PlatformLedgerTripRow) => {
+    if (
+      !window.confirm(
+        `Release ride ${trip.id.slice(0, 8)}… to cash settlement? Driver must enter cash received.`,
+      )
+    ) {
       return;
     }
+    setActingId(trip.id);
+    try {
+      await adminReleaseCashSettlement(token, trip.id);
+      toast.success('Released to cash settlement');
+      await load();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Release failed');
+    } finally {
+      setActingId(null);
+    }
+  };
+
+  const runCompleteCard = async (trip: PlatformLedgerTripRow) => {
     if (
       !window.confirm(
         `Mark ride ${trip.id.slice(0, 8)}… completed? Use only if the passenger was dropped off.`,
@@ -74,7 +96,7 @@ export function TripLedgerPage() {
     ) {
       return;
     }
-    setCompletingId(trip.id);
+    setActingId(trip.id);
     try {
       await adminForceCompleteRide(token, trip.id);
       toast.success('Ride marked completed');
@@ -82,7 +104,26 @@ export function TripLedgerPage() {
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Complete failed');
     } finally {
-      setCompletingId(null);
+      setActingId(null);
+    }
+  };
+
+  const runSettle = async (cashReceivedMinor: number) => {
+    if (!settleRide) return;
+    setActingId(settleRide.id);
+    try {
+      const result = await adminSettleCashRide(token, settleRide.id, cashReceivedMinor);
+      toast.success(
+        result.cash_settlement
+          ? `Settled (${result.cash_settlement.outcome})`
+          : 'Ride settled and completed',
+      );
+      setSettleRide(null);
+      await load();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Settle failed');
+    } finally {
+      setActingId(null);
     }
   };
 
@@ -108,6 +149,7 @@ export function TripLedgerPage() {
           <option value="completed">Completed</option>
           <option value="cancelled">Cancelled</option>
           <option value="awaiting_cash_settlement">Awaiting cash settlement</option>
+          <option value="on_trip">On trip</option>
         </select>
         <select
           value={paymentMethod}
@@ -160,6 +202,8 @@ export function TripLedgerPage() {
               {trips.map((t) => {
                 const expanded = expandedId === t.id;
                 const lines = t.ledger_lines ?? [];
+                const showOps =
+                  t.status === 'awaiting_cash_settlement' || t.status === 'on_trip';
                 return (
                   <React.Fragment key={t.id}>
                     <tr
@@ -200,47 +244,43 @@ export function TripLedgerPage() {
                     {expanded && (
                       <tr className="bg-slate-900/40">
                         <td colSpan={8} className="px-6 py-3 space-y-3">
-                          {(trip.status === 'awaiting_cash_settlement' || trip.status === 'on_trip') && (
+                          {showOps && (
                             <div className="flex flex-wrap items-center gap-3">
                               <p className="text-xs text-amber-300/90">
-                                {trip.status === 'awaiting_cash_settlement'
-                                  ? 'Cash settlement pending — complete here if the driver cannot confirm payment in the app.'
-                                  : 'Ride still active — complete only if the passenger was dropped off.'}
+                                {t.status === 'awaiting_cash_settlement'
+                                  ? 'Cash settlement pending — settle with the amount received, or let the driver confirm in the app.'
+                                  : 'Ride on trip — release to cash settlement after drop-off, or complete for card trips.'}
                               </p>
-                              <button
-                                type="button"
-                                disabled={completingId === trip.id}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  void runComplete(trip);
-                                }}
-                                className="rounded-md border border-emerald-700/60 px-2.5 py-1 text-xs text-emerald-300 hover:bg-emerald-950/40 disabled:opacity-50"
-                              >
-                                {completingId === trip.id ? 'Completing…' : 'Mark completed'}
-                              </button>
+                              <AdminCashTripActions
+                                ride={t}
+                                busy={actingId === t.id}
+                                onRelease={runRelease}
+                                onSettle={setSettleRide}
+                                onCompleteCard={runCompleteCard}
+                              />
                             </div>
                           )}
                           {lines.length > 0 ? (
-                          <table className="w-full text-xs">
-                            <thead>
-                              <tr className="text-slate-500 text-left">
-                                <th className="py-1 pr-4">Kind</th>
-                                <th className="py-1 pr-4">Description</th>
-                                <th className="py-1 text-right">Amount</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {lines.map((line) => (
-                                <tr key={line.id} className="text-slate-400">
-                                  <td className="py-1 pr-4">{line.line_kind}</td>
-                                  <td className="py-1 pr-4">{line.description}</td>
-                                  <td className="py-1 text-right tabular-nums">
-                                    {formatMoneyMinor(line.earnings_gross_minor, t.currency)}
-                                  </td>
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="text-slate-500 text-left">
+                                  <th className="py-1 pr-4">Kind</th>
+                                  <th className="py-1 pr-4">Description</th>
+                                  <th className="py-1 text-right">Amount</th>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                              </thead>
+                              <tbody>
+                                {lines.map((line) => (
+                                  <tr key={line.id} className="text-slate-400">
+                                    <td className="py-1 pr-4">{line.line_kind}</td>
+                                    <td className="py-1 pr-4">{line.description}</td>
+                                    <td className="py-1 text-right tabular-nums">
+                                      {formatMoneyMinor(line.earnings_gross_minor, t.currency)}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
                           ) : (
                             <p className="text-xs text-slate-500">No ledger lines yet.</p>
                           )}
@@ -254,6 +294,14 @@ export function TripLedgerPage() {
           </table>
         )}
       </div>
+
+      <AdminCashSettleModal
+        ride={settleRide}
+        open={settleRide != null}
+        submitting={actingId === settleRide?.id}
+        onClose={() => setSettleRide(null)}
+        onConfirm={runSettle}
+      />
     </div>
   );
 }

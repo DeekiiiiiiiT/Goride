@@ -18,9 +18,6 @@ import { RideChatUnreadDot } from '@roam/ride-chat';
 import { RiderRideChatWrap } from '@/components/RiderRideChatWrap';
 import { ShareMyTripSheet } from '@/components/trusted-contacts/ShareMyTripSheet';
 import { formatShortAddress } from '@/lib/formatRideAddress';
-import { CashPaymentCard } from '@/components/CashPaymentCard';
-import { isCashRide } from '@/lib/cashSettlementUi';
-
 type LatLng = { lat: number; lng: number };
 
 type Props = {
@@ -115,12 +112,6 @@ export function TripInProgressView({
           </p>
 
           <LiveRideDriverCard assignedDriver={assignedDriver} serviceLabel={serviceLabel} />
-
-          {isCashRide(ride) ? (
-            <div className="px-1 pb-1">
-              <CashPaymentCard ride={ride} />
-            </div>
-          ) : null}
 
           <div className="trip-progress-actions" role="group" aria-label="Trip actions">
             {canChat ? (

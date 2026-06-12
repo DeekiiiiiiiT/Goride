@@ -154,6 +154,18 @@ async function parseError(res: Response): Promise<string> {
         ? `Select a valid service. Active services: ${list}`
         : 'Select a valid service (Transport Solutions → Services) before saving this rule.';
     }
+    if (body.error === 'use_release_or_settle') {
+      return body.message ?? 'Cash trips use Release to cash settlement or Settle & complete.';
+    }
+    if (body.error === 'release_only_on_trip') {
+      return 'Release to cash settlement is only for rides currently on trip.';
+    }
+    if (body.error === 'settle_only_awaiting_cash') {
+      return 'Settle & complete is only for rides awaiting cash settlement.';
+    }
+    if (body.error === 'not_cash_trip') {
+      return 'This action applies to cash trips only.';
+    }
     if (body.error === 'forbidden') {
       return 'Not allowed to settle this ride (driver assignment mismatch).';
     }
@@ -245,7 +257,7 @@ export async function adminForceCancelRide(
   return res.json();
 }
 
-/** Ops: mark an on_trip ride completed (e.g. passenger dropped off but driver offline). */
+/** Ops: mark a card on_trip ride completed (cash trips must use release/settle). */
 export async function adminForceCompleteRide(
   accessToken: string,
   rideId: string,
@@ -253,6 +265,45 @@ export async function adminForceCompleteRide(
   const res = await adminFetch(accessToken, `${RIDES_BASE}/admin/rides/${rideId}/complete`, {
     method: 'POST',
     body: JSON.stringify({}),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+/** Ops: move cash on_trip ride to awaiting_cash_settlement (fare lock). */
+export async function adminReleaseCashSettlement(
+  accessToken: string,
+  rideId: string,
+): Promise<{ ride: RideRequestRow }> {
+  const res = await adminFetch(
+    accessToken,
+    `${RIDES_BASE}/admin/rides/${rideId}/release-cash-settlement`,
+    { method: 'POST', body: JSON.stringify({}) },
+  );
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export type AdminSettleCashResult = {
+  ride: RideRequestRow;
+  cash_settlement?: {
+    outcome: string;
+    owed_minor: number;
+    cash_received_minor: number;
+    arrears_minor: number;
+    change_credit_minor: number;
+  };
+};
+
+/** Ops: settle awaiting_cash_settlement with explicit cash received amount. */
+export async function adminSettleCashRide(
+  accessToken: string,
+  rideId: string,
+  cashReceivedMinor: number,
+): Promise<AdminSettleCashResult> {
+  const res = await adminFetch(accessToken, `${RIDES_BASE}/admin/rides/${rideId}/settle-cash`, {
+    method: 'POST',
+    body: JSON.stringify({ cash_received_minor: cashReceivedMinor }),
   });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();

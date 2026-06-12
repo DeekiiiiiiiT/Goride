@@ -131,6 +131,24 @@ export function ActiveRideRecoveryProvider({ children }: { children: React.React
   }, []);
 
   useEffect(() => {
+    let removeCapListener: (() => void) | undefined;
+    void (async () => {
+      try {
+        const { Capacitor } = await import('@capacitor/core');
+        if (!Capacitor.isNativePlatform()) return;
+        const { App } = await import('@capacitor/app');
+        const handle = await App.addListener('appStateChange', ({ isActive }) => {
+          if (isActive) void refreshActiveRide();
+        });
+        removeCapListener = () => void handle.remove();
+      } catch {
+        /* web / optional */
+      }
+    })();
+    return () => removeCapListener?.();
+  }, [refreshActiveRide]);
+
+  useEffect(() => {
     const onReconnected = () => {
       void refreshActiveRide();
     };

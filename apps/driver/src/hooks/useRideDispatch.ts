@@ -651,6 +651,9 @@ export function useRideDispatch() {
           });
         } else if (status === 'awaiting_cash_settlement') {
           toast.message('Enter the cash amount received');
+          window.setTimeout(() => {
+            if (activeRide?.id) void pollActiveRide(activeRide.id);
+          }, 1500);
         } else {
           toast.success('Updated');
         }
@@ -683,18 +686,32 @@ export function useRideDispatch() {
   const submitCashSettlement = useCallback(
     async (cashReceivedMinor: number, idempotencyKey: string) => {
       if (!activeRide) return;
-      const result = await ridesDriverCashSettlement(activeRide.id, {
-        cash_received_minor: cashReceivedMinor,
-        idempotency_key: idempotencyKey,
-      });
-      syncActiveRide(null);
-      clearCashSettlementPending();
-      window.dispatchEvent(new Event('roam-driver-trip-completed'));
-      toast.success(
-        result.outcome === 'exact'
-          ? 'Payment confirmed'
-          : `Payment recorded (${result.outcome})`,
-      );
+      try {
+        const result = await ridesDriverCashSettlement(activeRide.id, {
+          cash_received_minor: cashReceivedMinor,
+          idempotency_key: idempotencyKey,
+        });
+        syncActiveRide(null);
+        clearCashSettlementPending();
+        window.dispatchEvent(new Event('roam-driver-trip-completed'));
+        toast.success(
+          result.outcome === 'exact'
+            ? 'Payment confirmed'
+            : `Payment recorded (${result.outcome})`,
+        );
+      } catch (e: unknown) {
+        const raw = e instanceof Error ? e.message : '';
+        const friendly =
+          raw.includes('fare_not_locked')
+            ? 'Fare not locked yet — pull to refresh or wait a moment.'
+            : raw.includes('forbidden')
+              ? 'You are not assigned to this trip.'
+              : raw.includes('invalid_status')
+                ? 'Trip is not awaiting cash settlement.'
+                : raw || 'Could not confirm payment';
+        toast.error(friendly);
+        throw e;
+      }
     },
     [activeRide, syncActiveRide],
   );

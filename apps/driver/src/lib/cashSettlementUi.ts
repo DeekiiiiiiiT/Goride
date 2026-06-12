@@ -1,7 +1,8 @@
 import type { RideRequestRow } from '@roam/types/rides';
+import { isCashRide as isCashRideShared } from '@roam/types/cashSettlementDisplay';
 
 export function isCashRide(ride: Pick<RideRequestRow, 'payment_method'> | null | undefined): boolean {
-  return (ride?.payment_method ?? 'cash') === 'cash';
+  return isCashRideShared(ride);
 }
 
 /** Cash trips use settlement when the server has CASH_SETTLEMENT_ENABLED (do not gate on client flag). */

@@ -4,9 +4,13 @@ import { Session } from '@supabase/supabase-js';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import type { RideRequestRow } from '@roam/types/rides';
+import { AdminCashSettleModal } from '../components/AdminCashSettleModal';
+import { AdminCashTripActions } from '../components/AdminCashTripActions';
 import {
   adminForceCancelRide,
   adminForceCompleteRide,
+  adminReleaseCashSettlement,
+  adminSettleCashRide,
   listRidesDashboardView,
 } from '../services/ridesAdminService';
 
@@ -34,6 +38,8 @@ function statusBadge(status: RideRequestRow['status']): string {
       return 'bg-violet-500/20 text-violet-300';
     case 'on_trip':
       return 'bg-emerald-500/20 text-emerald-300';
+    case 'awaiting_cash_settlement':
+      return 'bg-amber-500/20 text-amber-300';
     default:
       return 'bg-slate-500/20 text-slate-300';
   }
@@ -51,6 +57,7 @@ export function RideOperationsPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [actingId, setActingId] = useState<string | null>(null);
+  const [settleRide, setSettleRide] = useState<RideRequestRow | null>(null);
 
   const load = useCallback(async () => {
     if (!session.access_token) return;
@@ -91,11 +98,27 @@ export function RideOperationsPage() {
     }
   };
 
-  const runComplete = async (ride: RideRequestRow) => {
-    if (ride.status !== 'on_trip' && ride.status !== 'awaiting_cash_settlement') {
-      toast.error('Force complete is only for rides on trip or awaiting cash settlement');
+  const runRelease = async (ride: RideRequestRow) => {
+    if (
+      !window.confirm(
+        `Release ride ${ride.id.slice(0, 8)}… to cash settlement? Driver must enter cash received.`,
+      )
+    ) {
       return;
     }
+    setActingId(ride.id);
+    try {
+      await adminReleaseCashSettlement(session.access_token, ride.id);
+      toast.success('Released to cash settlement');
+      await load();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Release failed');
+    } finally {
+      setActingId(null);
+    }
+  };
+
+  const runCompleteCard = async (ride: RideRequestRow) => {
     if (
       !window.confirm(
         `Mark ride ${ride.id.slice(0, 8)}… completed? Use only if the passenger was dropped off.`,
@@ -103,7 +126,6 @@ export function RideOperationsPage() {
     ) {
       return;
     }
-
     setActingId(ride.id);
     try {
       await adminForceCompleteRide(session.access_token, ride.id);
@@ -116,14 +138,37 @@ export function RideOperationsPage() {
     }
   };
 
+  const runSettle = async (cashReceivedMinor: number) => {
+    if (!settleRide) return;
+    setActingId(settleRide.id);
+    try {
+      const result = await adminSettleCashRide(
+        session.access_token,
+        settleRide.id,
+        cashReceivedMinor,
+      );
+      toast.success(
+        result.cash_settlement
+          ? `Settled (${result.cash_settlement.outcome})`
+          : 'Ride settled and completed',
+      );
+      setSettleRide(null);
+      await load();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Settle failed');
+    } finally {
+      setActingId(null);
+    }
+  };
+
   return (
     <div className="space-y-6 text-slate-200">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold text-white">Ride Operations</h2>
           <p className="text-sm text-slate-400 mt-1">
-            Active rides with last driver GPS and lifecycle status. Use actions to clear stuck trips
-            when the driver lost connection.
+            Active rides with last driver GPS and lifecycle status. Cash trips use release → driver
+            settlement; card trips can be force-completed.
           </p>
         </div>
         <button
@@ -157,6 +202,7 @@ export function RideOperationsPage() {
                 <tr className="border-b border-slate-800 bg-slate-900/50 text-left text-xs uppercase tracking-wide text-slate-500">
                   <th className="px-4 py-3 font-medium">Ride</th>
                   <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium">Payment</th>
                   <th className="px-4 py-3 font-medium">Last GPS</th>
                   <th className="px-4 py-3 font-medium">Pickup</th>
                   <th className="px-4 py-3 font-medium">Flags</th>
@@ -179,6 +225,9 @@ export function RideOperationsPage() {
                           {ride.status.replace(/_/g, ' ')}
                         </span>
                       </td>
+                      <td className="px-4 py-3 text-slate-400 capitalize text-xs">
+                        {ride.payment_method ?? 'cash'}
+                      </td>
                       <td className="px-4 py-3">
                         <span className={stale ? 'text-amber-400' : 'text-slate-300'}>
                           {formatGpsAge(ride.last_driver_location_at)}
@@ -192,16 +241,13 @@ export function RideOperationsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap justify-end gap-2">
-                          {ride.status === 'on_trip' || ride.status === 'awaiting_cash_settlement' ? (
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() => void runComplete(ride)}
-                              className="rounded-md border border-emerald-700/60 px-2.5 py-1 text-xs text-emerald-300 hover:bg-emerald-950/40 disabled:opacity-50"
-                            >
-                              Complete
-                            </button>
-                          ) : null}
+                          <AdminCashTripActions
+                            ride={ride}
+                            busy={busy}
+                            onRelease={runRelease}
+                            onSettle={setSettleRide}
+                            onCompleteCard={runCompleteCard}
+                          />
                           <button
                             type="button"
                             disabled={busy}
@@ -220,6 +266,14 @@ export function RideOperationsPage() {
           </div>
         </div>
       )}
+
+      <AdminCashSettleModal
+        ride={settleRide}
+        open={settleRide != null}
+        submitting={actingId === settleRide?.id}
+        onClose={() => setSettleRide(null)}
+        onConfirm={runSettle}
+      />
 
       <p className="text-xs text-slate-500">
         Role: <span className="font-mono">{role || 'unknown'}</span> · Refreshes every 30s

@@ -18,6 +18,7 @@ const ACTIVE_RIDE_STATUSES = [
   "driver_en_route_pickup",
   "driver_arrived_pickup",
   "on_trip",
+  "awaiting_cash_settlement",
 ] as const;
 
 const RIDER_ON_TRIP_STATUSES = [
