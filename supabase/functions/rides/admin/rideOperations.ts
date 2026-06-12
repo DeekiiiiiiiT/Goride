@@ -13,6 +13,8 @@ import { syncRideToFleetKv } from "../../_shared/rideToFleetTrip.ts";
 import { gridCellKey } from "../fare/buildQuote.ts";
 import { cleanupRideLiveState } from "../rideGeofence.ts";
 import { applyRideTransition, type ApplyTransitionDeps, type RideStatus } from "../rideLifecycle.ts";
+import { isCashSettlementEnabled } from "../cashSettlement/flags.ts";
+import { processCashSettlement } from "../cashSettlement/processCashSettlement.ts";
 
 const SUPPORT_PRODUCTS: ProductKey[] = ["rides", "driver"];
 
@@ -22,6 +24,7 @@ const ACTIVE_STATUSES: RideStatus[] = [
   "driver_en_route_pickup",
   "driver_arrived_pickup",
   "on_trip",
+  "awaiting_cash_settlement",
 ];
 
 const STUCK_TRIPS_LIMIT = 50;
@@ -363,15 +366,81 @@ export function registerRideOperationsAdminRoutes(
     if (status === "completed" || status === "cancelled") {
       return c.json({ ride, skipped: true });
     }
-    if (status !== "on_trip") {
+  if (
+      status !== "on_trip" &&
+      !(status === "awaiting_cash_settlement" && isCashSettlementEnabled())
+    ) {
       return c.json({
         error: "complete_only_on_trip",
-        message: "Force complete is only allowed when the ride is on_trip. Use cancel for earlier stages.",
+        message: "Force complete is only allowed when the ride is on_trip (or awaiting cash settlement). Use cancel for earlier stages.",
         status,
       }, 409);
     }
 
-    const result = await applyRideTransition(transitionDeps(), {
+    const paymentMethod = String(ride.payment_method ?? "cash");
+    const deps = transitionDeps();
+
+    if (isCashSettlementEnabled() && paymentMethod === "cash") {
+      if (status === "on_trip") {
+        const toSettlement = await applyRideTransition(deps, {
+          rideId,
+          next: "awaiting_cash_settlement",
+          actorUserId: adminUser.id,
+          source: "system",
+        });
+        if (!toSettlement.ok) {
+          return c.json({
+            error: toSettlement.error ?? "settlement_transition_failed",
+            current: toSettlement.current,
+          }, 409);
+        }
+      }
+
+      const freshForSettle = await loadRideRequestById(rideId);
+      if (!freshForSettle || String(freshForSettle.status) !== "awaiting_cash_settlement") {
+        return c.json({ error: "invalid_status_for_cash_settlement", status: freshForSettle?.status }, 409);
+      }
+
+      const fareMinor = Number(
+        freshForSettle.fare_final_minor ?? freshForSettle.fare_estimate_minor ?? 0,
+      );
+      const settleResult = await processCashSettlement(
+        ridesSvc(),
+        patchRideRequest,
+        loadRideRequestById,
+        {
+          ride: freshForSettle,
+          cashReceivedMinor: Math.max(0, fareMinor),
+          idempotencyKey: `admin-force:${rideId}`,
+          actorUserId: adminUser.id,
+        },
+      );
+
+      if (!settleResult.ok) {
+        return c.json({ error: settleResult.error, status: settleResult.status }, settleResult.status as 409);
+      }
+
+      await handleTerminalRideLedgerAndSync(rideId);
+      await cleanupRideLiveState(ridesSvc(), rideId);
+
+      const resolved = await ridesDbOrResponse(c);
+      if (!(resolved instanceof Response)) {
+        await adminAudit(resolved.db, resolved.tables, adminUser.id, "admin_ride_force_complete", {
+          ride_id: rideId,
+          from_status: status,
+          support_reason_code,
+          support_note,
+          cash_settlement: true,
+          outcome: settleResult.computed.outcome,
+        });
+      }
+
+      const fresh = await loadRideRequestById(rideId);
+      const [enriched] = await enrichDriverNames([fresh ?? ride]);
+      return c.json({ ride: enriched, cash_settlement: settleResult.computed });
+    }
+
+    const result = await applyRideTransition(deps, {
       rideId,
       next: "completed",
       actorUserId: adminUser.id,

@@ -35,11 +35,7 @@ import {
 } from '@/components/TransportOptionPicker';
 import { TripPaymentMethodBar } from '@/components/TripPaymentMethodBar';
 import { TripPaymentMethodSheet } from '@/components/TripPaymentMethodSheet';
-import {
-  getDefaultPaymentMethodId,
-  getPaymentMethodById,
-  type TripPaymentMethodId,
-} from '@/lib/tripPaymentMethods';
+import { useDefaultPaymentMethod } from '@/hooks/useDefaultPaymentMethod';
 import { useRidesVehicleTypes } from '@/hooks/useRidesVehicleTypes';
 import { formatVehicleEtaLineCompact } from '@/utils/formatRideEta';
 import { usePermissionPolicy } from '@/hooks/usePermissionPolicy';
@@ -168,7 +164,8 @@ export default function HomePage() {
   const [quotesLoading, setQuotesLoading] = useState(false);
   const [bookLoading, setBookLoading] = useState(false);
   const [bookError, setBookError] = useState<string | null>(null);
-  const [selectedPaymentId, setSelectedPaymentId] = useState<TripPaymentMethodId>(getDefaultPaymentMethodId);
+  const { selectedId: selectedPaymentId, selectedMethod: selectedPayment, select: setSelectedPaymentId } =
+    useDefaultPaymentMethod();
   const [paymentSheetOpen, setPaymentSheetOpen] = useState(false);
 
   const [quotesBySlug, setQuotesBySlug] = useState<Record<string, FareQuoteResponse>>({});
@@ -578,7 +575,6 @@ export default function HomePage() {
     !locationBlocked || (isNativeCapacitorPlatform() && manualRouteReady);
 
   const selectedService = services.find((s) => s.slug === vehicleOption);
-  const selectedPayment = getPaymentMethodById(selectedPaymentId);
 
   const quoteBySlug: Record<string, ServiceQuoteDisplay> = {};
   for (const s of services) {

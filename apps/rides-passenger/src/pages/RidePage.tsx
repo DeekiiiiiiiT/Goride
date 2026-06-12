@@ -23,6 +23,7 @@ import { TripInProgressView } from '@/components/TripInProgressView';
 import { CashSettlementRiderView } from '@/components/CashSettlementRiderView';
 import { TripSummaryView } from '@/components/TripSummaryView';
 import { CASH_SETTLEMENT_ENABLED } from '@/lib/cashSettlementFlags';
+import { isAwaitingCashSettlement, isCashRide } from '@/lib/cashSettlementUi';
 import { ridesCancelRequest, ridesGetLive, ridesGetRequest } from '@/services/ridesEdge';
 import { createPassengerInvite } from '@/services/contactsEdge';
 import { RiderConnectionBanner } from '@/components/RiderConnectionBanner';
@@ -74,7 +75,7 @@ const CASH_SETTLEMENT_STATUSES: RideRequestStatus[] = ['awaiting_cash_settlement
 const LIVE_TRACKING_STATUSES: RideRequestStatus[] = [
   ...PICKUP_LIVE_STATUSES,
   ...TRIP_IN_PROGRESS_STATUSES,
-  ...(CASH_SETTLEMENT_ENABLED ? CASH_SETTLEMENT_STATUSES : []),
+  ...CASH_SETTLEMENT_STATUSES,
 ];
 
 function isPickupLive(status: RideRequestStatus | undefined): boolean {
@@ -85,10 +86,11 @@ function isTripInProgress(status: RideRequestStatus | undefined): boolean {
   return Boolean(status && TRIP_IN_PROGRESS_STATUSES.includes(status));
 }
 
-function isCashSettlement(status: RideRequestStatus | undefined): boolean {
-  return Boolean(
-    CASH_SETTLEMENT_ENABLED && status && CASH_SETTLEMENT_STATUSES.includes(status),
-  );
+function isCashSettlement(
+  status: RideRequestStatus | undefined,
+  ride: RideRequestRow | undefined,
+): boolean {
+  return Boolean(ride && status && isAwaitingCashSettlement({ ...ride, status }));
 }
 
 function cashSettlementOutcomeMessage(
@@ -542,7 +544,7 @@ export default function RidePage() {
     <RiderConnectionBanner isOnline={isOnline} reconnecting={justReconnected} />
   );
 
-  if (ride && isCashSettlement(ride.status)) {
+  if (ride && isCashSettlement(ride.status, ride)) {
     return (
       <>
         {connectionBanner}

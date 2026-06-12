@@ -92,8 +92,8 @@ export function RideOperationsPage() {
   };
 
   const runComplete = async (ride: RideRequestRow) => {
-    if (ride.status !== 'on_trip') {
-      toast.error('Force complete is only for rides that are on trip');
+    if (ride.status !== 'on_trip' && ride.status !== 'awaiting_cash_settlement') {
+      toast.error('Force complete is only for rides on trip or awaiting cash settlement');
       return;
     }
     if (
@@ -192,7 +192,7 @@ export function RideOperationsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap justify-end gap-2">
-                          {ride.status === 'on_trip' ? (
+                          {ride.status === 'on_trip' || ride.status === 'awaiting_cash_settlement' ? (
                             <button
                               type="button"
                               disabled={busy}

@@ -19,7 +19,7 @@ import { formatOfferDistanceMi } from './rideDispatchUtils';
 import { RIDE_CANCEL_REASONS } from './rideCancelReasons';
 import { RideCancelSheet } from './RideCancelSheet';
 import { canCompleteTrip } from './rideGeofenceClient';
-import { CASH_SETTLEMENT_ENABLED } from '../../lib/cashSettlementFlags';
+import { shouldCollectCashAtDropoff } from '../../lib/cashSettlementUi';
 import { RideChatUnreadDot } from '@roam/ride-chat';
 import { DriverRideChatWrap } from './DriverRideChatWrap';
 
@@ -64,8 +64,7 @@ export function OnTripPanel({ ride, onAdvance, trackingError }: Props) {
   const moreRef = useRef<HTMLDivElement>(null);
 
   const completeReady = canCompleteTrip(ride);
-  const isCashTrip = (ride.payment_method ?? 'cash') === 'cash';
-  const useCashSettlement = CASH_SETTLEMENT_ENABLED && isCashTrip;
+  const useCashSettlement = shouldCollectCashAtDropoff(ride);
   const dropoffAddress = shortAddress(ride.dropoff_address);
   const tripMiles = formatOfferDistanceMi(ride.distance_estimate_km);
   const { title: navTitle, sub: navSub } = droppingOffMeta(ride);

@@ -3,19 +3,14 @@ import type { RideRequestRow } from '@roam/types/rides';
 import { useRideDispatchContext } from '../../contexts/RideDispatchContext';
 import { DriverTripFullscreenShell } from './DriverTripFullscreenShell';
 import { CashSettlementScreen } from './CashSettlementScreen';
-import { CASH_SETTLEMENT_ENABLED } from '../../lib/cashSettlementFlags';
+import { isAwaitingCashSettlement } from '../../lib/cashSettlementUi';
 
 /** Mandatory full-screen cash settlement — blocks all other driver UI. */
 export function DriverCashSettlementOverlay() {
   const { activeRide, submitCashSettlement } = useRideDispatchContext();
   const [submitting, setSubmitting] = useState(false);
 
-  const show = Boolean(
-    CASH_SETTLEMENT_ENABLED &&
-    activeRide &&
-    activeRide.status === 'awaiting_cash_settlement' &&
-    activeRide.payment_method === 'cash',
-  );
+  const show = isAwaitingCashSettlement(activeRide);
 
   if (!show || !activeRide) return null;
 

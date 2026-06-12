@@ -4,29 +4,22 @@ import { toast } from 'sonner';
 import {
   ArrowLeft,
   ChevronRight,
-  CreditCard,
-  MoreVertical,
-  Pencil,
   PlusCircle,
   Receipt,
   RefreshCw,
   Shield,
-  Smartphone,
-  Star,
-  Trash2,
 } from 'lucide-react';
+import { WalletPaymentMethodsList } from '@/components/wallet/WalletPaymentMethodsList';
+import { useDefaultPaymentMethod } from '@/hooks/useDefaultPaymentMethod';
+import { TRIP_PAYMENT_METHODS } from '@/lib/tripPaymentMethods';
 import {
   CARD_SHADOW,
-  ON_PRIMARY_CONTAINER,
   ON_SECONDARY_CONTAINER,
   ON_SURFACE,
   OUTLINE_VARIANT,
   PAGE_BG,
   PRIMARY,
-  PRIMARY_CONTAINER,
   SECONDARY,
-  SECONDARY_CONTAINER,
-  SURFACE_CONTAINER_HIGH,
   SURFACE_LOWEST,
   TOGGLE_OFF,
 } from '@/lib/passengerTheme';
@@ -74,6 +67,7 @@ function ToggleSwitch({
 
 export default function ManagePaymentMethodsPage() {
   const navigate = useNavigate();
+  const { selectedId, select } = useDefaultPaymentMethod();
   const [autoRefill, setAutoRefill] = useState(true);
 
   const notifySoon = () => {
@@ -119,115 +113,32 @@ export default function ManagePaymentMethodsPage() {
           <SectionLabel
             trailing={
               <span className="text-sm font-semibold" style={{ color: PRIMARY }}>
-                2 Active
+                {TRIP_PAYMENT_METHODS.length} methods
               </span>
             }
           >
             Saved methods
           </SectionLabel>
 
-          <div className="space-y-3">
-            <div
-              className="flex items-center justify-between rounded-xl border p-6 transition-colors passenger-row-hover"
-              style={{
-                backgroundColor: SURFACE_LOWEST,
-                borderColor: 'color-mix(in srgb, var(--passenger-outline-variant) 30%, transparent)',
-                boxShadow: CARD_SHADOW,
-              }}
-            >
-              <div className="flex items-center gap-4">
-                <div
-                  className="flex h-12 w-12 items-center justify-center rounded-lg"
-                  style={{ backgroundColor: ON_SURFACE }}
-                >
-                  <Smartphone className="h-6 w-6 text-white" aria-hidden />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold">Apple Pay</span>
-                    <span
-                      className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-tighter"
-                      style={{
-                        backgroundColor: PRIMARY_CONTAINER,
-                        color: ON_PRIMARY_CONTAINER,
-                      }}
-                    >
-                      Default
-                    </span>
-                  </div>
-                  <p className="text-sm" style={{ color: SECONDARY }}>
-                    Linked to Wallet
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={notifySoon}
-                className="rounded-full p-2 transition-colors passenger-row-hover"
-                style={{ color: SECONDARY }}
-                aria-label="More options for Apple Pay"
-              >
-                <MoreVertical className="h-5 w-5" aria-hidden />
-              </button>
-            </div>
+          <p className="text-sm" style={{ color: SECONDARY }}>
+            Tap a method to set your default for new trips. Card and Apple Pay are demo only; cash
+            trips use the live settlement flow.
+          </p>
 
-            <div
-              className="flex items-center justify-between rounded-xl border p-6 transition-colors passenger-row-hover"
-              style={{
-                backgroundColor: SURFACE_LOWEST,
-                borderColor: 'color-mix(in srgb, var(--passenger-outline-variant) 30%, transparent)',
-                boxShadow: CARD_SHADOW,
-              }}
-            >
-              <div className="flex items-center gap-4">
-                <div
-                  className="flex h-12 w-12 items-center justify-center rounded-lg"
-                  style={{ backgroundColor: SURFACE_CONTAINER_HIGH }}
-                >
-                  <CreditCard className="h-6 w-6" style={{ color: PRIMARY }} aria-hidden />
-                </div>
-                <div>
-                  <p className="font-semibold">Visa ending in 1212</p>
-                  <p className="text-sm" style={{ color: SECONDARY }}>
-                    Expires 12/26
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-1">
-                <button
-                  type="button"
-                  onClick={notifySoon}
-                  className="rounded-full p-2 transition-colors passenger-row-hover"
-                  style={{ color: SECONDARY }}
-                  aria-label="Remove Visa card"
-                >
-                  <Trash2 className="h-5 w-5" aria-hidden />
-                </button>
-                <button
-                  type="button"
-                  onClick={notifySoon}
-                  className="rounded-full p-2 transition-colors passenger-row-hover"
-                  style={{ color: SECONDARY }}
-                  aria-label="Edit Visa card"
-                >
-                  <Pencil className="h-5 w-5" aria-hidden />
-                </button>
-              </div>
-            </div>
+          <WalletPaymentMethodsList selectedId={selectedId} onSelect={select} variant="manage" />
 
-            <button
-              type="button"
-              onClick={notifySoon}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed py-4 font-semibold transition-all active:scale-[0.98] passenger-row-hover"
-              style={{
-                borderColor: OUTLINE_VARIANT,
-                color: PRIMARY,
-              }}
-            >
-              <PlusCircle className="h-5 w-5" aria-hidden />
-              <span>Add Payment Method</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={notifySoon}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed py-4 font-semibold transition-all active:scale-[0.98] passenger-row-hover"
+            style={{
+              borderColor: OUTLINE_VARIANT,
+              color: PRIMARY,
+            }}
+          >
+            <PlusCircle className="h-5 w-5" aria-hidden />
+            <span>Add card (coming soon)</span>
+          </button>
         </section>
 
         <section className="space-y-4">
@@ -241,18 +152,6 @@ export default function ManagePaymentMethodsPage() {
               divideColor: 'color-mix(in srgb, var(--passenger-outline-variant) 20%, transparent)',
             }}
           >
-            <button
-              type="button"
-              onClick={notifySoon}
-              className="flex w-full items-center justify-between p-6 text-left transition-colors passenger-row-hover"
-            >
-              <div className="flex items-center gap-4">
-                <Star className="h-6 w-6" style={{ color: SECONDARY }} aria-hidden />
-                <span className="font-medium">Set default payment method</span>
-              </div>
-              <ChevronRight className="h-5 w-5" style={{ color: OUTLINE_VARIANT }} aria-hidden />
-            </button>
-
             <div className="flex items-center justify-between p-6">
               <div className="flex items-center gap-4">
                 <RefreshCw className="h-6 w-6 shrink-0" style={{ color: SECONDARY }} aria-hidden />

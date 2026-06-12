@@ -47,6 +47,11 @@ function MethodRow({
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold truncate" style={{ color: 'var(--home-on-surface)' }}>
           {method.barLabel}
+          {method.isDemo ? (
+            <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide opacity-70">
+              Demo
+            </span>
+          ) : null}
         </p>
         {method.subtitle && (
           <p className="text-xs truncate" style={{ color: 'var(--home-on-surface-muted)' }}>

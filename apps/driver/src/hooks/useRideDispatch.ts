@@ -14,7 +14,7 @@ import {
   type DriverWaitTimeInfo,
   type DriverRideLocationLive,
 } from '../services/ridesDriverEdge';
-import { CASH_SETTLEMENT_ENABLED } from '../lib/cashSettlementFlags';
+import { isAwaitingCashSettlement, shouldCollectCashAtDropoff } from '../lib/cashSettlementUi';
 import {
   clearCashSettlementPending,
   readCashSettlementPending,
@@ -655,6 +655,21 @@ export function useRideDispatch() {
         }
       }
     } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : '';
+      if (
+        status === 'completed' &&
+        shouldCollectCashAtDropoff(activeRide) &&
+        msg.toLowerCase().includes('cash_settlement')
+      ) {
+        try {
+          const { ride } = await ridesDriverTransition(activeRide.id, { status: 'awaiting_cash_settlement' });
+          syncActiveRide(ride);
+          toast.message('Enter the cash amount received');
+          return;
+        } catch {
+          // fall through
+        }
+      }
       if (activeRide?.id) {
         const result = await pollActiveRide(activeRide.id);
         if (result === 'terminal') return;
@@ -684,8 +699,7 @@ export function useRideDispatch() {
   );
 
   useEffect(() => {
-    if (!CASH_SETTLEMENT_ENABLED || !activeRide) return;
-    if (activeRide.status !== 'awaiting_cash_settlement') return;
+    if (!activeRide || !isAwaitingCashSettlement(activeRide)) return;
     const pending = readCashSettlementPending();
     if (!pending || pending.rideId !== activeRide.id) return;
     void submitCashSettlement(pending.cashReceivedMinor, pending.idempotencyKey).catch(() => {

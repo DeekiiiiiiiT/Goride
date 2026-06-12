@@ -11,7 +11,7 @@ import { DriverGpsBadge } from './DriverGpsBadge';
 import { PinEntryModal } from './PinEntryModal';
 import { RideChatUnreadDot } from '@roam/ride-chat';
 import { DriverRideChatWrap } from './DriverRideChatWrap';
-import { CASH_SETTLEMENT_ENABLED } from '../../lib/cashSettlementFlags';
+import { shouldCollectCashAtDropoff } from '../../lib/cashSettlementUi';
 
 interface WaitTimeInfo {
   wait_time_charge_enabled?: boolean;
@@ -116,8 +116,7 @@ export function ActiveRidePanel({
 
   const navTarget = navTargetForStatus(ride);
   const completeReady = canCompleteTrip(ride);
-  const isCashTrip = (ride.payment_method ?? 'cash') === 'cash';
-  const useCashSettlement = CASH_SETTLEMENT_ENABLED && isCashTrip;
+  const useCashSettlement = shouldCollectCashAtDropoff(ride);
 
   const runAdvance = async (status: RideRequestRow['status'], reason?: string, pin?: string) => {
     setAdvancing(true);

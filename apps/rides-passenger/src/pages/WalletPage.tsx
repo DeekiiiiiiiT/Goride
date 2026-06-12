@@ -6,10 +6,8 @@ import {
   Car,
   ChevronRight,
   CircleHelp,
-  CreditCard,
   Loader2,
   PlusCircle,
-  Smartphone,
   Wallet,
 } from 'lucide-react';
 import type { WalletBalanceDto, WalletTransactionDto } from '@roam/types/rides';
@@ -38,6 +36,8 @@ import {
   SURFACE_VARIANT,
 } from '@/lib/passengerTheme';
 import { AddFundsSheet } from '@/components/wallet/AddFundsSheet';
+import { WalletPaymentMethodsList } from '@/components/wallet/WalletPaymentMethodsList';
+import { useDefaultPaymentMethod } from '@/hooks/useDefaultPaymentMethod';
 
 const PROMO_BANNER_URL =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuD0UhK5VtLTpy4UHuvfJVFirezfOFH8aVxjOc4xktbQT5pwx1qbyTm-1WnbSsefL9Wi0oVIw8xkhGB-M23OqRkM8nzib-4ZdM6dNXqr697Y74RBMdSaNwcbD1T-KNqHDZLZthBKomvCPZGNz5SxlisRDu3A3Uq0dj1GhoL0wn6Bf9DgGZ6Z4R79Abe0tlHvDx4axkEXUEOIL1d1-6axQwvJ7qYZEZysz7DB_d8-FN_Aqsd_NrdFdklLYBgPoWE-swsr6v2WeuC7e5zq';
@@ -83,6 +83,7 @@ function txIcon(tx: WalletTransactionDto) {
 
 export default function WalletPage() {
   const navigate = useNavigate();
+  const { selectedId, select } = useDefaultPaymentMethod();
   const [addFundsOpen, setAddFundsOpen] = useState(false);
   const [transactions, setTransactions] = useState<WalletTransactionDto[]>([]);
   const [wallet, setWallet] = useState<WalletBalanceDto | null>(null);
@@ -237,56 +238,10 @@ export default function WalletPage() {
               MANAGE
             </button>
           </div>
-          <div className="space-y-2">
-            <button
-              type="button"
-              onClick={notifySoon}
-              className="group flex w-full items-center justify-between rounded-[24px] p-4 text-left transition-colors passenger-row-hover"
-              style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
-            >
-              <div className="flex items-center gap-4">
-                <div
-                  className="flex h-12 w-12 items-center justify-center rounded-xl"
-                  style={{ backgroundColor: ON_SURFACE }}
-                >
-                  <Smartphone className="h-6 w-6 text-white" aria-hidden />
-                </div>
-                <div>
-                  <p className="font-bold" style={{ color: ON_SURFACE }}>
-                    Apple Pay
-                  </p>
-                  <p className="text-sm" style={{ color: SECONDARY }}>
-                    Default method
-                  </p>
-                </div>
-              </div>
-              <ChevronRight className="h-5 w-5" style={{ color: OUTLINE }} aria-hidden />
-            </button>
-            <button
-              type="button"
-              onClick={notifySoon}
-              className="flex w-full items-center justify-between rounded-[24px] p-4 text-left transition-colors passenger-row-hover"
-              style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
-            >
-              <div className="flex items-center gap-4">
-                <div
-                  className="flex h-12 w-12 items-center justify-center rounded-xl"
-                  style={{ backgroundColor: SECONDARY_CONTAINER }}
-                >
-                  <CreditCard className="h-6 w-6" style={{ color: PRIMARY }} aria-hidden />
-                </div>
-                <div>
-                  <p className="font-bold" style={{ color: ON_SURFACE }}>
-                    Visa ending in 1234
-                  </p>
-                  <p className="text-sm" style={{ color: SECONDARY }}>
-                    Expires 08/26
-                  </p>
-                </div>
-              </div>
-              <ChevronRight className="h-5 w-5" style={{ color: OUTLINE }} aria-hidden />
-            </button>
-          </div>
+          <p className="px-1 text-sm" style={{ color: ON_SURFACE_VARIANT }}>
+            Your default method is used when you book a trip on Home.
+          </p>
+          <WalletPaymentMethodsList selectedId={selectedId} onSelect={select} variant="wallet" />
         </section>
 
         <section className="space-y-4">
