@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo } from 'react';
 import { Search, X } from 'lucide-react';
 import type { RiderContactGroupRow, RiderContactRow } from '@roam/types/riderContacts';
+import { formatRoamTagDisplay } from '@/services/roamTagEdge';
 import { contactInitials, sortPinnedGroups } from '@/lib/contactGroups';
 import { PinnedGroupsFilterRow } from '@/components/contacts/PinnedGroupsFilterRow';
 import { GroupIconCircle } from '@/components/contacts/GroupIconCircle';
@@ -66,9 +67,10 @@ export function RoamContactsPickerSheet({
     }
     if (query.trim()) {
       const q = query.toLowerCase();
-      list = list.filter(
-        (c) => c.display_name.toLowerCase().includes(q) || c.phone_e164.includes(q),
-      );
+      list = list.filter((c) => {
+        const tag = c.custom_tag_name ? formatRoamTagDisplay(c.custom_tag_name).toLowerCase() : '';
+        return c.display_name.toLowerCase().includes(q) || tag.includes(q);
+      });
     }
     return [...list].sort((a, b) => a.display_name.localeCompare(b.display_name));
   }, [contacts, groupFilterId, query]);
@@ -159,10 +161,11 @@ export function RoamContactsPickerSheet({
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-semibold">{c.display_name}</p>
-                      <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-                        {c.phone_e164}
-                        {c.roam_account_linked ? ' · Roam member' : ''}
-                      </p>
+                      {c.custom_tag_name ? (
+                        <p className="truncate text-sm font-medium" style={{ color: PRIMARY }}>
+                          {formatRoamTagDisplay(c.custom_tag_name)}
+                        </p>
+                      ) : null}
                       {c.groups && c.groups.length > 0 ? (
                         <div className="mt-1 flex flex-wrap gap-1">
                           {c.groups.slice(0, 2).map((g) => (

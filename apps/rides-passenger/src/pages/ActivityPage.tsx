@@ -25,7 +25,7 @@ type FilterKey = 'all' | ActivityTripCategory;
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'for_others', label: 'Booked for others' },
-  { key: 'for_me', label: 'For me' },
+  { key: 'for_me', label: 'Gift me' },
 ];
 
 function ActivityTripSkeleton() {

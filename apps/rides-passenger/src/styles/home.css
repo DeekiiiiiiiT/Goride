@@ -1,13 +1,14 @@
 /* Shared tokens for bottom nav — light default */
 :root {
-  --home-nav-active: #006d43;
-  --home-nav-inactive: #5d5e61;
-  --home-nav-safe-area-bg: #e8eaed;
+  --home-nav-active: #00a86b;
+  --home-nav-inactive: #9ca3af;
+  --home-nav-safe-area-bg: #ffffff;
   --home-sheet-bg: #ffffff;
-  --home-sheet-border: rgba(188, 202, 190, 0.35);
+  --home-sheet-border: #f3f4f6;
   --home-suggestion-bg: rgba(255, 255, 255, 0.98);
-  --home-suggestion-text: #191c1d;
+  --home-suggestion-text: #111827;
   --home-suggestion-pin: #00a86b;
+  --roam-mint: #00a86b;
 }
 
 html.dark {
@@ -21,32 +22,32 @@ html.dark {
   --home-suggestion-pin: #59de9b;
 }
 
-/* Light mode — Stitch light home */
+/* Light mode — Executive Kinetic home */
 .home-page {
-  --home-bg: #f8f9fa;
-  --home-surface: #f8f9fa;
-  --home-on-surface: #191c1d;
-  --home-on-surface-muted: #3d4a41;
-  --home-primary: #006d43;
-  --home-primary-bright: #59de9b;
+  --home-bg: #fbf9f8;
+  --home-surface: #fbf9f8;
+  --home-on-surface: #111827;
+  --home-on-surface-muted: #6b7280;
+  --home-primary: #00a86b;
+  --home-primary-bright: #00a86b;
   --home-primary-container: #00a86b;
   --home-on-primary: #ffffff;
-  --home-secondary: #5d5e61;
-  --home-secondary-container: #e2e2e5;
-  --home-tertiary-fixed: #d8e6e0;
-  --home-tertiary-dim: #bccac4;
-  --home-outline: #6d7a70;
-  --home-outline-variant: #bccabe;
-  --home-input-bg: #f3f4f5;
-  --home-input-bg-settled: #eceef0;
+  --home-secondary: #6b7280;
+  --home-secondary-container: #d1fae5;
+  --home-tertiary-fixed: #ecfdf5;
+  --home-tertiary-dim: #d1fae5;
+  --home-outline: #9ca3af;
+  --home-outline-variant: #e5e7eb;
+  --home-input-bg: #f9fafb;
+  --home-input-bg-settled: #f3f4f6;
   --home-input-bg-focus: #ffffff;
-  --home-sheet-bg: rgba(255, 255, 255, 0.96);
-  --home-sheet-border: rgba(188, 202, 190, 0.35);
-  --home-header-bg: rgba(248, 249, 250, 0.88);
-  --home-pill-bg: rgba(255, 255, 255, 0.95);
-  --home-card-bg: #f8f9fa;
-  --home-card-border: rgba(188, 202, 190, 0.35);
-  --home-canvas-bg: #eef5f0;
+  --home-sheet-bg: #ffffff;
+  --home-sheet-border: #f3f4f6;
+  --home-header-bg: #ffffff;
+  --home-pill-bg: #ffffff;
+  --home-card-bg: #f9fafb;
+  --home-card-border: #f3f4f6;
+  --home-canvas-bg: #e5e7eb;
   --home-font-display: 'Hanken Grotesk', system-ui, sans-serif;
   --home-font-label: 'JetBrains Mono', ui-monospace, monospace;
 }
@@ -80,16 +81,16 @@ html.dark .home-page {
 }
 
 .home-page {
-  --home-header-h: 4rem;
-  --home-nav-h: 4.5rem;
+  --home-header-h: 5.5rem;
+  --home-nav-h: 6.25rem;
   --home-booking-actions-h: 0px;
-  --home-booking-sheet-max: min(46dvh, 420px);
+  --home-booking-sheet-max: min(58dvh, 520px);
   --home-panel-solid: #ffffff;
   --home-booking-stack-h: calc(
     var(--home-nav-h) + var(--home-booking-actions-h) + var(--home-booking-sheet-max) +
       env(safe-area-inset-bottom, 0px)
   );
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: var(--home-font-display);
   background-color: var(--home-bg);
   color: var(--home-on-surface);
 }
@@ -182,13 +183,175 @@ html.dark .home-page {
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
   border: 1px solid var(--home-sheet-border);
-  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.06);
 }
 
 .home-booking-sheet.home-glass-sheet {
   background-color: var(--home-panel-solid);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+}
+
+.home-booking-anchor--landing {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.home-booking-anchor--landing .home-booking-sheet {
+  border-radius: 2rem 2rem 0 0;
+  border-bottom: none;
+  max-width: none;
+}
+
+.home-executive-map {
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  top: calc(var(--home-header-h) + env(safe-area-inset-top, 0px));
+  bottom: var(--home-booking-stack-h);
+  background-color: var(--home-canvas-bg);
+  pointer-events: none;
+}
+
+.home-executive-map__wash {
+  position: absolute;
+  inset: 0;
+  background-color: #e5e7eb;
+  opacity: 0.4;
+}
+
+.home-header--executive {
+  border-bottom: none;
+  box-shadow: none;
+}
+
+.home-header--executive .home-header__inner {
+  padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
+  padding-bottom: 1.5rem;
+}
+
+.home-header__brand {
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--home-primary);
+}
+
+.home-quick-action-card {
+  display: flex;
+  height: 7rem;
+  align-items: center;
+  justify-content: space-between;
+  border-radius: 24px;
+  border: 1px solid #f3f4f6;
+  background-color: #ffffff;
+  padding: 0 1.5rem;
+  text-align: left;
+  box-shadow:
+    0 10px 15px -3px rgba(0, 0, 0, 0.08),
+    0 4px 6px -4px rgba(0, 0, 0, 0.06);
+  transition: background-color 0.2s ease;
+}
+
+.home-quick-action-card:active {
+  background-color: #f0f0f0;
+}
+
+.home-quick-action-card__label {
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.25;
+  color: #1f2937;
+}
+
+.home-quick-action-card__icon {
+  display: flex;
+  height: 2.5rem;
+  width: 2.5rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background-color: #ffffff;
+  color: var(--home-primary);
+}
+
+.home-place-input--executive {
+  min-height: 3.5rem;
+  border-radius: 1rem;
+  border-width: 2px;
+  border-color: #f3f4f6;
+  background-color: #f9fafb;
+  font-size: 1.125rem;
+  font-weight: 500;
+  padding-left: 1.5rem;
+  padding-right: 3rem;
+  box-shadow:
+    0 10px 30px -5px rgba(0, 0, 0, 0.05),
+    0 4px 6px -2px rgba(0, 0, 0, 0.02);
+}
+
+.home-place-input--executive:focus {
+  border-width: 4px;
+  border-color: var(--home-primary);
+  box-shadow:
+    0 10px 30px -5px rgba(0, 0, 0, 0.05),
+    0 4px 6px -2px rgba(0, 0, 0, 0.02);
+  background-color: #ffffff;
+}
+
+.home-place-input--executive.home-place-input--destination-prominent {
+  border-width: 4px;
+  border-color: var(--home-primary);
+  background-color: #f9fafb;
+  box-shadow:
+    0 10px 30px -5px rgba(0, 0, 0, 0.05),
+    0 4px 6px -2px rgba(0, 0, 0, 0.02);
+}
+
+.home-place-input--executive.home-place-input--destination-prominent:focus {
+  border-width: 4px;
+  border-color: var(--home-primary);
+  box-shadow:
+    0 10px 30px -5px rgba(0, 0, 0, 0.05),
+    0 4px 6px -2px rgba(0, 0, 0, 0.02);
+}
+
+.home-where-to-title {
+  font-size: 1.875rem;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  color: #111827;
+}
+
+html.dark .home-quick-action-card {
+  background-color: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.25);
+}
+
+html.dark .home-quick-action-card:active {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+html.dark .home-quick-action-card__label {
+  color: #f3f4f6;
+}
+
+html.dark .home-quick-action-card__icon {
+  background-color: transparent;
+}
+
+html.dark .home-where-to-title {
+  color: #f9fafb;
+}
+
+html.dark .home-place-input--executive {
+  border-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 255, 255, 0.05);
+  color: #f9fafb;
 }
 
 /* Home booking layout: sheet + fixed actions above bottom nav */

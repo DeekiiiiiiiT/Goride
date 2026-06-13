@@ -655,7 +655,7 @@ export function BookForOthersActivitySections({
         />
         <TabButton
           active={!isSomeone}
-          label="For me"
+          label="Gift me"
           count={bookForMe.length}
           onClick={() => selectTab('me')}
         />

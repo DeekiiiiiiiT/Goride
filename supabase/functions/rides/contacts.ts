@@ -105,6 +105,19 @@ async function loadPlacesForContact(
   return data ?? [];
 }
 
+async function loadCustomTagForUser(
+  db: SupabaseClient,
+  tagsTable: string,
+  userId: string,
+): Promise<string | null> {
+  const { data } = await db.from(tagsTable)
+    .select("custom_tag_name")
+    .eq("user_id", userId)
+    .maybeSingle();
+  const name = data?.custom_tag_name;
+  return typeof name === "string" && name.trim() ? name.trim() : null;
+}
+
 async function enrichContact(
   db: SupabaseClient,
   tables: RidesContactsTables,
@@ -112,15 +125,20 @@ async function enrichContact(
 ): Promise<Record<string, unknown>> {
   const linkedRow = await maybeRelinkContactRow(db, tables, row);
   const id = linkedRow.id as string;
-  const [groups, places, intentSummary] = await Promise.all([
+  const linkedUserId = linkedRow.linked_user_id ? String(linkedRow.linked_user_id) : null;
+  const [groups, places, intentSummary, customTagName] = await Promise.all([
     loadContactGroupsForContact(db, tables, id),
     loadPlacesForContact(db, tables, id),
-    isTripIntentV2Enabled() && linkedRow.linked_user_id
-      ? loadActiveTripIntentSummary(db, tables.booking_requests, String(linkedRow.linked_user_id))
+    isTripIntentV2Enabled() && linkedUserId
+      ? loadActiveTripIntentSummary(db, tables.booking_requests, linkedUserId)
+      : Promise.resolve(null),
+    linkedUserId
+      ? loadCustomTagForUser(db, tables.roam_passenger_tags, linkedUserId)
       : Promise.resolve(null),
   ]);
   return {
     ...withRoamLinkFlag(linkedRow),
+    custom_tag_name: customTagName,
     groups,
     places,
     ...(intentSummary ? { active_trip_intent_summary: intentSummary } : {}),

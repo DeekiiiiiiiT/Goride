@@ -84,6 +84,8 @@ export interface RiderContactRow {
   linked_user_id: string | null;
   /** True when phone resolves to a Roam passenger account (linked_user_id set). */
   roam_account_linked?: boolean;
+  /** Public Roam tag when linked to a Roam account. */
+  custom_tag_name?: string | null;
   bookable: boolean;
   trusted_for_safety: boolean;
   last_shared_at?: string | null;

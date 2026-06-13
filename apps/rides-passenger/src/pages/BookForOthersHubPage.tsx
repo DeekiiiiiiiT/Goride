@@ -110,7 +110,7 @@ export default function BookForOthersHubPage() {
           <HubRow
             icon={<Tag className="h-5 w-5" strokeWidth={1.65} aria-hidden />}
             iconWrapClassName="bg-[#E8F1FC] text-[#004AC6]"
-            label="Book for me"
+            label="Gift me ride"
             description="Let someone pay for your ride"
             onClick={() => navigate('/services/book-for-me')}
           />

@@ -551,7 +551,7 @@ export default function BookForMePage() {
         <button type="button" onClick={() => navigate('/services/book-for-others')} className="rounded-full p-2" style={{ color: PRIMARY }}>
           <ArrowLeft className="h-6 w-6" />
         </button>
-        <h1 className="ml-2 text-xl font-semibold" style={{ color: PRIMARY }}>Book for me</h1>
+        <h1 className="ml-2 text-xl font-semibold" style={{ color: PRIMARY }}>Gift me ride</h1>
       </header>
 
       <main className="mx-auto w-full max-w-2xl space-y-4 px-4 py-4 safe-x">

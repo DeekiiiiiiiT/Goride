@@ -5,6 +5,8 @@ import {
   ArrowLeft,
   ArrowRight,
   Crosshair,
+  Clock,
+  Gift,
   Package,
   Pencil,
   Tag,
@@ -600,7 +602,7 @@ export default function HomePage() {
   const destinationInputClassName = [
     'home-place-input',
     !showPickupField
-      ? 'home-place-input--destination-prominent'
+      ? 'home-place-input--destination-prominent home-place-input--executive'
       : 'home-place-input--destination',
   ].join(' ');
 
@@ -650,31 +652,28 @@ export default function HomePage() {
 
       {!showRouteMap && (
         <header
-          className="home-header fixed top-0 z-50 w-full border-b safe-t"
-          style={{
-            backgroundColor: 'var(--home-header-bg)',
-            borderColor: 'var(--home-sheet-border)',
-            backdropFilter: 'blur(12px)',
-          }}
+          className="home-header home-header--executive fixed top-0 z-50 w-full safe-t"
+          style={{ backgroundColor: 'var(--home-header-bg)' }}
         >
-          <div className="mx-auto flex h-16 max-w-2xl items-center justify-between px-5">
-            <span
-              className="home-display text-xl font-bold"
-              style={{ color: 'var(--home-primary)' }}
-            >
-              Roam
-            </span>
+          <div className="home-header__inner mx-auto flex max-w-2xl items-center justify-between px-6">
+            <span className="home-header__brand home-display">Roam</span>
             <button
               type="button"
               onClick={() => navigate('/account')}
-              className="h-10 w-10 overflow-hidden rounded-full border-2 active:scale-95"
-              style={{ borderColor: 'color-mix(in srgb, var(--home-outline-variant) 50%, transparent)' }}
+              className="h-10 w-10 overflow-hidden rounded-full border-2 border-white shadow-sm active:scale-95"
+              style={{ backgroundColor: '#94a3b8' }}
               aria-label="Account"
             >
               <img src={profileSrc} alt="" className="h-full w-full object-cover" />
             </button>
           </div>
         </header>
+      )}
+
+      {!showRouteMap && (
+        <div className="home-executive-map" aria-hidden>
+          <div className="home-executive-map__wash" />
+        </div>
       )}
 
       <div className="home-booking-backdrop" aria-hidden />
@@ -787,13 +786,17 @@ export default function HomePage() {
         )}
 
         <div
-          className="home-booking-anchor pointer-events-auto fixed left-0 z-40 w-full px-4 safe-x transition-[bottom] duration-200 ease-out"
+          className={`home-booking-anchor pointer-events-auto fixed left-0 z-40 w-full transition-[bottom] duration-200 ease-out ${
+            coordsReady ? 'px-4 safe-x' : 'home-booking-anchor--landing'
+          }`}
           style={{ bottom: sheetBottom }}
         >
           <div
-            className={`home-glass-sheet home-booking-sheet mx-auto max-w-xl overflow-hidden rounded-3xl ${
-              keyboardOpen ? 'home-booking-sheet--keyboard' : ''
-            } ${coordsReady ? 'home-booking-sheet--quotes' : ''}`}
+            className={`home-glass-sheet home-booking-sheet mx-auto max-w-xl overflow-hidden ${
+              coordsReady ? 'rounded-3xl' : ''
+            } ${keyboardOpen ? 'home-booking-sheet--keyboard' : ''} ${
+              coordsReady ? 'home-booking-sheet--quotes' : ''
+            }`}
             style={
               keyboardOpen
                 ? {
@@ -806,16 +809,12 @@ export default function HomePage() {
             }
           >
             <div
-              className={`flex shrink-0 justify-center ${coordsReady && !keyboardOpen ? 'py-2' : 'py-3'}`}
+              className={`flex shrink-0 justify-center ${coordsReady && !keyboardOpen ? 'py-2' : 'mb-8 pt-4'}`}
             >
-              <div
-                className="h-1.5 w-12 rounded-full"
-                style={{ backgroundColor: 'color-mix(in srgb, var(--home-outline-variant) 45%, transparent)' }}
-                aria-hidden
-              />
+              <div className="h-1.5 w-12 rounded-full bg-gray-200" aria-hidden />
             </div>
 
-            <div className="home-booking-sheet__top px-5 pb-3 pt-1">
+            <div className={`home-booking-sheet__top pb-3 ${coordsReady ? 'px-5 pt-1' : 'px-6 pb-8'}`}>
               {guestRecipient ? (
                 <div
                   className="mb-3 flex items-start gap-3 rounded-2xl border px-4 py-3"
@@ -930,11 +929,8 @@ export default function HomePage() {
                 </>
               ) : (
                 <>
-              <div className="mb-4 flex items-end justify-between gap-3">
-                <h1
-                  className="home-display text-[30px] font-bold leading-tight tracking-tight"
-                  style={{ color: 'var(--home-on-surface)' }}
-                >
+              <div className="mb-6 flex items-end justify-between gap-3">
+                <h1 className="home-where-to-title home-display">
                   Where to?
                 </h1>
                 {coordsReady && routeExpanded && (
@@ -949,7 +945,7 @@ export default function HomePage() {
                 )}
               </div>
 
-              <div className="relative mb-6">
+              <div className="relative mb-8">
                 {showPickupField ? (
                   <>
                     <div className="absolute bottom-7 left-1 top-7 flex w-2.5 flex-col items-center">
@@ -1074,50 +1070,56 @@ export default function HomePage() {
               <div
                 className={`overflow-hidden transition-[max-height,opacity,margin] duration-300 ease-out ${
                   showQuickActions
-                    ? 'mb-6 max-h-40 opacity-100'
+                    ? 'mb-2 max-h-80 opacity-100'
                     : 'pointer-events-none mb-0 max-h-0 opacity-0'
                 }`}
                 aria-hidden={!showQuickActions}
               >
-                <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => navigate('/services/book-for-someone')}
-                  className="flex min-h-[7.5rem] flex-col items-center justify-center gap-3 rounded-2xl border p-4 text-center transition-all active:scale-[0.98]"
-                  style={{
-                    backgroundColor: 'var(--home-card-bg)',
-                    borderColor: 'var(--home-card-border)',
-                  }}
-                >
-                  <div
-                    className="flex h-10 w-10 items-center justify-center rounded-xl"
-                    style={{ backgroundColor: 'var(--home-secondary-container)' }}
-                  >
-                    <UserPlus
-                      className="h-5 w-5"
-                      style={{ color: 'var(--home-on-secondary-container, #636467)' }}
-                      aria-hidden
-                    />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-4">
+                    <button
+                      type="button"
+                      onClick={() => navigate('/services/book-for-someone')}
+                      className="home-quick-action-card touch-manipulation"
+                    >
+                      <span className="home-quick-action-card__label">Pick up someone</span>
+                      <div className="home-quick-action-card__icon">
+                        <UserPlus className="h-5 w-5" aria-hidden />
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/services/book-for-me')}
+                      className="home-quick-action-card touch-manipulation"
+                    >
+                      <span className="home-quick-action-card__label">Gift Ride</span>
+                      <div className="home-quick-action-card__icon">
+                        <Gift className="h-5 w-5" aria-hidden />
+                      </div>
+                    </button>
                   </div>
-                  <span className="text-sm font-semibold leading-tight">Pick up Someone</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => navigate('/services/courier')}
-                  className="flex min-h-[7.5rem] flex-col items-center justify-center gap-3 rounded-2xl border p-4 text-center transition-all active:scale-[0.98]"
-                  style={{
-                    backgroundColor: 'var(--home-card-bg)',
-                    borderColor: 'var(--home-card-border)',
-                  }}
-                >
-                  <div
-                    className="flex h-10 w-10 items-center justify-center rounded-xl"
-                    style={{ backgroundColor: 'var(--home-tertiary-dim)' }}
-                  >
-                    <Package className="h-5 w-5" style={{ color: 'var(--home-primary)' }} aria-hidden />
+                  <div className="flex flex-col gap-4">
+                    <button
+                      type="button"
+                      onClick={() => navigate('/services/courier')}
+                      className="home-quick-action-card touch-manipulation"
+                    >
+                      <span className="home-quick-action-card__label">Courier</span>
+                      <div className="home-quick-action-card__icon">
+                        <Package className="h-5 w-5" aria-hidden />
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/services/schedule')}
+                      className="home-quick-action-card touch-manipulation"
+                    >
+                      <span className="home-quick-action-card__label">Reserve Trip</span>
+                      <div className="home-quick-action-card__icon">
+                        <Clock className="h-5 w-5" aria-hidden />
+                      </div>
+                    </button>
                   </div>
-                  <span className="text-sm font-semibold leading-tight">Courier</span>
-                </button>
                 </div>
               </div>
 
