@@ -24,4 +24,26 @@ export const CASH_SETTLEMENT_QA = [
   'Flag ON: wallet shows credit_minor after overpay',
   'Flag ON: payment method sheet warns when arrears_minor > 0',
   'Flag ON: 7-day timeout auto-unpaid in staging (ops backstop only)',
+  'V2 OFF (V1 only): settlement posts to legacy user:{id}:driver account',
+  'V2 ON: overpay credits driver:cash, rider change, digital debit or debt obligation',
+  'V2 ON: GET /v1/drivers/me/wallets returns digital/cash/debt balances',
+  'V2 ON: GET /v1/requests/:id/settlement-summary returns wallet_deltas snapshot',
+  'V2 ON: rider CashTripSummaryView shows fare/cash/change/wallet balance',
+  'V2 ON: driver post-settlement sheet shows wallet_deltas',
+  'V2 ON: driver Trip wallets page lists per-wallet journal',
+  'V2 ON: debt auto-repay on digital credit (FIFO obligations)',
+  'V2 ON: admin wallet-reconciliation export lists cash vs open debt',
+  'V2 ON: rollback — set CASH_SETTLEMENT_V2=0; V1 path resumes; snapshots read-only',
+] as const;
+
+/** Staged rollout sequence (staging → production). */
+export const CASH_SETTLEMENT_V2_ROLLOUT = [
+  '1. Apply migrations 20260622120000 + 20260622130000 on staging',
+  '2. Deploy rides edge; set CASH_SETTLEMENT_ENABLED=1 (V2 still off)',
+  '3. Run V1 QA matrix; soak ≥ 48h',
+  '4. Set CASH_SETTLEMENT_V2=1 + client VITE_CASH_SETTLEMENT_V2=1 on staging builds',
+  '5. Run full V2 QA matrix including overpay with insufficient digital',
+  '6. Production: repeat steps 1–5; monitor open obligations and journal conflicts',
+  '7. Rollback: CASH_SETTLEMENT_V2=0 (server + client); V1 journal path resumes immediately',
+  '8. Optional: enable CASH_SETTLEMENT_DEBT_DISPATCH_GUARD=1 after ≥2 week soak',
 ] as const;

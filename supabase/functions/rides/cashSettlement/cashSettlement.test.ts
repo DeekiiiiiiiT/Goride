@@ -12,6 +12,7 @@ import {
 } from "./cashSettlementLifecycle.ts";
 import { hashSettlementRequest } from "./requestHash.ts";
 import { resolveOwedFareMinor } from "./processCashSettlement.ts";
+import { isCashSettlementEnabled, isCashSettlementV2Enabled } from "./flags.ts";
 
 Deno.test("computeCashSettlementOutcome exact", () => {
   const r = computeCashSettlementOutcome(150000, 150000);
@@ -122,5 +123,26 @@ Deno.test("driver earnings invariant: journal never references fare reduction", 
         throw new Error("driver net must not be reduced");
       }
     });
+  }
+});
+
+Deno.test("isCashSettlementV2Enabled requires V1 flag", () => {
+  const prevV1 = Deno.env.get("CASH_SETTLEMENT_ENABLED");
+  const prevV2 = Deno.env.get("CASH_SETTLEMENT_V2");
+  try {
+    Deno.env.delete("CASH_SETTLEMENT_ENABLED");
+    Deno.env.delete("CASH_SETTLEMENT_V2");
+    assertEquals(isCashSettlementV2Enabled(), false);
+
+    Deno.env.set("CASH_SETTLEMENT_ENABLED", "1");
+    assertEquals(isCashSettlementV2Enabled(), false);
+
+    Deno.env.set("CASH_SETTLEMENT_V2", "1");
+    assertEquals(isCashSettlementV2Enabled(), true);
+  } finally {
+    if (prevV1 === undefined) Deno.env.delete("CASH_SETTLEMENT_ENABLED");
+    else Deno.env.set("CASH_SETTLEMENT_ENABLED", prevV1);
+    if (prevV2 === undefined) Deno.env.delete("CASH_SETTLEMENT_V2");
+    else Deno.env.set("CASH_SETTLEMENT_V2", prevV2);
   }
 });

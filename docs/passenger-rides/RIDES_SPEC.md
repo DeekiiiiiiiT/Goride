@@ -50,6 +50,25 @@ When enabled:
 - Ops backstop: **`public.rides_run_cash_settlement_timeout()`** (pg_cron daily) auto-completes stale settlement rows as **unpaid**.
 - Deploy: run migrations, then `pnpm deploy:rides` from repo root.
 
+### Multi-wallet settlement V2 (flag-gated, default OFF)
+
+Requires **`CASH_SETTLEMENT_ENABLED=1`** plus:
+
+- Server: **`CASH_SETTLEMENT_V2=1`**
+- Client: **`VITE_CASH_SETTLEMENT_V2=1`** (passenger + driver builds)
+
+When V2 is on:
+
+- Driver wallets: **`user:{id}:driver:digital`**, **`:cash`**, **`:debt`** (legacy **`user:{id}:driver`** remains as read fallback for digital).
+- Overpay: credit driver cash → credit rider change → pay change from digital or open **`payment_obligations`** + debt wallet; fare allocated from cash via **`fare_allocation_from_cash`**.
+- Debt auto-repay: FIFO on digital credits; pg_cron backstop **`rides_apply_pending_driver_debt()`**.
+- APIs: **`GET /v1/drivers/me/wallets`**, **`GET /v1/requests/:id/settlement-summary`**, journal filter **`?wallet=digital|cash|debt`**.
+- Admin: **`GET /admin/ledger/wallet-reconciliation`** (JSON or **`?format=csv`**).
+- Optional dispatch guard: **`CASH_SETTLEMENT_DEBT_DISPATCH_GUARD=1`** + **`CASH_SETTLEMENT_DEBT_THRESHOLD_MINOR`** (default 50000 = JMD 500).
+- Rollback: set **`CASH_SETTLEMENT_V2=0`** — V1 journal path resumes; V2 snapshots remain read-only history.
+
+**Deprecation (post-soak):** V1 single-account journal builder is retained behind the V2-off branch until V2 is stable in production ≥2 weeks; then migrate legacy balances and remove the V1 path.
+
 ---
 
 ## 3. Matching policy (Uber-style, phased implementation)

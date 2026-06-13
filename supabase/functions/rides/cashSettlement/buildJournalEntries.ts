@@ -1,9 +1,20 @@
 import type { CashSettlementComputed } from "./computeOutcome.ts";
 
 export const PLATFORM_RECEIVABLE_KEY = "platform:receivable";
+export const PLATFORM_CLEARING_KEY = "platform:clearing";
+
+export type JournalEntryType =
+  | "cash_trip_arrears"
+  | "cash_change_credit"
+  | "cash_change_debit"
+  | "cash_trip_collection"
+  | "change_paid_from_digital"
+  | "change_debt_open"
+  | "debt_repay_from_digital"
+  | "fare_allocation_from_cash";
 
 export interface JournalLineSpec {
-  entry_type: "cash_trip_arrears" | "cash_change_credit" | "cash_change_debit";
+  entry_type: JournalEntryType;
   debit_account_key: string;
   credit_account_key: string;
   amount_minor: number;
@@ -18,6 +29,14 @@ export interface BuildJournalParams {
   currency: string;
 }
 
+export interface WalletDeltaPreview {
+  rider_credit_minor: number;
+  driver_cash_credit_minor: number;
+  driver_digital_debit_minor: number;
+  driver_debt_opened_minor: number;
+  fare_allocated_minor: number;
+}
+
 function userAccountKey(userId: string, role: "rider" | "driver"): string {
   return `user:${userId}:${role}`;
 }
@@ -26,10 +45,24 @@ export function riderAccountKeyForUser(userId: string): string {
   return userAccountKey(userId, "rider");
 }
 
+/** Legacy single driver account (V1). */
 export function driverAccountKeyForUser(userId: string): string {
   return userAccountKey(userId, "driver");
 }
 
+export function driverDigitalAccountKeyForUser(userId: string): string {
+  return `user:${userId}:driver:digital`;
+}
+
+export function driverCashAccountKeyForUser(userId: string): string {
+  return `user:${userId}:driver:cash`;
+}
+
+export function driverDebtAccountKeyForUser(userId: string): string {
+  return `user:${userId}:driver:debt`;
+}
+
+/** V1 single-account journal builder — used when CASH_SETTLEMENT_V2 is off. Deprecated after V2 production soak. */
 export function buildJournalLineSpecs(params: BuildJournalParams): JournalLineSpec[] {
   const { computed, riderAccountKey, driverAccountKey, rideId, currency } = params;
   const lines: JournalLineSpec[] = [];
@@ -39,6 +72,7 @@ export function buildJournalLineSpecs(params: BuildJournalParams): JournalLineSp
     outcome: computed.outcome,
     owed_minor: computed.owed_minor,
     cash_received_minor: computed.cash_received_minor,
+    settlement_version: 1,
   };
 
   if (computed.arrears_minor > 0) {

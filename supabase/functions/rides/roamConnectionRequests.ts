@@ -12,6 +12,7 @@ import {
   isBlockedEitherDirection,
   isConnectionRequestExpired,
   maskPhoneE164,
+  removeRoamConnection,
 } from "./roamConnectionHelpers.ts";
 
 type ConnectionDeps = {
@@ -260,12 +261,25 @@ export function registerRoamConnectionRoutes(app: Hono, deps: ConnectionDeps) {
 
     const { db, tables: t } = await deps.getContactsDb();
 
+    await expireStalePendingRequests(db, t.roam_connection_requests, {
+      column: "requester_user_id",
+      value: gate.user!.id,
+    });
+
     if (targetUserId) {
       if (await isBlockedEitherDirection(db, t, gate.user!.id, targetUserId)) {
         return c.json({ error: "blocked" }, 403);
       }
       if (await areUsersConnected(db, t, gate.user!.id, targetUserId)) {
-        return c.json({ error: "already_connected" }, 409);
+        const { data: existingContact } = await db.from(t.rider_contacts).select("id")
+          .eq("owner_user_id", gate.user!.id)
+          .eq("linked_user_id", targetUserId)
+          .maybeSingle();
+        if (existingContact?.id) {
+          return c.json({ error: "already_connected" }, 409);
+        }
+        // Stale connection left after contact was deleted — clear it so the user can reconnect.
+        await removeRoamConnection(db, t, gate.user!.id, targetUserId);
       }
       const { data: pendingDup } = await db.from(t.roam_connection_requests).select("id")
         .eq("requester_user_id", gate.user!.id)

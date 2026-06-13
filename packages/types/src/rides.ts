@@ -35,7 +35,52 @@ export type PaymentJournalEntryType =
   | 'cash_change_debit'
   | 'wallet_topup'
   | 'wallet_adjustment'
-  | 'cash_settlement_confirmed';
+  | 'cash_settlement_confirmed'
+  | 'cash_trip_collection'
+  | 'change_paid_from_digital'
+  | 'change_debt_open'
+  | 'debt_repay_from_digital'
+  | 'fare_allocation_from_cash';
+
+export interface WalletDeltaPreviewDto {
+  rider_credit_minor: number;
+  driver_cash_credit_minor: number;
+  driver_digital_debit_minor: number;
+  driver_debt_opened_minor: number;
+  fare_allocated_minor: number;
+}
+
+export interface DriverWalletsResponse {
+  currency: string;
+  digital: WalletBalanceDto;
+  cash: WalletBalanceDto;
+  debt: WalletBalanceDto;
+}
+
+export interface CashSettlementSnapshotDto {
+  settlement_version: 1 | 2;
+  owed_minor: number;
+  cash_received_minor: number;
+  change_credit_minor: number;
+  arrears_minor: number;
+  outcome: CashSettlementOutcome;
+  wallet_deltas?: WalletDeltaPreviewDto;
+  debt_opened_minor?: number;
+  settled_at: string;
+}
+
+export interface SettlementSummaryDto {
+  ride_id: string;
+  outcome: CashSettlementOutcome;
+  owed_minor: number;
+  cash_received_minor: number;
+  change_credit_minor: number;
+  arrears_minor: number;
+  currency: string;
+  settlement_version: 1 | 2;
+  wallet_deltas?: WalletDeltaPreviewDto;
+  debt_opened_minor?: number;
+}
 
 export interface WalletBalanceDto {
   currency: string;
@@ -77,6 +122,8 @@ export interface CashSettlementResponse {
   cash_received_minor: number;
   arrears_minor: number;
   change_credit_minor: number;
+  settlement_version?: 1 | 2;
+  wallet_deltas?: WalletDeltaPreviewDto;
 }
 
 /** Assigned to driver and not yet completed/cancelled. */
@@ -247,6 +294,7 @@ export interface RideRequestRow {
   tip_received_minor?: number | null;
   cash_settlement_status?: CashSettlementStatus | null;
   cash_settlement_outcome?: CashSettlementOutcome | null;
+  cash_settlement_snapshot?: CashSettlementSnapshotDto | null;
   fare_locked_at?: string | null;
   settled_at?: string | null;
   booking_kind?: RideBookingKind;

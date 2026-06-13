@@ -1,4 +1,5 @@
 import React from 'react';
+import { ChevronRight, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Banknote,
@@ -11,6 +12,11 @@ import {
 } from 'lucide-react';
 import { formatMoneyMinor } from '@roam/types/rides';
 import { useIndependentEarnings } from '../../hooks/useIndependentEarnings';
+import { CASH_SETTLEMENT_V2_ENABLED } from '../../lib/cashSettlementFlags';
+
+type EarningsPageProps = {
+  onNavigate?: (page: string) => void;
+};
 
 function EarningsAmount({
   loading,
@@ -35,7 +41,7 @@ function EarningsAmount({
   );
 }
 
-export function IndependentEarningsPage() {
+export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
   const { data: allData, loading: allLoading, error } = useIndependentEarnings('all');
   const { data: weekData, loading: weekLoading } = useIndependentEarnings('week');
 
@@ -78,6 +84,25 @@ export function IndependentEarningsPage() {
           <BarChart3 className="h-6 w-6 text-emerald-600 dark:text-emerald-400" aria-hidden />
         </div>
       </section>
+
+      {CASH_SETTLEMENT_V2_ENABLED && onNavigate && (
+        <button
+          type="button"
+          onClick={() => onNavigate('rides-wallets')}
+          className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-4 text-left shadow-sm dark:border-slate-700 dark:bg-slate-900"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 dark:bg-blue-950/40">
+              <Wallet className="h-5 w-5 text-blue-700 dark:text-blue-400" aria-hidden />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">Trip wallets</p>
+              <p className="text-xs text-slate-500">Digital, cash & change debt</p>
+            </div>
+          </div>
+          <ChevronRight className="h-5 w-5 text-slate-400" aria-hidden />
+        </button>
+      )}
 
       <div className="space-y-4">
         <div className="group relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_4px_20px_rgba(0,0,0,0.04)] dark:border-slate-700 dark:bg-slate-900">

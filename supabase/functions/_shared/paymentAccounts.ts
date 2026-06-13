@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   driverAccountKeyForUser,
+  driverCashAccountKeyForUser,
+  driverDebtAccountKeyForUser,
+  driverDigitalAccountKeyForUser,
+  PLATFORM_CLEARING_KEY,
   PLATFORM_RECEIVABLE_KEY,
   riderAccountKeyForUser,
   type JournalLineSpec,
@@ -22,6 +26,13 @@ export interface WalletBalanceView {
   available_minor: number;
   arrears_minor: number;
   credit_minor: number;
+}
+
+export interface DriverWalletsView {
+  currency: string;
+  digital: WalletBalanceView;
+  cash: WalletBalanceView;
+  debt: WalletBalanceView;
 }
 
 async function paymentDb(): Promise<Awaited<ReturnType<typeof getRidesPaymentDb>>> {
@@ -105,6 +116,45 @@ export async function ensureDriverAccount(
   });
 }
 
+export async function ensureDriverDigitalAccount(
+  db: SupabaseClient,
+  userId: string,
+  currency: string,
+): Promise<PaymentAccountRow> {
+  return ensurePaymentAccount(db, {
+    userId,
+    role: "driver",
+    accountKey: driverDigitalAccountKeyForUser(userId),
+    currency,
+  });
+}
+
+export async function ensureDriverCashAccount(
+  db: SupabaseClient,
+  userId: string,
+  currency: string,
+): Promise<PaymentAccountRow> {
+  return ensurePaymentAccount(db, {
+    userId,
+    role: "driver",
+    accountKey: driverCashAccountKeyForUser(userId),
+    currency,
+  });
+}
+
+export async function ensureDriverDebtAccount(
+  db: SupabaseClient,
+  userId: string,
+  currency: string,
+): Promise<PaymentAccountRow> {
+  return ensurePaymentAccount(db, {
+    userId,
+    role: "driver",
+    accountKey: driverDebtAccountKeyForUser(userId),
+    currency,
+  });
+}
+
 export async function ensureSystemReceivableAccount(
   db: SupabaseClient,
   currency: string,
@@ -117,6 +167,19 @@ export async function ensureSystemReceivableAccount(
   });
 }
 
+export async function ensureSystemClearingAccount(
+  db: SupabaseClient,
+  currency: string,
+): Promise<PaymentAccountRow> {
+  return ensurePaymentAccount(db, {
+    userId: null,
+    role: "system",
+    accountKey: PLATFORM_CLEARING_KEY,
+    currency,
+  });
+}
+
+/** Rider / legacy driver wallet view (positive balance = credit). */
 export function walletBalanceFromMinor(balanceMinor: number, currency: string): WalletBalanceView {
   const balance = Number(balanceMinor) || 0;
   return {
@@ -125,6 +188,19 @@ export function walletBalanceFromMinor(balanceMinor: number, currency: string): 
     available_minor: Math.max(0, balance),
     arrears_minor: Math.max(0, -balance),
     credit_minor: Math.max(0, balance),
+  };
+}
+
+/** Debt wallet: negative balance = amount owed by driver. */
+export function debtWalletBalanceFromMinor(balanceMinor: number, currency: string): WalletBalanceView {
+  const balance = Number(balanceMinor) || 0;
+  const owed = Math.max(0, -balance);
+  return {
+    currency,
+    balance_minor: balance,
+    available_minor: 0,
+    arrears_minor: owed,
+    credit_minor: 0,
   };
 }
 
@@ -137,11 +213,33 @@ export async function getWalletBalance(
   const accountKey = role === "rider"
     ? riderAccountKeyForUser(userId)
     : driverAccountKeyForUser(userId);
-  const account = await getAccountByKey(db, accountKey, currency);
+  let account = await getAccountByKey(db, accountKey, currency);
+  if (!account && role === "driver") {
+    account = await getAccountByKey(db, driverDigitalAccountKeyForUser(userId), currency);
+  }
   if (!account) {
     return walletBalanceFromMinor(0, currency);
   }
   return walletBalanceFromMinor(account.balance_minor, currency);
+}
+
+export async function getDriverWallets(
+  db: SupabaseClient | undefined,
+  userId: string,
+  currency: string,
+): Promise<DriverWalletsView> {
+  const legacyDigital = await getAccountByKey(db, driverAccountKeyForUser(userId), currency);
+  const digitalAcct = await getAccountByKey(db, driverDigitalAccountKeyForUser(userId), currency)
+    ?? legacyDigital;
+  const cashAcct = await getAccountByKey(db, driverCashAccountKeyForUser(userId), currency);
+  const debtAcct = await getAccountByKey(db, driverDebtAccountKeyForUser(userId), currency);
+
+  return {
+    currency,
+    digital: walletBalanceFromMinor(digitalAcct?.balance_minor ?? 0, currency),
+    cash: walletBalanceFromMinor(cashAcct?.balance_minor ?? 0, currency),
+    debt: debtWalletBalanceFromMinor(debtAcct?.balance_minor ?? 0, currency),
+  };
 }
 
 export interface PostJournalResult {
@@ -157,6 +255,12 @@ export interface PostJournalParams {
   currency: string;
   lines: JournalLineSpec[];
   createdByUserId: string | null;
+}
+
+function parseDriverSubAccountKey(key: string): { userId: string; subtype: "digital" | "cash" | "debt" } | null {
+  const match = /^user:([^:]+):driver:(digital|cash|debt)$/.exec(key);
+  if (!match) return null;
+  return { userId: match[1], subtype: match[2] as "digital" | "cash" | "debt" };
 }
 
 export async function postPaymentJournal(
@@ -186,12 +290,28 @@ export async function postPaymentJournal(
   }
 
   const accountCache = new Map<string, PaymentAccountRow>();
+  const digitalCredits: Array<{ userId: string; amount: number }> = [];
 
   async function resolveAccountKey(key: string): Promise<PaymentAccountRow> {
     const cached = accountCache.get(key);
     if (cached) return cached;
     if (key === PLATFORM_RECEIVABLE_KEY) {
       const acct = await ensureSystemReceivableAccount(db, currency);
+      accountCache.set(key, acct);
+      return acct;
+    }
+    if (key === PLATFORM_CLEARING_KEY) {
+      const acct = await ensureSystemClearingAccount(db, currency);
+      accountCache.set(key, acct);
+      return acct;
+    }
+    const sub = parseDriverSubAccountKey(key);
+    if (sub) {
+      const acct = sub.subtype === "digital"
+        ? await ensureDriverDigitalAccount(db, sub.userId, currency)
+        : sub.subtype === "cash"
+        ? await ensureDriverCashAccount(db, sub.userId, currency)
+        : await ensureDriverDebtAccount(db, sub.userId, currency);
       accountCache.set(key, acct);
       return acct;
     }
@@ -264,22 +384,38 @@ export async function postPaymentJournal(
 
     debit.balance_minor = newDebitBalance;
     credit.balance_minor = newCreditBalance;
+
+    const creditSub = parseDriverSubAccountKey(line.credit_account_key);
+    if (creditSub?.subtype === "digital") {
+      digitalCredits.push({ userId: creditSub.userId, amount: line.amount_minor });
+    }
+
     inserted++;
+  }
+
+  if (inserted > 0) {
+    try {
+      const { applyPendingDebt } = await import("../rides/cashSettlement/debtRepayment.ts");
+      const seen = new Set<string>();
+      for (const dc of digitalCredits) {
+        if (seen.has(dc.userId)) continue;
+        seen.add(dc.userId);
+        await applyPendingDebt(db, dc.userId, currency, "digital_credit");
+      }
+    } catch (e) {
+      console.error("[paymentAccounts] applyPendingDebt after journal failed:", e);
+    }
   }
 
   return { inserted, skipped: false };
 }
 
-export async function listJournalForAccount(
+export async function listJournalForAccountKey(
   db: SupabaseClient | undefined,
-  userId: string,
-  role: "rider" | "driver",
+  accountKey: string,
   currency: string,
   limit = 50,
 ): Promise<Array<Record<string, unknown>>> {
-  const accountKey = role === "rider"
-    ? riderAccountKeyForUser(userId)
-    : driverAccountKeyForUser(userId);
   const account = await getAccountByKey(db, accountKey, currency);
   if (!account) return [];
 
@@ -303,4 +439,34 @@ export async function listJournalForAccount(
     String(b.created_at).localeCompare(String(a.created_at))
   );
   return merged.slice(0, limit) as Array<Record<string, unknown>>;
+}
+
+export async function listJournalForAccount(
+  db: SupabaseClient | undefined,
+  userId: string,
+  role: "rider" | "driver",
+  currency: string,
+  limit = 50,
+): Promise<Array<Record<string, unknown>>> {
+  const accountKey = role === "rider"
+    ? riderAccountKeyForUser(userId)
+    : driverAccountKeyForUser(userId);
+  return listJournalForAccountKey(db, accountKey, currency, limit);
+}
+
+export function journalEntryTitle(entryType: string): string {
+  const titles: Record<string, string> = {
+    cash_trip_arrears: "Cash trip balance",
+    cash_change_debit: "Change credit",
+    cash_change_credit: "Change credit",
+    cash_trip_collection: "Cash collected",
+    change_paid_from_digital: "Change paid from digital wallet",
+    change_debt_open: "Change owed (debt)",
+    debt_repay_from_digital: "Debt repayment",
+    fare_allocation_from_cash: "Fare allocation",
+    wallet_topup: "Wallet top-up",
+    wallet_adjustment: "Wallet adjustment",
+    cash_settlement_confirmed: "Cash settlement",
+  };
+  return titles[entryType] ?? entryType.replace(/_/g, " ");
 }

@@ -127,6 +127,27 @@ export function TripLedgerDetailPanel({ trip, colSpan }: TripLedgerDetailPanelPr
             {trip.cash_settlement_status && (
               <DetailField label="Settlement status" value={trip.cash_settlement_status} />
             )}
+            {trip.cash_settlement_snapshot && (
+              <>
+                <DetailField
+                  label="Settlement version"
+                  value={String(
+                    (trip.cash_settlement_snapshot as { settlement_version?: number }).settlement_version ?? '—',
+                  )}
+                />
+                <DetailField
+                  label="Debt opened"
+                  value={
+                    (trip.cash_settlement_snapshot as { debt_opened_minor?: number }).debt_opened_minor != null
+                      ? formatMoneyMinor(
+                          Number((trip.cash_settlement_snapshot as { debt_opened_minor?: number }).debt_opened_minor),
+                          trip.currency,
+                        )
+                      : null
+                  }
+                />
+              </>
+            )}
             {trip.settled_at && (
               <DetailField label="Settled at" value={formatWhen(trip.settled_at)} />
             )}

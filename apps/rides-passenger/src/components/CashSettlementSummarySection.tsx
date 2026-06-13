@@ -32,12 +32,19 @@ export function CashSettlementSummarySection({ ride }: Props) {
   }
 
   if (outcome === 'overpay') {
+    const changeMinor = computed?.change_credit_minor ?? Math.max(0, received - (owed ?? 0));
     return (
       <div className="px-4">
         <CashPaymentCard ride={ride} />
-        <p className="mt-2 text-center text-sm text-emerald-700">
-          Any change due is in your Roam wallet.
-        </p>
+        {changeMinor > 0 ? (
+          <p className="mt-2 text-center text-sm font-semibold text-emerald-700">
+            {formatMoneyMinor(changeMinor, currency)} credited to your Roam wallet
+          </p>
+        ) : (
+          <p className="mt-2 text-center text-sm text-emerald-700">
+            Any change due is in your Roam wallet.
+          </p>
+        )}
       </div>
     );
   }

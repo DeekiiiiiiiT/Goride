@@ -695,13 +695,12 @@ export function useRideDispatch() {
 
   const submitCashSettlement = useCallback(
     async (cashReceivedMinor: number, idempotencyKey: string) => {
-      if (!activeRide) return;
+      if (!activeRide) return undefined;
       try {
         const result = await ridesDriverCashSettlement(activeRide.id, {
           cash_received_minor: cashReceivedMinor,
           idempotency_key: idempotencyKey,
         });
-        syncActiveRide(null);
         clearCashSettlementPending();
         window.dispatchEvent(new Event('roam-driver-trip-completed'));
         toast.success(
@@ -709,6 +708,7 @@ export function useRideDispatch() {
             ? 'Payment confirmed'
             : `Payment recorded (${result.outcome})`,
         );
+        return result;
       } catch (e: unknown) {
         const raw = e instanceof Error ? e.message : '';
         const friendly =
@@ -755,6 +755,10 @@ export function useRideDispatch() {
     [syncActiveRide],
   );
 
+  const dismissCashSettlementResult = useCallback(() => {
+    syncActiveRide(null);
+  }, [syncActiveRide]);
+
   return {
     online,
     offers,
@@ -774,6 +778,7 @@ export function useRideDispatch() {
     decline,
     advance,
     submitCashSettlement,
+    dismissCashSettlementResult,
     resumeCashSettlement,
     refreshOffers,
     permissions,

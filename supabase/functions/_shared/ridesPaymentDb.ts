@@ -6,6 +6,7 @@ import { createClient, type PostgrestError, type SupabaseClient } from "https://
 export type RidesPaymentTables = {
   accounts: string;
   journal: string;
+  obligations: string;
 };
 
 type Resolved = {
@@ -16,11 +17,13 @@ type Resolved = {
 const NATIVE: RidesPaymentTables = {
   accounts: "payment_accounts",
   journal: "payment_journal_entries",
+  obligations: "payment_obligations",
 };
 
 const PUBLIC_VIEWS: RidesPaymentTables = {
   accounts: "rides_payment_accounts",
   journal: "rides_payment_journal_entries",
+  obligations: "rides_payment_obligations",
 };
 
 let resolved: Resolved | null = null;

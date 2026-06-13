@@ -10,6 +10,7 @@ import type {
   DriverOfferWithRide,
   DriverPresenceBody,
   DriverTransitionBody,
+  DriverWalletsResponse,
   RideLocationUpdateBody,
   RideMessageDto,
   RideMessagesResponse,
@@ -17,6 +18,7 @@ import type {
   SendRideMessageBody,
   SendRideMessageResponse,
   WalletBalanceResponse,
+  WalletJournalTransactionsResponse,
 } from '@roam/types/rides';
 
 async function ridesHeaders(): Promise<HeadersInit> {
@@ -190,6 +192,26 @@ export async function ridesDriverCashSettlement(
 
 export async function ridesDriverWalletBalance(currency = 'JMD'): Promise<WalletBalanceResponse> {
   const res = await fetch(`${base}/v1/drivers/me/wallet?currency=${encodeURIComponent(currency)}`, {
+    headers: await ridesHeaders(),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function ridesDriverWallets(currency = 'JMD'): Promise<{ wallets: DriverWalletsResponse }> {
+  const res = await fetch(`${base}/v1/drivers/me/wallets?currency=${encodeURIComponent(currency)}`, {
+    headers: await ridesHeaders(),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function ridesDriverWalletJournal(
+  wallet: 'digital' | 'cash' | 'debt',
+  currency = 'JMD',
+): Promise<WalletJournalTransactionsResponse> {
+  const params = new URLSearchParams({ currency, wallet });
+  const res = await fetch(`${base}/v1/drivers/me/wallet/journal?${params.toString()}`, {
     headers: await ridesHeaders(),
   });
   if (!res.ok) throw new Error(await res.text());

@@ -19,7 +19,11 @@ import {
   withRoamLinkFlag,
 } from "./contactRoamLink.ts";
 import { isRoamConnectionsEnabled } from "./roamConnectionFlags.ts";
-import { areUsersConnected } from "./roamConnectionHelpers.ts";
+import {
+  cancelPendingConnectionRequestsBetween,
+  cancelPendingPhoneInvitesFrom,
+  removeRoamConnection,
+} from "./roamConnectionHelpers.ts";
 
 const VALID_RELATIONS = new Set([
   "father", "mother", "sibling", "spouse", "friend", "colleague", "other",
@@ -482,10 +486,37 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
   app.delete("/v1/contacts/:id", async (c) => {
     const gate = await requirePassenger(c);
     if (gate.response) return gate.response;
+    const contactId = c.req.param("id");
     const { db, tables: t } = await deps.getContactsDb();
+    const { data: existing } = await db.from(t.rider_contacts).select("linked_user_id, phone_e164")
+      .eq("id", contactId)
+      .eq("owner_user_id", gate.user!.id)
+      .maybeSingle();
+    if (!existing) return c.json({ error: "not_found" }, 404);
+
     const { error } = await db.from(t.rider_contacts).delete()
-      .eq("id", c.req.param("id")).eq("owner_user_id", gate.user!.id);
+      .eq("id", contactId).eq("owner_user_id", gate.user!.id);
     if (error) return c.json({ error: "delete_failed" }, 500);
+
+    if (isRoamConnectionsEnabled()) {
+      const linkedUserId = existing.linked_user_id ? String(existing.linked_user_id) : null;
+      const phoneE164 = String(existing.phone_e164 ?? "");
+      if (linkedUserId) {
+        await removeRoamConnection(db, t, gate.user!.id, linkedUserId);
+        await cancelPendingConnectionRequestsBetween(db, t, gate.user!.id, linkedUserId);
+      }
+      if (phoneE164) {
+        await cancelPendingPhoneInvitesFrom(db, t, gate.user!.id, phoneE164);
+      }
+      await deps.audit(null, gate.user!.id, "rider_contact_deleted", {
+        contact_id: contactId,
+        linked_user_id: linkedUserId,
+        disconnected: Boolean(linkedUserId),
+      });
+    } else {
+      await deps.audit(null, gate.user!.id, "rider_contact_deleted", { contact_id: contactId });
+    }
+
     return c.json({ ok: true });
   });
 

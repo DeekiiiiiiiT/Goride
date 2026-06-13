@@ -6,9 +6,17 @@ import {
   driverAccountKeyForUser,
   riderAccountKeyForUser,
 } from "./buildJournalEntries.ts";
+import { buildSettlementJournalV2 } from "./buildSettlementJournalV2.ts";
+import { isCashSettlementV2Enabled } from "./flags.ts";
+import {
+  applyPendingDebt,
+  createPaymentObligation,
+  getDriverDigitalAvailableMinor,
+} from "./debtRepayment.ts";
 import { hashSettlementRequest } from "./requestHash.ts";
 import { settledRidePatch } from "./cashSettlementLifecycle.ts";
 import { postPaymentJournal } from "../../_shared/paymentAccounts.ts";
+import type { WalletDeltaPreview } from "./buildJournalEntries.ts";
 
 export interface ProcessCashSettlementParams {
   ride: Record<string, unknown>;
@@ -34,7 +42,13 @@ export function resolveOwedFareMinor(ride: Record<string, unknown>): number | nu
 }
 
 export type ProcessCashSettlementResult =
-  | { ok: true; ride: Record<string, unknown>; computed: ReturnType<typeof computeCashSettlementOutcome> }
+  | {
+    ok: true;
+    ride: Record<string, unknown>;
+    computed: ReturnType<typeof computeCashSettlementOutcome>;
+    settlement_version: 1 | 2;
+    wallet_deltas?: WalletDeltaPreview;
+  }
   | { ok: false; error: string; status: number };
 
 export async function processCashSettlement(
@@ -79,20 +93,40 @@ export async function processCashSettlement(
   const riderUserId = String(ride.rider_user_id);
   const driverUserId = String(ride.assigned_driver_user_id);
 
-  const lines = buildJournalLineSpecs({
-    computed,
-    riderAccountKey: riderAccountKeyForUser(riderUserId),
-    driverAccountKey: driverAccountKeyForUser(driverUserId),
-    rideId,
-    currency,
-  });
+  const useV2 = isCashSettlementV2Enabled();
+  let walletDeltas: WalletDeltaPreview | undefined;
+  let debtOpenedMinor = 0;
+
+  let journalLines;
+  if (useV2) {
+    const digitalAvailable = await getDriverDigitalAvailableMinor(db, driverUserId, currency);
+    const v2 = buildSettlementJournalV2({
+      computed,
+      rideId,
+      currency,
+      riderUserId,
+      driverUserId,
+      digitalAvailableMinor: digitalAvailable,
+    });
+    journalLines = v2.lines;
+    walletDeltas = v2.walletDeltas;
+    debtOpenedMinor = v2.debtOpenedMinor;
+  } else {
+    journalLines = buildJournalLineSpecs({
+      computed,
+      riderAccountKey: riderAccountKeyForUser(riderUserId),
+      driverAccountKey: driverAccountKeyForUser(driverUserId),
+      rideId,
+      currency,
+    });
+  }
 
   const journalResult = await postPaymentJournal(db, {
     rideId,
     idempotencyKey,
     requestHash,
     currency,
-    lines,
+    lines: journalLines,
     createdByUserId: params.actorUserId,
   });
 
@@ -103,6 +137,7 @@ export async function processCashSettlement(
   if (journalResult.skipped) {
     const existing = await loadRide(rideId);
     if (existing && String(existing.status) === "completed") {
+      const snapshot = existing.cash_settlement_snapshot as Record<string, unknown> | null;
       return {
         ok: true,
         ride: existing,
@@ -110,9 +145,36 @@ export async function processCashSettlement(
           owedMinor,
           Number(existing.cash_received_minor ?? cashReceived),
         ),
+        settlement_version: snapshot?.settlement_version === 2 ? 2 : 1,
+        wallet_deltas: snapshot?.wallet_deltas as WalletDeltaPreview | undefined,
       };
     }
   }
+
+  if (useV2 && debtOpenedMinor > 0 && journalResult.inserted > 0) {
+    await createPaymentObligation(db, {
+      driverUserId,
+      rideRequestId: rideId,
+      amountMinor: debtOpenedMinor,
+      currency,
+      obligationType: "change_to_rider",
+    });
+    await applyPendingDebt(db, driverUserId, currency, "post_settlement");
+  }
+
+  const settlementSnapshot = useV2
+    ? {
+      settlement_version: 2,
+      owed_minor: computed.owed_minor,
+      cash_received_minor: computed.cash_received_minor,
+      change_credit_minor: computed.change_credit_minor,
+      arrears_minor: computed.arrears_minor,
+      outcome: computed.outcome,
+      wallet_deltas: walletDeltas,
+      debt_opened_minor: debtOpenedMinor,
+      settled_at: new Date().toISOString(),
+    }
+    : null;
 
   const nowIso = new Date().toISOString();
   const patch = {
@@ -122,6 +184,7 @@ export async function processCashSettlement(
       nowIso,
     ),
     tip_minor: tipReceived > 0 ? tipReceived : Number(ride.tip_minor ?? 0),
+    ...(settlementSnapshot ? { cash_settlement_snapshot: settlementSnapshot } : {}),
   };
 
   const patched = await patchRide(rideId, patch);
@@ -134,5 +197,20 @@ export async function processCashSettlement(
     return { ok: false, error: "not_found", status: 404 };
   }
 
-  return { ok: true, ride: fresh, computed };
+  if (useV2) {
+    console.info("[cashSettlement] v2_completed", {
+      ride_id: rideId,
+      outcome: computed.outcome,
+      change_credit_minor: computed.change_credit_minor,
+      debt_opened_minor: debtOpenedMinor,
+    });
+  }
+
+  return {
+    ok: true,
+    ride: fresh,
+    computed,
+    settlement_version: useV2 ? 2 : 1,
+    wallet_deltas: walletDeltas,
+  };
 }

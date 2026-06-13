@@ -1,12 +1,18 @@
 import React from 'react';
+import { ChevronRight, Wallet } from 'lucide-react';
 import { isDriverActiveRideStatus } from '@roam/types/rides';
 import { useRideDispatchContext } from '../../contexts/RideDispatchContext';
 import { RideOfferCard } from './RideOfferCard';
 import { ActiveRidePanel } from './ActiveRidePanel';
 import { OnlineGaugeSlider } from './OnlineGaugeSlider';
 import { shouldRetractOnlineSlider } from './rideDispatchUtils';
+import { CASH_SETTLEMENT_V2_ENABLED } from '../../lib/cashSettlementFlags';
 
-export function RideDispatchPage() {
+type Props = {
+  onOpenWallets?: () => void;
+};
+
+export function RideDispatchPage({ onOpenWallets }: Props) {
   const {
     online,
     offers,
@@ -33,9 +39,22 @@ export function RideDispatchPage() {
           retractSlider ? 'driver-scroll-pad-nav-only' : 'driver-scroll-pad-for-slider'
         }`}
       >
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight">Passenger rides</h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400">Roam passenger dispatch</p>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h1 className="text-lg font-semibold tracking-tight">Passenger rides</h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Roam passenger dispatch</p>
+          </div>
+          {CASH_SETTLEMENT_V2_ENABLED && onOpenWallets && (
+            <button
+              type="button"
+              onClick={onOpenWallets}
+              className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+            >
+              <Wallet className="h-3.5 w-3.5" aria-hidden />
+              Wallets
+              <ChevronRight className="h-3.5 w-3.5 opacity-60" aria-hidden />
+            </button>
+          )}
         </div>
 
         {!online && (

@@ -179,6 +179,28 @@ export function rowMatchesIncomingRider(
   return phonesMatch(String(row.rider_phone_e164), userPhoneE164);
 }
 
+/** Same authorization as incoming list — signed-in Roam user or matching phone. */
+export function riderCanRespondToPickupLocationRequest(
+  row: Record<string, unknown>,
+  userId: string,
+  userPhoneE164: string | null,
+): boolean {
+  return rowMatchesIncomingRider(row, userId, userPhoneE164);
+}
+
+async function resolveSignedInRiderPhoneE164(
+  user: { id: string; phone?: string | null },
+): Promise<string | null> {
+  if (user.phone) {
+    try {
+      return normalizePhoneE164(user.phone);
+    } catch {
+      /* fall through */
+    }
+  }
+  return resolveAuthUserPhone(user.id);
+}
+
 async function cancelPriorPendingForPair(
   db: SupabaseClient,
   table: string,
@@ -305,18 +327,7 @@ export function registerPickupLocationRequestRoutes(app: Hono, deps: PickupLocat
     }
 
     const userId = gate.user!.id;
-    let userPhoneE164: string | null = null;
-    const rawPhone = gate.user!.phone;
-    if (rawPhone) {
-      try {
-        userPhoneE164 = normalizePhoneE164(rawPhone);
-      } catch {
-        userPhoneE164 = null;
-      }
-    }
-    if (!userPhoneE164) {
-      userPhoneE164 = await resolveAuthUserPhone(userId);
-    }
+    const userPhoneE164 = await resolveSignedInRiderPhoneE164(gate.user!);
 
     const { db, tables: t } = await deps.getContactsDb();
     const nowIso = new Date().toISOString();
@@ -529,8 +540,11 @@ export function registerPickupLocationRequestRoutes(app: Hono, deps: PickupLocat
     );
 
     if (String(fresh.status) === "shared") {
-      const userPhone = gate.user!.phone ?? await resolveAuthUserPhone(gate.user!.id);
-      if (userPhone && phonesMatch(userPhone, String(fresh.rider_phone_e164))) {
+      if (riderCanRespondToPickupLocationRequest(
+        fresh,
+        gate.user!.id,
+        await resolveSignedInRiderPhoneE164(gate.user!),
+      )) {
         return c.json({ request: toPickupLocationRequestDto(fresh) });
       }
     }
@@ -539,8 +553,8 @@ export function registerPickupLocationRequestRoutes(app: Hono, deps: PickupLocat
       return c.json({ error: "unavailable", status: fresh.status }, 409);
     }
 
-    const userPhone = gate.user!.phone ?? await resolveAuthUserPhone(gate.user!.id);
-    if (!userPhone || !phonesMatch(userPhone, String(fresh.rider_phone_e164))) {
+    const userPhone = await resolveSignedInRiderPhoneE164(gate.user!);
+    if (!riderCanRespondToPickupLocationRequest(fresh, gate.user!.id, userPhone)) {
       return c.json({
         error: "phone_mismatch",
         message: "Sign in with the phone number this request was sent to.",
@@ -592,8 +606,8 @@ export function registerPickupLocationRequestRoutes(app: Hono, deps: PickupLocat
       return c.json({ error: "unavailable", status: fresh.status }, 409);
     }
 
-    const userPhone = gate.user!.phone ?? await resolveAuthUserPhone(gate.user!.id);
-    if (!userPhone || !phonesMatch(userPhone, String(fresh.rider_phone_e164))) {
+    const userPhone = await resolveSignedInRiderPhoneE164(gate.user!);
+    if (!riderCanRespondToPickupLocationRequest(fresh, gate.user!.id, userPhone)) {
       return c.json({
         error: "phone_mismatch",
         message: "Sign in with the phone number this request was sent to.",

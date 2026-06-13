@@ -66,7 +66,8 @@ import {
   type ApplyTransitionDeps,
 } from "./rideLifecycle.ts";
 import { registerCashSettlementRoutes } from "./cashSettlement/registerCashSettlementRoutes.ts";
-import { isCashSettlementEnabled } from "./cashSettlement/flags.ts";
+import { isCashSettlementEnabled, driverDebtDispatchThresholdMinor, isDriverDebtDispatchGuardEnabled } from "./cashSettlement/flags.ts";
+import { getOpenDebtMinor } from "./cashSettlement/debtRepayment.ts";
 import { evaluateGeofenceTransitions, cleanupRideLiveState } from "./rideGeofence.ts";
 import { loadAppPermissionPolicy, policyDto } from "../_shared/appPermissionPolicy.ts";
 import type { AppPermissionSurface } from "../_shared/appPermissionCatalog.ts";
@@ -2071,6 +2072,20 @@ app.post("/v1/drivers/offers/:offerId/accept", async (c) => {
   const ride = await loadRideRequestById(rideId);
   if (!ride || ride.status !== "matching") return c.json({ error: "ride_not_matching" }, 409);
 
+  if (isDriverDebtDispatchGuardEnabled()) {
+    const currency = String(ride.currency ?? "JMD");
+    const openDebt = await getOpenDebtMinor(svc(), auth.user.id, currency);
+    const threshold = driverDebtDispatchThresholdMinor();
+    if (openDebt > threshold) {
+      return c.json({
+        error: "driver_debt_blocked",
+        message: "Resolve open change debt before accepting new trips.",
+        open_debt_minor: openDebt,
+        threshold_minor: threshold,
+      }, 409);
+    }
+  }
+
   await patchDriverOfferRow(offerId, { status: "accepted" });
 
   await supersedePendingOffersForRide(rideId, offerId);
@@ -2705,12 +2720,12 @@ app.get("/v1/wallet/transactions", async (c) => {
   }
   if (isCashSettlementEnabled() && c.req.query("legacy") !== "1") {
     const currency = c.req.query("currency")?.trim() || "JMD";
-    const { listJournalForAccount } = await import("../_shared/paymentAccounts.ts");
+    const { listJournalForAccount, journalEntryTitle } = await import("../_shared/paymentAccounts.ts");
     const rows = await listJournalForAccount(svc(), auth.user.id, "rider", currency);
     const transactions = rows.map((row) => ({
       id: String(row.id),
       kind: "journal" as const,
-      title: String(row.entry_type).replace(/_/g, " "),
+      title: journalEntryTitle(String(row.entry_type)),
       amount_minor: String(row.amount_minor),
       currency: String(row.currency),
       date: String(row.created_at),

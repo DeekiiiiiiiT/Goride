@@ -52,6 +52,58 @@ export async function areUsersConnected(
   return Boolean(data?.id);
 }
 
+/** Remove the mutual Roam connection between two users, if present. */
+export async function removeRoamConnection(
+  db: SupabaseClient,
+  tables: RidesContactsTables,
+  userA: string,
+  userB: string,
+): Promise<void> {
+  const { user_a_id, user_b_id } = canonicalPair(userA, userB);
+  await db.from(tables.roam_connections).delete()
+    .eq("user_a_id", user_a_id)
+    .eq("user_b_id", user_b_id);
+}
+
+/** Cancel pending connection requests between two users (both directions). */
+export async function cancelPendingConnectionRequestsBetween(
+  db: SupabaseClient,
+  tables: RidesContactsTables,
+  userA: string,
+  userB: string,
+): Promise<void> {
+  const now = new Date().toISOString();
+  await db.from(tables.roam_connection_requests).update({
+    status: "cancelled",
+    responded_at: now,
+    updated_at: now,
+  })
+    .eq("status", "pending")
+    .or(
+      `and(requester_user_id.eq.${userA},target_user_id.eq.${userB}),` +
+      `and(requester_user_id.eq.${userB},target_user_id.eq.${userA})`,
+    );
+}
+
+/** Cancel pending phone-only invites from requester to a phone number. */
+export async function cancelPendingPhoneInvitesFrom(
+  db: SupabaseClient,
+  tables: RidesContactsTables,
+  requesterUserId: string,
+  phoneE164: string,
+): Promise<void> {
+  const now = new Date().toISOString();
+  await db.from(tables.roam_connection_requests).update({
+    status: "cancelled",
+    responded_at: now,
+    updated_at: now,
+  })
+    .eq("requester_user_id", requesterUserId)
+    .eq("target_phone_e164", phoneE164)
+    .eq("status", "pending")
+    .is("target_user_id", null);
+}
+
 export async function isBlockedEitherDirection(
   db: SupabaseClient,
   tables: RidesContactsTables,

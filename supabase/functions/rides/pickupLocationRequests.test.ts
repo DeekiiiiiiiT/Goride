@@ -6,6 +6,7 @@ import {
   PICKUP_LOCATION_REQUEST_TTL_MS,
   resolveDeliveryChannel,
   rowMatchesIncomingRider,
+  riderCanRespondToPickupLocationRequest,
   toIncomingPickupLocationRequestDto,
   toPickupLocationRequestDto,
 } from "./pickupLocationRequests.ts";
@@ -93,6 +94,25 @@ Deno.test("rowMatchesIncomingRider matches user id or phone", () => {
   assertEquals(rowMatchesIncomingRider(row, "rider-a", "+18762222222"), true);
   assertEquals(rowMatchesIncomingRider(row, "rider-b", "+18761111111"), true);
   assertEquals(rowMatchesIncomingRider(row, "rider-b", "+18763333333"), false);
+});
+
+Deno.test("riderCanRespondToPickupLocationRequest allows Roam user id when contact phone differs", () => {
+  const row = {
+    rider_user_id: "rider-a",
+    rider_phone_e164: "+14165551234",
+  };
+  assertEquals(
+    riderCanRespondToPickupLocationRequest(row, "rider-a", "+18761234567"),
+    true,
+  );
+  assertEquals(
+    riderCanRespondToPickupLocationRequest(row, "rider-b", "+14165551234"),
+    true,
+  );
+  assertEquals(
+    riderCanRespondToPickupLocationRequest(row, "rider-b", "+18761234567"),
+    false,
+  );
 });
 
 Deno.test("PICKUP_LOCATION_REQUEST_TTL_MS is 15 minutes", () => {

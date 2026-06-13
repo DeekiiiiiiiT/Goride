@@ -532,7 +532,12 @@ export function registerRideOperationsAdminRoutes(
 
     const fresh = await loadRideRequestById(rideId);
     const [enriched] = await enrichDriverNames([fresh ?? ride]);
-    return c.json({ ride: enriched, cash_settlement: settleResult.computed });
+    return c.json({ ride: enriched, cash_settlement: {
+      ...settleResult.computed,
+      settlement_version: settleResult.settlement_version,
+      wallet_deltas: settleResult.wallet_deltas,
+      snapshot: (fresh ?? ride).cash_settlement_snapshot ?? null,
+    } });
   });
 
   admin.post("/rides/:id/complete", async (c) => {

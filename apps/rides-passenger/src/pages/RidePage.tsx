@@ -21,8 +21,10 @@ import { BookerTrackingView } from '@/components/BookerTrackingView';
 import { RideCancelledView } from '@/components/RideCancelledView';
 import { TripInProgressView } from '@/components/TripInProgressView';
 import { CashSettlementRiderView } from '@/components/CashSettlementRiderView';
+import { CashTripSummaryView } from '@/components/CashTripSummaryView';
 import { TripSummaryView } from '@/components/TripSummaryView';
 import { isAwaitingCashSettlement, isCashRide } from '@/lib/cashSettlementUi';
+import { CASH_SETTLEMENT_V2_ENABLED } from '@/lib/cashSettlementFlags';
 import {
   cashSettlementOutcomeMessage,
   showSettlementResultOnTripScreen,
@@ -531,7 +533,10 @@ export default function RidePage() {
         </div>
       );
     }
+    const useV2CashSummary =
+      CASH_SETTLEMENT_V2_ENABLED && isCashRide(ride) && Boolean(ride.cash_settlement_outcome);
     const showCashResultScreen =
+      !useV2CashSummary &&
       isCashRide(ride) &&
       showSettlementResultOnTripScreen(ride.cash_settlement_outcome) &&
       !cashResultDismissed;
@@ -546,6 +551,9 @@ export default function RidePage() {
           onContinueToSummary={() => setCashResultDismissed(true)}
         />
       );
+    }
+    if (useV2CashSummary) {
+      return <CashTripSummaryView ride={ride} />;
     }
     return <TripSummaryView ride={ride} />;
   }

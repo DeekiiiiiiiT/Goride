@@ -17,6 +17,7 @@ import type {
   ScheduledRideQuoteBody,
   SendRideMessageBody,
   SendRideMessageResponse,
+  SettlementSummaryDto,
 } from '@roam/types/rides';
 import type { RidesVehicleTypeDto } from '@/types/vehicleTypes';
 
@@ -302,6 +303,16 @@ export async function ridesSendMessage(
     method: 'POST',
     headers: await ridesHeaders(),
     body: JSON.stringify(body),
+  });
+  if (!res.ok) await parseRidesError(res);
+  return res.json();
+}
+
+export async function ridesGetSettlementSummary(
+  rideId: string,
+): Promise<{ summary: SettlementSummaryDto }> {
+  const res = await ridesFetch(`${base}/v1/requests/${rideId}/settlement-summary`, {
+    headers: await ridesHeaders(),
   });
   if (!res.ok) await parseRidesError(res);
   return res.json();
