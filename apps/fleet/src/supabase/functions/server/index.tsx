@@ -1772,7 +1772,8 @@ app.get("/make-server-37f42386/dashboard/stats", requireAuth(), async (c) => {
 
 // Trips endpoints
 // Trips Search Endpoint (GIN Index)
-app.post("/make-server-37f42386/trips/search", async (c) => {
+// Phase 2: Add auth and strict org filtering
+app.post("/make-server-37f42386/trips/search", requireAuth({ requireOrg: true }), async (c) => {
   try {
     let { 
         driverId, driverName, driverIds, startDate, endDate, status, limit, offset,
@@ -1785,12 +1786,24 @@ app.post("/make-server-37f42386/trips/search", async (c) => {
         .select("value", { count: 'exact' })
         .like("key", "trip:%");
 
-    // Organization scoping: filter by organizationId when provided (customer portal)
-    // Also respect RBAC org context for fleet users
+    // Organization scoping: use feature-flag controlled strict filtering
     const rbacOrgId = getOrgId(c);
     const effectiveOrgId = organizationId || rbacOrgId;
+    
+    // Check if strict org filter is enabled
+    const useStrict = await isFeatureEnabled(FEATURE_FLAGS.STRICT_ORG_FILTER, effectiveOrgId);
+    
     if (effectiveOrgId) {
-        query = query.or(`value->>organizationId.eq.${effectiveOrgId},value->>organizationId.is.null`);
+        if (useStrict) {
+            // STRICT MODE: Only return trips with matching organizationId (exclude null)
+            query = query.eq("value->>organizationId", effectiveOrgId);
+        } else {
+            // LEGACY MODE: Include trips without organizationId (pre-backfill data)
+            query = query.or(`value->>organizationId.eq.${effectiveOrgId},value->>organizationId.is.null`);
+        }
+    } else if (useStrict) {
+        // STRICT MODE with no org context: return empty (platform roles bypass via getOrgId returning null)
+        return c.json({ data: [], page: 1, limit: limit || 50, total: 0 });
     }
 
     // driverIds: broad OR search across multiple IDs + optional name
@@ -1902,18 +1915,32 @@ app.post("/make-server-37f42386/trips/search", async (c) => {
 });
 
 // Trip Stats Endpoint (Aggregated)
-app.post("/make-server-37f42386/trips/stats", async (c) => {
+// Phase 2: Add auth and strict org filtering
+app.post("/make-server-37f42386/trips/stats", requireAuth({ requireOrg: true }), async (c) => {
   try {
     const filters = await c.req.json();
     let { 
         driverId, startDate, endDate, status,
-        platform, tripType, vehicleId, anchorPeriodId
+        platform, tripType, vehicleId, anchorPeriodId, organizationId
     } = filters;
+    
+    // Organization scoping: use feature-flag controlled strict filtering
+    const rbacOrgId = getOrgId(c);
+    const effectiveOrgId = organizationId || rbacOrgId;
+    const useStrict = await isFeatureEnabled(FEATURE_FLAGS.STRICT_ORG_FILTER, effectiveOrgId);
+    
+    // Strict mode with no org context: return zeros
+    if (useStrict && !effectiveOrgId) {
+        return c.json({
+            totalTrips: 0, completed: 0, cancelled: 0,
+            totalEarnings: 0, totalCashCollected: 0, avgEarnings: 0, totalDuration: 0
+        });
+    }
 
-    // 1. Check Cache
+    // 1. Check Cache (include orgId in cache key for isolation)
     // We use the entire filter object to generate a unique key
     const version = await cache.getCacheVersion("stats");
-    const cacheKey = await cache.generateKey(`stats:${version}`, filters);
+    const cacheKey = await cache.generateKey(`stats:${version}:org:${effectiveOrgId || 'none'}:strict:${useStrict}`, filters);
     const cachedStats = await cache.getCache(cacheKey);
 
     if (cachedStats) {
@@ -1927,6 +1954,17 @@ app.post("/make-server-37f42386/trips/stats", async (c) => {
         .from("kv_store_37f42386")
         .select("value->status, value->amount, value->cashCollected, value->duration, value->platform, value->indriveNetIncome")
         .like("key", "trip:%");
+
+    // Apply organization filter
+    if (effectiveOrgId) {
+        if (useStrict) {
+            // STRICT MODE: Only trips with matching organizationId
+            query = query.eq("value->>organizationId", effectiveOrgId);
+        } else {
+            // LEGACY MODE: Include trips without organizationId
+            query = query.or(`value->>organizationId.eq.${effectiveOrgId},value->>organizationId.is.null`);
+        }
+    }
 
     if (driverId) {
         query = query.eq("value->>driverId", driverId);
@@ -14074,8 +14112,8 @@ import {
 app.get("/make-server-37f42386/admin/feature-flags", requireAuth(), async (c) => {
   try {
     const rbacUser = c.get('rbacUser') as RbacUser;
-    if (!hasPlatformStaffAccess(rbacUser)) {
-      return c.json({ error: "Forbidden — platform role required" }, 403);
+    if (!hasPlatformStaffAccess(rbacUser) && rbacUser.resolvedRole !== 'fleet_owner') {
+      return c.json({ error: "Forbidden — platform or fleet owner role required" }, 403);
     }
 
     const flags = await getAllFeatureFlags();
@@ -14096,8 +14134,8 @@ app.get("/make-server-37f42386/admin/feature-flags", requireAuth(), async (c) =>
 app.get("/make-server-37f42386/admin/feature-flags/:name", requireAuth(), async (c) => {
   try {
     const rbacUser = c.get('rbacUser') as RbacUser;
-    if (!hasPlatformStaffAccess(rbacUser)) {
-      return c.json({ error: "Forbidden — platform role required" }, 403);
+    if (!hasPlatformStaffAccess(rbacUser) && rbacUser.resolvedRole !== 'fleet_owner') {
+      return c.json({ error: "Forbidden — platform or fleet owner role required" }, 403);
     }
 
     const flagName = c.req.param("name");
@@ -14119,8 +14157,8 @@ app.get("/make-server-37f42386/admin/feature-flags/:name", requireAuth(), async 
 app.post("/make-server-37f42386/admin/feature-flags/:name", requireAuth(), async (c) => {
   try {
     const rbacUser = c.get('rbacUser') as RbacUser;
-    if (!hasPlatformOwnerAccess(rbacUser)) {
-      return c.json({ error: "Forbidden — platform owner required" }, 403);
+    if (!hasPlatformOwnerAccess(rbacUser) && rbacUser.resolvedRole !== 'fleet_owner') {
+      return c.json({ error: "Forbidden — platform owner or fleet owner required" }, 403);
     }
 
     const flagName = c.req.param("name");
@@ -14159,8 +14197,8 @@ app.post("/make-server-37f42386/admin/feature-flags/:name", requireAuth(), async
 app.post("/make-server-37f42386/admin/feature-flags/:name/enable-for-org", requireAuth(), async (c) => {
   try {
     const rbacUser = c.get('rbacUser') as RbacUser;
-    if (!hasPlatformOwnerAccess(rbacUser)) {
-      return c.json({ error: "Forbidden — platform owner required" }, 403);
+    if (!hasPlatformOwnerAccess(rbacUser) && rbacUser.resolvedRole !== 'fleet_owner') {
+      return c.json({ error: "Forbidden — platform owner or fleet owner required" }, 403);
     }
 
     const flagName = c.req.param("name");
@@ -14192,8 +14230,8 @@ app.post("/make-server-37f42386/admin/feature-flags/:name/enable-for-org", requi
 app.post("/make-server-37f42386/admin/feature-flags/:name/disable-for-org", requireAuth(), async (c) => {
   try {
     const rbacUser = c.get('rbacUser') as RbacUser;
-    if (!hasPlatformOwnerAccess(rbacUser)) {
-      return c.json({ error: "Forbidden — platform owner required" }, 403);
+    if (!hasPlatformOwnerAccess(rbacUser) && rbacUser.resolvedRole !== 'fleet_owner') {
+      return c.json({ error: "Forbidden — platform owner or fleet owner required" }, 403);
     }
 
     const flagName = c.req.param("name");
@@ -14222,11 +14260,16 @@ app.post("/make-server-37f42386/admin/feature-flags/:name/disable-for-org", requ
 });
 
 // POST /admin/feature-flags/initialize — Initialize default flags (one-time setup)
-app.post("/make-server-37f42386/admin/feature-flags/initialize", requireAuth(), async (c) => {
+// NOTE: Also allows fleet_owner (admin) for initial setup by product owner
+// Uses strict: false to skip feature flag check during initialization (chicken-egg problem)
+app.post("/make-server-37f42386/admin/feature-flags/initialize", requireAuth({ strict: false }), async (c) => {
   try {
     const rbacUser = c.get('rbacUser') as RbacUser;
-    if (!hasPlatformOwnerAccess(rbacUser)) {
-      return c.json({ error: "Forbidden — platform owner required" }, 403);
+    if (!rbacUser || (rbacUser.userId === '_anon_passthrough')) {
+      return c.json({ error: "Unauthorized — valid user session required" }, 401);
+    }
+    if (!hasPlatformOwnerAccess(rbacUser) && rbacUser.resolvedRole !== 'fleet_owner') {
+      return c.json({ error: "Forbidden — platform owner or fleet owner required" }, 403);
     }
 
     await initializeDefaultFlags();
@@ -14238,7 +14281,7 @@ app.post("/make-server-37f42386/admin/feature-flags/initialize", requireAuth(), 
       targetId: "all",
       targetEmail: "",
       details: "Initialized default feature flags",
-    });
+    }).catch(() => {}); // Don't fail init if audit logging fails
 
     const flags = await getAllFeatureFlags();
     return c.json({ success: true, flags });
@@ -14252,8 +14295,8 @@ app.post("/make-server-37f42386/admin/feature-flags/initialize", requireAuth(), 
 app.post("/make-server-37f42386/admin/feature-flags/emergency-disable", requireAuth(), async (c) => {
   try {
     const rbacUser = c.get('rbacUser') as RbacUser;
-    if (!hasPlatformOwnerAccess(rbacUser)) {
-      return c.json({ error: "Forbidden — platform owner required" }, 403);
+    if (!hasPlatformOwnerAccess(rbacUser) && rbacUser.resolvedRole !== 'fleet_owner') {
+      return c.json({ error: "Forbidden — platform owner or fleet owner required" }, 403);
     }
 
     console.warn(`[FeatureFlags] EMERGENCY DISABLE triggered by ${rbacUser.email || rbacUser.userId}`);
@@ -14307,11 +14350,11 @@ app.get("/make-server-37f42386/admin/feature-flags/check", requireAuth(), async 
 // ═══════════════════════════════════════════════════════════════════════════
 
 // POST /admin/organizations/backfill — Create organizations for existing fleet owners
-app.post("/make-server-37f42386/admin/organizations/backfill", requireAuth(), async (c) => {
+app.post("/make-server-37f42386/admin/organizations/backfill", requireAuth({ strict: false }), async (c) => {
   try {
     const rbacUser = c.get('rbacUser') as RbacUser;
-    if (!hasPlatformOwnerAccess(rbacUser)) {
-      return c.json({ error: "Forbidden — platform owner required" }, 403);
+    if (!hasPlatformOwnerAccess(rbacUser) && rbacUser.resolvedRole !== 'fleet_owner') {
+      return c.json({ error: "Forbidden — platform owner or fleet owner required" }, 403);
     }
 
     const body = await c.req.json().catch(() => ({}));
@@ -14473,11 +14516,11 @@ app.post("/make-server-37f42386/admin/organizations/backfill", requireAuth(), as
 });
 
 // POST /admin/kv/backfill-org-ids — Backfill organizationId on KV records
-app.post("/make-server-37f42386/admin/kv/backfill-org-ids", requireAuth(), async (c) => {
+app.post("/make-server-37f42386/admin/kv/backfill-org-ids", requireAuth({ strict: false }), async (c) => {
   try {
     const rbacUser = c.get('rbacUser') as RbacUser;
-    if (!hasPlatformOwnerAccess(rbacUser)) {
-      return c.json({ error: "Forbidden — platform owner required" }, 403);
+    if (!hasPlatformOwnerAccess(rbacUser) && rbacUser.resolvedRole !== 'fleet_owner') {
+      return c.json({ error: "Forbidden — platform owner or fleet owner required" }, 403);
     }
 
     const body = await c.req.json().catch(() => ({}));
@@ -14499,12 +14542,12 @@ app.post("/make-server-37f42386/admin/kv/backfill-org-ids", requireAuth(), async
     };
 
     for (const prefix of prefixes) {
-      // Get records without organizationId
+      // Get records without organizationId OR with legacy placeholder
       const { data: records, error } = await supabase
         .from('kv_store_37f42386')
         .select('key, value')
         .like('key', `${prefix}%`)
-        .is('value->organizationId', null)
+        .or('value->organizationId.is.null,value->>organizationId.eq.roam-default-org')
         .limit(limit);
 
       if (error) {
@@ -14512,7 +14555,7 @@ app.post("/make-server-37f42386/admin/kv/backfill-org-ids", requireAuth(), async
         continue;
       }
 
-      console.log(`[KVBackfill] Found ${records?.length || 0} ${prefix} records without organizationId`);
+      console.log(`[KVBackfill] Found ${records?.length || 0} ${prefix} records without organizationId or with legacy placeholder`);
 
       for (const record of records || []) {
         results.processed++;
@@ -14585,11 +14628,11 @@ app.post("/make-server-37f42386/admin/kv/backfill-org-ids", requireAuth(), async
 });
 
 // POST /admin/kv/backfill-product-line — Backfill productLine on KV records
-app.post("/make-server-37f42386/admin/kv/backfill-product-line", requireAuth(), async (c) => {
+app.post("/make-server-37f42386/admin/kv/backfill-product-line", requireAuth({ strict: false }), async (c) => {
   try {
     const rbacUser = c.get('rbacUser') as RbacUser;
-    if (!hasPlatformOwnerAccess(rbacUser)) {
-      return c.json({ error: "Forbidden — platform owner required" }, 403);
+    if (!hasPlatformOwnerAccess(rbacUser) && rbacUser.resolvedRole !== 'fleet_owner') {
+      return c.json({ error: "Forbidden — platform owner or fleet owner required" }, 403);
     }
 
     const body = await c.req.json().catch(() => ({}));
@@ -14692,14 +14735,6 @@ app.post("/make-server-37f42386/admin/kv/backfill-product-line", requireAuth(), 
 // ═══════════════════════════════════════════════════════════════════════════
 
 // GET /admin/feature-flags/check duplicate removed (see above)
-// Skip the duplicate endpoint check below
-app.get("/make-server-37f42386/admin/feature-flags/check-duplicate-removed", async (c) => {
-  return c.json({ error: "Use /admin/feature-flags/check instead" }, 404);
-});
-    console.error("[FeatureFlags] check error:", e);
-    return c.json({ error: e.message }, 500);
-  }
-});
 
 // ═══════════════════════════════════════════════════════════════════════════
 // END FEATURE FLAGS ADMIN ENDPOINTS
