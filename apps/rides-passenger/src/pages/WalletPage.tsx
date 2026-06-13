@@ -21,6 +21,7 @@ import {
   ON_PRIMARY,
   ON_SURFACE,
   ON_SURFACE_VARIANT,
+  PAGE_BG,
   PRIMARY,
   PRIMARY_CONTAINER,
   PRIMARY_FIXED,
@@ -92,7 +93,7 @@ export default function WalletPage() {
           walletGetBalance(),
         ]);
         if (!cancelled) {
-          setTransactions(txRes.transactions);
+          setTransactions(txRes.transactions ?? []);
           setWallet(balRes.wallet);
         }
       } catch (e) {

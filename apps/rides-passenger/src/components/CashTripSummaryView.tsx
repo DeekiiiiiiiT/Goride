@@ -219,7 +219,7 @@ export function CashTripSummaryView({ ride }: Props) {
                 </div>
               )}
               <Link
-                to={`/wallet?ride=${ride.id}`}
+                to={`/account/wallet?ride=${ride.id}`}
                 className="block text-center text-xs font-semibold text-emerald-700 underline dark:text-emerald-400"
               >
                 View wallet transactions

@@ -187,6 +187,7 @@ export default function App() {
           <Route path="/account/contacts/groups" element={<ContactGroupsPage />} />
           <Route path="/account/contacts/groups/:id" element={<ContactGroupDetailPage />} />
           <Route path="/account/contacts/:id" element={<ContactDetailPage />} />
+          <Route path="/wallet" element={<Navigate to="/account/wallet" replace />} />
           <Route path="/account/wallet" element={<WalletPage />} />
           <Route path="/account/wallet/payment-methods" element={<ManagePaymentMethodsPage />} />
           <Route path="/account/settings" element={<AppSettingsPage />} />

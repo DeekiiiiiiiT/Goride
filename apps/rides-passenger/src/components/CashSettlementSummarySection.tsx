@@ -74,7 +74,7 @@ export function CashSettlementSummarySection({ ride }: Props) {
       )}
       <p className="text-xs text-amber-800 leading-relaxed">
         This amount has been added to your wallet balance.{' '}
-        <Link to="/wallet" className="font-semibold underline">
+        <Link to="/account/wallet" className="font-semibold underline">
           Open Wallet
         </Link>{' '}
         to settle before your next cash trip.
