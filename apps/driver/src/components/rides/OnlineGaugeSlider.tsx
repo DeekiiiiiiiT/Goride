@@ -7,6 +7,7 @@ type Props = {
   disabled?: boolean;
   className?: string;
   variant?: 'default' | 'premium';
+  dense?: boolean;
 };
 
 const THUMB_SIZE = 44;
@@ -26,6 +27,7 @@ export function OnlineGaugeSlider({
   disabled = false,
   className = '',
   variant = 'default',
+  dense = false,
 }: Props) {
   const trackRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
@@ -34,7 +36,12 @@ export function OnlineGaugeSlider({
   const [dragging, setDragging] = useState(false);
 
   const isPremium = variant === 'premium';
-  const thumbSize = isPremium ? PREMIUM_THUMB_SIZE : THUMB_SIZE;
+  const thumbSize = isPremium ? (dense ? 44 : PREMIUM_THUMB_SIZE) : THUMB_SIZE;
+  const premiumTrackClass = isPremium
+    ? dense
+      ? 'driver-home-slider-track flex h-14 items-center overflow-hidden rounded-full px-2'
+      : 'driver-home-slider-track flex h-16 items-center overflow-hidden rounded-full px-2'
+    : '';
 
   useEffect(() => {
     if (!draggingRef.current) {
@@ -86,7 +93,7 @@ export function OnlineGaugeSlider({
     <div
       ref={trackRef}
       className={`relative mx-auto w-full select-none touch-none ${
-        isPremium ? 'driver-home-slider-track flex h-16 items-center overflow-hidden rounded-full px-2' : 'max-w-md rounded-xl'
+        isPremium ? premiumTrackClass : 'max-w-md rounded-xl'
       } ${goOnlineDisabled ? 'pointer-events-none' : 'cursor-grab active:cursor-grabbing'}`}
       style={{ height: isPremium ? undefined : TRACK_HEIGHT }}
       role="slider"
@@ -158,9 +165,39 @@ export function OnlineGaugeSlider({
               draggingOffline ? 'bg-red-500/10' : 'bg-[#006d43]/5'
             }`}
           />
-          <span className="pointer-events-none absolute left-8 text-sm font-medium text-slate-400/80 dark:text-white/40">
-            OFFLINE
-          </span>
+          {online ? (
+            <>
+              <span
+                className="pointer-events-none absolute top-1/2 -translate-y-1/2 text-sm font-medium text-slate-400/80 dark:text-white/40"
+                style={{
+                  left: dragging
+                    ? `calc(0.5rem + ${displayOffset}px + ${thumbSize}px + 0.75rem)`
+                    : '1.25rem',
+                  transition: dragging ? 'none' : 'left 0.2s ease-out',
+                }}
+              >
+                OFFLINE
+              </span>
+              <span className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-sm font-medium text-[#006d43]/70 dark:text-[#59de9b]/80">
+                ONLINE
+              </span>
+            </>
+          ) : (
+            <>
+              <span
+                className="pointer-events-none absolute top-1/2 -translate-y-1/2 text-sm font-medium text-slate-400/80 dark:text-white/40"
+                style={{
+                  left: `calc(0.5rem + ${displayOffset}px + ${thumbSize}px + 0.75rem)`,
+                  transition: dragging ? 'none' : 'left 0.2s ease-out',
+                }}
+              >
+                OFFLINE
+              </span>
+              <span className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-sm font-medium text-[#006d43]/70 dark:text-[#59de9b]/80">
+                ONLINE
+              </span>
+            </>
+          )}
         </>
       )}
       <div
@@ -195,7 +232,7 @@ export function OnlineGaugeSlider({
   if (isPremium) {
     return (
       <div className={className}>
-        <div className={`flex flex-col items-center gap-4 ${goOnlineDisabled ? 'opacity-60' : ''}`}>
+        <div className={`flex flex-col items-center ${dense ? 'gap-2' : 'gap-4'} ${goOnlineDisabled ? 'opacity-60' : ''}`}>
           <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
             {hint}
           </p>

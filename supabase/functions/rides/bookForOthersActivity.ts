@@ -300,7 +300,10 @@ export function registerBookForOthersActivityRoutes(
           .in("status", [...INTENT_HUB_STATUSES])
           .order("created_at", { ascending: false })
           .limit(10),
-        listTripIntentsTargetingBooker(contactsDb, t.booking_requests, userId, bookerPhone, deps.svc()),
+        listTripIntentsTargetingBooker(contactsDb, t.booking_requests, userId, bookerPhone, deps.svc(), {
+          rider_contacts: t.rider_contacts,
+          roam_connections: t.roam_connections,
+        }),
       ]);
 
       const [requesterIntentRides, payerIntentRides] = intentRideLoads;

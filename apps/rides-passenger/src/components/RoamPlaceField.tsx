@@ -203,17 +203,20 @@ export function RoamPlaceField({
     ? `input-touch ${inputClassName} ${homePadClass} ${defaultPadClass}`
     : `input-touch w-full rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 outline-none focus:border-emerald-500/55 focus:bg-white focus:ring-4 focus:ring-emerald-500/12 ${defaultPadClass}`;
 
-  const defaultListClass =
-    'absolute z-50 mt-1 max-h-52 w-full overflow-y-auto rounded-2xl border border-zinc-200 bg-white py-1 shadow-lg';
+  const suggestionListSurfaceClass =
+    'overflow-y-auto rounded-2xl border border-zinc-200 bg-white py-1 shadow-xl';
+
+  const defaultListClass = `absolute z-50 mt-1 max-h-52 w-full ${suggestionListSurfaceClass}`;
 
   const suggestionsList = showSuggestions && suggestions.length > 0 && (
     <ul
       data-roam-place-suggestions
-      className={
-        suggestionsListClassName ??
-        `${portalSuggestions ? '' : defaultListClass} overflow-y-auto rounded-2xl border py-1 shadow-lg`
+      className={suggestionsListClassName ?? (portalSuggestions ? suggestionListSurfaceClass : defaultListClass)}
+      style={
+        portalSuggestions
+          ? { ...portalListStyle, backgroundColor: '#ffffff' }
+          : undefined
       }
-      style={portalSuggestions ? portalListStyle : undefined}
       role="listbox"
     >
       {suggestions.map((suggestion, index) => (
@@ -223,7 +226,7 @@ export function RoamPlaceField({
             disabled={!suggestion.place_id || resolving}
             className={
               suggestionButtonClassName ??
-              'flex w-full items-start gap-2 px-3 py-2.5 text-left text-sm text-zinc-800 hover:bg-emerald-50 disabled:opacity-50'
+              'flex w-full items-start gap-2 bg-white px-3 py-2.5 text-left text-sm font-medium text-zinc-900 hover:bg-emerald-50 disabled:opacity-50'
             }
             onClick={() => void handleSelect(suggestion)}
           >

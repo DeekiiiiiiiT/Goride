@@ -1,25 +1,26 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, CalendarClock, CheckCircle2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  Circle,
+  Clock,
+  Info,
+  MapPin,
+} from 'lucide-react';
 import { formatMoneyMinor } from '@roam/types/rides';
 import type { ScheduledRideDetailResponse } from '@roam/types/rides';
-import {
-  CARD_SHADOW,
-  HEADER_BG,
-  ON_PRIMARY,
-  ON_SURFACE,
-  ON_SURFACE_VARIANT,
-  OUTLINE_VARIANT,
-  PAGE_BG,
-  PRIMARY,
-  SURFACE_LOWEST,
-} from '@/lib/passengerTheme';
+
+import { formatScheduledWhenLong } from '@/lib/formatScheduledWhen';
+import { PAGE_BG } from '@/lib/passengerTheme';
+
+const PRIMARY = '#006d43';
+const PRIMARY_CONTAINER = '#00a86b';
 
 type LocationState = {
   confirmation?: ScheduledRideDetailResponse;
 };
-
-import { formatScheduledWhenLong } from '@/lib/formatScheduledWhen';
 
 export default function ScheduledRideConfirmPage() {
   const navigate = useNavigate();
@@ -29,8 +30,11 @@ export default function ScheduledRideConfirmPage() {
 
   if (!data?.ride) {
     return (
-      <div className="flex min-h-[100dvh] flex-col items-center justify-center px-6" style={{ backgroundColor: PAGE_BG }}>
-        <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>Booking details unavailable.</p>
+      <div
+        className="flex min-h-[100dvh] flex-col items-center justify-center px-6"
+        style={{ backgroundColor: PAGE_BG }}
+      >
+        <p className="text-sm text-gray-500">Booking details unavailable.</p>
         <button
           type="button"
           className="mt-4 text-sm font-semibold"
@@ -44,98 +48,122 @@ export default function ScheduledRideConfirmPage() {
   }
 
   const { ride, pickup_window_start, pickup_window_end, cancellation_policy } = data;
+  const fareLabel = formatMoneyMinor(ride.fare_estimate_minor, ride.currency);
 
   return (
-    <div className="flex min-h-[100dvh] flex-col" style={{ backgroundColor: PAGE_BG, color: ON_SURFACE }}>
-      <header className="sticky top-0 z-50 flex h-16 w-full items-center bg-[#f7f9fb] px-4 safe-t">
+    <div
+      className="flex min-h-[100dvh] flex-col pb-36"
+      style={{ backgroundColor: PAGE_BG, color: '#1b1c1c' }}
+    >
+      <header className="sticky top-0 z-50 flex h-16 w-full items-center border-b border-[#006d43]/10 bg-[#fbf9f8]/95 px-6 backdrop-blur-xl safe-t">
         <button
           type="button"
           onClick={() => navigate('/')}
-          className="rounded-full p-2 transition-colors active:scale-95 passenger-row-hover"
+          className="rounded-full p-2 transition-transform active:scale-95 hover:bg-[#006d43]/5"
           style={{ color: PRIMARY }}
           aria-label="Back to home"
         >
           <ArrowLeft className="h-6 w-6" strokeWidth={2} aria-hidden />
         </button>
-        <h1 className="ml-4 text-xl font-semibold tracking-tight">Ride scheduled</h1>
+        <h1 className="ml-4 text-2xl font-semibold tracking-tight" style={{ color: PRIMARY }}>
+          Ride Scheduled
+        </h1>
       </header>
 
-      <main className="mx-auto w-full max-w-2xl flex-1 px-4 pb-10 pt-6 safe-x">
-        <div
-          className="rounded-[24px] p-8 text-center"
-          style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
-        >
-          <div
-            className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl"
-            style={{ backgroundColor: `${PRIMARY}18`, color: PRIMARY }}
-          >
-            <CheckCircle2 className="h-8 w-8" aria-hidden />
+      <main className="mx-auto w-full max-w-2xl flex-1 space-y-3 overflow-y-auto px-6 py-4 safe-x">
+        <div className="scheduled-confirm-glass-card flex flex-col items-center rounded-[1.5rem] p-4 text-center shadow-[0_4px_24px_rgba(0,168,107,0.05)]">
+          <div className="relative mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-[#006d43]/10">
+            <div className="scheduled-confirm-success-glow" aria-hidden />
+            <CheckCircle2 className="h-8 w-8 fill-[#006d43]/15" style={{ color: PRIMARY }} aria-hidden />
           </div>
-          <h2 className="text-xl font-semibold">You&apos;re all set</h2>
-          <p className="mt-2 text-sm leading-relaxed" style={{ color: ON_SURFACE_VARIANT }}>
+          <h2 className="mb-1 text-2xl font-semibold text-gray-900">You&apos;re all set</h2>
+          <p className="max-w-[240px] text-base leading-relaxed text-[#3d4a41]">
             We&apos;ll start finding a driver before your pickup time.
           </p>
         </div>
 
-        <div
-          className="mt-4 space-y-4 rounded-[24px] p-6"
-          style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
-        >
-          <div className="flex items-start gap-3">
-            <CalendarClock className="mt-0.5 h-5 w-5 shrink-0" style={{ color: PRIMARY }} aria-hidden />
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wide" style={{ color: ON_SURFACE_VARIANT }}>
-                Pickup time
+        <div className="scheduled-confirm-glass-card space-y-4 rounded-[1.5rem] p-4 shadow-[0_4px_24px_rgba(0,0,0,0.02)]">
+          <div className="flex gap-4">
+            <div className="mt-1 shrink-0">
+              <Clock className="h-6 w-6" style={{ color: PRIMARY }} fill="currentColor" aria-hidden />
+            </div>
+            <div className="min-w-0">
+              <p className="mb-1 text-xs font-medium uppercase tracking-widest text-[#5f5e5e]">
+                Pickup Time
               </p>
-              <p className="mt-1 font-semibold">{formatScheduledWhenLong(ride.scheduled_pickup_at)}</p>
+              <p className="mb-1 text-2xl font-semibold text-gray-900">
+                {formatScheduledWhenLong(ride.scheduled_pickup_at)}
+              </p>
               {pickup_window_start && pickup_window_end ? (
-                <p className="mt-1 text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-                  Window {formatScheduledWhenLong(pickup_window_start)} – {formatScheduledWhenLong(pickup_window_end)}
+                <p className="text-xs text-[#3d4a41]/80">
+                  Window {formatScheduledWhenLong(pickup_window_start)} –{' '}
+                  {formatScheduledWhenLong(pickup_window_end)}
                 </p>
               ) : null}
             </div>
           </div>
 
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wide" style={{ color: ON_SURFACE_VARIANT }}>
-              Route
-            </p>
-            <p className="mt-1 text-sm">{ride.pickup_address ?? 'Pickup'}</p>
-            <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>→ {ride.dropoff_address ?? 'Destination'}</p>
+          <div className="flex gap-4">
+            <div className="mt-1 flex flex-col items-center">
+              <Circle className="h-5 w-5 fill-[#006d43]" style={{ color: PRIMARY }} aria-hidden />
+              <div className="scheduled-confirm-route-line" aria-hidden />
+              <MapPin className="h-5 w-5 fill-[#00a86b]" style={{ color: PRIMARY_CONTAINER }} aria-hidden />
+            </div>
+            <div className="min-w-0 flex-1 space-y-4 pt-1">
+              <div>
+                <p className="mb-0.5 text-xs font-medium uppercase tracking-widest text-[#5f5e5e]">
+                  Origin
+                </p>
+                <p className="text-lg text-gray-900">{ride.pickup_address ?? 'Pickup'}</p>
+              </div>
+              <div>
+                <p className="mb-0.5 text-xs font-medium uppercase tracking-widest text-[#5f5e5e]">
+                  Destination
+                </p>
+                <p className="text-lg text-gray-900">{ride.dropoff_address ?? 'Destination'}</p>
+              </div>
+            </div>
           </div>
 
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wide" style={{ color: ON_SURFACE_VARIANT }}>
-              Estimated fare
-            </p>
-            <p className="mt-1 text-lg font-semibold" style={{ color: PRIMARY }}>
-              {formatMoneyMinor(ride.fare_estimate_minor, ride.currency)}
-            </p>
-          </div>
+          <div className="h-px w-full bg-[#006d43]/10" />
 
-          <div className="border-t pt-4 text-sm leading-relaxed" style={{ borderColor: `${OUTLINE_VARIANT}33`, color: ON_SURFACE_VARIANT }}>
-            {cancellation_policy}
+          <div className="space-y-4">
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <p className="mb-0.5 text-xs font-medium uppercase tracking-widest text-[#5f5e5e]">
+                  Estimated Fare
+                </p>
+                <p className="text-[32px] font-semibold leading-tight" style={{ color: PRIMARY }}>
+                  {fareLabel}
+                </p>
+              </div>
+              <div className="rounded-full border border-[#00a86b]/20 bg-[#00a86b]/10 px-3 py-1">
+                <p className="text-xs font-semibold" style={{ color: PRIMARY_CONTAINER }}>
+                  Scheduled
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-[#5f5e5e]" aria-hidden />
+              <p className="text-xs leading-relaxed text-[#3d4a41]">{cancellation_policy}</p>
+            </div>
           </div>
         </div>
-
-        <button
-          type="button"
-          onClick={() => navigate('/activity')}
-          className="mt-6 flex h-14 w-full items-center justify-center rounded-xl text-base font-semibold shadow-lg"
-          style={{ backgroundColor: PRIMARY, color: ON_PRIMARY }}
-        >
-          View in Activity
-        </button>
       </main>
 
-      <footer
-        className="border-t p-4 backdrop-blur-md safe-x"
-        style={{ backgroundColor: HEADER_BG, borderColor: `${OUTLINE_VARIANT}33` }}
-      >
-        <p className="text-center text-xs" style={{ color: ON_SURFACE_VARIANT }}>
-          Driver assignment is not guaranteed until matching begins.
-        </p>
-      </footer>
+      <div className="fixed bottom-20 left-0 z-40 w-full bg-gradient-to-t from-[#fbf9f8] via-[#fbf9f8]/95 to-transparent px-6 pb-6 safe-x">
+        <button
+          type="button"
+          onClick={() =>
+            navigate('/activity', { state: { scheduledRideId: ride.id } })
+          }
+          className="flex h-14 w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white shadow-[0_8px_20px_rgba(0,168,107,0.25)] transition-transform duration-200 active:scale-95"
+          style={{ backgroundColor: PRIMARY }}
+        >
+          View in Activity
+          <ArrowRight className="h-5 w-5" aria-hidden />
+        </button>
+      </div>
     </div>
   );
 }

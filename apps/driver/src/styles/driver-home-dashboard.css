@@ -1,7 +1,7 @@
 .driver-home-pulse-container {
   position: relative;
-  width: 200px;
-  height: 200px;
+  width: min(12.5rem, 44vw);
+  height: min(12.5rem, 44vw);
 }
 
 .driver-home-pulse-ring {
@@ -40,8 +40,8 @@
 }
 
 .driver-home-status-orb {
-  width: 80px;
-  height: 80px;
+  width: 5rem;
+  height: 5rem;
   border-radius: 50%;
   display: flex;
   align-items: center;

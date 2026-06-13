@@ -1,0 +1,53 @@
+.activity-scheduled-sheet {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.activity-scheduled-sheet-overlay {
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.activity-scheduled-sheet-overlay--open {
+  opacity: 1;
+}
+
+.activity-scheduled-sheet-panel {
+  transform: translateY(100%);
+  transition: transform 0.5s cubic-bezier(0.32, 0.72, 0, 1);
+  will-change: transform;
+}
+
+.activity-scheduled-sheet-panel--open {
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity-scheduled-sheet-overlay,
+  .activity-scheduled-sheet-panel {
+    transition-duration: 0.01ms;
+  }
+}
+
+.activity-scheduled-route-line {
+  width: 2px;
+  flex-grow: 1;
+  margin: 0.25rem 0;
+  border-radius: 9999px;
+  background: linear-gradient(to bottom, #006d43, #bccabe);
+}
+
+.activity-scheduled-status-pulse {
+  animation: activity-scheduled-pulse 2s ease-in-out infinite;
+}
+
+@keyframes activity-scheduled-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}

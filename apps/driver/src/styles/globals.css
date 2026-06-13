@@ -164,7 +164,7 @@ html.dark body {
 
 /* Bottom nav (h-16) + .safe-b padding — keep fixed chrome aligned with DriverShell nav */
 :root {
-  --driver-bottom-nav-total: calc(4rem + max(1rem, env(safe-area-inset-bottom, 0px)));
+  --driver-bottom-nav-total: calc(4.5rem + max(1rem, env(safe-area-inset-bottom, 0px)));
   --driver-online-slider-height: 7.75rem;
   --driver-online-slider-gap: 0.375rem;
   --driver-online-slider-bottom: calc(

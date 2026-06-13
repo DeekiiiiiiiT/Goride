@@ -1,0 +1,33 @@
+.scheduled-confirm-glass-card {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(0, 168, 107, 0.1);
+}
+
+.scheduled-confirm-success-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: rgba(0, 109, 67, 0.2);
+  filter: blur(16px);
+  z-index: -1;
+  animation: scheduled-confirm-pulse 2s ease-in-out infinite;
+}
+
+@keyframes scheduled-confirm-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.scheduled-confirm-route-line {
+  width: 2px;
+  height: 2rem;
+  margin: 0.25rem 0;
+  border-radius: 9999px;
+  background: linear-gradient(to bottom, #006d43, #00a86b);
+}

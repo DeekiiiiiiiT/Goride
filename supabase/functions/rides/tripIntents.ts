@@ -329,12 +329,79 @@ function canBookerAccessIntent(
   return { ok: false, reason: "not_targeted" };
 }
 
+/** Requesters whose tag-published (any_booker) trips this payer should see in Active trips. */
+async function loadAnyBookerRequesterIdsForBooker(
+  db: SupabaseClient,
+  contactsTable: string,
+  connectionsTable: string,
+  bookerUserId: string,
+): Promise<string[]> {
+  const ids = new Set<string>();
+
+  const [{ data: ownedContacts }, { data: reverseContacts }, { data: connections }] = await Promise.all([
+    db.from(contactsTable)
+      .select("linked_user_id")
+      .eq("owner_user_id", bookerUserId)
+      .not("linked_user_id", "is", null),
+    db.from(contactsTable)
+      .select("owner_user_id")
+      .eq("linked_user_id", bookerUserId),
+    db.from(connectionsTable)
+      .select("user_a_id, user_b_id")
+      .or(`user_a_id.eq.${bookerUserId},user_b_id.eq.${bookerUserId}`),
+  ]);
+
+  for (const row of ownedContacts ?? []) {
+    const id = String((row as Record<string, unknown>).linked_user_id ?? "");
+    if (id && id !== bookerUserId) ids.add(id);
+  }
+  for (const row of reverseContacts ?? []) {
+    const id = String((row as Record<string, unknown>).owner_user_id ?? "");
+    if (id && id !== bookerUserId) ids.add(id);
+  }
+  for (const row of connections ?? []) {
+    const record = row as Record<string, unknown>;
+    const peer = String(record.user_a_id) === bookerUserId
+      ? String(record.user_b_id)
+      : String(record.user_a_id);
+    if (peer && peer !== bookerUserId) ids.add(peer);
+  }
+
+  return [...ids];
+}
+
+function mergeTripIntentForTargetBooker(
+  merged: Map<string, Record<string, unknown>>,
+  resolved: Record<string, unknown>,
+  bookerUserId: string,
+  bookerPhone?: string | null,
+): void {
+  const rowStatus = String(resolved.status);
+  const claimedByMe = String(resolved.claimed_by_user_id) === bookerUserId;
+
+  if (rowStatus === "booked" && claimedByMe) {
+    merged.set(String(resolved.id), resolved);
+    return;
+  }
+  if (rowStatus === "claimed") {
+    if (!claimedByMe) return;
+    merged.set(String(resolved.id), resolved);
+    return;
+  }
+  if (rowStatus !== "published") return;
+
+  const access = canBookerAccessIntent(resolved, bookerUserId, bookerPhone);
+  if (!access.ok) return;
+  merged.set(String(resolved.id), resolved);
+}
+
 export async function listTripIntentsTargetingBooker(
   db: SupabaseClient,
   table: string,
   bookerUserId: string,
   bookerPhone?: string | null,
   rideSvc?: SupabaseClient,
+  opts?: { rider_contacts?: string; roam_connections?: string },
 ): Promise<Record<string, unknown>[]> {
   const openStatuses = ["published", "claimed"] as const;
   const queries = [
@@ -356,6 +423,23 @@ export async function listTripIntentsTargetingBooker(
     );
   }
 
+  if (opts?.rider_contacts && opts?.roam_connections) {
+    const requesterIds = await loadAnyBookerRequesterIdsForBooker(
+      db,
+      opts.rider_contacts,
+      opts.roam_connections,
+      bookerUserId,
+    );
+    if (requesterIds.length > 0) {
+      queries.push(
+        db.from(table).select("*")
+          .in("requester_user_id", requesterIds)
+          .eq("audience", "any_booker")
+          .in("status", [...openStatuses]),
+      );
+    }
+  }
+
   const results = await Promise.all(queries);
   const merged = new Map<string, Record<string, unknown>>();
 
@@ -374,25 +458,7 @@ export async function listTripIntentsTargetingBooker(
         resolved = reconciled;
       }
 
-      const rowStatus = String(resolved.status);
-      const claimedByMe = String(resolved.claimed_by_user_id) === bookerUserId;
-
-      if (rowStatus === "booked" && claimedByMe) {
-        merged.set(String(resolved.id), resolved);
-        continue;
-      }
-      if (rowStatus === "claimed" && claimedByMe) {
-        merged.set(String(resolved.id), resolved);
-        continue;
-      }
-      if (rowStatus === "published" && openStatuses.includes(rowStatus as typeof openStatuses[number])) {
-        const directedPayer = Boolean(resolved.target_booker_user_id) || Boolean(resolved.target_booker_phone_e164);
-        if (String(resolved.audience) === "targeted" || directedPayer) {
-          const access = canBookerAccessIntent(resolved, bookerUserId, bookerPhone);
-          if (!access.ok) continue;
-        }
-        merged.set(String(resolved.id), resolved);
-      }
+      mergeTripIntentForTargetBooker(merged, resolved, bookerUserId, bookerPhone);
     }
   }
 
@@ -830,6 +896,10 @@ export function registerTripIntentRoutes(app: Hono, deps: TripIntentDeps) {
       gate.user!.id,
       bookerPhone,
       deps.rideSvc?.(),
+      {
+        rider_contacts: t.rider_contacts,
+        roam_connections: t.roam_connections,
+      },
     );
     return c.json({
       trip_intents: rows.map((row) => mapTripIntentHubItem(row, "target_booker")),

@@ -250,9 +250,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
               </>
             ) : mintEarningsLayout || mintUtilityLayout ? (
               <h1 className="text-xl font-bold tracking-tight text-[#004ac6] dark:text-blue-400">Roam</h1>
-            ) : mintHomeLayout ? (
-              <h1 className="text-xl font-bold text-emerald-600 dark:text-emerald-400">Roam Driver</h1>
-            ) : (
+            ) : mintHomeLayout ? null : (
               <>
                 <ThemeToggleButton />
                 <h1 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white sm:hidden">
@@ -275,9 +273,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
             ) : mintDriverLayout ? (
               <>
                 {mintHomeLayout ? (
-                  <div className="rounded-full border border-[#006d43]/30 bg-[#006d43]/20 px-3 py-1 text-xs font-bold text-[#006d43] dark:text-[#59de9b]">
-                    PREMIUM
-                  </div>
+                  <ThemeToggleButton className="inline-flex h-10 w-10 items-center justify-center rounded-lg p-2 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white" />
                 ) : null}
                 {mintEarningsLayout && (
                   <button
@@ -339,11 +335,16 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
         </div>
       </header>
 
-      <main className="flex-1 overflow-x-hidden overflow-y-auto pb-[var(--driver-bottom-nav-total)]">
+      <main
+        className={cn(
+          'flex min-h-0 flex-1 flex-col overflow-x-hidden pb-[var(--driver-bottom-nav-total)]',
+          mintHomeLayout ? 'overflow-hidden' : 'overflow-y-auto',
+        )}
+      >
         <div
           className={cn(
             'mx-auto w-full min-w-0 max-w-lg safe-x sm:max-w-2xl md:max-w-3xl lg:max-w-4xl',
-            mintHomeLayout ? 'py-0' : mintDriverLayout ? 'py-6' : 'py-4',
+            mintHomeLayout ? 'flex min-h-0 flex-1 flex-col py-0' : mintDriverLayout ? 'py-6' : 'py-4',
           )}
         >
           {renderPage()}

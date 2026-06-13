@@ -4,12 +4,12 @@ import { toast } from 'sonner';
 import { ArrowLeft, ArrowRight, CircleDot, Clock, Loader2, MapPin } from 'lucide-react';
 
 import { RoamPlaceField } from '@/components/RoamPlaceField';
+import { ScheduleDepartTimeSheet } from '@/components/schedule/ScheduleDepartTimeSheet';
 import { TripPaymentMethodBar } from '@/components/TripPaymentMethodBar';
 import { TripPaymentMethodSheet } from '@/components/TripPaymentMethodSheet';
 import { useDefaultPaymentMethod } from '@/hooks/useDefaultPaymentMethod';
 import { useRidesVehicleTypes } from '@/hooks/useRidesVehicleTypes';
 import { createIdempotencyKey } from '@/lib/idempotencyKey';
-import { isScheduledRidesEnabled } from '@/lib/scheduledRidesFlags';
 import {
   CARD_SHADOW,
   HEADER_BG,
@@ -28,6 +28,7 @@ import {
   TERTIARY,
 } from '@/lib/passengerTheme';
 import { ridesCreateScheduled, ridesScheduledQuote } from '@/services/ridesEdge';
+import { formatTimeLabel } from '@/lib/scheduleTime';
 import type { FareQuoteResponse } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
 
@@ -57,17 +58,8 @@ function combineDayAndTime(dayId: string, time24: string): string | null {
   return new Date(y, m - 1, d, hh, mm, 0, 0).toISOString();
 }
 
-function formatTimeLabel(time24: string): string {
-  const [hh, mm] = time24.split(':').map(Number);
-  if (Number.isNaN(hh) || Number.isNaN(mm)) return time24;
-  const period = hh >= 12 ? 'PM' : 'AM';
-  const h12 = hh % 12 || 12;
-  return `${h12}:${String(mm).padStart(2, '0')} ${period}`;
-}
-
 export default function ScheduleRidePage() {
   const navigate = useNavigate();
-  const enabled = isScheduledRidesEnabled();
   const scheduleDays = useMemo(() => buildScheduleDays(7), []);
   const { active: services, loading: typesLoading } = useRidesVehicleTypes();
   const {
@@ -87,13 +79,7 @@ export default function ScheduleRidePage() {
   const [quotesBySlug, setQuotesBySlug] = useState<Record<string, FareQuoteResponse>>({});
   const [quoting, setQuoting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (!enabled) {
-      toast.message('Scheduled rides are not available.');
-      navigate('/services', { replace: true });
-    }
-  }, [enabled, navigate]);
+  const [timeSheetOpen, setTimeSheetOpen] = useState(false);
 
   useEffect(() => {
     if (services.length > 0 && !vehicleId) {
@@ -174,8 +160,6 @@ export default function ScheduleRidePage() {
     }
   };
 
-  if (!enabled) return null;
-
   return (
     <div className="flex min-h-[100dvh] flex-col" style={{ backgroundColor: PAGE_BG, color: ON_SURFACE }}>
       <header className="sticky top-0 z-50 flex h-16 w-full items-center bg-[#f7f9fb] px-4 safe-t">
@@ -191,7 +175,12 @@ export default function ScheduleRidePage() {
         <h1 className="ml-4 text-xl font-semibold tracking-tight">Schedule Ride</h1>
       </header>
 
-      <main className="mx-auto w-full max-w-2xl flex-1 px-4 pb-44 pt-4 safe-x">
+      <main
+        className="mx-auto w-full max-w-2xl flex-1 px-4 pt-4 safe-x"
+        style={{
+          paddingBottom: 'calc(5.5rem + 4.5rem + max(0.5rem, env(safe-area-inset-bottom, 0px)))',
+        }}
+      >
         <section className="mb-4">
           <div className="rounded-[24px] p-6" style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}>
             <span className="mb-4 block text-xs font-bold tracking-wide" style={{ color: SECONDARY }}>
@@ -220,9 +209,12 @@ export default function ScheduleRidePage() {
                   );
                 })}
               </div>
-              <div
-                className="flex items-center justify-between rounded-xl p-4"
+              <button
+                type="button"
+                onClick={() => setTimeSheetOpen(true)}
+                className="flex w-full items-center justify-between rounded-xl p-4 text-left transition-colors active:scale-[0.99] touch-manipulation"
                 style={{ backgroundColor: SURFACE_LOW }}
+                aria-label="Change departure time"
               >
                 <div className="flex flex-col">
                   <span className="text-[10px] font-bold tracking-wide" style={{ color: SECONDARY }}>
@@ -232,20 +224,14 @@ export default function ScheduleRidePage() {
                     {formatTimeLabel(departTime)}
                   </span>
                 </div>
-                <label
-                  className="rounded-lg border bg-white p-2 shadow-sm transition-transform active:scale-95"
+                <span
+                  className="rounded-lg border bg-white p-2 shadow-sm"
                   style={{ borderColor: `${OUTLINE_VARIANT}33`, color: PRIMARY }}
+                  aria-hidden
                 >
-                  <Clock className="h-6 w-6" aria-hidden />
-                  <input
-                    type="time"
-                    value={departTime}
-                    onChange={(e) => setDepartTime(e.target.value)}
-                    className="sr-only"
-                    aria-label="Change departure time"
-                  />
-                </label>
-              </div>
+                  <Clock className="h-6 w-6" />
+                </span>
+              </button>
             </div>
           </div>
         </section>
@@ -379,9 +365,20 @@ export default function ScheduleRidePage() {
         onSelect={setSelectedPaymentId}
       />
 
+      <ScheduleDepartTimeSheet
+        open={timeSheetOpen}
+        value={departTime}
+        onClose={() => setTimeSheetOpen(false)}
+        onConfirm={setDepartTime}
+      />
+
       <footer
-        className="fixed bottom-[4.5rem] left-0 z-40 w-full border-t p-4 backdrop-blur-md safe-x"
-        style={{ backgroundColor: HEADER_BG, borderColor: `${OUTLINE_VARIANT}33` }}
+        className="fixed left-0 z-40 w-full border-t p-4 backdrop-blur-md safe-x"
+        style={{
+          bottom: 'calc(4.5rem + max(0.5rem, env(safe-area-inset-bottom, 0px)))',
+          backgroundColor: HEADER_BG,
+          borderColor: `${OUTLINE_VARIANT}33`,
+        }}
       >
         <div className="mx-auto max-w-2xl">
           <button

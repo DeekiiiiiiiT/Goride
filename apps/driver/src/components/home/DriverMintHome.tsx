@@ -12,7 +12,7 @@ export function DriverMintHome() {
   const tripFlowActive = enRouteToPickup || onTrip || arrivedAtPickup || awaitingCash;
 
   return (
-    <div className="flex min-h-[calc(100dvh-8rem-env(safe-area-inset-bottom,0px))] flex-col">
+    <div className="flex h-full min-h-0 flex-1 flex-col">
       <DriverHomeDashboard tripFlowActive={tripFlowActive} />
     </div>
   );
