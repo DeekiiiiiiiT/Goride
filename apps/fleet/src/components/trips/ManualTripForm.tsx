@@ -103,6 +103,7 @@ export function ManualTripForm({
   const [dropoffCoords, setDropoffCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [isCalculatingDistance, setIsCalculatingDistance] = useState(false);
   const lastNotifiedDistanceRef = useRef<number | undefined>(undefined);
+  const distanceManuallyEditedRef = useRef(false);
 
   // Intermediate stops for multi-stop trips (e.g. InDrive)
   const [intermediateStops, setIntermediateStops] = useState<{ id: string; address: string; coords?: { lat: number; lon: number } }[]>([]);
@@ -123,6 +124,7 @@ export function ManualTripForm({
   useEffect(() => {
     if (open) {
       lastNotifiedDistanceRef.current = undefined;
+      distanceManuallyEditedRef.current = false;
       if (initialData) {
         // Calculate distance from route points if available (more accurate for multi-stop)
         let routeDistance = 0;
@@ -211,6 +213,8 @@ export function ManualTripForm({
     const calculateDistance = () => {
       // Skip if we have a live route (distance already calculated from track)
       if (initialData?.route && initialData.route.length > 1) return;
+      // Respect manual distance entry (e.g. 0 km for cancelled trips before driving)
+      if (distanceManuallyEditedRef.current) return;
 
       if (pickupCoords && dropoffCoords) {
         setIsCalculatingDistance(true);
@@ -264,7 +268,7 @@ export function ManualTripForm({
             tripData: {}, 
             formData: { ...formData, intermediateStops: intermediateStops.filter(s => s.address.trim()) },
             rawRoute: formData.route || [],
-            calculatedDistance: formData.distance || 0
+            calculatedDistance: Number.isFinite(formData.distance) ? formData.distance! : 0
           }
         });
         
@@ -281,6 +285,17 @@ export function ManualTripForm({
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDistanceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    distanceManuallyEditedRef.current = true;
+    const raw = e.target.value;
+    if (raw === '') {
+      handleInputChange('distance', 0);
+      return;
+    }
+    const parsed = parseFloat(raw);
+    handleInputChange('distance', Number.isFinite(parsed) ? parsed : 0);
   };
 
   const handleInputChange = (field: keyof ManualTripInput, value: any) => {
@@ -473,8 +488,8 @@ export function ManualTripForm({
                     step="0.01"
                     className="pl-9"
                     placeholder="0.00"
-                    value={formData.distance || ''}
-                    onChange={(e) => handleInputChange('distance', parseFloat(e.target.value))}
+                    value={Number.isFinite(formData.distance) ? formData.distance : ''}
+                    onChange={handleDistanceChange}
                   />
                 </div>
               </div>

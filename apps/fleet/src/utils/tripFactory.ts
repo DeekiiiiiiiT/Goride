@@ -130,7 +130,7 @@ export function createManualTrip(data: ManualTripInput, driverId: string, driver
     startLng: data.pickupCoords?.lon,
     endLat: data.dropoffCoords?.lat,
     endLng: data.dropoffCoords?.lon,
-    distance: data.distance || 0,
+    distance: Number.isFinite(data.distance) ? data.distance! : 0,
     vehicleId: data.vehicleId,
     notes: data.notes || '',
     route: data.route,
