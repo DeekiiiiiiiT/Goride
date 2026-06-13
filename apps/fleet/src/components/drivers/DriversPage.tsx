@@ -70,6 +70,7 @@ import { TierCalculations } from '../../utils/tierCalculations';
 import { TierConfig } from '../../types/data';
 import { isSameMonth } from 'date-fns';
 import { usePermissions } from '../../hooks/usePermissions';
+import { useAuth } from '../auth/AuthContext';
 
 function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? value : [];
@@ -167,6 +168,9 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
   const { v } = useVocab();
   const queryClient = useQueryClient();
   const { can } = usePermissions();
+  // Phase 5: Get user for organization validation
+  const { user } = useAuth();
+  const currentOrgId = user?.user_metadata?.organizationId || user?.id;
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   
   // Phase 10: Claim Driver state
@@ -394,31 +398,14 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
                     // Keep status from manual unless logic overrides? 
                     // We'll keep manual status but update acceptanceRate
                  });
+                 driverStats.set(driverId, { completed: 0, cancelled: 0 });
             } else {
-                // Use Trip Data (Default/CSV)
-                const mockPhone = `+1 876${trip.driverId.replace(/\D/g, '').substring(0, 7).padEnd(7, '0')}`;
-                const mockEmail = `${(trip.driverName || 'driver').split(' ')[0].toLowerCase()}${trip.driverId.substring(0, 4)}@gmail.com`;
-                
-                driverMap.set(driverId, {
-                    id: driverId,
-                    name: trip.driverName || 'Unknown Driver',
-                    status: 'Active',
-                    vehicle: trip.vehicleId || 'Unassigned',
-                    phone: mockPhone,
-                    email: mockEmail,
-                    totalTrips: 0,
-                    totalEarnings: 0,
-                    todaysEarnings: 0,
-                    todaysTrips: 0,
-                    monthlyEarnings: 0,
-                    acceptanceRate: 100, 
-                    tier: 'Bronze',
-                    linkedTrips: [], // Initialize list
-                    // Store the external ID found on this trip so we can potentially match it later
-                    [trip.platform === 'Uber' ? 'uberDriverId' : 'inDriveDriverId']: trip.driverId
-                });
+                // PHASE 5 FIX: Do NOT synthesize driver profiles from trip data.
+                // This was causing "random drivers" to appear in fleet portals.
+                // Only show drivers that have explicit driver profiles.
+                // Skip this trip's driver - they don't have a manual profile.
+                return;
             }
-            driverStats.set(driverId, { completed: 0, cancelled: 0 });
         }
 
         const driver = driverMap.get(driverId)!;
@@ -599,9 +586,21 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
     return [...processedDrivers, ...orphanedDrivers].map((d) => normalizeDriverProfile(d));
   }, [trips, safeManualDrivers, safeImportedMetrics, tiers, ledgerSummary, ledgerLoaded, ledgerError]);
 
+  // Phase 5: Apply org validation first, then other filters
+  const orgValidatedDrivers = useMemo(() => {
+    if (!currentOrgId) return drivers; // No org context - show all (legacy support)
+    
+    return drivers.filter(driver => {
+      // Allow drivers with matching organizationId or no organizationId (legacy data)
+      const driverOrgId = (driver as any).organizationId;
+      if (!driverOrgId) return true; // Legacy driver without org - include for now
+      return driverOrgId === currentOrgId;
+    });
+  }, [drivers, currentOrgId]);
+
   // Apply Filters
   const filteredDrivers = useMemo(() => {
-      return drivers.filter(driver => {
+      return orgValidatedDrivers.filter(driver => {
           const q = searchQuery.toLowerCase();
           const matchesSearch = 
             (driver.name ?? '').toLowerCase().includes(q) || 
@@ -620,7 +619,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
 
           return matchesSearch && matchesStatus && matchesTier && matchesPerformance;
       });
-  }, [drivers, searchQuery, statusFilter, tierFilter, performanceFilter]);
+  }, [orgValidatedDrivers, searchQuery, statusFilter, tierFilter, performanceFilter]);
 
   // Export Function
   const handleExport = () => {

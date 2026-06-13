@@ -305,13 +305,28 @@ function getSupabase() {
 // 7. Middleware: requireAuth()
 //
 // Extracts the Bearer token, validates it via supabase.auth.getUser().
-// If the token is the anon key (not a user JWT), we gracefully degrade to
-// fleet_owner so existing frontend calls (which send publicAnonKey) keep
-// working. This passthrough will be tightened in Phase 7+ once the frontend
-// sends real user access tokens.
+//
+// Phase 2 of Fleet Data Isolation:
+// - Added `strict` option to reject anon key (no passthrough)
+// - Added `requireOrg` option to require organizationId in context
+// - Feature flag `strict_auth` can globally enable strict mode
+//
+// Options:
+// - strict: Reject anon key instead of passthrough (default: check feature flag)
+// - requireOrg: Require organizationId in user context (default: false)
+// - allowedEndpoints: Whitelist of endpoints that allow anon access even in strict mode
 // ---------------------------------------------------------------------------
 
-export function requireAuth() {
+export interface RequireAuthOptions {
+  /** Reject anon key instead of passthrough. If not set, checks `feature:strict_auth` flag. */
+  strict?: boolean;
+  /** Require organizationId in user context. Returns 403 if missing. */
+  requireOrg?: boolean;
+  /** Allow anon access for specific use cases (health check, public status). */
+  allowAnon?: boolean;
+}
+
+export function requireAuth(options?: RequireAuthOptions) {
   return async (c: Context, next: Next) => {
     const authHeader = c.req.header('Authorization');
     const token = authHeader?.replace('Bearer ', '');
@@ -326,8 +341,39 @@ export function requireAuth() {
       const { data, error } = await sb.auth.getUser(token);
 
       if (error || !data?.user) {
-        // Token is likely the anon key — gracefully degrade
-        // Log for observability so we know when this passthrough fires
+        // Token is likely the anon key
+
+        // Check if anon is explicitly allowed
+        if (options?.allowAnon) {
+          c.set('rbacUser', null);
+          await next();
+          return;
+        }
+
+        // Check if strict mode is enabled
+        let useStrict = options?.strict;
+        if (useStrict === undefined) {
+          // Check feature flag
+          try {
+            const { isFeatureEnabled, FEATURE_FLAGS } = await import("./feature_flags.ts");
+            useStrict = await isFeatureEnabled(FEATURE_FLAGS.STRICT_AUTH);
+          } catch {
+            // If feature flags module fails, default to legacy behavior
+            useStrict = false;
+          }
+        }
+
+        if (useStrict) {
+          // STRICT MODE: Reject anon key
+          console.warn('[RBAC] STRICT: Rejected anon key - valid JWT required');
+          return c.json({ 
+            error: 'Unauthorized: Valid authentication required',
+            code: 'AUTH_REQUIRED',
+            message: 'This endpoint requires a valid user session. Please log in.'
+          }, 401);
+        }
+
+        // LEGACY MODE: Gracefully degrade for backward compatibility
         console.log('[RBAC] Auth passthrough: token is not a user JWT (likely anon key). Defaulting to fleet_owner.');
         const passthroughUser: RbacUser = {
           userId: '_anon_passthrough',
@@ -341,7 +387,7 @@ export function requireAuth() {
         return;
       }
 
-      // Resolve RBAC role from full JWT (platform roles beat product admin roles)
+      // Valid JWT — resolve RBAC role
       const appMeta = (data.user.app_metadata || {}) as Record<string, unknown>;
       const meta = data.user.user_metadata || {};
       const rawRole = pickRawRoleForRbac(appMeta, meta);
@@ -353,15 +399,53 @@ export function requireAuth() {
         rawRole,
         resolvedRole: resolved,
         // Derive organizationId: explicit metadata > self-referencing for fleet_owners
-        organizationId: meta.organizationId
-          || (resolved === 'fleet_owner' ? data.user.id : null),
+        organizationId: (typeof meta.organizationId === 'string' && meta.organizationId)
+          ? meta.organizationId
+          : (resolved === 'fleet_owner' ? data.user.id : null),
       };
 
       c.set('rbacUser', rbacUser);
+
+      // Check if organizationId is required
+      if (options?.requireOrg) {
+        // Platform roles are exempt from org requirement (they see all orgs)
+        const isPlatformRole = ['platform_owner', 'platform_support', 'platform_analyst'].includes(resolved);
+        
+        if (!isPlatformRole && !rbacUser.organizationId) {
+          console.warn(`[RBAC] requireOrg: User ${rbacUser.userId} (role=${resolved}) has no organizationId`);
+          return c.json({
+            error: 'Forbidden: Organization context required',
+            code: 'ORG_REQUIRED',
+            message: 'Your account is not associated with an organization. Please contact support.',
+          }, 403);
+        }
+      }
+
       await next();
     } catch (err) {
+      console.error('[RBAC] Auth error:', err);
+
+      // Check if we should fail-open or fail-closed
+      let useStrict = options?.strict;
+      if (useStrict === undefined) {
+        try {
+          const { isFeatureEnabled, FEATURE_FLAGS } = await import("./feature_flags.ts");
+          useStrict = await isFeatureEnabled(FEATURE_FLAGS.STRICT_AUTH);
+        } catch {
+          useStrict = false;
+        }
+      }
+
+      if (useStrict) {
+        // STRICT MODE: Fail closed
+        return c.json({ 
+          error: 'Authentication error',
+          code: 'AUTH_ERROR',
+        }, 500);
+      }
+
+      // LEGACY MODE: Fail-open during transition period
       console.log('[RBAC] Auth error, using passthrough:', err);
-      // Fail-open during transition period — never break existing fleet owners
       const passthroughUser: RbacUser = {
         userId: '_anon_passthrough',
         email: '',
@@ -373,6 +457,16 @@ export function requireAuth() {
       await next();
     }
   };
+}
+
+/**
+ * Middleware for endpoints that MUST have organization context.
+ * Combines requireAuth() with requireOrg: true.
+ * 
+ * Use this for fleet data endpoints like /drivers, /trips, /ledger.
+ */
+export function requireAuthWithOrg(options?: Omit<RequireAuthOptions, 'requireOrg'>) {
+  return requireAuth({ ...options, requireOrg: true });
 }
 
 // ---------------------------------------------------------------------------

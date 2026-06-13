@@ -8,14 +8,34 @@ import { API_ENDPOINTS } from './apiConfig';
 import type { CompatiblePartsResponse } from '../types/partSourcing';
 import { compressImage } from '../utils/compressImage';
 import { isTollCategory } from '../utils/tollCategoryHelper';
+import { getProductLineHeaders } from '../config/productLine';
 
-// Helper to get authorization headers (JWT if logged in, else anon key)
-async function getHeaders(contentType: string | null = 'application/json') {
+/**
+ * Helper to get authorization headers (JWT if logged in, else anon key).
+ * 
+ * IMPORTANT (Phase 1 of Fleet Data Isolation):
+ * - Always includes X-Roam-Product-Line header for proper product separation
+ * - Uses JWT when available for proper org scoping
+ * - Falls back to anon key only when user is not authenticated
+ * 
+ * @param contentType - Content-Type header value, or null to omit
+ * @param options.requireAuth - If true, logs warning when falling back to anon key
+ */
+async function getHeaders(
+  contentType: string | null = 'application/json',
+  options?: { requireAuth?: boolean }
+) {
   const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token || publicAnonKey;
+  const token = session?.access_token;
+  
+  // Log warning if auth is required but we're falling back to anon key
+  if (options?.requireAuth && !token) {
+    console.warn('[API] No session token available - falling back to anon key. Data may not be properly scoped.');
+  }
   
   const headers: Record<string, string> = {
-    'Authorization': `Bearer ${token}`
+    'Authorization': `Bearer ${token || publicAnonKey}`,
+    ...getProductLineHeaders(),  // Always include product line header
   };
   
   if (contentType) {
@@ -104,20 +124,19 @@ export async function throwIfCatalogGateBlocked(response: Response, fallbackMess
 
 export const api = {
   async getOdometerHistory(vehicleId: string): Promise<OdometerReading[]> {
+    // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/odometer-history/${vehicleId}`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await getHeaders(null, { requireAuth: true })
     });
     if (!response.ok) throw new Error("Failed to fetch odometer history");
     return response.json();
   },
 
   async addOdometerReading(reading: Partial<OdometerReading>) {
+    // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/odometer-history`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await getHeaders(),
       body: JSON.stringify(reading)
     });
     if (!response.ok) throw new Error("Failed to save odometer reading");
@@ -127,33 +146,20 @@ export const api = {
   async deleteOdometerReading(id: string, vehicleId: string, source?: string) {
     const params = new URLSearchParams({ vehicleId });
     if (source) params.set('source', source);
+    // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/odometer-history/${id}?${params.toString()}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await getHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to delete odometer reading");
     return response.json();
   },
 
   async updateAnchor(id: string, payload: { date?: string, value?: number, type: string, vehicleId: string }) {
-    // Uses the generic PATCH endpoint added to server/index.tsx
-    // Endpoint path: /make-server-37f42386/anchors/:id
-    // Note: API_ENDPOINTS.fuel typically points to /make-server-37f42386/... 
-    // We'll assume the path is relative to the base function URL if possible, or construct it.
-    // Based on other calls, API_ENDPOINTS.fuel seems to be the base URL.
-    // However, I added the route at root level /make-server.../anchors
-    // Let's use absolute path construction similar to others if needed, or stick to convention.
-    // Actually, looking at deleteOdometerReading: `${API_ENDPOINTS.fuel}/odometer-history/...`
-    // I'll assume I can use `${API_ENDPOINTS.fuel}/anchors/${id}` if I ensure the route is correct.
-    // In server/index.tsx, I defined `app.patch("/make-server-37f42386/anchors/:id", ...)`
-    // If API_ENDPOINTS.fuel is `.../make-server-37f42386`, then `${API_ENDPOINTS.fuel}/anchors/${id}` works.
-    
+    // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/anchors/${id}`, {
       method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await getHeaders(),
       body: JSON.stringify(payload)
     });
     if (!response.ok) throw new Error("Failed to update anchor");
@@ -249,21 +255,20 @@ export const api = {
   },
 
   async deleteBatch(id: string) {
+    // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/batches/${id}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await getHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to delete batch");
     return response.json();
   },
 
   async saveTrips(trips: Trip[]) {
+    // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/trips`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await getHeaders(),
       body: JSON.stringify(trips),
     });
 
@@ -284,21 +289,20 @@ export const api = {
   },
 
   async deleteTrip(id: string) {
+    // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/trips/${id}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await getHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to delete trip");
     return response.json();
   },
 
   async saveDriverMetrics(metrics: DriverMetrics[]) {
+      // Phase 1: Use JWT for proper org scoping
       const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/driver-metrics`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await getHeaders(),
         body: JSON.stringify(metrics),
       });
       if (!response.ok) throw new Error(`Failed to save driver metrics`);
@@ -306,12 +310,10 @@ export const api = {
   },
 
   async saveVehicleMetrics(metrics: VehicleMetrics[]) {
+      // Phase 1: Use JWT for proper org scoping
       const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicle-metrics`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await getHeaders(),
         body: JSON.stringify(metrics),
       });
       if (!response.ok) {
@@ -322,10 +324,9 @@ export const api = {
   },
 
   async getVehicleMetrics(): Promise<VehicleMetrics[]> {
+    // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicle-metrics`, {
-        headers: {
-            'Authorization': `Bearer ${publicAnonKey}`
-        }
+        headers: await getHeaders(null, { requireAuth: true })
     });
     if (!response.ok) throw new Error("Failed to fetch vehicle metrics");
     const txt = await response.text();
@@ -333,10 +334,9 @@ export const api = {
   },
 
   async getDriverMetrics(): Promise<DriverMetrics[]> {
+    // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/driver-metrics`, {
-        headers: {
-            'Authorization': `Bearer ${publicAnonKey}`
-        }
+        headers: await getHeaders(null, { requireAuth: true })
     });
     if (!response.ok) throw new Error("Failed to fetch driver metrics");
     const txt = await response.text();
@@ -344,12 +344,10 @@ export const api = {
   },
 
   async getTripsFiltered(params: TripFilterParams): Promise<PaginatedTripResponse> {
+    // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/trips/search`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await getHeaders(),
         body: JSON.stringify(params)
     });
     
@@ -361,12 +359,10 @@ export const api = {
   },
 
   async getTripStats(params: TripFilterParams): Promise<any> {
+    // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/trips/stats`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await getHeaders(),
         body: JSON.stringify(params)
     });
     
@@ -384,10 +380,9 @@ export const api = {
     
     let url = `${API_ENDPOINTS.fleet}/trips?limit=${limit}&offset=${offset}`;
 
+    // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(url, {
-        headers: {
-            'Authorization': `Bearer ${publicAnonKey}`
-        }
+        headers: await getHeaders(null, { requireAuth: true })
     });
     
     if (!response.ok) {
@@ -405,17 +400,19 @@ export const api = {
   },
 
   async getUnifiedVehicleLogs(vehicleId: string) {
+    // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicles/${vehicleId}/unified-logs`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await getHeaders(null, { requireAuth: true })
     });
     if (!response.ok) throw new Error("Failed to fetch unified logs");
     return response.json();
   },
 
   async clearAllData() {
+    // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/trips`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await getHeaders(null)
     });
     
     if (!response.ok) {
@@ -446,9 +443,10 @@ export const api = {
     if (userId) url.searchParams.append('userId', userId);
     if (vehicleId) url.searchParams.append('vehicleId', vehicleId);
     
+    // Phase 1: Use JWT for proper org scoping
     // Single attempt (no retries) — this is a background poll that retries every 30s anyway
     const response = await fetch(url.toString(), {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await getHeaders(null, { requireAuth: true })
     });
     if (!response.ok) {
       const errorText = await response.text().catch(() => 'unknown');
@@ -458,12 +456,10 @@ export const api = {
   },
 
   async pushAlert(alert: Partial<Notification>) {
+    // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/notifications/push`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await getHeaders(),
       body: JSON.stringify(alert)
     });
     if (!response.ok) throw new Error("Failed to push alert");
@@ -480,12 +476,10 @@ export const api = {
     reason: string, 
     userId: string 
   }) {
+    // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/audit/logs`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await getHeaders(),
       body: JSON.stringify(payload)
     });
     if (!response.ok) throw new Error("Failed to create audit log");
@@ -493,20 +487,19 @@ export const api = {
   },
 
   async getAuditLogs(entityId: string) {
+    // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/audit/logs/${entityId}`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await getHeaders(null, { requireAuth: true })
     });
     if (!response.ok) throw new Error("Failed to fetch audit logs");
     return response.json();
   },
 
   async verifyIntegrity(record: any, signature: string) {
+    // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/audit/verify-integrity`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await getHeaders(),
       body: JSON.stringify({ record, signature })
     });
     if (!response.ok) throw new Error("Failed to verify integrity");
@@ -514,12 +507,10 @@ export const api = {
   },
 
   async acknowledgeAlert(id: string, isDismissed: boolean = false) {
+    // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/notifications/acknowledge`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await getHeaders(),
       body: JSON.stringify({ id, isDismissed })
     });
     if (!response.ok) throw new Error("Failed to acknowledge alert");
@@ -527,11 +518,10 @@ export const api = {
   },
 
   async markNotificationAsRead(id: string) {
+    // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/notifications/${id}/read`, {
       method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${publicAnonKey}`
-      }
+      headers: await getHeaders(null)
     });
 
     if (!response.ok) {
@@ -722,8 +712,9 @@ export const api = {
   },
 
   async getDrivers() {
+    // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/drivers`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await getHeaders(null, { requireAuth: true })
     });
     if (!response.ok) throw new Error("Failed to fetch drivers");
     const txt = await response.text();
@@ -731,12 +722,10 @@ export const api = {
   },
 
   async saveDriver(driver: any) {
+    // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/drivers`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await getHeaders(),
         body: JSON.stringify(driver)
     });
     if (!response.ok) throw new Error("Failed to save driver");
@@ -744,8 +733,9 @@ export const api = {
   },
 
   async fetchPendingTollClaims(): Promise<FinancialTransaction[]> {
+    // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/transactions`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await getHeaders(null, { requireAuth: true })
     });
     if (!response.ok) throw new Error("Failed to fetch transactions");
     const allTx: FinancialTransaction[] = await response.json();
@@ -771,8 +761,9 @@ export const api = {
     if (options?.offset !== undefined) params.set('offset', String(options.offset));
     const qs = params.toString();
     if (qs) url += `?${qs}`;
+    // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(url, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await getHeaders(null, { requireAuth: true })
     });
     if (!response.ok) throw new Error("Failed to fetch transactions");
     return response.json();
@@ -795,12 +786,10 @@ export const api = {
   },
 
   async saveTransaction(transaction: Partial<FinancialTransaction>) {
+    // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/transactions`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await getHeaders(),
         body: JSON.stringify(transaction)
     });
     if (!response.ok) {
@@ -814,13 +803,12 @@ export const api = {
   async deleteTransaction(id: string) {
     const trimmed = typeof id === 'string' ? id.trim() : '';
     if (!trimmed) throw new Error('Missing transaction id');
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token || publicAnonKey;
+    // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/transactions/${encodeURIComponent(trimmed)}`,
       {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: await getHeaders(null)
       }
     );
     if (!response.ok) {
@@ -3158,9 +3146,10 @@ export const api = {
       if (date) params.set('date', date);
       const qs = params.toString();
       const qp = qs ? `?${qs}` : '';
+      // Phase 1: Use JWT for proper org scoping
       const response = await fetchWithRetry(
         `${API_ENDPOINTS.financial}/ledger/drivers-summary${qp}`,
-        { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
+        { headers: await getHeaders(null, { requireAuth: true }) }
       );
       if (!response.ok) {
         const errText = await response.text();

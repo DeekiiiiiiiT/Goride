@@ -27,7 +27,20 @@ import {
   type RbacUser,
 } from "./rbac_middleware.ts";
 import { logAdminAction, getAuditLogs, getAuditLogsByActor } from "./audit_log.ts";
-import { stampOrg, filterByOrg, belongsToOrg, getOrgId, isLegacyOrgPlaceholder } from "./org_scope.ts";
+import { 
+  stampOrg, 
+  stampRecord,
+  filterByOrg, 
+  filterByOrgStrict, 
+  filterByOrgSafe,
+  filterByOrgAndProduct,
+  belongsToOrg, 
+  belongsToOrgStrict,
+  belongsToOrgSafe,
+  getOrgId, 
+  isLegacyOrgPlaceholder,
+  type FilterStats,
+} from "./org_scope.ts";
 import {
   resolveProductLine,
   platformSettingsKvKey,
@@ -2106,8 +2119,29 @@ app.post(
         }
       }
     }
-    const stampWriteOrg = <T extends Record<string, any>>(record: T): T =>
-      writeOrgId ? ({ ...record, organizationId: writeOrgId } as T) : record;
+
+    // Phase 4: Resolve product line for stamping on writes
+    const productLineHeader = c.req.header("X-Roam-Product-Line")?.trim().toLowerCase();
+    const origin = c.req.header("Origin")?.toLowerCase() || "";
+    const referer = c.req.header("Referer")?.toLowerCase() || "";
+    const hostHint = origin || referer;
+    let writeProductLine: string = "fleet"; // default
+    if (productLineHeader === "fleet" || productLineHeader === "enterprise") {
+      writeProductLine = productLineHeader;
+    } else if (hostHint.includes("roamenterprise")) {
+      writeProductLine = "enterprise";
+    } else if (hostHint.includes("roamfleet")) {
+      writeProductLine = "fleet";
+    }
+
+    // Phase 4: Updated stamp function includes both organizationId and productLine
+    const stampWriteOrg = <T extends Record<string, any>>(record: T): T => {
+      const stamped: Record<string, any> = { ...record };
+      if (writeOrgId) stamped.organizationId = writeOrgId;
+      stamped.productLine = writeProductLine;
+      stamped.updatedAt = new Date().toISOString();
+      return stamped as T;
+    };
 
     // Create keys for each trip
     // Assuming each trip has a unique 'id' field
@@ -2142,7 +2176,8 @@ app.post(
 });
 
 // Trips GET Endpoint - Optimized with native Supabase pagination
-app.get("/make-server-37f42386/trips", requireAuth(), async (c) => {
+// Phase 2: Use requireOrg to ensure organization context for data isolation
+app.get("/make-server-37f42386/trips", requireAuth({ requireOrg: true }), async (c) => {
   try {
     const limitParam = c.req.query("limit");
     const offsetParam = c.req.query("offset");
@@ -2173,7 +2208,8 @@ app.get("/make-server-37f42386/trips", requireAuth(), async (c) => {
     
     // Phase 7: Org-scope filtering + Phase 8.4: Large Data Stripping + sanitize control chars
     const tripsUnscoped = (data || []).map((d: any) => d.value || {});
-    const tripsScoped = filterByOrg(tripsUnscoped, c);
+    // Phase 3: Use filterByOrgSafe for feature-flag controlled strict filtering
+    const tripsScoped = await filterByOrgSafe(tripsUnscoped, c, { endpoint: '/trips' });
     const trips = tripsScoped.map((val: any) => {
         const { route, stops, ...lightweight } = val;
         const sanitized: Record<string, any> = {};
@@ -2367,7 +2403,8 @@ app.get("/make-server-37f42386/vehicle-metrics", requireAuth(), async (c) => {
 });
 
 // Vehicles Endpoints
-app.get("/make-server-37f42386/vehicles", requireAuth(), async (c) => {
+// Phase 2/3: Use requireOrg and filterByOrgSafe for data isolation
+app.get("/make-server-37f42386/vehicles", requireAuth({ requireOrg: true }), async (c) => {
   try {
     const limitParam = c.req.query("limit");
     const offsetParam = c.req.query("offset");
@@ -2383,7 +2420,8 @@ app.get("/make-server-37f42386/vehicles", requireAuth(), async (c) => {
     if (error) throw error;
     
     const vehiclesRaw = data?.map((d: any) => d.value) || [];
-    return c.json(filterByOrg(vehiclesRaw, c));
+    const vehicles = await filterByOrgSafe(vehiclesRaw, c, { endpoint: '/vehicles' });
+    return c.json(vehicles);
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -2466,7 +2504,8 @@ app.delete("/make-server-37f42386/vehicles/:id", requireAuth(), requirePermissio
 });
 
 // Drivers Endpoints
-app.get("/make-server-37f42386/drivers", requireAuth(), async (c) => {
+// Phase 2: Use requireOrg to ensure organization context for data isolation
+app.get("/make-server-37f42386/drivers", requireAuth({ requireOrg: true }), async (c) => {
   try {
     const limitParam = c.req.query("limit");
     const offsetParam = c.req.query("offset");
@@ -2482,7 +2521,8 @@ app.get("/make-server-37f42386/drivers", requireAuth(), async (c) => {
     if (error) throw error;
     
     const driversRaw = data?.map((d: any) => d.value) || [];
-    const drivers = filterByOrg(driversRaw, c);
+    // Phase 3: Use filterByOrgSafe for feature-flag controlled filtering
+    const drivers = await filterByOrgSafe(driversRaw, c, { endpoint: '/drivers' });
 
     // ACTION 2: The "Exorcism" (Auto-Cleanup)
     const BANNED_UUID = "73dfc14d-3798-4a00-8d86-b2a3eb632f54";
@@ -2511,7 +2551,8 @@ app.get("/make-server-37f42386/drivers", requireAuth(), async (c) => {
   }
 });
 
-app.post("/make-server-37f42386/drivers", requireAuth(), requirePermission('drivers.create'), async (c) => {
+// Phase 2: Use requireOrg for data isolation
+app.post("/make-server-37f42386/drivers", requireAuth({ requireOrg: true }), requirePermission('drivers.create'), async (c) => {
   try {
     const body = await c.req.json();
     // Extract password to prevent saving it to KV, and use it for Auth creation
@@ -2554,7 +2595,8 @@ app.post("/make-server-37f42386/drivers", requireAuth(), requirePermission('driv
         driverId: driver.driverId || finalId, // Allow distinct legacy ID
     };
 
-    await kv.set(`driver:${finalId}`, stampOrg(newDriver, c));
+    // Phase 4: Use stampRecord to include productLine for data isolation
+    await kv.set(`driver:${finalId}`, stampRecord(newDriver, c));
     invalidateDriverCache();
     {
       const display =
@@ -2581,7 +2623,8 @@ app.post("/make-server-37f42386/drivers", requireAuth(), requirePermission('driv
 
 // Transactions Endpoints
 // Transactions GET Endpoint - Optimized
-app.get("/make-server-37f42386/transactions", requireAuth(), async (c) => {
+// Phase 2/3: Use requireOrg and filterByOrgSafe for data isolation
+app.get("/make-server-37f42386/transactions", requireAuth({ requireOrg: true }), async (c) => {
   try {
     const driverIdsParam = c.req.query("driverIds");
     const driverIdParam = c.req.query("driverId");
@@ -2633,7 +2676,9 @@ app.get("/make-server-37f42386/transactions", requireAuth(), async (c) => {
         return v;
     });
 
-    return c.json(filterByOrg(transactions, c));
+    // Phase 3: Use filterByOrgSafe for feature-flag controlled strict filtering
+    const filtered = await filterByOrgSafe(transactions, c, { endpoint: '/transactions' });
+    return c.json(filtered);
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -3341,7 +3386,8 @@ const VALID_LEDGER_EVENT_TYPES = new Set([
 const VALID_LEDGER_DIRECTIONS = new Set(['inflow', 'outflow']);
 
 // ─── GET /ledger — Query with filters + pagination (`ledger_event:*` only) ──
-app.get("/make-server-37f42386/ledger", requireAuth(), async (c) => {
+// Phase 2: Use requireOrg to ensure organization context for data isolation
+app.get("/make-server-37f42386/ledger", requireAuth({ requireOrg: true }), async (c) => {
   try {
     const driverId = c.req.query("driverId");
     const driverIdsParam = c.req.query("driverIds");
@@ -3482,7 +3528,8 @@ app.get("/make-server-37f42386/ledger", requireAuth(), async (c) => {
 
 // ─── GET /ledger/count — Diagnostic counts ──────────────────────────
 // `ledgerEntries` = canonical `ledger_event:*` (SSOT). Legacy `ledger:%` rows are removed via POST /ledger/purge-legacy-all.
-app.get("/make-server-37f42386/ledger/count", requireAuth(), async (c) => {
+// Phase 2: Use requireOrg to ensure organization context for data isolation
+app.get("/make-server-37f42386/ledger/count", requireAuth({ requireOrg: true }), async (c) => {
   try {
     const orgId = getOrgId(c);
     let canonicalLedgerQ = supabase
@@ -14005,6 +14052,659 @@ async function invalidateCustomerCache(): Promise<void> {
   console.log("[AdminCustomers] Cache invalidated");
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// FEATURE FLAGS ADMIN ENDPOINTS (Phase 0 of Fleet Data Isolation)
+// ═══════════════════════════════════════════════════════════════════════════
+
+import {
+  isFeatureEnabled,
+  setFeatureFlag,
+  getFeatureFlag,
+  getAllFeatureFlags,
+  enableFlagForOrg,
+  disableFlagForOrg,
+  getFeatureFlagStats,
+  getAllFeatureFlagStats,
+  initializeDefaultFlags,
+  emergencyDisableAll,
+  FEATURE_FLAGS,
+} from "./feature_flags.ts";
+
+// GET /admin/feature-flags — List all feature flags and their status
+app.get("/make-server-37f42386/admin/feature-flags", requireAuth(), async (c) => {
+  try {
+    const rbacUser = c.get('rbacUser') as RbacUser;
+    if (!hasPlatformStaffAccess(rbacUser)) {
+      return c.json({ error: "Forbidden — platform role required" }, 403);
+    }
+
+    const flags = await getAllFeatureFlags();
+    const stats = await getAllFeatureFlagStats();
+
+    return c.json({
+      flags,
+      stats,
+      knownFlags: FEATURE_FLAGS,
+    });
+  } catch (e: any) {
+    console.error("[FeatureFlags] GET error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// GET /admin/feature-flags/:name — Get a specific feature flag
+app.get("/make-server-37f42386/admin/feature-flags/:name", requireAuth(), async (c) => {
+  try {
+    const rbacUser = c.get('rbacUser') as RbacUser;
+    if (!hasPlatformStaffAccess(rbacUser)) {
+      return c.json({ error: "Forbidden — platform role required" }, 403);
+    }
+
+    const flagName = c.req.param("name");
+    const flag = await getFeatureFlag(flagName);
+    const stats = await getFeatureFlagStats(flagName);
+
+    if (!flag) {
+      return c.json({ error: `Feature flag '${flagName}' not found` }, 404);
+    }
+
+    return c.json({ flag, stats });
+  } catch (e: any) {
+    console.error("[FeatureFlags] GET single error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// POST /admin/feature-flags/:name — Update a feature flag
+app.post("/make-server-37f42386/admin/feature-flags/:name", requireAuth(), async (c) => {
+  try {
+    const rbacUser = c.get('rbacUser') as RbacUser;
+    if (!hasPlatformOwnerAccess(rbacUser)) {
+      return c.json({ error: "Forbidden — platform owner required" }, 403);
+    }
+
+    const flagName = c.req.param("name");
+    const body = await c.req.json();
+    const { enabled, enabledForOrgs, disabledForOrgs, description } = body;
+
+    if (typeof enabled !== "boolean") {
+      return c.json({ error: "enabled (boolean) is required" }, 400);
+    }
+
+    await setFeatureFlag(flagName, enabled, {
+      enabledForOrgs,
+      disabledForOrgs,
+      description,
+      updatedBy: rbacUser.email || rbacUser.userId,
+    });
+
+    await logAdminAction({
+      actorId: rbacUser.userId,
+      actorName: rbacUser.email || "Platform Admin",
+      action: "update_feature_flag",
+      targetId: flagName,
+      targetEmail: "",
+      details: `Set ${flagName} to ${enabled}`,
+    });
+
+    const updated = await getFeatureFlag(flagName);
+    return c.json({ success: true, flag: updated });
+  } catch (e: any) {
+    console.error("[FeatureFlags] POST error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// POST /admin/feature-flags/:name/enable-for-org — Enable flag for specific org
+app.post("/make-server-37f42386/admin/feature-flags/:name/enable-for-org", requireAuth(), async (c) => {
+  try {
+    const rbacUser = c.get('rbacUser') as RbacUser;
+    if (!hasPlatformOwnerAccess(rbacUser)) {
+      return c.json({ error: "Forbidden — platform owner required" }, 403);
+    }
+
+    const flagName = c.req.param("name");
+    const { orgId } = await c.req.json();
+
+    if (!orgId) {
+      return c.json({ error: "orgId is required" }, 400);
+    }
+
+    await enableFlagForOrg(flagName, orgId, rbacUser.email || rbacUser.userId);
+
+    await logAdminAction({
+      actorId: rbacUser.userId,
+      actorName: rbacUser.email || "Platform Admin",
+      action: "enable_feature_flag_for_org",
+      targetId: `${flagName}:${orgId}`,
+      targetEmail: "",
+      details: `Enabled ${flagName} for org ${orgId}`,
+    });
+
+    return c.json({ success: true });
+  } catch (e: any) {
+    console.error("[FeatureFlags] enable-for-org error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// POST /admin/feature-flags/:name/disable-for-org — Disable flag for specific org
+app.post("/make-server-37f42386/admin/feature-flags/:name/disable-for-org", requireAuth(), async (c) => {
+  try {
+    const rbacUser = c.get('rbacUser') as RbacUser;
+    if (!hasPlatformOwnerAccess(rbacUser)) {
+      return c.json({ error: "Forbidden — platform owner required" }, 403);
+    }
+
+    const flagName = c.req.param("name");
+    const { orgId } = await c.req.json();
+
+    if (!orgId) {
+      return c.json({ error: "orgId is required" }, 400);
+    }
+
+    await disableFlagForOrg(flagName, orgId, rbacUser.email || rbacUser.userId);
+
+    await logAdminAction({
+      actorId: rbacUser.userId,
+      actorName: rbacUser.email || "Platform Admin",
+      action: "disable_feature_flag_for_org",
+      targetId: `${flagName}:${orgId}`,
+      targetEmail: "",
+      details: `Disabled ${flagName} for org ${orgId}`,
+    });
+
+    return c.json({ success: true });
+  } catch (e: any) {
+    console.error("[FeatureFlags] disable-for-org error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// POST /admin/feature-flags/initialize — Initialize default flags (one-time setup)
+app.post("/make-server-37f42386/admin/feature-flags/initialize", requireAuth(), async (c) => {
+  try {
+    const rbacUser = c.get('rbacUser') as RbacUser;
+    if (!hasPlatformOwnerAccess(rbacUser)) {
+      return c.json({ error: "Forbidden — platform owner required" }, 403);
+    }
+
+    await initializeDefaultFlags();
+
+    await logAdminAction({
+      actorId: rbacUser.userId,
+      actorName: rbacUser.email || "Platform Admin",
+      action: "initialize_feature_flags",
+      targetId: "all",
+      targetEmail: "",
+      details: "Initialized default feature flags",
+    });
+
+    const flags = await getAllFeatureFlags();
+    return c.json({ success: true, flags });
+  } catch (e: any) {
+    console.error("[FeatureFlags] initialize error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// POST /admin/feature-flags/emergency-disable — EMERGENCY: Disable all strict flags
+app.post("/make-server-37f42386/admin/feature-flags/emergency-disable", requireAuth(), async (c) => {
+  try {
+    const rbacUser = c.get('rbacUser') as RbacUser;
+    if (!hasPlatformOwnerAccess(rbacUser)) {
+      return c.json({ error: "Forbidden — platform owner required" }, 403);
+    }
+
+    console.warn(`[FeatureFlags] EMERGENCY DISABLE triggered by ${rbacUser.email || rbacUser.userId}`);
+
+    await emergencyDisableAll(rbacUser.email || rbacUser.userId);
+
+    await logAdminAction({
+      actorId: rbacUser.userId,
+      actorName: rbacUser.email || "Platform Admin",
+      action: "emergency_disable_feature_flags",
+      targetId: "all",
+      targetEmail: "",
+      details: "EMERGENCY: Disabled all strict feature flags",
+    });
+
+    const flags = await getAllFeatureFlags();
+    return c.json({ success: true, message: "All strict feature flags have been disabled", flags });
+  } catch (e: any) {
+    console.error("[FeatureFlags] emergency-disable error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// GET /admin/feature-flags/check — Check if a flag is enabled for the current context
+app.get("/make-server-37f42386/admin/feature-flags/check", requireAuth(), async (c) => {
+  try {
+    const flagName = c.req.query("flag");
+    const orgId = c.req.query("orgId") || getOrgId(c);
+
+    if (!flagName) {
+      return c.json({ error: "flag query parameter is required" }, 400);
+    }
+
+    const isEnabled = await isFeatureEnabled(flagName, orgId);
+    const flag = await getFeatureFlag(flagName);
+
+    return c.json({
+      flag: flagName,
+      orgId,
+      isEnabled,
+      config: flag,
+    });
+  } catch (e: any) {
+    console.error("[FeatureFlags] check error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 6: Organization Backfill Endpoints
+// ═══════════════════════════════════════════════════════════════════════════
+
+// POST /admin/organizations/backfill — Create organizations for existing fleet owners
+app.post("/make-server-37f42386/admin/organizations/backfill", requireAuth(), async (c) => {
+  try {
+    const rbacUser = c.get('rbacUser') as RbacUser;
+    if (!hasPlatformOwnerAccess(rbacUser)) {
+      return c.json({ error: "Forbidden — platform owner required" }, 403);
+    }
+
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body.dryRun === true;
+    const productLineFilter = body.productLine; // Optional: 'fleet' or 'enterprise'
+
+    console.log(`[OrgBackfill] Starting ${dryRun ? 'DRY RUN' : 'LIVE'} backfill for product line: ${productLineFilter || 'all'}`);
+
+    // Get all fleet owners (users with admin role and no organization record yet)
+    const { data: users, error: usersError } = await supabase.auth.admin.listUsers({
+      perPage: 1000,
+    });
+
+    if (usersError) {
+      throw new Error(`Failed to list users: ${usersError.message}`);
+    }
+
+    const fleetOwners = (users.users || []).filter(u => {
+      const appRole = u.app_metadata?.role;
+      const userRole = u.user_metadata?.role;
+      const isAdmin = appRole === 'admin' || appRole === 'fleet_owner' || userRole === 'admin' || userRole === 'fleet_owner';
+      
+      if (!isAdmin) return false;
+      
+      // Filter by product line if specified
+      if (productLineFilter) {
+        const userProductLine = u.user_metadata?.productLine || 
+          (u.user_metadata?.businessType === 'rideshare' ? 'fleet' : 'enterprise');
+        return userProductLine === productLineFilter;
+      }
+      
+      return true;
+    });
+
+    console.log(`[OrgBackfill] Found ${fleetOwners.length} fleet owners to process`);
+
+    const results = {
+      processed: 0,
+      created: 0,
+      skipped: 0,
+      errors: [] as string[],
+      details: [] as any[],
+    };
+
+    for (const user of fleetOwners) {
+      results.processed++;
+
+      // Check if organization already exists
+      const { data: existingOrg } = await supabase
+        .from('organizations')
+        .select('id, name')
+        .eq('owner_id', user.id)
+        .maybeSingle();
+
+      if (existingOrg) {
+        results.skipped++;
+        results.details.push({
+          userId: user.id,
+          email: user.email,
+          status: 'skipped',
+          reason: `Organization already exists: ${existingOrg.name}`,
+        });
+        continue;
+      }
+
+      // Determine organization details
+      const productLine = user.user_metadata?.productLine || 
+        (user.user_metadata?.businessType === 'rideshare' ? 'fleet' : 'enterprise');
+      const orgName = user.user_metadata?.fleetName || 
+        user.user_metadata?.companyName ||
+        `${user.email?.split('@')[0]}'s Fleet`;
+      const businessType = user.user_metadata?.businessType || 'rideshare';
+
+      if (dryRun) {
+        results.created++;
+        results.details.push({
+          userId: user.id,
+          email: user.email,
+          status: 'would_create',
+          orgName,
+          productLine,
+          businessType,
+        });
+        continue;
+      }
+
+      // Create the organization
+      const { data: newOrg, error: createError } = await supabase
+        .from('organizations')
+        .insert({
+          id: user.id, // Use user ID as org ID for legacy compatibility
+          owner_id: user.id,
+          name: orgName,
+          product_line: productLine,
+          business_type: businessType,
+          contact_email: user.email,
+          status: 'active',
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        results.errors.push(`User ${user.id}: ${createError.message}`);
+        results.details.push({
+          userId: user.id,
+          email: user.email,
+          status: 'error',
+          error: createError.message,
+        });
+        continue;
+      }
+
+      // Update user metadata with organizationId
+      await supabase.auth.admin.updateUserById(user.id, {
+        user_metadata: {
+          ...user.user_metadata,
+          organizationId: user.id,
+        },
+      });
+
+      results.created++;
+      results.details.push({
+        userId: user.id,
+        email: user.email,
+        status: 'created',
+        orgId: newOrg?.id,
+        orgName,
+        productLine,
+      });
+    }
+
+    await logAdminAction({
+      actorId: rbacUser.userId,
+      actorName: rbacUser.email || "Platform Admin",
+      action: "organization_backfill",
+      targetId: "batch",
+      targetEmail: "",
+      details: `Backfill ${dryRun ? '(DRY RUN)' : ''}: ${results.created} created, ${results.skipped} skipped, ${results.errors.length} errors`,
+    });
+
+    console.log(`[OrgBackfill] Complete: ${results.created} created, ${results.skipped} skipped, ${results.errors.length} errors`);
+
+    return c.json({
+      success: true,
+      dryRun,
+      summary: {
+        processed: results.processed,
+        created: results.created,
+        skipped: results.skipped,
+        errors: results.errors.length,
+      },
+      details: results.details,
+      errors: results.errors,
+    });
+  } catch (e: any) {
+    console.error("[OrgBackfill] Error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// POST /admin/kv/backfill-org-ids — Backfill organizationId on KV records
+app.post("/make-server-37f42386/admin/kv/backfill-org-ids", requireAuth(), async (c) => {
+  try {
+    const rbacUser = c.get('rbacUser') as RbacUser;
+    if (!hasPlatformOwnerAccess(rbacUser)) {
+      return c.json({ error: "Forbidden — platform owner required" }, 403);
+    }
+
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body.dryRun === true;
+    const recordType = body.recordType; // 'driver', 'trip', 'transaction', or 'all'
+    const limit = Math.min(body.limit || 1000, 5000);
+
+    console.log(`[KVBackfill] Starting ${dryRun ? 'DRY RUN' : 'LIVE'} backfill for ${recordType || 'all'} records (limit: ${limit})`);
+
+    const prefixes = recordType === 'all' || !recordType
+      ? ['driver:', 'trip:', 'transaction:']
+      : [`${recordType}:`];
+
+    const results = {
+      processed: 0,
+      updated: 0,
+      skipped: 0,
+      errors: [] as string[],
+    };
+
+    for (const prefix of prefixes) {
+      // Get records without organizationId
+      const { data: records, error } = await supabase
+        .from('kv_store_37f42386')
+        .select('key, value')
+        .like('key', `${prefix}%`)
+        .is('value->organizationId', null)
+        .limit(limit);
+
+      if (error) {
+        results.errors.push(`Failed to fetch ${prefix} records: ${error.message}`);
+        continue;
+      }
+
+      console.log(`[KVBackfill] Found ${records?.length || 0} ${prefix} records without organizationId`);
+
+      for (const record of records || []) {
+        results.processed++;
+        const value = record.value as Record<string, any>;
+        
+        // Try to find organizationId from driver record
+        let orgId: string | null = null;
+        
+        if (prefix === 'driver:') {
+          // For drivers, look up the user's organizationId
+          const driverId = record.key.replace('driver:', '');
+          const { data: user } = await supabase.auth.admin.getUserById(driverId);
+          if (user?.user?.user_metadata?.organizationId) {
+            orgId = user.user.user_metadata.organizationId;
+          }
+        } else if (prefix === 'trip:' || prefix === 'transaction:') {
+          // For trips/transactions, look up the driver's organizationId
+          const driverId = value.driverId;
+          if (driverId) {
+            const driverRecord = await kv.get(`driver:${driverId}`);
+            if (driverRecord?.organizationId) {
+              orgId = driverRecord.organizationId;
+            }
+          }
+        }
+
+        if (!orgId) {
+          results.skipped++;
+          continue;
+        }
+
+        if (dryRun) {
+          results.updated++;
+          continue;
+        }
+
+        // Update the record with organizationId
+        const updatedValue = { ...value, organizationId: orgId };
+        await kv.set(record.key, updatedValue);
+        results.updated++;
+      }
+    }
+
+    await logAdminAction({
+      actorId: rbacUser.userId,
+      actorName: rbacUser.email || "Platform Admin",
+      action: "kv_org_id_backfill",
+      targetId: recordType || "all",
+      targetEmail: "",
+      details: `Backfill ${dryRun ? '(DRY RUN)' : ''}: ${results.updated} updated, ${results.skipped} skipped`,
+    });
+
+    console.log(`[KVBackfill] Complete: ${results.updated} updated, ${results.skipped} skipped, ${results.errors.length} errors`);
+
+    return c.json({
+      success: true,
+      dryRun,
+      summary: {
+        processed: results.processed,
+        updated: results.updated,
+        skipped: results.skipped,
+        errors: results.errors.length,
+      },
+      errors: results.errors,
+    });
+  } catch (e: any) {
+    console.error("[KVBackfill] Error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// POST /admin/kv/backfill-product-line — Backfill productLine on KV records
+app.post("/make-server-37f42386/admin/kv/backfill-product-line", requireAuth(), async (c) => {
+  try {
+    const rbacUser = c.get('rbacUser') as RbacUser;
+    if (!hasPlatformOwnerAccess(rbacUser)) {
+      return c.json({ error: "Forbidden — platform owner required" }, 403);
+    }
+
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body.dryRun === true;
+    const recordType = body.recordType; // 'driver', 'trip', 'transaction', or 'all'
+    const limit = Math.min(body.limit || 1000, 5000);
+
+    console.log(`[ProductLineBackfill] Starting ${dryRun ? 'DRY RUN' : 'LIVE'} backfill for ${recordType || 'all'} records (limit: ${limit})`);
+
+    const prefixes = recordType === 'all' || !recordType
+      ? ['driver:', 'trip:', 'transaction:']
+      : [`${recordType}:`];
+
+    const results = {
+      processed: 0,
+      updated: 0,
+      skipped: 0,
+      errors: [] as string[],
+    };
+
+    for (const prefix of prefixes) {
+      // Get records without productLine
+      const { data: records, error } = await supabase
+        .from('kv_store_37f42386')
+        .select('key, value')
+        .like('key', `${prefix}%`)
+        .is('value->productLine', null)
+        .limit(limit);
+
+      if (error) {
+        results.errors.push(`Failed to fetch ${prefix} records: ${error.message}`);
+        continue;
+      }
+
+      console.log(`[ProductLineBackfill] Found ${records?.length || 0} ${prefix} records without productLine`);
+
+      for (const record of records || []) {
+        results.processed++;
+        const value = record.value as Record<string, any>;
+        
+        // Try to find productLine from organization or user
+        let productLine: string = 'fleet'; // Default to fleet
+        
+        const orgId = value.organizationId;
+        if (orgId) {
+          // Look up organization's product line
+          const { data: org } = await supabase
+            .from('organizations')
+            .select('product_line')
+            .eq('id', orgId)
+            .maybeSingle();
+          
+          if (org?.product_line) {
+            productLine = org.product_line;
+          }
+        }
+
+        if (dryRun) {
+          results.updated++;
+          continue;
+        }
+
+        // Update the record with productLine
+        const updatedValue = { ...value, productLine };
+        await kv.set(record.key, updatedValue);
+        results.updated++;
+      }
+    }
+
+    await logAdminAction({
+      actorId: rbacUser.userId,
+      actorName: rbacUser.email || "Platform Admin",
+      action: "kv_product_line_backfill",
+      targetId: recordType || "all",
+      targetEmail: "",
+      details: `Backfill ${dryRun ? '(DRY RUN)' : ''}: ${results.updated} updated, ${results.skipped} skipped`,
+    });
+
+    console.log(`[ProductLineBackfill] Complete: ${results.updated} updated, ${results.skipped} skipped, ${results.errors.length} errors`);
+
+    return c.json({
+      success: true,
+      dryRun,
+      summary: {
+        processed: results.processed,
+        updated: results.updated,
+        skipped: results.skipped,
+        errors: results.errors.length,
+      },
+      errors: results.errors,
+    });
+  } catch (e: any) {
+    console.error("[ProductLineBackfill] Error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// END PHASE 6: Organization Backfill Endpoints
+// ═══════════════════════════════════════════════════════════════════════════
+
+// GET /admin/feature-flags/check duplicate removed (see above)
+// Skip the duplicate endpoint check below
+app.get("/make-server-37f42386/admin/feature-flags/check-duplicate-removed", async (c) => {
+  return c.json({ error: "Use /admin/feature-flags/check instead" }, 404);
+});
+    console.error("[FeatureFlags] check error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// END FEATURE FLAGS ADMIN ENDPOINTS
+// ═══════════════════════════════════════════════════════════════════════════
+
 // GET /admin/customers — List fleet manager accounts (?productLine=fleet|enterprise, default enterprise)
 app.get("/make-server-37f42386/admin/customers", requireAuth(), async (c) => {
   try {
@@ -15500,8 +16200,9 @@ app.post("/make-server-37f42386/bulk-delete-execute", requireAuth(), requirePerm
 // Aggregates ALL fare_earning ledger entries per driver into
 // lifetime / monthly / today earnings & trip-count buckets.
 // Used by DriversPage.tsx to display ledger-sourced financials.
+// Phase 2: Use requireOrg to ensure organization context for data isolation
 // ═══════════════════════════════════════════════════════════════════════════
-app.get("/make-server-37f42386/ledger/drivers-summary", requireAuth(), async (c) => {
+app.get("/make-server-37f42386/ledger/drivers-summary", requireAuth({ requireOrg: true }), async (c) => {
   const t0 = Date.now();
   try {
     // Date param (for "today" bucket) — defaults to server's current date

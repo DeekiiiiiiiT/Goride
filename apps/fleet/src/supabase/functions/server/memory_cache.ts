@@ -166,3 +166,9 @@ export const dashboardStatsCache = new MemoryCache<any>(50, 30 * 1000); // 50 en
 
 // Platform settings cache - single entry, 30sec TTL for maintenance mode checks
 export const platformSettingsCache = new MemoryCache<any>(5, 30 * 1000); // 5 entries, 30sec TTL
+
+// Feature flags cache - small dataset, short TTL for quick toggle response
+export const featureFlagCache = new MemoryCache<any>(20, 30 * 1000); // 20 entries, 30sec TTL
+
+// Filter statistics cache - for monitoring org filter behavior
+export const filterStatsCache = new MemoryCache<any>(100, 60 * 1000); // 100 entries, 1min TTL

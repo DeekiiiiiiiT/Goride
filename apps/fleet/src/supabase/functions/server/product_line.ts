@@ -68,3 +68,68 @@ export function isEnabledBusinessType(
   if (map[businessType] === false) return false;
   return true;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 4: Product Line Filtering for Data Isolation
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Filter records by product line.
+ * 
+ * LEGACY BEHAVIOR: Records without a productLine field are INCLUDED
+ * (graceful fallback for pre-migration data).
+ * 
+ * When `feature:product_line_filter` is enabled, this filter is applied
+ * to ensure Roam Fleet data doesn't appear in Roam Enterprise and vice versa.
+ */
+export function filterByProductLine<T extends Record<string, unknown>>(
+  records: T[],
+  productLine: ProductLine,
+): T[] {
+  return records.filter((r) => {
+    // Legacy: Records without productLine are included (pre-migration data)
+    if (!r.productLine) return true;
+    // Only include records matching the current product line
+    return r.productLine === productLine;
+  });
+}
+
+/**
+ * STRICT filter: Only return records that explicitly match the product line.
+ * Records without productLine are EXCLUDED.
+ */
+export function filterByProductLineStrict<T extends Record<string, unknown>>(
+  records: T[],
+  productLine: ProductLine,
+): T[] {
+  return records.filter((r) => {
+    // STRICT: Exclude records without productLine
+    if (!r.productLine) return false;
+    return r.productLine === productLine;
+  });
+}
+
+/**
+ * Feature-flag controlled product line filter.
+ */
+export async function filterByProductLineSafe<T extends Record<string, unknown>>(
+  records: T[],
+  c: Context,
+  options?: { strict?: boolean }
+): Promise<T[]> {
+  const { isFeatureEnabled, FEATURE_FLAGS } = await import("./feature_flags.ts");
+  
+  const useProductFilter = await isFeatureEnabled(FEATURE_FLAGS.PRODUCT_LINE_FILTER);
+  
+  if (!useProductFilter) {
+    return records; // Product line filtering disabled
+  }
+
+  const productLine = resolveProductLine(c);
+
+  if (options?.strict) {
+    return filterByProductLineStrict(records, productLine);
+  }
+  
+  return filterByProductLine(records, productLine);
+}
