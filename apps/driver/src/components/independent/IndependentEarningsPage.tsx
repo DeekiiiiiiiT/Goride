@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import { formatMoneyMinor } from '@roam/types/rides';
 import { useIndependentEarnings } from '../../hooks/useIndependentEarnings';
-import { CASH_SETTLEMENT_ENABLED } from '../../lib/cashSettlementFlags';
 
 type EarningsPageProps = {
   onNavigate?: (page: string) => void;
@@ -85,7 +84,7 @@ export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
         </div>
       </section>
 
-      {CASH_SETTLEMENT_ENABLED && onNavigate && (
+      {onNavigate && (
         <button
           type="button"
           onClick={() => onNavigate('rides-wallets')}
@@ -96,8 +95,8 @@ export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
               <Wallet className="h-5 w-5 text-blue-700 dark:text-blue-400" aria-hidden />
             </div>
             <div>
-              <p className="text-sm font-semibold text-slate-900 dark:text-white">Trip wallets</p>
-              <p className="text-xs text-slate-500">Digital, cash & change debt</p>
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">Trip wallet</p>
+              <p className="text-xs text-slate-500">Ledger balance & settlement history</p>
             </div>
           </div>
           <ChevronRight className="h-5 w-5 text-slate-400" aria-hidden />

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, Banknote, CreditCard, Loader2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Banknote, CreditCard, Loader2, RefreshCw } from 'lucide-react';
 import { formatMoneyMinorPlain, type PaymentJournalEntryDto } from '@roam/types/rides';
 import {
   ridesDriverWalletJournal,
@@ -15,7 +15,11 @@ const TAB_LABELS: Record<WalletTab, string> = {
   debt: 'Debt',
 };
 
-export function DriverWalletsPage() {
+type Props = {
+  onBack?: () => void;
+};
+
+export function DriverWalletsPage({ onBack }: Props) {
   const showMultiWallet = CASH_SETTLEMENT_V2_ENABLED;
   const [tab, setTab] = useState<WalletTab>('digital');
   const currency = 'JMD';
@@ -44,7 +48,7 @@ export function DriverWalletsPage() {
     setTxLoading(true);
     try {
       const res = await ridesDriverWalletJournal(tab, currency);
-      setTransactions(res.transactions);
+      setTransactions(res.transactions ?? []);
     } catch {
       setTransactions([]);
     } finally {
@@ -67,15 +71,27 @@ export function DriverWalletsPage() {
   return (
     <div className="space-y-6 pb-4">
       <div className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-            {showMultiWallet ? 'Trip wallets' : 'Wallet'}
-          </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            {showMultiWallet
-              ? 'Digital, cash collected, and change debt'
-              : 'Your Roam rides wallet balance'}
-          </p>
+        <div className="flex min-w-0 items-center gap-3">
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="rounded-full p-2 text-[#004ac6] transition-colors hover:bg-slate-100 active:scale-95 dark:text-blue-400 dark:hover:bg-slate-800"
+              aria-label="Back"
+            >
+              <ArrowLeft className="h-5 w-5" strokeWidth={2} aria-hidden />
+            </button>
+          )}
+          <div className="min-w-0">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+              {showMultiWallet ? 'Trip wallets' : 'Trip wallet'}
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {showMultiWallet
+                ? 'Digital, cash collected, and change debt'
+                : 'Settlement ledger balance & history'}
+            </p>
+          </div>
         </div>
         <button
           type="button"

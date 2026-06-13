@@ -6,7 +6,6 @@ import { RideOfferCard } from './RideOfferCard';
 import { ActiveRidePanel } from './ActiveRidePanel';
 import { OnlineGaugeSlider } from './OnlineGaugeSlider';
 import { shouldRetractOnlineSlider } from './rideDispatchUtils';
-import { CASH_SETTLEMENT_ENABLED } from '../../lib/cashSettlementFlags';
 
 type Props = {
   onOpenWallets?: () => void;
@@ -44,7 +43,7 @@ export function RideDispatchPage({ onOpenWallets }: Props) {
             <h1 className="text-lg font-semibold tracking-tight">Passenger rides</h1>
             <p className="text-xs text-slate-500 dark:text-slate-400">Roam passenger dispatch</p>
           </div>
-          {CASH_SETTLEMENT_ENABLED && onOpenWallets && (
+          {onOpenWallets && (
             <button
               type="button"
               onClick={onOpenWallets}
