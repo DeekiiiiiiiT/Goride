@@ -1,0 +1,275 @@
+.pending-page {
+  --pending-bg: #fbf9f8;
+  --pending-primary: #006d43;
+  --pending-on-surface: #1b1c1c;
+  --pending-on-surface-variant: #3d4a41;
+  --pending-secondary: #5f5e5e;
+  --pending-surface-low: #f5f3f3;
+  --pending-outline: #6d7a70;
+  --pending-primary-fixed: #78fbb6;
+  --pending-on-primary-fixed: #002111;
+  --pending-error: #ba1a1a;
+  font-family: 'Hanken Grotesk', system-ui, sans-serif;
+  background-color: var(--pending-bg);
+  color: var(--pending-on-surface);
+}
+
+html.dark .pending-page {
+  --pending-bg: #121413;
+  --pending-on-surface: #e2e3e0;
+  --pending-on-surface-variant: #bccabe;
+  --pending-secondary: #9ca3af;
+  --pending-surface-low: rgba(255, 255, 255, 0.06);
+  --pending-outline: #869489;
+}
+
+.pending-page__header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  height: 4rem;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(0, 109, 67, 0.1);
+  background: color-mix(in srgb, var(--pending-bg) 95%, transparent);
+  backdrop-filter: blur(16px);
+  padding-left: max(1.5rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1.5rem, env(safe-area-inset-right, 0px));
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.pending-page__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  padding: 0.5rem;
+  color: var(--pending-primary);
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.pending-page__icon-btn--muted {
+  color: var(--pending-secondary);
+}
+
+.pending-page__icon-btn:active {
+  transform: scale(0.95);
+}
+
+.pending-page__icon-btn:hover {
+  background-color: rgba(0, 109, 67, 0.05);
+}
+
+.pending-page__title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--pending-primary);
+}
+
+.pending-page__tabs {
+  display: flex;
+  border-radius: 9999px;
+  border: 1px solid rgba(0, 109, 67, 0.05);
+  background-color: var(--pending-surface-low);
+  padding: 0.375rem;
+  margin-bottom: 2rem;
+}
+
+.pending-page__tab {
+  flex: 1;
+  border-radius: 9999px;
+  padding: 0.75rem 1rem;
+  text-align: center;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--pending-secondary);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pending-page__tab--active {
+  background-color: #ffffff;
+  color: var(--pending-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+html.dark .pending-page__tab--active {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.pending-card {
+  border-radius: 1.5rem;
+  border: 1px solid rgba(0, 168, 107, 0.1);
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 10px 40px -10px rgba(0, 109, 67, 0.08);
+  padding: 1.5rem;
+}
+
+html.dark .pending-card {
+  background: rgba(30, 32, 31, 0.92);
+  border-color: rgba(89, 222, 155, 0.12);
+}
+
+.pending-card__avatar {
+  display: flex;
+  height: 4rem;
+  width: 4rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 9999px;
+  border: 2px solid rgba(0, 168, 107, 0.2);
+  background-color: #e5e2e1;
+  color: var(--pending-on-surface-variant);
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.pending-card__name {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: var(--pending-on-surface);
+}
+
+.pending-card__handle {
+  font-size: 0.8125rem;
+  color: var(--pending-secondary);
+}
+
+.pending-card__badge {
+  border-radius: 9999px;
+  background-color: var(--pending-primary-fixed);
+  padding: 0.25rem 0.5rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--pending-on-primary-fixed);
+}
+
+.pending-card__body {
+  margin-bottom: 1.5rem;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--pending-on-surface-variant);
+}
+
+.pending-card__actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.pending-card__accept {
+  flex: 1;
+  border-radius: 0.75rem;
+  background-color: var(--pending-primary);
+  padding: 0.875rem 1rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #ffffff;
+  box-shadow: 0 8px 20px rgba(0, 109, 67, 0.2);
+  transition: transform 0.15s ease;
+}
+
+.pending-card__accept:active {
+  transform: scale(0.98);
+}
+
+.pending-card__accept:disabled {
+  opacity: 0.5;
+}
+
+.pending-card__decline {
+  flex: 1;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(109, 122, 112, 0.3);
+  padding: 0.875rem 1rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--pending-secondary);
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.pending-card__decline:active {
+  transform: scale(0.98);
+}
+
+.pending-card__decline:disabled {
+  opacity: 0.5;
+}
+
+.pending-card__footer {
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
+  border-top: 1px solid rgba(0, 109, 67, 0.05);
+  padding-top: 1rem;
+}
+
+.pending-card__footer-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--pending-secondary) 60%, transparent);
+  transition: color 0.15s ease;
+}
+
+.pending-card__footer-btn:hover {
+  color: var(--pending-error);
+}
+
+.pending-card__footer-btn:disabled {
+  opacity: 0.5;
+}
+
+.pending-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1.5rem;
+  text-align: center;
+}
+
+.pending-empty__icon {
+  display: flex;
+  height: 12rem;
+  width: 12rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background-color: #e9e8e7;
+  margin-bottom: 1.5rem;
+  color: color-mix(in srgb, var(--pending-secondary) 40%, transparent);
+}
+
+html.dark .pending-empty__icon {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.pending-sent-section-title {
+  margin-bottom: 0.75rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--pending-secondary);
+}
+
+.pending-sent-link {
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--pending-primary);
+}
+
+.pending-sent-muted {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--pending-secondary);
+}

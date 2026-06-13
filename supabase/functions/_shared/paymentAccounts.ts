@@ -454,9 +454,41 @@ export async function listJournalForAccount(
   return listJournalForAccountKey(db, accountKey, currency, limit);
 }
 
+/** Map journal rows to signed amounts from the owning account's perspective. */
+export function mapJournalRowsForAccount(
+  accountId: string,
+  rows: Array<Record<string, unknown>>,
+): Array<{
+  id: string;
+  ride_request_id: string | null;
+  entry_type: string;
+  amount_minor: number;
+  currency: string;
+  description: string;
+  created_at: string;
+  is_credit: boolean;
+  metadata: Record<string, unknown>;
+}> {
+  return rows.map((row) => {
+    const creditId = String(row.credit_account_id ?? "");
+    const isCredit = creditId === accountId;
+    return {
+      id: String(row.id),
+      ride_request_id: row.ride_request_id ? String(row.ride_request_id) : null,
+      entry_type: String(row.entry_type),
+      amount_minor: Number(row.amount_minor),
+      currency: String(row.currency),
+      description: journalEntryTitle(String(row.entry_type)),
+      created_at: String(row.created_at),
+      is_credit: isCredit,
+      metadata: (row.metadata ?? {}) as Record<string, unknown>,
+    };
+  });
+}
+
 export function journalEntryTitle(entryType: string): string {
   const titles: Record<string, string> = {
-    cash_trip_arrears: "Cash trip balance",
+    cash_trip_arrears: "Outstanding balance",
     cash_change_debit: "Change credit",
     cash_change_credit: "Change credit",
     cash_trip_collection: "Cash collected",

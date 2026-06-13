@@ -51,7 +51,7 @@ import { DriverOnTripOverlay } from '../rides/DriverOnTripOverlay';
 import { DriverCashSettlementOverlay } from '../rides/DriverCashSettlementOverlay';
 import { DriverArrivedPickupOverlay } from '../rides/DriverArrivedPickupOverlay';
 import { DriverWalletsPage } from '../rides/DriverWalletsPage';
-import { CASH_SETTLEMENT_V2_ENABLED } from '../../lib/cashSettlementFlags';
+import { CASH_SETTLEMENT_ENABLED } from '../../lib/cashSettlementFlags';
 
 export function DriverShell({ forcePassengerRides = false }: { forcePassengerRides?: boolean }) {
   const { mode, isFleetDriver, isIndependentDriver, fleet, loading } = useDriver();
@@ -144,7 +144,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
       case 'passenger-rides':
         return <RideDispatchPage onOpenWallets={() => setCurrentPage('rides-wallets')} />;
       case 'rides-wallets':
-        return CASH_SETTLEMENT_V2_ENABLED ? <DriverWalletsPage /> : <RideDispatchPage />;
+        return CASH_SETTLEMENT_ENABLED ? <DriverWalletsPage /> : <RideDispatchPage />;
       case 'earnings':
         return isIndependentDriver ? (
           <IndependentEarningsPage onNavigate={setCurrentPage} />

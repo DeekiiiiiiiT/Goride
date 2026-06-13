@@ -16,7 +16,7 @@ const PRESET_AMOUNTS = [25, 50, 100, 200] as const;
 type Props = {
   open: boolean;
   onClose: () => void;
-  balanceUsd: number;
+  balanceMajor: number;
 };
 
 function formatUsd(value: number) {
@@ -28,7 +28,7 @@ function parseAmountInput(raw: string): number {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 }
 
-export function AddFundsSheet({ open, onClose, balanceUsd }: Props) {
+export function AddFundsSheet({ open, onClose, balanceMajor }: Props) {
   const [amount, setAmount] = useState('50.00');
   const [selectedPreset, setSelectedPreset] = useState<number | null>(50);
 
@@ -130,7 +130,7 @@ export function AddFundsSheet({ open, onClose, balanceUsd }: Props) {
               />
             </div>
             <p className="mt-2 text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-              Current Wallet Balance: ${formatUsd(balanceUsd)}
+              Current Wallet Balance: {formatUsd(balanceMajor)}
             </p>
           </div>
 

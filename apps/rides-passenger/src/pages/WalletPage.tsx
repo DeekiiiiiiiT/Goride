@@ -11,10 +11,9 @@ import {
   Wallet,
 } from 'lucide-react';
 import type { WalletBalanceDto, WalletTransactionDto } from '@roam/types/rides';
-import { formatMoneyMinor } from '@roam/types/rides';
-import { walletGetTransactions, formatFareMinor } from '@/services/tripIntentEdge';
+import { formatMoneyMinorPlain } from '@roam/types/rides';
+import { walletGetTransactions } from '@/services/tripIntentEdge';
 import { walletGetBalance } from '@/services/walletEdge';
-import { CASH_SETTLEMENT_ENABLED } from '@/lib/cashSettlementFlags';
 
 import {
   CARD_SHADOW,
@@ -22,16 +21,11 @@ import {
   ON_PRIMARY,
   ON_SURFACE,
   ON_SURFACE_VARIANT,
-  OUTLINE,
-  PAGE_BG,
   PRIMARY,
   PRIMARY_CONTAINER,
   PRIMARY_FIXED,
   SECONDARY,
-  SECONDARY_CONTAINER,
-  SURFACE_CONTAINER,
   SURFACE_CONTAINER_HIGH,
-  SURFACE_LOW,
   SURFACE_LOWEST,
   SURFACE_VARIANT,
 } from '@/lib/passengerTheme';
@@ -41,8 +35,6 @@ import { useDefaultPaymentMethod } from '@/hooks/useDefaultPaymentMethod';
 
 const PROMO_BANNER_URL =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuD0UhK5VtLTpy4UHuvfJVFirezfOFH8aVxjOc4xktbQT5pwx1qbyTm-1WnbSsefL9Wi0oVIw8xkhGB-M23OqRkM8nzib-4ZdM6dNXqr697Y74RBMdSaNwcbD1T-KNqHDZLZthBKomvCPZGNz5SxlisRDu3A3Uq0dj1GhoL0wn6Bf9DgGZ6Z4R79Abe0tlHvDx4axkEXUEOIL1d1-6axQwvJ7qYZEZysz7DB_d8-FN_Aqsd_NrdFdklLYBgPoWE-swsr6v2WeuC7e5zq';
-
-const LEGACY_BALANCE_USD = 42.5;
 
 function formatTxDate(iso: string): string {
   try {
@@ -62,20 +54,20 @@ function shadowTxTitle(tx: WalletTransactionDto): string {
   return tx.title?.trim() || 'Shadow trip';
 }
 
+function txIsCredit(tx: WalletTransactionDto): boolean {
+  if (tx.kind === 'journal') return tx.is_credit === true;
+  if (tx.kind === 'topup') return true;
+  return false;
+}
+
 function txIcon(tx: WalletTransactionDto) {
-  if (tx.kind === 'topup') {
-    return { Icon: Wallet, iconBg: PRIMARY_FIXED, iconColor: PRIMARY_CONTAINER, positive: true };
-  }
-  if (tx.kind === 'shadow_trip') {
-    return { Icon: Wallet, iconBg: PRIMARY_FIXED, iconColor: PRIMARY_CONTAINER, positive: false };
-  }
-  if (tx.kind === 'journal') {
-    const isCredit = tx.meta?.includes('credit') ?? false;
+  const positive = txIsCredit(tx);
+  if (tx.kind === 'topup' || tx.kind === 'shadow_trip' || tx.kind === 'journal') {
     return {
       Icon: Wallet,
-      iconBg: isCredit ? PRIMARY_FIXED : SURFACE_CONTAINER_HIGH,
-      iconColor: isCredit ? PRIMARY_CONTAINER : ON_SURFACE_VARIANT,
-      positive: isCredit,
+      iconBg: positive ? PRIMARY_FIXED : SURFACE_CONTAINER_HIGH,
+      iconColor: positive ? PRIMARY_CONTAINER : ON_SURFACE_VARIANT,
+      positive,
     };
   }
   return { Icon: Car, iconBg: SURFACE_CONTAINER_HIGH, iconColor: ON_SURFACE_VARIANT, positive: false };
@@ -88,20 +80,26 @@ export default function WalletPage() {
   const [transactions, setTransactions] = useState<WalletTransactionDto[]>([]);
   const [wallet, setWallet] = useState<WalletBalanceDto | null>(null);
   const [loading, setLoading] = useState(true);
+  const [walletError, setWalletError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
+      setWalletError(null);
       try {
-        const txRes = await walletGetTransactions();
-        if (!cancelled) setTransactions(txRes.transactions);
-        if (CASH_SETTLEMENT_ENABLED) {
-          const balRes = await walletGetBalance();
-          if (!cancelled) setWallet(balRes.wallet);
+        const [txRes, balRes] = await Promise.all([
+          walletGetTransactions(),
+          walletGetBalance(),
+        ]);
+        if (!cancelled) {
+          setTransactions(txRes.transactions);
+          setWallet(balRes.wallet);
         }
       } catch (e) {
         if (!cancelled) {
-          toast.error(e instanceof Error ? e.message : 'Could not load wallet');
+          const msg = e instanceof Error ? e.message : 'Could not load wallet';
+          setWalletError(msg);
+          toast.error(msg);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -122,6 +120,14 @@ export default function WalletPage() {
       navigate(`/shadow-trip/${tx.ride_id}/receipt`);
     }
   };
+
+  const balanceLabel = wallet
+    ? formatMoneyMinorPlain(wallet.balance_minor)
+    : loading
+      ? null
+      : '0.00';
+
+  const balanceMajor = wallet ? wallet.balance_minor / 100 : 0;
 
   return (
     <>
@@ -159,7 +165,7 @@ export default function WalletPage() {
       </header>
 
       <main className="mx-auto w-full max-w-xl flex-1 space-y-6 px-4 py-6 safe-x">
-        {CASH_SETTLEMENT_ENABLED && wallet && wallet.arrears_minor > 0 && (
+        {wallet && wallet.arrears_minor > 0 && (
           <div
             className="rounded-2xl border px-4 py-3 text-sm"
             style={{
@@ -170,9 +176,15 @@ export default function WalletPage() {
           >
             <p className="font-semibold">Outstanding balance</p>
             <p className="mt-0.5" style={{ color: ON_SURFACE_VARIANT }}>
-              You owe {formatMoneyMinor(wallet.arrears_minor, wallet.currency)} from a previous cash
-              trip. Pay your driver in full on your next ride or contact support.
+              You owe {formatMoneyMinorPlain(wallet.arrears_minor)} from a previous cash trip. Pay your
+              driver in full on your next ride or contact support.
             </p>
+          </div>
+        )}
+
+        {walletError && !wallet && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            {walletError}
           </div>
         )}
 
@@ -182,27 +194,20 @@ export default function WalletPage() {
         >
           <div className="relative z-10">
             <p className="mb-1 text-xs font-bold uppercase tracking-wide" style={{ color: SECONDARY }}>
-              {CASH_SETTLEMENT_ENABLED && wallet ? 'Wallet balance' : 'Current balance'}
+              Wallet balance
             </p>
             <div className="flex items-baseline gap-1">
-              {CASH_SETTLEMENT_ENABLED && wallet ? (
-                <span className="text-[30px] font-bold tracking-tight tabular-nums" style={{ color: PRIMARY }}>
-                  {formatMoneyMinor(wallet.balance_minor, wallet.currency)}
-                </span>
+              {loading ? (
+                <Loader2 className="h-8 w-8 animate-spin" style={{ color: PRIMARY }} />
               ) : (
-                <>
-                  <span className="text-[30px] font-bold tracking-tight" style={{ color: PRIMARY }}>
-                    ${LEGACY_BALANCE_USD.toFixed(2)}
-                  </span>
-                  <span className="text-sm" style={{ color: SECONDARY }}>
-                    USD
-                  </span>
-                </>
+                <span className="text-[30px] font-bold tracking-tight tabular-nums" style={{ color: PRIMARY }}>
+                  {balanceLabel}
+                </span>
               )}
             </div>
-            {CASH_SETTLEMENT_ENABLED && wallet && wallet.credit_minor > 0 && (
+            {wallet && wallet.credit_minor > 0 && (
               <p className="mt-2 text-xs" style={{ color: SECONDARY }}>
-                Includes {formatMoneyMinor(wallet.credit_minor, wallet.currency)} ride credit
+                Includes {formatMoneyMinorPlain(wallet.credit_minor)} ride credit
               </p>
             )}
             <div className="mt-8">
@@ -259,14 +264,15 @@ export default function WalletPage() {
               </div>
             ) : transactions.length === 0 ? (
               <p className="p-6 text-center text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-                No trips yet.
+                No transactions yet.
               </p>
             ) : (
               transactions.map((tx) => {
                 const { Icon, iconBg, iconColor, positive } = txIcon(tx);
+                const amountMinor = Number(tx.amount_minor);
                 const amount = positive
-                  ? `+${formatFareMinor(tx.amount_minor, tx.currency)}`
-                  : `-${formatFareMinor(tx.amount_minor, tx.currency)}`;
+                  ? `+${formatMoneyMinorPlain(amountMinor)}`
+                  : `-${formatMoneyMinorPlain(amountMinor)}`;
                 const clickable = tx.kind === 'shadow_trip' && Boolean(tx.ride_id);
                 const Row = clickable ? 'button' : 'div';
                 return (
@@ -296,16 +302,11 @@ export default function WalletPage() {
                     </div>
                     <div className="text-right">
                       <p
-                        className="font-bold"
+                        className="font-bold tabular-nums"
                         style={{ color: positive ? PRIMARY : ON_SURFACE }}
                       >
                         {amount}
                       </p>
-                      {tx.meta ? (
-                        <p className="text-[11px] font-semibold" style={{ color: SECONDARY }}>
-                          {tx.meta}
-                        </p>
-                      ) : null}
                     </div>
                   </Row>
                 );
@@ -328,7 +329,7 @@ export default function WalletPage() {
           <div className="relative z-10 min-w-0 flex-1">
             <h3 className="text-xl font-bold text-white">Earn 5% Back</h3>
             <p className="text-sm" style={{ color: SURFACE_VARIANT }}>
-              Top up $100 or more with Roam Rides Visa.
+              Top up with Roam Rides.
             </p>
           </div>
           <ChevronRight className="relative z-10 ml-auto h-6 w-6 shrink-0 text-white" aria-hidden />
@@ -340,7 +341,7 @@ export default function WalletPage() {
       <AddFundsSheet
         open={addFundsOpen}
         onClose={() => setAddFundsOpen(false)}
-        balanceUsd={LEGACY_BALANCE_USD}
+        balanceMajor={balanceMajor}
       />
     </>
   );

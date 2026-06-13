@@ -102,6 +102,7 @@ export interface PaymentJournalEntryDto {
   currency: string;
   description: string;
   created_at: string;
+  is_credit?: boolean;
   metadata?: Record<string, unknown>;
 }
 
@@ -405,6 +406,8 @@ export interface WalletTransactionDto {
   amount_minor: string;
   currency: string;
   date: string;
+  /** Journal rows: true when this account was credited (positive for rider/driver). */
+  is_credit?: boolean;
   meta?: string;
   ride_id?: string;
   driver_name?: string | null;
@@ -696,4 +699,17 @@ export function formatMoneyMinor(
   const n = typeof minor === 'bigint' ? Number(minor) : Number(minor);
   if (Number.isNaN(n)) return '—';
   return new Intl.NumberFormat('en-JM', { style: 'currency', currency }).format(n / 100);
+}
+
+/** Format minor units without currency code (default JMD locale). */
+export function formatMoneyMinorPlain(
+  minor: bigint | number | string | null | undefined,
+): string {
+  if (minor == null) return '—';
+  const n = typeof minor === 'bigint' ? Number(minor) : Number(minor);
+  if (Number.isNaN(n)) return '—';
+  return new Intl.NumberFormat('en-JM', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(n / 100);
 }

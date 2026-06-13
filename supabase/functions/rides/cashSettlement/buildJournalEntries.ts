@@ -87,7 +87,7 @@ export function buildJournalLineSpecs(params: BuildJournalParams): JournalLineSp
 
   if (computed.change_credit_minor > 0) {
     lines.push({
-      entry_type: "cash_change_debit",
+      entry_type: "cash_change_credit",
       debit_account_key: driverAccountKey,
       credit_account_key: riderAccountKey,
       amount_minor: computed.change_credit_minor,

@@ -2720,17 +2720,22 @@ app.get("/v1/wallet/transactions", async (c) => {
   }
   if (isCashSettlementEnabled() && c.req.query("legacy") !== "1") {
     const currency = c.req.query("currency")?.trim() || "JMD";
-    const { listJournalForAccount, journalEntryTitle } = await import("../_shared/paymentAccounts.ts");
-    const rows = await listJournalForAccount(svc(), auth.user.id, "rider", currency);
-    const transactions = rows.map((row) => ({
-      id: String(row.id),
+    const { listJournalForAccountKey, mapJournalRowsForAccount, getAccountByKey } =
+      await import("../_shared/paymentAccounts.ts");
+    const { riderAccountKeyForUser } = await import("./cashSettlement/buildJournalEntries.ts");
+    const accountKey = riderAccountKeyForUser(auth.user.id);
+    const account = await getAccountByKey(svc(), accountKey, currency);
+    const rows = await listJournalForAccountKey(svc(), accountKey, currency);
+    const mapped = account ? mapJournalRowsForAccount(String(account.id), rows) : [];
+    const transactions = mapped.map((row) => ({
+      id: row.id,
       kind: "journal" as const,
-      title: journalEntryTitle(String(row.entry_type)),
+      title: row.description,
       amount_minor: String(row.amount_minor),
-      currency: String(row.currency),
-      date: String(row.created_at),
-      meta: String(row.entry_type),
-      ride_id: row.ride_request_id ? String(row.ride_request_id) : undefined,
+      currency: row.currency,
+      date: row.created_at,
+      is_credit: row.is_credit,
+      ride_id: row.ride_request_id ?? undefined,
     }));
     return c.json({ transactions });
   }

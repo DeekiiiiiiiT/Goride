@@ -3,12 +3,16 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   ArrowLeft,
+  Ban,
+  Briefcase,
   Check,
   Copy,
+  Flag,
+  Inbox,
   Loader2,
+  MoreVertical,
   Pencil,
-  UserMinus,
-  X,
+  Search,
 } from 'lucide-react';
 import {
   cancelPassengerAuthorization,
@@ -36,35 +40,106 @@ import {
   listOutgoingPassengerAuthorizations,
   rejectRoamConnectionRequest,
 } from '@/services/roamConnectionsEdge';
-import {
-  CARD_SHADOW,
-  ON_SURFACE,
-  ON_SURFACE_VARIANT,
-  OUTLINE_VARIANT,
-  PAGE_BG,
-  PRIMARY,
-  PRIMARY_CONTAINER,
-  ON_PRIMARY,
-  SURFACE_LOWEST,
-} from '@/lib/passengerTheme';
+import '@/styles/pending-contacts.css';
 
 type Tab = 'sent' | 'received';
 
-function StatusChip({ label }: { label: string }) {
+function displayInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
+  return `${parts[0].slice(0, 1)}${parts[1].slice(0, 1)}`.toUpperCase();
+}
+
+function IncomingRequestCard({
+  req,
+  actionId,
+  onAccept,
+  onDecline,
+  onBlock,
+  onReport,
+}: {
+  req: RoamConnectionRequestDto;
+  actionId: string | null;
+  onAccept: () => void;
+  onDecline: () => void;
+  onBlock: () => void;
+  onReport: () => void;
+}) {
+  const name = req.requester_display_name ?? 'Someone on Roam';
+  const handle = req.requester_custom_tag_name ? `@${req.requester_custom_tag_name}` : null;
+  const busy = actionId === req.id;
+
   return (
-    <span
-      className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium"
-      style={{ backgroundColor: 'rgba(0,74,198,0.08)', color: PRIMARY }}
-    >
-      {label}
-    </span>
+    <article className="pending-card">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-4">
+          <div className="pending-card__avatar" aria-hidden>
+            {displayInitials(name)}
+          </div>
+          <div className="min-w-0">
+            <h3 className="pending-card__name truncate">{name}</h3>
+            {handle ? <p className="pending-card__handle truncate">{handle}</p> : null}
+          </div>
+        </div>
+        {req.status === 'pending' ? <span className="pending-card__badge">Active</span> : null}
+      </div>
+
+      <p className="pending-card__body">
+        Wants to connect with you on Roam.
+        {req.source === 'book_for_someone'
+          ? ' They may have booked or shared a ride with you before.'
+          : null}
+      </p>
+
+      <div className="pending-card__actions">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onAccept}
+          className="pending-card__accept inline-flex items-center justify-center gap-2"
+        >
+          <Check className="h-4 w-4" aria-hidden />
+          Accept
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onDecline}
+          className="pending-card__decline"
+        >
+          Decline
+        </button>
+      </div>
+
+      <div className="pending-card__footer">
+        <button
+          type="button"
+          disabled={busy || !req.requester_user_id}
+          onClick={onBlock}
+          className="pending-card__footer-btn"
+        >
+          <Ban className="h-4 w-4" aria-hidden />
+          Block
+        </button>
+        <button
+          type="button"
+          disabled={busy || !req.requester_user_id}
+          onClick={onReport}
+          className="pending-card__footer-btn"
+        >
+          <Flag className="h-4 w-4" aria-hidden />
+          Report
+        </button>
+      </div>
+    </article>
   );
 }
 
 export default function PendingContactsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialTab = searchParams.get('tab') === 'received' ? 'received' : 'sent';
+  const initialTab = searchParams.get('tab') === 'sent' ? 'sent' : 'received';
   const [tab, setTab] = useState<Tab>(initialTab);
   const [loading, setLoading] = useState(true);
   const [outgoingRequests, setOutgoingRequests] = useState<RoamConnectionRequestDto[]>([]);
@@ -101,19 +176,8 @@ export default function PendingContactsPage() {
 
   const switchTab = (next: Tab) => {
     setTab(next);
-    setSearchParams(next === 'received' ? { tab: 'received' } : {});
+    setSearchParams(next === 'sent' ? { tab: 'sent' } : {});
   };
-
-  if (!ROAM_CONNECTIONS) {
-    return (
-      <div className="flex min-h-[100dvh] flex-col items-center justify-center px-6" style={{ backgroundColor: PAGE_BG }}>
-        <p style={{ color: ON_SURFACE_VARIANT }}>Pending contacts is not enabled.</p>
-        <button type="button" onClick={() => navigate('/account/contacts')} className="mt-4 text-sm font-semibold" style={{ color: PRIMARY }}>
-          Back to Contacts
-        </button>
-      </div>
-    );
-  }
 
   const pendingOutgoingRequests = useMemo(
     () => outgoingRequests.filter((r) => r.status === 'pending'),
@@ -125,133 +189,249 @@ export default function PendingContactsPage() {
     [authorizations],
   );
 
-  const pendingConnectionCount = pendingOutgoingRequests.length
-    + incomingRequests.length
-    + activeAuthorizations.length;
+  if (!ROAM_CONNECTIONS) {
+    return (
+      <div className="pending-page flex min-h-[100dvh] flex-col items-center justify-center px-6">
+        <p style={{ color: 'var(--pending-on-surface-variant)' }}>Pending contacts is not enabled.</p>
+        <button
+          type="button"
+          onClick={() => navigate('/account/contacts')}
+          className="mt-4 text-sm font-semibold"
+          style={{ color: 'var(--pending-primary)' }}
+        >
+          Back to Contacts
+        </button>
+      </div>
+    );
+  }
+
+  const sentEmpty =
+    pendingOutgoingRequests.length === 0 && activeAuthorizations.length === 0;
 
   return (
-    <div className="flex min-h-[100dvh] flex-col pb-28" style={{ backgroundColor: PAGE_BG, color: ON_SURFACE }}>
-      <header
-        className="sticky top-0 z-50 flex h-14 items-center px-4 safe-t"
-        style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
-      >
-        <button type="button" onClick={() => navigate('/account/contacts')} className="rounded-full p-2" style={{ color: PRIMARY }} aria-label="Back">
-          <ArrowLeft className="h-6 w-6" />
-        </button>
-        <h1 className="ml-2 text-xl font-semibold" style={{ color: PRIMARY }}>
-          Pending
-        </h1>
-        {pendingConnectionCount > 0 ? (
-          <span className="ml-2 rounded-full px-2 py-0.5 text-xs font-semibold" style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_PRIMARY }}>
-            {pendingConnectionCount}
-          </span>
-        ) : null}
+    <div className="pending-page flex min-h-[100dvh] flex-col pb-28">
+      <header className="pending-page__header">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => navigate('/account/contacts')}
+            className="pending-page__icon-btn"
+            aria-label="Back"
+          >
+            <ArrowLeft className="h-6 w-6" />
+          </button>
+          <h1 className="pending-page__title">Pending</h1>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => toast.message('Search coming soon')}
+            className="pending-page__icon-btn pending-page__icon-btn--muted"
+            aria-label="Search"
+          >
+            <Search className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => toast.message('More options coming soon')}
+            className="pending-page__icon-btn pending-page__icon-btn--muted"
+            aria-label="More options"
+          >
+            <MoreVertical className="h-5 w-5" />
+          </button>
+        </div>
       </header>
 
-      <div className="mx-auto w-full max-w-xl px-4 pt-3 safe-x">
-        <div className="flex rounded-2xl p-1" style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}>
-          {(['sent', 'received'] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => switchTab(t)}
-              className="flex-1 rounded-xl py-2.5 text-sm font-semibold capitalize transition-colors"
-              style={{
-                backgroundColor: tab === t ? PRIMARY : 'transparent',
-                color: tab === t ? ON_PRIMARY : ON_SURFACE_VARIANT,
-              }}
-            >
-              {t}
-              {t === 'received' && incomingRequests.length > 0 ? (
-                <span className="ml-1.5">({incomingRequests.length})</span>
-              ) : null}
-            </button>
-          ))}
+      <main className="mx-auto w-full max-w-2xl flex-1 px-6 pb-6 pt-6 safe-x">
+        <div className="pending-page__tabs">
+          <button
+            type="button"
+            onClick={() => switchTab('received')}
+            className={`pending-page__tab ${tab === 'received' ? 'pending-page__tab--active' : ''}`}
+          >
+            Received
+            {incomingRequests.length > 0 ? (
+              <span className="ml-1">({incomingRequests.length})</span>
+            ) : null}
+          </button>
+          <button
+            type="button"
+            onClick={() => switchTab('sent')}
+            className={`pending-page__tab ${tab === 'sent' ? 'pending-page__tab--active' : ''}`}
+          >
+            Sent
+          </button>
         </div>
-      </div>
 
-      <main className="mx-auto w-full max-w-xl flex-1 space-y-4 px-4 py-4 safe-x">
         {loading ? (
-          <div className="flex justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin" style={{ color: PRIMARY }} />
+          <div className="flex justify-center py-16">
+            <Loader2 className="h-8 w-8 animate-spin" style={{ color: 'var(--pending-primary)' }} />
           </div>
-        ) : tab === 'sent' ? (
-          <>
+        ) : tab === 'received' ? (
+          incomingRequests.length === 0 ? (
+            <div className="pending-empty">
+              <div className="pending-empty__icon">
+                <Inbox className="h-16 w-16" aria-hidden />
+              </div>
+              <h3 className="text-lg font-semibold">No incoming requests</h3>
+              <p className="mt-2 text-sm" style={{ color: 'var(--pending-secondary)' }}>
+                When someone wants to connect with you on Roam, it will appear here.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {incomingRequests.map((req) => (
+                <IncomingRequestCard
+                  key={req.id}
+                  req={req}
+                  actionId={actionId}
+                  onAccept={() => {
+                    setActionId(req.id);
+                    void acceptRoamConnectionRequest(req.id)
+                      .then(() => {
+                        toast.success('Connected');
+                        return load();
+                      })
+                      .catch((e) => toast.error(e instanceof Error ? e.message : 'Could not accept'))
+                      .finally(() => setActionId(null));
+                  }}
+                  onDecline={() => {
+                    setActionId(req.id);
+                    void rejectRoamConnectionRequest(req.id)
+                      .then(() => {
+                        toast.message('Request declined');
+                        return load();
+                      })
+                      .catch((e) => toast.error(e instanceof Error ? e.message : 'Could not decline'))
+                      .finally(() => setActionId(null));
+                  }}
+                  onBlock={() => {
+                    if (!req.requester_user_id) return;
+                    setActionId(req.id);
+                    void createUserBlock({ blocked_user_id: req.requester_user_id })
+                      .then(() => {
+                        toast.success('User blocked');
+                        return load();
+                      })
+                      .catch((e) => toast.error(e instanceof Error ? e.message : 'Could not block'))
+                      .finally(() => setActionId(null));
+                  }}
+                  onReport={() => {
+                    if (!req.requester_user_id) return;
+                    setActionId(req.id);
+                    void createAbuseReport({
+                      reported_user_id: req.requester_user_id,
+                      reason_code: 'spam',
+                      context: { request_id: req.id },
+                    })
+                      .then(() => toast.success('Report submitted'))
+                      .catch((e) => toast.error(e instanceof Error ? e.message : 'Could not report'))
+                      .finally(() => setActionId(null));
+                  }}
+                />
+              ))}
+            </div>
+          )
+        ) : sentEmpty ? (
+          <div className="pending-empty">
+            <div className="pending-empty__icon">
+              <Inbox className="h-16 w-16" aria-hidden />
+            </div>
+            <h3 className="text-lg font-semibold">No pending sent requests</h3>
+            <p className="mt-2 px-4 text-sm" style={{ color: 'var(--pending-secondary)' }}>
+              When you send a connection request, it will appear here for you to track.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-8">
             <section>
-              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: ON_SURFACE_VARIANT }}>
-                Connection requests
-              </h2>
+              <h2 className="pending-sent-section-title">Connection requests</h2>
               {pendingOutgoingRequests.length === 0 ? (
-                <p className="rounded-2xl p-4 text-sm" style={{ backgroundColor: SURFACE_LOWEST, color: ON_SURFACE_VARIANT, boxShadow: CARD_SHADOW }}>
+                <p className="pending-card text-sm" style={{ color: 'var(--pending-secondary)' }}>
                   No connection requests in progress.
                 </p>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-4">
                   {pendingOutgoingRequests.map((req) => (
-                    <div key={req.id} className="rounded-2xl p-4" style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}>
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="font-semibold">{req.target_display_name}</p>
-                          <p className="text-xs" style={{ color: ON_SURFACE_VARIANT }}>{req.target_phone_masked}</p>
+                    <article key={req.id} className="pending-card">
+                      <div className="mb-4 flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-4">
+                          <div className="pending-card__avatar" aria-hidden>
+                            <Briefcase className="h-7 w-7" />
+                          </div>
+                          <div className="min-w-0">
+                            <h3 className="pending-card__name truncate">{req.target_display_name}</h3>
+                            <p className="pending-card__handle truncate">{req.target_phone_masked}</p>
+                          </div>
                         </div>
-                        <StatusChip label={connectionRequestStatusLabel(req)} />
+                        <span className="pending-card__badge">
+                          {connectionRequestStatusLabel(req)}
+                        </span>
                       </div>
+                      <p className="pending-card__body">
+                        Waiting for {req.target_display_name} to accept your connection request.
+                      </p>
                       <button
                         type="button"
                         disabled={actionId === req.id}
                         onClick={() => {
                           setActionId(req.id);
                           void cancelRoamConnectionRequest(req.id)
-                            .then(() => { toast.success('Request cancelled'); return load(); })
+                            .then(() => {
+                              toast.success('Request cancelled');
+                              return load();
+                            })
                             .catch((e) => toast.error(e instanceof Error ? e.message : 'Could not cancel'))
                             .finally(() => setActionId(null));
                         }}
-                        className="mt-3 text-xs font-semibold disabled:opacity-50"
-                        style={{ color: ON_SURFACE_VARIANT }}
+                        className="pending-card__decline w-full"
                       >
                         Cancel request
                       </button>
-                    </div>
+                    </article>
                   ))}
                 </div>
               )}
             </section>
 
             <section>
-              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: ON_SURFACE_VARIANT }}>
-                Ride authorizations
-              </h2>
+              <h2 className="pending-sent-section-title">Ride authorizations</h2>
               {activeAuthorizations.length === 0 ? (
-                <p className="rounded-2xl p-4 text-sm" style={{ backgroundColor: SURFACE_LOWEST, color: ON_SURFACE_VARIANT, boxShadow: CARD_SHADOW }}>
+                <p className="pending-card text-sm" style={{ color: 'var(--pending-secondary)' }}>
                   No ride authorizations in progress.
                 </p>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-4">
                   {activeAuthorizations.map((auth) => (
-                    <div key={auth.id} className="rounded-2xl p-4" style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}>
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="font-semibold">{auth.recipient_name}</p>
-                          {editingAuthId === auth.id ? (
-                            <input
-                              type="tel"
-                              value={editPhone}
-                              onChange={(e) => setEditPhone(formatGuestPhoneDisplay(e.target.value))}
-                              className="mt-2 h-10 w-full rounded-xl px-3 text-sm outline-none focus:ring-2 focus:ring-[#004ac6]/30"
-                              style={{ backgroundColor: 'rgba(0,0,0,0.04)' }}
-                              placeholder="Phone number"
-                              autoFocus
-                            />
-                          ) : (
-                            <p className="text-xs" style={{ color: ON_SURFACE_VARIANT }}>
-                              {auth.phone_e164.replace(/\d(?=\d{4})/g, '*')}
-                            </p>
-                          )}
+                    <article key={auth.id} className="pending-card">
+                      <div className="mb-4 flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-4">
+                          <div className="pending-card__avatar" aria-hidden>
+                            {displayInitials(auth.recipient_name)}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="pending-card__name truncate">{auth.recipient_name}</p>
+                            {editingAuthId === auth.id ? (
+                              <input
+                                type="tel"
+                                value={editPhone}
+                                onChange={(e) => setEditPhone(formatGuestPhoneDisplay(e.target.value))}
+                                className="mt-2 h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm outline-none focus:border-[#006d43] dark:border-white/10 dark:bg-white/5"
+                                placeholder="Phone number"
+                                autoFocus
+                              />
+                            ) : (
+                              <p className="pending-card__handle">
+                                {auth.phone_e164.replace(/\d(?=\d{4})/g, '*')}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                        <StatusChip label={authorizationStatusLabel(auth)} />
+                        <span className="pending-card__badge">{authorizationStatusLabel(auth)}</span>
                       </div>
+
                       {editingAuthId === auth.id ? (
-                        <div className="mt-3 flex flex-wrap gap-2">
+                        <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
                             disabled={actionId === auth.id || !isValidGuestPhone(editPhone)}
@@ -267,11 +447,12 @@ export default function PendingContactsPage() {
                                   setEditPhone('');
                                   return load();
                                 })
-                                .catch((e) => toast.error(e instanceof Error ? e.message : 'Could not update phone'))
+                                .catch((e) =>
+                                  toast.error(e instanceof Error ? e.message : 'Could not update phone'),
+                                )
                                 .finally(() => setActionId(null));
                             }}
-                            className="rounded-xl px-3 py-2 text-xs font-semibold disabled:opacity-50"
-                            style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_PRIMARY }}
+                            className="pending-card__accept px-4 py-2 text-sm"
                           >
                             Save new number
                           </button>
@@ -281,24 +462,24 @@ export default function PendingContactsPage() {
                               setEditingAuthId(null);
                               setEditPhone('');
                             }}
-                            className="rounded-xl px-3 py-2 text-xs font-semibold"
-                            style={{ color: ON_SURFACE_VARIANT }}
+                            className="pending-sent-muted"
                           >
                             Cancel edit
                           </button>
                         </div>
                       ) : (
-                        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                           {auth.status === 'pending' ? (
                             <button
                               type="button"
                               onClick={() => {
-                                void navigator.clipboard.writeText(auth.url).then(() => toast.success('Link copied'));
+                                void navigator.clipboard
+                                  .writeText(auth.url)
+                                  .then(() => toast.success('Link copied'));
                               }}
-                              className="flex items-center gap-1.5 text-xs font-semibold"
-                              style={{ color: PRIMARY }}
+                              className="pending-sent-link inline-flex items-center gap-1.5"
                             >
-                              <Copy className="h-3.5 w-3.5" />
+                              <Copy className="h-3.5 w-3.5" aria-hidden />
                               Copy link
                             </button>
                           ) : null}
@@ -306,8 +487,7 @@ export default function PendingContactsPage() {
                             <button
                               type="button"
                               onClick={() => navigate('/services/book-for-someone')}
-                              className="text-xs font-semibold"
-                              style={{ color: PRIMARY }}
+                              className="pending-sent-link"
                             >
                               Continue booking
                             </button>
@@ -317,12 +497,13 @@ export default function PendingContactsPage() {
                               type="button"
                               onClick={() => {
                                 setEditingAuthId(auth.id);
-                                setEditPhone(formatGuestPhoneDisplay(auth.phone_e164.replace(/^\+1/, '')));
+                                setEditPhone(
+                                  formatGuestPhoneDisplay(auth.phone_e164.replace(/^\+1/, '')),
+                                );
                               }}
-                              className="flex items-center gap-1 text-xs font-semibold"
-                              style={{ color: ON_SURFACE_VARIANT }}
+                              className="pending-sent-muted inline-flex items-center gap-1"
                             >
-                              <Pencil className="h-3.5 w-3.5" />
+                              <Pencil className="h-3.5 w-3.5" aria-hidden />
                               Edit phone
                             </button>
                           ) : null}
@@ -336,119 +517,23 @@ export default function PendingContactsPage() {
                                   toast.success('Authorization cancelled');
                                   return load();
                                 })
-                                .catch((e) => toast.error(e instanceof Error ? e.message : 'Could not cancel'))
+                                .catch((e) =>
+                                  toast.error(e instanceof Error ? e.message : 'Could not cancel'),
+                                )
                                 .finally(() => setActionId(null));
                             }}
-                            className="text-xs font-semibold disabled:opacity-50"
-                            style={{ color: ON_SURFACE_VARIANT }}
+                            className="pending-sent-muted disabled:opacity-50"
                           >
                             Cancel
                           </button>
                         </div>
                       )}
-                    </div>
+                    </article>
                   ))}
                 </div>
               )}
             </section>
-          </>
-        ) : (
-          <section>
-            {incomingRequests.length === 0 ? (
-              <p className="rounded-2xl p-4 text-sm" style={{ backgroundColor: SURFACE_LOWEST, color: ON_SURFACE_VARIANT, boxShadow: CARD_SHADOW }}>
-                No incoming requests.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {incomingRequests.map((req) => (
-                  <div key={req.id} className="rounded-2xl p-4" style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}>
-                    <div className="min-w-0">
-                      <p className="font-semibold">
-                        {req.requester_display_name ?? 'Someone on Roam'}
-                        {req.requester_custom_tag_name ? (
-                          <span className="font-normal" style={{ color: ON_SURFACE_VARIANT }}> @{req.requester_custom_tag_name}</span>
-                        ) : null}
-                      </p>
-                      <p className="mt-1 text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-                        Wants to connect with you on Roam
-                      </p>
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={actionId === req.id}
-                        onClick={() => {
-                          setActionId(req.id);
-                          void acceptRoamConnectionRequest(req.id)
-                            .then(() => { toast.success('Connected'); return load(); })
-                            .catch((e) => toast.error(e instanceof Error ? e.message : 'Could not accept'))
-                            .finally(() => setActionId(null));
-                        }}
-                        className="flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-semibold disabled:opacity-50"
-                        style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_PRIMARY }}
-                      >
-                        <Check className="h-4 w-4" />
-                        Accept
-                      </button>
-                      <button
-                        type="button"
-                        disabled={actionId === req.id}
-                        onClick={() => {
-                          setActionId(req.id);
-                          void rejectRoamConnectionRequest(req.id)
-                            .then(() => { toast.message('Request declined'); return load(); })
-                            .catch((e) => toast.error(e instanceof Error ? e.message : 'Could not decline'))
-                            .finally(() => setActionId(null));
-                        }}
-                        className="flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-semibold disabled:opacity-50"
-                        style={{ color: ON_SURFACE_VARIANT }}
-                      >
-                        <X className="h-4 w-4" />
-                        Decline
-                      </button>
-                      <button
-                        type="button"
-                        disabled={actionId === req.id}
-                        onClick={() => {
-                          if (!req.requester_user_id) return;
-                          setActionId(req.id);
-                          void createUserBlock({ blocked_user_id: req.requester_user_id })
-                            .then(() => { toast.success('User blocked'); return load(); })
-                            .catch((e) => toast.error(e instanceof Error ? e.message : 'Could not block'))
-                            .finally(() => setActionId(null));
-                        }}
-                        className="flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-semibold disabled:opacity-50"
-                        style={{ color: ON_SURFACE_VARIANT }}
-                      >
-                        <UserMinus className="h-4 w-4" />
-                        Block
-                      </button>
-                      <button
-                        type="button"
-                        disabled={actionId === req.id}
-                        onClick={() => {
-                          if (!req.requester_user_id) return;
-                          setActionId(req.id);
-                          void createAbuseReport({
-                            reported_user_id: req.requester_user_id,
-                            reason_code: 'spam',
-                            context: { request_id: req.id },
-                          })
-                            .then(() => toast.success('Report submitted'))
-                            .catch((e) => toast.error(e instanceof Error ? e.message : 'Could not report'))
-                            .finally(() => setActionId(null));
-                        }}
-                        className="rounded-xl px-3 py-2 text-sm font-semibold disabled:opacity-50"
-                        style={{ color: OUTLINE_VARIANT }}
-                      >
-                        Report
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
+          </div>
         )}
       </main>
     </div>

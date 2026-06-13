@@ -16,14 +16,13 @@ import {
 import { supabase } from '@roam/auth-client';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import type { WalletBalanceDto } from '@roam/types/rides';
-import { formatMoneyMinor } from '@roam/types/rides';
+import { formatMoneyMinorPlain } from '@roam/types/rides';
 
 import {
   formatRoamTagDisplay,
   getMyRoamPassengerTag,
 } from '@/services/roamTagEdge';
 import { walletGetBalance } from '@/services/walletEdge';
-import { CASH_SETTLEMENT_ENABLED } from '@/lib/cashSettlementFlags';
 import { useDefaultPaymentMethod } from '@/hooks/useDefaultPaymentMethod';
 import {
   ERROR,
@@ -39,8 +38,6 @@ import {
   PRIMARY_FIXED,
   SECONDARY,
 } from '@/lib/passengerTheme';
-
-const LEGACY_BALANCE_USD = 42.5;
 
 function BentoCard({
   className = '',
@@ -87,7 +84,6 @@ export default function AccountPage() {
   }, [user?.id]);
 
   useEffect(() => {
-    if (!CASH_SETTLEMENT_ENABLED) return;
     let cancelled = false;
     void walletGetBalance()
       .then((res) => {
@@ -124,13 +120,8 @@ export default function AccountPage() {
     null;
 
   const walletBalanceLabel = useMemo(() => {
-    if (CASH_SETTLEMENT_ENABLED && wallet) {
-      return formatMoneyMinor(wallet.balance_minor, wallet.currency);
-    }
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency: 'USD',
-    }).format(LEGACY_BALANCE_USD);
+    if (wallet) return formatMoneyMinorPlain(wallet.balance_minor);
+    return '—';
   }, [wallet]);
 
   const signOut = async () => {

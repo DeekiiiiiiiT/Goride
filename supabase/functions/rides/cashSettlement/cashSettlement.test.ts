@@ -64,7 +64,7 @@ Deno.test("buildJournalLineSpecs balances for overpay", () => {
     currency: "JMD",
   });
   assertEquals(lines.length, 1);
-  assertEquals(lines[0].entry_type, "cash_change_debit");
+  assertEquals(lines[0].entry_type, "cash_change_credit");
   assertJournalBalanced(lines);
 });
 

@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { formatMoneyMinor } from '@roam/types/rides';
 import { useIndependentEarnings } from '../../hooks/useIndependentEarnings';
-import { CASH_SETTLEMENT_V2_ENABLED } from '../../lib/cashSettlementFlags';
+import { CASH_SETTLEMENT_ENABLED } from '../../lib/cashSettlementFlags';
 
 type EarningsPageProps = {
   onNavigate?: (page: string) => void;
@@ -85,7 +85,7 @@ export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
         </div>
       </section>
 
-      {CASH_SETTLEMENT_V2_ENABLED && onNavigate && (
+      {CASH_SETTLEMENT_ENABLED && onNavigate && (
         <button
           type="button"
           onClick={() => onNavigate('rides-wallets')}

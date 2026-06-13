@@ -9,11 +9,13 @@ import {
   driverDigitalAccountKeyForUser,
 } from "./buildJournalEntries.ts";
 import {
+  getAccountByKey,
   getDriverWallets,
   getWalletBalance,
   journalEntryTitle,
   listJournalForAccount,
   listJournalForAccountKey,
+  mapJournalRowsForAccount,
 } from "../../_shared/paymentAccounts.ts";
 import { canAccessRide } from "../rideAccess.ts";
 
@@ -36,19 +38,6 @@ type RegisterDeps = {
   sanitizeRideForDriver: (ride: Record<string, unknown>, pinRequired: boolean) => Record<string, unknown>;
   loadDispatchSettingsForRides: () => Promise<{ pin_verification_required_for_start: boolean }>;
 };
-
-function mapJournalRows(rows: Array<Record<string, unknown>>) {
-  return rows.map((row) => ({
-    id: String(row.id),
-    ride_request_id: row.ride_request_id ? String(row.ride_request_id) : null,
-    entry_type: String(row.entry_type),
-    amount_minor: Number(row.amount_minor),
-    currency: String(row.currency),
-    description: journalEntryTitle(String(row.entry_type)),
-    created_at: String(row.created_at),
-    metadata: row.metadata ?? {},
-  }));
-}
 
 function driverWalletAccountKey(
   userId: string,
@@ -276,10 +265,36 @@ export function registerCashSettlementRoutes(app: Hono, deps: RegisterDeps): voi
     const walletFilter = c.req.query("wallet")?.trim() || "digital";
     const accountKey = isCashSettlementV2Enabled()
       ? driverWalletAccountKey(auth.user.id, walletFilter)
-      : null;
+      : `user:${auth.user.id}:driver`;
+    const account = accountKey ? await getAccountByKey(deps.svc(), accountKey, currency) : null;
     const rows = accountKey
       ? await listJournalForAccountKey(deps.svc(), accountKey, currency)
       : await listJournalForAccount(deps.svc(), auth.user.id, "driver", currency);
-    return c.json({ transactions: mapJournalRows(rows) });
+    const mapped = account
+      ? mapJournalRowsForAccount(String(account.id), rows)
+      : rows.map((row) => ({
+        id: String(row.id),
+        ride_request_id: row.ride_request_id ? String(row.ride_request_id) : null,
+        entry_type: String(row.entry_type),
+        amount_minor: Number(row.amount_minor),
+        currency: String(row.currency),
+        description: journalEntryTitle(String(row.entry_type)),
+        created_at: String(row.created_at),
+        is_credit: false,
+        metadata: (row.metadata ?? {}) as Record<string, unknown>,
+      }));
+    return c.json({
+      transactions: mapped.map((row) => ({
+        id: row.id,
+        ride_request_id: row.ride_request_id,
+        entry_type: row.entry_type,
+        amount_minor: row.amount_minor,
+        currency: row.currency,
+        description: row.description,
+        created_at: row.created_at,
+        is_credit: row.is_credit,
+        metadata: row.metadata,
+      })),
+    });
   });
 }
