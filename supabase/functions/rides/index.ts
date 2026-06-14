@@ -9,7 +9,7 @@
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { cors } from "https://deno.land/x/hono@v4.3.11/middleware.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { jsonEdgeForbidden, ridesUserSurfaceRole } from "../_shared/authEdge.ts";
+import { jsonEdgeForbidden, ridesUserSurfaceRole, allowsPassengerSurface } from "../_shared/authEdge.ts";
 import { buildFareQuote, gridCellKey } from "./fare/buildQuote.ts";
 import { FareRuleNotFoundError } from "./fare/rules.ts";
 import { rankDriversByDriveTime } from "./fare/distanceMatrix.ts";
@@ -66,7 +66,7 @@ import {
   type ApplyTransitionDeps,
 } from "./rideLifecycle.ts";
 import { registerCashSettlementRoutes } from "./cashSettlement/registerCashSettlementRoutes.ts";
-import { isCashSettlementEnabled, driverDebtDispatchThresholdMinor, isDriverDebtDispatchGuardEnabled } from "./cashSettlement/flags.ts";
+import { isCashSettlementEnabled, isCashSettlementV2Enabled, driverDebtDispatchThresholdMinor, isDriverDebtDispatchGuardEnabled } from "./cashSettlement/flags.ts";
 import { getOpenDebtMinor } from "./cashSettlement/debtRepayment.ts";
 import { evaluateGeofenceTransitions, cleanupRideLiveState } from "./rideGeofence.ts";
 import { loadAppPermissionPolicy, policyDto } from "../_shared/appPermissionPolicy.ts";
@@ -147,6 +147,7 @@ app.use(
       "apikey",
       "x-client-info",
       "x-request-id",
+      "X-Debug-Session-Id",
     ],
   }),
 );
@@ -2715,11 +2716,21 @@ registerCashSettlementRoutes(app, {
 app.get("/v1/wallet/transactions", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-  if (ridesUserSurfaceRole(auth.user) !== "passenger") {
+  if (!allowsPassengerSurface(auth.user)) {
     return jsonEdgeForbidden(c, "forbidden_role");
   }
   if (isCashSettlementEnabled() && c.req.query("legacy") !== "1") {
     const currency = c.req.query("currency")?.trim() || "JMD";
+    if (isCashSettlementV2Enabled()) {
+      try {
+        const { repairIncompleteCashSettlementsForRider } = await import(
+          "./cashSettlement/repairIncompleteSettlement.ts"
+        );
+        await repairIncompleteCashSettlementsForRider(svc(), auth.user.id, currency);
+      } catch (e) {
+        console.error("[cashSettlement] rider_repair_on_transactions_failed", e);
+      }
+    }
     const { listJournalForAccountKey, mapJournalRowsForAccount, getAccountByKey } =
       await import("../_shared/paymentAccounts.ts");
     const { riderAccountKeyForUser } = await import("./cashSettlement/buildJournalEntries.ts");

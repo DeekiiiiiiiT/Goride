@@ -134,6 +134,20 @@ export async function processCashSettlement(
     return { ok: false, error: "idempotency_conflict", status: 409 };
   }
 
+  if (journalLines.length > 0) {
+    const { getRidesPaymentDb } = await import("../../_shared/ridesPaymentDb.ts");
+    const { db: payClient, tables } = await getRidesPaymentDb();
+    const { data: posted } = await payClient
+      .from(tables.journal)
+      .select("entry_type")
+      .eq("ride_request_id", rideId);
+    const postedTypes = new Set((posted ?? []).map((r) => String(r.entry_type)));
+    const incomplete = journalLines.some((line) => !postedTypes.has(line.entry_type));
+    if (incomplete && !journalResult.skipped) {
+      return { ok: false, error: "journal_incomplete", status: 500 };
+    }
+  }
+
   if (journalResult.skipped) {
     const existing = await loadRide(rideId);
     if (existing && String(existing.status) === "completed") {

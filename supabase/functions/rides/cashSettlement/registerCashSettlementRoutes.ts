@@ -1,13 +1,18 @@
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { jsonEdgeForbidden } from "../../_shared/authEdge.ts";
+import { jsonEdgeForbidden, allowsPassengerSurface } from "../../_shared/authEdge.ts";
 import { isCashSettlementEnabled, isCashSettlementV2Enabled } from "./flags.ts";
+import {
+  repairIncompleteCashSettlementsForDriver,
+  repairIncompleteCashSettlementsForRider,
+} from "./repairIncompleteSettlement.ts";
 import { processCashSettlement } from "./processCashSettlement.ts";
 import {
   driverAccountKeyForUser,
   driverCashAccountKeyForUser,
   driverDebtAccountKeyForUser,
   driverDigitalAccountKeyForUser,
+  riderAccountKeyForUser,
 } from "./buildJournalEntries.ts";
 import {
   getAccountByKey,
@@ -197,11 +202,18 @@ export function registerCashSettlementRoutes(app: Hono, deps: RegisterDeps): voi
   app.get("/v1/wallet", async (c) => {
     const auth = await deps.requireUser(c.req.header("Authorization"));
     if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-    if (deps.ridesUserSurfaceRole(auth.user) !== "passenger") {
+    if (!allowsPassengerSurface(auth.user)) {
       return jsonEdgeForbidden(c, "forbidden_role");
     }
 
     const currency = c.req.query("currency")?.trim() || "JMD";
+    if (isCashSettlementV2Enabled()) {
+      try {
+        await repairIncompleteCashSettlementsForRider(deps.svc(), auth.user.id, currency);
+      } catch (e) {
+        console.error("[cashSettlement] rider_repair_incomplete_failed", e);
+      }
+    }
     const wallet = await getWalletBalance(deps.svc(), auth.user.id, "rider", currency);
     return c.json({ wallet });
   });
@@ -212,12 +224,16 @@ export function registerCashSettlementRoutes(app: Hono, deps: RegisterDeps): voi
     }
     const auth = await deps.requireUser(c.req.header("Authorization"));
     if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-    if (deps.ridesUserSurfaceRole(auth.user) !== "passenger") {
+    if (!allowsPassengerSurface(auth.user)) {
       return jsonEdgeForbidden(c, "forbidden_role");
     }
     const currency = c.req.query("currency")?.trim() || "JMD";
     const rows = await listJournalForAccount(deps.svc(), auth.user.id, "rider", currency);
-    return c.json({ transactions: mapJournalRows(rows) });
+    const account = await getAccountByKey(deps.svc(), riderAccountKeyForUser(auth.user.id), currency);
+    const mapped = account
+      ? mapJournalRowsForAccount(String(account.id), rows)
+      : [];
+    return c.json({ transactions: mapped });
   });
 
   app.get("/v1/drivers/me/wallet", async (c) => {
@@ -239,6 +255,11 @@ export function registerCashSettlementRoutes(app: Hono, deps: RegisterDeps): voi
     }
     const currency = c.req.query("currency")?.trim() || "JMD";
     if (isCashSettlementV2Enabled()) {
+      try {
+        await repairIncompleteCashSettlementsForDriver(deps.svc(), auth.user.id, currency);
+      } catch (e) {
+        console.error("[cashSettlement] repair_incomplete_failed", e);
+      }
       const wallets = await getDriverWallets(deps.svc(), auth.user.id, currency);
       return c.json({ wallets });
     }

@@ -263,6 +263,42 @@ function parseDriverSubAccountKey(key: string): { userId: string; subtype: "digi
   return { userId: match[1], subtype: match[2] as "digital" | "cash" | "debt" };
 }
 
+function lineIdempotencyKey(baseKey: string, entryType: string): string {
+  return `${baseKey}:${entryType}`;
+}
+
+function settlementLinePrefix(baseKey: string): string {
+  return `${baseKey}:`;
+}
+
+/** Detect prior settlement rows for this ride (legacy single-key or per-line keys). */
+async function findSettlementJournalRows(
+  client: SupabaseClient,
+  journalTable: string,
+  rideId: string,
+  baseKey: string,
+): Promise<Array<{ id: string; entry_type: string; request_hash: string | null; idempotency_key: string }>> {
+  const { data: legacy } = await client
+    .from(journalTable)
+    .select("id, entry_type, request_hash, idempotency_key")
+    .eq("ride_request_id", rideId)
+    .eq("idempotency_key", baseKey);
+
+  const { data: keyed } = await client
+    .from(journalTable)
+    .select("id, entry_type, request_hash, idempotency_key")
+    .eq("ride_request_id", rideId)
+    .like("idempotency_key", `${settlementLinePrefix(baseKey)}%`);
+
+  const merged = [...(legacy ?? []), ...(keyed ?? [])];
+  const seen = new Set<string>();
+  return merged.filter((row) => {
+    if (seen.has(row.id)) return false;
+    seen.add(row.id);
+    return true;
+  });
+}
+
 export async function postPaymentJournal(
   db: SupabaseClient | undefined,
   params: PostJournalParams,
@@ -270,19 +306,25 @@ export async function postPaymentJournal(
   const { rideId, idempotencyKey, requestHash, currency, lines, createdByUserId } = params;
   const { db: client, tables } = await paymentDb();
 
-  const { data: existing } = await client
-    .from(tables.journal)
-    .select("id, request_hash")
-    .eq("ride_request_id", rideId)
-    .eq("idempotency_key", idempotencyKey)
-    .limit(1)
-    .maybeSingle();
+  const existingRows = await findSettlementJournalRows(
+    client,
+    tables.journal,
+    rideId,
+    idempotencyKey,
+  );
 
-  if (existing) {
-    if (String(existing.request_hash) !== requestHash) {
+  if (existingRows.length > 0) {
+    const hashMismatch = existingRows.some(
+      (row) => row.request_hash != null && String(row.request_hash) !== requestHash,
+    );
+    if (hashMismatch) {
       return { inserted: 0, skipped: false, conflict: true };
     }
-    return { inserted: 0, skipped: true };
+    const existingTypes = new Set(existingRows.map((row) => String(row.entry_type)));
+    const allPresent = lines.length === 0 || lines.every((line) => existingTypes.has(line.entry_type));
+    if (allPresent) {
+      return { inserted: 0, skipped: true };
+    }
   }
 
   if (lines.length === 0) {
@@ -291,6 +333,7 @@ export async function postPaymentJournal(
 
   const accountCache = new Map<string, PaymentAccountRow>();
   const digitalCredits: Array<{ userId: string; amount: number }> = [];
+  const existingTypes = new Set(existingRows.map((row) => String(row.entry_type)));
 
   async function resolveAccountKey(key: string): Promise<PaymentAccountRow> {
     const cached = accountCache.get(key);
@@ -335,12 +378,17 @@ export async function postPaymentJournal(
 
   let inserted = 0;
   for (const line of lines) {
+    if (existingTypes.has(line.entry_type)) {
+      continue;
+    }
+
     const debit = await resolveAccountKey(line.debit_account_key);
     const credit = await resolveAccountKey(line.credit_account_key);
+    const rowIdempotencyKey = lineIdempotencyKey(idempotencyKey, line.entry_type);
 
     const { error: insertError } = await client.from(tables.journal).insert({
       ride_request_id: rideId,
-      idempotency_key: idempotencyKey,
+      idempotency_key: rowIdempotencyKey,
       entry_type: line.entry_type,
       debit_account_id: debit.id,
       credit_account_id: credit.id,
@@ -357,12 +405,12 @@ export async function postPaymentJournal(
           .from(tables.journal)
           .select("request_hash")
           .eq("ride_request_id", rideId)
-          .eq("idempotency_key", idempotencyKey)
+          .eq("idempotency_key", rowIdempotencyKey)
           .maybeSingle();
         if (dup && String(dup.request_hash) !== requestHash) {
           return { inserted: 0, skipped: false, conflict: true };
         }
-        return { inserted: 0, skipped: true };
+        continue;
       }
       throw new Error(insertError.message);
     }

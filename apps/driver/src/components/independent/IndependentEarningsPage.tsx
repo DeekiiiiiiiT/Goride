@@ -91,7 +91,7 @@ export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
   const weekLabel = formatMoneyMinor(weekCashMinor, currency);
 
   const digitalBal = wallets?.digital.balance_minor ?? 0;
-  const cashWalletBal = wallets?.cash.available_minor ?? 0;
+  const cashWalletBal = wallets?.cash.balance_minor ?? 0;
   const debtOwed = wallets?.debt.arrears_minor ?? 0;
   const debtDisplay =
     debtOwed > 0 ? `-${formatMoneyMinorPlain(debtOwed)}` : formatMoneyMinorPlain(0);
