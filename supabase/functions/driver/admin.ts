@@ -9,6 +9,7 @@ import { registerDriverUserAdminRoutes } from "./admin/drivers.ts";
 import { registerDriverPlayStoreLaunchRoutes } from "./admin/playStoreLaunch.ts";
 import { registerComplianceRoutes } from "./admin/complianceRoutes.ts";
 import { isInComplianceQueue, computeComplianceBlockers } from "./admin/complianceLogic.ts";
+import { enrichDriverIdentities } from "./admin/driverIdentity.ts";
 
 interface Deps {
   svc: () => SupabaseClient;
@@ -127,34 +128,90 @@ export function registerDriverAdminRoutes(app: Hono, _deps: Deps) {
       .limit(limit);
 
     const { data: activeTrips } = await db.from(tables.ride_requests)
-      .select("assigned_driver_user_id, status")
+      .select("id, assigned_driver_user_id, status, pickup_address, dropoff_address")
       .in("status", ACTIVE_TRIP_STATUSES)
       .not("assigned_driver_user_id", "is", null);
 
     const onTrip = new Map(
-      (activeTrips ?? []).map((t) => [t.assigned_driver_user_id as string, t.status as string]),
+      (activeTrips ?? []).map((t) => [
+        t.assigned_driver_user_id as string,
+        {
+          status: t.status as string,
+          ride_id: t.id as string,
+          pickup_address: (t.pickup_address as string | null) ?? null,
+          dropoff_address: (t.dropoff_address as string | null) ?? null,
+        },
+      ]),
     );
 
     const now = Date.now();
+    const seen = new Set<string>();
     let drivers = (locations ?? []).map((l) => {
       const uid = l.user_id as string;
+      seen.add(uid);
       const fresh = l.updated_at &&
         now - new Date(l.updated_at as string).getTime() <= ONLINE_STALE_MS;
-      const tripStatus = onTrip.get(uid);
+      const trip = onTrip.get(uid);
+      const lat = Number(l.lat);
+      const lng = Number(l.lng);
+      const hasCoords = Number.isFinite(lat) && Number.isFinite(lng) &&
+        !(lat === 0 && lng === 0);
       return {
         driver_id: uid,
-        lat: l.lat,
-        lng: l.lng,
-        is_available: Boolean(l.available_for_rides) && fresh,
-        last_seen: l.updated_at,
-        live_status: tripStatus ? "on_trip" : (fresh && l.available_for_rides ? "online" : "offline"),
-        trip_status: tripStatus ?? null,
+        lat: hasCoords ? lat : null,
+        lng: hasCoords ? lng : null,
+        is_available: Boolean(l.available_for_rides) && fresh && !trip,
+        last_seen: l.updated_at as string | null,
+        live_status: trip ? "on_trip" : (fresh && l.available_for_rides ? "online" : "offline"),
+        trip_status: trip?.status ?? null,
+        ride_id: trip?.ride_id ?? null,
+        pickup_address: trip?.pickup_address ?? null,
+        dropoff_address: trip?.dropoff_address ?? null,
+        display_name: null as string | null,
+        email: null as string | null,
+        phone: null as string | null,
       };
     });
+
+    for (const [uid, trip] of onTrip) {
+      if (seen.has(uid)) continue;
+      drivers.push({
+        driver_id: uid,
+        lat: null,
+        lng: null,
+        is_available: false,
+        last_seen: null,
+        live_status: "on_trip",
+        trip_status: trip.status,
+        ride_id: trip.ride_id,
+        pickup_address: trip.pickup_address,
+        dropoff_address: trip.dropoff_address,
+        display_name: null,
+        email: null,
+        phone: null,
+      });
+    }
+
+    const userIds = drivers.map((d) => d.driver_id);
+    if (userIds.length > 0) {
+      const { data: profiles } = await db.from(tables.driver_profiles)
+        .select("user_id, display_name, first_name, last_name, phone")
+        .in("user_id", userIds);
+      drivers = await enrichDriverIdentities(drivers, profiles ?? []);
+    }
 
     if (onlineOnly) {
       drivers = drivers.filter((d) => d.live_status === "online" || d.live_status === "on_trip");
     }
+
+    drivers.sort((a, b) => {
+      const rank = (s: string) => (s === "on_trip" ? 0 : s === "online" ? 1 : 2);
+      const dr = rank(a.live_status) - rank(b.live_status);
+      if (dr !== 0) return dr;
+      const ta = a.last_seen ? new Date(a.last_seen).getTime() : 0;
+      const tb = b.last_seen ? new Date(b.last_seen).getTime() : 0;
+      return tb - ta;
+    });
 
     return c.json({ drivers, total: drivers.length });
   });

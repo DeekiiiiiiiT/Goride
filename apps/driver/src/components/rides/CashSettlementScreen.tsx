@@ -71,7 +71,7 @@ export function CashSettlementScreen({ ride, submitting, onSubmit }: Props) {
           <div>
             <h1 className="text-base font-bold text-slate-900 dark:text-white">Collect cash</h1>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Enter the fare amount received — required before your next trip
+              Enter the full amount the rider handed you — not just the fare
             </p>
           </div>
         </div>
@@ -82,19 +82,30 @@ export function CashSettlementScreen({ ride, submitting, onSubmit }: Props) {
 
         <label className="block space-y-2">
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Cash received (fare only)
+            Total cash received from rider
           </span>
           <input
             type="text"
             inputMode="decimal"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={owedLabel.replace(/^[A-Z]{3}\s*/i, '')}
+            placeholder="e.g. amount on the bill they gave you"
             className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-2xl font-bold tabular-nums text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
             disabled={submitting}
           />
-          <p className="text-[11px] text-slate-500">Tips are separate and not recorded here.</p>
+          <p className="text-[11px] leading-relaxed text-slate-500">
+            Enter everything the rider paid in cash — including notes larger than the fare. Any
+            overpayment is credited to their Roam wallet as change. Tips are not recorded here.
+          </p>
         </label>
+
+        <div className="rounded-2xl border border-blue-100 bg-blue-50/80 px-3 py-2.5 dark:border-blue-900/40 dark:bg-blue-950/30">
+          <p className="text-xs leading-relaxed text-blue-900 dark:text-blue-200">
+            <span className="font-semibold">Fare due: {owedLabel}</span>
+            {' — '}
+            if they gave more (e.g. a JMD 1,000 note), type the full amount, not just the fare.
+          </p>
+        </div>
 
         <div className="flex flex-wrap gap-2">
           <button
@@ -103,7 +114,7 @@ export function CashSettlementScreen({ ride, submitting, onSubmit }: Props) {
             onClick={() => setInput((owedMinor / 100).toFixed(2))}
             className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
           >
-            Exact: {owedLabel}
+            Exact fare: {owedLabel}
           </button>
           <button
             type="button"

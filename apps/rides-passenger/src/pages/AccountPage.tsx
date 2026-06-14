@@ -23,6 +23,7 @@ import {
   getMyRoamPassengerTag,
 } from '@/services/roamTagEdge';
 import { walletGetBalance } from '@/services/walletEdge';
+import { WALLET_BALANCE_CHANGED_EVENT } from '@/lib/walletEvents';
 import { useDefaultPaymentMethod } from '@/hooks/useDefaultPaymentMethod';
 import {
   ERROR,
@@ -85,15 +86,25 @@ export default function AccountPage() {
 
   useEffect(() => {
     let cancelled = false;
-    void walletGetBalance()
-      .then((res) => {
-        if (!cancelled) setWallet(res.wallet);
-      })
-      .catch(() => {
-        if (!cancelled) setWallet(null);
-      });
+    const loadWallet = () => {
+      void walletGetBalance()
+        .then((res) => {
+          if (!cancelled) setWallet(res.wallet);
+        })
+        .catch(() => {
+          if (!cancelled) setWallet(null);
+        });
+    };
+    loadWallet();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadWallet();
+    };
+    window.addEventListener(WALLET_BALANCE_CHANGED_EVENT, loadWallet);
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
       cancelled = true;
+      window.removeEventListener(WALLET_BALANCE_CHANGED_EVENT, loadWallet);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, []);
 

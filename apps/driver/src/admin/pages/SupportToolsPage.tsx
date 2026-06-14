@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link, useOutletContext } from 'react-router-dom';
+import { Link, useOutletContext, useSearchParams } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
 import { AlertTriangle, Loader2, RefreshCw, Search } from 'lucide-react';
 import { toast } from 'sonner';
@@ -80,6 +80,7 @@ function auditSummary(event: RideAuditEvent): string {
 export function SupportToolsPage() {
   const { session } = useOutletContext<OutletContext>();
   const { confirm } = useAdminConfirm();
+  const [searchParams] = useSearchParams();
   const token = session.access_token;
 
   const [stuckRides, setStuckRides] = useState<SupportRideRow[]>([]);
@@ -141,6 +142,23 @@ export function SupportToolsPage() {
   useEffect(() => {
     void loadQueue();
   }, [loadQueue]);
+
+  useEffect(() => {
+    const rideId = searchParams.get('ride')?.trim();
+    if (!rideId || !isFullRideUuid(rideId) || !token) return;
+    setLookupInput(rideId);
+    void (async () => {
+      setLookupLoading(true);
+      try {
+        const { ride } = await getRideById(token, rideId);
+        await selectRide(ride);
+      } catch {
+        /* ignore — user can search manually */
+      } finally {
+        setLookupLoading(false);
+      }
+    })();
+  }, [searchParams, token, selectRide]);
 
   const handleLookup = async () => {
     const raw = lookupInput.trim();

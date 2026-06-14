@@ -16,12 +16,18 @@ const DRIVER_BASE = API_ENDPOINTS.driver;
 
 export interface DriverPresenceRow {
   driver_id: string;
-  lat: number;
-  lng: number;
+  lat: number | null;
+  lng: number | null;
   is_available: boolean;
-  last_seen: string;
-  live_status?: string;
+  last_seen: string | null;
+  live_status: 'online' | 'on_trip' | 'offline' | string;
   trip_status?: string | null;
+  ride_id?: string | null;
+  pickup_address?: string | null;
+  dropoff_address?: string | null;
+  display_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
 }
 
 export interface DriverOfferRow {

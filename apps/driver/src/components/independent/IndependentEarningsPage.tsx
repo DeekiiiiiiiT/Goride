@@ -10,8 +10,10 @@ import {
   Loader2,
   TrendingUp,
 } from 'lucide-react';
-import { formatMoneyMinor } from '@roam/types/rides';
+import { formatMoneyMinor, formatMoneyMinorPlain } from '@roam/types/rides';
 import { useIndependentEarnings } from '../../hooks/useIndependentEarnings';
+import { useDriverWallets } from '../../hooks/useDriverWallets';
+import { CASH_SETTLEMENT_ENABLED } from '../../lib/cashSettlementFlags';
 
 type EarningsPageProps = {
   onNavigate?: (page: string) => void;
@@ -40,21 +42,59 @@ function EarningsAmount({
   );
 }
 
+function WalletChip({
+  label,
+  amount,
+  loading,
+  variant = 'default',
+}: {
+  label: string;
+  amount: string;
+  loading: boolean;
+  variant?: 'default' | 'debt';
+}) {
+  return (
+    <div
+      className={`rounded-2xl border px-3 py-3 ${
+        variant === 'debt'
+          ? 'border-amber-200 bg-amber-50/60 dark:border-amber-900/40 dark:bg-amber-950/20'
+          : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900'
+      }`}
+    >
+      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</p>
+      {loading ? (
+        <Loader2 className="mt-1 h-4 w-4 animate-spin text-slate-400" />
+      ) : (
+        <p
+          className={`mt-1 text-sm font-bold tabular-nums ${
+            variant === 'debt' ? 'text-amber-800 dark:text-amber-300' : 'text-slate-900 dark:text-white'
+          }`}
+        >
+          {amount}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
   const { data: allData, loading: allLoading, error } = useIndependentEarnings('all');
   const { data: weekData, loading: weekLoading } = useIndependentEarnings('week');
+  const { wallets, loading: walletsLoading } = useDriverWallets();
 
-  const currency = allData?.currency ?? weekData?.currency ?? 'JMD';
+  const currency = allData?.currency ?? weekData?.currency ?? wallets?.currency ?? 'JMD';
   const cashMinor = allData?.cash_minor ?? 0;
-  const digitalMinor = allData?.digital_minor ?? 0;
-  const totalMinor = cashMinor + digitalMinor;
   const weekCashMinor = weekData?.cash_minor ?? 0;
   const weekTrips = weekData?.trip_count ?? 0;
 
-  const totalLabel = formatMoneyMinor(totalMinor, currency);
   const cashLabel = formatMoneyMinor(cashMinor, currency);
-  const digitalLabel = formatMoneyMinor(digitalMinor, currency);
   const weekLabel = formatMoneyMinor(weekCashMinor, currency);
+
+  const digitalBal = wallets?.digital.balance_minor ?? 0;
+  const cashWalletBal = wallets?.cash.available_minor ?? 0;
+  const debtOwed = wallets?.debt.arrears_minor ?? 0;
+  const debtDisplay =
+    debtOwed > 0 ? `-${formatMoneyMinorPlain(debtOwed)}` : formatMoneyMinorPlain(0);
 
   return (
     <div className="space-y-8 pb-4">
@@ -69,22 +109,69 @@ export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
       <section className="flex items-end justify-between gap-4">
         <div>
           <p className="mb-1 text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-            Total balance
+            Cash trip earnings
           </p>
           {allLoading && !allData ? (
             <Loader2 className="h-9 w-9 animate-spin text-emerald-600" />
           ) : (
             <h2 className="text-[30px] font-extrabold leading-tight tracking-tight text-slate-900 dark:text-white tabular-nums">
-              {totalLabel}
+              {cashLabel}
             </h2>
           )}
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Total fare from completed cash trips
+          </p>
         </div>
         <div className="rounded-xl bg-emerald-500/10 p-2.5">
           <BarChart3 className="h-6 w-6 text-emerald-600 dark:text-emerald-400" aria-hidden />
         </div>
       </section>
 
-      {onNavigate && (
+      {CASH_SETTLEMENT_ENABLED && (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between px-0.5">
+            <div>
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">Trip wallets</p>
+              <p className="text-xs text-slate-500">Cash, digital change fund & debt</p>
+            </div>
+            {onNavigate && (
+              <button
+                type="button"
+                onClick={() => onNavigate('rides-wallets')}
+                className="text-xs font-bold text-[#004ac6] hover:underline dark:text-blue-400"
+              >
+                View all
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <WalletChip
+              label="Cash"
+              amount={formatMoneyMinorPlain(cashWalletBal)}
+              loading={walletsLoading && !wallets}
+            />
+            <WalletChip
+              label="Digital"
+              amount={formatMoneyMinorPlain(digitalBal)}
+              loading={walletsLoading && !wallets}
+            />
+            <WalletChip
+              label="Debt"
+              amount={debtDisplay}
+              loading={walletsLoading && !wallets}
+              variant={debtOwed > 0 ? 'debt' : 'default'}
+            />
+          </div>
+          {debtOwed > 0 && (
+            <p className="text-xs text-amber-800 dark:text-amber-300">
+              You owe {formatMoneyMinorPlain(debtOwed)} in rider change — fund your Digital wallet to
+              auto-repay.
+            </p>
+          )}
+        </section>
+      )}
+
+      {onNavigate && !CASH_SETTLEMENT_ENABLED && (
         <button
           type="button"
           onClick={() => onNavigate('rides-wallets')}
@@ -126,23 +213,17 @@ export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
           </div>
         </div>
 
-        <div className="group relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_4px_20px_rgba(0,0,0,0.04)] dark:border-slate-700 dark:bg-slate-900">
-          <div className="absolute right-4 top-4 rounded-full bg-slate-100 px-3 py-1 dark:bg-slate-800">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Coming soon
-            </span>
-          </div>
-          <div className="mb-6 flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-100 text-slate-600 dark:bg-blue-950/40 dark:text-slate-300">
-              <CreditCard className="h-7 w-7" strokeWidth={1.75} aria-hidden />
+        <div className="relative overflow-hidden rounded-3xl border border-dashed border-slate-200 bg-slate-50/80 p-5 dark:border-slate-700 dark:bg-slate-900/40">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-200/80 dark:bg-slate-800">
+              <CreditCard className="h-5 w-5 text-slate-500" aria-hidden />
             </div>
-            <p className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Digital earnings
-            </p>
-          </div>
-          <div className="space-y-1 opacity-60">
-            <EarningsAmount loading={allLoading && !allData} amount={digitalLabel} muted />
-            <p className="text-sm text-slate-500 dark:text-slate-400">Card payments placeholder</p>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Card trips</p>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                In-app card payments coming soon — not part of your trip wallets.
+              </p>
+            </div>
           </div>
         </div>
 
@@ -197,7 +278,6 @@ export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
           </div>
         </div>
       </section>
-
     </div>
   );
 }

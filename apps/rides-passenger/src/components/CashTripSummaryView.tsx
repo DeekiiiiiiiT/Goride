@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Loader2, Share2, Star, Wallet, X } from 'lucide-react';
+import { Banknote, Loader2, Share2, Star, Wallet, X } from 'lucide-react';
 import { vehicleTypeLabel } from '@roam/business-config/ridesVehicleTypes';
 import type { RideRequestRow, SettlementSummaryDto, WalletBalanceDto } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
@@ -9,7 +9,7 @@ import {
   cashSettlementOutcomeMessage,
   computeOutcomeFromRide,
 } from '@roam/types/cashSettlementDisplay';
-import { TripSummaryMap } from '@/components/TripSummaryMap';
+import { notifyWalletBalanceChanged } from '@/lib/walletEvents';
 import { ridesGetSettlementSummary } from '@/services/ridesEdge';
 import { walletGetBalance } from '@/services/walletEdge';
 
@@ -67,7 +67,10 @@ export function CashTripSummaryView({ ride }: Props) {
         ]);
         if (cancelled) return;
         if (summaryRes?.summary) setSummary(summaryRes.summary);
-        if (balanceRes?.wallet) setWallet(balanceRes.wallet);
+        if (balanceRes?.wallet) {
+          setWallet(balanceRes.wallet);
+          notifyWalletBalanceChanged();
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -89,12 +92,14 @@ export function CashTripSummaryView({ ride }: Props) {
   const distance = formatTripDistanceMi(ride.distance_estimate_km);
 
   const finish = () => {
+    notifyWalletBalanceChanged();
     toast.success('Thanks for riding with Roam');
     navigate('/', { replace: true });
   };
 
   const handleShare = async () => {
-    const text = `Cash trip from ${ride.pickup_address ?? 'pickup'} to ${ride.dropoff_address ?? 'drop-off'} — ${fare}`;
+    const changeLine = changeMinor > 0 ? ` — ${formatMoneyMinor(changeMinor, currency)} credited to wallet` : '';
+    const text = `Cash trip from ${ride.pickup_address ?? 'pickup'} to ${ride.dropoff_address ?? 'drop-off'} — ${fare}${changeLine}`;
     try {
       if (navigator.share) {
         await navigator.share({ title: 'Roam cash trip summary', text });
@@ -142,11 +147,102 @@ export function CashTripSummaryView({ ride }: Props) {
       </header>
 
       <main className="trip-summary-main">
-        <TripSummaryMap
-          pickup={{ lat: ride.pickup_lat, lng: ride.pickup_lng }}
-          dropoff={{ lat: ride.dropoff_lat, lng: ride.dropoff_lng }}
-          encodedPolyline={ride.route_polyline_encoded}
-        />
+        <section className="trip-summary-cash-hero" aria-label="Cash payment details">
+          <div className="trip-summary-cash-hero__icon" aria-hidden>
+            <Banknote className="size-6" strokeWidth={2} />
+          </div>
+
+          {loading ? (
+            <div className="flex justify-center py-6">
+              <Loader2 className="h-6 w-6 animate-spin text-slate-400" aria-hidden />
+            </div>
+          ) : (
+            <>
+              {outcome === 'overpay' && changeMinor > 0 ? (
+                <div className="trip-summary-cash-hero__highlight">
+                  <p className="trip-summary-cash-hero__highlight-label">Change credited to wallet</p>
+                  <p className="trip-summary-cash-hero__highlight-amount">
+                    +{formatMoneyMinor(changeMinor, currency)}
+                  </p>
+                  <p className="trip-summary-cash-hero__highlight-sub">
+                    Your driver collected more than the fare. The difference is in your Roam wallet.
+                  </p>
+                </div>
+              ) : outcome === 'exact' ? (
+                <div className="trip-summary-cash-hero__highlight trip-summary-cash-hero__highlight--exact">
+                  <p className="trip-summary-cash-hero__highlight-label">Paid in cash</p>
+                  <p className="trip-summary-cash-hero__highlight-amount">
+                    {formatMoneyMinor(receivedMinor, currency)}
+                  </p>
+                  <p className="trip-summary-cash-hero__highlight-sub">Exact fare — no change due</p>
+                </div>
+              ) : outcome === 'underpay' || outcome === 'unpaid' ? (
+                <div className="trip-summary-cash-hero__highlight trip-summary-cash-hero__highlight--arrears">
+                  <p className="trip-summary-cash-hero__highlight-label">
+                    {outcome === 'unpaid' ? 'Trip unpaid' : 'Partial payment'}
+                  </p>
+                  {arrearsMinor > 0 && (
+                    <p className="trip-summary-cash-hero__highlight-amount">
+                      {formatMoneyMinor(arrearsMinor, currency)} owed
+                    </p>
+                  )}
+                  <p className="trip-summary-cash-hero__highlight-sub">
+                    Outstanding balance added to your wallet — settle before your next cash trip.
+                  </p>
+                </div>
+              ) : null}
+
+              <div className="trip-summary-cash-hero__rows">
+                <div className="trip-summary-cash-hero__row">
+                  <span>Fare due</span>
+                  <span className="tabular-nums font-medium">{formatMoneyMinor(owedMinor, currency)}</span>
+                </div>
+                <div className="trip-summary-cash-hero__row">
+                  <span>Cash paid to driver</span>
+                  <span className="tabular-nums font-medium">{formatMoneyMinor(receivedMinor, currency)}</span>
+                </div>
+                {changeMinor > 0 && (
+                  <div className="trip-summary-cash-hero__row trip-summary-cash-hero__row--credit">
+                    <span>Change to wallet</span>
+                    <span className="tabular-nums font-semibold">
+                      +{formatMoneyMinor(changeMinor, currency)}
+                    </span>
+                  </div>
+                )}
+                {arrearsMinor > 0 && (
+                  <div className="trip-summary-cash-hero__row trip-summary-cash-hero__row--arrears">
+                    <span>Outstanding balance</span>
+                    <span className="tabular-nums font-semibold">
+                      {formatMoneyMinor(arrearsMinor, currency)}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {outcome && (
+                <p className="trip-summary-cash-hero__note">
+                  {cashSettlementOutcomeMessage(outcome, ride)}
+                </p>
+              )}
+
+              {wallet && (
+                <div className="trip-summary-cash-hero__wallet">
+                  <span className="flex items-center gap-2">
+                    <Wallet className="h-4 w-4" aria-hidden />
+                    Wallet balance
+                  </span>
+                  <span className="font-bold tabular-nums">
+                    {formatMoneyMinor(wallet.balance_minor, wallet.currency)}
+                  </span>
+                </div>
+              )}
+
+              <Link to={`/account/wallet?ride=${ride.id}`} className="trip-summary-cash-hero__link">
+                View wallet transactions
+              </Link>
+            </>
+          )}
+        </section>
 
         <section className="trip-summary-stats" aria-label="Trip statistics">
           <div className="trip-summary-stats__cell">
@@ -161,71 +257,6 @@ export function CashTripSummaryView({ ride }: Props) {
             <span className="trip-summary-stats__label">Dist</span>
             <span className="trip-summary-stats__value">{distance}</span>
           </div>
-        </section>
-
-        <section
-          className="mx-4 rounded-2xl border border-slate-200 bg-white p-4 space-y-3 dark:border-slate-700 dark:bg-slate-900"
-          aria-label="Payment breakdown"
-        >
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Payment breakdown</h2>
-          {loading ? (
-            <div className="flex justify-center py-4">
-              <Loader2 className="h-5 w-5 animate-spin text-slate-400" aria-hidden />
-            </div>
-          ) : (
-            <>
-              <div className="flex justify-between text-sm text-slate-600 dark:text-slate-300">
-                <span>Fare due</span>
-                <span className="tabular-nums font-medium text-slate-900 dark:text-white">
-                  {formatMoneyMinor(owedMinor, currency)}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm text-slate-600 dark:text-slate-300">
-                <span>Cash paid to driver</span>
-                <span className="tabular-nums font-medium text-slate-900 dark:text-white">
-                  {formatMoneyMinor(receivedMinor, currency)}
-                </span>
-              </div>
-              {changeMinor > 0 && (
-                <div className="flex justify-between text-sm text-emerald-700 dark:text-emerald-400">
-                  <span>Change credited to wallet</span>
-                  <span className="tabular-nums font-semibold">
-                    +{formatMoneyMinor(changeMinor, currency)}
-                  </span>
-                </div>
-              )}
-              {arrearsMinor > 0 && (
-                <div className="flex justify-between text-sm text-amber-800 dark:text-amber-300">
-                  <span>Outstanding balance</span>
-                  <span className="tabular-nums font-semibold">
-                    {formatMoneyMinor(arrearsMinor, currency)}
-                  </span>
-                </div>
-              )}
-              {outcome && (
-                <p className="text-xs text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800 pt-2">
-                  {cashSettlementOutcomeMessage(outcome, ride)}
-                </p>
-              )}
-              {wallet && (
-                <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5 dark:bg-slate-800/60">
-                  <span className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-                    <Wallet className="h-4 w-4" aria-hidden />
-                    Wallet balance
-                  </span>
-                  <span className="text-sm font-bold tabular-nums text-slate-900 dark:text-white">
-                    {formatMoneyMinor(wallet.balance_minor, wallet.currency)}
-                  </span>
-                </div>
-              )}
-              <Link
-                to={`/account/wallet?ride=${ride.id}`}
-                className="block text-center text-xs font-semibold text-emerald-700 underline dark:text-emerald-400"
-              >
-                View wallet transactions
-              </Link>
-            </>
-          )}
         </section>
 
         <section className="trip-summary-card" aria-label="Rate your driver">

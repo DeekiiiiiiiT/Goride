@@ -2,7 +2,6 @@ import React from 'react';
 import { CheckCircle2, Loader2 } from 'lucide-react';
 import type { CashSettlementResponse } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
-import { CASH_SETTLEMENT_V2_ENABLED } from '../../lib/cashSettlementFlags';
 
 type Props = {
   result: CashSettlementResponse;
@@ -17,7 +16,7 @@ export function CashSettlementResultSheet({ result, onDone }: Props) {
   const cashCredit = deltas?.driver_cash_credit_minor ?? 0;
   const changeMinor = result.change_credit_minor ?? 0;
 
-  if (!CASH_SETTLEMENT_V2_ENABLED || result.settlement_version !== 2 || !deltas) {
+  if (result.settlement_version !== 2 || !deltas) {
     return (
       <div className="flex h-full min-h-0 flex-col items-center justify-center bg-slate-50 p-6 dark:bg-slate-950">
         <CheckCircle2 className="mb-4 h-12 w-12 text-emerald-600" aria-hidden />

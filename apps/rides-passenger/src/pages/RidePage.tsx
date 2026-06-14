@@ -24,7 +24,7 @@ import { CashSettlementRiderView } from '@/components/CashSettlementRiderView';
 import { CashTripSummaryView } from '@/components/CashTripSummaryView';
 import { TripSummaryView } from '@/components/TripSummaryView';
 import { isAwaitingCashSettlement, isCashRide } from '@/lib/cashSettlementUi';
-import { CASH_SETTLEMENT_V2_ENABLED } from '@/lib/cashSettlementFlags';
+import { CASH_SETTLEMENT_ENABLED, CASH_SETTLEMENT_V2_ENABLED } from '@/lib/cashSettlementFlags';
 import {
   cashSettlementOutcomeMessage,
   showSettlementResultOnTripScreen,
@@ -533,11 +533,12 @@ export default function RidePage() {
         </div>
       );
     }
-    const useV2CashSummary =
-      CASH_SETTLEMENT_V2_ENABLED && isCashRide(ride) && Boolean(ride.cash_settlement_outcome);
+    const showCashTripSummary =
+      isCashRide(ride) && Boolean(ride.cash_settlement_outcome);
     const showCashResultScreen =
-      !useV2CashSummary &&
-      isCashRide(ride) &&
+      CASH_SETTLEMENT_ENABLED &&
+      !CASH_SETTLEMENT_V2_ENABLED &&
+      showCashTripSummary &&
       showSettlementResultOnTripScreen(ride.cash_settlement_outcome) &&
       !cashResultDismissed;
     if (showCashResultScreen) {
@@ -552,7 +553,7 @@ export default function RidePage() {
         />
       );
     }
-    if (useV2CashSummary) {
+    if (showCashTripSummary) {
       return <CashTripSummaryView ride={ride} />;
     }
     return <TripSummaryView ride={ride} />;

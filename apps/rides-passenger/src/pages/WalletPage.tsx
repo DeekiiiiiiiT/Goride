@@ -14,6 +14,7 @@ import type { WalletBalanceDto, WalletTransactionDto } from '@roam/types/rides';
 import { formatMoneyMinorPlain } from '@roam/types/rides';
 import { walletGetTransactions } from '@/services/tripIntentEdge';
 import { walletGetBalance } from '@/services/walletEdge';
+import { WALLET_BALANCE_CHANGED_EVENT } from '@/lib/walletEvents';
 
 import {
   CARD_SHADOW,
@@ -87,6 +88,7 @@ export default function WalletPage() {
     let cancelled = false;
     const load = async () => {
       setWalletError(null);
+      setLoading(true);
       try {
         const [txRes, balRes] = await Promise.all([
           walletGetTransactions(),
@@ -107,8 +109,15 @@ export default function WalletPage() {
       }
     };
     void load();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void load();
+    };
+    window.addEventListener(WALLET_BALANCE_CHANGED_EVENT, load);
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
       cancelled = true;
+      window.removeEventListener(WALLET_BALANCE_CHANGED_EVENT, load);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, []);
 

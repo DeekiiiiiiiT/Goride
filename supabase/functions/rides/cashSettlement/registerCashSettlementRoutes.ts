@@ -4,6 +4,7 @@ import { jsonEdgeForbidden } from "../../_shared/authEdge.ts";
 import { isCashSettlementEnabled, isCashSettlementV2Enabled } from "./flags.ts";
 import { processCashSettlement } from "./processCashSettlement.ts";
 import {
+  driverAccountKeyForUser,
   driverCashAccountKeyForUser,
   driverDebtAccountKeyForUser,
   driverDigitalAccountKeyForUser,
@@ -263,26 +264,73 @@ export function registerCashSettlementRoutes(app: Hono, deps: RegisterDeps): voi
     }
     const currency = c.req.query("currency")?.trim() || "JMD";
     const walletFilter = c.req.query("wallet")?.trim() || "digital";
-    const accountKey = isCashSettlementV2Enabled()
-      ? driverWalletAccountKey(auth.user.id, walletFilter)
-      : `user:${auth.user.id}:driver`;
-    const account = accountKey ? await getAccountByKey(deps.svc(), accountKey, currency) : null;
-    const rows = accountKey
-      ? await listJournalForAccountKey(deps.svc(), accountKey, currency)
-      : await listJournalForAccount(deps.svc(), auth.user.id, "driver", currency);
-    const mapped = account
-      ? mapJournalRowsForAccount(String(account.id), rows)
-      : rows.map((row) => ({
-        id: String(row.id),
-        ride_request_id: row.ride_request_id ? String(row.ride_request_id) : null,
-        entry_type: String(row.entry_type),
-        amount_minor: Number(row.amount_minor),
-        currency: String(row.currency),
-        description: journalEntryTitle(String(row.entry_type)),
-        created_at: String(row.created_at),
-        is_credit: false,
-        metadata: (row.metadata ?? {}) as Record<string, unknown>,
+
+    type MappedTx = {
+      id: string;
+      ride_request_id: string | null;
+      entry_type: string;
+      amount_minor: number;
+      currency: string;
+      description: string;
+      created_at: string;
+      is_credit: boolean;
+      metadata: Record<string, unknown>;
+    };
+
+    async function journalForAccountKey(accountKey: string): Promise<MappedTx[]> {
+      const account = await getAccountByKey(deps.svc(), accountKey, currency);
+      if (!account) return [];
+      const rows = await listJournalForAccountKey(deps.svc(), accountKey, currency);
+      return mapJournalRowsForAccount(String(account.id), rows).map((row) => ({
+        id: row.id,
+        ride_request_id: row.ride_request_id,
+        entry_type: row.entry_type,
+        amount_minor: row.amount_minor,
+        currency: row.currency,
+        description: row.description,
+        created_at: row.created_at,
+        is_credit: row.is_credit,
+        metadata: row.metadata,
       }));
+    }
+
+    let mapped: MappedTx[] = [];
+
+    if (isCashSettlementV2Enabled() && walletFilter === "digital") {
+      const digitalKey = driverDigitalAccountKeyForUser(auth.user.id);
+      const legacyKey = driverAccountKeyForUser(auth.user.id);
+      const [digitalTx, legacyTx] = await Promise.all([
+        journalForAccountKey(digitalKey),
+        journalForAccountKey(legacyKey),
+      ]);
+      const seen = new Set<string>();
+      mapped = [...digitalTx, ...legacyTx]
+        .filter((row) => {
+          if (seen.has(row.id)) return false;
+          seen.add(row.id);
+          return true;
+        })
+        .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+        .slice(0, 50);
+    } else {
+      const accountKey = isCashSettlementV2Enabled()
+        ? driverWalletAccountKey(auth.user.id, walletFilter)
+        : `user:${auth.user.id}:driver`;
+      mapped = accountKey
+        ? await journalForAccountKey(accountKey)
+        : (await listJournalForAccount(deps.svc(), auth.user.id, "driver", currency)).map((row) => ({
+          id: String(row.id),
+          ride_request_id: row.ride_request_id ? String(row.ride_request_id) : null,
+          entry_type: String(row.entry_type),
+          amount_minor: Number(row.amount_minor),
+          currency: String(row.currency),
+          description: journalEntryTitle(String(row.entry_type)),
+          created_at: String(row.created_at),
+          is_credit: false,
+          metadata: (row.metadata ?? {}) as Record<string, unknown>,
+        }));
+    }
+
     return c.json({
       transactions: mapped.map((row) => ({
         id: row.id,
