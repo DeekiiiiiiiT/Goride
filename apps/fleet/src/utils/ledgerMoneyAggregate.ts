@@ -462,25 +462,38 @@ export function canonicalEventInSelectedWindow(
   endDate: string,
 ): boolean {
   const d = ymdSlice(v.date as string);
-  if (d && d >= startDate && d <= endDate) return true;
   const ps = ymdSlice(v.periodStart as string);
   const pe = ymdSlice(v.periodEnd as string);
-  if (ps && pe) return ps <= endDate && pe >= startDate;
-
   const et = typeof v.eventType === 'string' ? v.eventType : '';
   const isStatementish =
     et === 'statement_line' || et === 'payout_cash' || et === 'payout_bank';
+
+  // Trip-dated rows and anything with an explicit calendar date inside the picker range.
+  if (d && d >= startDate && d <= endDate) return true;
+
+  // Statement import batches: period window must overlap the selected range.
+  if (ps && pe) {
+    const overlaps = ps <= endDate && pe >= startDate;
+    if (!overlaps) return false;
+    if (isStatementish) {
+      const spanDays =
+        (new Date(`${pe}T12:00:00.000Z`).getTime() - new Date(`${ps}T12:00:00.000Z`).getTime()) /
+        (24 * 60 * 60 * 1000);
+      // Month-wide imports must not attribute full cash to a single calendar week inside them.
+      if (spanDays > 10) return ps >= startDate && pe <= endDate;
+    }
+    return true;
+  }
 
   // Statement rows with only periodStart (no periodEnd): include if periodStart overlaps range
   if (isStatementish && ps && !pe) {
     if (ps >= startDate && ps <= endDate) return true;
   }
 
-  // Widen band for statement rows whose `date` may be import/posting date rather than period date
-  if (isStatementish && d) {
-    const bandLo = addDaysYmd(startDate, -14);
-    const bandHi = addDaysYmd(endDate, 21);
-    if (d >= bandLo && d <= bandHi) return true;
+  // Legacy rows without period fields: posting/settlement may trail period end, never precede it by weeks.
+  if (isStatementish && d && (!ps || !pe)) {
+    const graceHi = addDaysYmd(endDate, 14);
+    if (d >= startDate && d <= graceHi) return true;
   }
   return false;
 }

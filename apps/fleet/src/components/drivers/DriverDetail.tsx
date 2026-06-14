@@ -156,7 +156,7 @@ import { TierCalculations } from '../../utils/tierCalculations';
 import { TierConfig } from '../../types/data';
 import { getEffectiveTripEarnings } from '../../utils/tripEarnings';
 import { normalizePlatform } from '../../utils/normalizePlatform';
-import { isValidDriverMetricPeriod } from '../../utils/driverMetricPeriod';
+import { isUberCashEligibleMetricPeriod, isValidDriverMetricPeriod } from '../../utils/driverMetricPeriod';
 import { calculateAverageEnroute, estimateEnrouteFallback } from '../../utils/enrouteStrategy';
 import { Tooltip as UiTooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { Checkbox } from "../ui/checkbox";
@@ -1491,7 +1491,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      // and has a real span (periodEnd > periodStart). Same-timestamp rows are ignored.
      const relevantCsvMetricsForUberCash = (isAllPlatforms && csvMetrics)
        ? csvMetrics.filter(m => {
-           if (!isValidDriverMetricPeriod(m)) return false;
+           if (!isUberCashEligibleMetricPeriod(m)) return false;
            const mStart = new Date(m.periodStart);
            const mEnd = new Date(m.periodEnd);
            return mStart <= end && mEnd >= start;
@@ -2224,7 +2224,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         delete metrics.platformStats['Dispute Recoveries'];
       }
 
-      // Replace trip Uber cash with CSV statement total (Excel SUM of Cash Collected) when available.
+      // Replace trip Uber cash with CSV statement total when a week-sized import overlaps this period.
       const uberCsvCash = metrics.uberCsvCashCollectedMagnitude;
       if (uberCsvCash != null) {
         if (platformStats.Uber) {

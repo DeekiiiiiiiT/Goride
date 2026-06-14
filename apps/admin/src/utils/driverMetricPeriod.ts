@@ -5,12 +5,24 @@
 
 const MS_WEEK = 7 * 24 * 60 * 60 * 1000;
 
+/** Uber payment CSV rows represent one statement week — reject month-long bogus spans. */
+const MAX_UBER_CASH_METRIC_DAYS = 10;
+
 /** True when periodEnd is strictly after periodStart (finite dates). */
 export function isValidDriverMetricPeriod(m: { periodStart?: string; periodEnd?: string }): boolean {
   const s = m.periodStart ? new Date(m.periodStart).getTime() : NaN;
   const e = m.periodEnd ? new Date(m.periodEnd).getTime() : NaN;
   if (!Number.isFinite(s) || !Number.isFinite(e)) return false;
   return e > s;
+}
+
+/** Stricter gate for Uber CSV cash override — valid week-sized period only. */
+export function isUberCashEligibleMetricPeriod(m: { periodStart?: string; periodEnd?: string }): boolean {
+  if (!isValidDriverMetricPeriod(m)) return false;
+  const s = new Date(m.periodStart!).getTime();
+  const e = new Date(m.periodEnd!).getTime();
+  const spanDays = (e - s) / (24 * 60 * 60 * 1000);
+  return spanDays <= MAX_UBER_CASH_METRIC_DAYS;
 }
 
 

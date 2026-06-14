@@ -1,7 +1,7 @@
 import { endOfDay, format, isWithinInterval, startOfDay } from "date-fns";
 import type { DriverMetrics, Trip } from "../types/data";
 import { normalizePlatform } from "./normalizePlatform";
-import { isValidDriverMetricPeriod } from "./driverMetricPeriod";
+import { isUberCashEligibleMetricPeriod } from "./driverMetricPeriod";
 
 export type UberCashDebugRow = {
   id: string;
@@ -62,7 +62,7 @@ export function buildUberCashDebugReport(
     const mStart = new Date(m.periodStart);
     const mEnd = new Date(m.periodEnd);
     const overlaps =
-      isValidDriverMetricPeriod(m) && intervalsOverlap(mStart, mEnd, start, end);
+      isUberCashEligibleMetricPeriod(m) && intervalsOverlap(mStart, mEnd, start, end);
     const vTx = m.uberPaymentsTransactionCashColumnSum;
     const txContrib = vTx != null && vTx !== 0 ? vTx : 0;
     const paymentOk =
