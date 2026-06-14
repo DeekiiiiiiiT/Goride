@@ -47,9 +47,21 @@ import {
 } from '@roam/types';
 import { hasAcceptedDriverBackgroundLocationDisclosure } from '../utils/driverLocationDisclosure';
 import {
+  ensureDriverLocationAccess,
   openRoamDriverAppSettings,
-  promptDriverLocationAccess,
+  readCurrentDriverPosition,
 } from '../utils/nativeLocationAccess';
+
+function isFatalPresenceError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes('forbidden') ||
+    m.includes('driver_not_active') ||
+    m.includes('fleet_not_eligible') ||
+    m.includes('no_driver_profile') ||
+    m.includes('not_eligible_for_dispatch')
+  );
+}
 
 const OFFER_POLL_MS = 4000;
 const RIDE_SYNC_MS = 30_000;
@@ -60,6 +72,7 @@ const DEFAULT_BODY_TYPE_SLUG = 'sedan';
 
 export function useRideDispatch() {
   const [online, setOnline] = useState(false);
+  const [goingOnline, setGoingOnline] = useState(false);
   const [offers, setOffers] = useState<DriverOfferWithRide[]>([]);
   const [activeRide, setActiveRide] = useState<RideRequestRow | null>(null);
   const [activeRideWaitTime, setActiveRideWaitTime] = useState<DriverWaitTimeInfo | null>(null);
@@ -74,6 +87,9 @@ export function useRideDispatch() {
   const knownOfferIds = useRef<Set<string>>(new Set());
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const pendingGoOnlineAfterSettings = useRef(false);
+  const bodyTypeSlugRef = useRef(DEFAULT_BODY_TYPE_SLUG);
+  const lastPresenceSuccessAt = useRef(0);
+  const locationFailureStreak = useRef(0);
 
   const {
     activeRide: recoveredRide,
@@ -204,6 +220,7 @@ export function useRideDispatch() {
   }, []);
 
   const effectiveBodyTypeSlug = bodyTypeSlug ?? DEFAULT_BODY_TYPE_SLUG;
+  bodyTypeSlugRef.current = effectiveBodyTypeSlug;
 
   const clearGeoWatch = useCallback(() => {
     if (watchId.current == null) return;
@@ -327,7 +344,12 @@ export function useRideDispatch() {
   }, [online, userId, refreshOffers]);
 
   const postPresenceFromCoords = useCallback(
-    async (lat: number, lng: number, heading?: number | null) => {
+    async (
+      lat: number,
+      lng: number,
+      heading?: number | null,
+      opts?: { offlineOnFailure?: boolean },
+    ): Promise<boolean> => {
       lastCoords.current = { lat, lng };
       try {
         await ridesDriverPresence({
@@ -335,9 +357,12 @@ export function useRideDispatch() {
           lng,
           heading_degrees: heading ?? undefined,
           available_for_rides: true,
-          body_type_slug: effectiveBodyTypeSlug,
+          body_type_slug: bodyTypeSlugRef.current,
         });
         setPresenceError(null);
+        lastPresenceSuccessAt.current = Date.now();
+        locationFailureStreak.current = 0;
+        return true;
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : 'Could not go online';
         let display = message;
@@ -352,20 +377,26 @@ export function useRideDispatch() {
           /* use raw message */
         }
         setPresenceError(display);
+        const fatal = isFatalPresenceError(message);
         if (message.includes('fleet_not_eligible')) {
           toast.error('Fleet drivers cannot go online for Roam dispatch during beta.');
         } else if (message.includes('driver_not_active')) {
           toast.error('Your driver account is not active yet. Contact support.');
         } else if (message.includes('no_driver_profile')) {
           toast.error('No driver profile found for this login.');
+        } else if (fatal) {
+          toast.error(display);
         } else {
-          toast.error('Could not register your location. Check permissions and try again.');
+          toast.error('Could not register your location. Retrying…');
         }
-        setOnline(false);
+        if (fatal || opts?.offlineOnFailure) {
+          setOnline(false);
+        }
         console.warn('presence failed', e);
+        return false;
       }
     },
-    [effectiveBodyTypeSlug],
+    [],
   );
 
   useEffect(() => {
@@ -375,7 +406,13 @@ export function useRideDispatch() {
 
     const handleLocationFailure = () => {
       if (cancelled) return;
-      toast.error('Location permission needed for ride matching');
+      locationFailureStreak.current += 1;
+      const hadRecentPresence =
+        lastPresenceSuccessAt.current > 0 &&
+        Date.now() - lastPresenceSuccessAt.current < 60_000;
+      if (locationFailureStreak.current < 4 && hadRecentPresence) return;
+      if (locationFailureStreak.current < 6) return;
+      toast.error('Location signal lost — check GPS and try again.');
       setOnline(false);
       setLocationGoOnlineBlocked(true);
     };
@@ -511,30 +548,47 @@ export function useRideDispatch() {
       return;
     }
 
-    const access = await promptDriverLocationAccess();
-    if (access === 'denied_needs_settings') {
-      pendingGoOnlineAfterSettings.current = true;
-      toast.message('Enable location for Roam Driver (Allow all the time), then return and tap go online.');
-      setLocationGoOnlineBlocked(true);
-      return;
-    }
-    if (access === 'gps_off') {
-      pendingGoOnlineAfterSettings.current = true;
-      toast.message('Turn on GPS on your phone, then return and tap go online.');
-      setLocationGoOnlineBlocked(true);
-      return;
-    }
-    if (access !== 'granted') {
-      toast.error('Location is required to go online.');
-      setLocationGoOnlineBlocked(true);
-      return;
-    }
+    setGoingOnline(true);
+    try {
+      const access = await ensureDriverLocationAccess();
+      if (access === 'denied_needs_settings') {
+        pendingGoOnlineAfterSettings.current = true;
+        toast.message('Enable location for Roam Driver, then slide to go online again.');
+        setLocationGoOnlineBlocked(true);
+        return;
+      }
+      if (access === 'gps_off') {
+        pendingGoOnlineAfterSettings.current = true;
+        toast.message('Turn on GPS on your phone, then slide to go online again.');
+        setLocationGoOnlineBlocked(true);
+        return;
+      }
+      if (access !== 'granted') {
+        toast.error('Location is required to go online.');
+        setLocationGoOnlineBlocked(true);
+        return;
+      }
 
-    setLocationGoOnlineBlocked(false);
-    setPresenceError(null);
-    pendingGoOnlineAfterSettings.current = false;
-    setOnline(true);
-  }, [vehicleReady, activeRide?.status]);
+      setLocationGoOnlineBlocked(false);
+      setPresenceError(null);
+      pendingGoOnlineAfterSettings.current = false;
+      locationFailureStreak.current = 0;
+
+      const coords = await readCurrentDriverPosition();
+      if (coords) {
+        const ok = await postPresenceFromCoords(coords.lat, coords.lng, coords.heading, {
+          offlineOnFailure: true,
+        });
+        if (!ok) return;
+      } else {
+        toast.message('Waiting for GPS signal…');
+      }
+
+      setOnline(true);
+    } finally {
+      setGoingOnline(false);
+    }
+  }, [vehicleReady, activeRide?.status, postPresenceFromCoords]);
 
   useEffect(() => {
     if (!isNativeCapacitorPlatform()) return;
@@ -570,6 +624,7 @@ export function useRideDispatch() {
   }, [permissions, goOnline, activeRide?.id, pollActiveRide]);
 
   const goOffline = useCallback(async () => {
+    setGoingOnline(false);
     clearGeoWatch();
     await postOfflinePresence();
     setOnline(false);
@@ -761,6 +816,7 @@ export function useRideDispatch() {
 
   return {
     online,
+    goingOnline,
     offers,
     activeRide,
     activeRideWaitTime,

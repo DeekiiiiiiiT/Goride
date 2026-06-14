@@ -14,6 +14,7 @@ type Props = {
 export function RideDispatchPage({ onOpenWallets }: Props) {
   const {
     online,
+    goingOnline,
     offers,
     activeRide,
     activeRideWaitTime,
@@ -97,7 +98,7 @@ export function RideDispatchPage({ onOpenWallets }: Props) {
         }`}
         aria-hidden={retractSlider}
       >
-        <OnlineGaugeSlider online={online} onToggle={toggleOnline} />
+        <OnlineGaugeSlider online={online} goingOnline={goingOnline} onToggle={toggleOnline} />
       </div>
     </>
   );

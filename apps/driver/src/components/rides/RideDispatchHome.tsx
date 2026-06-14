@@ -14,6 +14,7 @@ type Props = {
 export function RideDispatchHome({ embedded = false }: Props) {
   const {
     online,
+    goingOnline,
     offers,
     activeRide,
     activeRideWaitTime,
@@ -134,6 +135,7 @@ export function RideDispatchHome({ embedded = false }: Props) {
       {!embedded && (
         <OnlineGaugeSlider
           online={online}
+          goingOnline={goingOnline}
           onToggle={toggleOnline}
           disabled={goOnlineDisabled}
           className="fixed left-0 right-0 z-[45] driver-online-slider-anchor"

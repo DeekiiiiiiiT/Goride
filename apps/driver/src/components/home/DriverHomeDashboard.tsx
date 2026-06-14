@@ -43,7 +43,7 @@ export function DriverHomeDashboard({ tripFlowActive }: Props) {
   const [period, setPeriod] = useState<HomePeriod>('today');
   const { data, loading, error, refresh } = useIndependentEarnings(period);
   const { driverRecord } = useCurrentDriver();
-  const { online, toggleOnline, locationGoOnlineBlocked } = useRideDispatchContext();
+  const { online, goingOnline, toggleOnline, locationGoOnlineBlocked } = useRideDispatchContext();
   const onlineTime = useOnlineSessionDuration(online);
 
   const rating =
@@ -164,6 +164,7 @@ export function DriverHomeDashboard({ tripFlowActive }: Props) {
           <OnlineGaugeSlider
             variant="premium"
             online={online}
+            goingOnline={goingOnline}
             onToggle={toggleOnline}
             disabled={!online && locationGoOnlineBlocked}
           />

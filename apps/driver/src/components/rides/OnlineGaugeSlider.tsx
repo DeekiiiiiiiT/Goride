@@ -4,6 +4,7 @@ import { Power } from 'lucide-react';
 type Props = {
   online: boolean;
   onToggle: () => void;
+  goingOnline?: boolean;
   disabled?: boolean;
   className?: string;
   variant?: 'default' | 'premium';
@@ -24,6 +25,7 @@ function clamp01(n: number): number {
 export function OnlineGaugeSlider({
   online,
   onToggle,
+  goingOnline = false,
   disabled = false,
   className = '',
   variant = 'default',
@@ -44,11 +46,11 @@ export function OnlineGaugeSlider({
     : '';
 
   useEffect(() => {
-    if (!draggingRef.current) {
+    if (!draggingRef.current && !goingOnline) {
       dragOffsetRef.current = 0;
       setDragOffset(0);
     }
-  }, [online]);
+  }, [online, goingOnline]);
 
   const maxTravel = () => {
     const track = trackRef.current;
@@ -65,13 +67,15 @@ export function OnlineGaugeSlider({
     return Math.min(maxTravel(), Math.max(0, raw));
   };
 
-  const restingOffset = () => (online ? maxTravel() : 0);
+  const restingOffset = () => (online || goingOnline ? maxTravel() : 0);
   const displayOffset = dragging ? dragOffset : restingOffset();
   const progress = progressFromOffset(displayOffset);
+  const visuallyOnline = online || goingOnline;
 
   const commit = (offset: number) => {
     draggingRef.current = false;
     setDragging(false);
+    if (goingOnline) return;
     const p = progressFromOffset(offset);
     const offlineThreshold = isPremium ? PREMIUM_OFFLINE_DRAG_RATIO : OFFLINE_DRAG_RATIO;
     const shouldBeOnline = online ? p > 1 - offlineThreshold : p >= ONLINE_DRAG_RATIO;
@@ -83,11 +87,11 @@ export function OnlineGaugeSlider({
     setDragOffset(0);
   };
 
-  const goOnlineDisabled = disabled && !online;
-  const hint = online ? 'Slide left to go offline' : 'Slide right to go online';
-  const status = online ? 'You are online' : 'You are offline';
+  const goOnlineDisabled = (disabled && !online) || goingOnline;
+  const hint = visuallyOnline ? 'Slide left to go offline' : 'Slide right to go online';
+  const status = goingOnline ? 'Going online…' : visuallyOnline ? 'You are online' : 'You are offline';
   const draggingOffline =
-    isPremium && online && dragging && progressFromOffset(dragOffset) < 1 - PREMIUM_OFFLINE_DRAG_RATIO;
+    isPremium && visuallyOnline && !goingOnline && dragging && progressFromOffset(dragOffset) < 1 - PREMIUM_OFFLINE_DRAG_RATIO;
 
   const trackNode = (
     <div
