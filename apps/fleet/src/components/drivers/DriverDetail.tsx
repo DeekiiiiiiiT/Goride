@@ -1489,12 +1489,14 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
      // Uber CSV cash override: only use driver_metric rows whose **period overlaps** the selected range
      // and has a real span (periodEnd > periodStart). Same-timestamp rows are ignored.
+     // Uber CSV cash: metric period **start** must fall inside the selected range (avoids
+     // attributing a full prior-week statement to a future/partial week that only touches one day).
      const relevantCsvMetricsForUberCash = (isAllPlatforms && csvMetrics)
        ? csvMetrics.filter(m => {
            if (!isUberCashEligibleMetricPeriod(m)) return false;
            const mStart = new Date(m.periodStart);
            const mEnd = new Date(m.periodEnd);
-           return mStart <= end && mEnd >= start;
+           return mStart >= start && mStart <= end && mEnd >= start;
          })
        : [];
 

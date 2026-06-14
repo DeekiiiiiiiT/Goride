@@ -41,6 +41,33 @@ describe('canonicalEventInSelectedWindow', () => {
     ).toBe(false);
   });
 
+  it('does not attribute a prior-week statement that only touches the range end date', () => {
+    expect(
+      canonicalEventInSelectedWindow(
+        {
+          eventType: 'payout_cash',
+          date: '2026-06-16',
+          periodStart: '2026-06-10',
+          periodEnd: '2026-06-16',
+        },
+        '2026-06-16',
+        '2026-06-20',
+      ),
+    ).toBe(false);
+    expect(
+      canonicalEventInSelectedWindow(
+        {
+          eventType: 'payout_cash',
+          date: '2026-06-16',
+          periodStart: '2026-06-16',
+          periodEnd: '2026-06-22',
+        },
+        '2026-06-16',
+        '2026-06-20',
+      ),
+    ).toBe(true);
+  });
+
   it('does not attribute month-wide payout_cash to a single week inside the month', () => {
     expect(
       canonicalEventInSelectedWindow(

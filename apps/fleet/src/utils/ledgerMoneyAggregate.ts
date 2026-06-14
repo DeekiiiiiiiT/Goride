@@ -468,22 +468,20 @@ export function canonicalEventInSelectedWindow(
   const isStatementish =
     et === 'statement_line' || et === 'payout_cash' || et === 'payout_bank';
 
+  // Statement / payout imports: period start must fall inside the selected range.
+  if (isStatementish && ps && pe) {
+    if (!(ps <= endDate && pe >= startDate)) return false;
+    const spanDays =
+      (new Date(`${pe}T12:00:00.000Z`).getTime() - new Date(`${ps}T12:00:00.000Z`).getTime()) /
+      (24 * 60 * 60 * 1000);
+    if (spanDays > 10) return ps >= startDate && pe <= endDate;
+    return ps >= startDate && ps <= endDate;
+  }
+
   // Trip-dated rows and anything with an explicit calendar date inside the picker range.
   if (d && d >= startDate && d <= endDate) return true;
 
-  // Statement import batches: period window must overlap the selected range.
-  if (ps && pe) {
-    const overlaps = ps <= endDate && pe >= startDate;
-    if (!overlaps) return false;
-    if (isStatementish) {
-      const spanDays =
-        (new Date(`${pe}T12:00:00.000Z`).getTime() - new Date(`${ps}T12:00:00.000Z`).getTime()) /
-        (24 * 60 * 60 * 1000);
-      // Month-wide imports must not attribute full cash to a single calendar week inside them.
-      if (spanDays > 10) return ps >= startDate && pe <= endDate;
-    }
-    return true;
-  }
+  if (ps && pe) return ps <= endDate && pe >= startDate;
 
   // Statement rows with only periodStart (no periodEnd): include if periodStart overlaps range
   if (isStatementish && ps && !pe) {

@@ -62,7 +62,10 @@ export function buildUberCashDebugReport(
     const mStart = new Date(m.periodStart);
     const mEnd = new Date(m.periodEnd);
     const overlaps =
-      isUberCashEligibleMetricPeriod(m) && intervalsOverlap(mStart, mEnd, start, end);
+      isUberCashEligibleMetricPeriod(m) &&
+      intervalsOverlap(mStart, mEnd, start, end) &&
+      mStart >= start &&
+      mStart <= end;
     const vTx = m.uberPaymentsTransactionCashColumnSum;
     const txContrib = vTx != null && vTx !== 0 ? vTx : 0;
     const paymentOk =
