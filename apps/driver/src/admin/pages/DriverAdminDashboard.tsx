@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
+import { jwtPrimaryRole } from '@roam/auth-client';
 import { MapPin, ShieldCheck, Car, Users, Loader2, Route } from 'lucide-react';
 import { toast } from 'sonner';
 import { getDriverStats } from '../services/driverAdminService';
@@ -121,6 +122,7 @@ export function DriverAdminDashboard() {
 
       <DriverDashboardDrilldown
         accessToken={accessToken}
+        adminRole={jwtPrimaryRole(session.user)}
         activeTab={activeTab}
         onTabChange={setActiveTab}
       />

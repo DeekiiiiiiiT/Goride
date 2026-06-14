@@ -1,9 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { jwtPrimaryRole } from '@roam/auth-client';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
-import type { DriverDirectoryRow, DriverLiveStatus } from '@roam/types/driver';
-import { listDrivers } from '../services/driverAdminService';
+import type { DriverComplianceRow, DriverDirectoryRow, DriverLiveStatus } from '@roam/types/driver';
+import { listComplianceQueue, listDrivers } from '../services/driverAdminService';
+import { ComplianceQueueTable } from './ComplianceQueueTable';
+import { canWriteDriverAdmin } from '../utils/driverAdminRoles';
 
 export type DriverDashboardTab = 'total' | 'online' | 'on_trip' | 'active' | 'compliance';
 
@@ -29,17 +32,11 @@ const TAB_META: Record<
   },
   compliance: {
     label: 'Compliance queue',
-    description: 'Incomplete onboarding or background check not approved.',
+    description: 'Drivers awaiting activation or with compliance blockers.',
   },
 };
 
 const LIST_LIMIT = 100;
-
-function isComplianceQueueRow(d: DriverDirectoryRow): boolean {
-  if (!d.onboarding_complete) return true;
-  const bg = d.background_check_status?.trim().toLowerCase();
-  return bg !== 'approved';
-}
 
 function LiveBadge({ status }: { status: DriverLiveStatus }) {
   const styles =
@@ -65,18 +62,28 @@ function formatWhen(iso: string | null): string {
 
 type Props = {
   accessToken: string;
+  adminRole: string | null;
   activeTab: DriverDashboardTab;
   onTabChange: (tab: DriverDashboardTab) => void;
 };
 
-export function DriverDashboardDrilldown({ accessToken, activeTab, onTabChange }: Props) {
+export function DriverDashboardDrilldown({ accessToken, adminRole, activeTab, onTabChange }: Props) {
   const [drivers, setDrivers] = useState<DriverDirectoryRow[]>([]);
+  const [complianceRows, setComplianceRows] = useState<DriverComplianceRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const canWrite = canWriteDriverAdmin(adminRole);
 
   const load = useCallback(async () => {
     if (!accessToken) return;
     setLoading(true);
     try {
+      if (activeTab === 'compliance') {
+        const res = await listComplianceQueue(accessToken, { limit: LIST_LIMIT });
+        setComplianceRows(res.drivers);
+        setDrivers([]);
+        return;
+      }
+
       let rows: DriverDirectoryRow[] = [];
       if (activeTab === 'online') {
         const res = await listDrivers(accessToken, { live_status: 'online', limit: LIST_LIMIT, sort: 'last_ride' });
@@ -92,17 +99,16 @@ export function DriverDashboardDrilldown({ accessToken, activeTab, onTabChange }
           sort: 'last_ride',
         });
         rows = res.drivers;
-      } else if (activeTab === 'compliance') {
-        const res = await listDrivers(accessToken, { limit: LIST_LIMIT, sort: 'signup' });
-        rows = res.drivers.filter(isComplianceQueueRow);
       } else {
         const res = await listDrivers(accessToken, { limit: LIST_LIMIT, sort: 'signup' });
         rows = res.drivers;
       }
       setDrivers(rows);
+      setComplianceRows([]);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Failed to load driver list');
       setDrivers([]);
+      setComplianceRows([]);
     } finally {
       setLoading(false);
     }
@@ -113,6 +119,7 @@ export function DriverDashboardDrilldown({ accessToken, activeTab, onTabChange }
   }, [load]);
 
   const meta = TAB_META[activeTab];
+  const rowCount = activeTab === 'compliance' ? complianceRows.length : drivers.length;
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/30 overflow-hidden">
@@ -149,7 +156,23 @@ export function DriverDashboardDrilldown({ accessToken, activeTab, onTabChange }
         </button>
       </div>
 
-      {loading ? (
+      {activeTab === 'compliance' ? (
+        <div className="p-2">
+          <ComplianceQueueTable
+            rows={complianceRows}
+            loading={loading}
+            canWrite={canWrite}
+            adminRole={adminRole}
+            compact
+            onApprove={() => {
+              toast.info('Open Compliance page or driver detail to approve.');
+            }}
+            onUpdateBackgroundCheck={() => {
+              toast.info('Open Compliance page to update background check.');
+            }}
+          />
+        </div>
+      ) : loading ? (
         <div className="flex items-center justify-center py-14 text-slate-400">
           <Loader2 className="w-5 h-5 animate-spin mr-2" />
           Loading…
@@ -175,10 +198,7 @@ export function DriverDashboardDrilldown({ accessToken, activeTab, onTabChange }
                   className="border-b border-slate-800/60 hover:bg-slate-800/40 transition-colors"
                 >
                   <td className="px-4 py-3">
-                    <Link
-                      to={`/users/${d.user_id}`}
-                      className="block group"
-                    >
+                    <Link to={`/users/${d.user_id}`} className="block group">
                       <p className="font-medium text-white group-hover:text-violet-300 truncate max-w-[220px]">
                         {d.display_name || d.email || 'Unnamed driver'}
                       </p>
@@ -202,14 +222,20 @@ export function DriverDashboardDrilldown({ accessToken, activeTab, onTabChange }
         </div>
       )}
 
-      {!loading && drivers.length > 0 && (
+      {!loading && rowCount > 0 && (
         <p className="px-4 py-2 text-xs text-slate-600 border-t border-slate-800/80">
-          Showing {drivers.length} driver{drivers.length === 1 ? '' : 's'}
-          {drivers.length >= LIST_LIMIT ? ` (up to ${LIST_LIMIT})` : ''}.
+          Showing {rowCount} driver{rowCount === 1 ? '' : 's'}
+          {rowCount >= LIST_LIMIT ? ` (up to ${LIST_LIMIT})` : ''}.
           {' '}
-          <Link to="/users" className="text-violet-400 hover:text-violet-300">
-            Open full directory →
-          </Link>
+          {activeTab === 'compliance' ? (
+            <Link to="/compliance" className="text-violet-400 hover:text-violet-300">
+              Open full compliance queue →
+            </Link>
+          ) : (
+            <Link to="/users" className="text-violet-400 hover:text-violet-300">
+              Open full directory →
+            </Link>
+          )}
         </p>
       )}
     </div>

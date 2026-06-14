@@ -35,6 +35,10 @@ export const ACTION_MATRIX: Record<ActionProductScope, readonly string[]> = {
   [ACTION_PRODUCT_SCOPE.ROAM_DRIVER]: [
     'list_directory',
     'detail',
+    'compliance_queue',
+    'compliance_update',
+    'approve',
+    'force_approve',
     'suspend',
     'unsuspend',
     'deactivate',

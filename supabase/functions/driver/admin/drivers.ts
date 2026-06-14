@@ -14,78 +14,27 @@ import {
   getDriverAdminDb,
   type DriverAdminTables,
 } from "../../_shared/driverAdminDb.ts";
-import { getRiderAdminDb } from "../../_shared/ridesAdminDb.ts";
 import { listDriverRideRequests } from "../../_shared/driverRideQueries.ts";
 import {
   aggregateLedgerLinesForTrips,
   listPlatformLedgerLines,
 } from "../../_shared/platformLedgerQueries.ts";
+import { driverAudit } from "./audit.ts";
+import {
+  canForceApprove,
+  canStrictApprove,
+  computeComplianceBlockers,
+  validateApproveRequest,
+  type ComplianceProfileInput,
+} from "./complianceLogic.ts";
+import {
+  DRIVER_DELETE_ROLES,
+  DRIVER_WRITE_ROLES,
+  requireDelete,
+  requireWrite,
+} from "./permissions.ts";
 
 type DriverAdminDb = Awaited<ReturnType<typeof getDriverAdminDb>>;
-
-// ---------------------------------------------------------------------------
-// Permission Role Sets
-// ---------------------------------------------------------------------------
-
-/** Roles allowed to perform write actions (suspend, unsuspend, sign-out) */
-const DRIVER_WRITE_ROLES = new Set([
-  "driver_admin",
-  "platform_owner",
-  "platform_support",
-  "superadmin",
-]);
-
-/** Roles allowed to delete driver profiles (destructive action) */
-const DRIVER_DELETE_ROLES = new Set([
-  "platform_owner",
-  "superadmin",
-]);
-
-// ---------------------------------------------------------------------------
-// Permission Helpers
-// ---------------------------------------------------------------------------
-
-function requireWrite(admin: ProductAdminUser): Response | null {
-  if (!DRIVER_WRITE_ROLES.has(admin.role)) {
-    return new Response(
-      JSON.stringify({ error: "forbidden", message: "driver_admin or platform role required for write actions" }),
-      { status: 403, headers: { "Content-Type": "application/json" } },
-    );
-  }
-  return null;
-}
-
-function requireDelete(admin: ProductAdminUser): Response | null {
-  if (!DRIVER_DELETE_ROLES.has(admin.role)) {
-    return new Response(
-      JSON.stringify({ error: "forbidden", message: "platform_owner or superadmin required for delete actions" }),
-      { status: 403, headers: { "Content-Type": "application/json" } },
-    );
-  }
-  return null;
-}
-
-// ---------------------------------------------------------------------------
-// Audit Helper
-// ---------------------------------------------------------------------------
-
-async function driverAudit(
-  actorId: string,
-  eventType: string,
-  payload: Record<string, unknown>,
-) {
-  try {
-    const ridesDb = await getRiderAdminDb();
-    await ridesDb.db.from(ridesDb.tables.audit_events).insert({
-      ride_request_id: null,
-      actor_user_id: actorId,
-      event_type: eventType,
-      payload,
-    });
-  } catch (e) {
-    console.error("[driverAudit] Failed to log audit event:", e);
-  }
-}
 
 const ACTIVE_TRIP_STATUSES = [
   "driver_assigned",
@@ -110,6 +59,7 @@ type DirectoryRow = {
   fleet_id: string | null;
   onboarding_complete: boolean;
   background_check_status: string | null;
+  compliance_blockers_count?: number;
   total_trips: number;
   completed_trips: number;
   cancelled_trips: number;
@@ -192,6 +142,33 @@ async function enrichAuth(row: DirectoryRow): Promise<DirectoryRow> {
   };
 }
 
+function profileInputFromRow(p: Record<string, unknown>): ComplianceProfileInput {
+  return {
+    status: (p.status as ComplianceProfileInput["status"]) ?? "pending",
+    mode: (p.mode as string) ?? "independent",
+    onboarding_complete: Boolean(p.onboarding_complete),
+    background_check_status: (p.background_check_status as string | null) ?? null,
+    insurance_expiry: (p.insurance_expiry as string | null) ?? null,
+  };
+}
+
+async function fetchVehicleCountsByProfileId(
+  db: SupabaseClient,
+  profileIds: string[],
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (!profileIds.length) return counts;
+  const { data } = await db
+    .from("driver_vehicles")
+    .select("driver_profile_id")
+    .in("driver_profile_id", profileIds);
+  for (const row of data ?? []) {
+    const pid = row.driver_profile_id as string;
+    counts.set(pid, (counts.get(pid) ?? 0) + 1);
+  }
+  return counts;
+}
+
 async function buildDirectory(
   resolved: DriverAdminDb,
   opts: {
@@ -231,6 +208,9 @@ async function buildDirectory(
     (locationRows ?? []).map((l) => [l.user_id as string, l]),
   );
 
+  const profileIds = (profileRows ?? []).map((p) => p.id as string);
+  const vehicleCounts = await fetchVehicleCountsByProfileId(db, profileIds);
+
   const byId = new Map<string, DirectoryRow>();
 
   for (const p of profileRows ?? []) {
@@ -238,6 +218,8 @@ async function buildDirectory(
     const s = statsByUser.get(uid);
     const loc = locByUser.get(uid);
     const live_status = computeLiveStatus(uid, loc, onTripIds);
+    const hasVehicle = (vehicleCounts.get(p.id as string) ?? 0) > 0;
+    const blockers = computeComplianceBlockers(profileInputFromRow(p), hasVehicle);
 
     byId.set(uid, {
       user_id: uid,
@@ -250,6 +232,7 @@ async function buildDirectory(
       fleet_id: (p.fleet_id as string | null) ?? null,
       onboarding_complete: Boolean(p.onboarding_complete),
       background_check_status: (p.background_check_status as string | null) ?? null,
+      compliance_blockers_count: blockers.length,
       total_trips: Number(s?.total_trips ?? 0),
       completed_trips: Number(s?.completed_trips ?? 0),
       cancelled_trips: Number(s?.cancelled_trips ?? 0),
@@ -291,6 +274,7 @@ async function buildDirectory(
           fleet_id: null,
           onboarding_complete: false,
           background_check_status: null,
+          compliance_blockers_count: 1,
           total_trips: 0,
           completed_trips: 0,
           cancelled_trips: 0,
@@ -459,13 +443,19 @@ export function registerDriverUserAdminRoutes(admin: Hono) {
         .limit(5)
       : { data: [] };
 
+    const hasVehicle = (vehicles ?? []).length > 0;
+    const complianceBlockers = profile
+      ? computeComplianceBlockers(profileInputFromRow(profile), hasVehicle)
+      : ["no_profile" as const];
+    const accountStatus = (profile?.status as DriverAccountStatus) ?? "pending";
+
     return c.json({
       driver: {
         user_id: userId,
         email: authData.user.email,
         phone: (profile?.phone as string | null) ?? authData.user.phone ?? null,
         display_name: (profile?.display_name as string | null) ?? null,
-        status: (profile?.status as DriverAccountStatus) ?? "pending",
+        status: accountStatus,
         live_status,
         mode: (profile?.mode as string) ?? "independent",
         fleet_id: (profile?.fleet_id as string | null) ?? null,
@@ -500,12 +490,92 @@ export function registerDriverUserAdminRoutes(admin: Hono) {
         recent_trips: recentTrips ?? [],
         recent_offers: recentOffers ?? [],
         vehicles: vehicles ?? [],
+        compliance: {
+          blockers: complianceBlockers,
+          can_strict_approve: canStrictApprove(complianceBlockers, accountStatus),
+          can_force_approve: canForceApprove(adminUser.role, complianceBlockers, accountStatus),
+        },
       },
       permissions: {
         can_write: DRIVER_WRITE_ROLES.has(adminUser.role),
         can_delete: DRIVER_DELETE_ROLES.has(adminUser.role),
         can_see_reset_link: isPlatformRole(adminUser.role),
       },
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Lifecycle Actions: Approve (pending → active)
+  // ---------------------------------------------------------------------------
+
+  admin.post("/drivers/:userId/approve", async (c) => {
+    const adminUser = await requireProductAdmin(c, "driver");
+    if (adminUser instanceof Response) return adminUser;
+    const denied = requireWrite(adminUser);
+    if (denied) return denied;
+
+    const userId = c.req.param("userId");
+    const body = await c.req.json().catch(() => ({})) as { force?: boolean; reason?: string };
+
+    const resolved = await driverDbOrResponse(c);
+    if (resolved instanceof Response) return resolved;
+    const { db, tables } = resolved;
+
+    const { data: profile } = await db.from(tables.driver_profiles)
+      .select("id, user_id, mode, status, onboarding_complete, background_check_status, insurance_expiry")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    const { data: vehicles } = profile?.id
+      ? await db.from("driver_vehicles").select("id").eq("driver_profile_id", profile.id as string).limit(1)
+      : { data: [] };
+
+    const hasVehicle = (vehicles ?? []).length > 0;
+    const blockers = profile
+      ? computeComplianceBlockers(profileInputFromRow(profile), hasVehicle)
+      : (["no_profile"] as const);
+    const status = (profile?.status as DriverAccountStatus) ?? "pending";
+
+    if (status === "active") {
+      return c.json({
+        ok: true,
+        status: "active",
+        approved_at: new Date().toISOString(),
+        force: false,
+        blockers_at_approval: blockers,
+        already_active: true,
+      });
+    }
+
+    const validation = validateApproveRequest(body, [...blockers], status, adminUser.role);
+    if (!validation.ok) {
+      return c.json({ error: validation.error, message: validation.message }, validation.httpStatus);
+    }
+
+    const now = new Date().toISOString();
+    const { error: updateErr } = await db.from(tables.driver_profiles).update({
+      status: "active",
+      updated_at: now,
+    }).eq("user_id", userId);
+
+    if (updateErr) {
+      return c.json({ error: "update_failed", message: updateErr.message }, 500);
+    }
+
+    await driverAudit(adminUser.id, "admin_driver_approved", {
+      driver_user_id: userId,
+      force: validation.force,
+      reason: validation.reason ?? null,
+      blockers_at_approval: blockers,
+      admin_email: adminUser.email,
+    });
+
+    return c.json({
+      ok: true,
+      status: "active",
+      approved_at: now,
+      force: validation.force,
+      blockers_at_approval: blockers,
     });
   });
 

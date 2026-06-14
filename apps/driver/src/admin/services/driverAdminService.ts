@@ -7,6 +7,8 @@ import type {
   DriverDetailDto,
   DriverDirectoryRow,
   DriverAdminPermissions,
+  DriverComplianceRow,
+  DriverApproveResult,
 } from '@roam/types/driver';
 import type { RideRequestRow } from '@roam/types/rides';
 
@@ -32,17 +34,7 @@ export interface DriverOfferRow {
   expires_at: string;
 }
 
-export interface DriverComplianceRow {
-  driver_id: string;
-  driver_name?: string;
-  driver_email?: string;
-  license_verified: boolean;
-  insurance_verified: boolean;
-  vehicle_verified: boolean;
-  background_check: string;
-  onboarding_complete?: boolean;
-  created_at: string;
-}
+export type { DriverComplianceRow, DriverApproveResult };
 
 export interface DriverStats {
   total_drivers: number;
@@ -259,11 +251,13 @@ export async function cancelOffer(
 
 export async function listComplianceQueue(
   accessToken: string,
-  opts: { status?: string; limit?: number } = {},
-): Promise<{ drivers: DriverComplianceRow[]; total: number }> {
+  opts: { status?: string; limit?: number; offset?: number } = {},
+): Promise<{ drivers: DriverComplianceRow[]; total: number; limit?: number; offset?: number }> {
   const sp = new URLSearchParams();
   if (opts.status) sp.set('status', opts.status);
   if (opts.limit != null) sp.set('limit', String(opts.limit));
+  if (opts.offset != null) sp.set('offset', String(opts.offset));
+  sp.set('queue', 'true');
 
   const res = await fetch(`${DRIVER_BASE}/admin/compliance?${sp.toString()}`, {
     headers: headers(accessToken),
@@ -278,11 +272,25 @@ export async function updateComplianceStatus(
   updates: {
     background_check?: 'pending' | 'approved' | 'rejected';
   },
-): Promise<{ ok: boolean }> {
+): Promise<{ ok: boolean; driver?: DriverComplianceRow }> {
   const res = await fetch(`${DRIVER_BASE}/admin/compliance/${driverId}`, {
     method: 'PATCH',
     headers: headers(accessToken, 'application/json'),
     body: JSON.stringify(updates),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return parseJson(res);
+}
+
+export async function approveDriver(
+  accessToken: string,
+  userId: string,
+  opts: { force?: boolean; reason?: string } = {},
+): Promise<DriverApproveResult> {
+  const res = await fetch(`${DRIVER_BASE}/admin/drivers/${encodeURIComponent(userId)}/approve`, {
+    method: 'POST',
+    headers: headers(accessToken, 'application/json'),
+    body: JSON.stringify(opts),
   });
   if (!res.ok) throw new Error(await parseError(res));
   return parseJson(res);

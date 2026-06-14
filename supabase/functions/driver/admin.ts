@@ -7,6 +7,8 @@ import { requireProductAdmin } from "../_shared/productAdmin.ts";
 import { getDriverAdminDb } from "../_shared/driverAdminDb.ts";
 import { registerDriverUserAdminRoutes } from "./admin/drivers.ts";
 import { registerDriverPlayStoreLaunchRoutes } from "./admin/playStoreLaunch.ts";
+import { registerComplianceRoutes } from "./admin/complianceRoutes.ts";
+import { isInComplianceQueue, computeComplianceBlockers } from "./admin/complianceLogic.ts";
 
 interface Deps {
   svc: () => SupabaseClient;
@@ -33,6 +35,7 @@ export function registerDriverAdminRoutes(app: Hono, _deps: Deps) {
 
   registerDriverUserAdminRoutes(admin);
   registerDriverPlayStoreLaunchRoutes(admin);
+  registerComplianceRoutes(admin, _deps);
 
   admin.get("/stats", async (c) => {
     const resolved = await getDriverAdminDb();
@@ -41,14 +44,43 @@ export function registerDriverAdminRoutes(app: Hono, _deps: Deps) {
     const { count: totalDrivers } = await db.from(tables.driver_profiles)
       .select("*", { count: "exact", head: true });
 
+    const { data: allProfiles } = await db.from(tables.driver_profiles)
+      .select("mode, onboarding_complete, background_check_status, insurance_expiry, status, id");
+
+    const profileIds = (allProfiles ?? []).map((p) => p.id as string);
+    let vehicleCounts = new Map<string, number>();
+    if (profileIds.length) {
+      const { data: vehicleRows } = await db
+        .from("driver_vehicles")
+        .select("driver_profile_id")
+        .in("driver_profile_id", profileIds);
+      for (const v of vehicleRows ?? []) {
+        const pid = v.driver_profile_id as string;
+        vehicleCounts.set(pid, (vehicleCounts.get(pid) ?? 0) + 1);
+      }
+    }
+
+    let pendingCompliance = 0;
+    for (const p of allProfiles ?? []) {
+      const hasVehicle = (vehicleCounts.get(p.id as string) ?? 0) > 0;
+      const blockers = computeComplianceBlockers(
+        {
+          status: (p.status as "active" | "pending" | "suspended" | "deactivated") ?? "pending",
+          mode: (p.mode as string) ?? "independent",
+          onboarding_complete: Boolean(p.onboarding_complete),
+          background_check_status: (p.background_check_status as string | null) ?? null,
+          insurance_expiry: (p.insurance_expiry as string | null) ?? null,
+        },
+        hasVehicle,
+      );
+      const status = (p.status as "active" | "pending" | "suspended" | "deactivated") ?? "pending";
+      if (isInComplianceQueue(blockers, status)) pendingCompliance += 1;
+    }
+
     const { count: activeDrivers } = await db.from(tables.driver_profiles)
       .select("*", { count: "exact", head: true })
       .eq("status", "active")
       .eq("onboarding_complete", true);
-
-    const { count: pendingCompliance } = await db.from(tables.driver_profiles)
-      .select("*", { count: "exact", head: true })
-      .or("onboarding_complete.eq.false,background_check_status.neq.approved");
 
     const { data: locations } = await db.from(tables.driver_locations)
       .select("user_id, available_for_rides, updated_at");
@@ -163,79 +195,6 @@ export function registerDriverAdminRoutes(app: Hono, _deps: Deps) {
       action: "offer_cancelled",
       offer_id: offerId,
       admin: adminUser.email,
-    }));
-
-    return c.json({ ok: true });
-  });
-
-  admin.get("/compliance", async (c) => {
-    const status = c.req.query("status");
-    const limit = Math.min(parseInt(c.req.query("limit") ?? "100"), 500);
-    const resolved = await getDriverAdminDb();
-    const { db } = resolved;
-
-    let query = db.from("driver_profiles")
-      .select(
-        "user_id, display_name, phone, onboarding_complete, background_check_status, insurance_expiry, status, created_at",
-      )
-      .order("created_at", { ascending: false })
-      .limit(limit);
-
-    if (status === "pending") {
-      query = query.eq("onboarding_complete", false);
-    } else if (status === "complete") {
-      query = query.eq("onboarding_complete", true);
-    }
-
-    const { data, error } = await query;
-    if (error) return c.json({ drivers: [], total: 0, error: error.message });
-
-    const auth = _deps.svc();
-    const drivers = await Promise.all((data ?? []).map(async (d) => {
-      const { data: u } = await auth.auth.admin.getUserById(d.user_id as string);
-      return {
-        driver_id: d.user_id,
-        driver_name: (d.display_name as string) || "Unknown",
-        driver_email: u?.user?.email ?? "",
-        license_verified: false,
-        insurance_verified: Boolean(d.insurance_expiry),
-        vehicle_verified: false,
-        background_check: (d.background_check_status as string) ?? "not_started",
-        onboarding_complete: Boolean(d.onboarding_complete),
-        created_at: d.created_at,
-      };
-    }));
-
-    return c.json({ drivers, total: drivers.length });
-  });
-
-  admin.patch("/compliance/:driverId", async (c) => {
-    const driverId = c.req.param("driverId");
-    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-    const resolved = await getDriverAdminDb();
-    const { db } = resolved;
-    const adminUser = c.get("adminUser") as { id: string; email: string };
-
-    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-    if (typeof body.background_check === "string") {
-      patch.background_check_status = body.background_check;
-      if (body.background_check === "approved") {
-        patch.background_check_date = new Date().toISOString().slice(0, 10);
-      }
-    }
-
-    if (Object.keys(patch).length > 1) {
-      const { error } = await db.from("driver_profiles")
-        .update(patch)
-        .eq("user_id", driverId);
-      if (error) return c.json({ ok: false, error: error.message }, 400);
-    }
-
-    console.log(JSON.stringify({
-      action: "compliance_updated",
-      driver_id: driverId,
-      admin: adminUser.email,
-      updates: body,
     }));
 
     return c.json({ ok: true });

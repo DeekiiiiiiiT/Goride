@@ -1,0 +1,165 @@
+/**
+ * Pure compliance logic for driver admin — single source of truth for blockers and approve rules.
+ */
+
+export type DriverComplianceBlocker =
+  | "no_profile"
+  | "onboarding_incomplete"
+  | "background_check_not_approved"
+  | "insurance_missing"
+  | "vehicle_missing"
+  | "account_suspended"
+  | "account_deactivated";
+
+export type DriverAccountStatus = "active" | "pending" | "suspended" | "deactivated";
+
+export interface ComplianceProfileInput {
+  status: DriverAccountStatus;
+  mode: string;
+  onboarding_complete: boolean;
+  background_check_status: string | null;
+  insurance_expiry: string | null;
+}
+
+export const FORCE_APPROVE_ROLES = new Set(["platform_owner", "superadmin"]);
+export const MIN_FORCE_APPROVE_REASON_LENGTH = 10;
+
+const LIFECYCLE_BLOCKERS = new Set<DriverComplianceBlocker>([
+  "account_suspended",
+  "account_deactivated",
+]);
+
+export function computeComplianceBlockers(
+  profile: ComplianceProfileInput | null,
+  hasVehicle: boolean,
+): DriverComplianceBlocker[] {
+  if (!profile) return ["no_profile"];
+
+  const blockers: DriverComplianceBlocker[] = [];
+
+  if (profile.status === "suspended") blockers.push("account_suspended");
+  if (profile.status === "deactivated") blockers.push("account_deactivated");
+  if (!profile.onboarding_complete) blockers.push("onboarding_incomplete");
+
+  const bg = profile.background_check_status?.trim().toLowerCase();
+  if (bg !== "approved") blockers.push("background_check_not_approved");
+
+  if (profile.mode !== "fleet") {
+    if (!profile.insurance_expiry) blockers.push("insurance_missing");
+    if (!hasVehicle) blockers.push("vehicle_missing");
+  }
+
+  return blockers;
+}
+
+export function getStrictApproveBlockers(
+  blockers: DriverComplianceBlocker[],
+): DriverComplianceBlocker[] {
+  return blockers.filter((b) => !LIFECYCLE_BLOCKERS.has(b));
+}
+
+export function canStrictApprove(
+  blockers: DriverComplianceBlocker[],
+  status: DriverAccountStatus,
+): boolean {
+  if (status !== "pending") return false;
+  if (blockers.includes("no_profile")) return false;
+  if (blockers.some((b) => LIFECYCLE_BLOCKERS.has(b))) return false;
+  return getStrictApproveBlockers(blockers).length === 0;
+}
+
+export function canForceApprove(
+  role: string,
+  blockers: DriverComplianceBlocker[],
+  status: DriverAccountStatus,
+): boolean {
+  if (!FORCE_APPROVE_ROLES.has(role)) return false;
+  if (status !== "pending") return false;
+  if (blockers.includes("no_profile")) return false;
+  if (blockers.some((b) => LIFECYCLE_BLOCKERS.has(b))) return false;
+  return true;
+}
+
+export function isInComplianceQueue(
+  blockers: DriverComplianceBlocker[],
+  status: DriverAccountStatus,
+): boolean {
+  if (status === "pending") return true;
+  return getStrictApproveBlockers(blockers).length > 0;
+}
+
+export type ApproveValidationResult =
+  | { ok: true; force: boolean; reason?: string }
+  | { ok: false; error: string; message: string; httpStatus: number };
+
+export function validateApproveRequest(
+  input: { force?: boolean; reason?: string },
+  blockers: DriverComplianceBlocker[],
+  status: DriverAccountStatus,
+  adminRole: string,
+): ApproveValidationResult {
+  if (blockers.includes("no_profile")) {
+    return {
+      ok: false,
+      error: "no_profile",
+      message: "Driver profile not found. Driver must complete signup first.",
+      httpStatus: 404,
+    };
+  }
+
+  if (
+    status === "suspended" ||
+    status === "deactivated" ||
+    blockers.includes("account_suspended") ||
+    blockers.includes("account_deactivated")
+  ) {
+    return {
+      ok: false,
+      error: "blocked_lifecycle_state",
+      message: "Cannot approve a suspended or deactivated account.",
+      httpStatus: 409,
+    };
+  }
+
+  if (status !== "pending") {
+    return {
+      ok: false,
+      error: "not_pending",
+      message: "Only pending accounts can be approved.",
+      httpStatus: 409,
+    };
+  }
+
+  const force = Boolean(input.force);
+  if (force) {
+    if (!canForceApprove(adminRole, blockers, status)) {
+      return {
+        ok: false,
+        error: "forbidden",
+        message: "Force approve requires platform_owner or superadmin role.",
+        httpStatus: 403,
+      };
+    }
+    const reason = (input.reason ?? "").trim();
+    if (reason.length < MIN_FORCE_APPROVE_REASON_LENGTH) {
+      return {
+        ok: false,
+        error: "force_reason_required",
+        message: `Force approve reason must be at least ${MIN_FORCE_APPROVE_REASON_LENGTH} characters.`,
+        httpStatus: 400,
+      };
+    }
+    return { ok: true, force: true, reason };
+  }
+
+  if (!canStrictApprove(blockers, status)) {
+    return {
+      ok: false,
+      error: "compliance_incomplete",
+      message: "Compliance requirements are not met. Resolve blockers or use force approve.",
+      httpStatus: 409,
+    };
+  }
+
+  return { ok: true, force: false };
+}

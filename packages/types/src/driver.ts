@@ -83,6 +83,46 @@ export type DriverAccountStatus = 'active' | 'pending' | 'suspended' | 'deactiva
 
 export type DriverLiveStatus = 'online' | 'offline' | 'on_trip';
 
+export type DriverComplianceBlocker =
+  | 'no_profile'
+  | 'onboarding_incomplete'
+  | 'background_check_not_approved'
+  | 'insurance_missing'
+  | 'vehicle_missing'
+  | 'account_suspended'
+  | 'account_deactivated';
+
+export interface DriverComplianceSummary {
+  blockers: DriverComplianceBlocker[];
+  can_strict_approve: boolean;
+  can_force_approve: boolean;
+}
+
+export interface DriverComplianceRow {
+  driver_id: string;
+  driver_name: string | null;
+  driver_email: string | null;
+  account_status: DriverAccountStatus;
+  mode: string;
+  onboarding_complete: boolean;
+  background_check_status: string | null;
+  insurance_expiry: string | null;
+  has_vehicle: boolean;
+  blockers: DriverComplianceBlocker[];
+  can_strict_approve: boolean;
+  can_force_approve: boolean;
+  created_at: string | null;
+}
+
+export interface DriverApproveResult {
+  ok: boolean;
+  status: DriverAccountStatus;
+  approved_at: string;
+  force: boolean;
+  blockers_at_approval: DriverComplianceBlocker[];
+  already_active?: boolean;
+}
+
 export interface DriverDirectoryRow {
   user_id: string;
   display_name: string | null;
@@ -94,6 +134,7 @@ export interface DriverDirectoryRow {
   fleet_id: string | null;
   onboarding_complete: boolean;
   background_check_status: string | null;
+  compliance_blockers_count?: number;
   total_trips: number;
   completed_trips: number;
   cancelled_trips: number;
@@ -171,6 +212,7 @@ export interface DriverDetailDto {
     is_primary: boolean;
     status: string;
   }>;
+  compliance?: DriverComplianceSummary;
 }
 
 export interface DriverVehicle {
