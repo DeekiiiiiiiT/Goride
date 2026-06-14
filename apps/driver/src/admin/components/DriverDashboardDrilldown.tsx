@@ -1,12 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { jwtPrimaryRole } from '@roam/auth-client';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import type { DriverComplianceRow, DriverDirectoryRow, DriverLiveStatus } from '@roam/types/driver';
 import { listComplianceQueue, listDrivers } from '../services/driverAdminService';
-import { ComplianceQueueTable } from './ComplianceQueueTable';
-import { canWriteDriverAdmin } from '../utils/driverAdminRoles';
+import { ComplianceQueueTableCompact } from './ComplianceQueueTable';
 
 export type DriverDashboardTab = 'total' | 'online' | 'on_trip' | 'active' | 'compliance';
 
@@ -62,16 +60,14 @@ function formatWhen(iso: string | null): string {
 
 type Props = {
   accessToken: string;
-  adminRole: string | null;
   activeTab: DriverDashboardTab;
   onTabChange: (tab: DriverDashboardTab) => void;
 };
 
-export function DriverDashboardDrilldown({ accessToken, adminRole, activeTab, onTabChange }: Props) {
+export function DriverDashboardDrilldown({ accessToken, activeTab, onTabChange }: Props) {
   const [drivers, setDrivers] = useState<DriverDirectoryRow[]>([]);
   const [complianceRows, setComplianceRows] = useState<DriverComplianceRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const canWrite = canWriteDriverAdmin(adminRole);
 
   const load = useCallback(async () => {
     if (!accessToken) return;
@@ -157,21 +153,7 @@ export function DriverDashboardDrilldown({ accessToken, adminRole, activeTab, on
       </div>
 
       {activeTab === 'compliance' ? (
-        <div className="p-2">
-          <ComplianceQueueTable
-            rows={complianceRows}
-            loading={loading}
-            canWrite={canWrite}
-            adminRole={adminRole}
-            compact
-            onApprove={() => {
-              toast.info('Open Compliance page or driver detail to approve.');
-            }}
-            onUpdateBackgroundCheck={() => {
-              toast.info('Open Compliance page to update background check.');
-            }}
-          />
-        </div>
+        <ComplianceQueueTableCompact rows={complianceRows} loading={loading} />
       ) : loading ? (
         <div className="flex items-center justify-center py-14 text-slate-400">
           <Loader2 className="w-5 h-5 animate-spin mr-2" />
@@ -229,7 +211,7 @@ export function DriverDashboardDrilldown({ accessToken, adminRole, activeTab, on
           {' '}
           {activeTab === 'compliance' ? (
             <Link to="/compliance" className="text-violet-400 hover:text-violet-300">
-              Open full compliance queue →
+              Open compliance workspace →
             </Link>
           ) : (
             <Link to="/users" className="text-violet-400 hover:text-violet-300">

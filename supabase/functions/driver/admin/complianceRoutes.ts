@@ -55,7 +55,7 @@ function buildComplianceRow(
   profile: Record<string, unknown> | null,
   hasVehicle: boolean,
   email: string,
-  adminRole: string,
+  adminRoles: string[],
 ): Record<string, unknown> {
   const input = profile ? profileInput(profile) : null;
   const blockers = computeComplianceBlockers(input, hasVehicle);
@@ -72,7 +72,7 @@ function buildComplianceRow(
     has_vehicle: hasVehicle,
     blockers,
     can_strict_approve: canStrictApprove(blockers, status),
-    can_force_approve: canForceApprove(adminRole, blockers, status),
+    can_force_approve: canForceApprove(adminRoles, blockers, status),
     created_at: profile ? ((profile.created_at as string | null) ?? null) : null,
   };
 }
@@ -105,16 +105,18 @@ export function registerComplianceRoutes(admin: Hono, deps: Deps) {
     const offset = Math.max(parseInt(c.req.query("offset") ?? "0"), 0);
 
     const resolved = await getDriverAdminDb();
-    const { db } = resolved;
+    const { db, tables } = resolved;
 
     const { data: profiles, error } = await db
-      .from("driver_profiles")
+      .from(tables.driver_profiles)
       .select(
         "id, user_id, display_name, phone, mode, onboarding_complete, background_check_status, insurance_expiry, status, created_at",
       )
       .order("created_at", { ascending: false });
 
-    if (error) return c.json({ drivers: [], total: 0, error: error.message });
+    if (error) {
+      return c.json({ drivers: [], total: 0, error: error.message }, 500);
+    }
 
     const profileIds = (profiles ?? []).map((p) => p.id as string);
     const vehicleCounts = await fetchVehicleCountsByProfileId(db, profileIds);
@@ -143,7 +145,7 @@ export function registerComplianceRoutes(admin: Hono, deps: Deps) {
       }
 
       rows.push({
-        ...buildComplianceRow(p, hasVehicle, email, adminUser.role),
+        ...buildComplianceRow(p, hasVehicle, email, adminUser.roles),
         driver_id: uid,
       });
     }
@@ -221,6 +223,15 @@ export function registerComplianceRoutes(admin: Hono, deps: Deps) {
       if (body.background_check === "approved") {
         patch.background_check_date = new Date().toISOString().slice(0, 10);
       }
+      if (body.background_check === "pending" || body.background_check === "rejected") {
+        patch.background_check_date = null;
+      }
+    }
+
+    if (typeof body.insurance_expiry === "string" && body.insurance_expiry.trim()) {
+      patch.insurance_expiry = body.insurance_expiry.trim().slice(0, 10);
+    } else if (body.insurance_expiry === null) {
+      patch.insurance_expiry = null;
     }
 
     if (Object.keys(patch).length <= 1) {
@@ -257,7 +268,7 @@ export function registerComplianceRoutes(admin: Hono, deps: Deps) {
     const hasVehicle = (vehicles ?? []).length > 0;
     return c.json({
       ok: true,
-      driver: buildComplianceRow(profile, hasVehicle, u?.user?.email ?? "", adminUser.role),
+      driver: buildComplianceRow(profile, hasVehicle, u?.user?.email ?? "", adminUser.roles),
     });
   });
 }

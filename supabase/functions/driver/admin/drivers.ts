@@ -30,6 +30,7 @@ import {
 import {
   DRIVER_DELETE_ROLES,
   DRIVER_WRITE_ROLES,
+  hasAnyDriverRole,
   requireDelete,
   requireWrite,
 } from "./permissions.ts";
@@ -493,12 +494,12 @@ export function registerDriverUserAdminRoutes(admin: Hono) {
         compliance: {
           blockers: complianceBlockers,
           can_strict_approve: canStrictApprove(complianceBlockers, accountStatus),
-          can_force_approve: canForceApprove(adminUser.role, complianceBlockers, accountStatus),
+          can_force_approve: canForceApprove(adminUser.roles, complianceBlockers, accountStatus),
         },
       },
       permissions: {
-        can_write: DRIVER_WRITE_ROLES.has(adminUser.role),
-        can_delete: DRIVER_DELETE_ROLES.has(adminUser.role),
+        can_write: hasAnyDriverRole(adminUser.roles, DRIVER_WRITE_ROLES),
+        can_delete: hasAnyDriverRole(adminUser.roles, DRIVER_DELETE_ROLES),
         can_see_reset_link: isPlatformRole(adminUser.role),
       },
     });
@@ -547,7 +548,7 @@ export function registerDriverUserAdminRoutes(admin: Hono) {
       });
     }
 
-    const validation = validateApproveRequest(body, [...blockers], status, adminUser.role);
+    const validation = validateApproveRequest(body, [...blockers], status, adminUser.roles);
     if (!validation.ok) {
       return c.json({ error: validation.error, message: validation.message }, validation.httpStatus);
     }

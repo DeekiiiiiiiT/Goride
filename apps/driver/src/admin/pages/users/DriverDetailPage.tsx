@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
-import { jwtPrimaryRole } from '@roam/auth-client';
-import { ArrowLeft, Copy, Loader2, MoreHorizontal, LogOut, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Copy, Loader2, MoreHorizontal, LogOut, Trash2, X, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import type { DriverDetailDto, DriverLiveStatus, DriverAdminPermissions } from '@roam/types/driver';
 import type { RideRequestRow } from '@roam/types/rides';
@@ -17,17 +16,13 @@ import {
   signOutDriver,
   resetDriverPassword,
   deleteDriver,
-  approveDriver,
-  updateComplianceStatus,
 } from '../../services/driverAdminService';
 import { useAdminConfirm } from '../../contexts/AdminConfirmContext';
 import { ComplianceChecklist, BlockerChips } from '../../components/ComplianceChecklist';
-import { canForceApproveDriver } from '../../utils/driverAdminRoles';
 import { formatBlockersList } from '../../utils/complianceLabels';
-import { MIN_FORCE_APPROVE_REASON_LENGTH } from '../../utils/complianceConstants';
 
 type Tab = 'overview' | 'trips' | 'compliance';
-type ModalType = 'suspend' | 'deactivate' | 'delete' | 'force_approve' | null;
+type ModalType = 'suspend' | 'deactivate' | 'delete' | null;
 
 interface OutletContext {
   session: Session;
@@ -63,8 +58,6 @@ export function DriverDetailPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = session.access_token;
-  const adminRole = jwtPrimaryRole(session.user);
-  const canForce = canForceApproveDriver(adminRole);
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -238,52 +231,6 @@ export function DriverDetailPage() {
     }
   };
 
-  const doApprove = async (force: boolean, forceReasonText?: string) => {
-    if (!token || !userId) return;
-    setActionLoading(true);
-    try {
-      await approveDriver(token, userId, { force, reason: forceReasonText });
-      toast.success(force ? 'Driver force-approved' : 'Driver approved');
-      setModal(null);
-      setReason('');
-      void load();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Approve failed');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleApproveClick = async (force: boolean) => {
-    if (!driver) return;
-    if (force) {
-      setModal('force_approve');
-      setReason('');
-      return;
-    }
-    const ok = await confirm({
-      title: 'Approve driver',
-      description: 'Activate this driver? They will be able to go online.',
-      confirmLabel: 'Approve',
-    });
-    if (!ok) return;
-    await doApprove(false);
-  };
-
-  const doBackgroundCheck = async (status: 'approved' | 'rejected' | 'pending') => {
-    if (!token || !userId) return;
-    setActionLoading(true);
-    try {
-      await updateComplianceStatus(token, userId, { background_check: status });
-      toast.success(`Background check set to ${status}`);
-      void load();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Update failed');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24 text-slate-400">
@@ -338,6 +285,13 @@ export function DriverDetailPage() {
               Missing: {formatBlockersList(driver.compliance.blockers)}
             </span>
           )}
+          <Link
+            to={`/compliance?review=${driver.user_id}`}
+            className="inline-flex items-center gap-1.5 mt-2 text-xs text-violet-300 hover:text-violet-200"
+          >
+            <ExternalLink className="w-3 h-3" />
+            Review in Compliance Manager
+          </Link>
         </div>
       )}
       {driver.status !== 'active' && driver.status !== 'pending' && (
@@ -390,42 +344,6 @@ export function DriverDetailPage() {
             </button>
             {actionsOpen && (
               <div className="absolute right-0 mt-2 w-56 rounded-lg border border-slate-700 bg-slate-900 shadow-xl z-20 py-1 text-sm">
-                {driver.status === 'pending' && driver.compliance && (
-                  <>
-                    {driver.compliance.can_strict_approve && (
-                      <button
-                        type="button"
-                        className="w-full text-left px-3 py-2 hover:bg-slate-800 text-violet-300"
-                        onClick={() => {
-                          setActionsOpen(false);
-                          void handleApproveClick(false);
-                        }}
-                      >
-                        Approve driver
-                      </button>
-                    )}
-                    {canForce && driver.compliance.can_force_approve && !driver.compliance.can_strict_approve && (
-                      <button
-                        type="button"
-                        className="w-full text-left px-3 py-2 hover:bg-slate-800 text-amber-300"
-                        onClick={() => {
-                          setActionsOpen(false);
-                          void handleApproveClick(true);
-                        }}
-                      >
-                        Force approve
-                      </button>
-                    )}
-                    <Link
-                      to="/compliance"
-                      className="block w-full text-left px-3 py-2 hover:bg-slate-800"
-                      onClick={() => setActionsOpen(false)}
-                    >
-                      Open compliance queue
-                    </Link>
-                    <hr className="my-1 border-slate-800" />
-                  </>
-                )}
                 {/* Suspend / Unsuspend */}
                 {driver.status === 'active' && (
                   <button
@@ -601,44 +519,6 @@ export function DriverDetailPage() {
         </Modal>
       )}
 
-      {modal === 'force_approve' && (
-        <Modal
-          title="Force approve driver"
-          onClose={() => { setModal(null); setReason(''); }}
-        >
-          <p className="text-sm text-slate-400 mb-4">
-            This driver still has compliance blockers. Document why you are overriding requirements.
-          </p>
-          <label className="block text-xs text-slate-500 mb-1">
-            Reason (required, min {MIN_FORCE_APPROVE_REASON_LENGTH} characters)
-          </label>
-          <textarea
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Manual review completed because…"
-            rows={3}
-            className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-sm text-white resize-none"
-          />
-          <div className="flex justify-end gap-2 mt-4">
-            <button
-              type="button"
-              onClick={() => { setModal(null); setReason(''); }}
-              className="px-3 py-2 rounded-lg border border-slate-700 text-sm hover:bg-slate-800"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => void doApprove(true, reason.trim())}
-              disabled={reason.trim().length < MIN_FORCE_APPROVE_REASON_LENGTH || actionLoading}
-              className="px-3 py-2 rounded-lg bg-amber-600 text-white text-sm hover:bg-amber-500 disabled:opacity-50"
-            >
-              {actionLoading ? 'Approving...' : 'Force approve'}
-            </button>
-          </div>
-        </Modal>
-      )}
-
       {modal === 'delete' && (
         <Modal
           title="Remove from Roam Driver"
@@ -776,36 +656,16 @@ export function DriverDetailPage() {
             <Row label="Insurance expiry" value={driver.insurance_expiry ?? '—'} />
             <Row label="Vehicles" value={String(driver.vehicles.length)} />
           </div>
-          {permissions?.can_write && driver.status === 'pending' && driver.compliance && (
-            <div className="flex flex-wrap gap-2 pt-2">
-              <button
-                type="button"
-                disabled={actionLoading || !driver.compliance.can_strict_approve}
-                onClick={() => void handleApproveClick(false)}
-                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-40"
-              >
-                Approve driver
-              </button>
-              {canForce && driver.compliance.can_force_approve && (
-                <button
-                  type="button"
-                  disabled={actionLoading}
-                  onClick={() => void handleApproveClick(true)}
-                  className="px-3 py-1.5 rounded-lg text-sm font-medium border border-amber-500/40 text-amber-200 hover:bg-amber-500/10 disabled:opacity-40"
-                >
-                  Force approve
-                </button>
-              )}
-              <button
-                type="button"
-                disabled={actionLoading}
-                onClick={() => void doBackgroundCheck('approved')}
-                className="px-3 py-1.5 rounded-lg text-sm border border-slate-700 text-slate-300 hover:bg-slate-800 disabled:opacity-40"
-              >
-                Approve background check
-              </button>
-            </div>
-          )}
+          <p className="text-xs text-slate-500 pt-2">
+            Compliance actions (approve, decline, verify documents) are handled in the Compliance workspace.
+          </p>
+          <Link
+            to={`/compliance?review=${driver.user_id}`}
+            className="inline-flex items-center gap-1.5 text-sm text-violet-400 hover:text-violet-300 pt-1"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            Open in Compliance Manager
+          </Link>
           {driver.mode === 'fleet' && (
             <p className="text-xs text-slate-500">
               Fleet drivers may not receive Roam passenger dispatch when independent-only matching is enabled.

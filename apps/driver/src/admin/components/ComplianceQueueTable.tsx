@@ -1,19 +1,13 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Loader2, MoreHorizontal } from 'lucide-react';
+import { Loader2, ChevronRight } from 'lucide-react';
 import type { DriverComplianceRow } from '@roam/types/driver';
 import { BlockerChips } from './ComplianceChecklist';
-import { canForceApproveDriver } from '../utils/driverAdminRoles';
 
 type Props = {
   rows: DriverComplianceRow[];
   loading: boolean;
-  canWrite: boolean;
-  adminRole: string | null;
-  compact?: boolean;
-  actionLoadingId?: string | null;
-  onApprove: (row: DriverComplianceRow, force: boolean, reason?: string) => void;
-  onUpdateBackgroundCheck: (row: DriverComplianceRow, status: 'approved' | 'rejected' | 'pending') => void;
+  selectedId: string | null;
+  onSelect: (row: DriverComplianceRow) => void;
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -33,21 +27,14 @@ function StatusBadge({ status }: { status: string }) {
 export function ComplianceQueueTable({
   rows,
   loading,
-  canWrite,
-  adminRole,
-  compact,
-  actionLoadingId,
-  onApprove,
-  onUpdateBackgroundCheck,
+  selectedId,
+  onSelect,
 }: Props) {
-  const [menuId, setMenuId] = useState<string | null>(null);
-  const canForce = canForceApproveDriver(adminRole);
-
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16 text-slate-400">
         <Loader2 className="w-6 h-6 animate-spin mr-2" />
-        Loading compliance queue…
+        Loading queue…
       </div>
     );
   }
@@ -62,123 +49,85 @@ export function ComplianceQueueTable({
 
   return (
     <div className="rounded-xl border border-slate-800 overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm text-left">
-          <thead className="bg-slate-900/80 text-slate-400 text-xs uppercase tracking-wide">
-            <tr>
-              <th className="px-4 py-3 font-medium">Driver</th>
-              <th className="px-4 py-3 font-medium">Account</th>
-              {!compact && <th className="px-4 py-3 font-medium">Mode</th>}
-              <th className="px-4 py-3 font-medium">Blockers</th>
-              {!compact && <th className="px-4 py-3 font-medium">Background check</th>}
-              {canWrite && <th className="px-4 py-3 font-medium text-right">Actions</th>}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-800">
-            {rows.map((row) => {
-              const isLoading = actionLoadingId === row.driver_id;
-              const showApprove =
-                canWrite &&
-                row.account_status === 'pending' &&
-                (row.can_strict_approve || (canForce && row.can_force_approve));
-
-              return (
-                <tr key={row.driver_id} className="hover:bg-slate-900/50">
-                  <td className="px-4 py-3">
-                    <Link
-                      to={`/users/${row.driver_id}?tab=compliance`}
-                      className="font-medium text-white hover:text-violet-300"
-                    >
-                      {row.driver_name || row.driver_email || 'Unknown'}
-                    </Link>
-                    {row.driver_email && row.driver_name && (
-                      <p className="text-xs text-slate-500 mt-0.5">{row.driver_email}</p>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={row.account_status} />
-                  </td>
-                  {!compact && (
-                    <td className="px-4 py-3 text-slate-400 capitalize">{row.mode}</td>
-                  )}
-                  <td className="px-4 py-3 max-w-xs">
-                    <BlockerChips blockers={row.blockers} />
-                  </td>
-                  {!compact && (
-                    <td className="px-4 py-3 text-slate-400 capitalize">
-                      {row.background_check_status ?? 'not started'}
-                    </td>
-                  )}
-                  {canWrite && (
-                    <td className="px-4 py-3 text-right">
-                      <div className="relative inline-flex items-center gap-2 justify-end">
-                        {showApprove && (
-                          <button
-                            type="button"
-                            disabled={isLoading}
-                            onClick={() => onApprove(row, false)}
-                            className="px-2.5 py-1 rounded-lg text-xs font-medium bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-50"
-                          >
-                            {isLoading ? '…' : 'Approve'}
-                          </button>
-                        )}
-                        {canWrite && row.account_status === 'pending' && canForce && !row.can_strict_approve && (
-                          <button
-                            type="button"
-                            disabled={isLoading}
-                            onClick={() => onApprove(row, true)}
-                            className="px-2.5 py-1 rounded-lg text-xs font-medium border border-amber-500/40 text-amber-200 hover:bg-amber-500/10 disabled:opacity-50"
-                          >
-                            Force
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => setMenuId(menuId === row.driver_id ? null : row.driver_id)}
-                          className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400"
-                        >
-                          <MoreHorizontal className="w-4 h-4" />
-                        </button>
-                        {menuId === row.driver_id && (
-                          <div className="absolute right-0 top-full mt-1 z-20 w-44 rounded-lg border border-slate-700 bg-slate-900 shadow-xl py-1 text-left">
-                            <button
-                              type="button"
-                              className="w-full text-left px-3 py-2 text-xs hover:bg-slate-800"
-                              onClick={() => {
-                                onUpdateBackgroundCheck(row, 'approved');
-                                setMenuId(null);
-                              }}
-                            >
-                              Approve background check
-                            </button>
-                            <button
-                              type="button"
-                              className="w-full text-left px-3 py-2 text-xs hover:bg-slate-800"
-                              onClick={() => {
-                                onUpdateBackgroundCheck(row, 'rejected');
-                                setMenuId(null);
-                              }}
-                            >
-                              Reject background check
-                            </button>
-                            <Link
-                              to={`/users/${row.driver_id}?tab=compliance`}
-                              className="block px-3 py-2 text-xs hover:bg-slate-800 text-violet-300"
-                              onClick={() => setMenuId(null)}
-                            >
-                              View details
-                            </Link>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <div className="px-4 py-3 border-b border-slate-800 bg-slate-900/50">
+        <p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Review queue</p>
+        <p className="text-sm text-slate-400 mt-0.5">Select a driver to verify and approve</p>
       </div>
+      <ul className="divide-y divide-slate-800 max-h-[calc(100vh-280px)] overflow-y-auto">
+        {rows.map((row) => {
+          const selected = selectedId === row.driver_id;
+          return (
+            <li key={row.driver_id}>
+              <button
+                type="button"
+                onClick={() => onSelect(row)}
+                className={`w-full text-left px-4 py-3 flex items-start gap-3 transition-colors ${
+                  selected ? 'bg-violet-500/10 border-l-2 border-l-violet-500' : 'hover:bg-slate-900/60 border-l-2 border-l-transparent'
+                }`}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-white truncate">
+                      {row.driver_name || row.driver_email || 'Unknown'}
+                    </span>
+                    <StatusBadge status={row.account_status} />
+                  </div>
+                  {row.driver_email && row.driver_name && (
+                    <p className="text-xs text-slate-500 truncate mt-0.5">{row.driver_email}</p>
+                  )}
+                  <div className="mt-2">
+                    <BlockerChips blockers={row.blockers} />
+                  </div>
+                </div>
+                <ChevronRight className={`w-4 h-4 shrink-0 mt-1 ${selected ? 'text-violet-400' : 'text-slate-600'}`} />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/** Compact table for dashboard drilldown — links to full compliance page */
+export function ComplianceQueueTableCompact({
+  rows,
+  loading,
+}: {
+  rows: DriverComplianceRow[];
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12 text-slate-400">
+        <Loader2 className="w-5 h-5 animate-spin mr-2" />
+        Loading…
+      </div>
+    );
+  }
+  if (!rows.length) {
+    return <p className="text-center py-12 text-slate-500 text-sm">No drivers in queue.</p>;
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-slate-800 text-left text-slate-500 text-xs uppercase">
+            <th className="px-4 py-2 font-medium">Driver</th>
+            <th className="px-4 py-2 font-medium">Status</th>
+            <th className="px-4 py-2 font-medium">Blockers</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.driver_id} className="border-b border-slate-800/60">
+              <td className="px-4 py-2 text-white">{row.driver_name || row.driver_email}</td>
+              <td className="px-4 py-2 capitalize text-slate-400">{row.account_status}</td>
+              <td className="px-4 py-2"><BlockerChips blockers={row.blockers} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

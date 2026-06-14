@@ -11,8 +11,15 @@ export const DRIVER_WRITE_ROLES = new Set([
 /** Roles allowed to force-approve with override reason. */
 export const DRIVER_FORCE_APPROVE_ROLES = new Set([
   "platform_owner",
+  "platform_support",
   "superadmin",
+  "admin",
+  "driver_admin",
 ]);
+
+export function hasAnyDriverRole(roles: string[], allowed: ReadonlySet<string>): boolean {
+  return roles.some((r) => allowed.has(r));
+}
 
 /** Roles allowed to delete driver profiles. */
 export const DRIVER_DELETE_ROLES = new Set([
@@ -21,7 +28,7 @@ export const DRIVER_DELETE_ROLES = new Set([
 ]);
 
 export function requireWrite(admin: ProductAdminUser): Response | null {
-  if (!DRIVER_WRITE_ROLES.has(admin.role)) {
+  if (!hasAnyDriverRole(admin.roles, DRIVER_WRITE_ROLES)) {
     return new Response(
       JSON.stringify({
         error: "forbidden",
@@ -34,7 +41,7 @@ export function requireWrite(admin: ProductAdminUser): Response | null {
 }
 
 export function requireDelete(admin: ProductAdminUser): Response | null {
-  if (!DRIVER_DELETE_ROLES.has(admin.role)) {
+  if (!hasAnyDriverRole(admin.roles, DRIVER_DELETE_ROLES)) {
     return new Response(
       JSON.stringify({
         error: "forbidden",

@@ -88,7 +88,7 @@ Deno.test("validateApproveRequest — force approve with reason", () => {
   if (r.ok) assertEquals(r.force, true);
 });
 
-Deno.test("validateApproveRequest — driver_admin cannot force", () => {
+Deno.test("validateApproveRequest — driver_admin can force with reason", () => {
   const blockers = computeComplianceBlockers(
     { ...completeIndependent, onboarding_complete: false },
     false,
@@ -99,6 +99,36 @@ Deno.test("validateApproveRequest — driver_admin cannot force", () => {
     "pending",
     "driver_admin",
   );
+  assertEquals(r.ok, true);
+  if (r.ok) assertEquals(r.force, true);
+});
+
+Deno.test("validateApproveRequest — driver_admin cannot force alone when role missing", () => {
+  const blockers = computeComplianceBlockers(
+    { ...completeIndependent, onboarding_complete: false },
+    false,
+  );
+  const r = validateApproveRequest(
+    { force: true, reason: "Manual review completed by ops" },
+    blockers,
+    "pending",
+    "rides_ops",
+  );
   assertEquals(r.ok, false);
   if (!r.ok) assertEquals(r.error, "forbidden");
+});
+
+Deno.test("validateApproveRequest — superadmin in roles[] allows force", () => {
+  const blockers = computeComplianceBlockers(
+    { ...completeIndependent, onboarding_complete: false },
+    false,
+  );
+  const r = validateApproveRequest(
+    { force: true, reason: "Manual review completed by ops" },
+    blockers,
+    "pending",
+    ["driver_admin", "superadmin"],
+  );
+  assertEquals(r.ok, true);
+  if (r.ok) assertEquals(r.force, true);
 });

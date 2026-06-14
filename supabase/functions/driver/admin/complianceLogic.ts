@@ -21,7 +21,13 @@ export interface ComplianceProfileInput {
   insurance_expiry: string | null;
 }
 
-export const FORCE_APPROVE_ROLES = new Set(["platform_owner", "superadmin"]);
+export const FORCE_APPROVE_ROLES = new Set([
+  "platform_owner",
+  "platform_support",
+  "superadmin",
+  "admin",
+  "driver_admin",
+]);
 export const MIN_FORCE_APPROVE_REASON_LENGTH = 10;
 
 const LIFECYCLE_BLOCKERS = new Set<DriverComplianceBlocker>([
@@ -68,12 +74,17 @@ export function canStrictApprove(
   return getStrictApproveBlockers(blockers).length === 0;
 }
 
+export function hasForceApproveRole(roles: string[]): boolean {
+  return roles.some((r) => FORCE_APPROVE_ROLES.has(r));
+}
+
 export function canForceApprove(
-  role: string,
+  roleOrRoles: string | string[],
   blockers: DriverComplianceBlocker[],
   status: DriverAccountStatus,
 ): boolean {
-  if (!FORCE_APPROVE_ROLES.has(role)) return false;
+  const roles = Array.isArray(roleOrRoles) ? roleOrRoles : [roleOrRoles];
+  if (!hasForceApproveRole(roles)) return false;
   if (status !== "pending") return false;
   if (blockers.includes("no_profile")) return false;
   if (blockers.some((b) => LIFECYCLE_BLOCKERS.has(b))) return false;
@@ -96,8 +107,9 @@ export function validateApproveRequest(
   input: { force?: boolean; reason?: string },
   blockers: DriverComplianceBlocker[],
   status: DriverAccountStatus,
-  adminRole: string,
+  adminRoles: string | string[],
 ): ApproveValidationResult {
+  const roles = Array.isArray(adminRoles) ? adminRoles : [adminRoles];
   if (blockers.includes("no_profile")) {
     return {
       ok: false,
@@ -132,7 +144,7 @@ export function validateApproveRequest(
 
   const force = Boolean(input.force);
   if (force) {
-    if (!canForceApprove(adminRole, blockers, status)) {
+    if (!canForceApprove(roles, blockers, status)) {
       return {
         ok: false,
         error: "forbidden",

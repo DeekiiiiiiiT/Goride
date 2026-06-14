@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
-import { jwtPrimaryRole } from '@roam/auth-client';
 import { Loader2, Search, MoreHorizontal, LogOut, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@roam/ui';
@@ -18,11 +17,8 @@ import {
   deactivateDriver,
   reactivateDriver,
   signOutDriver,
-  approveDriver,
-  getDriverDetail,
 } from '../../services/driverAdminService';
 import { useAdminConfirm } from '../../contexts/AdminConfirmContext';
-import { canWriteDriverAdmin } from '../../utils/driverAdminRoles';
 
 const PAGE_SIZE = 50;
 
@@ -66,8 +62,6 @@ const ACTION_MENU_TOOLTIPS = {
   reactivate: 'Restore a deactivated driver account',
   signOut: 'End all active sessions on every device',
   viewDetails: 'Open full driver profile and trip history',
-  reviewCompliance: 'Open compliance checklist for this driver',
-  approve: 'Activate this driver account',
 } as const;
 
 const MENU_WIDTH = 192;
@@ -173,7 +167,6 @@ export function DriversListPage() {
   const { session } = useOutletContext<OutletContext>();
   const { confirm } = useAdminConfirm();
   const accessToken = session.access_token;
-  const canWrite = canWriteDriverAdmin(jwtPrimaryRole(session.user));
 
   const [drivers, setDrivers] = useState<DriverDirectoryRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -364,35 +357,6 @@ export function DriversListPage() {
     }
   };
 
-  const doApprove = async (driver: DriverDirectoryRow) => {
-    if (!accessToken) return;
-    const detail = await getDriverDetail(accessToken, driver.user_id);
-    if (!detail.driver.compliance?.can_strict_approve) {
-      toast.error('Compliance requirements not met. Review in Compliance or use force approve on driver detail.');
-      closeActionsMenu();
-      navigate(`/users/${driver.user_id}?tab=compliance`);
-      return;
-    }
-    const name = driver.display_name || driver.email || 'this driver';
-    const ok = await confirm({
-      title: 'Approve driver',
-      description: `Activate ${name}? They will be able to go online.`,
-      confirmLabel: 'Approve',
-    });
-    if (!ok) return;
-    setActionLoading(true);
-    try {
-      await approveDriver(accessToken, driver.user_id, { force: false });
-      toast.success('Driver approved');
-      closeActionsMenu();
-      void load();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Approve failed');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
@@ -526,7 +490,7 @@ export function DriversListPage() {
                         </p>
                       )}
                       {d.status === 'pending' && (d.compliance_blockers_count ?? 0) === 0 && (
-                        <p className="text-xs text-emerald-400/90 mt-1">Ready to approve</p>
+                        <p className="text-xs text-emerald-400/90 mt-1">Compliance complete</p>
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -622,24 +586,6 @@ export function DriversListPage() {
               tooltip={ACTION_MENU_TOOLTIPS.reactivate}
               onClick={() => void doReactivate(menuDriver)}
             />
-          )}
-          {canWrite && menuDriver.status === 'pending' && (
-            <>
-              <ActionMenuItem
-                label="Review compliance"
-                tooltip={ACTION_MENU_TOOLTIPS.reviewCompliance}
-                onClick={() => {
-                  closeActionsMenu();
-                  navigate(`/users/${menuDriver.user_id}?tab=compliance`);
-                }}
-              />
-              <ActionMenuItem
-                label="Approve driver"
-                tooltip={ACTION_MENU_TOOLTIPS.approve}
-                className="text-violet-300"
-                onClick={() => void doApprove(menuDriver)}
-              />
-            </>
           )}
 
           <hr className="my-1 border-slate-800" />

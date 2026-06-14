@@ -252,7 +252,7 @@ export async function cancelOffer(
 export async function listComplianceQueue(
   accessToken: string,
   opts: { status?: string; limit?: number; offset?: number } = {},
-): Promise<{ drivers: DriverComplianceRow[]; total: number; limit?: number; offset?: number }> {
+): Promise<{ drivers: DriverComplianceRow[]; total: number; limit?: number; offset?: number; error?: string }> {
   const sp = new URLSearchParams();
   if (opts.status) sp.set('status', opts.status);
   if (opts.limit != null) sp.set('limit', String(opts.limit));
@@ -263,7 +263,53 @@ export async function listComplianceQueue(
     headers: headers(accessToken),
   });
   if (!res.ok) throw new Error(await parseError(res));
-  return parseJson(res);
+  const body = await parseJson<{ drivers: DriverComplianceRow[]; total: number; error?: string }>(res);
+
+  // Fallback when backend is not yet deployed or returns empty while pending drivers exist
+  if (!body.error && (body.drivers?.length ?? 0) === 0) {
+    const pending = await listDrivers(accessToken, { status: 'pending', limit: opts.limit ?? 100, sort: 'signup' });
+    if (pending.drivers.length > 0) {
+      return {
+        drivers: pending.drivers.map((d) => directoryRowToComplianceRow(d)),
+        total: pending.drivers.length,
+        limit: opts.limit,
+        offset: opts.offset,
+      };
+    }
+  }
+
+  if (body.error) {
+    throw new Error(body.error);
+  }
+
+  return body;
+}
+
+/** Maps directory rows to compliance rows when the compliance API is unavailable or empty. */
+function directoryRowToComplianceRow(d: DriverDirectoryRow): DriverComplianceRow {
+  const blockers: DriverComplianceRow['blockers'] = [];
+  if (!d.onboarding_complete) blockers.push('onboarding_incomplete');
+  const bg = d.background_check_status?.trim().toLowerCase();
+  if (bg !== 'approved') blockers.push('background_check_not_approved');
+  if (d.mode !== 'fleet') {
+    blockers.push('insurance_missing', 'vehicle_missing');
+  }
+
+  return {
+    driver_id: d.user_id,
+    driver_name: d.display_name,
+    driver_email: d.email,
+    account_status: d.status,
+    mode: d.mode,
+    onboarding_complete: d.onboarding_complete,
+    background_check_status: d.background_check_status,
+    insurance_expiry: null,
+    has_vehicle: false,
+    blockers,
+    can_strict_approve: false,
+    can_force_approve: false,
+    created_at: d.created_at,
+  };
 }
 
 export async function updateComplianceStatus(
@@ -271,6 +317,7 @@ export async function updateComplianceStatus(
   driverId: string,
   updates: {
     background_check?: 'pending' | 'approved' | 'rejected';
+    insurance_expiry?: string | null;
   },
 ): Promise<{ ok: boolean; driver?: DriverComplianceRow }> {
   const res = await fetch(`${DRIVER_BASE}/admin/compliance/${driverId}`, {
