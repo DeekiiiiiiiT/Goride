@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { HelpCircle, Loader2, Pencil, X } from 'lucide-react';
+import { HelpCircle, Loader2, Pencil, X, AlertTriangle, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Tooltip,
@@ -14,6 +14,50 @@ import {
 } from '../services/ridesAdminService';
 
 const WRITE_ROLES = new Set(['platform_owner', 'superadmin', 'rides_admin']);
+
+function isDeprecationEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  const value = import.meta.env.VITE_CONTROL_PANEL_DEPRECATED;
+  if (!value) return false;
+  const normalized = String(value).toLowerCase().trim();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes';
+}
+
+function DeprecationBanner() {
+  return (
+    <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+        <div className="space-y-2">
+          <h3 className="font-medium text-amber-300">Control Panel Deprecated</h3>
+          <p className="text-sm text-amber-200/80">
+            This control panel has been superseded by the new{' '}
+            <strong>Platform Matching Brain</strong> at{' '}
+            <a
+              href="https://roamdominion.co"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-amber-300 underline underline-offset-2 hover:text-white inline-flex items-center gap-1"
+            >
+              roamdominion.co
+              <ExternalLink className="w-3 h-3" />
+            </a>
+            . Settings here are read-only. All configuration changes should be made in the new admin portal.
+          </p>
+          <a
+            href="https://roamdominion.co/admin/platform/matching-brain"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-900 font-medium rounded-lg text-sm mt-2"
+          >
+            Open Matching Brain
+            <ExternalLink className="w-4 h-4" />
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 type SectionId = 'matching' | 'presence' | 'bodyType' | 'rollout' | 'automation' | 'waitTime' | 'pinVerification' | 'tollDetection' | 'quotes';
 
@@ -252,7 +296,8 @@ function SettingsSection({
 }
 
 export function DispatchSettingsForm({ accessToken, role }: DispatchSettingsFormProps) {
-  const canEdit = role ? WRITE_ROLES.has(role) : false;
+  const isDeprecated = isDeprecationEnabled();
+  const canEdit = isDeprecated ? false : (role ? WRITE_ROLES.has(role) : false);
 
   const [loading, setLoading] = useState(true);
   const [savingSection, setSavingSection] = useState<SectionId | null>(null);
@@ -392,6 +437,7 @@ export function DispatchSettingsForm({ accessToken, role }: DispatchSettingsForm
   return (
     <TooltipProvider delayDuration={200}>
       <div className="space-y-8 max-w-2xl">
+        {isDeprecated && <DeprecationBanner />}
         <SettingsSection
           title="Dispatch and matching"
           description="How far and how many times the system searches for drivers per ride."
@@ -1041,7 +1087,11 @@ export function DispatchSettingsForm({ accessToken, role }: DispatchSettingsForm
 
         <p className="text-xs text-slate-500 pt-2">
           Last updated: {formatUpdatedAt(form.updated_at)}
-          {!canEdit && (
+          {isDeprecated ? (
+            <span className="block mt-1 text-amber-500/90">
+              Read-only — this control panel is deprecated. Use Matching Brain at roamdominion.co.
+            </span>
+          ) : !canEdit && (
             <span className="block mt-1 text-amber-500/90">
               Read-only — rides_admin or higher required to edit.
             </span>

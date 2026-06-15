@@ -27,7 +27,8 @@ import { startMatching, reconcileMatching as doReconcile } from "./dispatch/reco
 import { runMatchingWave } from "./dispatch/runMatchingWave.ts";
 import { patchDriverOfferRow, supersedePendingOffersForRide, loadDriverOfferById } from "./dispatch/offerWrites.ts";
 
-const app = new Hono();
+/** Match Supabase path prefix: .../functions/v1/matching/<route> → /matching/<route> */
+const app = new Hono().basePath("/matching");
 
 app.use("*", cors());
 
@@ -264,13 +265,68 @@ app.patch("/admin/policies/:id", async (c) => {
 
   invalidatePolicyCache();
 
+  // Dual-write to rides.dispatch_settings for backward compatibility
+  // Only sync if this is the default policy and dual-write is enabled
+  let dualWriteStatus: "skipped" | "success" | "failed" = "skipped";
+  const dualWriteEnabled = Deno.env.get("MATCHING_DUAL_WRITE_ENABLED") === "1";
+  
+  if (dualWriteEnabled && updated.is_default) {
+    try {
+      const legacyPatch: Record<string, unknown> = {
+        updated_at: new Date().toISOString(),
+        updated_by: auth.id,
+      };
+
+      // Map policy fields to legacy table (only include fields that exist in both)
+      const legacyFields = [
+        "max_match_waves", "wave_radius_km", "max_offers_per_wave",
+        "default_driver_offer_timeout_seconds", "driver_location_max_age_minutes",
+        "max_matching_duration_minutes", "quote_driver_radius_km",
+        "body_type_filtering_enabled", "body_type_tier_mode", "require_body_type_for_offers",
+        "independent_only_matching", "trip_location_interval_seconds",
+        "pickup_geofence_radius_m", "dropoff_geofence_radius_m",
+        "arrival_dwell_seconds", "max_speed_mps_for_arrival",
+        "auto_en_route_on_accept", "auto_arrive_enabled",
+        "auto_complete_suggest_enabled", "no_show_cancel_minutes",
+        "gps_max_accuracy_m_for_arrival", "no_show_auto_cancel_enabled",
+        "wait_time_grace_minutes", "wait_time_rate_per_min_minor",
+        "wait_time_charge_enabled", "wait_time_max_minutes",
+        "pin_verification_enabled", "pin_verification_required_for_start",
+        "toll_detection_enabled", "toll_geofence_radius_m",
+      ];
+
+      for (const field of legacyFields) {
+        if (updated[field] !== undefined) {
+          legacyPatch[field] = updated[field];
+        }
+      }
+
+      const { error: legacyError } = await db
+        .from("rides_dispatch_settings")
+        .update(legacyPatch)
+        .eq("id", 1);
+
+      if (legacyError) {
+        logLine({ event: "dual_write_failed", error: legacyError.message, policy_id: id });
+        dualWriteStatus = "failed";
+      } else {
+        logLine({ event: "dual_write_success", policy_id: id });
+        dualWriteStatus = "success";
+      }
+    } catch (e) {
+      logLine({ event: "dual_write_error", error: String(e), policy_id: id });
+      dualWriteStatus = "failed";
+    }
+  }
+
   await audit(db, "matching_policy_updated", null, id, auth.id, {
     changed_fields: Object.keys(patch).filter((k) => k !== "updated_by"),
+    dual_write_status: dualWriteStatus,
   });
 
-  logLine({ event: "admin_policy_updated", policy_id: id, actor: auth.id });
+  logLine({ event: "admin_policy_updated", policy_id: id, actor: auth.id, dual_write_status: dualWriteStatus });
 
-  return c.json({ policy: updated });
+  return c.json({ policy: updated, dual_write_status: dualWriteStatus });
 });
 
 // -----------------------------------------------------------------------------
@@ -745,6 +801,230 @@ app.post("/v1/internal/reconcile-all", async (c) => {
     total: rideIds.length,
     processed,
     errors,
+  });
+});
+
+// -----------------------------------------------------------------------------
+// Admin: Sync Status (compares matching.policies vs rides.dispatch_settings)
+// -----------------------------------------------------------------------------
+
+app.get("/admin/policies/:id/sync-status", async (c) => {
+  const auth = await requirePlatformAdmin(c);
+  if (auth instanceof Response) return auth;
+
+  const id = c.req.param("id");
+  const db = svc();
+
+  // Load matching policy
+  const { data: policy, error: policyError } = await db
+    .from("matching_policies")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (policyError || !policy) {
+    return c.json({ error: "policy_not_found" }, 404);
+  }
+
+  // Load rides.dispatch_settings via public view
+  const { data: legacySettings, error: legacyError } = await db
+    .from("rides_dispatch_settings")
+    .select("*")
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (legacyError) {
+    logLine({ event: "sync_status_legacy_load_failed", error: legacyError.message });
+    return c.json({
+      policy_id: id,
+      in_sync: false,
+      legacy_available: false,
+      message: "Could not load rides.dispatch_settings",
+    });
+  }
+
+  if (!legacySettings) {
+    return c.json({
+      policy_id: id,
+      in_sync: true,
+      legacy_available: false,
+      message: "No rides.dispatch_settings found - using matching.policies only",
+    });
+  }
+
+  // Compare fields that exist in both schemas
+  const sharedFields = [
+    "max_match_waves",
+    "max_offers_per_wave",
+    "default_driver_offer_timeout_seconds",
+    "driver_location_max_age_minutes",
+    "max_matching_duration_minutes",
+    "quote_driver_radius_km",
+    "body_type_filtering_enabled",
+    "body_type_tier_mode",
+    "require_body_type_for_offers",
+    "independent_only_matching",
+    "trip_location_interval_seconds",
+    "pickup_geofence_radius_m",
+    "dropoff_geofence_radius_m",
+    "arrival_dwell_seconds",
+    "max_speed_mps_for_arrival",
+    "auto_en_route_on_accept",
+    "auto_arrive_enabled",
+    "auto_complete_suggest_enabled",
+    "no_show_cancel_minutes",
+    "gps_max_accuracy_m_for_arrival",
+    "no_show_auto_cancel_enabled",
+    "wait_time_grace_minutes",
+    "wait_time_rate_per_min_minor",
+    "wait_time_charge_enabled",
+    "wait_time_max_minutes",
+    "pin_verification_enabled",
+    "pin_verification_required_for_start",
+    "toll_detection_enabled",
+    "toll_geofence_radius_m",
+  ];
+
+  const differences: Array<{
+    field: string;
+    matching_value: unknown;
+    legacy_value: unknown;
+  }> = [];
+
+  for (const field of sharedFields) {
+    const matchingVal = policy[field];
+    const legacyVal = legacySettings[field];
+
+    // Handle array comparison (wave_radius_km)
+    if (Array.isArray(matchingVal) && Array.isArray(legacyVal)) {
+      if (JSON.stringify(matchingVal) !== JSON.stringify(legacyVal)) {
+        differences.push({
+          field,
+          matching_value: matchingVal,
+          legacy_value: legacyVal,
+        });
+      }
+    } else if (matchingVal !== legacyVal) {
+      differences.push({
+        field,
+        matching_value: matchingVal,
+        legacy_value: legacyVal,
+      });
+    }
+  }
+
+  // Also check wave_radius_km separately
+  const matchingRadii = policy.wave_radius_km;
+  const legacyRadii = legacySettings.wave_radius_km;
+  if (JSON.stringify(matchingRadii) !== JSON.stringify(legacyRadii)) {
+    const existing = differences.find((d) => d.field === "wave_radius_km");
+    if (!existing) {
+      differences.push({
+        field: "wave_radius_km",
+        matching_value: matchingRadii,
+        legacy_value: legacyRadii,
+      });
+    }
+  }
+
+  return c.json({
+    policy_id: id,
+    in_sync: differences.length === 0,
+    legacy_available: true,
+    differences,
+    matching_updated_at: policy.updated_at,
+    legacy_updated_at: legacySettings.updated_at,
+  });
+});
+
+// -----------------------------------------------------------------------------
+// Admin: Sync to Legacy (copy matching.policies → rides.dispatch_settings)
+// -----------------------------------------------------------------------------
+
+app.post("/admin/sync-to-legacy", async (c) => {
+  const auth = await requirePlatformAdmin(c);
+  if (auth instanceof Response) return auth;
+
+  if (!ADMIN_WRITE_ROLES.has(auth.role)) {
+    return c.json({ error: "forbidden" }, 403);
+  }
+
+  const body = await c.req.json().catch(() => ({}));
+  const policyId = body.policy_id;
+
+  if (!policyId || typeof policyId !== "string") {
+    return c.json({ error: "policy_id_required" }, 400);
+  }
+
+  const db = svc();
+
+  // Load matching policy
+  const { data: policy, error: policyError } = await db
+    .from("matching_policies")
+    .select("*")
+    .eq("id", policyId)
+    .maybeSingle();
+
+  if (policyError || !policy) {
+    return c.json({ error: "policy_not_found" }, 404);
+  }
+
+  // Build update for rides.dispatch_settings
+  const legacyUpdate: Record<string, unknown> = {
+    max_match_waves: policy.max_match_waves,
+    wave_radius_km: policy.wave_radius_km,
+    max_offers_per_wave: policy.max_offers_per_wave,
+    default_driver_offer_timeout_seconds: policy.default_driver_offer_timeout_seconds,
+    driver_location_max_age_minutes: policy.driver_location_max_age_minutes,
+    max_matching_duration_minutes: policy.max_matching_duration_minutes,
+    quote_driver_radius_km: policy.quote_driver_radius_km,
+    body_type_filtering_enabled: policy.body_type_filtering_enabled,
+    body_type_tier_mode: policy.body_type_tier_mode,
+    require_body_type_for_offers: policy.require_body_type_for_offers,
+    independent_only_matching: policy.independent_only_matching,
+    trip_location_interval_seconds: policy.trip_location_interval_seconds,
+    pickup_geofence_radius_m: policy.pickup_geofence_radius_m,
+    dropoff_geofence_radius_m: policy.dropoff_geofence_radius_m,
+    arrival_dwell_seconds: policy.arrival_dwell_seconds,
+    max_speed_mps_for_arrival: policy.max_speed_mps_for_arrival,
+    auto_en_route_on_accept: policy.auto_en_route_on_accept,
+    auto_arrive_enabled: policy.auto_arrive_enabled,
+    auto_complete_suggest_enabled: policy.auto_complete_suggest_enabled,
+    no_show_cancel_minutes: policy.no_show_cancel_minutes,
+    gps_max_accuracy_m_for_arrival: policy.gps_max_accuracy_m_for_arrival,
+    no_show_auto_cancel_enabled: policy.no_show_auto_cancel_enabled,
+    wait_time_grace_minutes: policy.wait_time_grace_minutes,
+    wait_time_rate_per_min_minor: policy.wait_time_rate_per_min_minor,
+    wait_time_charge_enabled: policy.wait_time_charge_enabled,
+    wait_time_max_minutes: policy.wait_time_max_minutes,
+    pin_verification_enabled: policy.pin_verification_enabled,
+    pin_verification_required_for_start: policy.pin_verification_required_for_start,
+    toll_detection_enabled: policy.toll_detection_enabled,
+    toll_geofence_radius_m: policy.toll_geofence_radius_m,
+    updated_at: new Date().toISOString(),
+    updated_by: auth.id,
+  };
+
+  const { error: updateError } = await db
+    .from("rides_dispatch_settings")
+    .update(legacyUpdate)
+    .eq("id", 1);
+
+  if (updateError) {
+    logLine({ event: "sync_to_legacy_failed", error: updateError.message, policy_id: policyId });
+    return c.json({ error: "sync_failed", message: updateError.message }, 500);
+  }
+
+  await audit(db, "matching_sync_to_legacy", null, policyId, auth.id, {
+    fields_synced: Object.keys(legacyUpdate).filter((k) => k !== "updated_at" && k !== "updated_by"),
+  });
+
+  logLine({ event: "sync_to_legacy_completed", policy_id: policyId, actor: auth.id });
+
+  return c.json({
+    ok: true,
+    policy_id: policyId,
+    synced_fields: Object.keys(legacyUpdate).length - 2, // exclude updated_at, updated_by
   });
 });
 

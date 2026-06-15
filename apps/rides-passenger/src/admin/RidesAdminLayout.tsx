@@ -22,13 +22,30 @@ import {
 } from 'lucide-react';
 import { RidesAdminLoginForm } from './components/RidesAdminLoginForm';
 
-const NAV_ITEMS = [
+interface NavItem {
+  id: string;
+  path: string;
+  label: string;
+  icon: React.ElementType;
+  deprecated?: boolean;
+  externalHint?: string;
+}
+
+function isControlPanelDeprecated(): boolean {
+  if (typeof window === 'undefined') return false;
+  const value = import.meta.env.VITE_CONTROL_PANEL_DEPRECATED;
+  if (!value) return false;
+  const normalized = String(value).toLowerCase().trim();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes';
+}
+
+const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', path: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'users', path: '/admin/users', label: 'User Management', icon: Users },
   { id: 'ledger', path: '/admin/ledger', label: 'Trip Ledger', icon: ScrollText },
   { id: 'fare-rules', path: '/admin/fare-rules', label: 'Fare Rules', icon: CircleDollarSign },
   { id: 'surge', path: '/admin/surge', label: 'Surge Pricing', icon: TrendingUp },
-  { id: 'control-panel', path: '/admin/control-panel', label: 'Control Panel', icon: SlidersHorizontal },
+  { id: 'control-panel', path: '/admin/control-panel', label: 'Control Panel', icon: SlidersHorizontal, deprecated: true, externalHint: 'Use Matching Brain' },
   { id: 'app-permissions', path: '/admin/app-permissions', label: 'App Permissions', icon: Shield },
   { id: 'play-store', path: '/admin/play-store', label: 'Play Store', icon: Store },
   { id: 'rides', path: '/admin/rides', label: 'Ride Operations', icon: Car },
@@ -196,6 +213,7 @@ export function RidesAdminLayout() {
             const Icon = item.icon;
             const isActive = currentPath === item.path || 
               (item.path !== '/admin' && currentPath.startsWith(item.path));
+            const showDeprecated = item.deprecated && isControlPanelDeprecated();
             return (
               <button
                 key={item.id}
@@ -206,12 +224,19 @@ export function RidesAdminLayout() {
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive
                     ? 'bg-emerald-500/10 text-emerald-300'
+                    : showDeprecated
+                    ? 'text-slate-600 hover:text-slate-400 hover:bg-slate-800/50'
                     : 'text-slate-500 hover:text-white hover:bg-slate-800'
                 }`}
               >
-                <Icon className="w-4 h-4 shrink-0" />
-                <span className="truncate">{item.label}</span>
-                {isActive && <ChevronRight className="w-3 h-3 ml-auto text-emerald-400/60" />}
+                <Icon className={`w-4 h-4 shrink-0 ${showDeprecated ? 'opacity-50' : ''}`} />
+                <span className={`truncate ${showDeprecated ? 'line-through decoration-slate-600' : ''}`}>{item.label}</span>
+                {showDeprecated && (
+                  <span className="text-[10px] text-amber-500/80 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                    Deprecated
+                  </span>
+                )}
+                {isActive && !showDeprecated && <ChevronRight className="w-3 h-3 ml-auto text-emerald-400/60" />}
               </button>
             );
           })}

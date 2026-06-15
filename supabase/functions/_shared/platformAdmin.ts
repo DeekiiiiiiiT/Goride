@@ -8,7 +8,9 @@ export const PLATFORM_ADMIN_ROLES = new Set([
   "platform_owner",
   "platform_support",
   "superadmin",
+  "super_admin",
   "admin",
+  "rides_admin",
 ]);
 
 export type PlatformAdminUser = { id: string; email: string; role: string };
