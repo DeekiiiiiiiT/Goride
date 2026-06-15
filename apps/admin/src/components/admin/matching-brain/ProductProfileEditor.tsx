@@ -245,49 +245,46 @@ export function ProductProfileEditor({
                         <label className={`${toggleRowClass} flex-1`}>
                           <span className="text-sm text-slate-300">Profile Active</span>
                           <Switch
-                            disabled={!canEdit}
                             checked={profile.is_active}
                             onCheckedChange={() => handleToggleActive(profile)}
                           />
                         </label>
                         
-                        {canEdit && (
-                          <div className="flex items-center gap-2 ml-4">
-                            {!isEditing ? (
+                        <div className="flex items-center gap-2 ml-4">
+                          {!isEditing ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEdit(profile)}
+                            >
+                              <Pencil className="w-3.5 h-3.5 mr-1" />
+                              Edit Overrides
+                            </Button>
+                          ) : (
+                            <>
                               <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                onClick={() => handleEdit(profile)}
+                                onClick={handleCancel}
+                                disabled={saving}
                               >
-                                <Pencil className="w-3.5 h-3.5 mr-1" />
-                                Edit Overrides
+                                <X className="w-3.5 h-3.5 mr-1" />
+                                Cancel
                               </Button>
-                            ) : (
-                              <>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={handleCancel}
-                                  disabled={saving}
-                                >
-                                  <X className="w-3.5 h-3.5 mr-1" />
-                                  Cancel
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  onClick={() => handleSave(profile.id)}
-                                  disabled={saving}
-                                >
-                                  {saving && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}
-                                  Save
-                                </Button>
-                              </>
-                            )}
-                          </div>
-                        )}
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => handleSave(profile.id)}
+                                disabled={saving}
+                              >
+                                {saving && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}
+                                Save
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </div>
 
                       <div className="space-y-3">
