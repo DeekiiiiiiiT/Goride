@@ -32,7 +32,15 @@ import {
 import { ProductProfileEditor } from "./ProductProfileEditor";
 import { SyncStatusCard } from "./SyncStatusCard";
 
-const ADMIN_WRITE_ROLES = ["platform_owner", "superadmin", "rides_admin", "super_admin"];
+const ADMIN_WRITE_ROLES = ["platform_owner", "superadmin", "rides_admin", "super_admin", "super admin"];
+
+function hasWriteAccess(role: string | undefined | null): boolean {
+  if (!role) return false;
+  const normalized = role.toLowerCase().replace(/[\s_-]+/g, '_');
+  return ADMIN_WRITE_ROLES.some(r => 
+    r.toLowerCase().replace(/[\s_-]+/g, '_') === normalized
+  );
+}
 
 export function MatchingBrainPage() {
   const { session, profile } = useAuth();
@@ -48,7 +56,7 @@ export function MatchingBrainPage() {
   const [selectedPolicy, setSelectedPolicy] = useState<MatchingPolicy | null>(null);
   const [activeTab, setActiveTab] = useState("dispatch");
 
-  const canEdit = profile?.role ? ADMIN_WRITE_ROLES.includes(profile.role) : false;
+  const canEdit = hasWriteAccess(profile?.role);
 
   const fetchData = useCallback(async () => {
     if (!session) return;
