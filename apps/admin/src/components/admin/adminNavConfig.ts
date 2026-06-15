@@ -29,6 +29,7 @@ import {
   Truck,
   Search,
   Store,
+  Brain,
 } from 'lucide-react';
 
 export type NavChild = {
@@ -42,6 +43,7 @@ export const NAV_ITEMS = [{ id: 'dashboard', label: 'Dashboard', icon: LayoutDas
 
 export const PLATFORM_CHILDREN: NavChild[] = [
   { id: 'platform-team', label: 'Platform Team', icon: Shield },
+  { id: 'matching-brain', label: 'Matching Brain', icon: Brain },
   { id: 'global-identity', label: 'Global Identity Search', icon: Search },
   { id: 'activity-log', label: 'Activity Log', icon: ClipboardList },
 ];
@@ -117,6 +119,7 @@ export const DATABASE_MANAGEMENT_ITEM = { id: 'db-management', label: 'Database 
 const SHARED_PLATFORM_PAGES = [
   'dashboard',
   'platform-team',
+  'matching-brain',
   'global-identity',
   'activity-log',
   'enterprise-overview',

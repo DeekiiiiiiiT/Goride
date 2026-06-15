@@ -2,7 +2,8 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { shouldSkipOauthSurfaceWrite } from '@roam/auth-client';
 import { supabase } from '../utils/supabase/client';
-import { DRIVER_OAUTH_INTENT_KEY, DRIVER_OAUTH_INTENT_VALUE } from '../utils/driverAuthSignup';
+import { ensureDriverSurface } from '../utils/ensureDriverSurface';
+import { DRIVER_OAUTH_INTENT_KEY } from '../utils/driverAuthSignup';
 
 interface AuthContextType {
   session: Session | null;
@@ -24,6 +25,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const applySession = async (session: Session | null) => {
+      if (!session?.user) {
+        setSession(null);
+        setUser(null);
+        return;
+      }
+      const patchedUser = await ensureDriverSurface(session.user);
+      setSession(patchedUser === session.user ? session : { ...session, user: patchedUser });
+      setUser(patchedUser);
+      sessionStorage.removeItem(DRIVER_OAUTH_INTENT_KEY);
+    };
+
     const initSession = async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
@@ -33,12 +46,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           await supabase.auth.signOut({ scope: 'local' });
           setSession(null);
           setUser(null);
-          setLoading(false);
           return;
         }
 
-        setSession(session);
-        setUser(session?.user ?? null);
+        await applySession(session);
       } catch (error: unknown) {
         console.error('Error fetching session:', error);
         try { await supabase.auth.signOut({ scope: 'local' }); } catch { /* ignore */ }
@@ -49,32 +60,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     initSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const needsSurfacePatch =
+        Boolean(session?.user) && !shouldSkipOauthSurfaceWrite(session!.user, 'driver');
+      if (needsSurfacePatch) setLoading(true);
+      void applySession(session).finally(() => setLoading(false));
     });
 
     return () => {
       subscription.unsubscribe();
     };
   }, []);
-
-  /** Google OAuth: record surface only (never overwrite app_metadata / admin roles). */
-  useEffect(() => {
-    if (!user) return;
-    void (async () => {
-      try {
-        if (sessionStorage.getItem(DRIVER_OAUTH_INTENT_KEY) !== DRIVER_OAUTH_INTENT_VALUE) return;
-        if (shouldSkipOauthSurfaceWrite(user, 'driver')) return;
-        await supabase.auth.updateUser({ data: { surface: 'driver' } });
-      } catch (e) {
-        console.warn('driver oauth surface patch:', e);
-      } finally {
-        sessionStorage.removeItem(DRIVER_OAUTH_INTENT_KEY);
-      }
-    })();
-  }, [user]);
 
   const signOut = async () => {
     setSession(null);

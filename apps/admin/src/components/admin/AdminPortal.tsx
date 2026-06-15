@@ -33,6 +33,7 @@ import { useAuth } from '../auth/AuthContext';
 import { LEGACY_PAGE_REDIRECTS } from './adminNavConfig';
 import { MerchantVerificationManager } from './roam-dash/MerchantVerificationManager';
 import { GlobalIdentitySearch } from './platform/GlobalIdentitySearch';
+import { MatchingBrainPage } from './matching-brain/MatchingBrainPage';
 import { DriverUsersPage } from './product-users/DriverUsersPage';
 import { DriverUserDetailPage } from './product-users/DriverUserDetailPage';
 import { RiderUsersPage } from './product-users/RiderUsersPage';
@@ -175,6 +176,11 @@ export function AdminPortal() {
       )}
 
       {currentPage === 'platform-team' && <PlatformTeam />}
+      {currentPage === 'matching-brain' && (
+        <div className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden min-h-[560px]">
+          <MatchingBrainPage />
+        </div>
+      )}
       {currentPage === 'activity-log' && <ActivityLog />}
       {currentPage === 'fuel-stations' && (
         <div className="min-h-[600px] rounded-xl bg-white shadow-sm overflow-x-auto overflow-y-visible dark:bg-card dark:shadow-none dark:ring-1 dark:ring-border">

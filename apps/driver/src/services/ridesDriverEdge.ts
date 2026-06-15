@@ -33,6 +33,26 @@ async function ridesHeaders(): Promise<HeadersInit> {
 
 const base = API_ENDPOINTS.rides;
 
+export const DRIVER_FORBIDDEN_ROLE_MESSAGE =
+  'Driver access is not enabled for this account. Sign out, then sign in again here.';
+
+async function parseDriverRidesError(res: Response): Promise<never> {
+  const text = await res.text();
+  try {
+    const body = JSON.parse(text) as { error?: string; message?: string };
+    if (body.error === 'forbidden_role') {
+      throw new Error(DRIVER_FORBIDDEN_ROLE_MESSAGE);
+    }
+    if (body.error === 'chat_not_available') {
+      throw new Error('Chat is only available during an active trip.');
+    }
+    throw new Error(body.message ?? body.error ?? text);
+  } catch (e) {
+    if (e instanceof Error && e.message !== text) throw e;
+    throw new Error(text || `Request failed (HTTP ${res.status})`);
+  }
+}
+
 export async function ridesDriverPresence(body: DriverPresenceBody): Promise<void> {
   const res = await fetch(`${base}/v1/drivers/presence`, {
     method: 'POST',
@@ -224,22 +244,8 @@ export async function ridesDriverMyEarnings(
   const res = await fetch(`${base}/v1/drivers/me/earnings?period=${encodeURIComponent(period)}`, {
     headers: await ridesHeaders(),
   });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) await parseDriverRidesError(res);
   return res.json();
-}
-
-async function parseDriverRidesError(res: Response): Promise<never> {
-  const text = await res.text();
-  try {
-    const body = JSON.parse(text) as { error?: string; message?: string };
-    if (body.error === 'chat_not_available') {
-      throw new Error('Chat is only available during an active trip.');
-    }
-    throw new Error(body.message ?? body.error ?? text);
-  } catch (e) {
-    if (e instanceof Error && e.message !== text) throw e;
-    throw new Error(text || `Request failed (HTTP ${res.status})`);
-  }
 }
 
 export async function ridesDriverListMessages(

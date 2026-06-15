@@ -119,6 +119,13 @@ import {
   notifyShadowBookerOfTripCompleted,
 } from "./rideNotifications.ts";
 import { registerScheduledRidesRoutes } from "./scheduledRides/scheduledRidesRoutes.ts";
+import {
+  isMatchingBrainEnabled,
+  delegateStartMatching,
+  delegateReconcile,
+  delegateDeclineOffer,
+} from "./matchingBrainClient.ts";
+import { latLngToH3 } from "../_shared/h3/geoIndex.ts";
 
 /** Match Supabase path prefix: .../functions/v1/rides/<route> → /rides/<route> */
 const app = new Hono().basePath("/rides");
@@ -482,11 +489,45 @@ async function cancelRideRequestRow(
   });
 }
 
+/**
+ * @deprecated Phase 8 cleanup: Remove legacy path after matching brain stable in production.
+ * Legacy matching logic is retained for fallback during rollout.
+ * After stable operation, this should only delegate to matching brain.
+ */
 async function startMatchingForRide(
   rideId: string,
   ride: Record<string, unknown>,
   reqId?: string,
 ): Promise<void> {
+  if (isMatchingBrainEnabled()) {
+    const result = await delegateStartMatching({
+      product_key: "rides",
+      ride_request_id: rideId,
+      request_id: reqId,
+      ride_snapshot: {
+        pickup_lat: Number(ride.pickup_lat),
+        pickup_lng: Number(ride.pickup_lng),
+        vehicle_option: String(ride.vehicle_option ?? ""),
+        rider_user_id: String(ride.rider_user_id),
+        driver_offer_timeout_seconds: ride.driver_offer_timeout_seconds != null
+          ? Number(ride.driver_offer_timeout_seconds)
+          : undefined,
+      },
+    });
+    if (!result.ok) {
+      logLine({
+        event: "brain_start_matching_failed_fallback",
+        ride_id: rideId,
+        error: result.error,
+        request_id: reqId ?? null,
+      });
+      // Fallback to legacy path
+      await runMatchingWave(rideId, ride, 1, reqId);
+      await reconcileMatching(rideId, reqId);
+    }
+    return;
+  }
+  // Legacy path
   await runMatchingWave(rideId, ride, 1, reqId);
   await reconcileMatching(rideId, reqId);
 }
@@ -799,31 +840,84 @@ async function requireUser(authHeader: string | undefined) {
   return { user };
 }
 
-async function bumpSurgeDemand(cellKey: string, delta: number) {
+function isH3SurgeEnabled(): boolean {
+  return Deno.env.get("MATCHING_H3_SURGE") === "1";
+}
+
+async function bumpSurgeDemand(cellKey: string, delta: number, h3CellKey?: string) {
+  // Use RPC if available (supports H3 dual-write)
+  const { data: rpcResult, error: rpcError } = await pubSvc().rpc("rides_upsert_surge_cell", {
+    p_cell_key: cellKey,
+    p_h3_cell_key: isH3SurgeEnabled() ? h3CellKey : null,
+    p_delta: delta,
+  });
+
+  if (!rpcError && rpcResult) {
+    return;
+  }
+
+  // Fallback to direct writes
   const db = svc();
   const { data: row } = await db.from("surge_cells").select("*").eq("cell_key", cellKey).maybeSingle();
+
   if (!row) {
     if (delta <= 0) return;
-    await db.from("surge_cells").insert({
+    const insertRow: Record<string, unknown> = {
       cell_key: cellKey,
       open_requests: Math.max(0, delta),
       surge_multiplier: 1,
-    });
+    };
+    if (isH3SurgeEnabled() && h3CellKey) {
+      insertRow.h3_cell_key = h3CellKey;
+    }
+    await db.from("surge_cells").insert(insertRow);
     return;
   }
+
   const next = Math.max(0, (row.open_requests ?? 0) + delta);
   let mult = Number(row.surge_multiplier ?? 1);
   if (next >= 8) mult = Math.min(2.5, mult + 0.05);
   else if (next <= 2) mult = Math.max(1, mult - 0.02);
-  await db.from("surge_cells").update({
+
+  const updateRow: Record<string, unknown> = {
     open_requests: next,
     surge_multiplier: mult,
     updated_at: new Date().toISOString(),
-  }).eq("cell_key", cellKey);
+  };
+  if (isH3SurgeEnabled() && h3CellKey && !row.h3_cell_key) {
+    updateRow.h3_cell_key = h3CellKey;
+  }
+
+  await db.from("surge_cells").update(updateRow).eq("cell_key", cellKey);
 }
 
-async function readSurgeMultiplier(cellKey: string): Promise<number> {
+async function readSurgeMultiplier(cellKey: string, h3CellKey?: string): Promise<number> {
+  // Use RPC if available (supports H3 lookup with fallback)
+  const { data: rpcResult, error: rpcError } = await pubSvc().rpc("rides_read_surge_multiplier", {
+    p_cell_key: cellKey,
+    p_h3_cell_key: isH3SurgeEnabled() ? h3CellKey : null,
+  });
+
+  if (!rpcError && typeof rpcResult === "number") {
+    return rpcResult;
+  }
+
+  // Fallback to direct query
   const db = svc();
+
+  // Try H3 first if enabled
+  if (isH3SurgeEnabled() && h3CellKey) {
+    const { data: h3Data } = await db
+      .from("surge_cells")
+      .select("surge_multiplier")
+      .eq("h3_cell_key", h3CellKey)
+      .maybeSingle();
+    if (h3Data?.surge_multiplier != null) {
+      return Number(h3Data.surge_multiplier);
+    }
+  }
+
+  // Fallback to legacy key
   const { data } = await db.from("surge_cells").select("surge_multiplier").eq("cell_key", cellKey).maybeSingle();
   return data?.surge_multiplier != null ? Number(data.surge_multiplier) : 1;
 }
@@ -901,7 +995,31 @@ async function cancelMatchingRideSystem(
   await handleTerminalRideLedgerAndSync(rideId);
 }
 
+/**
+ * @deprecated Phase 8 cleanup: Remove legacy path after matching brain stable in production.
+ * Legacy reconcile logic is retained for fallback during rollout.
+ * After stable operation, this should only delegate to matching brain.
+ */
 async function reconcileMatching(rideId: string, requestId?: string) {
+  if (isMatchingBrainEnabled()) {
+    const result = await delegateReconcile({
+      product_key: "rides",
+      ride_request_id: rideId,
+      request_id: requestId,
+    });
+    if (!result.ok) {
+      logLine({
+        event: "brain_reconcile_failed_fallback",
+        ride_id: rideId,
+        error: result.error,
+        request_id: requestId ?? null,
+      });
+      // Fallback to legacy path below
+    } else {
+      return;
+    }
+  }
+
   await expirePendingOffers(rideId);
 
   // #region agent log
@@ -965,6 +1083,11 @@ async function reconcileMatching(rideId: string, requestId?: string) {
   });
 }
 
+/**
+ * @deprecated Phase 8 cleanup: Remove after matching brain stable in production.
+ * Legacy wave runner is retained for fallback during rollout.
+ * All wave logic should be handled by matching brain after cutover.
+ */
 async function runMatchingWave(
   rideId: string,
   ride: Record<string, unknown>,
@@ -1980,6 +2103,14 @@ app.post("/v1/drivers/presence", async (c) => {
   const headingRaw = body.heading_degrees != null ? Number(body.heading_degrees) : null;
   const headingDegrees = headingRaw != null && Number.isFinite(headingRaw) ? headingRaw : null;
 
+  // Compute H3 cell for spatial indexing (Phase 4)
+  let h3Cell: string | null = null;
+  try {
+    h3Cell = latLngToH3(lat, lng, 7); // Default resolution 7
+  } catch {
+    // H3 computation failed, proceed without it
+  }
+
   const upsert = {
     user_id: auth.user.id,
     lat,
@@ -1987,6 +2118,7 @@ app.post("/v1/drivers/presence", async (c) => {
     heading_degrees: headingDegrees,
     available_for_rides: Boolean(body.available_for_rides ?? true),
     body_type_slug: bodyTypeSlug,
+    h3_cell: h3Cell,
     updated_at: new Date().toISOString(),
   };
 
@@ -1997,6 +2129,7 @@ app.post("/v1/drivers/presence", async (c) => {
     p_heading_degrees: upsert.heading_degrees,
     p_available_for_rides: upsert.available_for_rides,
     p_body_type_slug: upsert.body_type_slug,
+    p_h3_cell: upsert.h3_cell,
   });
 
   if (rpcError) {
@@ -2087,28 +2220,63 @@ app.post("/v1/drivers/offers/:offerId/accept", async (c) => {
     }
   }
 
-  await patchDriverOfferRow(offerId, { status: "accepted" });
-
-  await supersedePendingOffersForRide(rideId, offerId);
-  await supersedeAllPendingOffersForDriver(auth.user.id);
-
-  await patchRideRequest(rideId, {
-    status: "driver_assigned",
-    assigned_driver_user_id: auth.user.id,
-    updated_at: nowIso,
+  // Use atomic accept RPC for race-free assignment
+  const { data: atomicResult, error: atomicError } = await pubSvc().rpc("matching_accept_driver_offer", {
+    p_offer_id: offerId,
+    p_driver_user_id: auth.user.id,
   });
 
-  const freshRide = await loadRideRequestById(rideId);
+  let freshRide: Record<string, unknown> | null = null;
+  let usedAtomicPath = false;
 
-  if (!freshRide || freshRide.status !== "driver_assigned") {
-    await audit(rideId, auth.user.id, "accept_race_lost", { offer_id: offerId });
-    return c.json({ error: "assign_failed" }, 409);
+  if (!atomicError && atomicResult) {
+    const result = atomicResult as { ok: boolean; error?: string; ride?: Record<string, unknown> };
+    if (result.ok && result.ride) {
+      freshRide = result.ride;
+      usedAtomicPath = true;
+      logLine({ event: "atomic_accept_success", ride_id: rideId, driver_id: auth.user.id });
+    } else if (!result.ok) {
+      const errorMap: Record<string, { error: string; status: number }> = {
+        offer_not_found: { error: "not_found", status: 404 },
+        offer_not_pending: { error: "offer_not_pending", status: 409 },
+        offer_expired: { error: "offer_expired", status: 410 },
+        ride_not_matching: { error: "ride_not_matching", status: 409 },
+        assign_failed: { error: "assign_failed", status: 409 },
+      };
+      const mapped = errorMap[result.error ?? ""] ?? { error: result.error ?? "accept_failed", status: 409 };
+      await audit(rideId, auth.user.id, "accept_race_lost", { offer_id: offerId, atomic_error: result.error });
+      return c.json({ error: mapped.error }, mapped.status);
+    }
   }
 
-  await audit(rideId, auth.user.id, "offer_accepted", { offer_id: offerId });
-  logLine({ event: "offer_accepted", ride_id: rideId, driver_id: auth.user.id });
+  if (!usedAtomicPath) {
+    // Fallback to legacy path (atomic RPC failed or unavailable)
+    if (atomicError) {
+      logLine({ event: "atomic_accept_rpc_failed", offer_id: offerId, error: atomicError.message });
+    }
 
-  void notifyPassengerOfRideEvent(db, freshRide, "driver_assigned", {
+    await patchDriverOfferRow(offerId, { status: "accepted" });
+    await supersedePendingOffersForRide(rideId, offerId);
+    await supersedeAllPendingOffersForDriver(auth.user.id);
+
+    await patchRideRequest(rideId, {
+      status: "driver_assigned",
+      assigned_driver_user_id: auth.user.id,
+      updated_at: nowIso,
+    });
+
+    freshRide = await loadRideRequestById(rideId);
+
+    if (!freshRide || freshRide.status !== "driver_assigned") {
+      await audit(rideId, auth.user.id, "accept_race_lost", { offer_id: offerId });
+      return c.json({ error: "assign_failed" }, 409);
+    }
+  }
+
+  await audit(rideId, auth.user.id, "offer_accepted", { offer_id: offerId, atomic: usedAtomicPath });
+  logLine({ event: "offer_accepted", ride_id: rideId, driver_id: auth.user.id, atomic: usedAtomicPath });
+
+  void notifyPassengerOfRideEvent(db, freshRide!, "driver_assigned", {
     url: `${PASSENGER_APP_ORIGIN}/ride/${rideId}`,
   }).catch((e) =>
     console.warn("[rides] passenger SMS driver_assigned failed:", e)
@@ -2123,7 +2291,7 @@ app.post("/v1/drivers/offers/:offerId/accept", async (c) => {
   );
 
   const enRouteRide = rideOut ?? freshRide;
-  if (String(enRouteRide.status) === "driver_en_route_pickup") {
+  if (String(enRouteRide?.status) === "driver_en_route_pickup") {
     void maybeAutoShareWithTrustedContacts(
       { getContactsDb: getRidesContactsDb, requireUser, loadRideRequestById, audit },
       enRouteRide as Record<string, unknown>,
