@@ -320,8 +320,14 @@ export interface DriverActiveRideResponse {
 
 export interface DriverEarningsSummary {
   period: DriverEarningsPeriod;
+  /** Sum of fares from cash-payment trips (trip revenue, not physical cash received). */
   cash_minor: number;
+  /** Sum of fares from card/digital-payment trips. */
   digital_minor: number;
+  /** Total trip revenue: cash_minor + digital_minor (tips excluded until added later). */
+  total_minor: number;
+  /** Physical cash received from riders on cash trips (cash_received_minor when settled). */
+  cash_in_hand_minor: number;
   currency: string;
   trip_count: number;
   digital_payments_enabled: boolean;

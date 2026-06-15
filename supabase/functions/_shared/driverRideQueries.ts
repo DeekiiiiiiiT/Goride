@@ -23,7 +23,7 @@ const WEEKDAY_MON_OFFSET: Record<string, number> = {
 };
 
 const LEDGER_TRIP_COLUMNS =
-  "fare_final_minor, fare_estimate_minor, payment_method, currency, completed_at, updated_at, status";
+  "fare_final_minor, fare_estimate_minor, payment_method, currency, completed_at, updated_at, status, cash_received_minor";
 const LEGACY_TRIP_COLUMNS =
   "fare_final_minor, fare_estimate_minor, currency, updated_at, created_at, status";
 
@@ -57,8 +57,24 @@ function isMissingLedgerColumnError(message: string): boolean {
   const m = message.toLowerCase();
   return (
     m.includes("does not exist") &&
-    (m.includes("payment_method") || m.includes("completed_at"))
+    (m.includes("payment_method") ||
+      m.includes("completed_at") ||
+      m.includes("cash_received_minor"))
   );
+}
+
+/** Physical cash received on a cash trip; falls back to fare when settlement was not recorded. */
+export function effectiveCashInHandMinor(
+  row: Record<string, unknown>,
+  fareMinor: number,
+  isCashTrip: boolean,
+): number {
+  if (!isCashTrip) return 0;
+  const raw = row.cash_received_minor;
+  if (raw != null && Number.isFinite(Number(raw))) {
+    return Math.max(0, Math.floor(Number(raw)));
+  }
+  return fareMinor;
 }
 
 function effectiveFareMinor(row: Record<string, unknown>): number {
@@ -359,6 +375,8 @@ export interface DriverEarningsAggregate {
   period: DriverEarningsPeriod;
   cash_minor: number;
   digital_minor: number;
+  total_minor: number;
+  cash_in_hand_minor: number;
   currency: string;
   trip_count: number;
   digital_payments_enabled: boolean;
@@ -388,6 +406,7 @@ async function aggregateFromTable(
 
   let cash_minor = 0;
   let digital_minor = 0;
+  let cash_in_hand_minor = 0;
   let currency = "JMD";
   let trip_count = 0;
 
@@ -399,12 +418,14 @@ async function aggregateFromTable(
     }
     const fare = effectiveFareMinor(r);
     const method = r.payment_method as string | null;
+    const isCashTrip = method !== "card";
     currency = (r.currency as string) || currency;
     trip_count += 1;
     if (method === "card") {
       digital_minor += fare;
     } else {
       cash_minor += fare;
+      cash_in_hand_minor += effectiveCashInHandMinor(r, fare, isCashTrip);
     }
   }
 
@@ -412,6 +433,8 @@ async function aggregateFromTable(
     period,
     cash_minor,
     digital_minor,
+    total_minor: cash_minor + digital_minor,
+    cash_in_hand_minor,
     currency,
     trip_count,
     digital_payments_enabled: false,

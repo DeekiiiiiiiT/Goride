@@ -139,6 +139,21 @@ export function showSettlementResultOnTripScreen(outcome: CashSettlementOutcome 
   return outcome === 'exact' || outcome === 'overpay';
 }
 
+/** Completed cash trips use the dedicated cash trip summary (not the digital/card layout). */
+export function shouldShowRiderCashTripSummary(
+  ride: Pick<CashSettlementRidePick, 'payment_method' | 'status'> | null | undefined,
+): boolean {
+  return Boolean(ride && ride.status === 'completed' && isCashRide(ride));
+}
+
+/** Resolve settlement outcome from ride row or derived fare/received amounts. */
+export function resolveCashSettlementOutcome(
+  ride: CashSettlementRidePick,
+): CashSettlementOutcome | null {
+  if (ride.cash_settlement_outcome) return ride.cash_settlement_outcome;
+  return computeOutcomeFromRide(ride)?.outcome ?? null;
+}
+
 export function cashSettlementOutcomeMessage(
   outcome: CashSettlementOutcome,
   ride: CashSettlementRidePick,

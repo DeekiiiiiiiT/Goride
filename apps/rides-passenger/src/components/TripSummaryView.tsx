@@ -5,7 +5,6 @@ import { Share2, Star, X } from 'lucide-react';
 import { vehicleTypeLabel } from '@roam/business-config/ridesVehicleTypes';
 import type { RideRequestRow } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
-import { CashSettlementSummarySection } from '@/components/CashSettlementSummarySection';
 import { TripSummaryMap } from '@/components/TripSummaryMap';
 
 const KM_TO_MI = 0.621371;
@@ -131,8 +130,6 @@ export function TripSummaryView({ ride }: Props) {
             <span className="trip-summary-stats__value">{distance}</span>
           </div>
         </section>
-
-        <CashSettlementSummarySection ride={ride} />
 
         <section className="trip-summary-card" aria-label="Rate your driver">
           <div className="trip-summary-rating__avatar" aria-hidden>

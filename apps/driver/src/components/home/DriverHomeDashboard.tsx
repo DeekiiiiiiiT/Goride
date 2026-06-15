@@ -55,7 +55,7 @@ export function DriverHomeDashboard({ tripFlowActive }: Props) {
 
   const earningsAmount =
     data != null
-      ? formatStatAmount(data.cash_minor, data.currency)
+      ? formatStatAmount(data.total_minor ?? data.cash_minor + data.digital_minor, data.currency)
       : loading
         ? null
         : formatStatAmount(0, 'JMD');

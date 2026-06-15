@@ -1,0 +1,51 @@
+import { describe, expect, it } from 'vitest';
+import type { CashSettlementResponse } from '@roam/types/rides';
+import { resolveDriverCashSettlementDisplay } from './driverTripCompleteUtils';
+
+function result(partial: Partial<CashSettlementResponse>): CashSettlementResponse {
+  return {
+    ride: {
+      id: 'ride-1',
+      currency: 'JMD',
+      fare_final_minor: 62320,
+      fare_estimate_minor: 62320,
+    } as CashSettlementResponse['ride'],
+    outcome: 'exact',
+    owed_minor: 0,
+    cash_received_minor: 0,
+    arrears_minor: 0,
+    change_credit_minor: 0,
+    ...partial,
+  };
+}
+
+describe('resolveDriverCashSettlementDisplay', () => {
+  it('derives fare and received from ride when response fields are zero', () => {
+    const display = resolveDriverCashSettlementDisplay(
+      result({ outcome: 'overpay', owed_minor: 0, cash_received_minor: 0 }),
+    );
+    expect(display.fareMinor).toBe(62320);
+    expect(display.receivedMinor).toBe(0);
+    expect(display.changeMinor).toBe(0);
+  });
+
+  it('computes overpay change from response amounts', () => {
+    const display = resolveDriverCashSettlementDisplay(
+      result({
+        outcome: 'overpay',
+        owed_minor: 62320,
+        cash_received_minor: 100000,
+        change_credit_minor: 37680,
+        wallet_deltas: {
+          rider_credit_minor: 37680,
+          driver_cash_credit_minor: 37680,
+          driver_digital_debit_minor: 0,
+          driver_debt_opened_minor: 37680,
+          fare_allocated_minor: 62320,
+        },
+      }),
+    );
+    expect(display.changeMinor).toBe(37680);
+    expect(display.debtOpenedMinor).toBe(37680);
+  });
+});

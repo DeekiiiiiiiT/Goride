@@ -49,6 +49,7 @@ import { DriverTripRequestOverlay } from '../rides/DriverTripRequestOverlay';
 import { DriverEnRouteOverlay } from '../rides/DriverEnRouteOverlay';
 import { DriverOnTripOverlay } from '../rides/DriverOnTripOverlay';
 import { DriverCashSettlementOverlay } from '../rides/DriverCashSettlementOverlay';
+import { DriverDigitalTripCompleteOverlay } from '../rides/DriverDigitalTripCompleteOverlay';
 import { DriverArrivedPickupOverlay } from '../rides/DriverArrivedPickupOverlay';
 import { DriverWalletsPage } from '../rides/DriverWalletsPage';
 
@@ -538,6 +539,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
       <DriverEnRouteOverlay />
       <DriverOnTripOverlay />
       <DriverCashSettlementOverlay />
+      <DriverDigitalTripCompleteOverlay />
       <DriverArrivedPickupOverlay />
     </RideDispatchProvider>
   ) : (

@@ -8,6 +8,7 @@ import { formatMoneyMinor } from '@roam/types/rides';
 import {
   cashSettlementOutcomeMessage,
   computeOutcomeFromRide,
+  resolveCashSettlementOutcome,
 } from '@roam/types/cashSettlementDisplay';
 import { notifyWalletBalanceChanged } from '@/lib/walletEvents';
 import { ridesGetSettlementSummary } from '@/services/ridesEdge';
@@ -55,7 +56,13 @@ export function CashTripSummaryView({ ride }: Props) {
 
   const currency = ride.currency ?? 'JMD';
   const computed = useMemo(() => computeOutcomeFromRide(ride), [ride]);
-  const outcome = ride.cash_settlement_outcome;
+  const outcome =
+    ride.cash_settlement_outcome ??
+    summary?.outcome ??
+    resolveCashSettlementOutcome(ride) ??
+    computed?.outcome ??
+    null;
+  const isLegacyCashTrip = outcome == null && !loading;
 
   useEffect(() => {
     let cancelled = false;
@@ -81,8 +88,11 @@ export function CashTripSummaryView({ ride }: Props) {
     };
   }, [ride.id, currency]);
 
-  const owedMinor = summary?.owed_minor ?? computed?.owed_minor ?? ride.fare_final_minor ?? 0;
-  const receivedMinor = summary?.cash_received_minor ?? Number(ride.cash_received_minor ?? 0);
+  const owedMinor = summary?.owed_minor ?? computed?.owed_minor ?? ride.fare_final_minor ?? ride.fare_estimate_minor ?? 0;
+  const receivedMinor =
+    summary?.cash_received_minor ??
+    computed?.cash_received_minor ??
+    Number(ride.cash_received_minor ?? (isLegacyCashTrip ? owedMinor : 0));
   const changeMinor = summary?.change_credit_minor ?? computed?.change_credit_minor ?? 0;
   const arrearsMinor = summary?.arrears_minor ?? computed?.arrears_minor ?? 0;
 
@@ -160,58 +170,76 @@ export function CashTripSummaryView({ ride }: Props) {
             <>
               {outcome === 'overpay' && changeMinor > 0 ? (
                 <div className="trip-summary-cash-hero__highlight">
-                  <p className="trip-summary-cash-hero__highlight-label">Change credited to wallet</p>
+                  <p className="trip-summary-cash-hero__highlight-label">Your change</p>
                   <p className="trip-summary-cash-hero__highlight-amount">
-                    +{formatMoneyMinor(changeMinor, currency)}
+                    {formatMoneyMinor(changeMinor, currency)}
                   </p>
                   <p className="trip-summary-cash-hero__highlight-sub">
-                    Your driver collected more than the fare. The difference is in your Roam wallet.
+                    Credited to your Roam wallet — use it on your next trip.
                   </p>
                 </div>
               ) : outcome === 'exact' ? (
                 <div className="trip-summary-cash-hero__highlight trip-summary-cash-hero__highlight--exact">
-                  <p className="trip-summary-cash-hero__highlight-label">Paid in cash</p>
+                  <p className="trip-summary-cash-hero__highlight-label">Your change</p>
                   <p className="trip-summary-cash-hero__highlight-amount">
-                    {formatMoneyMinor(receivedMinor, currency)}
+                    {formatMoneyMinor(0, currency)}
                   </p>
-                  <p className="trip-summary-cash-hero__highlight-sub">Exact fare — no change due</p>
+                  <p className="trip-summary-cash-hero__highlight-sub">Exact fare paid — no change due</p>
                 </div>
-              ) : outcome === 'underpay' || outcome === 'unpaid' ? (
+              ) : outcome === 'underpay' ? (
                 <div className="trip-summary-cash-hero__highlight trip-summary-cash-hero__highlight--arrears">
-                  <p className="trip-summary-cash-hero__highlight-label">
-                    {outcome === 'unpaid' ? 'Trip unpaid' : 'Partial payment'}
+                  <p className="trip-summary-cash-hero__highlight-label">Amount still owed</p>
+                  {arrearsMinor > 0 && (
+                    <p className="trip-summary-cash-hero__highlight-amount">
+                      {formatMoneyMinor(arrearsMinor, currency)}
+                    </p>
+                  )}
+                  <p className="trip-summary-cash-hero__highlight-sub">
+                    You paid {formatMoneyMinor(receivedMinor, currency)} of{' '}
+                    {formatMoneyMinor(owedMinor, currency)}. The balance was added to your Roam wallet.
                   </p>
+                </div>
+              ) : outcome === 'unpaid' ? (
+                <div className="trip-summary-cash-hero__highlight trip-summary-cash-hero__highlight--arrears">
+                  <p className="trip-summary-cash-hero__highlight-label">Trip unpaid</p>
                   {arrearsMinor > 0 && (
                     <p className="trip-summary-cash-hero__highlight-amount">
                       {formatMoneyMinor(arrearsMinor, currency)} owed
                     </p>
                   )}
                   <p className="trip-summary-cash-hero__highlight-sub">
-                    Outstanding balance added to your wallet — settle before your next cash trip.
+                    No cash was received for this trip. Please settle your balance before your next cash
+                    trip.
                   </p>
+                </div>
+              ) : isLegacyCashTrip ? (
+                <div className="trip-summary-cash-hero__highlight trip-summary-cash-hero__highlight--exact">
+                  <p className="trip-summary-cash-hero__highlight-label">Paid in cash</p>
+                  <p className="trip-summary-cash-hero__highlight-amount">{fare}</p>
+                  <p className="trip-summary-cash-hero__highlight-sub">Cash trip completed</p>
                 </div>
               ) : null}
 
               <div className="trip-summary-cash-hero__rows">
                 <div className="trip-summary-cash-hero__row">
-                  <span>Fare due</span>
+                  <span>Fare</span>
                   <span className="tabular-nums font-medium">{formatMoneyMinor(owedMinor, currency)}</span>
                 </div>
                 <div className="trip-summary-cash-hero__row">
-                  <span>Cash paid to driver</span>
+                  <span>Cash you gave</span>
                   <span className="tabular-nums font-medium">{formatMoneyMinor(receivedMinor, currency)}</span>
                 </div>
-                {changeMinor > 0 && (
+                {outcome === 'overpay' && changeMinor > 0 && (
                   <div className="trip-summary-cash-hero__row trip-summary-cash-hero__row--credit">
-                    <span>Change to wallet</span>
+                    <span>Change</span>
                     <span className="tabular-nums font-semibold">
-                      +{formatMoneyMinor(changeMinor, currency)}
+                      {formatMoneyMinor(changeMinor, currency)}
                     </span>
                   </div>
                 )}
-                {arrearsMinor > 0 && (
+                {(outcome === 'underpay' || outcome === 'unpaid') && arrearsMinor > 0 && (
                   <div className="trip-summary-cash-hero__row trip-summary-cash-hero__row--arrears">
-                    <span>Outstanding balance</span>
+                    <span>Still owed</span>
                     <span className="tabular-nums font-semibold">
                       {formatMoneyMinor(arrearsMinor, currency)}
                     </span>

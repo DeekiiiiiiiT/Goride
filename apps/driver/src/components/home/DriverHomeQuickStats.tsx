@@ -35,7 +35,11 @@ export function DriverHomeQuickStats({ data, loading, rating }: Props) {
   const hasRating = rating != null && Number.isFinite(rating);
 
   const earningsAmount =
-    data != null ? formatStatAmount(data.cash_minor, data.currency) : loading ? null : formatStatAmount(0, 'JMD');
+    data != null
+      ? formatStatAmount(data.total_minor ?? data.cash_minor + data.digital_minor, data.currency)
+      : loading
+        ? null
+        : formatStatAmount(0, 'JMD');
 
   return (
     <div className="grid min-w-0 grid-cols-3 gap-1">

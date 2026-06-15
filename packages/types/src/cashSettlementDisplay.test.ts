@@ -4,7 +4,9 @@ import {
   computeOutcomeFromRide,
   getCashPaymentCardMode,
   isCashRide,
+  resolveCashSettlementOutcome,
   resolveLockedFareMinor,
+  shouldShowRiderCashTripSummary,
   showSettlementResultOnTripScreen,
 } from './cashSettlementDisplay';
 import type { CashSettlementRidePick } from './cashSettlementDisplay';
@@ -136,5 +138,44 @@ describe('showSettlementResultOnTripScreen', () => {
     expect(showSettlementResultOnTripScreen('overpay')).toBe(true);
     expect(showSettlementResultOnTripScreen('underpay')).toBe(false);
     expect(showSettlementResultOnTripScreen('unpaid')).toBe(false);
+  });
+});
+
+describe('shouldShowRiderCashTripSummary', () => {
+  it('cash completed trips use cash summary', () => {
+    expect(
+      shouldShowRiderCashTripSummary({ payment_method: 'cash', status: 'completed' }),
+    ).toBe(true);
+  });
+  it('card completed trips use digital summary', () => {
+    expect(
+      shouldShowRiderCashTripSummary({ payment_method: 'card', status: 'completed' }),
+    ).toBe(false);
+  });
+  it('in-progress cash trips do not use summary routing', () => {
+    expect(
+      shouldShowRiderCashTripSummary({ payment_method: 'cash', status: 'on_trip' }),
+    ).toBe(false);
+  });
+});
+
+describe('resolveCashSettlementOutcome', () => {
+  it('prefers stored outcome', () => {
+    expect(
+      resolveCashSettlementOutcome(
+        ride({ status: 'completed', cash_settlement_outcome: 'underpay', fare_final_minor: 1000 }),
+      ),
+    ).toBe('underpay');
+  });
+  it('derives outcome from received amounts', () => {
+    expect(
+      resolveCashSettlementOutcome(
+        ride({
+          status: 'completed',
+          fare_final_minor: 1000,
+          cash_received_minor: 1500,
+        }),
+      ),
+    ).toBe('overpay');
   });
 });

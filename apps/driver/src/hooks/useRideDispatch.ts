@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '../utils/supabase/client';
-import type { DriverOfferWithRide, DriverTransitionBody, RideRequestRow } from '@roam/types/rides';
+import type { DriverOfferWithRide, DriverTransitionBody, RideRequestRow, CashSettlementResponse } from '@roam/types/rides';
 import { isDriverActiveRideStatus } from '@roam/types/rides';
 import {
   ridesDriverAcceptOffer,
@@ -14,7 +14,7 @@ import {
   type DriverWaitTimeInfo,
   type DriverRideLocationLive,
 } from '../services/ridesDriverEdge';
-import { isAwaitingCashSettlement, shouldCollectCashAtDropoff } from '../lib/cashSettlementUi';
+import { isAwaitingCashSettlement, isCashRide, shouldCollectCashAtDropoff } from '../lib/cashSettlementUi';
 import {
   clearCashSettlementPending,
   readCashSettlementPending,
@@ -70,6 +70,18 @@ const OFFER_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-p
 
 const DEFAULT_BODY_TYPE_SLUG = 'sedan';
 
+function buildExactCashSettlementResult(ride: RideRequestRow): CashSettlementResponse {
+  const fareMinor = Number(ride.fare_final_minor ?? ride.fare_estimate_minor ?? 0);
+  return {
+    ride,
+    outcome: 'exact',
+    owed_minor: fareMinor,
+    cash_received_minor: fareMinor,
+    arrears_minor: 0,
+    change_credit_minor: 0,
+  };
+}
+
 export function useRideDispatch() {
   const [online, setOnline] = useState(false);
   const [goingOnline, setGoingOnline] = useState(false);
@@ -81,6 +93,8 @@ export function useRideDispatch() {
   const [presenceError, setPresenceError] = useState<string | null>(null);
   const [rideLocationLive, setRideLocationLive] = useState<DriverRideLocationLive | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [cashSettlementResult, setCashSettlementResult] = useState<CashSettlementResponse | null>(null);
+  const [digitalTripComplete, setDigitalTripComplete] = useState<RideRequestRow | null>(null);
 
   const watchId = useRef<string | number | null>(null);
   const lastCoords = useRef<{ lat: number; lng: number } | null>(null);
@@ -701,7 +715,11 @@ export function useRideDispatch() {
         syncActiveRide(null);
         if (status === 'completed') {
           window.dispatchEvent(new Event('roam-driver-trip-completed'));
-          toast.success('Trip completed');
+          if (isCashRide(ride)) {
+            setCashSettlementResult(buildExactCashSettlementResult(ride));
+          } else {
+            setDigitalTripComplete(ride);
+          }
         } else {
           toast.message('Ride cancelled');
         }
@@ -757,12 +775,9 @@ export function useRideDispatch() {
           idempotency_key: idempotencyKey,
         });
         clearCashSettlementPending();
+        syncActiveRide(null);
+        setCashSettlementResult(result);
         window.dispatchEvent(new Event('roam-driver-trip-completed'));
-        toast.success(
-          result.outcome === 'exact'
-            ? 'Payment confirmed'
-            : `Payment recorded (${result.outcome})`,
-        );
         return result;
       } catch (e: unknown) {
         const raw = e instanceof Error ? e.message : '';
@@ -811,8 +826,12 @@ export function useRideDispatch() {
   );
 
   const dismissCashSettlementResult = useCallback(() => {
-    syncActiveRide(null);
-  }, [syncActiveRide]);
+    setCashSettlementResult(null);
+  }, []);
+
+  const dismissDigitalTripComplete = useCallback(() => {
+    setDigitalTripComplete(null);
+  }, []);
 
   return {
     online,
@@ -835,6 +854,9 @@ export function useRideDispatch() {
     advance,
     submitCashSettlement,
     dismissCashSettlementResult,
+    cashSettlementResult,
+    digitalTripComplete,
+    dismissDigitalTripComplete,
     resumeCashSettlement,
     refreshOffers,
     permissions,

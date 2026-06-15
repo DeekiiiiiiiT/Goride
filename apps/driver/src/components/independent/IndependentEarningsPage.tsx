@@ -83,15 +83,19 @@ export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
   const { wallets, loading: walletsLoading } = useDriverWallets();
 
   const currency = allData?.currency ?? weekData?.currency ?? wallets?.currency ?? 'JMD';
-  const cashMinor = allData?.cash_minor ?? 0;
-  const weekCashMinor = weekData?.cash_minor ?? 0;
+  const totalMinor =
+    allData?.total_minor ?? (allData?.cash_minor ?? 0) + (allData?.digital_minor ?? 0);
+  const cashFareMinor = allData?.cash_minor ?? 0;
+  const cashInHandMinor = allData?.cash_in_hand_minor ?? cashFareMinor;
+  const weekTotalMinor =
+    weekData?.total_minor ?? (weekData?.cash_minor ?? 0) + (weekData?.digital_minor ?? 0);
   const weekTrips = weekData?.trip_count ?? 0;
 
-  const cashLabel = formatMoneyMinor(cashMinor, currency);
-  const weekLabel = formatMoneyMinor(weekCashMinor, currency);
+  const totalLabel = formatMoneyMinor(totalMinor, currency);
+  const cashInHandLabel = formatMoneyMinor(cashInHandMinor, currency);
+  const weekLabel = formatMoneyMinor(weekTotalMinor, currency);
 
   const digitalBal = wallets?.digital.balance_minor ?? 0;
-  const cashWalletBal = wallets?.cash.balance_minor ?? 0;
   const debtOwed = wallets?.debt.arrears_minor ?? 0;
   const debtDisplay =
     debtOwed > 0 ? `-${formatMoneyMinorPlain(debtOwed)}` : formatMoneyMinorPlain(0);
@@ -109,17 +113,17 @@ export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
       <section className="flex items-end justify-between gap-4">
         <div>
           <p className="mb-1 text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-            Cash trip earnings
+            Total earnings
           </p>
           {allLoading && !allData ? (
             <Loader2 className="h-9 w-9 animate-spin text-emerald-600" />
           ) : (
             <h2 className="text-[30px] font-extrabold leading-tight tracking-tight text-slate-900 dark:text-white tabular-nums">
-              {cashLabel}
+              {totalLabel}
             </h2>
           )}
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Total fare from completed cash trips
+            Trip revenue from all completed trips
           </p>
         </div>
         <div className="rounded-xl bg-emerald-500/10 p-2.5">
@@ -147,8 +151,8 @@ export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
           <div className="grid grid-cols-3 gap-2">
             <WalletChip
               label="Cash"
-              amount={formatMoneyMinorPlain(cashWalletBal)}
-              loading={walletsLoading && !wallets}
+              amount={formatMoneyMinorPlain(cashFareMinor)}
+              loading={allLoading && !allData}
             />
             <WalletChip
               label="Digital"
@@ -201,14 +205,14 @@ export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
               <Banknote className="h-7 w-7" strokeWidth={1.75} aria-hidden />
             </div>
             <p className="text-xs font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
-              Total cash earnings
+              Cash in hand
             </p>
           </div>
           <div className="relative space-y-1">
-            <EarningsAmount loading={allLoading && !allData} amount={cashLabel} />
+            <EarningsAmount loading={allLoading && !allData} amount={cashInHandLabel} />
             <p className="flex items-center gap-1 text-sm text-slate-500 dark:text-slate-400">
               <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
-              All completed cash trips
+              Physical cash received from riders
             </p>
           </div>
         </div>

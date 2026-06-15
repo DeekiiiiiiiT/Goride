@@ -58,7 +58,10 @@ export function IndependentHomeEarnings() {
         </div>
       ) : (
         <p className="text-4xl font-bold tabular-nums text-slate-900 dark:text-white tracking-tight">
-          {formatMoneyMinor(data?.cash_minor ?? 0, data?.currency ?? 'JMD')}
+          {formatMoneyMinor(
+            data?.total_minor ?? (data?.cash_minor ?? 0) + (data?.digital_minor ?? 0),
+            data?.currency ?? 'JMD',
+          )}
         </p>
       )}
     </section>
