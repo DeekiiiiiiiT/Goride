@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { useSupabase } from "../../../utils/supabase/useSupabase";
+import { useAuth } from "../../auth/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/tabs";
 import { Button } from "../../ui/button";
@@ -51,7 +51,7 @@ interface BrainStatus {
 }
 
 export function MatchingBrainPage() {
-  const { supabase, session } = useSupabase();
+  const { session } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +64,7 @@ export function MatchingBrainPage() {
   const [editedPolicy, setEditedPolicy] = useState<Partial<MatchingPolicy>>({});
 
   const fetchData = useCallback(async () => {
-    if (!supabase || !session) return;
+    if (!session) return;
 
     setLoading(true);
     setError(null);
@@ -108,14 +108,14 @@ export function MatchingBrainPage() {
     } finally {
       setLoading(false);
     }
-  }, [supabase, session]);
+  }, [session]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
   const savePolicy = async () => {
-    if (!supabase || !session || !selectedPolicy) return;
+    if (!session || !selectedPolicy) return;
 
     setSaving(true);
     setError(null);
