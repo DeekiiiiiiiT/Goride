@@ -859,7 +859,13 @@ export async function listDisputes(
   const qs = params.toString();
   const res = await adminFetch(accessToken, `${RIDES_BASE}/admin/disputes${qs ? `?${qs}` : ''}`);
   if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
+  const data = await res.json();
+  return {
+    disputes: data.disputes ?? [],
+    total: data.total ?? 0,
+    page: data.page ?? 1,
+    limit: data.limit ?? 20,
+  };
 }
 
 export async function getDispute(
@@ -931,7 +937,13 @@ export async function listSettlementOverrides(
   const qs = params.toString();
   const res = await adminFetch(accessToken, `${RIDES_BASE}/admin/settlement-overrides${qs ? `?${qs}` : ''}`);
   if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
+  const data = await res.json();
+  return {
+    overrides: data.overrides ?? [],
+    total: data.total ?? 0,
+    page: data.page ?? 1,
+    limit: data.limit ?? 20,
+  };
 }
 
 export async function writeoffRiderArrears(
@@ -983,5 +995,6 @@ export async function getReasonCodes(
 ): Promise<{ reason_codes: Record<string, string> }> {
   const res = await adminFetch(accessToken, `${RIDES_BASE}/admin/reason-codes`);
   if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
+  const data = await res.json();
+  return { reason_codes: data.reason_codes ?? {} };
 }

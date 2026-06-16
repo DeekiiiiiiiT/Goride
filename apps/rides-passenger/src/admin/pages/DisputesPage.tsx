@@ -69,6 +69,7 @@ function statusBadge(status: string) {
 
 export function DisputesPage() {
   const { session } = useOutletContext<OutletContext>();
+  const token = session?.access_token;
   const [disputes, setDisputes] = useState<DisputeAdminDto[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -83,9 +84,10 @@ export function DisputesPage() {
   const [partialAmount, setPartialAmount] = useState('');
 
   const loadDisputes = useCallback(async () => {
+    if (!token) return;
     setLoading(true);
     try {
-      const result = await listDisputes(session.access_token, {
+      const result = await listDisputes(token, {
         status: statusFilter || undefined,
         page,
         limit: 20,
@@ -97,7 +99,7 @@ export function DisputesPage() {
     } finally {
       setLoading(false);
     }
-  }, [session.access_token, statusFilter, page]);
+  }, [token, statusFilter, page]);
 
   useEffect(() => {
     void loadDisputes();
@@ -110,7 +112,7 @@ export function DisputesPage() {
     setAdminNotes('');
     setPartialAmount('');
     try {
-      const result = await getDispute(session.access_token, disputeId);
+      const result = await getDispute(token!, disputeId);
       setSelectedDispute(result);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load dispute');
@@ -123,7 +125,7 @@ export function DisputesPage() {
     if (!selectedDispute) return;
     setResolving(true);
     try {
-      await markDisputeUnderReview(session.access_token, selectedDispute.dispute.id);
+      await markDisputeUnderReview(token!, selectedDispute.dispute.id);
       toast.success('Dispute marked as under review');
       setSelectedDispute({
         ...selectedDispute,
@@ -149,7 +151,7 @@ export function DisputesPage() {
     setResolving(true);
     try {
       await resolveDispute(
-        session.access_token,
+        token!,
         selectedDispute.dispute.id,
         resolution as 'rider_favor' | 'driver_favor' | 'partial' | 'rejected',
         adminNotes.trim(),

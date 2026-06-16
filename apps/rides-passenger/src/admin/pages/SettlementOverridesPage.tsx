@@ -52,6 +52,7 @@ function actionBadge(action: string) {
 
 export function SettlementOverridesPage() {
   const { session } = useOutletContext<OutletContext>();
+  const token = session?.access_token;
   const [overrides, setOverrides] = useState<SettlementOverrideDto[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -77,9 +78,10 @@ export function SettlementOverridesPage() {
   const [dNotes, setDNotes] = useState('');
 
   const loadOverrides = useCallback(async () => {
+    if (!token) return;
     setLoading(true);
     try {
-      const result = await listSettlementOverrides(session.access_token, {
+      const result = await listSettlementOverrides(token, {
         riderId: searchRiderId || undefined,
         driverId: searchDriverId || undefined,
         page,
@@ -92,17 +94,18 @@ export function SettlementOverridesPage() {
     } finally {
       setLoading(false);
     }
-  }, [session.access_token, searchRiderId, searchDriverId, page]);
+  }, [token, searchRiderId, searchDriverId, page]);
 
   useEffect(() => {
     void loadOverrides();
   }, [loadOverrides]);
 
   useEffect(() => {
-    getReasonCodes(session.access_token)
+    if (!token) return;
+    getReasonCodes(token)
       .then((r) => setReasonCodes(r.reason_codes))
       .catch(() => {});
-  }, [session.access_token]);
+  }, [token]);
 
   const handleWriteoff = async () => {
     if (!wRiderId.trim() || !wReason) {
@@ -111,7 +114,7 @@ export function SettlementOverridesPage() {
     }
     setSubmitting(true);
     try {
-      const result = await writeoffRiderArrears(session.access_token, wRiderId.trim(), {
+      const result = await writeoffRiderArrears(token!, wRiderId.trim(), {
         rideId: wRideId.trim() || undefined,
         amountMinor: wAmount ? Math.round(Number(wAmount) * 100) : undefined,
         reasonCode: wReason,
@@ -136,7 +139,7 @@ export function SettlementOverridesPage() {
     setSubmitting(true);
     try {
       const result = await adjustDriverCredit(
-        session.access_token,
+        token!,
         dRideId.trim(),
         Math.round(Number(dAmount) * 100),
         dReason,
