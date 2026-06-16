@@ -62,16 +62,24 @@ export interface CreateDisputeResult {
   disputeId?: string;
 }
 
+export const CASH_SETTLEMENT_DISPUTES_TABLE_PUBLIC = "rides_cash_settlement_disputes";
+
+function disputesTable(table?: string): string {
+  return table ?? "cash_settlement_disputes";
+}
+
 export async function createDispute(
   db: SupabaseClient,
   patchRide: (id: string, patch: Record<string, unknown>) => Promise<boolean>,
   params: CreateDisputeParams,
+  opts?: { disputesTable?: string },
 ): Promise<CreateDisputeResult> {
   if (!isCashSettlementDisputeFlowEnabled()) {
     return { success: false, error: "feature_disabled", status: 404 };
   }
 
-  const existing = await getDisputeForRide(db, params.rideId);
+  const table = disputesTable(opts?.disputesTable);
+  const existing = await getDisputeForRide(db, params.rideId, table);
   if (existing && ["open", "under_review"].includes(existing.dispute_status)) {
     return { success: false, error: "dispute_already_exists", status: 409 };
   }
@@ -85,7 +93,7 @@ export async function createDispute(
   }
 
   const { data, error } = await db
-    .from("cash_settlement_disputes")
+    .from(table)
     .insert({
       ride_request_id: params.rideId,
       rider_user_id: params.riderUserId,
@@ -119,9 +127,10 @@ export async function createDispute(
 export async function getDisputeForRide(
   db: SupabaseClient,
   rideId: string,
+  table = "cash_settlement_disputes",
 ): Promise<Dispute | null> {
   const { data, error } = await db
-    .from("cash_settlement_disputes")
+    .from(table)
     .select("*")
     .eq("ride_request_id", rideId)
     .order("created_at", { ascending: false })
@@ -144,10 +153,12 @@ export async function listDisputes(
     driverId?: string;
     page?: number;
     limit?: number;
+    disputesTable?: string;
   },
 ): Promise<{ disputes: Dispute[]; total: number }> {
+  const table = disputesTable(opts.disputesTable);
   let query = db
-    .from("cash_settlement_disputes")
+    .from(table)
     .select("*", { count: "exact" });
 
   if (opts.status) {
@@ -202,13 +213,15 @@ export async function resolveDispute(
   db: SupabaseClient,
   patchRide: (id: string, patch: Record<string, unknown>) => Promise<boolean>,
   params: ResolveDisputeParams,
+  opts?: { disputesTable?: string },
 ): Promise<ResolveDisputeResult> {
   if (!isCashSettlementDisputeFlowEnabled()) {
     return { success: false, error: "feature_disabled", status: 404 };
   }
 
+  const table = disputesTable(opts?.disputesTable);
   const { data: dispute, error: fetchError } = await db
-    .from("cash_settlement_disputes")
+    .from(table)
     .select("*")
     .eq("id", params.disputeId)
     .single();
@@ -245,7 +258,7 @@ export async function resolveDispute(
       disputeId: params.disputeId,
     });
 
-    const journalResult = await postPaymentJournal(db, {
+    const journalResult = await postPaymentJournal(undefined, {
       rideId: params.rideId,
       idempotencyKey: `dispute_resolution:${params.disputeId}`,
       requestHash: `dispute:${params.disputeId}:${resolutionAmount}`,
@@ -261,7 +274,7 @@ export async function resolveDispute(
 
   const now = new Date().toISOString();
   const { error: updateError } = await db
-    .from("cash_settlement_disputes")
+    .from(table)
     .update({
       dispute_status: newStatus,
       resolution_amount_minor: resolutionAmount > 0 ? resolutionAmount : null,

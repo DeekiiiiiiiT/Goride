@@ -170,6 +170,17 @@ async function parseError(res: Response): Promise<string> {
     if (body.error === 'forbidden') {
       return 'Not allowed to settle this ride (driver assignment mismatch).';
     }
+    if (body.error === 'feature_disabled') {
+      return 'This cash settlement admin feature is disabled. Enable the matching CASH_SETTLEMENT_* flag on the rides edge function and redeploy.';
+    }
+    if (body.error === 'query_failed') {
+      return body.message
+        ? `Settlement overrides query failed: ${body.message}`
+        : 'Settlement overrides query failed. Run migration 20260615234000_admin_settlement_overrides.sql and 20260616121500_cash_settlement_admin_grants.sql, then reload the API schema cache.';
+    }
+    if (body.error === 'internal_error' && body.message) {
+      return body.message;
+    }
     if (body.error === 'fare_not_locked') {
       return 'Fare could not be locked for cash settlement. Check fare estimate on the ride.';
     }

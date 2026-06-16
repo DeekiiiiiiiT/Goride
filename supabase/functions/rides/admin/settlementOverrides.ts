@@ -25,21 +25,27 @@ type AdminAuditFn = (
   payload: Record<string, unknown>,
 ) => Promise<void>;
 
-function svc(): SupabaseClient {
+function pubSvc(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
   );
 }
 
+const OVERRIDES_TABLE = "rides_admin_settlement_overrides";
+const RIDE_REQUESTS_TABLE = "rides_ride_requests";
+
 async function loadRideRequestById(id: string): Promise<Record<string, unknown> | null> {
-  const { data } = await svc().from("ride_requests").select("*").eq("id", id).maybeSingle();
+  const { data } = await pubSvc().from(RIDE_REQUESTS_TABLE).select("*").eq("id", id).maybeSingle();
   return data as Record<string, unknown> | null;
 }
 
 async function patchRideRequest(id: string, patch: Record<string, unknown>): Promise<boolean> {
-  const { error } = await svc().from("ride_requests").update(patch).eq("id", id);
-  return !error;
+  const { data: rpcData, error: rpcError } = await pubSvc().rpc("rides_patch_ride_request", {
+    p_id: id,
+    p_patch: patch,
+  });
+  return !rpcError && rpcData != null;
 }
 
 export const OVERRIDE_REASON_CODES = {
@@ -78,7 +84,7 @@ async function insertOverrideAudit(
     performedBy: string;
   },
 ): Promise<void> {
-  await svc().from("admin_settlement_overrides").insert({
+  await pubSvc().from(OVERRIDES_TABLE).insert({
     ride_request_id: params.rideRequestId ?? null,
     rider_user_id: params.riderUserId ?? null,
     driver_user_id: params.driverUserId ?? null,
@@ -162,8 +168,8 @@ export function registerSettlementOverrideRoutes(
     if (dbOrRes instanceof Response) return dbOrRes;
     const { db, tables } = dbOrRes;
 
-    const adminCheck = await requireProductAdmin(c, "rides");
-    if (adminCheck) return adminCheck;
+    const adminUser = await requireProductAdmin(c, "rides");
+    if (adminUser instanceof Response) return adminUser;
 
     const riderUserId = c.req.param("userId");
     const body = await c.req.json().catch(() => ({}));
@@ -180,14 +186,14 @@ export function registerSettlementOverrideRoutes(
       return c.json({ error: "invalid_reason_code", valid_codes: Object.keys(OVERRIDE_REASON_CODES) }, 400);
     }
 
-    const currentArrears = await getRiderArrearsMinor(svc(), riderUserId, currency);
+    const currentArrears = await getRiderArrearsMinor(undefined, riderUserId, currency);
     if (currentArrears <= 0) {
       return c.json({ error: "no_arrears", message: "Rider has no outstanding arrears" }, 400);
     }
 
     const writeoffAmount = amountMinor > 0 ? Math.min(amountMinor, currentArrears) : currentArrears;
 
-    const actorId = c.get("userId") as string ?? "";
+    const actorId = adminUser.id;
     const journalLines = buildArrearsWriteoffJournal({
       rideId,
       riderUserId,
@@ -197,7 +203,7 @@ export function registerSettlementOverrideRoutes(
       adminUserId: actorId,
     });
 
-    const journalResult = await postPaymentJournal(svc(), {
+    const journalResult = await postPaymentJournal(undefined, {
       rideId: rideId ?? `admin_writeoff_${riderUserId}_${Date.now()}`,
       idempotencyKey: `admin_writeoff:${riderUserId}:${Date.now()}`,
       requestHash: `writeoff:${writeoffAmount}:${reasonCode}`,
@@ -228,7 +234,7 @@ export function registerSettlementOverrideRoutes(
       reason_code: reasonCode,
     });
 
-    const newArrears = await getRiderArrearsMinor(svc(), riderUserId, currency);
+    const newArrears = await getRiderArrearsMinor(undefined, riderUserId, currency);
 
     return c.json({
       success: true,
@@ -247,8 +253,8 @@ export function registerSettlementOverrideRoutes(
     if (dbOrRes instanceof Response) return dbOrRes;
     const { db, tables } = dbOrRes;
 
-    const adminCheck = await requireProductAdmin(c, "rides");
-    if (adminCheck) return adminCheck;
+    const adminUser = await requireProductAdmin(c, "rides");
+    if (adminUser instanceof Response) return adminUser;
 
     const rideId = c.req.param("rideId");
     const ride = await loadRideRequestById(rideId);
@@ -277,7 +283,7 @@ export function registerSettlementOverrideRoutes(
       return c.json({ error: "invalid_reason_code", valid_codes: Object.keys(OVERRIDE_REASON_CODES) }, 400);
     }
 
-    const actorId = c.get("userId") as string ?? "";
+    const actorId = adminUser.id;
     const journalLines = buildDriverAdjustmentJournal({
       rideId,
       driverUserId,
@@ -287,7 +293,7 @@ export function registerSettlementOverrideRoutes(
       adminUserId: actorId,
     });
 
-    const journalResult = await postPaymentJournal(svc(), {
+    const journalResult = await postPaymentJournal(undefined, {
       rideId,
       idempotencyKey: `admin_driver_adj:${rideId}:${Date.now()}`,
       requestHash: `driver_adj:${adjustmentMinor}:${reasonCode}`,
@@ -333,8 +339,8 @@ export function registerSettlementOverrideRoutes(
     const dbOrRes = await ridesDbOrResponse(c);
     if (dbOrRes instanceof Response) return dbOrRes;
 
-    const adminCheck = await requireProductAdmin(c, "rides");
-    if (adminCheck) return adminCheck;
+    const adminUser = await requireProductAdmin(c, "rides");
+    if (adminUser instanceof Response) return adminUser;
 
     const riderId = c.req.query("rider_id");
     const driverId = c.req.query("driver_id");
@@ -343,8 +349,8 @@ export function registerSettlementOverrideRoutes(
     const limit = Math.min(100, Math.max(1, Number(c.req.query("limit")) || 20));
     const offset = (page - 1) * limit;
 
-    let query = svc()
-      .from("admin_settlement_overrides")
+    let query = pubSvc()
+      .from(OVERRIDES_TABLE)
       .select("*", { count: "exact" });
 
     if (riderId) query = query.eq("rider_user_id", riderId);
@@ -358,7 +364,8 @@ export function registerSettlementOverrideRoutes(
     const { data, error, count } = await query;
 
     if (error) {
-      return c.json({ error: "query_failed" }, 500);
+      console.error("[settlementOverrides] list_failed", error);
+      return c.json({ error: "query_failed", message: error.message, code: error.code }, 500);
     }
 
     return c.json({
@@ -373,8 +380,8 @@ export function registerSettlementOverrideRoutes(
   });
 
   app.get("/reason-codes", async (c: Context) => {
-    const adminCheck = await requireProductAdmin(c, "rides");
-    if (adminCheck) return adminCheck;
+    const adminUser = await requireProductAdmin(c, "rides");
+    if (adminUser instanceof Response) return adminUser;
 
     return c.json({ reason_codes: OVERRIDE_REASON_CODES });
   });

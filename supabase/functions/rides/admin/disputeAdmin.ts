@@ -8,6 +8,7 @@ import {
 import {
   listDisputes,
   resolveDispute,
+  CASH_SETTLEMENT_DISPUTES_TABLE_PUBLIC,
   type DisputeResolution,
   type DisputeStatus,
   DISPUTE_REASONS,
@@ -25,21 +26,27 @@ type AdminAuditFn = (
   payload: Record<string, unknown>,
 ) => Promise<void>;
 
-function svc(): SupabaseClient {
+function pubSvc(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
   );
 }
 
+const DISPUTES_TABLE = CASH_SETTLEMENT_DISPUTES_TABLE_PUBLIC;
+const RIDE_REQUESTS_TABLE = "rides_ride_requests";
+
 async function loadRideRequestById(id: string): Promise<Record<string, unknown> | null> {
-  const { data } = await svc().from("ride_requests").select("*").eq("id", id).maybeSingle();
+  const { data } = await pubSvc().from(RIDE_REQUESTS_TABLE).select("*").eq("id", id).maybeSingle();
   return data as Record<string, unknown> | null;
 }
 
 async function patchRideRequest(id: string, patch: Record<string, unknown>): Promise<boolean> {
-  const { error } = await svc().from("ride_requests").update(patch).eq("id", id);
-  return !error;
+  const { data: rpcData, error: rpcError } = await pubSvc().rpc("rides_patch_ride_request", {
+    p_id: id,
+    p_patch: patch,
+  });
+  return !rpcError && rpcData != null;
 }
 
 export function registerDisputeAdminRoutes(
@@ -56,8 +63,8 @@ export function registerDisputeAdminRoutes(
     if (dbOrRes instanceof Response) return dbOrRes;
     const { db, tables } = dbOrRes;
 
-    const adminCheck = await requireProductAdmin(c, "rides");
-    if (adminCheck) return adminCheck;
+    const adminUser = await requireProductAdmin(c, "rides");
+    if (adminUser instanceof Response) return adminUser;
 
     const status = c.req.query("status") as DisputeStatus | undefined;
     const riderId = c.req.query("rider_id");
@@ -65,16 +72,20 @@ export function registerDisputeAdminRoutes(
     const page = Math.max(1, Number(c.req.query("page")) || 1);
     const limit = Math.min(100, Math.max(1, Number(c.req.query("limit")) || 20));
 
-    const result = await listDisputes(svc(), {
+    const result = await listDisputes(pubSvc(), {
       status,
       riderId,
       driverId,
       page,
       limit,
+      disputesTable: DISPUTES_TABLE,
     });
 
     return c.json({
-      disputes: result.disputes,
+      disputes: result.disputes.map((d) => ({
+        ...d,
+        reason_label: DISPUTE_REASONS[d.dispute_reason as keyof typeof DISPUTE_REASONS] ?? d.dispute_reason,
+      })),
       total: result.total,
       page,
       limit,
@@ -90,12 +101,12 @@ export function registerDisputeAdminRoutes(
     if (dbOrRes instanceof Response) return dbOrRes;
     const { db, tables } = dbOrRes;
 
-    const adminCheck = await requireProductAdmin(c, "rides");
-    if (adminCheck) return adminCheck;
+    const adminUser = await requireProductAdmin(c, "rides");
+    if (adminUser instanceof Response) return adminUser;
 
     const disputeId = c.req.param("id");
-    const { data: dispute, error } = await svc()
-      .from("cash_settlement_disputes")
+    const { data: dispute, error } = await pubSvc()
+      .from(DISPUTES_TABLE)
       .select("*")
       .eq("id", disputeId)
       .single();
@@ -135,13 +146,13 @@ export function registerDisputeAdminRoutes(
     if (dbOrRes instanceof Response) return dbOrRes;
     const { db, tables } = dbOrRes;
 
-    const adminCheck = await requireProductAdmin(c, "rides");
-    if (adminCheck) return adminCheck;
+    const adminUser = await requireProductAdmin(c, "rides");
+    if (adminUser instanceof Response) return adminUser;
 
     const disputeId = c.req.param("id");
 
-    const { data: dispute, error: fetchError } = await svc()
-      .from("cash_settlement_disputes")
+    const { data: dispute, error: fetchError } = await pubSvc()
+      .from(DISPUTES_TABLE)
       .select("*")
       .eq("id", disputeId)
       .single();
@@ -175,9 +186,9 @@ export function registerDisputeAdminRoutes(
       return c.json({ error: "resolution_amount_required_for_partial" }, 400);
     }
 
-    const actorId = c.get("userId") as string ?? "";
+    const actorId = adminUser.id;
     const result = await resolveDispute(
-      svc(),
+      pubSvc(),
       patchRideRequest,
       {
         disputeId,
@@ -189,6 +200,7 @@ export function registerDisputeAdminRoutes(
         riderUserId: String(dispute.rider_user_id),
         rideId: String(dispute.ride_request_id),
       },
+      { disputesTable: DISPUTES_TABLE },
     );
 
     if (!result.success) {
@@ -214,13 +226,13 @@ export function registerDisputeAdminRoutes(
     if (dbOrRes instanceof Response) return dbOrRes;
     const { db, tables } = dbOrRes;
 
-    const adminCheck = await requireProductAdmin(c, "rides");
-    if (adminCheck) return adminCheck;
+    const adminUser = await requireProductAdmin(c, "rides");
+    if (adminUser instanceof Response) return adminUser;
 
     const disputeId = c.req.param("id");
 
-    const { data: dispute, error: fetchError } = await svc()
-      .from("cash_settlement_disputes")
+    const { data: dispute, error: fetchError } = await pubSvc()
+      .from(DISPUTES_TABLE)
       .select("dispute_status, ride_request_id")
       .eq("id", disputeId)
       .single();
@@ -233,8 +245,8 @@ export function registerDisputeAdminRoutes(
       return c.json({ error: "not_open", current_status: dispute.dispute_status }, 409);
     }
 
-    const { error: updateError } = await svc()
-      .from("cash_settlement_disputes")
+    const { error: updateError } = await pubSvc()
+      .from(DISPUTES_TABLE)
       .update({
         dispute_status: "under_review",
         updated_at: new Date().toISOString(),
@@ -245,7 +257,7 @@ export function registerDisputeAdminRoutes(
       return c.json({ error: "update_failed" }, 500);
     }
 
-    const actorId = c.get("userId") as string ?? "";
+    const actorId = adminUser.id;
     await adminAudit(db, tables, actorId, "dispute_under_review", {
       dispute_id: disputeId,
       ride_request_id: dispute.ride_request_id,
