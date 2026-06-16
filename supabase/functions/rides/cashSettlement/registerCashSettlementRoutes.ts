@@ -3,6 +3,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { jsonEdgeForbidden, allowsPassengerSurface } from "../../_shared/authEdge.ts";
 import { isCashSettlementEnabled, isCashSettlementSplitPaymentEnabled, isCashSettlementSwitchToCardEnabled, isCashSettlementV2Enabled } from "./flags.ts";
 import { processCardShortfallPayment } from "./processCardShortfallPayment.ts";
+import { processRiderArrearsPayment } from "./processRiderArrearsPayment.ts";
 import { getRiderArrearsMinor } from "./arrearsCheck.ts";
 import {
   canFileDispute,
@@ -472,6 +473,61 @@ export function registerCashSettlementRoutes(app: Hono, deps: RegisterDeps): voi
     }
     const wallet = await getWalletBalance(deps.svc(), auth.user.id, "rider", currency);
     return c.json({ wallet });
+  });
+
+  app.post("/v1/wallet/pay-arrears", async (c) => {
+    if (!isCashSettlementSwitchToCardEnabled()) {
+      return c.json({ error: "feature_disabled" }, 404);
+    }
+
+    const auth = await deps.requireUser(c.req.header("Authorization"));
+    if ("error" in auth) return c.json({ error: auth.error }, auth.status);
+    if (!allowsPassengerSurface(auth.user)) {
+      return jsonEdgeForbidden(c, "forbidden_role");
+    }
+
+    const body = await c.req.json().catch(() => ({}));
+    const paymentMethodId = typeof body.payment_method_id === "string" ? body.payment_method_id : "";
+    const idempotencyKey = typeof body.idempotency_key === "string" ? body.idempotency_key : "";
+    const currency = typeof body.currency === "string" && body.currency.trim()
+      ? body.currency.trim()
+      : "JMD";
+
+    if (!paymentMethodId) {
+      return c.json({ error: "payment_method_id_required" }, 400);
+    }
+    if (!idempotencyKey) {
+      return c.json({ error: "idempotency_key_required" }, 400);
+    }
+
+    const result = await processRiderArrearsPayment(deps.svc(), {
+      riderUserId: auth.user.id,
+      currency,
+      paymentMethodId,
+      idempotencyKey,
+      source: "wallet",
+    });
+
+    if (!result.success) {
+      return c.json({ error: result.error }, result.status as 400);
+    }
+
+    await deps.audit(`wallet:${auth.user.id}`, auth.user.id, "wallet_arrears_payment_completed", {
+      amount_paid_minor: result.amountPaidMinor,
+      new_arrears_minor: result.newArrearsMinor,
+      payment_method_id: paymentMethodId,
+      payment_source: result.paymentSource,
+      currency,
+    });
+
+    return c.json({
+      success: true,
+      amount_paid_minor: result.amountPaidMinor,
+      new_arrears_minor: result.newArrearsMinor,
+      currency,
+      payment_method_id: paymentMethodId,
+      payment_source: result.paymentSource,
+    });
   });
 
   app.get("/v1/wallet/journal", async (c) => {

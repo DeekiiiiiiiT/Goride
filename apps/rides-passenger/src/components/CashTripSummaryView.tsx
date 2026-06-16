@@ -17,16 +17,15 @@ import {
 import { notifyWalletBalanceChanged } from '@/lib/walletEvents';
 import {
   ridesGetSettlementSummary,
-  ridesPayShortfallWithCard,
   ridesGetDisputeInfo,
   ridesCreateDispute,
   type DisputeDto,
 } from '@/services/ridesEdge';
 import { walletGetBalance } from '@/services/walletEdge';
-import { createIdempotencyKey } from '@/lib/idempotencyKey';
 import { TripPaymentMethodSheet } from '@/components/TripPaymentMethodSheet';
+import { PayArrearsSheet } from '@/components/wallet/PayArrearsSheet';
 import { useDefaultPaymentMethod } from '@/hooks/useDefaultPaymentMethod';
-import { TRIP_PAYMENT_METHODS, isDemoPaymentMethod } from '@/lib/tripPaymentMethods';
+import { CASH_SETTLEMENT_PAY_ARREARS_ENABLED } from '@/lib/cashSettlementFlags';
 import { AlertTriangle, MessageSquare } from 'lucide-react';
 
 const KM_TO_MI = 0.621371;
@@ -69,7 +68,6 @@ export function CashTripSummaryView({ ride }: Props) {
   const [wallet, setWallet] = useState<WalletBalanceDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [paymentSheetOpen, setPaymentSheetOpen] = useState(false);
-  const [payingShortfall, setPayingShortfall] = useState(false);
   const { selectedMethod } = useDefaultPaymentMethod();
   const [dispute, setDispute] = useState<DisputeDto | null>(null);
   const [canFileDispute, setCanFileDispute] = useState(false);
@@ -135,6 +133,8 @@ export function CashTripSummaryView({ ride }: Props) {
     owedMinor,
     outcome,
   });
+  const walletArrearsMinor = wallet?.arrears_minor ?? riderArrearsMinor;
+  const payArrearsMinor = walletArrearsMinor > 0 ? walletArrearsMinor : riderArrearsMinor;
   const isSplit = outcome === 'split' || isSplitPaymentOutcome(outcome);
   const tripFullyPaid =
     isSplit ||
@@ -178,39 +178,15 @@ export function CashTripSummaryView({ ride }: Props) {
     setSelectedTip((prev) => (prev === id ? null : id));
   };
 
-  const handlePayWithCard = async (paymentMethodId: string) => {
-    if (payingShortfall) return;
-    setPayingShortfall(true);
-    setPaymentSheetOpen(false);
-    try {
-      const result = await ridesPayShortfallWithCard(
-        ride.id,
-        paymentMethodId,
-        createIdempotencyKey(),
-      );
-      if (result.success) {
-        toast.success(`Paid ${formatMoneyMinor(result.amount_paid_minor, currency)} with card`);
-        const [summaryRes, balanceRes] = await Promise.all([
-          ridesGetSettlementSummary(ride.id).catch(() => null),
-          walletGetBalance(currency).catch(() => null),
-        ]);
-        if (summaryRes?.summary) setSummary(summaryRes.summary);
-        if (balanceRes?.wallet) {
-          setWallet(balanceRes.wallet);
-          notifyWalletBalanceChanged();
-        }
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Could not process payment';
-      toast.error(msg);
-    } finally {
-      setPayingShortfall(false);
+  const handleArrearsPaid = async () => {
+    const balanceRes = await walletGetBalance(currency).catch(() => null);
+    if (balanceRes?.wallet) {
+      setWallet(balanceRes.wallet);
+      notifyWalletBalanceChanged();
     }
+    const summaryRes = await ridesGetSettlementSummary(ride.id).catch(() => null);
+    if (summaryRes?.summary) setSummary(summaryRes.summary);
   };
-
-  const cardPaymentMethods = TRIP_PAYMENT_METHODS.filter(
-    (m) => m.ridePaymentMethod === 'card' && isDemoPaymentMethod(m.id),
-  );
 
   const handleFileDispute = async () => {
     if (filingDispute || !disputeReason) return;
@@ -419,21 +395,13 @@ export function CashTripSummaryView({ ride }: Props) {
                 </p>
               )}
 
-              {riderArrearsMinor > 0 && cardPaymentMethods.length > 0 && !dispute && (
+              {payArrearsMinor > 0 && CASH_SETTLEMENT_PAY_ARREARS_ENABLED && !dispute && (
                 <button
                   type="button"
                   className="trip-summary-pay-card-btn"
                   onClick={() => setPaymentSheetOpen(true)}
-                  disabled={payingShortfall}
                 >
-                  {payingShortfall ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                      Processing...
-                    </>
-                  ) : (
-                    <>Pay {formatMoneyMinor(riderArrearsMinor, currency)} with card</>
-                  )}
+                  Pay {formatMoneyMinor(payArrearsMinor, currency)} outstanding balance
                 </button>
               )}
 
@@ -557,47 +525,13 @@ export function CashTripSummaryView({ ride }: Props) {
         </button>
       </main>
 
-      {paymentSheetOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50">
-          <div className="w-full max-w-lg rounded-t-2xl bg-white p-6 animate-in slide-in-from-bottom">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold">Pay with card</h3>
-              <button
-                type="button"
-                className="p-2 -mr-2 text-slate-400 hover:text-slate-600"
-                onClick={() => setPaymentSheetOpen(false)}
-                aria-label="Close"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <p className="mb-4 text-sm text-slate-600">
-              Select a payment method to pay your outstanding balance of{' '}
-              {formatMoneyMinor(riderArrearsMinor, currency)}.
-            </p>
-            <div className="space-y-2">
-              {cardPaymentMethods.map((method) => (
-                <button
-                  key={method.id}
-                  type="button"
-                  className="flex w-full items-center gap-3 rounded-lg border p-3 text-left hover:bg-slate-50"
-                  onClick={() => void handlePayWithCard(method.id)}
-                  disabled={payingShortfall}
-                >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100">
-                    {method.icon === 'visa' && <span className="text-sm font-bold text-blue-600">VISA</span>}
-                    {method.icon === 'apple' && <span className="text-lg"></span>}
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium">{method.barLabel}</p>
-                    <p className="text-xs text-slate-500">{method.subtitle}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      <PayArrearsSheet
+        open={paymentSheetOpen}
+        onClose={() => setPaymentSheetOpen(false)}
+        arrearsMinor={payArrearsMinor}
+        currency={currency}
+        onSuccess={() => void handleArrearsPaid()}
+      />
 
       {disputeSheetOpen && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50">

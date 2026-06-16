@@ -10,6 +10,8 @@ import {
 } from "../../_shared/productAdmin.ts";
 import { getJwtRoles, jwtPrimaryRole } from "../../_shared/authEdge.ts";
 import { getRiderAdminDb, type RidesAdminTables } from "../../_shared/ridesAdminDb.ts";
+import { getWalletBalance } from "../../_shared/paymentAccounts.ts";
+import { isCashSettlementV2Enabled } from "../cashSettlement/flags.ts";
 
 type RiderAdminDb = Awaited<ReturnType<typeof getRiderAdminDb>>;
 
@@ -350,6 +352,25 @@ export function registerRiderAdminRoutes(admin: Hono) {
       return p?.rider_user_id === userId || et.startsWith("admin_rider_");
     }).slice(0, 20);
 
+    const baseStats = stats ?? {
+      total_trips: 0,
+      completed_trips: 0,
+      cancelled_trips: 0,
+      last_ride_at: null,
+      lifetime_spend_minor: 0,
+    };
+
+    let enrichedStats: Record<string, unknown> = { ...baseStats };
+    if (isCashSettlementV2Enabled()) {
+      const wallet = await getWalletBalance(undefined, userId, "rider", "JMD");
+      enrichedStats = {
+        ...baseStats,
+        arrears_minor: wallet.arrears_minor,
+        wallet_balance_minor: wallet.balance_minor,
+        currency: wallet.currency,
+      };
+    }
+
     return c.json({
       rider: {
         user_id: userId,
@@ -362,13 +383,7 @@ export function registerRiderAdminRoutes(admin: Hono) {
         suspended_by: profile.suspended_by,
         created_at: authData.user.created_at,
         last_sign_in_at: authData.user.last_sign_in_at,
-        stats: stats ?? {
-          total_trips: 0,
-          completed_trips: 0,
-          cancelled_trips: 0,
-          last_ride_at: null,
-          lifetime_spend_minor: 0,
-        },
+        stats: enrichedStats,
         recent_notes: notes ?? [],
         recent_activity: activity ?? [],
       },

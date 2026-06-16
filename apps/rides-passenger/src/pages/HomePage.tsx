@@ -66,6 +66,13 @@ import {
   requestGeolocationPermission,
   shouldShowOnboardingPrompt,
 } from '@roam/types';
+import {
+  CASH_SETTLEMENT_ENABLED,
+  CASH_SETTLEMENT_PAY_ARREARS_ENABLED,
+} from '@/lib/cashSettlementFlags';
+import { walletGetBalance } from '@/services/walletEdge';
+import { PayArrearsSheet } from '@/components/wallet/PayArrearsSheet';
+import { notifyWalletBalanceChanged } from '@/lib/walletEvents';
 
 const HOME_SUGGESTIONS =
   'home-suggestions overflow-y-auto rounded-2xl border py-1 shadow-lg';
@@ -169,11 +176,30 @@ export default function HomePage() {
   const { selectedId: selectedPaymentId, selectedMethod: selectedPayment, select: setSelectedPaymentId } =
     useDefaultPaymentMethod();
   const [paymentSheetOpen, setPaymentSheetOpen] = useState(false);
+  const [walletArrearsMinor, setWalletArrearsMinor] = useState(0);
+  const [walletCurrency, setWalletCurrency] = useState('JMD');
+  const [payArrearsOpen, setPayArrearsOpen] = useState(false);
 
   const [quotesBySlug, setQuotesBySlug] = useState<Record<string, FareQuoteResponse>>({});
   const { permissions } = usePermissionPolicy('rider');
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [locationBlocked, setLocationBlocked] = useState(false);
+
+  useEffect(() => {
+    if (!CASH_SETTLEMENT_ENABLED) return;
+    let cancelled = false;
+    void walletGetBalance()
+      .then((res) => {
+        if (!cancelled) {
+          setWalletArrearsMinor(res.wallet.arrears_minor ?? 0);
+          setWalletCurrency(res.wallet.currency ?? 'JMD');
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!permissions.length) return;
@@ -735,6 +761,32 @@ export default function HomePage() {
               </p>
             )}
 
+            {walletArrearsMinor > 0 && CASH_SETTLEMENT_PAY_ARREARS_ENABLED && (
+              <div
+                className="mb-3 rounded-2xl border px-4 py-3 text-sm"
+                style={{
+                  borderColor: 'color-mix(in srgb, #dc2626 35%, var(--home-card-border))',
+                  color: 'var(--home-on-surface)',
+                  backgroundColor: 'color-mix(in srgb, #dc2626 8%, var(--home-panel-solid))',
+                }}
+              >
+                <p>
+                  Outstanding balance:{' '}
+                  <span className="font-semibold tabular-nums">
+                    {formatMoneyMinor(walletArrearsMinor, walletCurrency)}
+                  </span>
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setPayArrearsOpen(true)}
+                  className="mt-2 text-sm font-semibold underline"
+                  style={{ color: 'var(--home-primary)' }}
+                >
+                  Pay now
+                </button>
+              </div>
+            )}
+
             {bookError && (
               <p
                 className="mb-3 rounded-2xl border px-4 py-2 text-center text-sm"
@@ -1204,6 +1256,19 @@ export default function HomePage() {
         onClose={() => setPaymentSheetOpen(false)}
         onSelect={setSelectedPaymentId}
       />
+
+      {walletArrearsMinor > 0 && CASH_SETTLEMENT_PAY_ARREARS_ENABLED ? (
+        <PayArrearsSheet
+          open={payArrearsOpen}
+          onClose={() => setPayArrearsOpen(false)}
+          arrearsMinor={walletArrearsMinor}
+          currency={walletCurrency}
+          onSuccess={() => {
+            setWalletArrearsMinor(0);
+            notifyWalletBalanceChanged();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

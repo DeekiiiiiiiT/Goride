@@ -2,10 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Check, ChevronRight, PlusCircle, X } from 'lucide-react';
 import { formatMoneyMinor } from '@roam/types/rides';
-import { CASH_SETTLEMENT_ENABLED } from '@/lib/cashSettlementFlags';
+import { CASH_SETTLEMENT_ENABLED, CASH_SETTLEMENT_PAY_ARREARS_ENABLED } from '@/lib/cashSettlementFlags';
 import { walletGetBalance } from '@/services/walletEdge';
 import {
-  TRIP_PAYMENT_METHODS,
+  BOOKABLE_PAYMENT_METHODS,
   type TripPaymentMethodId,
   type TripPaymentMethodOption,
 } from '@/lib/tripPaymentMethods';
@@ -73,8 +73,8 @@ export function TripPaymentMethodSheet({ open, selectedId, onClose, onSelect, ex
   const [arrearsMinor, setArrearsMinor] = useState(0);
   const [arrearsCurrency, setArrearsCurrency] = useState('JMD');
   const methods = excludeIds?.length
-    ? TRIP_PAYMENT_METHODS.filter((m) => !excludeIds.includes(m.id))
-    : TRIP_PAYMENT_METHODS;
+    ? BOOKABLE_PAYMENT_METHODS.filter((m) => !excludeIds.includes(m.id as TripPaymentMethodId))
+    : BOOKABLE_PAYMENT_METHODS;
 
   useEffect(() => {
     if (!open || !CASH_SETTLEMENT_ENABLED) return;
@@ -152,7 +152,7 @@ export function TripPaymentMethodSheet({ open, selectedId, onClose, onSelect, ex
         </p>
 
         {CASH_SETTLEMENT_ENABLED && arrearsMinor > 0 && (
-          <p
+          <div
             className="mb-3 rounded-2xl border px-3 py-2.5 text-sm"
             style={{
               color: 'var(--home-on-surface)',
@@ -160,9 +160,29 @@ export function TripPaymentMethodSheet({ open, selectedId, onClose, onSelect, ex
               backgroundColor: 'color-mix(in srgb, #f59e0b 10%, var(--home-card-bg))',
             }}
           >
-            You have {formatMoneyMinor(arrearsMinor, arrearsCurrency)} outstanding from a prior cash
-            trip. Please pay your driver the full fare.
-          </p>
+            <p>
+              You have {formatMoneyMinor(arrearsMinor, arrearsCurrency)} outstanding from a prior cash
+              trip.
+              {CASH_SETTLEMENT_PAY_ARREARS_ENABLED ? (
+                <>
+                  {' '}
+                  <button
+                    type="button"
+                    className="font-semibold underline"
+                    style={{ color: 'var(--home-primary)' }}
+                    onClick={() => {
+                      onClose();
+                      navigate('/account/wallet');
+                    }}
+                  >
+                    Pay in Wallet
+                  </button>
+                </>
+              ) : (
+                ' Please pay your driver the full fare.'
+              )}
+            </p>
+          </div>
         )}
 
         <div className="space-y-2 max-h-[min(50dvh,360px)] overflow-y-auto">

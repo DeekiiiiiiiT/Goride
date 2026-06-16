@@ -42,6 +42,13 @@ export const CASH_SETTLEMENT_QA = [
   'SPLIT ON: repair reclassifies legacy underpay trips with wallet journal to split',
   'SPLIT OFF: underpay path unchanged (no wallet_fare journal lines)',
   'SPLIT OFF: card trip completion unchanged',
+  'ARREARS PAY ON: Wallet page Pay outstanding balance clears arrears',
+  'ARREARS PAY ON: Home banner Pay now opens payment sheet',
+  'ARREARS PAY ON: no saved methods — add card or Lynk only (not cash)',
+  'ARREARS PAY ON: admin Outstanding Balances lists riders with arrears_minor > 0',
+  'ARREARS PAY ON: rider detail shows wallet balance and outstanding',
+  'ARREARS PAY ON: trip summary pay amount matches wallet arrears total',
+  'ARREARS PAY OFF: no pay buttons; POST /v1/wallet/pay-arrears returns feature_disabled',
 ] as const;
 
 /** Staged rollout sequence (staging → production). */
@@ -59,4 +66,6 @@ export const CASH_SETTLEMENT_V2_ROLLOUT = [
   '11. Rollback split: CASH_SETTLEMENT_SPLIT_PAYMENT=0 — legacy underpay path resumes',
   '12. Rollback V2: CASH_SETTLEMENT_V2=0 (server + client); V1 journal path resumes immediately',
   '13. Optional: enable CASH_SETTLEMENT_DEBT_DISPATCH_GUARD=1 after ≥2 week soak',
+  '14. Set CASH_SETTLEMENT_SWITCH_TO_CARD=1 + VITE_CASH_SETTLEMENT_SWITCH_TO_CARD=1 for wallet pay-arrears',
+  '15. Verify admin Outstanding Balances + rider detail arrears on staging',
 ] as const;

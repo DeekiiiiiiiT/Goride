@@ -21,6 +21,7 @@ import {
   Store,
   AlertTriangle,
   Banknote,
+  Wallet,
 } from 'lucide-react';
 import { RidesAdminLoginForm } from './components/RidesAdminLoginForm';
 
@@ -48,6 +49,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'fare-rules', path: '/admin/fare-rules', label: 'Fare Rules', icon: CircleDollarSign },
   { id: 'surge', path: '/admin/surge', label: 'Surge Pricing', icon: TrendingUp },
   { id: 'disputes', path: '/admin/disputes', label: 'Cash Disputes', icon: AlertTriangle },
+  { id: 'outstanding-balances', path: '/admin/outstanding-balances', label: 'Outstanding Balances', icon: Wallet },
   { id: 'settlement-overrides', path: '/admin/settlement-overrides', label: 'Settlement Overrides', icon: Banknote },
   { id: 'control-panel', path: '/admin/control-panel', label: 'Control Panel', icon: SlidersHorizontal, deprecated: true, externalHint: 'Use Matching Brain' },
   { id: 'app-permissions', path: '/admin/app-permissions', label: 'App Permissions', icon: Shield },

@@ -41,6 +41,17 @@ export function TripPaymentMethodIcon({ icon, className = 'h-6 w-6' }: Props) {
     );
   }
 
+  if (icon === 'lynk') {
+    return (
+      <div
+        className={`flex shrink-0 items-center justify-center rounded-md bg-violet-600 ${className}`}
+        aria-hidden
+      >
+        <span className="text-[9px] font-bold tracking-tight text-white">LYNK</span>
+      </div>
+    );
+  }
+
   return (
     <div
       className={`flex shrink-0 items-center justify-center rounded-md bg-zinc-100 dark:bg-zinc-800 ${className}`}

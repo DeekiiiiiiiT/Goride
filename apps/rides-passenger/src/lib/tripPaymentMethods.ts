@@ -1,8 +1,10 @@
 import type { RidePaymentMethod } from '@roam/types/rides';
 
-export type TripPaymentMethodId = 'apple_pay' | 'visa_1212' | 'cash';
+export type TripPaymentMethodId = 'apple_pay' | 'visa_1212' | 'cash' | 'lynk';
 
-export type TripPaymentMethodIcon = 'apple' | 'visa' | 'cash' | 'card';
+export type TripPaymentMethodIcon = 'apple' | 'visa' | 'cash' | 'card' | 'lynk';
+
+export type ArrearsPaymentMethodKind = 'card' | 'lynk';
 
 export interface TripPaymentMethodOption {
   id: TripPaymentMethodId;
@@ -15,6 +17,10 @@ export interface TripPaymentMethodOption {
   isDefault?: boolean;
   /** Demo / not yet live — still selectable but card rails are stubbed. */
   isDemo?: boolean;
+  /** Used for arrears settlement eligibility. */
+  arrearsKind?: ArrearsPaymentMethodKind;
+  /** When false, method is not shown in trip booking picker (arrears-only). */
+  bookable?: boolean;
 }
 
 /** Single source of truth for booking + wallet payment method UI. */
@@ -25,6 +31,7 @@ export const TRIP_PAYMENT_METHODS: TripPaymentMethodOption[] = [
     subtitle: 'Pay your driver in person',
     ridePaymentMethod: 'cash',
     icon: 'cash',
+    bookable: true,
   },
   {
     id: 'apple_pay',
@@ -33,6 +40,8 @@ export const TRIP_PAYMENT_METHODS: TripPaymentMethodOption[] = [
     ridePaymentMethod: 'card',
     icon: 'apple',
     isDemo: true,
+    arrearsKind: 'card',
+    bookable: true,
   },
   {
     id: 'visa_1212',
@@ -41,15 +50,37 @@ export const TRIP_PAYMENT_METHODS: TripPaymentMethodOption[] = [
     ridePaymentMethod: 'card',
     icon: 'visa',
     isDemo: true,
+    arrearsKind: 'card',
+    bookable: true,
+  },
+  {
+    id: 'lynk',
+    barLabel: 'Lynk',
+    subtitle: 'Demo — Lynk wallet',
+    ridePaymentMethod: 'card',
+    icon: 'lynk',
+    isDemo: true,
+    arrearsKind: 'lynk',
+    bookable: false,
   },
 ];
+
+/** Methods shown in the home booking payment picker. */
+export const BOOKABLE_PAYMENT_METHODS = TRIP_PAYMENT_METHODS.filter(
+  (m) => m.bookable !== false,
+);
 
 export const PAYMENT_METHOD_STORAGE_KEY = 'roam-default-payment-method-id';
 export const PAYMENT_METHOD_CHANGED_EVENT = 'roam-payment-method-changed';
 
+/** Server allowlist for arrears payment (mirrors client). */
+export const ARREARS_PAYMENT_METHOD_IDS = ['apple_pay', 'visa_1212', 'lynk'] as const;
+
+export type ArrearsPaymentMethodId = (typeof ARREARS_PAYMENT_METHOD_IDS)[number];
+
 const STORAGE_KEY = PAYMENT_METHOD_STORAGE_KEY;
 
-export function getPaymentMethodById(id: TripPaymentMethodId): TripPaymentMethodOption {
+export function getPaymentMethodById(id: string): TripPaymentMethodOption {
   return TRIP_PAYMENT_METHODS.find((m) => m.id === id) ?? TRIP_PAYMENT_METHODS[0];
 }
 
@@ -58,7 +89,7 @@ export function getDefaultPaymentMethodId(): TripPaymentMethodId {
     return 'cash';
   }
   const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored && TRIP_PAYMENT_METHODS.some((m) => m.id === stored)) {
+  if (stored && BOOKABLE_PAYMENT_METHODS.some((m) => m.id === stored)) {
     return stored as TripPaymentMethodId;
   }
   return 'cash';
@@ -70,6 +101,33 @@ export function setDefaultPaymentMethodId(id: TripPaymentMethodId): void {
   window.dispatchEvent(new CustomEvent(PAYMENT_METHOD_CHANGED_EVENT, { detail: id }));
 }
 
-export function isDemoPaymentMethod(id: TripPaymentMethodId): boolean {
+export function isDemoPaymentMethod(id: string): boolean {
   return getPaymentMethodById(id).isDemo === true;
+}
+
+export function canUseMethodForArrears(id: string): boolean {
+  const method = getPaymentMethodById(id);
+  return method.arrearsKind === 'card' || method.arrearsKind === 'lynk';
+}
+
+export function getArrearsEligibleMethods(
+  methodIds?: string[],
+): TripPaymentMethodOption[] {
+  const ids = methodIds ?? TRIP_PAYMENT_METHODS.map((m) => m.id);
+  return ids
+    .map((id) => getPaymentMethodById(id))
+    .filter((m) => canUseMethodForArrears(m.id));
+}
+
+export function hasArrearsEligibleMethod(methodIds?: string[]): boolean {
+  return getArrearsEligibleMethods(methodIds).length > 0;
+}
+
+export function paymentSourceForMethodId(id: string): 'demo_card' | 'demo_lynk' {
+  const method = getPaymentMethodById(id);
+  return method.arrearsKind === 'lynk' ? 'demo_lynk' : 'demo_card';
+}
+
+export function shortfallPaymentMethodForId(id: string): 'card' | 'lynk' {
+  return getPaymentMethodById(id).arrearsKind === 'lynk' ? 'lynk' : 'card';
 }

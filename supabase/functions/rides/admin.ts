@@ -21,6 +21,7 @@ import { normalizeVehicleType } from "./fare/ridesVehicleTypes.ts";
 import { isKnownServiceSlug } from "./fare/vehicleTypesDb.ts";
 import { registerVehicleTypeAdminRoutes } from "./admin/vehicleTypes.ts";
 import { registerRiderAdminRoutes } from "./admin/riders.ts";
+import { registerRiderArrearsRoutes } from "./admin/riderArrears.ts";
 import { registerDispatchSettingsAdminRoutes } from "./admin/dispatchSettings.ts";
 import { registerAppPermissionAdminRoutes } from "./admin/appPermissions.ts";
 import { registerDashboardStatsRoutes } from "./admin/dashboardStats.ts";
@@ -642,6 +643,8 @@ export function registerAdminRoutes(
   });
 
   registerVehicleTypeAdminRoutes(admin, ridesDbOrResponse, adminAudit);
+
+  registerRiderArrearsRoutes(admin);
 
   registerRiderAdminRoutes(admin);
 

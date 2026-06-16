@@ -84,6 +84,20 @@ When split payment is on:
 - Full contract: [`CASH_SPLIT_SETTLEMENT.md`](./CASH_SPLIT_SETTLEMENT.md).
 - Rollback: set **`CASH_SETTLEMENT_SPLIT_PAYMENT=0`** — legacy underpay journal path resumes.
 
+### Rider arrears payment (flag-gated, default OFF)
+
+Requires **`CASH_SETTLEMENT_V2=1`** plus:
+
+- Server: **`CASH_SETTLEMENT_SWITCH_TO_CARD=1`**
+- Client: **`VITE_CASH_SETTLEMENT_SWITCH_TO_CARD=1`**
+
+When enabled:
+
+- **`POST /v1/wallet/pay-arrears`** — pay full wallet arrears via demo card or Lynk (journal only).
+- Trip shortfall: **`POST /v1/requests/:id/pay-shortfall`** (same journal semantics).
+- Admin: **`GET /admin/riders/arrears`** — riders with negative wallet balance.
+- Full contract: [`RIDER_ARREARS_PAYMENT.md`](./RIDER_ARREARS_PAYMENT.md).
+
 ---
 
 ## 3. Matching policy (Uber-style, phased implementation)

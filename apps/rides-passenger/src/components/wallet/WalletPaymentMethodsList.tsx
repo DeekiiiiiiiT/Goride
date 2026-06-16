@@ -2,7 +2,7 @@ import React from 'react';
 import { Check } from 'lucide-react';
 import { toast } from 'sonner';
 import {
-  TRIP_PAYMENT_METHODS,
+  BOOKABLE_PAYMENT_METHODS,
   type TripPaymentMethodId,
   type TripPaymentMethodOption,
 } from '@/lib/tripPaymentMethods';
@@ -107,7 +107,7 @@ export function WalletPaymentMethodsList({
 }: Props) {
   return (
     <div className={variant === 'wallet' ? 'space-y-2' : 'space-y-3'}>
-      {TRIP_PAYMENT_METHODS.map((method) => (
+      {BOOKABLE_PAYMENT_METHODS.map((method) => (
         <MethodCard
           key={method.id}
           method={method}

@@ -460,7 +460,36 @@ export function RiderDetailPage() {
               label="Lifetime spend"
               value={formatMoneyMinor(rider.stats.lifetime_spend_minor, 'JMD')}
             />
+            {rider.stats.arrears_minor != null && rider.stats.arrears_minor > 0 && (
+              <Stat
+                label="Outstanding"
+                value={formatMoneyMinor(
+                  rider.stats.arrears_minor,
+                  rider.stats.currency ?? 'JMD',
+                )}
+              />
+            )}
+            {rider.stats.wallet_balance_minor != null && (
+              <Stat
+                label="Wallet balance"
+                value={formatMoneyMinor(
+                  rider.stats.wallet_balance_minor,
+                  rider.stats.currency ?? 'JMD',
+                )}
+              />
+            )}
           </div>
+          {rider.stats.arrears_minor != null && rider.stats.arrears_minor > 0 && (
+            <div className="rounded-xl border border-amber-800/50 bg-amber-950/20 px-4 py-3 text-sm text-amber-200">
+              This rider owes{' '}
+              {formatMoneyMinor(rider.stats.arrears_minor, rider.stats.currency ?? 'JMD')} from cash
+              trips. Use{' '}
+              <Link to="/admin/outstanding-balances" className="underline font-medium">
+                Outstanding Balances
+              </Link>{' '}
+              to write off or review.
+            </div>
+          )}
           <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-5 space-y-4">
             <h3 className="text-sm font-medium text-white">Profile</h3>
             <div className="grid sm:grid-cols-2 gap-4">

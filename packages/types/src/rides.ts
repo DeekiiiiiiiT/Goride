@@ -641,6 +641,26 @@ export interface RiderAdminPermissions {
   can_see_reset_link: boolean;
 }
 
+export interface PayArrearsResultDto {
+  success: boolean;
+  amount_paid_minor: number;
+  new_arrears_minor: number;
+  currency: string;
+  payment_method_id: string;
+  payment_source: 'demo_card' | 'demo_lynk';
+}
+
+export interface RiderArrearsRowDto {
+  user_id: string;
+  display_name: string | null;
+  email: string | null;
+  phone: string | null;
+  account_status?: RiderAccountStatus;
+  arrears_minor: number;
+  currency: string;
+  last_arrears_at?: string | null;
+}
+
 export interface RiderDetailDto {
   user_id: string;
   email: string | null;
@@ -658,6 +678,10 @@ export interface RiderDetailDto {
     cancelled_trips: number;
     last_ride_at: string | null;
     lifetime_spend_minor: number;
+    /** Present when cash settlement V2 is enabled on the server. */
+    arrears_minor?: number;
+    wallet_balance_minor?: number;
+    currency?: string;
   };
   recent_notes: RiderAdminNote[];
   recent_activity: Array<{

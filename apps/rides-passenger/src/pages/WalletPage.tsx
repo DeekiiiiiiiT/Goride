@@ -15,7 +15,7 @@ import type { WalletBalanceDto, WalletTransactionDto } from '@roam/types/rides';
 import { formatMoneyMinorPlain } from '@roam/types/rides';
 import { walletGetTransactions } from '@/services/tripIntentEdge';
 import { walletGetBalance } from '@/services/walletEdge';
-import { WALLET_BALANCE_CHANGED_EVENT } from '@/lib/walletEvents';
+import { WALLET_BALANCE_CHANGED_EVENT, notifyWalletBalanceChanged } from '@/lib/walletEvents';
 
 import {
   CARD_SHADOW,
@@ -34,8 +34,10 @@ import {
 } from '@/lib/passengerTheme';
 import { AddFundsSheet } from '@/components/wallet/AddFundsSheet';
 import { WithdrawSheet } from '@/components/wallet/WithdrawSheet';
+import { PayArrearsSheet } from '@/components/wallet/PayArrearsSheet';
 import { WalletPaymentMethodsList } from '@/components/wallet/WalletPaymentMethodsList';
 import { useDefaultPaymentMethod } from '@/hooks/useDefaultPaymentMethod';
+import { CASH_SETTLEMENT_PAY_ARREARS_ENABLED } from '@/lib/cashSettlementFlags';
 
 const PROMO_BANNER_URL =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuD0UhK5VtLTpy4UHuvfJVFirezfOFH8aVxjOc4xktbQT5pwx1qbyTm-1WnbSsefL9Wi0oVIw8xkhGB-M23OqRkM8nzib-4ZdM6dNXqr697Y74RBMdSaNwcbD1T-KNqHDZLZthBKomvCPZGNz5SxlisRDu3A3Uq0dj1GhoL0wn6Bf9DgGZ6Z4R79Abe0tlHvDx4axkEXUEOIL1d1-6axQwvJ7qYZEZysz7DB_d8-FN_Aqsd_NrdFdklLYBgPoWE-swsr6v2WeuC7e5zq';
@@ -86,6 +88,7 @@ export default function WalletPage() {
   const [wallet, setWallet] = useState<WalletBalanceDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [walletError, setWalletError] = useState<string | null>(null);
+  const [payArrearsOpen, setPayArrearsOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -142,7 +145,7 @@ export default function WalletPage() {
 
   const balanceMajor = wallet ? wallet.balance_minor / 100 : 0;
 
-  const overlayOpen = addCashOpen || withdrawOpen;
+  const overlayOpen = addCashOpen || withdrawOpen || payArrearsOpen;
 
   return (
     <>
@@ -191,9 +194,22 @@ export default function WalletPage() {
           >
             <p className="font-semibold">Outstanding balance</p>
             <p className="mt-0.5" style={{ color: ON_SURFACE_VARIANT }}>
-              You owe {formatMoneyMinorPlain(wallet.arrears_minor)} from a previous cash trip. Pay your
-              driver in full on your next ride or contact support.
+              You owe {formatMoneyMinorPlain(wallet.arrears_minor)} from a previous cash trip.
             </p>
+            {CASH_SETTLEMENT_PAY_ARREARS_ENABLED ? (
+              <button
+                type="button"
+                onClick={() => setPayArrearsOpen(true)}
+                className="mt-3 w-full rounded-xl py-2.5 text-sm font-semibold text-white"
+                style={{ backgroundColor: PRIMARY }}
+              >
+                Pay outstanding balance
+              </button>
+            ) : (
+              <p className="mt-2 text-xs" style={{ color: ON_SURFACE_VARIANT }}>
+                Pay your driver in full on your next ride or contact support.
+              </p>
+            )}
           </div>
         )}
 
@@ -376,6 +392,23 @@ export default function WalletPage() {
         onClose={() => setWithdrawOpen(false)}
         availableMinor={wallet?.available_minor ?? 0}
       />
+      {wallet && wallet.arrears_minor > 0 ? (
+        <PayArrearsSheet
+          open={payArrearsOpen}
+          onClose={() => setPayArrearsOpen(false)}
+          arrearsMinor={wallet.arrears_minor}
+          currency={wallet.currency}
+          onSuccess={async () => {
+            try {
+              const balRes = await walletGetBalance(wallet.currency);
+              setWallet(balRes.wallet);
+              notifyWalletBalanceChanged();
+            } catch {
+              /* ignore */
+            }
+          }}
+        />
+      ) : null}
     </>
   );
 }

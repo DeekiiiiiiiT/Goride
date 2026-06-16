@@ -9,6 +9,7 @@ import type {
   RiderDirectoryRow,
   RiderAdminNote,
   RiderAdminPermissions,
+  RiderArrearsRowDto,
 } from '@roam/types/rides';
 import type { RideRequestRow } from '@roam/types/rides';
 import type { AppPermissionPolicyRow } from '@roam/types';
@@ -1008,4 +1009,27 @@ export async function getReasonCodes(
   if (!res.ok) throw new Error(await parseError(res));
   const data = await res.json();
   return { reason_codes: data.reason_codes ?? {} };
+}
+
+export async function listRidersWithArrears(
+  accessToken: string,
+  opts: { currency?: string; page?: number; limit?: number } = {},
+): Promise<{ riders: RiderArrearsRowDto[]; total: number; page: number; limit: number }> {
+  const sp = new URLSearchParams();
+  if (opts.currency) sp.set('currency', opts.currency);
+  if (opts.page) sp.set('page', String(opts.page));
+  if (opts.limit) sp.set('limit', String(opts.limit));
+  const qs = sp.toString();
+  const res = await adminFetch(
+    accessToken,
+    `${RIDES_BASE}/admin/riders/arrears${qs ? `?${qs}` : ''}`,
+  );
+  if (!res.ok) throw new Error(await parseError(res));
+  const data = await res.json();
+  return {
+    riders: data.riders ?? [],
+    total: data.total ?? 0,
+    page: data.page ?? 1,
+    limit: data.limit ?? 50,
+  };
 }

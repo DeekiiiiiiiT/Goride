@@ -61,6 +61,7 @@ import { RidersListPage } from './admin/pages/users/RidersListPage';
 import { RiderDetailPage } from './admin/pages/users/RiderDetailPage';
 import { DisputesPage } from './admin/pages/DisputesPage';
 import { SettlementOverridesPage } from './admin/pages/SettlementOverridesPage';
+import { OutstandingBalancesPage } from './admin/pages/OutstandingBalancesPage';
 import { SplashScreen } from './components/layout/SplashScreen';
 import { BookerTrackingProvider } from './contexts/BookerTrackingContext';
 import { PassengerShell } from './components/layout/PassengerShell';
@@ -151,6 +152,7 @@ export default function App() {
         <Route path="ledger" element={<TripLedgerPage />} />
         <Route path="rides" element={<RideOperationsPage />} />
         <Route path="disputes" element={<DisputesPage />} />
+        <Route path="outstanding-balances" element={<OutstandingBalancesPage />} />
         <Route path="settlement-overrides" element={<SettlementOverridesPage />} />
       </Route>
 

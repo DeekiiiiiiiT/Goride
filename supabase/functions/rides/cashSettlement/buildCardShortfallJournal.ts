@@ -13,22 +13,27 @@ export interface BuildCardShortfallJournalParams {
   shortfallMinor: number;
   currency: string;
   paymentMethodId: string;
+  paymentSource?: "demo_card" | "demo_lynk";
+  arrearsPaymentSource?: "wallet" | "trip_shortfall";
 }
 
 /**
  * Build journal lines for a card shortfall payment.
- * 
- * This posts a single entry that:
- * - Credits platform:clearing (simulating card processor funding)
- * - Debits platform:receivable (clearing the rider's arrears)
- * 
- * The driver has already been credited via platform_fare_guarantee,
- * so we only need to clear the rider's arrears when they pay via card.
+ *
+ * This posts a single entry that credits the rider wallet (clears arrears).
  */
 export function buildCardShortfallJournalLines(
   params: BuildCardShortfallJournalParams,
 ): JournalLineSpec[] {
-  const { rideId, riderUserId, driverUserId, shortfallMinor, currency, paymentMethodId } = params;
+  const {
+    rideId,
+    riderUserId,
+    shortfallMinor,
+    currency,
+    paymentMethodId,
+    paymentSource = "demo_card",
+    arrearsPaymentSource,
+  } = params;
 
   if (shortfallMinor <= 0) {
     return [];
@@ -40,8 +45,9 @@ export function buildCardShortfallJournalLines(
     currency,
     shortfall_minor: shortfallMinor,
     payment_method_id: paymentMethodId,
-    payment_source: "demo_card",
+    payment_source: paymentSource,
     settlement_version: 2,
+    ...(arrearsPaymentSource ? { arrears_payment_source: arrearsPaymentSource } : {}),
   };
 
   const lines: JournalLineSpec[] = [];
