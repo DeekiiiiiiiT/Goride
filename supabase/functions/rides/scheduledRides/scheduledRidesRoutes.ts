@@ -7,6 +7,7 @@ import { DEFAULT_DISPATCH_SETTINGS, loadDispatchSettings } from "../fare/dispatc
 import { SCHEDULED_QUOTE_TTL_MS, quoteTokenHash, verifyQuoteToken } from "../fare/quoteToken.ts";
 import { canCancelRide } from "../rideAccess.ts";
 import { isScheduledRidesEnabled } from "./flags.ts";
+import { isRiderArrearsBlocked } from "../cashSettlement/arrearsCheck.ts";
 import {
   MAX_UPCOMING_SCHEDULED_PER_RIDER,
   clampPickupWindowMinutes,
@@ -264,6 +265,16 @@ export function registerScheduledRidesRoutes(app: Hono, deps: ScheduledRidesDeps
     const paymentMethod = body.payment_method;
     if (paymentMethod === "cash" || paymentMethod === "card") {
       insertRow.payment_method = paymentMethod;
+    }
+
+    const arrearsCheck = await isRiderArrearsBlocked(deps.svc(), auth.user.id, paymentMethod ?? "cash", locked.currency);
+    if (arrearsCheck.blocked) {
+      return c.json({
+        error: "rider_arrears_blocked",
+        message: "Clear outstanding balance before requesting cash rides",
+        arrears_minor: arrearsCheck.arrearsMinor,
+        currency: locked.currency,
+      }, 403);
     }
 
     const { data: rpcRide, error: rpcError } = await deps.pubSvc().rpc("rides_create_ride_request", {

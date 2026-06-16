@@ -1,7 +1,17 @@
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { jsonEdgeForbidden, allowsPassengerSurface } from "../../_shared/authEdge.ts";
-import { isCashSettlementEnabled, isCashSettlementSplitPaymentEnabled, isCashSettlementV2Enabled } from "./flags.ts";
+import { isCashSettlementEnabled, isCashSettlementSplitPaymentEnabled, isCashSettlementSwitchToCardEnabled, isCashSettlementV2Enabled } from "./flags.ts";
+import { processCardShortfallPayment } from "./processCardShortfallPayment.ts";
+import { getRiderArrearsMinor } from "./arrearsCheck.ts";
+import {
+  canFileDispute,
+  createDispute,
+  getDisputeForRide,
+  DISPUTE_REASONS,
+  type DisputeReasonCode,
+} from "./disputeService.ts";
+import { isCashSettlementDisputeFlowEnabled } from "./flags.ts";
 import {
   repairIncompleteCashSettlementsForDriver,
   repairIncompleteCashSettlementsForRider,
@@ -27,6 +37,38 @@ import {
 } from "../../_shared/paymentAccounts.ts";
 import { canAccessRide } from "../rideAccess.ts";
 import { settlementJournalAmountsForRide } from "./settlementJournalAmounts.ts";
+import { reconcileRiderShortfallDisplay } from "./settlementRepairGuards.ts";
+
+async function riderShortfallFromRideJournal(
+  rideId: string,
+  owedMinor: number,
+  receivedMinor: number,
+  snapshot: Record<string, unknown> | null,
+): Promise<{ wallet_paid_minor: number; rider_arrears_minor: number; arrears_minor: number }> {
+  let walletPaid = Number(snapshot?.wallet_paid_minor ?? 0);
+  let riderArrears = Number(snapshot?.rider_arrears_minor ?? snapshot?.arrears_minor ?? 0);
+
+  try {
+    const fromJournal = await settlementJournalAmountsForRide(rideId);
+    if (fromJournal.wallet_paid_minor > 0) walletPaid = fromJournal.wallet_paid_minor;
+    if (fromJournal.arrears_minor > 0) riderArrears = fromJournal.arrears_minor;
+  } catch (e) {
+    console.error("[cashSettlement] settlement_journal_fallback_failed", e);
+  }
+
+  const reconciled = reconcileRiderShortfallDisplay({
+    owedMinor,
+    cashReceivedMinor: receivedMinor,
+    walletPaidMinor: walletPaid,
+    arrearsMinor: riderArrears,
+  });
+
+  return {
+    wallet_paid_minor: reconciled.wallet_paid_minor,
+    rider_arrears_minor: reconciled.rider_arrears_minor,
+    arrears_minor: reconciled.rider_arrears_minor,
+  };
+}
 
 type RegisterDeps = {
   svc: () => SupabaseClient;
@@ -177,34 +219,30 @@ export function registerCashSettlementRoutes(app: Hono, deps: RegisterDeps): voi
 
     if (snapshot && typeof snapshot === "object") {
       received = Number(snapshot.cash_received_minor ?? received);
-      let arrears = Number(snapshot.arrears_minor ?? 0);
-      if (received <= 0 || (outcome === "underpay" && arrears <= 0)) {
+      const owedMinor = Number(snapshot.owed_minor ?? owed);
+      if (received <= 0) {
         try {
           const fromJournal = await settlementJournalAmountsForRide(rideId);
-          if (received <= 0 && fromJournal.cash_received_minor > 0) {
-            received = fromJournal.cash_received_minor;
-          }
-          if (outcome === "underpay" && arrears <= 0 && fromJournal.wallet_paid_minor > 0) {
-            arrears = fromJournal.wallet_paid_minor;
-          }
+          if (fromJournal.cash_received_minor > 0) received = fromJournal.cash_received_minor;
         } catch (e) {
           console.error("[cashSettlement] settlement_journal_fallback_failed", e);
         }
       }
+      const shortfall = await riderShortfallFromRideJournal(rideId, owedMinor, received, snapshot);
       return c.json({
         summary: {
           ride_id: rideId,
           outcome,
-          owed_minor: Number(snapshot.owed_minor ?? owed),
+          owed_minor: owedMinor,
           cash_received_minor: received,
           change_credit_minor: Number(snapshot.change_credit_minor ?? 0),
-          arrears_minor: arrears,
+          arrears_minor: shortfall.arrears_minor,
           currency,
           settlement_version: snapshot.settlement_version === 2 ? 2 : 1,
           wallet_deltas: snapshot.wallet_deltas ?? undefined,
           debt_opened_minor: Number(snapshot.debt_opened_minor ?? 0),
-          wallet_paid_minor: Number(snapshot.wallet_paid_minor ?? 0),
-          rider_arrears_minor: Number(snapshot.rider_arrears_minor ?? arrears),
+          wallet_paid_minor: shortfall.wallet_paid_minor,
+          rider_arrears_minor: shortfall.rider_arrears_minor,
           driver_digital_credit_minor: Number(snapshot.driver_digital_credit_minor ?? 0),
           platform_guarantee_minor: Number(snapshot.platform_guarantee_minor ?? 0),
         },
@@ -212,21 +250,16 @@ export function registerCashSettlementRoutes(app: Hono, deps: RegisterDeps): voi
     }
 
     let arrears = Math.max(0, owed - received);
-    if (received <= 0 || (outcome === "underpay" && arrears <= 0)) {
+    if (received <= 0) {
       try {
         const fromJournal = await settlementJournalAmountsForRide(rideId);
-        if (received <= 0 && fromJournal.cash_received_minor > 0) {
-          received = fromJournal.cash_received_minor;
-        }
-        if (outcome === "underpay" && fromJournal.wallet_paid_minor > 0) {
-          arrears = fromJournal.wallet_paid_minor;
-        } else if (received > 0 && owed > received) {
-          arrears = owed - received;
-        }
+        if (fromJournal.cash_received_minor > 0) received = fromJournal.cash_received_minor;
       } catch (e) {
         console.error("[cashSettlement] settlement_journal_fallback_failed", e);
       }
     }
+    const shortfall = await riderShortfallFromRideJournal(rideId, owed, received, null);
+    arrears = shortfall.arrears_minor;
 
     return c.json({
       summary: {
@@ -236,9 +269,189 @@ export function registerCashSettlementRoutes(app: Hono, deps: RegisterDeps): voi
         cash_received_minor: received,
         change_credit_minor: Math.max(0, received - owed),
         arrears_minor: arrears,
+        wallet_paid_minor: shortfall.wallet_paid_minor,
+        rider_arrears_minor: shortfall.rider_arrears_minor,
         currency,
         settlement_version: 1,
       },
+    });
+  });
+
+  app.post("/v1/requests/:id/pay-shortfall", async (c) => {
+    if (!isCashSettlementSwitchToCardEnabled()) {
+      return c.json({ error: "feature_disabled" }, 404);
+    }
+
+    const auth = await deps.requireUser(c.req.header("Authorization"));
+    if ("error" in auth) return c.json({ error: auth.error }, auth.status);
+    if (!allowsPassengerSurface(auth.user)) {
+      return jsonEdgeForbidden(c, "forbidden_role");
+    }
+
+    const rideId = c.req.param("id");
+    const ride = await deps.loadRideRequestById(rideId);
+    if (!ride) return c.json({ error: "not_found" }, 404);
+
+    if (!canAccessRide(ride, auth.user.id)) {
+      return jsonEdgeForbidden(c, "forbidden");
+    }
+
+    const body = await c.req.json().catch(() => ({}));
+    const paymentMethodId = typeof body.payment_method_id === "string" ? body.payment_method_id : "";
+    const idempotencyKey = typeof body.idempotency_key === "string" ? body.idempotency_key : "";
+
+    if (!paymentMethodId) {
+      return c.json({ error: "payment_method_id_required" }, 400);
+    }
+    if (!idempotencyKey) {
+      return c.json({ error: "idempotency_key_required" }, 400);
+    }
+
+    const currency = String(ride.currency ?? "JMD");
+    const riderArrearsMinor = await getRiderArrearsMinor(deps.svc(), auth.user.id, currency);
+
+    if (riderArrearsMinor <= 0) {
+      return c.json({ error: "no_arrears", message: "No outstanding balance to pay" }, 400);
+    }
+
+    const result = await processCardShortfallPayment(
+      deps.svc(),
+      deps.patchRideRequest,
+      deps.loadRideRequestById,
+      {
+        rideId,
+        riderUserId: auth.user.id,
+        driverUserId: String(ride.assigned_driver_user_id ?? ""),
+        shortfallMinor: riderArrearsMinor,
+        currency,
+        paymentMethodId,
+        idempotencyKey,
+      },
+    );
+
+    if (!result.success) {
+      return c.json({ error: result.error }, result.status as 400);
+    }
+
+    await deps.audit(rideId, auth.user.id, "card_shortfall_payment_completed", {
+      amount_paid_minor: result.amountPaidMinor,
+      new_arrears_minor: result.newArrearsMinor,
+      payment_method_id: paymentMethodId,
+      currency,
+    });
+
+    return c.json({
+      success: true,
+      amount_paid_minor: result.amountPaidMinor,
+      new_arrears_minor: result.newArrearsMinor,
+      currency,
+    });
+  });
+
+  app.post("/v1/requests/:id/dispute", async (c) => {
+    if (!isCashSettlementDisputeFlowEnabled()) {
+      return c.json({ error: "feature_disabled" }, 404);
+    }
+
+    const auth = await deps.requireUser(c.req.header("Authorization"));
+    if ("error" in auth) return c.json({ error: auth.error }, auth.status);
+    if (!allowsPassengerSurface(auth.user)) {
+      return jsonEdgeForbidden(c, "forbidden_role");
+    }
+
+    const rideId = c.req.param("id");
+    const ride = await deps.loadRideRequestById(rideId);
+    if (!ride) return c.json({ error: "not_found" }, 404);
+
+    if (String(ride.rider_user_id) !== auth.user.id) {
+      return jsonEdgeForbidden(c, "forbidden");
+    }
+
+    const currency = String(ride.currency ?? "JMD");
+    const arrearsMinor = await getRiderArrearsMinor(deps.svc(), auth.user.id, currency);
+
+    const canDispute = canFileDispute(ride, arrearsMinor);
+    if (!canDispute.allowed) {
+      return c.json({ error: canDispute.reason ?? "cannot_dispute" }, 400);
+    }
+
+    const body = await c.req.json().catch(() => ({}));
+    const reason = typeof body.reason === "string" ? body.reason : "";
+    const notes = typeof body.notes === "string" ? body.notes : "";
+
+    if (!reason || !Object.keys(DISPUTE_REASONS).includes(reason)) {
+      return c.json({ error: "invalid_reason", valid_reasons: Object.keys(DISPUTE_REASONS) }, 400);
+    }
+
+    const result = await createDispute(
+      deps.svc(),
+      deps.patchRideRequest,
+      {
+        rideId,
+        riderUserId: auth.user.id,
+        driverUserId: String(ride.assigned_driver_user_id ?? ""),
+        disputedAmountMinor: arrearsMinor,
+        reason: reason as DisputeReasonCode,
+        notes,
+        currency,
+      },
+    );
+
+    if (!result.success) {
+      return c.json({ error: result.error }, result.status as 400);
+    }
+
+    await deps.audit(rideId, auth.user.id, "dispute_created", {
+      dispute_id: result.disputeId,
+      disputed_amount_minor: arrearsMinor,
+      reason,
+      currency,
+    });
+
+    return c.json({
+      dispute_id: result.disputeId,
+      status: "open",
+    });
+  });
+
+  app.get("/v1/requests/:id/dispute", async (c) => {
+    if (!isCashSettlementDisputeFlowEnabled()) {
+      return c.json({ error: "feature_disabled" }, 404);
+    }
+
+    const auth = await deps.requireUser(c.req.header("Authorization"));
+    if ("error" in auth) return c.json({ error: auth.error }, auth.status);
+
+    const rideId = c.req.param("id");
+    const ride = await deps.loadRideRequestById(rideId);
+    if (!ride) return c.json({ error: "not_found" }, 404);
+
+    if (!canAccessRide(ride, auth.user.id)) {
+      return jsonEdgeForbidden(c, "forbidden");
+    }
+
+    const dispute = await getDisputeForRide(deps.svc(), rideId);
+
+    const currency = String(ride.currency ?? "JMD");
+    const arrearsMinor = await getRiderArrearsMinor(deps.svc(), auth.user.id, currency);
+    const canDispute = canFileDispute(ride, arrearsMinor);
+
+    return c.json({
+      dispute: dispute
+        ? {
+            id: dispute.id,
+            status: dispute.dispute_status,
+            reason: dispute.dispute_reason,
+            disputed_amount_minor: dispute.disputed_amount_minor,
+            resolution_amount_minor: dispute.resolution_amount_minor,
+            rider_notes: dispute.rider_notes,
+            created_at: dispute.created_at,
+            resolved_at: dispute.resolved_at,
+          }
+        : null,
+      can_file_dispute: canDispute.allowed,
+      cannot_dispute_reason: canDispute.reason,
+      dispute_reasons: DISPUTE_REASONS,
     });
   });
 

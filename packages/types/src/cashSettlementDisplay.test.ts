@@ -5,10 +5,12 @@ import {
   getCashPaymentCardMode,
   isCashRide,
   isSplitPaymentOutcome,
+  reconcileRiderShortfallDisplay,
   resolveCashSettlementOutcome,
   resolveCashReceivedMinor,
   resolveDriverFacingOutcome,
   resolveLockedFareMinor,
+  resolveRiderArrearsMinor,
   resolveWalletPaidMinor,
   shouldShowRiderCashTripSummary,
   showSettlementResultOnTripScreen,
@@ -229,7 +231,30 @@ describe('resolveCashReceivedMinor', () => {
 });
 
 describe('resolveWalletPaidMinor', () => {
-  it('returns arrears for underpay trips', () => {
+  it('returns wallet paid from summary for split trips', () => {
+    expect(
+      resolveWalletPaidMinor(
+        ride({
+          status: 'completed',
+          fare_final_minor: 81462,
+          cash_received_minor: 70000,
+          cash_settlement_outcome: 'split',
+        }),
+        {
+          summary: {
+            owed_minor: 81462,
+            cash_received_minor: 70000,
+            wallet_paid_minor: 11462,
+            rider_arrears_minor: 0,
+            change_credit_minor: 0,
+          },
+          outcome: 'split',
+        },
+      ),
+    ).toBe(11462);
+  });
+
+  it('does not treat legacy underpay arrears as wallet paid', () => {
     expect(
       resolveWalletPaidMinor(
         ride({
@@ -248,7 +273,7 @@ describe('resolveWalletPaidMinor', () => {
           outcome: 'underpay',
         },
       ),
-    ).toBe(69915);
+    ).toBe(0);
   });
 
   it('returns zero for exact pay', () => {
@@ -310,5 +335,43 @@ describe('isSplitPaymentOutcome', () => {
   it('identifies split only', () => {
     expect(isSplitPaymentOutcome('split')).toBe(true);
     expect(isSplitPaymentOutcome('underpay')).toBe(false);
+  });
+});
+
+describe('reconcileRiderShortfallDisplay', () => {
+  it('caps duplicate journal debits to one shortfall', () => {
+    const r = reconcileRiderShortfallDisplay({
+      owedMinor: 81462,
+      cashReceivedMinor: 70000,
+      walletPaidMinor: 11462,
+      arrearsMinor: 11462,
+    });
+    expect(r.wallet_paid_minor).toBe(11462);
+    expect(r.rider_arrears_minor).toBe(0);
+  });
+});
+
+describe('resolveRiderArrearsMinor', () => {
+  it('returns company receivable for underpay', () => {
+    expect(
+      resolveRiderArrearsMinor(
+        ride({
+          status: 'completed',
+          fare_final_minor: 189915,
+          cash_received_minor: 120000,
+          cash_settlement_outcome: 'underpay',
+        }),
+        {
+          summary: {
+            owed_minor: 189915,
+            cash_received_minor: 120000,
+            arrears_minor: 69915,
+            rider_arrears_minor: 69915,
+            change_credit_minor: 0,
+          },
+          outcome: 'underpay',
+        },
+      ),
+    ).toBe(69915);
   });
 });

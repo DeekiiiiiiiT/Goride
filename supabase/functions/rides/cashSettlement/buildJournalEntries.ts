@@ -15,7 +15,13 @@ export type JournalEntryType =
   | "card_trip_digital_credit"
   | "wallet_fare_from_rider"
   | "wallet_fare_to_driver"
-  | "platform_fare_guarantee";
+  | "platform_fare_guarantee"
+  | "card_shortfall_payment"
+  | "dispute_resolution_credit"
+  | "admin_arrears_writeoff"
+  | "admin_settlement_adjustment"
+  | "admin_driver_credit"
+  | "admin_driver_debit";
 
 export interface JournalLineSpec {
   entry_type: JournalEntryType;

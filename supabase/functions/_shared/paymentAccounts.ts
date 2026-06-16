@@ -335,6 +335,14 @@ export async function postPaymentJournal(
   const digitalCredits: Array<{ userId: string; amount: number }> = [];
   const existingTypes = new Set(existingRows.map((row) => String(row.entry_type)));
 
+  const { data: rideJournalRows } = await client
+    .from(tables.journal)
+    .select("entry_type")
+    .eq("ride_request_id", rideId);
+  const rideEntryTypes = new Set(
+    (rideJournalRows ?? []).map((row) => String(row.entry_type)),
+  );
+
   async function resolveAccountKey(key: string): Promise<PaymentAccountRow> {
     const cached = accountCache.get(key);
     if (cached) return cached;
@@ -379,6 +387,9 @@ export async function postPaymentJournal(
   let inserted = 0;
   for (const line of lines) {
     if (existingTypes.has(line.entry_type)) {
+      continue;
+    }
+    if (rideEntryTypes.has(line.entry_type)) {
       continue;
     }
 
@@ -439,6 +450,7 @@ export async function postPaymentJournal(
     }
 
     inserted++;
+    rideEntryTypes.add(line.entry_type);
   }
 
   if (inserted > 0) {

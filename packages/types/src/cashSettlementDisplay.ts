@@ -77,10 +77,40 @@ function cashReceivedFromSnapshot(
 function arrearsFromSnapshot(
   snapshot: CashSettlementSnapshotDto | null | undefined,
 ): number | null {
+  if (snapshot?.rider_arrears_minor != null) {
+    const n = Number(snapshot.rider_arrears_minor);
+    if (Number.isFinite(n)) return Math.max(0, Math.floor(n));
+  }
   if (snapshot?.arrears_minor == null) return null;
   const n = Number(snapshot.arrears_minor);
   if (!Number.isFinite(n)) return null;
   return Math.max(0, Math.floor(n));
+}
+
+/** Rider shortfall display: wallet + arrears must not exceed fare gap (handles duplicate journal). */
+export function reconcileRiderShortfallDisplay(params: {
+  owedMinor: number;
+  cashReceivedMinor: number;
+  walletPaidMinor: number;
+  arrearsMinor: number;
+}): { wallet_paid_minor: number; rider_arrears_minor: number } {
+  const shortfall = Math.max(0, params.owedMinor - params.cashReceivedMinor);
+  let walletPaid = Math.max(0, Math.floor(params.walletPaidMinor));
+  let riderArrears = Math.max(0, Math.floor(params.arrearsMinor));
+
+  if (shortfall <= 0) {
+    return { wallet_paid_minor: 0, rider_arrears_minor: 0 };
+  }
+
+  if (walletPaid + riderArrears > shortfall) {
+    if (walletPaid > 0) {
+      riderArrears = Math.max(0, shortfall - walletPaid);
+    } else {
+      walletPaid = Math.max(0, shortfall - riderArrears);
+    }
+  }
+
+  return { wallet_paid_minor: walletPaid, rider_arrears_minor: riderArrears };
 }
 
 /** Physical cash the rider handed the driver at settlement. */
@@ -105,7 +135,7 @@ export function resolveCashReceivedMinor(
   return 0;
 }
 
-/** Shortfall covered from the rider Roam wallet (split or legacy underpay trips). */
+/** Shortfall covered from the rider Roam wallet at settlement. */
 export function resolveWalletPaidMinor(
   ride: CashSettlementRidePick,
   opts?: {
@@ -116,36 +146,82 @@ export function resolveWalletPaidMinor(
   },
 ): number {
   const outcome = opts?.outcome ?? resolveCashSettlementOutcome(ride);
+  const owed = opts?.owedMinor ?? resolveLockedFareMinor(ride) ?? 0;
+  const received = opts?.receivedMinor ?? resolveCashReceivedMinor(ride, opts?.summary);
 
-  if (opts?.summary?.wallet_paid_minor != null && opts.summary.wallet_paid_minor > 0) {
-    return Math.floor(opts.summary.wallet_paid_minor);
+  if (opts?.summary?.wallet_paid_minor != null && opts.summary.wallet_paid_minor >= 0) {
+    const fromSummary = Math.floor(opts.summary.wallet_paid_minor);
+    if (fromSummary > 0) return fromSummary;
   }
 
   const fromSnapshot = walletPaidFromSnapshot(ride.cash_settlement_snapshot);
   if (fromSnapshot != null && fromSnapshot > 0) return fromSnapshot;
 
-  if (outcome === 'split') {
-    const snap = ride.cash_settlement_snapshot;
-    const riderArrears = snap?.rider_arrears_minor ?? snap?.arrears_minor ?? 0;
-    const owed = opts?.owedMinor ?? resolveLockedFareMinor(ride) ?? 0;
-    const received = opts?.receivedMinor ?? resolveCashReceivedMinor(ride, opts?.summary);
+  if (outcome === 'split' || outcome === 'underpay') {
+    const riderArrears = resolveRiderArrearsMinor(ride, {
+      summary: opts?.summary,
+      receivedMinor: received,
+      owedMinor: owed,
+      outcome,
+    });
     const shortfall = Math.max(0, owed - received);
-    return Math.max(0, shortfall - Number(riderArrears));
+    return Math.max(0, shortfall - riderArrears);
   }
 
-  if (outcome !== 'underpay') return 0;
+  return 0;
+}
 
-  const fromSummary = opts?.summary?.arrears_minor;
-  if (fromSummary != null && fromSummary > 0) {
-    return Math.max(0, Math.floor(fromSummary));
-  }
-
-  const fromSnapshotArrears = arrearsFromSnapshot(ride.cash_settlement_snapshot);
-  if (fromSnapshotArrears != null && fromSnapshotArrears > 0) return fromSnapshotArrears;
-
+/** Amount the rider still owes Roam (company receivable), not the driver. */
+export function resolveRiderArrearsMinor(
+  ride: CashSettlementRidePick,
+  opts?: {
+    summary?: RiderSettlementSummaryPick | null;
+    receivedMinor?: number;
+    owedMinor?: number;
+    outcome?: CashSettlementOutcome | null;
+  },
+): number {
   const owed = opts?.owedMinor ?? resolveLockedFareMinor(ride) ?? 0;
   const received = opts?.receivedMinor ?? resolveCashReceivedMinor(ride, opts?.summary);
-  if (owed > received) return owed - received;
+
+  if (opts?.summary?.rider_arrears_minor != null && opts.summary.rider_arrears_minor >= 0) {
+    return reconcileRiderShortfallDisplay({
+      owedMinor: owed,
+      cashReceivedMinor: received,
+      walletPaidMinor: opts.summary.wallet_paid_minor ?? 0,
+      arrearsMinor: opts.summary.rider_arrears_minor,
+    }).rider_arrears_minor;
+  }
+
+  const snap = ride.cash_settlement_snapshot;
+  const fromSnapshot = arrearsFromSnapshot(snap);
+  const walletPaid =
+    opts?.summary?.wallet_paid_minor ??
+    walletPaidFromSnapshot(snap) ??
+    0;
+
+  if (fromSnapshot != null) {
+    return reconcileRiderShortfallDisplay({
+      owedMinor: owed,
+      cashReceivedMinor: received,
+      walletPaidMinor: walletPaid,
+      arrearsMinor: fromSnapshot,
+    }).rider_arrears_minor;
+  }
+
+  const outcome = opts?.outcome ?? resolveCashSettlementOutcome(ride);
+  if (outcome === 'unpaid') {
+    return Math.max(0, owed - received);
+  }
+  if (outcome === 'underpay' || outcome === 'split') {
+    return reconcileRiderShortfallDisplay({
+      owedMinor: owed,
+      cashReceivedMinor: received,
+      walletPaidMinor: walletPaid,
+      arrearsMinor: Math.max(0, owed - received),
+    }).rider_arrears_minor;
+  }
+
   return 0;
 }
 

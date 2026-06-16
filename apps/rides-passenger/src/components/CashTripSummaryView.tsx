@@ -11,11 +11,23 @@ import {
   isSplitPaymentOutcome,
   resolveCashReceivedMinor,
   resolveCashSettlementOutcome,
+  resolveRiderArrearsMinor,
   resolveWalletPaidMinor,
 } from '@roam/types/cashSettlementDisplay';
 import { notifyWalletBalanceChanged } from '@/lib/walletEvents';
-import { ridesGetSettlementSummary } from '@/services/ridesEdge';
+import {
+  ridesGetSettlementSummary,
+  ridesPayShortfallWithCard,
+  ridesGetDisputeInfo,
+  ridesCreateDispute,
+  type DisputeDto,
+} from '@/services/ridesEdge';
 import { walletGetBalance } from '@/services/walletEdge';
+import { createIdempotencyKey } from '@/lib/idempotencyKey';
+import { TripPaymentMethodSheet } from '@/components/TripPaymentMethodSheet';
+import { useDefaultPaymentMethod } from '@/hooks/useDefaultPaymentMethod';
+import { TRIP_PAYMENT_METHODS, isDemoPaymentMethod } from '@/lib/tripPaymentMethods';
+import { AlertTriangle, MessageSquare } from 'lucide-react';
 
 const KM_TO_MI = 0.621371;
 
@@ -56,6 +68,16 @@ export function CashTripSummaryView({ ride }: Props) {
   const [summary, setSummary] = useState<SettlementSummaryDto | null>(null);
   const [wallet, setWallet] = useState<WalletBalanceDto | null>(null);
   const [loading, setLoading] = useState(true);
+  const [paymentSheetOpen, setPaymentSheetOpen] = useState(false);
+  const [payingShortfall, setPayingShortfall] = useState(false);
+  const { selectedMethod } = useDefaultPaymentMethod();
+  const [dispute, setDispute] = useState<DisputeDto | null>(null);
+  const [canFileDispute, setCanFileDispute] = useState(false);
+  const [disputeReasons, setDisputeReasons] = useState<Record<string, string>>({});
+  const [disputeSheetOpen, setDisputeSheetOpen] = useState(false);
+  const [filingDispute, setFilingDispute] = useState(false);
+  const [disputeReason, setDisputeReason] = useState('');
+  const [disputeNotes, setDisputeNotes] = useState('');
 
   const currency = ride.currency ?? 'JMD';
   const computed = useMemo(() => computeOutcomeFromRide(ride), [ride]);
@@ -71,15 +93,21 @@ export function CashTripSummaryView({ ride }: Props) {
     let cancelled = false;
     const load = async () => {
       try {
-        const [summaryRes, balanceRes] = await Promise.all([
+        const [summaryRes, balanceRes, disputeRes] = await Promise.all([
           ridesGetSettlementSummary(ride.id).catch(() => null),
           walletGetBalance(currency).catch(() => null),
+          ridesGetDisputeInfo(ride.id).catch(() => null),
         ]);
         if (cancelled) return;
         if (summaryRes?.summary) setSummary(summaryRes.summary);
         if (balanceRes?.wallet) {
           setWallet(balanceRes.wallet);
           notifyWalletBalanceChanged();
+        }
+        if (disputeRes) {
+          setDispute(disputeRes.dispute);
+          setCanFileDispute(disputeRes.can_file_dispute);
+          setDisputeReasons(disputeRes.dispute_reasons ?? {});
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -101,8 +129,12 @@ export function CashTripSummaryView({ ride }: Props) {
     outcome,
   });
   const changeMinor = summary?.change_credit_minor ?? computed?.change_credit_minor ?? 0;
-  const riderArrearsMinor =
-    summary?.rider_arrears_minor ?? summary?.arrears_minor ?? computed?.arrears_minor ?? 0;
+  const riderArrearsMinor = resolveRiderArrearsMinor(ride, {
+    summary,
+    receivedMinor,
+    owedMinor,
+    outcome,
+  });
   const isSplit = outcome === 'split' || isSplitPaymentOutcome(outcome);
   const tripFullyPaid =
     isSplit ||
@@ -144,6 +176,80 @@ export function CashTripSummaryView({ ride }: Props) {
       return;
     }
     setSelectedTip((prev) => (prev === id ? null : id));
+  };
+
+  const handlePayWithCard = async (paymentMethodId: string) => {
+    if (payingShortfall) return;
+    setPayingShortfall(true);
+    setPaymentSheetOpen(false);
+    try {
+      const result = await ridesPayShortfallWithCard(
+        ride.id,
+        paymentMethodId,
+        createIdempotencyKey(),
+      );
+      if (result.success) {
+        toast.success(`Paid ${formatMoneyMinor(result.amount_paid_minor, currency)} with card`);
+        const [summaryRes, balanceRes] = await Promise.all([
+          ridesGetSettlementSummary(ride.id).catch(() => null),
+          walletGetBalance(currency).catch(() => null),
+        ]);
+        if (summaryRes?.summary) setSummary(summaryRes.summary);
+        if (balanceRes?.wallet) {
+          setWallet(balanceRes.wallet);
+          notifyWalletBalanceChanged();
+        }
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Could not process payment';
+      toast.error(msg);
+    } finally {
+      setPayingShortfall(false);
+    }
+  };
+
+  const cardPaymentMethods = TRIP_PAYMENT_METHODS.filter(
+    (m) => m.ridePaymentMethod === 'card' && isDemoPaymentMethod(m.id),
+  );
+
+  const handleFileDispute = async () => {
+    if (filingDispute || !disputeReason) return;
+    setFilingDispute(true);
+    try {
+      const result = await ridesCreateDispute(ride.id, disputeReason, disputeNotes);
+      if (result.dispute_id) {
+        toast.success('Dispute submitted successfully');
+        setDisputeSheetOpen(false);
+        setDispute({
+          id: result.dispute_id,
+          status: result.status,
+          reason: disputeReason,
+          disputed_amount_minor: riderArrearsMinor,
+          resolution_amount_minor: null,
+          rider_notes: disputeNotes || null,
+          created_at: new Date().toISOString(),
+          resolved_at: null,
+        });
+        setCanFileDispute(false);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Could not submit dispute';
+      toast.error(msg);
+    } finally {
+      setFilingDispute(false);
+    }
+  };
+
+  const disputeStatusLabel = (status: string): string => {
+    const labels: Record<string, string> = {
+      open: 'Under review',
+      under_review: 'Under review',
+      resolved_rider_favor: 'Resolved in your favor',
+      resolved_driver_favor: 'Resolved',
+      resolved_partial: 'Partially resolved',
+      rejected: 'Rejected',
+    };
+    return labels[status] ?? status;
   };
 
   return (
@@ -297,12 +403,66 @@ export function CashTripSummaryView({ ride }: Props) {
                     </span>
                   </div>
                 )}
+                {(outcome === 'underpay' || isSplit) && riderArrearsMinor > 0 && (
+                  <div className="trip-summary-cash-hero__row trip-summary-cash-hero__row--arrears">
+                    <span>Still owed to Roam</span>
+                    <span className="tabular-nums font-semibold">
+                      {formatMoneyMinor(riderArrearsMinor, currency)}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {outcome && (
                 <p className="trip-summary-cash-hero__note">
                   {cashSettlementOutcomeMessage(outcome, ride)}
                 </p>
+              )}
+
+              {riderArrearsMinor > 0 && cardPaymentMethods.length > 0 && !dispute && (
+                <button
+                  type="button"
+                  className="trip-summary-pay-card-btn"
+                  onClick={() => setPaymentSheetOpen(true)}
+                  disabled={payingShortfall}
+                >
+                  {payingShortfall ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                      Processing...
+                    </>
+                  ) : (
+                    <>Pay {formatMoneyMinor(riderArrearsMinor, currency)} with card</>
+                  )}
+                </button>
+              )}
+
+              {dispute && (
+                <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                  <div className="flex items-center gap-2 text-amber-800">
+                    <MessageSquare className="h-4 w-4" />
+                    <span className="font-medium">Dispute {disputeStatusLabel(dispute.status)}</span>
+                  </div>
+                  <p className="mt-1 text-sm text-amber-700">
+                    {disputeReasons[dispute.reason] ?? dispute.reason}
+                  </p>
+                  {dispute.resolution_amount_minor != null && dispute.resolution_amount_minor > 0 && (
+                    <p className="mt-1 text-sm font-medium text-amber-800">
+                      {formatMoneyMinor(dispute.resolution_amount_minor, currency)} credited to your wallet
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {riderArrearsMinor > 0 && canFileDispute && !dispute && (
+                <button
+                  type="button"
+                  className="mt-3 flex items-center gap-2 text-sm text-slate-600 underline hover:text-slate-800"
+                  onClick={() => setDisputeSheetOpen(true)}
+                >
+                  <AlertTriangle className="h-4 w-4" />
+                  Dispute this charge
+                </button>
               )}
 
               {wallet && (
@@ -396,6 +556,127 @@ export function CashTripSummaryView({ ride }: Props) {
           Done
         </button>
       </main>
+
+      {paymentSheetOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50">
+          <div className="w-full max-w-lg rounded-t-2xl bg-white p-6 animate-in slide-in-from-bottom">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Pay with card</h3>
+              <button
+                type="button"
+                className="p-2 -mr-2 text-slate-400 hover:text-slate-600"
+                onClick={() => setPaymentSheetOpen(false)}
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="mb-4 text-sm text-slate-600">
+              Select a payment method to pay your outstanding balance of{' '}
+              {formatMoneyMinor(riderArrearsMinor, currency)}.
+            </p>
+            <div className="space-y-2">
+              {cardPaymentMethods.map((method) => (
+                <button
+                  key={method.id}
+                  type="button"
+                  className="flex w-full items-center gap-3 rounded-lg border p-3 text-left hover:bg-slate-50"
+                  onClick={() => void handlePayWithCard(method.id)}
+                  disabled={payingShortfall}
+                >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100">
+                    {method.icon === 'visa' && <span className="text-sm font-bold text-blue-600">VISA</span>}
+                    {method.icon === 'apple' && <span className="text-lg"></span>}
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium">{method.barLabel}</p>
+                    <p className="text-xs text-slate-500">{method.subtitle}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {disputeSheetOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50">
+          <div className="w-full max-w-lg rounded-t-2xl bg-white p-6 animate-in slide-in-from-bottom max-h-[80vh] overflow-y-auto">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Dispute this charge</h3>
+              <button
+                type="button"
+                className="p-2 -mr-2 text-slate-400 hover:text-slate-600"
+                onClick={() => setDisputeSheetOpen(false)}
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="mb-4 text-sm text-slate-600">
+              You are disputing a charge of {formatMoneyMinor(riderArrearsMinor, currency)}. Please select a
+              reason and provide any additional details.
+            </p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Reason for dispute
+                </label>
+                <div className="space-y-2">
+                  {Object.entries(disputeReasons).map(([code, label]) => (
+                    <label
+                      key={code}
+                      className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 ${
+                        disputeReason === code ? 'border-blue-500 bg-blue-50' : 'hover:bg-slate-50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="dispute-reason"
+                        value={code}
+                        checked={disputeReason === code}
+                        onChange={(e) => setDisputeReason(e.target.value)}
+                        className="h-4 w-4 text-blue-600"
+                      />
+                      <span className="text-sm">{label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Additional details (optional)
+                </label>
+                <textarea
+                  value={disputeNotes}
+                  onChange={(e) => setDisputeNotes(e.target.value)}
+                  placeholder="Please provide any additional information..."
+                  className="w-full rounded-lg border p-3 text-sm"
+                  rows={3}
+                />
+              </div>
+
+              <button
+                type="button"
+                className="w-full rounded-lg bg-blue-600 py-3 font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                onClick={() => void handleFileDispute()}
+                disabled={filingDispute || !disputeReason}
+              >
+                {filingDispute ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                    Submitting...
+                  </span>
+                ) : (
+                  'Submit dispute'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -68,6 +68,7 @@ import {
 import { registerCashSettlementRoutes } from "./cashSettlement/registerCashSettlementRoutes.ts";
 import { isCashSettlementEnabled, isCashSettlementV2Enabled, driverDebtDispatchThresholdMinor, isDriverDebtDispatchGuardEnabled } from "./cashSettlement/flags.ts";
 import { getOpenDebtMinor } from "./cashSettlement/debtRepayment.ts";
+import { isRiderArrearsBlocked } from "./cashSettlement/arrearsCheck.ts";
 import { evaluateGeofenceTransitions, cleanupRideLiveState } from "./rideGeofence.ts";
 import { loadAppPermissionPolicy, policyDto } from "../_shared/appPermissionPolicy.ts";
 import type { AppPermissionSurface } from "../_shared/appPermissionCatalog.ts";
@@ -1665,6 +1666,16 @@ app.post("/v1/requests", async (c) => {
     insertRow.payment_method = paymentMethod;
   }
 
+  const arrearsCheck = await isRiderArrearsBlocked(db, auth.user.id, paymentMethod ?? "cash", locked.currency);
+  if (arrearsCheck.blocked) {
+    return c.json({
+      error: "rider_arrears_blocked",
+      message: "Clear outstanding balance before requesting cash rides",
+      arrears_minor: arrearsCheck.arrearsMinor,
+      currency: locked.currency,
+    }, 403);
+  }
+
   const guestPassengerName = typeof body.guest_passenger_name === "string"
     ? body.guest_passenger_name.trim()
     : "";
@@ -2780,6 +2791,12 @@ registerTripIntentRoutes(app, {
     };
   },
   fulfillIntent: async ({ bookerUserId, intent, paymentMethod }) => {
+    const intentCurrency = String(intent.currency ?? "JMD");
+    const arrearsCheck = await isRiderArrearsBlocked(svc(), bookerUserId, paymentMethod, intentCurrency);
+    if (arrearsCheck.blocked) {
+      throw new Error(`rider_arrears_blocked:${arrearsCheck.arrearsMinor}:${intentCurrency}`);
+    }
+
     let bookDispatchSettings = DEFAULT_DISPATCH_SETTINGS;
     try {
       const { db: adminDb, tables } = await getRidesAdminDb();

@@ -73,7 +73,21 @@ type RidesErrorBody = {
   vehicle_type?: string;
   location_keys_tried?: string[];
   vehicle_types_tried?: string[];
+  arrears_minor?: number;
+  currency?: string;
 };
+
+export class RiderArrearsBlockedError extends Error {
+  public readonly arrearsMinor: number;
+  public readonly currency: string;
+
+  constructor(arrearsMinor: number, currency: string) {
+    super(`rider_arrears_blocked:${arrearsMinor}:${currency}`);
+    this.name = 'RiderArrearsBlockedError';
+    this.arrearsMinor = arrearsMinor;
+    this.currency = currency;
+  }
+}
 
 function throwRidesErrorBody(body: RidesErrorBody, status: number, rawText: string): never {
   if (body.error === 'quote_stale') {
@@ -96,6 +110,12 @@ function throwRidesErrorBody(body: RidesErrorBody, status: number, rawText: stri
   }
   if (body.error === 'rider_account_restricted') {
     throw new Error('Your account cannot book rides right now. Contact support.');
+  }
+  if (body.error === 'rider_arrears_blocked') {
+    throw new RiderArrearsBlockedError(
+      body.arrears_minor ?? 0,
+      body.currency ?? 'JMD',
+    );
   }
   if (body.error === 'insert_failed') {
     throw new Error('Could not start your trip. Please try again in a moment.');
@@ -313,6 +333,75 @@ export async function ridesGetSettlementSummary(
 ): Promise<{ summary: SettlementSummaryDto }> {
   const res = await ridesFetch(`${base}/v1/requests/${rideId}/settlement-summary`, {
     headers: await ridesHeaders(),
+  });
+  if (!res.ok) await parseRidesError(res);
+  return res.json();
+}
+
+export interface PayShortfallResult {
+  success: boolean;
+  amount_paid_minor: number;
+  new_arrears_minor: number;
+  currency: string;
+}
+
+export async function ridesPayShortfallWithCard(
+  rideId: string,
+  paymentMethodId: string,
+  idempotencyKey: string,
+): Promise<PayShortfallResult> {
+  const res = await ridesFetch(`${base}/v1/requests/${rideId}/pay-shortfall`, {
+    method: 'POST',
+    headers: await ridesHeaders(),
+    body: JSON.stringify({
+      payment_method_id: paymentMethodId,
+      idempotency_key: idempotencyKey,
+    }),
+  });
+  if (!res.ok) await parseRidesError(res);
+  return res.json();
+}
+
+export interface DisputeDto {
+  id: string;
+  status: string;
+  reason: string;
+  disputed_amount_minor: number;
+  resolution_amount_minor: number | null;
+  rider_notes: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export interface DisputeInfoResponse {
+  dispute: DisputeDto | null;
+  can_file_dispute: boolean;
+  cannot_dispute_reason?: string;
+  dispute_reasons: Record<string, string>;
+}
+
+export async function ridesGetDisputeInfo(rideId: string): Promise<DisputeInfoResponse> {
+  const res = await ridesFetch(`${base}/v1/requests/${rideId}/dispute`, {
+    headers: await ridesHeaders(),
+  });
+  if (!res.ok) await parseRidesError(res);
+  return res.json();
+}
+
+export interface CreateDisputeResult {
+  dispute_id: string;
+  status: string;
+}
+
+export async function ridesCreateDispute(
+  rideId: string,
+  reason: string,
+  notes?: string,
+): Promise<CreateDisputeResult> {
+  const res = await ridesFetch(`${base}/v1/requests/${rideId}/dispute`, {
+    method: 'POST',
+    headers: await ridesHeaders(),
+    body: JSON.stringify({ reason, notes }),
   });
   if (!res.ok) await parseRidesError(res);
   return res.json();

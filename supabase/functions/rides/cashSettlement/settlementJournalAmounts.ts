@@ -3,6 +3,7 @@ import { getRidesPaymentDb } from "../../_shared/ridesPaymentDb.ts";
 export interface SettlementJournalAmounts {
   cash_received_minor: number;
   wallet_paid_minor: number;
+  arrears_minor: number;
 }
 
 /** Read settlement amounts from payment journal when ride columns/snapshot are missing. */
@@ -17,6 +18,7 @@ export async function settlementJournalAmountsForRide(
 
   let cash_received_minor = 0;
   let wallet_paid_minor = 0;
+  let arrears_minor = 0;
 
   for (const row of rows ?? []) {
     const type = String(row.entry_type ?? "");
@@ -28,10 +30,10 @@ export async function settlementJournalAmountsForRide(
     if (type === "wallet_fare_from_rider") {
       wallet_paid_minor += amount;
     }
-    if (type === "cash_trip_arrears" && wallet_paid_minor === 0) {
-      wallet_paid_minor += amount;
+    if (type === "cash_trip_arrears") {
+      arrears_minor += amount;
     }
   }
 
-  return { cash_received_minor, wallet_paid_minor };
+  return { cash_received_minor, wallet_paid_minor, arrears_minor };
 }

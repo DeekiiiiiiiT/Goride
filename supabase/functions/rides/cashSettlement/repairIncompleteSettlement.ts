@@ -11,6 +11,10 @@ import {
 import { hashSettlementRequest } from "./requestHash.ts";
 import { postPaymentJournal } from "../../_shared/paymentAccounts.ts";
 import { getRidesPaymentDb } from "../../_shared/ridesPaymentDb.ts";
+import {
+  filterLegacyRepairMissingLines,
+  shouldSkipLegacySettlementRepair,
+} from "./settlementRepairGuards.ts";
 
 /**
  * Repairs V2 settlements where only the first journal line posted (legacy idempotency bug),
@@ -135,6 +139,19 @@ async function repairIncompleteCashSettlements(
     const existingTypes = new Set((journalRows ?? []).map((r) => String(r.entry_type)));
     const collectionRow = (journalRows ?? []).find((r) => r.entry_type === "cash_trip_collection");
     const snapshot = null as Record<string, unknown> | null;
+    const outcome = String(ride.cash_settlement_outcome ?? "");
+
+    if (shouldSkipLegacySettlementRepair({ outcome, existingTypes })) {
+      debug.candidates.push({
+        rideId,
+        journalTypes: [...existingTypes],
+        missingTypes: [],
+        owed: 0,
+        received: 0,
+        action: "skip",
+      });
+      continue;
+    }
 
     const isV2Ride = Boolean(collectionRow) ||
       snapshot?.settlement_version === 2 ||
@@ -186,7 +203,7 @@ async function repairIncompleteCashSettlements(
 
     if (lines.length === 0) continue;
 
-    const missing = lines.filter((line) => !existingTypes.has(line.entry_type));
+    const missing = filterLegacyRepairMissingLines(lines, existingTypes);
     if (missing.length === 0) {
       debug.candidates.push({
         rideId,
@@ -215,7 +232,7 @@ async function repairIncompleteCashSettlements(
       idempotencyKey: repairBaseKey,
       requestHash,
       currency: rideCurrency,
-      lines,
+      lines: missing,
       createdByUserId: driverUserId ?? riderUserId ?? null,
     });
 

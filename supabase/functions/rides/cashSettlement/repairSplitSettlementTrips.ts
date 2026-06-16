@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { computeSplitSettlement } from "./computeSplitSettlement.ts";
+import { computeSplitSettlement, type SplitSettlementResult } from "./computeSplitSettlement.ts";
 import { buildSplitPaymentJournalLines } from "./buildSplitPaymentJournalLines.ts";
 import { isCashSettlementSplitPaymentEnabled } from "./flags.ts";
 import { getDriverDigitalAvailableMinor } from "./debtRepayment.ts";
@@ -9,6 +9,7 @@ import { postPaymentJournal } from "../../_shared/paymentAccounts.ts";
 import { getRidesPaymentDb } from "../../_shared/ridesPaymentDb.ts";
 import { settlementJournalAmountsForRide } from "./settlementJournalAmounts.ts";
 import { applyPendingDebt } from "./debtRepayment.ts";
+import { filterSplitRepairMissingLines } from "./settlementRepairGuards.ts";
 
 const RIDE_SELECT =
   "id, rider_user_id, assigned_driver_user_id, currency, fare_final_minor, fare_estimate_minor, cash_received_minor, cash_settlement_outcome, payment_method, status, cash_settlement_snapshot";
@@ -20,9 +21,26 @@ function pubSvc(): SupabaseClient {
   );
 }
 
+/** When rider was already debited via arrears, only credit driver — no second rider debit. */
+function splitForDriverOnlyRepair(
+  base: SplitSettlementResult,
+  shortfall: number,
+): SplitSettlementResult {
+  return {
+    ...base,
+    storedOutcome: "split",
+    wallet_paid_minor: 0,
+    rider_arrears_minor: shortfall,
+    driver_digital_credit_minor: shortfall,
+    platform_guarantee_minor: shortfall,
+    arrears_minor: shortfall,
+    change_credit_minor: 0,
+  };
+}
+
 /**
  * Repairs legacy underpay cash trips: credits driver digital and reclassifies to split.
- * Idempotent — skips rides that already have wallet_fare_to_driver or platform_fare_guarantee.
+ * Idempotent — never posts wallet_fare_from_rider when cash_trip_arrears already exists.
  */
 export async function repairSplitSettlementTripsForDriver(
   ridesDb: SupabaseClient,
@@ -49,7 +67,6 @@ export async function repairSplitSettlementTripsForDriver(
   for (const ride of rides) {
     const rideId = String(ride.id);
     const outcome = String(ride.cash_settlement_outcome ?? "");
-    if (outcome === "split") continue;
 
     const { data: journalRows } = await payClient
       .from(tables.journal)
@@ -57,7 +74,13 @@ export async function repairSplitSettlementTripsForDriver(
       .eq("ride_request_id", rideId);
 
     const types = new Set((journalRows ?? []).map((r) => String(r.entry_type)));
+    const hasWalletFare = types.has("wallet_fare_from_rider");
+    const hasArrears = types.has("cash_trip_arrears");
+
     if (types.has("wallet_fare_to_driver") || types.has("platform_fare_guarantee")) {
+      continue;
+    }
+    if (outcome === "split" && hasWalletFare) {
       continue;
     }
 
@@ -65,23 +88,42 @@ export async function repairSplitSettlementTripsForDriver(
     const cashReceived = Number(ride.cash_received_minor ?? 0);
     if (owed <= 0 || cashReceived <= 0 || cashReceived >= owed) continue;
 
+    const shortfall = owed - cashReceived;
     const fromJournal = await settlementJournalAmountsForRide(rideId);
     const riderUserId = String(ride.rider_user_id ?? "");
     const driverId = String(ride.assigned_driver_user_id ?? "");
     if (!riderUserId || !driverId) continue;
 
     const rideCurrency = String(ride.currency ?? currency);
-    const riderAvailable = await getRiderWalletAvailableMinor(ridesDb, riderUserId, rideCurrency);
-    const walletPaidFromJournal = types.has("wallet_fare_from_rider")
-      ? fromJournal.wallet_paid_minor
-      : Math.min(owed - cashReceived, fromJournal.wallet_paid_minor || owed - cashReceived);
 
-    const split = computeSplitSettlement({
-      owedMinor: owed,
-      cashReceivedMinor: cashReceived,
-      riderWalletAvailableMinor: Math.max(walletPaidFromJournal, riderAvailable),
-      splitEnabled: true,
-    });
+    let split: SplitSettlementResult;
+    if (hasArrears && !hasWalletFare) {
+      split = splitForDriverOnlyRepair(
+        computeSplitSettlement({
+          owedMinor: owed,
+          cashReceivedMinor: cashReceived,
+          riderWalletAvailableMinor: 0,
+          splitEnabled: true,
+        }),
+        shortfall,
+      );
+    } else {
+      const riderAvailable = await getRiderWalletAvailableMinor(ridesDb, riderUserId, rideCurrency);
+      const walletAlreadyCollected = hasWalletFare ? fromJournal.wallet_paid_minor : 0;
+      split = computeSplitSettlement({
+        owedMinor: owed,
+        cashReceivedMinor: cashReceived,
+        riderWalletAvailableMinor: Math.max(walletAlreadyCollected, riderAvailable),
+        splitEnabled: true,
+      });
+      if (hasWalletFare) {
+        split = {
+          ...split,
+          wallet_paid_minor: fromJournal.wallet_paid_minor,
+          rider_arrears_minor: Math.max(0, shortfall - fromJournal.wallet_paid_minor),
+        };
+      }
+    }
 
     if (split.storedOutcome !== "split") continue;
 
@@ -95,13 +137,7 @@ export async function repairSplitSettlementTripsForDriver(
       digitalAvailableMinor: digitalAvailable,
     });
 
-    const repairLines = lines.filter((line) =>
-      line.entry_type === "wallet_fare_from_rider" ||
-      line.entry_type === "wallet_fare_to_driver" ||
-      line.entry_type === "platform_fare_guarantee" ||
-      (line.entry_type === "cash_trip_arrears" && !types.has("cash_trip_arrears"))
-    ).filter((line) => !types.has(line.entry_type));
-
+    const repairLines = filterSplitRepairMissingLines(lines, types);
     if (repairLines.length === 0) continue;
 
     const result = await postPaymentJournal(ridesDb, {

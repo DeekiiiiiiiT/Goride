@@ -29,7 +29,7 @@ import {
   watchPosition,
   type GeoPositionWithAccuracy,
 } from '@/services/locationService';
-import { ridesCreateRequest, ridesQuote } from '@/services/ridesEdge';
+import { ridesCreateRequest, ridesQuote, RiderArrearsBlockedError } from '@/services/ridesEdge';
 import { DEFAULT_VEHICLE_OPTION } from '@/types/vehicleTypes';
 import {
   TransportOptionPicker,
@@ -557,6 +557,13 @@ export default function HomePage() {
         'Booking timed out — check your connection and try again.',
       );
     } catch (e: unknown) {
+      if (e instanceof RiderArrearsBlockedError) {
+        const arrearsFormatted = formatMoneyMinor(e.arrearsMinor, e.currency);
+        const msg = `You have an outstanding balance of ${arrearsFormatted}. Please clear it in your wallet before booking cash rides.`;
+        setBookError(msg);
+        toast.error(msg, { duration: 8000 });
+        return;
+      }
       const msg = e instanceof Error ? e.message : 'Could not request ride';
       setBookError(msg);
       toast.error(msg);
