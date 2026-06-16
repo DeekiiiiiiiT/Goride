@@ -1,4 +1,4 @@
-export type CashSettlementOutcome = "exact" | "underpay" | "overpay" | "unpaid";
+export type CashSettlementOutcome = "exact" | "underpay" | "overpay" | "unpaid" | "split";
 
 export interface CashSettlementComputed {
   outcome: CashSettlementOutcome;

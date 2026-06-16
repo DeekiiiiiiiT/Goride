@@ -578,6 +578,14 @@ async function handleTerminalRideLedgerAndSync(rideId: string): Promise<void> {
     await persistRideLedgerLinesForTerminalState(svc(), fresh);
     if (status === "completed") {
       await finalizeRideLedgerFields(svc(), rideId, fresh);
+      try {
+        const { processCardTripSettlement } = await import(
+          "./cashSettlement/processCardTripSettlement.ts"
+        );
+        await processCardTripSettlement(svc(), fresh);
+      } catch (e) {
+        console.error("[rides] card trip settlement failed:", e);
+      }
       if (fresh.roam_mode === "shadow_roam") {
         void notifyShadowBookerOfTripCompleted(pubSvc(), fresh).catch((e) =>
           logLine({ event: "shadow_booker_notify_failed", error: String(e) })

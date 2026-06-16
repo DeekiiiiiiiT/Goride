@@ -34,6 +34,14 @@ export const CASH_SETTLEMENT_QA = [
   'V2 ON: debt auto-repay on digital credit (FIFO obligations)',
   'V2 ON: admin wallet-reconciliation export lists cash vs open debt',
   'V2 ON: rollback — set CASH_SETTLEMENT_V2=0; V1 path resumes; snapshots read-only',
+  'SPLIT ON: JMD 1,200 cash + wallet covers rest → outcome split, driver digital credited',
+  'SPLIT ON: partial wallet + platform guarantee → rider_arrears_minor > 0, driver still paid',
+  'SPLIT ON: driver complete view shows Trip paid — no "Rider owes"',
+  'SPLIT ON: rider CashTripSummaryView shows cash + paid from wallet for split',
+  'SPLIT ON: earnings digital_minor includes split wallet portion',
+  'SPLIT ON: repair reclassifies legacy underpay trips with wallet journal to split',
+  'SPLIT OFF: underpay path unchanged (no wallet_fare journal lines)',
+  'SPLIT OFF: card trip completion unchanged',
 ] as const;
 
 /** Staged rollout sequence (staging → production). */
@@ -43,7 +51,12 @@ export const CASH_SETTLEMENT_V2_ROLLOUT = [
   '3. Run V1 QA matrix; soak ≥ 48h',
   '4. Set CASH_SETTLEMENT_V2=1 + client VITE_CASH_SETTLEMENT_V2=1 on staging builds',
   '5. Run full V2 QA matrix including overpay with insufficient digital',
-  '6. Production: repeat steps 1–5; monitor open obligations and journal conflicts',
-  '7. Rollback: CASH_SETTLEMENT_V2=0 (server + client); V1 journal path resumes immediately',
-  '8. Optional: enable CASH_SETTLEMENT_DEBT_DISPATCH_GUARD=1 after ≥2 week soak',
+  '6. Apply migration 20260624120000_cash_split_settlement.sql (split outcome + journal types)',
+  '7. Deploy rides edge; set CASH_SETTLEMENT_SPLIT_PAYMENT=1 on staging',
+  '8. Run SPLIT QA matrix (exact, overpay, split full/partial wallet, card, flag OFF regression)',
+  '9. Run historical repair on staging underpay trips with wallet journal evidence',
+  '10. Production: repeat steps 6–9; monitor journal idempotency conflicts',
+  '11. Rollback split: CASH_SETTLEMENT_SPLIT_PAYMENT=0 — legacy underpay path resumes',
+  '12. Rollback V2: CASH_SETTLEMENT_V2=0 (server + client); V1 journal path resumes immediately',
+  '13. Optional: enable CASH_SETTLEMENT_DEBT_DISPATCH_GUARD=1 after ≥2 week soak',
 ] as const;

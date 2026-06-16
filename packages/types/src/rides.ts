@@ -23,7 +23,9 @@ export type RideRequestStatus =
   | 'completed'
   | 'cancelled';
 
-export type CashSettlementOutcome = 'exact' | 'underpay' | 'overpay' | 'unpaid';
+export type CashSettlementOutcome = 'exact' | 'underpay' | 'overpay' | 'unpaid' | 'split';
+
+export type DriverFacingSettlementOutcome = 'paid' | 'change_due' | 'ops_unpaid';
 
 export type CashSettlementStatus = 'pending' | 'settled' | 'disputed';
 
@@ -40,7 +42,11 @@ export type PaymentJournalEntryType =
   | 'change_paid_from_digital'
   | 'change_debt_open'
   | 'debt_repay_from_digital'
-  | 'fare_allocation_from_cash';
+  | 'fare_allocation_from_cash'
+  | 'card_trip_digital_credit'
+  | 'wallet_fare_from_rider'
+  | 'wallet_fare_to_driver'
+  | 'platform_fare_guarantee';
 
 export interface WalletDeltaPreviewDto {
   rider_credit_minor: number;
@@ -48,6 +54,8 @@ export interface WalletDeltaPreviewDto {
   driver_digital_debit_minor: number;
   driver_debt_opened_minor: number;
   fare_allocated_minor: number;
+  driver_digital_credit_minor?: number;
+  rider_wallet_debit_minor?: number;
 }
 
 export interface DriverWalletsResponse {
@@ -66,6 +74,10 @@ export interface CashSettlementSnapshotDto {
   outcome: CashSettlementOutcome;
   wallet_deltas?: WalletDeltaPreviewDto;
   debt_opened_minor?: number;
+  wallet_paid_minor?: number;
+  rider_arrears_minor?: number;
+  driver_digital_credit_minor?: number;
+  platform_guarantee_minor?: number;
   settled_at: string;
 }
 
@@ -80,6 +92,10 @@ export interface SettlementSummaryDto {
   settlement_version: 1 | 2;
   wallet_deltas?: WalletDeltaPreviewDto;
   debt_opened_minor?: number;
+  wallet_paid_minor?: number;
+  rider_arrears_minor?: number;
+  driver_digital_credit_minor?: number;
+  platform_guarantee_minor?: number;
 }
 
 export interface WalletBalanceDto {
@@ -125,6 +141,10 @@ export interface CashSettlementResponse {
   change_credit_minor: number;
   settlement_version?: 1 | 2;
   wallet_deltas?: WalletDeltaPreviewDto;
+  wallet_paid_minor?: number;
+  rider_arrears_minor?: number;
+  driver_digital_credit_minor?: number;
+  platform_guarantee_minor?: number;
 }
 
 /** Assigned to driver and not yet completed/cancelled. */
@@ -326,7 +346,7 @@ export interface DriverEarningsSummary {
   digital_minor: number;
   /** Total trip revenue: cash_minor + digital_minor (tips excluded until added later). */
   total_minor: number;
-  /** Physical cash received from riders on cash trips (cash_received_minor when settled). */
+  /** Physical cash received — sum of cash_received_minor from settlement (what the driver entered). */
   cash_in_hand_minor: number;
   currency: string;
   trip_count: number;

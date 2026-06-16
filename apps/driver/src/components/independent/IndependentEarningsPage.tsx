@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { ChevronRight, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -11,7 +11,9 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { formatMoneyMinor, formatMoneyMinorPlain } from '@roam/types/rides';
+import { sumCashInHandFromTrips } from '@roam/types/cashInHand';
 import { useIndependentEarnings } from '../../hooks/useIndependentEarnings';
+import { useIndependentTrips } from '../../hooks/useIndependentTrips';
 import { useDriverWallets } from '../../hooks/useDriverWallets';
 import { CASH_SETTLEMENT_ENABLED } from '../../lib/cashSettlementFlags';
 
@@ -80,13 +82,24 @@ function WalletChip({
 export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
   const { data: allData, loading: allLoading, error } = useIndependentEarnings('all');
   const { data: weekData, loading: weekLoading } = useIndependentEarnings('week');
+  const { trips, loading: tripsLoading, loadAll } = useIndependentTrips();
+
+  useEffect(() => {
+    void loadAll();
+  }, [loadAll]);
   const { wallets, loading: walletsLoading } = useDriverWallets();
 
   const currency = allData?.currency ?? weekData?.currency ?? wallets?.currency ?? 'JMD';
   const totalMinor =
     allData?.total_minor ?? (allData?.cash_minor ?? 0) + (allData?.digital_minor ?? 0);
   const cashFareMinor = allData?.cash_minor ?? 0;
-  const cashInHandMinor = allData?.cash_in_hand_minor ?? cashFareMinor;
+  const cardTripEarningsMinor = allData?.digital_minor ?? 0;
+  const cashInHandFromTrips = useMemo(
+    () => sumCashInHandFromTrips(trips.filter((trip) => trip.status === 'completed')),
+    [trips],
+  );
+  const apiCashInHandMinor = allData?.cash_in_hand_minor ?? 0;
+  const cashInHandMinor = Math.max(apiCashInHandMinor, cashInHandFromTrips);
   const weekTotalMinor =
     weekData?.total_minor ?? (weekData?.cash_minor ?? 0) + (weekData?.digital_minor ?? 0);
   const weekTrips = weekData?.trip_count ?? 0;
@@ -168,8 +181,8 @@ export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
           </div>
           {debtOwed > 0 && (
             <p className="text-xs text-amber-800 dark:text-amber-300">
-              You owe {formatMoneyMinorPlain(debtOwed)} in rider change — fund your Digital wallet to
-              auto-repay.
+              You owe {formatMoneyMinorPlain(debtOwed)} in rider change — card trip earnings and
+              wallet top-ups credit your Digital wallet and auto-repay.
             </p>
           )}
         </section>
@@ -209,23 +222,34 @@ export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
             </p>
           </div>
           <div className="relative space-y-1">
-            <EarningsAmount loading={allLoading && !allData} amount={cashInHandLabel} />
+            <EarningsAmount
+              loading={(allLoading && !allData) || (cashInHandMinor === 0 && tripsLoading && trips.length === 0)}
+              amount={cashInHandLabel}
+            />
             <p className="flex items-center gap-1 text-sm text-slate-500 dark:text-slate-400">
               <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
-              Physical cash received from riders
+              Physical cash you collected — amounts entered at settlement
             </p>
           </div>
         </div>
 
-        <div className="relative overflow-hidden rounded-3xl border border-dashed border-slate-200 bg-slate-50/80 p-5 dark:border-slate-700 dark:bg-slate-900/40">
+        <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
           <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-200/80 dark:bg-slate-800">
-              <CreditCard className="h-5 w-5 text-slate-500" aria-hidden />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-100 dark:bg-blue-950/40">
+              <CreditCard className="h-5 w-5 text-blue-700 dark:text-blue-400" aria-hidden />
             </div>
-            <div>
+            <div className="flex-1 space-y-1">
               <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Card trips</p>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                In-app card payments coming soon — not part of your trip wallets.
+              {allLoading && !allData ? (
+                <Loader2 className="mt-1 h-4 w-4 animate-spin text-slate-400" />
+              ) : (
+                <p className="text-2xl font-extrabold tabular-nums text-slate-900 dark:text-white">
+                  {formatMoneyMinor(cardTripEarningsMinor, currency)}
+                </p>
+              )}
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Trip revenue from in-app card payments — credited to your Digital wallet when each
+                trip completes.
               </p>
             </div>
           </div>

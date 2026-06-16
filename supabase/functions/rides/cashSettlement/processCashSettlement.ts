@@ -7,12 +7,15 @@ import {
   riderAccountKeyForUser,
 } from "./buildJournalEntries.ts";
 import { buildSettlementJournalV2 } from "./buildSettlementJournalV2.ts";
-import { isCashSettlementV2Enabled } from "./flags.ts";
+import { buildSplitPaymentJournalLines } from "./buildSplitPaymentJournalLines.ts";
+import { computeSplitSettlement, splitToLegacyComputed } from "./computeSplitSettlement.ts";
+import { isCashSettlementSplitPaymentEnabled, isCashSettlementV2Enabled } from "./flags.ts";
 import {
   applyPendingDebt,
   createPaymentObligation,
   getDriverDigitalAvailableMinor,
 } from "./debtRepayment.ts";
+import { getRiderWalletAvailableMinor } from "./getRiderWalletAvailableMinor.ts";
 import { hashSettlementRequest } from "./requestHash.ts";
 import { settledRidePatch } from "./cashSettlementLifecycle.ts";
 import { postPaymentJournal } from "../../_shared/paymentAccounts.ts";
@@ -48,6 +51,10 @@ export type ProcessCashSettlementResult =
     computed: ReturnType<typeof computeCashSettlementOutcome>;
     settlement_version: 1 | 2;
     wallet_deltas?: WalletDeltaPreview;
+    wallet_paid_minor?: number;
+    rider_arrears_minor?: number;
+    driver_digital_credit_minor?: number;
+    platform_guarantee_minor?: number;
   }
   | { ok: false; error: string; status: number };
 
@@ -94,23 +101,62 @@ export async function processCashSettlement(
   const driverUserId = String(ride.assigned_driver_user_id);
 
   const useV2 = isCashSettlementV2Enabled();
+  const useSplit = isCashSettlementSplitPaymentEnabled();
   let walletDeltas: WalletDeltaPreview | undefined;
   let debtOpenedMinor = 0;
+  let splitMeta: {
+    wallet_paid_minor: number;
+    rider_arrears_minor: number;
+    driver_digital_credit_minor: number;
+    platform_guarantee_minor: number;
+  } | undefined;
 
+  let effectiveComputed = computed;
   let journalLines;
   if (useV2) {
     const digitalAvailable = await getDriverDigitalAvailableMinor(db, driverUserId, currency);
-    const v2 = buildSettlementJournalV2({
-      computed,
-      rideId,
-      currency,
-      riderUserId,
-      driverUserId,
-      digitalAvailableMinor: digitalAvailable,
+    const riderAvailable = useSplit
+      ? await getRiderWalletAvailableMinor(db, riderUserId, currency)
+      : 0;
+    const split = computeSplitSettlement({
+      owedMinor,
+      cashReceivedMinor: cashReceived,
+      riderWalletAvailableMinor: riderAvailable,
+      splitEnabled: useSplit,
     });
-    journalLines = v2.lines;
-    walletDeltas = v2.walletDeltas;
-    debtOpenedMinor = v2.debtOpenedMinor;
+    effectiveComputed = splitToLegacyComputed(split);
+    splitMeta = {
+      wallet_paid_minor: split.wallet_paid_minor,
+      rider_arrears_minor: split.rider_arrears_minor,
+      driver_digital_credit_minor: split.driver_digital_credit_minor,
+      platform_guarantee_minor: split.platform_guarantee_minor,
+    };
+
+    if (split.storedOutcome === "split") {
+      const splitJournal = buildSplitPaymentJournalLines({
+        split,
+        rideId,
+        currency,
+        riderUserId,
+        driverUserId,
+        digitalAvailableMinor: digitalAvailable,
+      });
+      journalLines = splitJournal.lines;
+      walletDeltas = splitJournal.walletDeltas;
+      debtOpenedMinor = splitJournal.debtOpenedMinor;
+    } else {
+      const v2 = buildSettlementJournalV2({
+        computed: effectiveComputed,
+        rideId,
+        currency,
+        riderUserId,
+        driverUserId,
+        digitalAvailableMinor: digitalAvailable,
+      });
+      journalLines = v2.lines;
+      walletDeltas = v2.walletDeltas;
+      debtOpenedMinor = v2.debtOpenedMinor;
+    }
   } else {
     journalLines = buildJournalLineSpecs({
       computed,
@@ -179,13 +225,17 @@ export async function processCashSettlement(
   const settlementSnapshot = useV2
     ? {
       settlement_version: 2,
-      owed_minor: computed.owed_minor,
-      cash_received_minor: computed.cash_received_minor,
-      change_credit_minor: computed.change_credit_minor,
-      arrears_minor: computed.arrears_minor,
-      outcome: computed.outcome,
+      owed_minor: effectiveComputed.owed_minor,
+      cash_received_minor: effectiveComputed.cash_received_minor,
+      change_credit_minor: effectiveComputed.change_credit_minor,
+      arrears_minor: effectiveComputed.arrears_minor,
+      outcome: effectiveComputed.outcome,
       wallet_deltas: walletDeltas,
       debt_opened_minor: debtOpenedMinor,
+      wallet_paid_minor: splitMeta?.wallet_paid_minor ?? 0,
+      rider_arrears_minor: splitMeta?.rider_arrears_minor ?? effectiveComputed.arrears_minor,
+      driver_digital_credit_minor: splitMeta?.driver_digital_credit_minor ?? 0,
+      platform_guarantee_minor: splitMeta?.platform_guarantee_minor ?? 0,
       settled_at: new Date().toISOString(),
     }
     : null;
@@ -193,7 +243,7 @@ export async function processCashSettlement(
   const nowIso = new Date().toISOString();
   const patch = {
     ...settledRidePatch(
-      { outcome: computed.outcome, cash_received_minor: cashReceived },
+      { outcome: effectiveComputed.outcome, cash_received_minor: cashReceived },
       tipReceived,
       nowIso,
     ),
@@ -214,17 +264,26 @@ export async function processCashSettlement(
   if (useV2) {
     console.info("[cashSettlement] v2_completed", {
       ride_id: rideId,
-      outcome: computed.outcome,
-      change_credit_minor: computed.change_credit_minor,
+      outcome: effectiveComputed.outcome,
+      change_credit_minor: effectiveComputed.change_credit_minor,
       debt_opened_minor: debtOpenedMinor,
+      wallet_paid_minor: splitMeta?.wallet_paid_minor,
     });
+  }
+
+  if (useSplit && (splitMeta?.driver_digital_credit_minor ?? 0) > 0 && journalResult.inserted > 0) {
+    await applyPendingDebt(db, driverUserId, currency, "split_settlement");
   }
 
   return {
     ok: true,
     ride: fresh,
-    computed,
+    computed: effectiveComputed,
     settlement_version: useV2 ? 2 : 1,
     wallet_deltas: walletDeltas,
+    wallet_paid_minor: splitMeta?.wallet_paid_minor,
+    rider_arrears_minor: splitMeta?.rider_arrears_minor,
+    driver_digital_credit_minor: splitMeta?.driver_digital_credit_minor,
+    platform_guarantee_minor: splitMeta?.platform_guarantee_minor,
   };
 }

@@ -2,7 +2,13 @@
  * Client-side cash settlement display helpers (mirrors server computeOutcome.ts).
  * Used by rider and driver apps — no journal or API side effects.
  */
-import type { CashSettlementOutcome, RideRequestRow } from './rides';
+import type {
+  CashSettlementOutcome,
+  CashSettlementSnapshotDto,
+  DriverFacingSettlementOutcome,
+  RideRequestRow,
+  SettlementSummaryDto,
+} from './rides';
 import { formatMoneyMinor } from './rides';
 
 export type CashPaymentCardMode =
@@ -28,8 +34,153 @@ export type CashSettlementRidePick = Pick<
   | 'fare_estimate_minor'
   | 'cash_received_minor'
   | 'cash_settlement_outcome'
+  | 'cash_settlement_snapshot'
   | 'currency'
 >;
+
+export type RiderSettlementSummaryPick = Pick<
+  SettlementSummaryDto,
+  | 'cash_received_minor'
+  | 'arrears_minor'
+  | 'owed_minor'
+  | 'change_credit_minor'
+  | 'wallet_paid_minor'
+  | 'rider_arrears_minor'
+  | 'driver_digital_credit_minor'
+>;
+
+function walletPaidFromSnapshot(
+  snapshot: CashSettlementSnapshotDto | null | undefined,
+): number | null {
+  if (snapshot?.wallet_paid_minor != null) {
+    const n = Number(snapshot.wallet_paid_minor);
+    if (Number.isFinite(n)) return Math.max(0, Math.floor(n));
+  }
+  return null;
+}
+
+export function isSplitPaymentOutcome(
+  outcome: CashSettlementOutcome | null | undefined,
+): boolean {
+  return outcome === 'split';
+}
+
+function cashReceivedFromSnapshot(
+  snapshot: CashSettlementSnapshotDto | null | undefined,
+): number | null {
+  if (snapshot?.cash_received_minor == null) return null;
+  const n = Number(snapshot.cash_received_minor);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.floor(n));
+}
+
+function arrearsFromSnapshot(
+  snapshot: CashSettlementSnapshotDto | null | undefined,
+): number | null {
+  if (snapshot?.arrears_minor == null) return null;
+  const n = Number(snapshot.arrears_minor);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.floor(n));
+}
+
+/** Physical cash the rider handed the driver at settlement. */
+export function resolveCashReceivedMinor(
+  ride: CashSettlementRidePick,
+  summary?: RiderSettlementSummaryPick | null,
+): number {
+  if (summary?.cash_received_minor != null && Number.isFinite(summary.cash_received_minor)) {
+    return Math.max(0, Math.floor(summary.cash_received_minor));
+  }
+
+  const fromColumn =
+    ride.cash_received_minor != null && Number.isFinite(Number(ride.cash_received_minor))
+      ? Math.max(0, Math.floor(Number(ride.cash_received_minor)))
+      : null;
+  const fromSnapshot = cashReceivedFromSnapshot(ride.cash_settlement_snapshot);
+
+  if (fromColumn != null && fromColumn > 0) return fromColumn;
+  if (fromSnapshot != null && fromSnapshot > 0) return fromSnapshot;
+  if (fromColumn != null) return fromColumn;
+  if (fromSnapshot != null) return fromSnapshot;
+  return 0;
+}
+
+/** Shortfall covered from the rider Roam wallet (split or legacy underpay trips). */
+export function resolveWalletPaidMinor(
+  ride: CashSettlementRidePick,
+  opts?: {
+    summary?: RiderSettlementSummaryPick | null;
+    receivedMinor?: number;
+    owedMinor?: number;
+    outcome?: CashSettlementOutcome | null;
+  },
+): number {
+  const outcome = opts?.outcome ?? resolveCashSettlementOutcome(ride);
+
+  if (opts?.summary?.wallet_paid_minor != null && opts.summary.wallet_paid_minor > 0) {
+    return Math.floor(opts.summary.wallet_paid_minor);
+  }
+
+  const fromSnapshot = walletPaidFromSnapshot(ride.cash_settlement_snapshot);
+  if (fromSnapshot != null && fromSnapshot > 0) return fromSnapshot;
+
+  if (outcome === 'split') {
+    const snap = ride.cash_settlement_snapshot;
+    const riderArrears = snap?.rider_arrears_minor ?? snap?.arrears_minor ?? 0;
+    const owed = opts?.owedMinor ?? resolveLockedFareMinor(ride) ?? 0;
+    const received = opts?.receivedMinor ?? resolveCashReceivedMinor(ride, opts?.summary);
+    const shortfall = Math.max(0, owed - received);
+    return Math.max(0, shortfall - Number(riderArrears));
+  }
+
+  if (outcome !== 'underpay') return 0;
+
+  const fromSummary = opts?.summary?.arrears_minor;
+  if (fromSummary != null && fromSummary > 0) {
+    return Math.max(0, Math.floor(fromSummary));
+  }
+
+  const fromSnapshotArrears = arrearsFromSnapshot(ride.cash_settlement_snapshot);
+  if (fromSnapshotArrears != null && fromSnapshotArrears > 0) return fromSnapshotArrears;
+
+  const owed = opts?.owedMinor ?? resolveLockedFareMinor(ride) ?? 0;
+  const received = opts?.receivedMinor ?? resolveCashReceivedMinor(ride, opts?.summary);
+  if (owed > received) return owed - received;
+  return 0;
+}
+
+export function resolveDriverDigitalCreditMinor(
+  ride: CashSettlementRidePick,
+  summary?: RiderSettlementSummaryPick | null,
+): number {
+  if (summary?.driver_digital_credit_minor != null && summary.driver_digital_credit_minor > 0) {
+    return Math.floor(summary.driver_digital_credit_minor);
+  }
+  const snap = ride.cash_settlement_snapshot;
+  if (snap?.driver_digital_credit_minor != null && snap.driver_digital_credit_minor > 0) {
+    return Math.floor(snap.driver_digital_credit_minor);
+  }
+  const outcome = resolveCashSettlementOutcome(ride);
+  if (outcome === 'split') {
+    const owed = resolveLockedFareMinor(ride) ?? 0;
+    const received = resolveCashReceivedMinor(ride, summary);
+    return Math.max(0, owed - received);
+  }
+  return resolveWalletPaidMinor(ride, { summary, outcome });
+}
+
+/** Driver UI bucket — never implies rider owes driver. */
+export function resolveDriverFacingOutcome(
+  storedOutcome: CashSettlementOutcome | null | undefined,
+  walletPaidMinor = 0,
+): DriverFacingSettlementOutcome {
+  if (!storedOutcome || storedOutcome === 'exact' || storedOutcome === 'split') return 'paid';
+  if (storedOutcome === 'overpay') return 'change_due';
+  if (storedOutcome === 'underpay' && walletPaidMinor > 0) return 'paid';
+  if (storedOutcome === 'underpay') return 'paid';
+  if (storedOutcome === 'unpaid') return 'ops_unpaid';
+  return 'paid';
+}
 
 export function isCashRide(
   ride: Pick<RideRequestRow, 'payment_method'> | null | undefined,
@@ -99,7 +250,7 @@ export function computeOutcomeFromRide(ride: CashSettlementRidePick): CashSettle
   const owed = resolveLockedFareMinor(ride);
   if (owed == null) return null;
 
-  const received = Number(ride.cash_received_minor ?? 0);
+  const received = resolveCashReceivedMinor(ride, null);
   if (ride.cash_settlement_outcome && ride.status === 'completed') {
     const computed = computeCashSettlementOutcome(owed, received);
     return { ...computed, outcome: ride.cash_settlement_outcome };
@@ -109,7 +260,7 @@ export function computeOutcomeFromRide(ride: CashSettlementRidePick): CashSettle
     return null;
   }
 
-  if (ride.status === 'completed' && ride.cash_received_minor != null) {
+  if (ride.status === 'completed' && (ride.cash_received_minor != null || ride.cash_settlement_snapshot)) {
     return computeCashSettlementOutcome(owed, received);
   }
 
@@ -131,6 +282,7 @@ export function getCashPaymentCardMode(ride: CashSettlementRidePick): CashPaymen
   if (!outcome) return 'hidden';
 
   if (outcome === 'underpay' || outcome === 'unpaid') return 'summary_arrears';
+  if (outcome === 'split') return 'summary_paid';
   return 'summary_paid';
 }
 
@@ -168,6 +320,8 @@ export function cashSettlementOutcomeMessage(
       return computed && computed.arrears_minor > 0
         ? `Payment recorded. You owe ${formatMoneyMinor(computed.arrears_minor, currency)} on your wallet.`
         : 'Payment recorded. You have an outstanding balance on your wallet.';
+    case 'split':
+      return 'Trip paid with cash and your Roam wallet — thanks for riding with Roam';
     case 'overpay': {
       const credit = computed?.change_credit_minor ?? 0;
       return credit > 0
@@ -191,6 +345,8 @@ export function cashSettlementResultHeadline(outcome: CashSettlementOutcome): st
       return 'Change credited to your wallet';
     case 'underpay':
       return 'Partial payment recorded';
+    case 'split':
+      return 'Trip paid';
     case 'unpaid':
       return 'Trip marked unpaid';
     default:

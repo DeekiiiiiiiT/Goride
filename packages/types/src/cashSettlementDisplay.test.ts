@@ -4,8 +4,12 @@ import {
   computeOutcomeFromRide,
   getCashPaymentCardMode,
   isCashRide,
+  isSplitPaymentOutcome,
   resolveCashSettlementOutcome,
+  resolveCashReceivedMinor,
+  resolveDriverFacingOutcome,
   resolveLockedFareMinor,
+  resolveWalletPaidMinor,
   shouldShowRiderCashTripSummary,
   showSettlementResultOnTripScreen,
 } from './cashSettlementDisplay';
@@ -111,6 +115,18 @@ describe('getCashPaymentCardMode', () => {
       ),
     ).toBe('summary_paid');
   });
+  it('summary_paid for split', () => {
+    expect(
+      getCashPaymentCardMode(
+        ride({
+          status: 'completed',
+          fare_final_minor: 189915,
+          cash_received_minor: 120000,
+          cash_settlement_outcome: 'split',
+        }),
+      ),
+    ).toBe('summary_paid');
+  });
 });
 
 describe('computeOutcomeFromRide', () => {
@@ -177,5 +193,122 @@ describe('resolveCashSettlementOutcome', () => {
         }),
       ),
     ).toBe('overpay');
+  });
+});
+
+describe('resolveCashReceivedMinor', () => {
+  it('prefers settlement summary', () => {
+    expect(
+      resolveCashReceivedMinor(
+        ride({ status: 'completed', cash_received_minor: 0 }),
+        { cash_received_minor: 120000, arrears_minor: 69915, owed_minor: 189915, change_credit_minor: 0 },
+      ),
+    ).toBe(120000);
+  });
+
+  it('falls back to cash_settlement_snapshot when column is zero', () => {
+    expect(
+      resolveCashReceivedMinor(
+        ride({
+          status: 'completed',
+          cash_received_minor: 0,
+          cash_settlement_snapshot: {
+            settlement_version: 2,
+            owed_minor: 189915,
+            cash_received_minor: 120000,
+            change_credit_minor: 0,
+            arrears_minor: 69915,
+            outcome: 'underpay',
+            settled_at: '2026-06-15T00:00:00Z',
+          },
+        }),
+        null,
+      ),
+    ).toBe(120000);
+  });
+});
+
+describe('resolveWalletPaidMinor', () => {
+  it('returns arrears for underpay trips', () => {
+    expect(
+      resolveWalletPaidMinor(
+        ride({
+          status: 'completed',
+          fare_final_minor: 189915,
+          cash_received_minor: 120000,
+          cash_settlement_outcome: 'underpay',
+        }),
+        {
+          summary: {
+            owed_minor: 189915,
+            cash_received_minor: 120000,
+            arrears_minor: 69915,
+            change_credit_minor: 0,
+          },
+          outcome: 'underpay',
+        },
+      ),
+    ).toBe(69915);
+  });
+
+  it('returns zero for exact pay', () => {
+    expect(
+      resolveWalletPaidMinor(
+        ride({
+          status: 'completed',
+          fare_final_minor: 1000,
+          cash_received_minor: 1000,
+          cash_settlement_outcome: 'exact',
+        }),
+      ),
+    ).toBe(0);
+  });
+
+  it('returns wallet paid for split outcome', () => {
+    expect(
+      resolveWalletPaidMinor(
+        ride({
+          status: 'completed',
+          fare_final_minor: 189915,
+          cash_received_minor: 120000,
+          cash_settlement_outcome: 'split',
+          cash_settlement_snapshot: {
+            settlement_version: 2,
+            owed_minor: 189915,
+            cash_received_minor: 120000,
+            wallet_paid_minor: 69915,
+            rider_arrears_minor: 0,
+            outcome: 'split',
+            settled_at: '2026-06-15T00:00:00Z',
+          },
+        }),
+        {
+          summary: {
+            owed_minor: 189915,
+            cash_received_minor: 120000,
+            wallet_paid_minor: 69915,
+            rider_arrears_minor: 0,
+            change_credit_minor: 0,
+          },
+          outcome: 'split',
+        },
+      ),
+    ).toBe(69915);
+  });
+});
+
+describe('resolveDriverFacingOutcome', () => {
+  it('maps split and legacy underpay with wallet to paid', () => {
+    expect(resolveDriverFacingOutcome('split')).toBe('paid');
+    expect(resolveDriverFacingOutcome('underpay', 69915)).toBe('paid');
+    expect(resolveDriverFacingOutcome('overpay')).toBe('change_due');
+    expect(resolveDriverFacingOutcome('unpaid')).toBe('ops_unpaid');
+  });
+});
+
+describe('isSplitPaymentOutcome', () => {
+  it('identifies split only', () => {
+    expect(isSplitPaymentOutcome('split')).toBe(true);
+    expect(isSplitPaymentOutcome('underpay')).toBe(false);
   });
 });

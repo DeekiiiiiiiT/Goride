@@ -14,6 +14,15 @@ export function isDriverDebtDispatchGuardEnabled(): boolean {
     Deno.env.get("CASH_SETTLEMENT_DEBT_DISPATCH_GUARD") === "1";
 }
 
+/**
+ * Cash + rider wallet split settlement (`CASH_SETTLEMENT_SPLIT_PAYMENT=1`).
+ * Requires V2. When OFF, legacy underpay path is unchanged.
+ */
+export function isCashSettlementSplitPaymentEnabled(): boolean {
+  return isCashSettlementV2Enabled() &&
+    Deno.env.get("CASH_SETTLEMENT_SPLIT_PAYMENT") === "1";
+}
+
 export function driverDebtDispatchThresholdMinor(): number {
   const raw = Number(Deno.env.get("CASH_SETTLEMENT_DEBT_THRESHOLD_MINOR"));
   return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 50_000;

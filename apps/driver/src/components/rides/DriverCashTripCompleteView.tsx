@@ -1,5 +1,5 @@
 import React from 'react';
-import { Banknote, CheckCircle2 } from 'lucide-react';
+import { Banknote, CheckCircle2, CreditCard } from 'lucide-react';
 import type { CashSettlementResponse } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
 import { resolveDriverCashSettlementDisplay } from './driverTripCompleteUtils';
@@ -16,15 +16,15 @@ function DetailRow({
 }: {
   label: string;
   value: string;
-  tone?: 'default' | 'credit' | 'debt';
+  tone?: 'default' | 'credit' | 'digital';
 }) {
   return (
     <div
       className={`flex items-center justify-between gap-3 text-sm ${
         tone === 'credit'
           ? 'text-emerald-700 dark:text-emerald-400'
-          : tone === 'debt'
-            ? 'text-amber-800 dark:text-amber-300'
+          : tone === 'digital'
+            ? 'text-blue-700 dark:text-blue-400'
             : 'text-slate-700 dark:text-slate-200'
       }`}
     >
@@ -39,13 +39,18 @@ export function DriverCashTripCompleteView({ result, onDone }: Props) {
   const {
     currency,
     outcome,
+    driverFacingOutcome,
     fareMinor,
     receivedMinor,
     changeMinor,
-    arrearsMinor,
+    walletPaidMinor,
+    driverDigitalCreditMinor,
     debtOpenedMinor,
     digitalDebitMinor,
   } = display;
+
+  const digitalReceived = driverDigitalCreditMinor > 0 ? driverDigitalCreditMinor : walletPaidMinor;
+  const showSplitPaid = outcome === 'split' || (driverFacingOutcome === 'paid' && digitalReceived > 0);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-slate-50 dark:bg-slate-950">
@@ -56,7 +61,9 @@ export function DriverCashTripCompleteView({ result, onDone }: Props) {
           </div>
           <div>
             <h2 className="text-base font-bold text-slate-900 dark:text-white">Cash trip complete</h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 capitalize">{outcome}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 capitalize">
+              {outcome === 'split' ? 'Cash + digital' : outcome}
+            </p>
           </div>
         </div>
 
@@ -110,26 +117,33 @@ export function DriverCashTripCompleteView({ result, onDone }: Props) {
               </p>
               <p className="text-sm text-slate-600 dark:text-slate-300">Exact fare — no change due</p>
             </div>
-          ) : outcome === 'underpay' ? (
+          ) : showSplitPaid ? (
             <div className="mb-4 space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
-                Rider still owes
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
+                Trip paid
               </p>
-              <p className="text-3xl font-extrabold tabular-nums text-amber-900 dark:text-amber-200">
-                {formatMoneyMinor(arrearsMinor, currency)}
+              <p className="text-3xl font-extrabold tabular-nums text-slate-900 dark:text-white">
+                {formatMoneyMinor(fareMinor, currency)}
               </p>
               <p className="text-sm text-slate-600 dark:text-slate-300">
-                You received {formatMoneyMinor(receivedMinor, currency)} of{' '}
-                {formatMoneyMinor(fareMinor, currency)}. Your trip earnings are unchanged.
+                {formatMoneyMinor(receivedMinor, currency)} cash
+                {digitalReceived > 0 && (
+                  <>
+                    {' '}
+                    + {formatMoneyMinor(digitalReceived, currency)} from rider wallet
+                  </>
+                )}
+                . Full fare credited to your earnings.
               </p>
             </div>
           ) : outcome === 'unpaid' ? (
             <div className="mb-4 space-y-1">
               <p className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
-                No payment received
+                Trip recorded
               </p>
               <p className="text-sm text-slate-600 dark:text-slate-300">
-                Fare recorded as unpaid — {formatMoneyMinor(fareMinor, currency)} trip earnings unchanged.
+                No cash received — {formatMoneyMinor(fareMinor, currency)} trip earnings recorded. Roam
+                handles rider payment collection.
               </p>
             </div>
           ) : null}
@@ -137,13 +151,24 @@ export function DriverCashTripCompleteView({ result, onDone }: Props) {
           <div className="space-y-2.5 border-t border-slate-100 pt-4 dark:border-slate-800">
             <DetailRow label="Trip earnings" value={formatMoneyMinor(fareMinor, currency)} />
             <DetailRow label="Cash in hand" value={formatMoneyMinor(receivedMinor, currency)} tone="credit" />
-            {outcome === 'overpay' && changeMinor > 0 && (
-              <DetailRow label="Change due" value={formatMoneyMinor(changeMinor, currency)} tone="debt" />
+            {digitalReceived > 0 && (
+              <DetailRow
+                label="Digital received"
+                value={formatMoneyMinor(digitalReceived, currency)}
+                tone="digital"
+              />
             )}
-            {(outcome === 'underpay' || outcome === 'unpaid') && arrearsMinor > 0 && (
-              <DetailRow label="Rider owes" value={formatMoneyMinor(arrearsMinor, currency)} tone="debt" />
+            {outcome === 'overpay' && changeMinor > 0 && (
+              <DetailRow label="Change due" value={formatMoneyMinor(changeMinor, currency)} />
             )}
           </div>
+
+          {digitalReceived > 0 && (
+            <div className="mt-4 flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-xs text-blue-800 dark:bg-blue-950/30 dark:text-blue-300">
+              <CreditCard className="h-4 w-4 shrink-0" aria-hidden />
+              Digital portion credited to your Digital wallet.
+            </div>
+          )}
         </section>
       </div>
 

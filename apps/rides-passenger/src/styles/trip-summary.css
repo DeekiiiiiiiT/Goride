@@ -192,6 +192,10 @@
   color: #047857;
 }
 
+.trip-summary-cash-hero__row--wallet {
+  color: var(--passenger-primary);
+}
+
 .trip-summary-cash-hero__row--arrears {
   color: #b45309;
 }

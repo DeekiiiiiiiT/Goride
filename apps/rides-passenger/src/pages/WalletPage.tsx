@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   ArrowLeft,
+  ArrowUpFromLine,
+  Banknote,
   Car,
   ChevronRight,
   CircleHelp,
   Loader2,
-  PlusCircle,
   Wallet,
 } from 'lucide-react';
 import type { WalletBalanceDto, WalletTransactionDto } from '@roam/types/rides';
@@ -32,6 +33,7 @@ import {
   SURFACE_VARIANT,
 } from '@/lib/passengerTheme';
 import { AddFundsSheet } from '@/components/wallet/AddFundsSheet';
+import { WithdrawSheet } from '@/components/wallet/WithdrawSheet';
 import { WalletPaymentMethodsList } from '@/components/wallet/WalletPaymentMethodsList';
 import { useDefaultPaymentMethod } from '@/hooks/useDefaultPaymentMethod';
 
@@ -78,7 +80,8 @@ function txIcon(tx: WalletTransactionDto) {
 export default function WalletPage() {
   const navigate = useNavigate();
   const { selectedId, select } = useDefaultPaymentMethod();
-  const [addFundsOpen, setAddFundsOpen] = useState(false);
+  const [addCashOpen, setAddCashOpen] = useState(false);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [transactions, setTransactions] = useState<WalletTransactionDto[]>([]);
   const [wallet, setWallet] = useState<WalletBalanceDto | null>(null);
   const [loading, setLoading] = useState(true);
@@ -139,10 +142,12 @@ export default function WalletPage() {
 
   const balanceMajor = wallet ? wallet.balance_minor / 100 : 0;
 
+  const overlayOpen = addCashOpen || withdrawOpen;
+
   return (
     <>
     <div
-      className={`flex min-h-[100dvh] flex-col pb-28 ${addFundsOpen ? 'blur-sm' : ''}`}
+      className={`flex min-h-[100dvh] flex-col pb-28 ${overlayOpen ? 'blur-sm' : ''}`}
       style={{ backgroundColor: PAGE_BG, color: ON_SURFACE }}
     >
       <header
@@ -220,15 +225,28 @@ export default function WalletPage() {
                 Includes {formatMoneyMinorPlain(wallet.credit_minor)} ride credit
               </p>
             )}
-            <div className="mt-8">
+            <div className="mt-8 grid grid-cols-2 gap-3">
               <button
                 type="button"
-                onClick={() => setAddFundsOpen(true)}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl py-4 font-bold shadow-md transition-all active:scale-95"
+                onClick={() => setAddCashOpen(true)}
+                className="flex items-center justify-center gap-2 rounded-2xl py-4 text-sm font-bold shadow-md transition-all active:scale-95"
                 style={{ backgroundColor: PRIMARY, color: ON_PRIMARY }}
               >
-                <PlusCircle className="h-5 w-5" fill="currentColor" aria-hidden />
-                Add Funds
+                <Banknote className="h-5 w-5" aria-hidden />
+                Add Cash
+              </button>
+              <button
+                type="button"
+                onClick={() => setWithdrawOpen(true)}
+                className="flex items-center justify-center gap-2 rounded-2xl border py-4 text-sm font-bold transition-all active:scale-95"
+                style={{
+                  borderColor: 'color-mix(in srgb, var(--passenger-primary) 35%, transparent)',
+                  backgroundColor: 'color-mix(in srgb, var(--passenger-primary) 6%, var(--passenger-surface))',
+                  color: PRIMARY,
+                }}
+              >
+                <ArrowUpFromLine className="h-5 w-5" aria-hidden />
+                Withdraw
               </button>
             </div>
           </div>
@@ -349,9 +367,14 @@ export default function WalletPage() {
     </div>
 
       <AddFundsSheet
-        open={addFundsOpen}
-        onClose={() => setAddFundsOpen(false)}
+        open={addCashOpen}
+        onClose={() => setAddCashOpen(false)}
         balanceMajor={balanceMajor}
+      />
+      <WithdrawSheet
+        open={withdrawOpen}
+        onClose={() => setWithdrawOpen(false)}
+        availableMinor={wallet?.available_minor ?? 0}
       />
     </>
   );

@@ -1,30 +1,45 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { effectiveCashInHandMinor } from "./driverRideQueries.ts";
+import { cashReceivedMinorFromTripRow } from "./cashInHand.ts";
 
-Deno.test("effectiveCashInHandMinor uses cash_received when settled", () => {
+Deno.test("cashReceivedMinorFromTripRow uses cash_received column", () => {
   assertEquals(
-    effectiveCashInHandMinor({ cash_received_minor: 100000 }, 62320, true),
+    cashReceivedMinorFromTripRow({
+      status: "completed",
+      payment_method: "cash",
+      cash_received_minor: 100000,
+    }),
     100000,
   );
 });
 
-Deno.test("effectiveCashInHandMinor treats zero received as settled unpaid", () => {
+Deno.test("cashReceivedMinorFromTripRow reads settlement snapshot", () => {
   assertEquals(
-    effectiveCashInHandMinor({ cash_received_minor: 0 }, 62320, true),
+    cashReceivedMinorFromTripRow({
+      status: "completed",
+      payment_method: "cash",
+      cash_settlement_snapshot: { cash_received_minor: 100000 },
+    }),
+    100000,
+  );
+});
+
+Deno.test("cashReceivedMinorFromTripRow is zero without settlement data", () => {
+  assertEquals(
+    cashReceivedMinorFromTripRow({
+      status: "completed",
+      payment_method: "cash",
+    }),
     0,
   );
 });
 
-Deno.test("effectiveCashInHandMinor falls back to fare when unsettled", () => {
+Deno.test("cashReceivedMinorFromTripRow ignores card trips", () => {
   assertEquals(
-    effectiveCashInHandMinor({}, 62320, true),
-    62320,
-  );
-});
-
-Deno.test("effectiveCashInHandMinor is zero for card trips", () => {
-  assertEquals(
-    effectiveCashInHandMinor({ cash_received_minor: 100000 }, 62320, false),
+    cashReceivedMinorFromTripRow({
+      status: "completed",
+      payment_method: "card",
+      cash_received_minor: 100000,
+    }),
     0,
   );
 });

@@ -48,4 +48,37 @@ describe('resolveDriverCashSettlementDisplay', () => {
     expect(display.changeMinor).toBe(37680);
     expect(display.debtOpenedMinor).toBe(37680);
   });
+
+  it('split trip shows paid with cash and digital breakdown', () => {
+    const display = resolveDriverCashSettlementDisplay(
+      result({
+        outcome: 'split',
+        owed_minor: 189915,
+        cash_received_minor: 120000,
+        wallet_paid_minor: 69915,
+        driver_digital_credit_minor: 69915,
+        rider_arrears_minor: 0,
+        arrears_minor: 0,
+      }),
+    );
+    expect(display.driverFacingOutcome).toBe('paid');
+    expect(display.walletPaidMinor).toBe(69915);
+    expect(display.driverDigitalCreditMinor).toBe(69915);
+    expect(display.riderArrearsMinor).toBe(0);
+  });
+
+  it('legacy underpay with wallet journal maps to paid driver outcome', () => {
+    const display = resolveDriverCashSettlementDisplay(
+      result({
+        outcome: 'underpay',
+        owed_minor: 189915,
+        cash_received_minor: 120000,
+        wallet_paid_minor: 69915,
+        driver_digital_credit_minor: 69915,
+        arrears_minor: 69915,
+      }),
+    );
+    expect(display.driverFacingOutcome).toBe('paid');
+    expect(display.driverDigitalCreditMinor).toBe(69915);
+  });
 });

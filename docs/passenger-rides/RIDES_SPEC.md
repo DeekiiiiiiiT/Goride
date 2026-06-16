@@ -69,6 +69,21 @@ When V2 is on:
 
 **Deprecation (post-soak):** V1 single-account journal builder is retained behind the V2-off branch until V2 is stable in production ≥2 weeks; then migrate legacy balances and remove the V1 path.
 
+### Split payment (cash + rider wallet, flag-gated, default OFF)
+
+Requires **`CASH_SETTLEMENT_V2=1`** plus:
+
+- Server: **`CASH_SETTLEMENT_SPLIT_PAYMENT=1`**
+
+When split payment is on:
+
+- Partial cash trips attempt **rider wallet collection** for the shortfall at settlement.
+- New outcome **`split`**: cash + wallet and/or platform guarantee covers the full fare.
+- Driver **digital wallet** is credited for the non-cash portion (same economic class as card/digital trips).
+- **`rider_arrears_minor`** is company receivable only; driver UI never shows "rider owes driver."
+- Full contract: [`CASH_SPLIT_SETTLEMENT.md`](./CASH_SPLIT_SETTLEMENT.md).
+- Rollback: set **`CASH_SETTLEMENT_SPLIT_PAYMENT=0`** — legacy underpay journal path resumes.
+
 ---
 
 ## 3. Matching policy (Uber-style, phased implementation)

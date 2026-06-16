@@ -80,14 +80,14 @@ export function AddFundsSheet({ open, onClose, balanceMajor }: Props) {
       <button
         type="button"
         className="absolute inset-0 bg-black/60 transition-opacity"
-        aria-label="Close add funds"
+        aria-label="Close add cash"
         onClick={onClose}
       />
 
       <div
         role="dialog"
         aria-modal="true"
-        aria-labelledby="add-funds-title"
+        aria-labelledby="add-cash-title"
         className="relative z-10 w-full max-w-2xl overflow-hidden rounded-t-[32px] shadow-2xl safe-x"
         style={{ backgroundColor: SURFACE_LOWEST }}
       >
@@ -100,8 +100,8 @@ export function AddFundsSheet({ open, onClose, balanceMajor }: Props) {
         </div>
 
         <div className="flex items-center justify-between px-5 py-4">
-          <h2 id="add-funds-title" className="text-xl font-semibold tracking-tight" style={{ color: ON_SURFACE }}>
-            Add Funds
+          <h2 id="add-cash-title" className="text-xl font-semibold tracking-tight" style={{ color: ON_SURFACE }}>
+            Add Cash
           </h2>
           <button
             type="button"
@@ -214,7 +214,7 @@ export function AddFundsSheet({ open, onClose, balanceMajor }: Props) {
                 boxShadow: '0 10px 24px color-mix(in srgb, var(--passenger-primary) 22%, transparent)',
               }}
             >
-              Add Funds
+              Add Cash
             </button>
             <div
               className="flex items-center justify-center gap-2 opacity-70"

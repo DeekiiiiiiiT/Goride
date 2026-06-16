@@ -1,11 +1,13 @@
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { jsonEdgeForbidden, allowsPassengerSurface } from "../../_shared/authEdge.ts";
-import { isCashSettlementEnabled, isCashSettlementV2Enabled } from "./flags.ts";
+import { isCashSettlementEnabled, isCashSettlementSplitPaymentEnabled, isCashSettlementV2Enabled } from "./flags.ts";
 import {
   repairIncompleteCashSettlementsForDriver,
   repairIncompleteCashSettlementsForRider,
 } from "./repairIncompleteSettlement.ts";
+import { repairMissingCardTripSettlementsForDriver } from "./processCardTripSettlement.ts";
+import { repairSplitSettlementTripsForDriver } from "./repairSplitSettlementTrips.ts";
 import { processCashSettlement } from "./processCashSettlement.ts";
 import {
   driverAccountKeyForUser,
@@ -24,6 +26,7 @@ import {
   mapJournalRowsForAccount,
 } from "../../_shared/paymentAccounts.ts";
 import { canAccessRide } from "../rideAccess.ts";
+import { settlementJournalAmountsForRide } from "./settlementJournalAmounts.ts";
 
 type RegisterDeps = {
   svc: () => SupabaseClient;
@@ -145,6 +148,10 @@ export function registerCashSettlementRoutes(app: Hono, deps: RegisterDeps): voi
       change_credit_minor: result.computed.change_credit_minor,
       settlement_version: result.settlement_version,
       wallet_deltas: result.wallet_deltas,
+      wallet_paid_minor: result.wallet_paid_minor,
+      rider_arrears_minor: result.rider_arrears_minor,
+      driver_digital_credit_minor: result.driver_digital_credit_minor,
+      platform_guarantee_minor: result.platform_guarantee_minor,
     });
   });
 
@@ -165,24 +172,60 @@ export function registerCashSettlementRoutes(app: Hono, deps: RegisterDeps): voi
     const snapshot = ride.cash_settlement_snapshot as Record<string, unknown> | null;
     const currency = String(ride.currency ?? "JMD");
     const owed = Number(ride.fare_final_minor ?? ride.fare_estimate_minor ?? 0);
-    const received = Number(ride.cash_received_minor ?? 0);
+    let received = Number(ride.cash_received_minor ?? 0);
     const outcome = String(ride.cash_settlement_outcome ?? "");
 
     if (snapshot && typeof snapshot === "object") {
+      received = Number(snapshot.cash_received_minor ?? received);
+      let arrears = Number(snapshot.arrears_minor ?? 0);
+      if (received <= 0 || (outcome === "underpay" && arrears <= 0)) {
+        try {
+          const fromJournal = await settlementJournalAmountsForRide(rideId);
+          if (received <= 0 && fromJournal.cash_received_minor > 0) {
+            received = fromJournal.cash_received_minor;
+          }
+          if (outcome === "underpay" && arrears <= 0 && fromJournal.wallet_paid_minor > 0) {
+            arrears = fromJournal.wallet_paid_minor;
+          }
+        } catch (e) {
+          console.error("[cashSettlement] settlement_journal_fallback_failed", e);
+        }
+      }
       return c.json({
         summary: {
           ride_id: rideId,
           outcome,
           owed_minor: Number(snapshot.owed_minor ?? owed),
-          cash_received_minor: Number(snapshot.cash_received_minor ?? received),
+          cash_received_minor: received,
           change_credit_minor: Number(snapshot.change_credit_minor ?? 0),
-          arrears_minor: Number(snapshot.arrears_minor ?? 0),
+          arrears_minor: arrears,
           currency,
           settlement_version: snapshot.settlement_version === 2 ? 2 : 1,
           wallet_deltas: snapshot.wallet_deltas ?? undefined,
           debt_opened_minor: Number(snapshot.debt_opened_minor ?? 0),
+          wallet_paid_minor: Number(snapshot.wallet_paid_minor ?? 0),
+          rider_arrears_minor: Number(snapshot.rider_arrears_minor ?? arrears),
+          driver_digital_credit_minor: Number(snapshot.driver_digital_credit_minor ?? 0),
+          platform_guarantee_minor: Number(snapshot.platform_guarantee_minor ?? 0),
         },
       });
+    }
+
+    let arrears = Math.max(0, owed - received);
+    if (received <= 0 || (outcome === "underpay" && arrears <= 0)) {
+      try {
+        const fromJournal = await settlementJournalAmountsForRide(rideId);
+        if (received <= 0 && fromJournal.cash_received_minor > 0) {
+          received = fromJournal.cash_received_minor;
+        }
+        if (outcome === "underpay" && fromJournal.wallet_paid_minor > 0) {
+          arrears = fromJournal.wallet_paid_minor;
+        } else if (received > 0 && owed > received) {
+          arrears = owed - received;
+        }
+      } catch (e) {
+        console.error("[cashSettlement] settlement_journal_fallback_failed", e);
+      }
     }
 
     return c.json({
@@ -192,7 +235,7 @@ export function registerCashSettlementRoutes(app: Hono, deps: RegisterDeps): voi
         owed_minor: owed,
         cash_received_minor: received,
         change_credit_minor: Math.max(0, received - owed),
-        arrears_minor: Math.max(0, owed - received),
+        arrears_minor: arrears,
         currency,
         settlement_version: 1,
       },
@@ -257,6 +300,8 @@ export function registerCashSettlementRoutes(app: Hono, deps: RegisterDeps): voi
     if (isCashSettlementV2Enabled()) {
       try {
         await repairIncompleteCashSettlementsForDriver(deps.svc(), auth.user.id, currency);
+        await repairMissingCardTripSettlementsForDriver(deps.svc(), auth.user.id, currency);
+        await repairSplitSettlementTripsForDriver(deps.svc(), auth.user.id, currency);
       } catch (e) {
         console.error("[cashSettlement] repair_incomplete_failed", e);
       }

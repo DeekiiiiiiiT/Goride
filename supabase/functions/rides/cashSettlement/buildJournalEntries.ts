@@ -11,7 +11,11 @@ export type JournalEntryType =
   | "change_paid_from_digital"
   | "change_debt_open"
   | "debt_repay_from_digital"
-  | "fare_allocation_from_cash";
+  | "fare_allocation_from_cash"
+  | "card_trip_digital_credit"
+  | "wallet_fare_from_rider"
+  | "wallet_fare_to_driver"
+  | "platform_fare_guarantee";
 
 export interface JournalLineSpec {
   entry_type: JournalEntryType;
@@ -35,6 +39,8 @@ export interface WalletDeltaPreview {
   driver_digital_debit_minor: number;
   driver_debt_opened_minor: number;
   fare_allocated_minor: number;
+  driver_digital_credit_minor?: number;
+  rider_wallet_debit_minor?: number;
 }
 
 function userAccountKey(userId: string, role: "rider" | "driver"): string {

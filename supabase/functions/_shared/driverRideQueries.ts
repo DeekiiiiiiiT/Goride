@@ -2,6 +2,10 @@
  * Shared ride_requests queries for driver app, driver admin, and platform ledger.
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { cashReceivedMinorFromTripRow } from "./cashInHand.ts";
+import { driverCashAccountKeyForUser } from "../rides/cashSettlement/buildJournalEntries.ts";
+import { getAccountByKey } from "./paymentAccounts.ts";
+import { getRidesPaymentDb } from "./ridesPaymentDb.ts";
 
 export type RidePaymentMethod = "cash" | "card";
 export type DriverEarningsPeriod = "today" | "week" | "all";
@@ -22,8 +26,10 @@ const WEEKDAY_MON_OFFSET: Record<string, number> = {
   Sun: 6,
 };
 
+const LEDGER_TRIP_COLUMNS_BASE =
+  "id, fare_final_minor, fare_estimate_minor, payment_method, currency, completed_at, updated_at, status";
 const LEDGER_TRIP_COLUMNS =
-  "fare_final_minor, fare_estimate_minor, payment_method, currency, completed_at, updated_at, status, cash_received_minor";
+  `${LEDGER_TRIP_COLUMNS_BASE}, cash_received_minor, cash_settlement_snapshot, cash_settlement_outcome`;
 const LEGACY_TRIP_COLUMNS =
   "fare_final_minor, fare_estimate_minor, currency, updated_at, created_at, status";
 
@@ -57,24 +63,23 @@ function isMissingLedgerColumnError(message: string): boolean {
   const m = message.toLowerCase();
   return (
     m.includes("does not exist") &&
-    (m.includes("payment_method") ||
-      m.includes("completed_at") ||
-      m.includes("cash_received_minor"))
+    (m.includes("payment_method") || m.includes("completed_at"))
   );
 }
 
-/** Physical cash received on a cash trip; falls back to fare when settlement was not recorded. */
-export function effectiveCashInHandMinor(
-  row: Record<string, unknown>,
-  fareMinor: number,
-  isCashTrip: boolean,
-): number {
+function isMissingCashReceivedColumnError(message: string): boolean {
+  const m = message.toLowerCase();
+  return m.includes("does not exist") && m.includes("cash_received_minor");
+}
+
+function isMissingSettlementSnapshotColumnError(message: string): boolean {
+  const m = message.toLowerCase();
+  return m.includes("does not exist") && m.includes("cash_settlement_snapshot");
+}
+
+function effectiveCashInHandMinor(row: Record<string, unknown>, isCashTrip: boolean): number {
   if (!isCashTrip) return 0;
-  const raw = row.cash_received_minor;
-  if (raw != null && Number.isFinite(Number(raw))) {
-    return Math.max(0, Math.floor(Number(raw)));
-  }
-  return fareMinor;
+  return cashReceivedMinorFromTripRow(row);
 }
 
 function effectiveFareMinor(row: Record<string, unknown>): number {
@@ -82,6 +87,21 @@ function effectiveFareMinor(row: Record<string, unknown>): number {
   const estimate = row.fare_estimate_minor;
   const n = final != null ? Number(final) : Number(estimate);
   return Number.isFinite(n) ? n : 0;
+}
+
+/** Wallet / platform-funded portion credited to driver digital on cash split trips. */
+function splitDigitalMinorFromTripRow(row: Record<string, unknown>): number {
+  const snap = row.cash_settlement_snapshot as Record<string, unknown> | null | undefined;
+  if (snap) {
+    const credit = Number(snap.driver_digital_credit_minor ?? snap.wallet_paid_minor ?? 0);
+    if (Number.isFinite(credit) && credit > 0) return Math.floor(credit);
+  }
+  if (String(row.cash_settlement_outcome ?? "") === "split") {
+    const fare = effectiveFareMinor(row);
+    const cash = Number(row.cash_received_minor ?? 0);
+    if (Number.isFinite(cash) && fare > cash) return fare - cash;
+  }
+  return 0;
 }
 
 function applyTripFilters(
@@ -386,21 +406,86 @@ function rowCompletedAt(r: Record<string, unknown>): string | null {
   return (r.completed_at as string | null) ?? (r.updated_at as string | null);
 }
 
+type EarningsColumnMode = "legacy" | "base" | "cash" | "full";
+
+function earningsColumnsForMode(mode: EarningsColumnMode): string {
+  switch (mode) {
+    case "legacy":
+      return LEGACY_TRIP_COLUMNS;
+    case "base":
+      return LEDGER_TRIP_COLUMNS_BASE;
+    case "cash":
+      return `${LEDGER_TRIP_COLUMNS_BASE}, cash_received_minor`;
+    case "full":
+      return LEDGER_TRIP_COLUMNS;
+  }
+}
+
+async function aggregateCashInHandFromJournal(
+  driverUserId: string,
+  currency: string,
+  periodCashRows: Record<string, unknown>[],
+): Promise<number> {
+  try {
+    const { db, tables } = await getRidesPaymentDb();
+    const account = await getAccountByKey(
+      db,
+      driverCashAccountKeyForUser(driverUserId),
+      currency,
+    );
+    if (!account) return 0;
+
+    const rideIds = periodCashRows
+      .map((row) => String(row.id ?? ""))
+      .filter((id) => id.length > 0);
+    if (rideIds.length === 0) return 0;
+
+    const { data, error } = await db
+      .from(tables.journal)
+      .select("amount_minor, ride_request_id, metadata")
+      .eq("entry_type", "cash_trip_collection")
+      .eq("credit_account_id", account.id)
+      .in("ride_request_id", rideIds);
+
+    if (error || !data?.length) return 0;
+
+    let sum = 0;
+    for (const entry of data) {
+      const meta = (entry.metadata ?? {}) as Record<string, unknown>;
+      const received = meta.cash_received_minor != null
+        ? Number(meta.cash_received_minor)
+        : Number(entry.amount_minor);
+      if (Number.isFinite(received) && received > 0) {
+        sum += Math.floor(received);
+      }
+    }
+    return sum;
+  } catch {
+    return 0;
+  }
+}
+
 async function aggregateFromTable(
   db: SupabaseClient,
   table: string,
   driverUserId: string,
   period: DriverEarningsPeriod,
-  legacyMode = false,
+  columnMode: EarningsColumnMode = "full",
 ): Promise<DriverEarningsAggregate | { error: string }> {
-  const columns = legacyMode ? LEGACY_TRIP_COLUMNS : LEDGER_TRIP_COLUMNS;
+  const columns = earningsColumnsForMode(columnMode);
   const { data, error } = await db.from(table)
     .select(columns)
     .eq("assigned_driver_user_id", driverUserId)
     .eq("status", "completed");
 
-  if (error && isMissingLedgerColumnError(error.message) && !legacyMode) {
-    return aggregateFromTable(db, table, driverUserId, period, true);
+  if (error && columnMode === "full" && isMissingSettlementSnapshotColumnError(error.message)) {
+    return aggregateFromTable(db, table, driverUserId, period, "cash");
+  }
+  if (error && (columnMode === "full" || columnMode === "cash") && isMissingCashReceivedColumnError(error.message)) {
+    return aggregateFromTable(db, table, driverUserId, period, "base");
+  }
+  if (error && columnMode !== "legacy" && isMissingLedgerColumnError(error.message)) {
+    return aggregateFromTable(db, table, driverUserId, period, "legacy");
   }
   if (error) return { error: error.message };
 
@@ -409,6 +494,7 @@ async function aggregateFromTable(
   let cash_in_hand_minor = 0;
   let currency = "JMD";
   let trip_count = 0;
+  const periodCashRows: Record<string, unknown>[] = [];
 
   for (const row of data ?? []) {
     const r = row as Record<string, unknown>;
@@ -425,8 +511,15 @@ async function aggregateFromTable(
       digital_minor += fare;
     } else {
       cash_minor += fare;
-      cash_in_hand_minor += effectiveCashInHandMinor(r, fare, isCashTrip);
+      cash_in_hand_minor += effectiveCashInHandMinor(r, isCashTrip);
+      digital_minor += splitDigitalMinorFromTripRow(r);
+      if (isCashTrip) periodCashRows.push(r);
     }
+  }
+
+  if (cash_in_hand_minor === 0 && periodCashRows.length > 0) {
+    const fromJournal = await aggregateCashInHandFromJournal(driverUserId, currency, periodCashRows);
+    if (fromJournal > 0) cash_in_hand_minor = fromJournal;
   }
 
   return {
