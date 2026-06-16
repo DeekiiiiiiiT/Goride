@@ -59,6 +59,8 @@ import { RideOperationsPage } from './admin/pages/RideOperationsPage';
 import { TripLedgerPage } from './admin/pages/TripLedgerPage';
 import { RidersListPage } from './admin/pages/users/RidersListPage';
 import { RiderDetailPage } from './admin/pages/users/RiderDetailPage';
+import { DisputesPage } from './admin/pages/DisputesPage';
+import { SettlementOverridesPage } from './admin/pages/SettlementOverridesPage';
 import { SplashScreen } from './components/layout/SplashScreen';
 import { BookerTrackingProvider } from './contexts/BookerTrackingContext';
 import { PassengerShell } from './components/layout/PassengerShell';
@@ -148,6 +150,8 @@ export default function App() {
         <Route path="play-store" element={<PlayStoreLaunchPage />} />
         <Route path="ledger" element={<TripLedgerPage />} />
         <Route path="rides" element={<RideOperationsPage />} />
+        <Route path="disputes" element={<DisputesPage />} />
+        <Route path="settlement-overrides" element={<SettlementOverridesPage />} />
       </Route>
 
       {/* Public delegated-booking entry (signup gate) */}

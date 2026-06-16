@@ -813,3 +813,175 @@ export function formatMoneyMinor(minorUnits: number, currency = 'JMD'): string {
     maximumFractionDigits: 2,
   }).format(major);
 }
+
+// ============ Disputes ============
+
+export interface DisputeAdminDto {
+  id: string;
+  ride_request_id: string;
+  rider_user_id: string;
+  driver_user_id: string;
+  disputed_amount_minor: number;
+  dispute_reason: string;
+  dispute_status: string;
+  rider_notes: string | null;
+  admin_notes: string | null;
+  resolution_amount_minor: number | null;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+  reason_label?: string;
+}
+
+export interface DisputeWithRideDto {
+  dispute: DisputeAdminDto;
+  ride: {
+    id: string;
+    pickup_address: string | null;
+    dropoff_address: string | null;
+    fare_final_minor: number | null;
+    cash_received_minor: number | null;
+    cash_settlement_outcome: string | null;
+    currency: string;
+    completed_at: string | null;
+  } | null;
+}
+
+export async function listDisputes(
+  accessToken: string,
+  opts?: { status?: string; page?: number; limit?: number },
+): Promise<{ disputes: DisputeAdminDto[]; total: number; page: number; limit: number }> {
+  const params = new URLSearchParams();
+  if (opts?.status) params.set('status', opts.status);
+  if (opts?.page) params.set('page', String(opts.page));
+  if (opts?.limit) params.set('limit', String(opts.limit));
+  const qs = params.toString();
+  const res = await adminFetch(accessToken, `${RIDES_BASE}/admin/disputes${qs ? `?${qs}` : ''}`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function getDispute(
+  accessToken: string,
+  disputeId: string,
+): Promise<DisputeWithRideDto> {
+  const res = await adminFetch(accessToken, `${RIDES_BASE}/admin/disputes/${disputeId}`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function markDisputeUnderReview(
+  accessToken: string,
+  disputeId: string,
+): Promise<{ success: boolean; status: string }> {
+  const res = await adminFetch(accessToken, `${RIDES_BASE}/admin/disputes/${disputeId}/review`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function resolveDispute(
+  accessToken: string,
+  disputeId: string,
+  resolution: 'rider_favor' | 'driver_favor' | 'partial' | 'rejected',
+  adminNotes: string,
+  resolutionAmountMinor?: number,
+): Promise<{ success: boolean }> {
+  const res = await adminFetch(accessToken, `${RIDES_BASE}/admin/disputes/${disputeId}/resolve`, {
+    method: 'POST',
+    body: JSON.stringify({
+      resolution,
+      admin_notes: adminNotes,
+      resolution_amount_minor: resolutionAmountMinor,
+    }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+// ============ Settlement Overrides ============
+
+export interface SettlementOverrideDto {
+  id: string;
+  ride_request_id: string | null;
+  rider_user_id: string | null;
+  driver_user_id: string | null;
+  action_type: string;
+  amount_minor: number;
+  currency: string;
+  reason_code: string;
+  reason_label?: string;
+  admin_notes: string | null;
+  performed_by: string;
+  created_at: string;
+}
+
+export async function listSettlementOverrides(
+  accessToken: string,
+  opts?: { riderId?: string; driverId?: string; rideId?: string; page?: number; limit?: number },
+): Promise<{ overrides: SettlementOverrideDto[]; total: number; page: number; limit: number }> {
+  const params = new URLSearchParams();
+  if (opts?.riderId) params.set('rider_id', opts.riderId);
+  if (opts?.driverId) params.set('driver_id', opts.driverId);
+  if (opts?.rideId) params.set('ride_id', opts.rideId);
+  if (opts?.page) params.set('page', String(opts.page));
+  if (opts?.limit) params.set('limit', String(opts.limit));
+  const qs = params.toString();
+  const res = await adminFetch(accessToken, `${RIDES_BASE}/admin/settlement-overrides${qs ? `?${qs}` : ''}`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function writeoffRiderArrears(
+  accessToken: string,
+  riderUserId: string,
+  opts: {
+    rideId?: string;
+    amountMinor?: number;
+    reasonCode: string;
+    notes?: string;
+    currency?: string;
+  },
+): Promise<{ success: boolean; amount_written_off_minor: number; new_arrears_minor: number; currency: string }> {
+  const res = await adminFetch(accessToken, `${RIDES_BASE}/admin/riders/${riderUserId}/writeoff-arrears`, {
+    method: 'POST',
+    body: JSON.stringify({
+      ride_id: opts.rideId,
+      amount_minor: opts.amountMinor,
+      reason_code: opts.reasonCode,
+      notes: opts.notes,
+      currency: opts.currency ?? 'JMD',
+    }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function adjustDriverCredit(
+  accessToken: string,
+  rideId: string,
+  adjustmentMinor: number,
+  reasonCode: string,
+  notes?: string,
+): Promise<{ success: boolean; adjustment_minor: number; currency: string }> {
+  const res = await adminFetch(accessToken, `${RIDES_BASE}/admin/rides/${rideId}/adjust-driver-credit`, {
+    method: 'POST',
+    body: JSON.stringify({
+      adjustment_minor: adjustmentMinor,
+      reason_code: reasonCode,
+      notes,
+    }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function getReasonCodes(
+  accessToken: string,
+): Promise<{ reason_codes: Record<string, string> }> {
+  const res = await adminFetch(accessToken, `${RIDES_BASE}/admin/reason-codes`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
