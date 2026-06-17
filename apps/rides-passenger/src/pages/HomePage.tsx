@@ -748,7 +748,9 @@ export default function HomePage() {
 
       {showBookCta && (
         <div
-          className="home-booking-actions safe-x transition-[bottom] duration-200 ease-out"
+          className={`home-booking-actions safe-x transition-[bottom] duration-200 ease-out${
+            paymentSheetOpen ? ' invisible pointer-events-none' : ''
+          }`}
           style={{ bottom: bookingActionsBottom }}
         >
           <div className="home-booking-actions__inner px-1">

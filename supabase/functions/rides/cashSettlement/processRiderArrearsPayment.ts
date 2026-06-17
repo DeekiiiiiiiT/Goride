@@ -26,10 +26,6 @@ export interface ProcessRiderArrearsPaymentResult {
   paymentSource?: "demo_card" | "demo_lynk";
 }
 
-function walletArrearsRideId(riderUserId: string): string {
-  return `wallet-arrears:${riderUserId}`;
-}
-
 function scopedIdempotencyKey(
   source: ArrearsPaymentSourceKind,
   riderUserId: string,
@@ -71,7 +67,7 @@ export async function processRiderArrearsPayment(
   }
 
   const amountMinor = currentArrearsMinor;
-  const journalRideId = params.rideId ?? walletArrearsRideId(params.riderUserId);
+  const journalRideId = params.source === "wallet" ? null : (params.rideId ?? null);
 
   const journalLines = buildCardShortfallJournalLines({
     rideId: journalRideId,

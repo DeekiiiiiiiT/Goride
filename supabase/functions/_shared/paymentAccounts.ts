@@ -249,7 +249,7 @@ export interface PostJournalResult {
 }
 
 export interface PostJournalParams {
-  rideId: string;
+  rideId: string | null;
   idempotencyKey: string;
   requestHash: string;
   currency: string;
@@ -275,9 +275,31 @@ function settlementLinePrefix(baseKey: string): string {
 async function findSettlementJournalRows(
   client: SupabaseClient,
   journalTable: string,
-  rideId: string,
+  rideId: string | null,
   baseKey: string,
 ): Promise<Array<{ id: string; entry_type: string; request_hash: string | null; idempotency_key: string }>> {
+  if (!rideId) {
+    const { data: legacy } = await client
+      .from(journalTable)
+      .select("id, entry_type, request_hash, idempotency_key")
+      .is("ride_request_id", null)
+      .eq("idempotency_key", baseKey);
+
+    const { data: keyed } = await client
+      .from(journalTable)
+      .select("id, entry_type, request_hash, idempotency_key")
+      .is("ride_request_id", null)
+      .like("idempotency_key", `${settlementLinePrefix(baseKey)}%`);
+
+    const merged = [...(legacy ?? []), ...(keyed ?? [])];
+    const seen = new Set<string>();
+    return merged.filter((row) => {
+      if (seen.has(row.id)) return false;
+      seen.add(row.id);
+      return true;
+    });
+  }
+
   const { data: legacy } = await client
     .from(journalTable)
     .select("id, entry_type, request_hash, idempotency_key")
@@ -335,13 +357,16 @@ export async function postPaymentJournal(
   const digitalCredits: Array<{ userId: string; amount: number }> = [];
   const existingTypes = new Set(existingRows.map((row) => String(row.entry_type)));
 
-  const { data: rideJournalRows } = await client
-    .from(tables.journal)
-    .select("entry_type")
-    .eq("ride_request_id", rideId);
-  const rideEntryTypes = new Set(
-    (rideJournalRows ?? []).map((row) => String(row.entry_type)),
-  );
+  let rideEntryTypes = new Set<string>();
+  if (rideId) {
+    const { data: rideJournalRows } = await client
+      .from(tables.journal)
+      .select("entry_type")
+      .eq("ride_request_id", rideId);
+    rideEntryTypes = new Set(
+      (rideJournalRows ?? []).map((row) => String(row.entry_type)),
+    );
+  }
 
   async function resolveAccountKey(key: string): Promise<PaymentAccountRow> {
     const cached = accountCache.get(key);
@@ -412,12 +437,14 @@ export async function postPaymentJournal(
 
     if (insertError) {
       if (String(insertError.code) === "23505") {
-        const { data: dup } = await client
+        let dupQuery = client
           .from(tables.journal)
           .select("request_hash")
-          .eq("ride_request_id", rideId)
-          .eq("idempotency_key", rowIdempotencyKey)
-          .maybeSingle();
+          .eq("idempotency_key", rowIdempotencyKey);
+        dupQuery = rideId
+          ? dupQuery.eq("ride_request_id", rideId)
+          : dupQuery.is("ride_request_id", null);
+        const { data: dup } = await dupQuery.maybeSingle();
         if (dup && String(dup.request_hash) !== requestHash) {
           return { inserted: 0, skipped: false, conflict: true };
         }
@@ -550,19 +577,40 @@ export function journalEntryTitle(entryType: string): string {
   const titles: Record<string, string> = {
     cash_trip_arrears: "Outstanding balance",
     cash_change_debit: "Change credit",
-    cash_change_credit: "Change credit",
+    cash_change_credit: "Change credit to wallet",
     cash_trip_collection: "Cash collected",
     change_paid_from_digital: "Change paid from digital wallet",
     change_debt_open: "Change owed (debt)",
     debt_repay_from_digital: "Debt repayment",
     fare_allocation_from_cash: "Fare allocation",
     card_trip_digital_credit: "Card trip earnings",
-    wallet_fare_from_rider: "Fare paid from rider wallet",
+    card_shortfall_payment: "Arrears paid by card",
+    card_trip_rider_charge: "Trip paid by card",
+    wallet_fare_from_rider: "Trip paid from wallet",
     wallet_fare_to_driver: "Digital fare credit",
     platform_fare_guarantee: "Platform fare guarantee",
     wallet_topup: "Wallet top-up",
     wallet_adjustment: "Wallet adjustment",
     cash_settlement_confirmed: "Cash settlement",
+    admin_arrears_writeoff: "Balance adjustment",
+    dispute_resolution_credit: "Dispute credit",
   };
   return titles[entryType] ?? entryType.replace(/_/g, " ");
+}
+
+/** Rider-facing transaction label (may differ from driver/admin journal titles). */
+export function riderWalletTransactionTitle(
+  entryType: string,
+  metadata?: Record<string, unknown>,
+): string {
+  if (entryType === "card_trip_digital_credit") {
+    if (metadata?.payment_source === "demo_lynk") return "Trip paid with Lynk";
+    return "Trip paid by card";
+  }
+  if (entryType === "card_shortfall_payment") {
+    if (metadata?.payment_source === "demo_lynk") return "Arrears paid with Lynk";
+    if (metadata?.arrears_payment_source === "wallet") return "Arrears paid from wallet";
+    return "Arrears paid by card";
+  }
+  return journalEntryTitle(entryType);
 }

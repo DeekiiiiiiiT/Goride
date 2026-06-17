@@ -204,7 +204,7 @@ export function registerSettlementOverrideRoutes(
     });
 
     const journalResult = await postPaymentJournal(undefined, {
-      rideId: rideId ?? `admin_writeoff_${riderUserId}_${Date.now()}`,
+      rideId: rideId ?? null,
       idempotencyKey: `admin_writeoff:${riderUserId}:${Date.now()}`,
       requestHash: `writeoff:${writeoffAmount}:${reasonCode}`,
       currency,

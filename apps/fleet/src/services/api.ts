@@ -769,6 +769,23 @@ export const api = {
     return response.json();
   },
 
+  /** Paginate until exhausted — cash payment history must not be truncated at 5k rows. */
+  async getAllTransactionsForDrivers(driverIdOrIds: string | string[], pageSize = 5000, maxRows = 50000) {
+    const ids = Array.isArray(driverIdOrIds) ? driverIdOrIds.filter(Boolean) : [driverIdOrIds].filter(Boolean);
+    if (ids.length === 0) return [] as FinancialTransaction[];
+
+    const all: FinancialTransaction[] = [];
+    let offset = 0;
+    while (offset < maxRows) {
+      const page = await this.getTransactions(ids, { limit: pageSize, offset });
+      const batch = Array.isArray(page) ? page.filter(Boolean) : [];
+      all.push(...batch);
+      if (batch.length < pageSize) break;
+      offset += pageSize;
+    }
+    return all;
+  },
+
   /** Pending fuel transactions with station gate hold (Station Database → Evidence inbox). */
   async getStationGateEvidence(options?: { limit?: number }) {
     const params = new URLSearchParams();

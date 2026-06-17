@@ -23,26 +23,24 @@ function coerceAmount(amount: unknown): number {
 }
 
 /**
- * Align with client DriverDetail trip cash: explicit paymentMethod, then cash-heavy platforms.
- * Ledger aggregation (`ledgerMoneyAggregate`) only counts cash when `paymentMethod === "Cash"`.
+ * Ledger cash: only when the trip explicitly collected physical cash.
+ * Do not treat every Roam/InDrive trip as cash — card trips must not inflate the wallet.
  */
 function detectTripFarePaymentMethod(trip: Record<string, unknown>): "Cash" | "Card" | undefined {
   const pmRaw = String(trip.paymentMethod ?? "").trim().toLowerCase();
   if (pmRaw === "cash") return "Cash";
   if (pmRaw === "card" || pmRaw.includes("digital") || pmRaw.includes("braintree")) return "Card";
 
-  const platformLc = String(trip.platform ?? "").trim().toLowerCase();
-  // Uber trips: use explicit paymentMethod from CSV, don't default to cash
-  if (platformLc === "uber") return undefined;
-  
-  const cashHeavy = ["roam", "goride", "indrive", "private", "cash"].includes(platformLc);
   const rawCash = Math.abs(coerceAmount(trip.cashCollected));
   if (rawCash > 0) return "Cash";
-  if (cashHeavy) return "Cash";
+
+  const platformLc = String(trip.platform ?? "").trim().toLowerCase();
+  if (platformLc === "cash" || platformLc === "private") return "Cash";
+
   return undefined;
 }
 
-/** Physical cash for ledger (metadata.cashCollected); prefer trip field, else passenger fare (gross). */
+/** Physical cash for ledger metadata; only set when cash was actually collected. */
 function computeTripFareCashCollected(
   trip: Record<string, unknown>,
   fareGross: number,
@@ -50,7 +48,13 @@ function computeTripFareCashCollected(
 ): number {
   const explicit = Math.abs(coerceAmount(trip.cashCollected));
   if (explicit > 0) return explicit;
-  return Math.abs(fareGross > 0 ? fareGross : netAmount);
+  const pmRaw = String(trip.paymentMethod ?? "").trim().toLowerCase();
+  if (pmRaw === "cash") return Math.abs(fareGross > 0 ? fareGross : netAmount);
+  const platformLc = String(trip.platform ?? "").trim().toLowerCase();
+  if (platformLc === "cash" || platformLc === "private") {
+    return Math.abs(fareGross > 0 ? fareGross : netAmount);
+  }
+  return 0;
 }
 
 /** Same money eligibility as tripHasMoneyForLedgerProjection in index.tsx */

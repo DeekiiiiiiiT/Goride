@@ -1,7 +1,6 @@
-import type { TripPaymentMethodIcon } from '@/lib/tripPaymentMethods';
+import type { TripPaymentMethodIcon, TripPaymentMethodOption } from '@/lib/tripPaymentMethods';
 import {
   TRIP_PAYMENT_METHODS,
-  canUseMethodForArrears,
   type ArrearsPaymentMethodKind,
 } from '@/lib/tripPaymentMethods';
 
@@ -20,7 +19,7 @@ const STORAGE_KEY = 'roam-saved-payment-methods-v1';
 export const SAVED_PAYMENT_METHODS_CHANGED_EVENT = 'roam-saved-payment-methods-changed';
 
 function seedFromTripMethods(): SavedPaymentMethod[] {
-  return TRIP_PAYMENT_METHODS.filter((m) => canUseMethodForArrears(m.id)).map((m) => ({
+  return TRIP_PAYMENT_METHODS.filter((m) => m.arrearsKind === 'card').map((m) => ({
     id: m.id,
     kind: m.arrearsKind!,
     barLabel: m.barLabel,
@@ -28,6 +27,40 @@ function seedFromTripMethods(): SavedPaymentMethod[] {
     icon: m.icon,
     isDemo: m.isDemo,
   }));
+}
+
+function savedToTripOption(m: SavedPaymentMethod): TripPaymentMethodOption {
+  return {
+    id: m.id,
+    barLabel: m.barLabel,
+    subtitle: m.subtitle,
+    ridePaymentMethod: 'card',
+    icon: m.icon,
+    isDemo: m.isDemo,
+    arrearsKind: m.kind,
+    bookable: m.kind === 'card',
+  };
+}
+
+/** Cash + cards for trip booking and wallet. Lynk is withdraw-only and excluded. */
+export function listTripPaymentMethods(): TripPaymentMethodOption[] {
+  const byId = new Map<string, TripPaymentMethodOption>();
+
+  for (const m of TRIP_PAYMENT_METHODS) {
+    if (m.id === 'lynk' || m.arrearsKind === 'lynk') continue;
+    byId.set(m.id, m);
+  }
+
+  for (const saved of listSavedMethods()) {
+    if (saved.kind === 'lynk') continue;
+    if (!byId.has(saved.id)) {
+      byId.set(saved.id, savedToTripOption(saved));
+    }
+  }
+
+  const cash = byId.get('cash');
+  const rest = [...byId.values()].filter((m) => m.id !== 'cash');
+  return cash ? [cash, ...rest] : rest;
 }
 
 function readRaw(): SavedPaymentMethod[] | null {

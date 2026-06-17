@@ -2919,28 +2919,20 @@ app.get("/v1/wallet/transactions", async (c) => {
         const { repairIncompleteCashSettlementsForRider } = await import(
           "./cashSettlement/repairIncompleteSettlement.ts"
         );
+        const { repairMissingCardTripSettlementsForRider } = await import(
+          "./cashSettlement/processCardTripSettlement.ts"
+        );
         await repairIncompleteCashSettlementsForRider(svc(), auth.user.id, currency);
+        await repairMissingCardTripSettlementsForRider(svc(), auth.user.id, currency);
       } catch (e) {
         console.error("[cashSettlement] rider_repair_on_transactions_failed", e);
       }
     }
-    const { listJournalForAccountKey, mapJournalRowsForAccount, getAccountByKey } =
-      await import("../_shared/paymentAccounts.ts");
-    const { riderAccountKeyForUser } = await import("./cashSettlement/buildJournalEntries.ts");
-    const accountKey = riderAccountKeyForUser(auth.user.id);
-    const account = await getAccountByKey(svc(), accountKey, currency);
-    const rows = await listJournalForAccountKey(svc(), accountKey, currency);
-    const mapped = account ? mapJournalRowsForAccount(String(account.id), rows) : [];
-    const transactions = mapped.map((row) => ({
-      id: row.id,
-      kind: "journal" as const,
-      title: row.description,
-      amount_minor: String(row.amount_minor),
-      currency: row.currency,
-      date: row.created_at,
-      is_credit: row.is_credit,
-      ride_id: row.ride_request_id ?? undefined,
-    }));
+    const { listRiderWalletTransactions, riderWalletTransactionToDto } = await import(
+      "./cashSettlement/riderWalletTransactions.ts"
+    );
+    const rows = await listRiderWalletTransactions(svc(), auth.user.id, currency);
+    const transactions = rows.map(riderWalletTransactionToDto);
     return c.json({ transactions });
   }
   const db = svc();

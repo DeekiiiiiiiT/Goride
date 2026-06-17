@@ -8,6 +8,8 @@
 // ════════════════════════════════════════════════════════════════════════════
 
 import { Trip, FinancialTransaction, DriverMetrics } from '../types/data';
+import { getTripPhysicalCashCollected } from './tripPhysicalCash';
+import { isDriverCashPaymentTransaction } from './driverCashPayment';
 import {
     startOfWeek,
     endOfWeek,
@@ -103,15 +105,7 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
             return isWithinInterval(new Date(t.date), { start: weekStart, end: weekEnd });
         });
 
-        const tripCalculatedCash = weekTrips.reduce((sum, t) => {
-            const cash = Number(t.cashCollected || 0);
-            if (Math.abs(cash) > 0) return sum + Math.abs(cash);
-            const platform = (t.platform || '').toLowerCase();
-            const isCashPlatform = ['indrive', 'bolt', 'cash', 'goride', 'roam', 'private'].includes(platform);
-            const isCashMethod = t['paymentMethod'] === 'Cash';
-            if (isCashPlatform || isCashMethod) return sum + Number(t.amount || 0);
-            return sum;
-        }, 0);
+        const tripCalculatedCash = weekTrips.reduce((sum, t) => sum + getTripPhysicalCashCollected(t), 0);
 
         // Float Issued in this week (Increases Debt)
         const weeklyFloat = safeTransactions
@@ -245,8 +239,7 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
         // Exclude Allocated (Metadata)
         if (t.metadata?.workPeriodStart) return false;
 
-        // STRICT PAYMENT LOGIC: Only count explicit Cash Collections or Payment Received types
-        const isPayment = t.category === 'Cash Collection' || t.type === 'Payment_Received';
+        const isPayment = isDriverCashPaymentTransaction(t);
 
         return isPayment && (t.amount || 0) > 0;
     });
@@ -291,13 +284,7 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
     return weeksData.map(week => {
         const amountPaid = week.allocatedPaid + week.debtPaid + week.surplusPaid;
 
-        const cashTripCount = week.weekTrips.filter(t => {
-            const cash = Number(t.cashCollected || 0);
-            const platform = (t.platform || '').toLowerCase();
-            const isCashPlatform = ['indrive', 'bolt', 'cash', 'goride', 'roam', 'private'].includes(platform);
-            const isCashMethod = t['paymentMethod'] === 'Cash';
-            return Math.abs(cash) > 0 || isCashPlatform || isCashMethod;
-        }).length;
+        const cashTripCount = week.weekTrips.filter(t => getTripPhysicalCashCollected(t) > 0).length;
 
         // Status Logic
         let status: 'Paid' | 'Partial' | 'Unpaid' | 'Overpaid' | 'No Activity' = 'Unpaid';

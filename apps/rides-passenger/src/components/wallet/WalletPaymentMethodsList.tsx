@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Check } from 'lucide-react';
 import { toast } from 'sonner';
 import {
-  BOOKABLE_PAYMENT_METHODS,
-  type TripPaymentMethodId,
-  type TripPaymentMethodOption,
-} from '@/lib/tripPaymentMethods';
+  listTripPaymentMethods,
+  SAVED_PAYMENT_METHODS_CHANGED_EVENT,
+} from '@/lib/savedPaymentMethods';
+import type { TripPaymentMethodId, TripPaymentMethodOption } from '@/lib/tripPaymentMethods';
 import { TripPaymentMethodIcon } from '@/components/TripPaymentMethodIcon';
 import {
   CARD_SHADOW,
@@ -105,9 +105,22 @@ export function WalletPaymentMethodsList({
   onSelect,
   variant = 'wallet',
 }: Props) {
+  const [methods, setMethods] = useState<TripPaymentMethodOption[]>(() => listTripPaymentMethods());
+
+  useEffect(() => {
+    const refresh = () => setMethods(listTripPaymentMethods());
+    refresh();
+    window.addEventListener(SAVED_PAYMENT_METHODS_CHANGED_EVENT, refresh);
+    window.addEventListener('roam-payment-method-changed', refresh);
+    return () => {
+      window.removeEventListener(SAVED_PAYMENT_METHODS_CHANGED_EVENT, refresh);
+      window.removeEventListener('roam-payment-method-changed', refresh);
+    };
+  }, []);
+
   return (
     <div className={variant === 'wallet' ? 'space-y-2' : 'space-y-3'}>
-      {BOOKABLE_PAYMENT_METHODS.map((method) => (
+      {methods.map((method) => (
         <MethodCard
           key={method.id}
           method={method}

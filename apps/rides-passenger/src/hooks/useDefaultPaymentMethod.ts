@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { SAVED_PAYMENT_METHODS_CHANGED_EVENT } from '@/lib/savedPaymentMethods';
 import {
   getDefaultPaymentMethodId,
   getPaymentMethodById,
@@ -15,9 +16,11 @@ export function useDefaultPaymentMethod() {
     const sync = () => setSelectedId(getDefaultPaymentMethodId());
     window.addEventListener('storage', sync);
     window.addEventListener(PAYMENT_METHOD_CHANGED_EVENT, sync);
+    window.addEventListener(SAVED_PAYMENT_METHODS_CHANGED_EVENT, sync);
     return () => {
       window.removeEventListener('storage', sync);
       window.removeEventListener(PAYMENT_METHOD_CHANGED_EVENT, sync);
+      window.removeEventListener(SAVED_PAYMENT_METHODS_CHANGED_EVENT, sync);
     };
   }, []);
 

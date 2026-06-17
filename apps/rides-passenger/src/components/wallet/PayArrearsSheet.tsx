@@ -43,6 +43,20 @@ export function PayArrearsSheet({
     return () => window.removeEventListener(SAVED_PAYMENT_METHODS_CHANGED_EVENT, onChanged);
   }, [open, reloadMethods]);
 
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !paying) onClose();
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open, onClose, paying]);
+
   if (!open) return null;
 
   const handlePay = async (methodId: string) => {
@@ -74,10 +88,24 @@ export function PayArrearsSheet({
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50">
-        <div className="w-full max-w-lg rounded-t-2xl bg-white p-6 animate-in slide-in-from-bottom">
+      <div className="fixed inset-0 z-[60] flex items-end justify-center">
+        <button
+          type="button"
+          className="absolute inset-0 bg-black/50"
+          aria-label="Close pay balance sheet"
+          onClick={onClose}
+          disabled={paying}
+        />
+        <div
+          className="relative z-10 w-full max-w-lg rounded-t-2xl bg-white px-6 pt-6 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] safe-x max-h-[min(85dvh,640px)] overflow-y-auto animate-in slide-in-from-bottom"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="pay-arrears-sheet-title"
+        >
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-lg font-semibold">Pay outstanding balance</h3>
+            <h3 id="pay-arrears-sheet-title" className="text-lg font-semibold">
+              Pay outstanding balance
+            </h3>
             <button
               type="button"
               className="p-2 -mr-2 text-slate-400 hover:text-slate-600"
@@ -98,7 +126,7 @@ export function PayArrearsSheet({
           </p>
 
           {methods.length > 0 ? (
-            <div className="space-y-2">
+            <div className="space-y-2 max-h-[min(40dvh,280px)] overflow-y-auto">
               {methods.map((method) => (
                 <button
                   key={method.id}

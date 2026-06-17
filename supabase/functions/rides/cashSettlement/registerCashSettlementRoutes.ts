@@ -17,7 +17,7 @@ import {
   repairIncompleteCashSettlementsForDriver,
   repairIncompleteCashSettlementsForRider,
 } from "./repairIncompleteSettlement.ts";
-import { repairMissingCardTripSettlementsForDriver } from "./processCardTripSettlement.ts";
+import { repairMissingCardTripSettlementsForDriver, repairMissingCardTripSettlementsForRider } from "./processCardTripSettlement.ts";
 import { repairSplitSettlementTripsForDriver } from "./repairSplitSettlementTrips.ts";
 import { processCashSettlement } from "./processCashSettlement.ts";
 import {
@@ -36,6 +36,9 @@ import {
   listJournalForAccountKey,
   mapJournalRowsForAccount,
 } from "../../_shared/paymentAccounts.ts";
+import {
+  listRiderWalletTransactions,
+} from "./riderWalletTransactions.ts";
 import { canAccessRide } from "../rideAccess.ts";
 import { settlementJournalAmountsForRide } from "./settlementJournalAmounts.ts";
 import { reconcileRiderShortfallDisplay } from "./settlementRepairGuards.ts";
@@ -467,6 +470,7 @@ export function registerCashSettlementRoutes(app: Hono, deps: RegisterDeps): voi
     if (isCashSettlementV2Enabled()) {
       try {
         await repairIncompleteCashSettlementsForRider(deps.svc(), auth.user.id, currency);
+        await repairMissingCardTripSettlementsForRider(deps.svc(), auth.user.id, currency);
       } catch (e) {
         console.error("[cashSettlement] rider_repair_incomplete_failed", e);
       }
@@ -540,12 +544,28 @@ export function registerCashSettlementRoutes(app: Hono, deps: RegisterDeps): voi
       return jsonEdgeForbidden(c, "forbidden_role");
     }
     const currency = c.req.query("currency")?.trim() || "JMD";
-    const rows = await listJournalForAccount(deps.svc(), auth.user.id, "rider", currency);
-    const account = await getAccountByKey(deps.svc(), riderAccountKeyForUser(auth.user.id), currency);
-    const mapped = account
-      ? mapJournalRowsForAccount(String(account.id), rows)
-      : [];
-    return c.json({ transactions: mapped });
+    if (isCashSettlementV2Enabled()) {
+      try {
+        await repairIncompleteCashSettlementsForRider(deps.svc(), auth.user.id, currency);
+        await repairMissingCardTripSettlementsForRider(deps.svc(), auth.user.id, currency);
+      } catch (e) {
+        console.error("[cashSettlement] rider_repair_on_journal_failed", e);
+      }
+    }
+    const rows = await listRiderWalletTransactions(deps.svc(), auth.user.id, currency);
+    return c.json({
+      transactions: rows.map((row) => ({
+        id: row.id,
+        ride_request_id: row.ride_request_id,
+        entry_type: row.entry_type,
+        amount_minor: row.amount_minor,
+        currency: row.currency,
+        description: row.title,
+        created_at: row.date,
+        is_credit: row.is_credit,
+        metadata: {},
+      })),
+    });
   });
 
   app.get("/v1/drivers/me/wallet", async (c) => {

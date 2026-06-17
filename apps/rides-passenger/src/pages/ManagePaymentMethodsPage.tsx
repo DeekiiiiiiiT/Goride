@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { WalletPaymentMethodsList } from '@/components/wallet/WalletPaymentMethodsList';
 import { useDefaultPaymentMethod } from '@/hooks/useDefaultPaymentMethod';
-import { TRIP_PAYMENT_METHODS } from '@/lib/tripPaymentMethods';
+import { listTripPaymentMethods } from '@/lib/savedPaymentMethods';
 import {
   CARD_SHADOW,
   ON_SECONDARY_CONTAINER,
@@ -113,7 +113,7 @@ export default function ManagePaymentMethodsPage() {
           <SectionLabel
             trailing={
               <span className="text-sm font-semibold" style={{ color: PRIMARY }}>
-                {TRIP_PAYMENT_METHODS.length} methods
+                {listTripPaymentMethods().length} methods
               </span>
             }
           >

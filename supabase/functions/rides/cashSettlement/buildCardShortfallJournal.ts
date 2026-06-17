@@ -7,7 +7,7 @@ import {
 } from "./buildJournalEntries.ts";
 
 export interface BuildCardShortfallJournalParams {
-  rideId: string;
+  rideId: string | null;
   riderUserId: string;
   driverUserId: string;
   shortfallMinor: number;

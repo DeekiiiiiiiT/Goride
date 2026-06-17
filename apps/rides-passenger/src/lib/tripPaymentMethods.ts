@@ -1,6 +1,8 @@
 import type { RidePaymentMethod } from '@roam/types/rides';
 
-export type TripPaymentMethodId = 'apple_pay' | 'visa_1212' | 'cash' | 'lynk';
+/** Built-in ids; user-saved cards use `saved_card_*` / `saved_lynk_*`. */
+export type BuiltinTripPaymentMethodId = 'apple_pay' | 'visa_1212' | 'cash' | 'lynk';
+export type TripPaymentMethodId = BuiltinTripPaymentMethodId | string;
 
 export type TripPaymentMethodIcon = 'apple' | 'visa' | 'cash' | 'card' | 'lynk';
 
@@ -79,9 +81,74 @@ export const ARREARS_PAYMENT_METHOD_IDS = ['apple_pay', 'visa_1212', 'lynk'] as 
 export type ArrearsPaymentMethodId = (typeof ARREARS_PAYMENT_METHOD_IDS)[number];
 
 const STORAGE_KEY = PAYMENT_METHOD_STORAGE_KEY;
+const SAVED_METHODS_STORAGE_KEY = 'roam-saved-payment-methods-v1';
+
+type StoredSavedMethod = {
+  id: string;
+  kind: ArrearsPaymentMethodKind;
+  barLabel: string;
+  subtitle?: string;
+  icon: TripPaymentMethodIcon;
+  isDemo?: boolean;
+};
+
+function readSavedMethodsRaw(): StoredSavedMethod[] {
+  if (typeof localStorage === 'undefined') return [];
+  const raw = localStorage.getItem(SAVED_METHODS_STORAGE_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as StoredSavedMethod[];
+    return Array.isArray(parsed) ? parsed.filter((m) => m?.id && m?.barLabel) : [];
+  } catch {
+    return [];
+  }
+}
+
+function savedMethodToTripOption(m: StoredSavedMethod): TripPaymentMethodOption {
+  return {
+    id: m.id,
+    barLabel: m.barLabel,
+    subtitle: m.subtitle,
+    ridePaymentMethod: 'card',
+    icon: m.icon,
+    isDemo: m.isDemo,
+    arrearsKind: m.kind,
+    bookable: m.kind === 'card',
+  };
+}
+
+/** Built-in bookable methods plus user-saved cards. Lynk excluded (withdraw-only). */
+export function getAllBookablePaymentMethods(): TripPaymentMethodOption[] {
+  const byId = new Map<string, TripPaymentMethodOption>();
+
+  for (const m of BOOKABLE_PAYMENT_METHODS) {
+    if (m.id === 'lynk' || m.arrearsKind === 'lynk') continue;
+    byId.set(m.id, m);
+  }
+
+  for (const raw of readSavedMethodsRaw()) {
+    if (raw.kind === 'lynk') continue;
+    if (!byId.has(raw.id)) {
+      byId.set(raw.id, savedMethodToTripOption(raw));
+    }
+  }
+
+  const cash = byId.get('cash');
+  const rest = [...byId.values()].filter((m) => m.id !== 'cash');
+  return cash ? [cash, ...rest] : rest;
+}
+
+/** Same as bookable list — Lynk is not a trip/wallet payment method. */
+export function getAllPaymentMethodsForWallet(): TripPaymentMethodOption[] {
+  return getAllBookablePaymentMethods();
+}
 
 export function getPaymentMethodById(id: string): TripPaymentMethodOption {
-  return TRIP_PAYMENT_METHODS.find((m) => m.id === id) ?? TRIP_PAYMENT_METHODS[0];
+  const builtIn = TRIP_PAYMENT_METHODS.find((m) => m.id === id);
+  if (builtIn) return builtIn;
+  const saved = readSavedMethodsRaw().find((m) => m.id === id);
+  if (saved) return savedMethodToTripOption(saved);
+  return TRIP_PAYMENT_METHODS[0];
 }
 
 export function getDefaultPaymentMethodId(): TripPaymentMethodId {
@@ -89,8 +156,8 @@ export function getDefaultPaymentMethodId(): TripPaymentMethodId {
     return 'cash';
   }
   const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored && BOOKABLE_PAYMENT_METHODS.some((m) => m.id === stored)) {
-    return stored as TripPaymentMethodId;
+  if (stored && getAllBookablePaymentMethods().some((m) => m.id === stored)) {
+    return stored;
   }
   return 'cash';
 }

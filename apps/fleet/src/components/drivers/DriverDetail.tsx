@@ -156,6 +156,8 @@ import { TierCalculations } from '../../utils/tierCalculations';
 import { TierConfig } from '../../types/data';
 import { getEffectiveTripEarnings } from '../../utils/tripEarnings';
 import { normalizePlatform } from '../../utils/normalizePlatform';
+import { getTripPhysicalCashCollected, sumTripPhysicalCashCollected } from '../../utils/tripPhysicalCash';
+import { isDriverCashPaymentTransaction } from '../../utils/driverCashPayment';
 import { isUberCashEligibleMetricPeriod, isValidDriverMetricPeriod } from '../../utils/driverMetricPeriod';
 import { calculateAverageEnroute, estimateEnrouteFallback } from '../../utils/enrouteStrategy';
 import { Tooltip as UiTooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
@@ -616,24 +618,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   // Manually-logged payments don't carry a tripId and fall outside the trip-date
   // window heuristic, causing them to be incorrectly hidden. Financial records
   // like cash collections / floats / adjustments should always be visible.
-  const paymentTransactions = useMemo(() => (transactions || []).filter(t => {
-      if (!t) return false;
-      // Strict Safety: Never show Tag Balance operations in Payment Log
-      if (t.paymentMethod === 'Tag Balance') return false;
-      if (t.description?.toLowerCase().includes('top-up')) return false;
-
-      // Exclude tolls just in case
-      const isToll = t.category === 'Toll Usage' || t.category === 'Toll' || t.category === 'Tolls';
-      if (isToll) return false;
-
-      // Exclude fuel from payment log (it has its own tab)
-      const isFuel = (t.category || '').toLowerCase().includes('fuel') || (t.description || '').toLowerCase().includes('fuel');
-      if (isFuel) return false;
-
-      // Strict Payment Logic: Focus on Cash Collections (Money from Driver)
-      const isPayment = t.category === 'Cash Collection' || t.type === 'Payment_Received';
-      return isPayment && t.amount > 0;
-  }), [transactions]);
+  const paymentTransactions = useMemo(() => {
+    return (transactions || [])
+      .filter(isDriverCashPaymentTransaction)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [transactions]);
 
   const fuelTransactions = useMemo(() => (dateFilteredTransactions || []).filter(t => {
       if (!t) return false;
@@ -737,7 +726,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           ].filter(Boolean) as string[];
 
           const [driverTx, allClaims] = await Promise.all([
-              api.getTransactions(driverIds),
+              api.getAllTransactionsForDrivers(driverIds),
               api.getClaims(), // Fetch ALL claims to ensure we find links even if driverId filter is tricky
           ]);
 
@@ -745,7 +734,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           const validTx = Array.isArray(driverTx) ? driverTx.filter(Boolean) : [];
           
           // Diagnostic: Log transaction breakdown to verify data completeness
-          const paymentCount = validTx.filter((t: any) => t.category === 'Cash Collection' || t.type === 'Payment_Received').length;
+          const paymentCount = validTx.filter(isDriverCashPaymentTransaction).length;
           const tollCount = validTx.filter((t: any) => ['Toll Usage', 'Toll', 'Tolls'].includes(t.category)).length;
           const fuelCount = validTx.filter((t: any) => (t.category || '').toLowerCase().includes('fuel')).length;
           const floatCount = validTx.filter((t: any) => t.category === 'Float Issue').length;
@@ -1375,13 +1364,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         const tripDateObj = new Date(trip.date);
         if (isNaN(tripDateObj.getTime())) return;
         
-        // FIX: Determine effective cash (handling Roam/Private legacy/missing data)
-        const platformName = (trip.platform || 'Other').toLowerCase();
-        const isCashPlatform = ['goride', 'roam', 'private', 'cash'].includes(platformName);
-        const rawCash = Number(trip.cashCollected || 0);
-        const effectiveCash = (Math.abs(rawCash) > 0)
-           ? rawCash
-           : (isCashPlatform ? trip.amount : 0);
+        // Physical cash: explicit cashCollected or paymentMethod Cash only (not all Roam trips).
+        const effectiveCash = getTripPhysicalCashCollected(trip);
 
         // Lifetime stats
         // For InDrive trips with fee data, use true profit (net income) instead of full fare
@@ -1894,13 +1878,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      // Strictly look for 'Payment_Received' type or 'Cash Collection' category.
      // These are positive values (money entering fleet).
      const totalPaymentsReceived = (transactions || [])
-        .filter(t => {
-            if (!t) return false;
-            // Strict Safety: Never include Tag Balance operations as Driver Payments
-            if (t.paymentMethod === 'Tag Balance') return false;
-            
-            return (t.type === 'Payment_Received' || t.category === 'Cash Collection') && t.amount > 0;
-        })
+        .filter(isDriverCashPaymentTransaction)
         .reduce((sum, t) => sum + (t?.amount || 0), 0);
 
      // 3. DEAD CODE (Phase 5): approvedCashTollExpenses — walletMetrics recomputes this
@@ -1936,8 +1914,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         .filter(t => {
             if (!t) return false;
             const d = new Date(t.date);
-            if (t.paymentMethod === 'Tag Balance') return false;
-            return isWithinInterval(d, { start, end }) && (t.type === 'Payment_Received' || t.category === 'Cash Collection');
+            return isWithinInterval(d, { start, end }) && isDriverCashPaymentTransaction(t);
         })
         .reduce((sum, t) => sum + (t?.amount || 0), 0);
      
@@ -2236,6 +2213,25 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         }
       }
 
+      // Ledger may count every Roam/InDrive fare as cash — use trip evidence for wallet/risk display.
+      if (dateRange?.from) {
+        const periodStart = startOfDay(dateRange.from);
+        const periodEnd = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
+        for (const [platform, stats] of Object.entries(platformStats)) {
+          if (platform === 'Uber' || platform === 'Dispute Recoveries') continue;
+          stats.cashCollected = allTrips
+            .filter((t) => {
+              const d = new Date(t.date);
+              if (Number.isNaN(d.getTime())) return false;
+              return (
+                normalizePlatform(t.platform) === platform &&
+                isWithinInterval(startOfDay(d), { start: periodStart, end: periodEnd })
+              );
+            })
+            .reduce((sum, t) => sum + getTripPhysicalCashCollected(t), 0);
+        }
+      }
+
       /** When canonical/ledger only has Uber (or partial platforms), `period.earnings` is not the sum of the rows we show — trip-backed platforms stay in the breakdown. Sum merged rows for headline. */
       const sumMergedEarnings = (() => {
         let t = 0;
@@ -2295,7 +2291,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           ledgerOverview.lifetime.tripRecordCount != null
             ? ledgerOverview.lifetime.tripRecordCount
             : metrics.lifetimeTrips,
-        lifetimeCashCollected: ledgerOverview.lifetime.cashCollected,
+        lifetimeCashCollected: (() => {
+          const tripCash = sumTripPhysicalCashCollected(allTrips);
+          return tripCash > 0.005 ? tripCash : ledgerOverview.lifetime.cashCollected;
+        })(),
         lifetimeTolls: ledgerOverview.lifetime.tolls,
         lifetimeDisputeRefunds: ledgerOverview.lifetime.disputeRefunds || 0,
         lifetimePlatformStats: ledgerOverview.lifetime.platformStats || {},
@@ -2381,7 +2380,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       lifetimeDisputeRefunds: 0,
       lifetimePlatformStats: {} as Record<string, any>,
     };
-  }, [ledgerOverview, ledgerOverviewLoaded, metrics]);
+  }, [ledgerOverview, ledgerOverviewLoaded, metrics, allTrips, dateRange]);
 
   // Phase 6.2: Hybrid earningsPerKm — ledger earnings ÷ trip-sourced distance
   const ledgerEarningsPerKm = useMemo(() => {
@@ -2390,11 +2389,13 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     return distance > 0 ? earnings / distance : 0;
   }, [resolvedFinancials.periodEarnings, metrics.totalDistance]);
 
-  // ── Phase 4: Ledger-sourced Cash Wallet metrics ──
-  // Uses lifetime cash from the ledger (single source of truth) combined with
-  // transaction-derived values (floats, payments, toll expenses, fuel credits).
+  // ── Cash Wallet metrics ──
+  // Lifetime cash from trip evidence (explicit cashCollected / paymentMethod Cash).
+  // Ledger lifetime cash can inflate when Roam card trips were posted as Cash — do not use that for the wallet.
   const walletMetrics = useMemo(() => {
+    const tripLifetimeCash = sumTripPhysicalCashCollected(allTrips);
     const ledgerLifetimeCash = resolvedFinancials.lifetimeCashCollected || metrics.totalCashCollected || 0;
+    const lifetimeCashCollected = tripLifetimeCash > 0.005 ? tripLifetimeCash : ledgerLifetimeCash;
     const floatIssued = metrics.floatHeld;
     const paymentsReceived = metrics.cashReceived || 0;
     const tollExpenses = (transactions || [])
@@ -2406,9 +2407,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         return isToll && isCash && isResolved;
       })
       .reduce((sum: number, t: any) => sum + Math.abs(t?.amount || 0), 0);
-    const netOutstanding = (ledgerLifetimeCash + floatIssued) - (paymentsReceived + tollExpenses);
-    return { netOutstanding, lifetimeCashCollected: ledgerLifetimeCash };
-  }, [resolvedFinancials.lifetimeCashCollected, metrics.totalCashCollected, metrics.floatHeld, metrics.cashReceived, transactions]);
+    const netOutstanding = (lifetimeCashCollected + floatIssued) - (paymentsReceived + tollExpenses);
+    return { netOutstanding, lifetimeCashCollected };
+  }, [allTrips, resolvedFinancials.lifetimeCashCollected, metrics.totalCashCollected, metrics.floatHeld, metrics.cashReceived, transactions]);
 
   /** Same ledger + cash weeks pipeline as Financials → Payout (weekly), for net settlement on Cash Wallet. */
   const { periodData: walletPayoutPeriodRows } = useDriverPayoutPeriodRows({
@@ -4376,10 +4377,14 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                     </div>
                                 ) : ledgerView === 'payments' ? (
                                     <div className="space-y-4">
-                                        <div className="flex justify-end">
+                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                            <p className="text-sm text-slate-500">
+                                                {paymentTransactions.length} cash payment{paymentTransactions.length !== 1 ? 's' : ''} on record
+                                                {transactions.length > 0 ? ` (${transactions.length.toLocaleString()} total transactions loaded)` : ''}
+                                            </p>
                                             <Button 
                                                 size="sm"
-                                                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                                                className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
                                                 onClick={() => setPaymentModalState({ isOpen: true })}
                                             >
                                                 <Plus className="mr-2 h-4 w-4" />

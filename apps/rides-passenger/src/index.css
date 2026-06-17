@@ -11,6 +11,7 @@
 @import "./styles/trip-summary.css";
 @import "./styles/live-ride.css";
 @import "./styles/trip-in-progress.css";
+@import "./styles/finding-driver.css";
 @import "./styles/active-trip-fab.css";
 @import "./styles/ride-cancelled.css";
 @import "./styles/splash.css";

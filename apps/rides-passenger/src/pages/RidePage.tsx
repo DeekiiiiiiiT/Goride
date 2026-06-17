@@ -17,6 +17,7 @@ import {
 } from '@roam/ui';
 import { supabase } from '@roam/auth-client';
 import { LiveRideView } from '@/components/LiveRideView';
+import { FindingDriverView } from '@/components/FindingDriverView';
 import { BookerTrackingView } from '@/components/BookerTrackingView';
 import { RideCancelledView } from '@/components/RideCancelledView';
 import { TripInProgressView } from '@/components/TripInProgressView';
@@ -723,6 +724,33 @@ export default function RidePage() {
             onCancelTrip={() => setCancelDialogOpen(true)}
             cancelling={cancelling}
             canChat={canChat}
+            canCancel={canCancel}
+          />
+        </div>
+        <RidePageDialogs
+          cancelDialogOpen={cancelDialogOpen}
+          setCancelDialogOpen={setCancelDialogOpen}
+          leaveDialogOpen={false}
+          setLeaveDialogOpen={setLeaveDialogOpen}
+          cancelling={cancelling}
+          cancelCopy={getCancelCopy(ride.status)}
+          onConfirmCancel={() => void performCancel()}
+          showLeaveDialog={false}
+        />
+      </>
+    );
+  }
+
+  if (ride && ride.status === 'matching' && !isDelegatedBooker) {
+    return (
+      <>
+        {connectionBanner}
+        <div className="h-[100dvh] max-h-[100dvh] overflow-hidden">
+          <FindingDriverView
+            ride={ride}
+            onMinimize={handlePassengerMinimize}
+            onCancelTrip={() => setCancelDialogOpen(true)}
+            cancelling={cancelling}
             canCancel={canCancel}
           />
         </div>

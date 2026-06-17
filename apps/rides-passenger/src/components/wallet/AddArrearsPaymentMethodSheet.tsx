@@ -60,8 +60,8 @@ export function AddArrearsPaymentMethodSheet({ open, mode, onClose, onAdded }: P
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50">
-      <div className="w-full max-w-lg rounded-t-2xl bg-white p-6 animate-in slide-in-from-bottom max-h-[85vh] overflow-y-auto">
+    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50">
+      <div className="w-full max-w-lg rounded-t-2xl bg-white px-6 pt-6 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] safe-x animate-in slide-in-from-bottom max-h-[85dvh] overflow-y-auto">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-semibold">
             {mode === 'card' ? 'Add debit or credit card' : 'Link Lynk'}

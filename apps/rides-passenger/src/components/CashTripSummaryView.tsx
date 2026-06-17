@@ -1,12 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Banknote, Loader2, Share2, Star, Wallet, X } from 'lucide-react';
+import { Banknote, Loader2, Share2, Star, X } from 'lucide-react';
 import { vehicleTypeLabel } from '@roam/business-config/ridesVehicleTypes';
 import type { RideRequestRow, SettlementSummaryDto, WalletBalanceDto } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
 import {
-  cashSettlementOutcomeMessage,
   computeOutcomeFromRide,
   isSplitPaymentOutcome,
   resolveCashReceivedMinor,
@@ -138,7 +137,22 @@ export function CashTripSummaryView({ ride }: Props) {
   const isSplit = outcome === 'split' || isSplitPaymentOutcome(outcome);
   const tripFullyPaid =
     isSplit ||
+    outcome === 'exact' ||
+    outcome === 'overpay' ||
     (outcome === 'underpay' && receivedMinor > 0 && walletPaidMinor > 0 && riderArrearsMinor === 0);
+
+  const tripChangeCreditMinor = useMemo(() => {
+    if (changeMinor > 0) return changeMinor;
+    if (riderArrearsMinor > 0) return 0;
+    return Math.max(0, receivedMinor + walletPaidMinor - owedMinor);
+  }, [changeMinor, riderArrearsMinor, receivedMinor, walletPaidMinor, owedMinor]);
+
+  const cashHeroStatus = (() => {
+    if (isLegacyCashTrip) return 'Trip complete';
+    if (outcome === 'unpaid') return 'No cash received';
+    if (tripFullyPaid && tripChangeCreditMinor <= 0) return 'Paid in full';
+    return null;
+  })();
 
   const fare = formatMoneyMinor(ride.fare_final_minor ?? ride.fare_estimate_minor, currency);
   const serviceLabel = vehicleTypeLabel(ride.vehicle_option);
@@ -262,88 +276,14 @@ export function CashTripSummaryView({ ride }: Props) {
             </div>
           ) : (
             <>
-              {outcome === 'overpay' && changeMinor > 0 ? (
-                <div className="trip-summary-cash-hero__highlight">
-                  <p className="trip-summary-cash-hero__highlight-label">Your change</p>
-                  <p className="trip-summary-cash-hero__highlight-amount">
-                    {formatMoneyMinor(changeMinor, currency)}
-                  </p>
-                  <p className="trip-summary-cash-hero__highlight-sub">
-                    Credited to your Roam wallet — use it on your next trip.
-                  </p>
-                </div>
-              ) : outcome === 'exact' ? (
-                <div className="trip-summary-cash-hero__highlight trip-summary-cash-hero__highlight--exact">
-                  <p className="trip-summary-cash-hero__highlight-label">Your change</p>
-                  <p className="trip-summary-cash-hero__highlight-amount">
-                    {formatMoneyMinor(0, currency)}
-                  </p>
-                  <p className="trip-summary-cash-hero__highlight-sub">Exact fare paid — no change due</p>
-                </div>
-              ) : outcome === 'underpay' || isSplit ? (
-                <div
-                  className={`trip-summary-cash-hero__highlight ${
-                    tripFullyPaid
-                      ? 'trip-summary-cash-hero__highlight--exact'
-                      : 'trip-summary-cash-hero__highlight--arrears'
-                  }`}
+              {cashHeroStatus ? (
+                <p
+                  className={`trip-summary-cash-hero__status${
+                    tripFullyPaid ? ' trip-summary-cash-hero__status--success' : ''
+                  }${outcome === 'unpaid' ? ' trip-summary-cash-hero__status--arrears' : ''}`}
                 >
-                  <p className="trip-summary-cash-hero__highlight-label">
-                    {tripFullyPaid ? 'Trip paid' : 'Amount still owed'}
-                  </p>
-                  {!tripFullyPaid && riderArrearsMinor > 0 && (
-                    <p className="trip-summary-cash-hero__highlight-amount">
-                      {formatMoneyMinor(riderArrearsMinor, currency)}
-                    </p>
-                  )}
-                  <p className="trip-summary-cash-hero__highlight-sub">
-                    {tripFullyPaid ? (
-                      <>
-                        You gave {formatMoneyMinor(receivedMinor, currency)} in cash
-                        {walletPaidMinor > 0 && (
-                          <>
-                            {' '}
-                            and {formatMoneyMinor(walletPaidMinor, currency)} was taken from your wallet
-                          </>
-                        )}
-                        .
-                      </>
-                    ) : (
-                      <>
-                        You paid {formatMoneyMinor(receivedMinor, currency)} in cash
-                        {walletPaidMinor > 0 && (
-                          <>
-                            {' '}
-                            and {formatMoneyMinor(walletPaidMinor, currency)} from your wallet
-                          </>
-                        )}{' '}
-                        of {formatMoneyMinor(owedMinor, currency)}.
-                        {riderArrearsMinor > 0 && (
-                          <> The remaining balance was added to your Roam wallet.</>
-                        )}
-                      </>
-                    )}
-                  </p>
-                </div>
-              ) : outcome === 'unpaid' ? (
-                <div className="trip-summary-cash-hero__highlight trip-summary-cash-hero__highlight--arrears">
-                  <p className="trip-summary-cash-hero__highlight-label">Trip unpaid</p>
-                  {riderArrearsMinor > 0 && (
-                    <p className="trip-summary-cash-hero__highlight-amount">
-                      {formatMoneyMinor(riderArrearsMinor, currency)} owed
-                    </p>
-                  )}
-                  <p className="trip-summary-cash-hero__highlight-sub">
-                    No cash was received for this trip. Please settle your balance before your next cash
-                    trip.
-                  </p>
-                </div>
-              ) : isLegacyCashTrip ? (
-                <div className="trip-summary-cash-hero__highlight trip-summary-cash-hero__highlight--exact">
-                  <p className="trip-summary-cash-hero__highlight-label">Paid in cash</p>
-                  <p className="trip-summary-cash-hero__highlight-amount">{fare}</p>
-                  <p className="trip-summary-cash-hero__highlight-sub">Cash trip completed</p>
-                </div>
+                  {cashHeroStatus}
+                </p>
               ) : null}
 
               <div className="trip-summary-cash-hero__rows">
@@ -357,21 +297,21 @@ export function CashTripSummaryView({ ride }: Props) {
                 </div>
                 {walletPaidMinor > 0 && (
                   <div className="trip-summary-cash-hero__row trip-summary-cash-hero__row--wallet">
-                    <span>Paid from wallet</span>
+                    <span>From your wallet</span>
                     <span className="tabular-nums font-semibold">
                       {formatMoneyMinor(walletPaidMinor, currency)}
                     </span>
                   </div>
                 )}
-                {outcome === 'overpay' && changeMinor > 0 && (
+                {tripChangeCreditMinor > 0 && (
                   <div className="trip-summary-cash-hero__row trip-summary-cash-hero__row--credit">
-                    <span>Change</span>
+                    <span>Credited to your wallet</span>
                     <span className="tabular-nums font-semibold">
-                      {formatMoneyMinor(changeMinor, currency)}
+                      {formatMoneyMinor(tripChangeCreditMinor, currency)}
                     </span>
                   </div>
                 )}
-                {outcome === 'unpaid' && riderArrearsMinor > 0 && (
+                {riderArrearsMinor > 0 && (
                   <div className="trip-summary-cash-hero__row trip-summary-cash-hero__row--arrears">
                     <span>Still owed</span>
                     <span className="tabular-nums font-semibold">
@@ -379,21 +319,7 @@ export function CashTripSummaryView({ ride }: Props) {
                     </span>
                   </div>
                 )}
-                {(outcome === 'underpay' || isSplit) && riderArrearsMinor > 0 && (
-                  <div className="trip-summary-cash-hero__row trip-summary-cash-hero__row--arrears">
-                    <span>Still owed to Roam</span>
-                    <span className="tabular-nums font-semibold">
-                      {formatMoneyMinor(riderArrearsMinor, currency)}
-                    </span>
-                  </div>
-                )}
               </div>
-
-              {outcome && (
-                <p className="trip-summary-cash-hero__note">
-                  {cashSettlementOutcomeMessage(outcome, ride)}
-                </p>
-              )}
 
               {payArrearsMinor > 0 && CASH_SETTLEMENT_PAY_ARREARS_ENABLED && !dispute && (
                 <button
@@ -401,7 +327,7 @@ export function CashTripSummaryView({ ride }: Props) {
                   className="trip-summary-pay-card-btn"
                   onClick={() => setPaymentSheetOpen(true)}
                 >
-                  Pay {formatMoneyMinor(payArrearsMinor, currency)} outstanding balance
+                  Pay in Wallet
                 </button>
               )}
 
@@ -431,18 +357,6 @@ export function CashTripSummaryView({ ride }: Props) {
                   <AlertTriangle className="h-4 w-4" />
                   Dispute this charge
                 </button>
-              )}
-
-              {wallet && (
-                <div className="trip-summary-cash-hero__wallet">
-                  <span className="flex items-center gap-2">
-                    <Wallet className="h-4 w-4" aria-hidden />
-                    Wallet balance
-                  </span>
-                  <span className="font-bold tabular-nums">
-                    {formatMoneyMinor(wallet.balance_minor, wallet.currency)}
-                  </span>
-                </div>
               )}
 
               <Link to={`/account/wallet?ride=${ride.id}`} className="trip-summary-cash-hero__link">

@@ -5,10 +5,10 @@ import { formatMoneyMinor } from '@roam/types/rides';
 import { CASH_SETTLEMENT_ENABLED, CASH_SETTLEMENT_PAY_ARREARS_ENABLED } from '@/lib/cashSettlementFlags';
 import { walletGetBalance } from '@/services/walletEdge';
 import {
-  BOOKABLE_PAYMENT_METHODS,
-  type TripPaymentMethodId,
-  type TripPaymentMethodOption,
-} from '@/lib/tripPaymentMethods';
+  listTripPaymentMethods,
+  SAVED_PAYMENT_METHODS_CHANGED_EVENT,
+} from '@/lib/savedPaymentMethods';
+import type { TripPaymentMethodId, TripPaymentMethodOption } from '@/lib/tripPaymentMethods';
 import { TripPaymentMethodIcon } from '@/components/TripPaymentMethodIcon';
 
 type Props = {
@@ -72,9 +72,24 @@ export function TripPaymentMethodSheet({ open, selectedId, onClose, onSelect, ex
   const navigate = useNavigate();
   const [arrearsMinor, setArrearsMinor] = useState(0);
   const [arrearsCurrency, setArrearsCurrency] = useState('JMD');
-  const methods = excludeIds?.length
-    ? BOOKABLE_PAYMENT_METHODS.filter((m) => !excludeIds.includes(m.id as TripPaymentMethodId))
-    : BOOKABLE_PAYMENT_METHODS;
+  const [methods, setMethods] = useState<TripPaymentMethodOption[]>(() => listTripPaymentMethods());
+
+  const refreshMethods = () => {
+    const all = listTripPaymentMethods();
+    setMethods(
+      excludeIds?.length
+        ? all.filter((m) => !excludeIds.includes(m.id as TripPaymentMethodId))
+        : all,
+    );
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    refreshMethods();
+    const onSavedChanged = () => refreshMethods();
+    window.addEventListener(SAVED_PAYMENT_METHODS_CHANGED_EVENT, onSavedChanged);
+    return () => window.removeEventListener(SAVED_PAYMENT_METHODS_CHANGED_EVENT, onSavedChanged);
+  }, [open, excludeIds?.join(',')]);
 
   useEffect(() => {
     if (!open || !CASH_SETTLEMENT_ENABLED) return;
@@ -111,7 +126,7 @@ export function TripPaymentMethodSheet({ open, selectedId, onClose, onSelect, ex
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center">
+    <div className="fixed inset-0 z-[1100] flex items-end justify-center">
       <button
         type="button"
         className="absolute inset-0 bg-black/40 backdrop-blur-sm"
