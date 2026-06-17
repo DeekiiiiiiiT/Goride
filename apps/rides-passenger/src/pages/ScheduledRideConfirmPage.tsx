@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -23,6 +24,7 @@ type LocationState = {
 };
 
 export default function ScheduledRideConfirmPage() {
+  const { t } = useTranslation('booking');
   const navigate = useNavigate();
   const location = useLocation();
   const state = (location.state ?? {}) as LocationState;
@@ -34,14 +36,14 @@ export default function ScheduledRideConfirmPage() {
         className="flex min-h-[100dvh] flex-col items-center justify-center px-6"
         style={{ backgroundColor: PAGE_BG }}
       >
-        <p className="text-sm text-gray-500">Booking details unavailable.</p>
+        <p className="text-sm text-gray-500">{t('detailsUnavailable')}</p>
         <button
           type="button"
           className="mt-4 text-sm font-semibold"
           style={{ color: PRIMARY }}
           onClick={() => navigate('/services/schedule')}
         >
-          Schedule a ride
+          {t('scheduleARide')}
         </button>
       </div>
     );
@@ -61,12 +63,12 @@ export default function ScheduledRideConfirmPage() {
           onClick={() => navigate('/')}
           className="rounded-full p-2 transition-transform active:scale-95 hover:bg-[#006d43]/5"
           style={{ color: PRIMARY }}
-          aria-label="Back to home"
+          aria-label={t('backToHome')}
         >
           <ArrowLeft className="h-6 w-6" strokeWidth={2} aria-hidden />
         </button>
         <h1 className="ml-4 text-2xl font-semibold tracking-tight" style={{ color: PRIMARY }}>
-          Ride Scheduled
+          {t('rideScheduled')}
         </h1>
       </header>
 
@@ -76,9 +78,9 @@ export default function ScheduledRideConfirmPage() {
             <div className="scheduled-confirm-success-glow" aria-hidden />
             <CheckCircle2 className="h-8 w-8 fill-[#006d43]/15" style={{ color: PRIMARY }} aria-hidden />
           </div>
-          <h2 className="mb-1 text-2xl font-semibold text-gray-900">You&apos;re all set</h2>
+          <h2 className="mb-1 text-2xl font-semibold text-gray-900">{t('allSet')}</h2>
           <p className="max-w-[240px] text-base leading-relaxed text-[#3d4a41]">
-            We&apos;ll start finding a driver before your pickup time.
+            {t('driverSearchHint')}
           </p>
         </div>
 
@@ -89,15 +91,17 @@ export default function ScheduledRideConfirmPage() {
             </div>
             <div className="min-w-0">
               <p className="mb-1 text-xs font-medium uppercase tracking-widest text-[#5f5e5e]">
-                Pickup Time
+                {t('pickupTime')}
               </p>
               <p className="mb-1 text-2xl font-semibold text-gray-900">
                 {formatScheduledWhenLong(ride.scheduled_pickup_at)}
               </p>
               {pickup_window_start && pickup_window_end ? (
                 <p className="text-xs text-[#3d4a41]/80">
-                  Window {formatScheduledWhenLong(pickup_window_start)} –{' '}
-                  {formatScheduledWhenLong(pickup_window_end)}
+                  {t('window', {
+                    start: formatScheduledWhenLong(pickup_window_start),
+                    end: formatScheduledWhenLong(pickup_window_end),
+                  })}
                 </p>
               ) : null}
             </div>
@@ -112,15 +116,15 @@ export default function ScheduledRideConfirmPage() {
             <div className="min-w-0 flex-1 space-y-4 pt-1">
               <div>
                 <p className="mb-0.5 text-xs font-medium uppercase tracking-widest text-[#5f5e5e]">
-                  Origin
+                  {t('origin')}
                 </p>
-                <p className="text-lg text-gray-900">{ride.pickup_address ?? 'Pickup'}</p>
+                <p className="text-lg text-gray-900">{ride.pickup_address ?? t('pickup')}</p>
               </div>
               <div>
                 <p className="mb-0.5 text-xs font-medium uppercase tracking-widest text-[#5f5e5e]">
-                  Destination
+                  {t('destinationField')}
                 </p>
-                <p className="text-lg text-gray-900">{ride.dropoff_address ?? 'Destination'}</p>
+                <p className="text-lg text-gray-900">{ride.dropoff_address ?? t('destinationField')}</p>
               </div>
             </div>
           </div>
@@ -131,7 +135,7 @@ export default function ScheduledRideConfirmPage() {
             <div className="flex items-end justify-between gap-3">
               <div>
                 <p className="mb-0.5 text-xs font-medium uppercase tracking-widest text-[#5f5e5e]">
-                  Estimated Fare
+                  {t('estimatedFare')}
                 </p>
                 <p className="text-[32px] font-semibold leading-tight" style={{ color: PRIMARY }}>
                   {fareLabel}
@@ -139,7 +143,7 @@ export default function ScheduledRideConfirmPage() {
               </div>
               <div className="rounded-full border border-[#00a86b]/20 bg-[#00a86b]/10 px-3 py-1">
                 <p className="text-xs font-semibold" style={{ color: PRIMARY_CONTAINER }}>
-                  Scheduled
+                  {t('scheduled')}
                 </p>
               </div>
             </div>
@@ -160,7 +164,7 @@ export default function ScheduledRideConfirmPage() {
           className="flex h-14 w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white shadow-[0_8px_20px_rgba(0,168,107,0.25)] transition-transform duration-200 active:scale-95"
           style={{ backgroundColor: PRIMARY }}
         >
-          View in Activity
+          {t('viewInActivity')}
           <ArrowRight className="h-5 w-5" aria-hidden />
         </button>
       </div>

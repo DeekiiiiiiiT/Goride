@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { ArrowLeft, ChevronRight, Tag, UserPlus } from 'lucide-react';
 import { BookForOthersActiveTripBanner } from '@/components/book-for-others/BookForOthersActiveTripBanner';
@@ -55,6 +56,7 @@ function HubRow({
 
 export default function BookForOthersHubPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation('booking');
   const { data, isLoading, isFetching, error } = useBookForOthersActivity();
 
   useEffect(() => {
@@ -79,7 +81,7 @@ export default function BookForOthersHubPage() {
             onClick={() => navigate('/services')}
             className="btn-touch flex h-11 w-11 items-center justify-center touch-manipulation"
             style={{ color: NAVY }}
-            aria-label="Back to services"
+            aria-label={t('backToServices')}
           >
             <ArrowLeft className="h-6 w-6" strokeWidth={2} aria-hidden />
           </button>
@@ -87,7 +89,7 @@ export default function BookForOthersHubPage() {
             className="text-center text-[13px] font-bold uppercase tracking-[0.18em]"
             style={{ color: NAVY }}
           >
-            Book for others
+            {t('bookForOthersHub.title')}
           </h1>
           <span className="w-11" aria-hidden />
         </div>
@@ -95,23 +97,23 @@ export default function BookForOthersHubPage() {
 
       <main className="mx-auto w-full max-w-lg flex-1 safe-x px-4 pt-5 pb-6">
         <p className="mb-4 text-center text-[13px] leading-relaxed" style={{ color: MUTED }}>
-          Book a ride for someone else, or publish a trip on your tag for someone to pay.
+          {t('bookForOthersHub.description')}
         </p>
 
         <div className="services-menu-card overflow-hidden rounded-2xl">
           <HubRow
             icon={<UserPlus className="h-5 w-5" strokeWidth={1.65} aria-hidden />}
             iconWrapClassName="bg-[#E8F1FC] text-[#4A7FD4]"
-            label="Book for someone"
-            description="Friend, child, or family member"
+            label={t('bookForOthersHub.bookForSomeone')}
+            description={t('bookForOthersHub.bookForSomeoneDescription')}
             onClick={() => navigate('/services/book-for-someone')}
           />
           <div className="mx-4 h-px bg-black/[0.06]" />
           <HubRow
             icon={<Tag className="h-5 w-5" strokeWidth={1.65} aria-hidden />}
             iconWrapClassName="bg-[#E8F1FC] text-[#004AC6]"
-            label="Gift me ride"
-            description="Let someone pay for your ride"
+            label={t('bookForOthersHub.giftMeRide')}
+            description={t('bookForOthersHub.giftMeRideDescription')}
             onClick={() => navigate('/services/book-for-me')}
           />
         </div>

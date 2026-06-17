@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { ArrowLeft, ChevronRight, Clock, Contact, ShieldCheck } from 'lucide-react';
 import { ROAM_CONNECTIONS } from '@/lib/roamConnectionFlags';
 import {
@@ -54,6 +55,8 @@ function HubRow({
 
 export default function ContactsHubPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation('contacts');
+  const { t: tc } = useTranslation('common');
   const [pendingBadge, setPendingBadge] = useState(0);
 
   useEffect(() => {
@@ -87,12 +90,12 @@ export default function ContactsHubPage() {
           onClick={() => navigate('/account')}
           className="rounded-full p-2"
           style={{ color: PRIMARY }}
-          aria-label="Back"
+          aria-label={tc('back')}
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
         <h1 className="ml-2 text-xl font-semibold" style={{ color: PRIMARY }}>
-          Contacts
+          {t('title')}
         </h1>
       </header>
 
@@ -104,8 +107,8 @@ export default function ContactsHubPage() {
           <HubRow
             icon={<Contact className="h-5 w-5" />}
             iconColor={PRIMARY}
-            label="Roam Contacts"
-            description="People you book rides for"
+            label={t('hub.roamContacts')}
+            description={t('hub.roamContactsDescription')}
             onClick={() => navigate('/account/contacts/roam')}
           />
           {ROAM_CONNECTIONS ? (
@@ -115,8 +118,8 @@ export default function ContactsHubPage() {
                 <HubRow
                   icon={<Clock className="h-5 w-5" />}
                   iconColor={PRIMARY}
-                  label="Pending"
-                  description="Requests and ride approvals"
+                  label={t('hub.pending')}
+                  description={t('hub.pendingDescription')}
                   onClick={() => navigate('/account/contacts/pending')}
                 />
                 {pendingBadge > 0 ? (
@@ -134,8 +137,8 @@ export default function ContactsHubPage() {
           <HubRow
             icon={<ShieldCheck className="h-5 w-5" />}
             iconColor={PRIMARY}
-            label="Trusted Contacts"
-            description="Safety alerts & emergency sharing"
+            label={t('hub.trustedContacts')}
+            description={t('hub.trustedDescription')}
             onClick={() => navigate('/account/contacts/trusted')}
           />
         </div>

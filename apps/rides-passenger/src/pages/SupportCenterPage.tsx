@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import {
   ArrowLeft,
@@ -31,58 +32,6 @@ import {
   SURFACE_LOWEST,
   TERTIARY,
 } from '@/lib/passengerTheme';
-
-const CATEGORIES = [
-  {
-    id: 'trip',
-    title: 'Trip Issues',
-    description:
-      'Report safety concerns, lost items, or vehicle quality problems from your recent rides.',
-    icon: Car,
-    iconBg: 'rgba(37, 99, 235, 0.1)',
-    iconColor: PRIMARY,
-    featured: true,
-    linkLabel: 'VIEW 12 ARTICLES',
-  },
-  {
-    id: 'payment',
-    title: 'Payment & Refunds',
-    description: 'Billing errors, refund status, and managing payment methods.',
-    icon: CreditCard,
-    iconBg: 'rgba(188, 72, 0, 0.1)',
-    iconColor: TERTIARY,
-  },
-  {
-    id: 'account',
-    title: 'Account & Security',
-    description: 'Update profile, login issues, and data privacy settings.',
-    icon: Shield,
-    iconBg: 'rgba(208, 225, 251, 0.5)',
-    iconColor: ON_SECONDARY_CONTAINER,
-  },
-  {
-    id: 'promotions',
-    title: 'Promotions',
-    description: 'Using promo codes and understanding reward programs.',
-    icon: Ticket,
-    iconBg: 'rgba(125, 45, 0, 0.1)',
-    iconColor: ON_TERTIARY_FIXED_VARIANT,
-  },
-  {
-    id: 'app',
-    title: 'Using the App',
-    description: 'A comprehensive guide for new riders and power users.',
-    icon: Info,
-    iconBg: 'rgba(219, 225, 255, 0.5)',
-    iconColor: PRIMARY,
-  },
-] as const;
-
-const POPULAR_ARTICLES = [
-  'Understanding the peak pricing multiplier',
-  'How to schedule a ride in advance',
-  'What to do if you left an item in a vehicle',
-] as const;
 
 function CategoryCard({
   title,
@@ -151,10 +100,69 @@ function CategoryCard({
 
 export default function SupportCenterPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation('support');
+  const { t: tc } = useTranslation('common');
   const [query, setQuery] = useState('');
 
+  const categories = useMemo(
+    () => [
+      {
+        id: 'trip' as const,
+        title: t('center.categories.trip'),
+        description: t('center.categories.tripDescription'),
+        icon: Car,
+        iconBg: 'rgba(37, 99, 235, 0.1)',
+        iconColor: PRIMARY,
+        featured: true,
+        linkLabel: t('center.categories.tripLink'),
+      },
+      {
+        id: 'payment' as const,
+        title: t('center.categories.payment'),
+        description: t('center.categories.paymentDescription'),
+        icon: CreditCard,
+        iconBg: 'rgba(188, 72, 0, 0.1)',
+        iconColor: TERTIARY,
+      },
+      {
+        id: 'account' as const,
+        title: t('center.categories.account'),
+        description: t('center.categories.accountDescription'),
+        icon: Shield,
+        iconBg: 'rgba(208, 225, 251, 0.5)',
+        iconColor: ON_SECONDARY_CONTAINER,
+      },
+      {
+        id: 'promotions' as const,
+        title: t('center.categories.promotions'),
+        description: t('center.categories.promotionsDescription'),
+        icon: Ticket,
+        iconBg: 'rgba(125, 45, 0, 0.1)',
+        iconColor: ON_TERTIARY_FIXED_VARIANT,
+      },
+      {
+        id: 'app' as const,
+        title: t('center.categories.app'),
+        description: t('center.categories.appDescription'),
+        icon: Info,
+        iconBg: 'rgba(219, 225, 255, 0.5)',
+        iconColor: PRIMARY,
+      },
+    ],
+    [t],
+  );
+
+  const popularArticles = useMemo(
+    () => [
+      t('center.articles.peakPricing'),
+      t('center.articles.scheduleRide'),
+      t('center.articles.lostItem'),
+    ],
+    [t],
+  );
+
   const notifySoon = () => {
-    toast.message('Coming soon');
+    toast.message(tc('comingSoon'));
   };
 
   return (
@@ -171,12 +179,12 @@ export default function SupportCenterPage() {
           onClick={() => navigate('/account')}
           className="rounded-full p-2 transition-colors active:scale-95 passenger-row-hover"
           style={{ color: PRIMARY }}
-          aria-label="Back to account"
+          aria-label={t('center.backAria')}
         >
           <ArrowLeft className="h-6 w-6" strokeWidth={2} aria-hidden />
         </button>
         <h1 className="text-xl font-semibold tracking-tight" style={{ color: PRIMARY }}>
-          Support Center
+          {t('center.title')}
         </h1>
       </header>
 
@@ -184,10 +192,10 @@ export default function SupportCenterPage() {
         <section className="space-y-6">
           <div className="space-y-2">
             <h2 className="text-[30px] font-bold leading-tight tracking-tight" style={{ color: ON_SURFACE }}>
-              How can we help?
+              {t('center.headline')}
             </h2>
             <p className="text-base" style={{ color: SECONDARY }}>
-              Search our knowledge base or browse categories below.
+              {t('center.description')}
             </p>
           </div>
           <div className="relative">
@@ -200,7 +208,7 @@ export default function SupportCenterPage() {
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search articles, issues, or tips..."
+              placeholder={t('center.searchPlaceholder')}
               className="h-14 w-full rounded-xl pl-12 pr-4 text-base outline-none transition-all focus:ring-2 focus:ring-[#004ac6]"
               style={{
                 backgroundColor: SURFACE_LOWEST,
@@ -212,10 +220,10 @@ export default function SupportCenterPage() {
         </section>
 
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {CATEGORIES.map((cat) => (
+          {categories.map((cat) => (
             <div
               key={cat.id}
-              className={'featured' in cat && cat.featured ? 'sm:col-span-2' : undefined}
+              className={cat.featured ? 'sm:col-span-2' : undefined}
             >
               <CategoryCard
                 title={cat.title}
@@ -223,8 +231,8 @@ export default function SupportCenterPage() {
                 icon={cat.icon}
                 iconBg={cat.iconBg}
                 iconColor={cat.iconColor}
-                featured={'featured' in cat && cat.featured}
-                linkLabel={'linkLabel' in cat ? cat.linkLabel : undefined}
+                featured={cat.featured}
+                linkLabel={cat.linkLabel}
                 onClick={notifySoon}
               />
             </div>
@@ -239,14 +247,13 @@ export default function SupportCenterPage() {
             <div className="max-w-xl space-y-4">
               <div className="inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 backdrop-blur-sm">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-green-400" aria-hidden />
-                <span className="text-xs font-bold tracking-wide">AGENTS ONLINE</span>
+                <span className="text-xs font-bold tracking-wide">{t('center.agentsOnline')}</span>
               </div>
               <h2 className="text-[30px] font-bold leading-tight tracking-tight">
-                Can&apos;t find what you need?
+                {t('center.cantFind')}
               </h2>
               <p className="text-base" style={{ color: PRIMARY_FIXED }}>
-                Our premium support team is available 24/7 to assist with any complex issues or
-                immediate concerns.
+                {t('center.premiumSupport')}
               </p>
             </div>
             <button
@@ -256,7 +263,7 @@ export default function SupportCenterPage() {
               style={{ backgroundColor: SURFACE_LOWEST, color: PRIMARY }}
             >
               <MessageCircle className="h-6 w-6" aria-hidden />
-              Contact Support
+              {t('center.contactSupport')}
             </button>
           </div>
           <div
@@ -268,14 +275,14 @@ export default function SupportCenterPage() {
 
         <section className="space-y-4">
           <h3 className="px-2 text-xl font-semibold tracking-tight" style={{ color: ON_SURFACE }}>
-            Popular Articles
+            {t('center.popularArticles')}
           </h3>
           <div
             className="overflow-hidden rounded-[24px]"
             style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
           >
             <div className="flex flex-col gap-0 p-1">
-            {POPULAR_ARTICLES.map((title) => (
+            {popularArticles.map((title) => (
               <button
                 key={title}
                 type="button"

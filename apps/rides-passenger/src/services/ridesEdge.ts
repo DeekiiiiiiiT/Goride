@@ -123,6 +123,11 @@ function throwRidesErrorBody(body: RidesErrorBody, status: number, rawText: stri
   if (body.error === 'invalid_guest_passenger') {
     throw new Error('Enter the recipient’s name and phone number to book for someone else.');
   }
+  if (body.error === 'delegated_digital_payment_required' || body.error === 'roam_tag_digital_payment_required') {
+    throw new Error(
+      body.message ?? 'Book for others trips must be paid with a digital payment method.',
+    );
+  }
   if (body.error === 'not_found') {
     throw new Error('Ride not found. It may still be syncing — go back and try again.');
   }

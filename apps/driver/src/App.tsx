@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { DriverProvider, useDriver } from './contexts/DriverContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { NavigationPreferenceProvider } from './contexts/NavigationPreferenceContext';
 import { OfflineProvider } from './components/providers/OfflineProvider';
 import { DriverLoginPage } from './components/auth/DriverLoginPage';
 import { DriverHybridOnboarding } from './components/onboarding/DriverHybridOnboarding';
@@ -100,13 +101,15 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <AuthProvider>
-          <OfflineProvider>
-            <AppErrorBoundary>
-              <AppContent />
-            </AppErrorBoundary>
-          </OfflineProvider>
-        </AuthProvider>
+        <NavigationPreferenceProvider>
+          <AuthProvider>
+            <OfflineProvider>
+              <AppErrorBoundary>
+                <AppContent />
+              </AppErrorBoundary>
+            </OfflineProvider>
+          </AuthProvider>
+        </NavigationPreferenceProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

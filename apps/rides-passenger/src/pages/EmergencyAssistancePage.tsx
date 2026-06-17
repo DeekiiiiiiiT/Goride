@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import {
   ArrowLeft,
@@ -38,27 +39,6 @@ import {
 
 const MAP_PREVIEW_URL =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuA_ruTf_tgm1exT9JHlE91QlxE8N-TYTvm97uM4wxH83MkymFofJWXN1L_NjFi_dEO2VyiHZ3KXDB6Wj18jCQAzzKH-SiKdLM5AYcBpVTbvyg_IOli3FRzBWllmQIV8Bs7Qo5jq5LHGUsYTmWHfD0K6ixKoFkAjqCQh-_Nfnt4OxTptf4LeYNmKolMqDsz3erzR3te9dDZlQhuES-13AdqHAxvKfVThF5V-c0ygvGL4AKKreKnE5UtRgrC-JM2lNtB4QqT--RYs7c_7';
-
-const TOOLKIT_ITEMS = [
-  {
-    id: 'identity',
-    title: 'Identity Verification',
-    description: 'Check driver credentials & vehicle PIN',
-    icon: BadgeCheck,
-  },
-  {
-    id: 'audio',
-    title: 'Audio Recording',
-    description: 'Securely record trip audio for safety',
-    icon: Mic,
-  },
-  {
-    id: 'safety-center',
-    title: 'Safety Center',
-    description: 'Emergency protocols & urban safety tips',
-    icon: Shield,
-  },
-] as const;
 
 function ToolkitRow({
   title,
@@ -102,17 +82,41 @@ function ToolkitRow({
 
 export default function EmergencyAssistancePage() {
   const navigate = useNavigate();
+  const { t } = useTranslation('support');
+  const { t: tc } = useTranslation('common');
   const [calling, setCalling] = useState(false);
   const [alerting, setAlerting] = useState(false);
 
+  const toolkitItems = useMemo(
+    () => [
+      {
+        id: 'identity' as const,
+        title: t('emergency.toolkit.identity'),
+        description: t('emergency.toolkit.identityDescription'),
+        icon: BadgeCheck,
+      },
+      {
+        id: 'audio' as const,
+        title: t('emergency.toolkit.audio'),
+        description: t('emergency.toolkit.audioDescription'),
+        icon: Mic,
+      },
+      {
+        id: 'safety-center' as const,
+        title: t('emergency.toolkit.safetyCenter'),
+        description: t('emergency.toolkit.safetyCenterDescription'),
+        icon: Shield,
+      },
+    ],
+    [t],
+  );
+
   const notifySoon = () => {
-    toast.message('Coming soon');
+    toast.message(tc('comingSoon'));
   };
 
   const handleAlertTrusted = async () => {
-    const confirmed = window.confirm(
-      'Send an urgent safety alert with your location to all trusted contacts?',
-    );
+    const confirmed = window.confirm(t('emergency.confirmAlert'));
     if (!confirmed) return;
 
     setAlerting(true);
@@ -140,18 +144,20 @@ export default function EmergencyAssistancePage() {
         lng,
         ride_request_id: activeRideId,
       });
-      toast.success(`Alert sent to ${res.sent_count} trusted contact${res.sent_count === 1 ? '' : 's'}.`);
+      toast.success(
+        t(res.sent_count === 1 ? 'emergency.alertSent' : 'emergency.alertSent_plural', {
+          count: res.sent_count,
+        }),
+      );
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not alert contacts');
+      toast.error(e instanceof Error ? e.message : t('emergency.couldNotAlert'));
     } finally {
       setAlerting(false);
     }
   };
 
   const handleEmergencyCall = () => {
-    const confirmed = window.confirm(
-      'Confirm: You are about to call emergency services (911). This action cannot be undone.',
-    );
+    const confirmed = window.confirm(t('emergency.confirm911'));
     if (!confirmed) return;
     setCalling(true);
     window.location.href = 'tel:911';
@@ -183,7 +189,7 @@ export default function EmergencyAssistancePage() {
           onClick={() => navigate('/account')}
           className="rounded-full p-2 transition-colors active:scale-95 passenger-row-hover"
           style={{ color: PRIMARY }}
-          aria-label="Back to account"
+          aria-label={t('emergency.backAria')}
         >
           <ArrowLeft className="h-6 w-6" strokeWidth={2} aria-hidden />
         </button>
@@ -191,7 +197,7 @@ export default function EmergencyAssistancePage() {
           className="flex-1 truncate px-2 text-center text-xl font-semibold tracking-tight"
           style={{ color: PRIMARY }}
         >
-          Emergency Assistance
+          {t('emergency.title')}
         </h1>
         <div className="w-10 shrink-0" aria-hidden />
       </header>
@@ -220,7 +226,7 @@ export default function EmergencyAssistancePage() {
               className="text-xs font-bold uppercase tracking-wide"
               style={{ color: ON_SURFACE }}
             >
-              Live Location Sharing Active
+              {t('emergency.liveLocationActive')}
             </p>
           </div>
         </div>
@@ -240,15 +246,14 @@ export default function EmergencyAssistancePage() {
             />
             <div className="relative z-10 flex flex-col items-center justify-center gap-2">
               <Phone className="h-10 w-10" fill="currentColor" aria-hidden />
-              <span className="text-[30px] font-bold tracking-tight">Call 911</span>
+              <span className="text-[30px] font-bold tracking-tight">{t('emergency.call911')}</span>
               <span className="text-xs font-bold uppercase tracking-widest opacity-90">
-                Connect to Emergency Services
+                {t('emergency.connectEmergency')}
               </span>
             </div>
           </button>
           <p className="px-4 text-center text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-            This will immediately dial local emergency services and share your precise GPS
-            coordinates.
+            {t('emergency.call911Description')}
           </p>
         </div>
 
@@ -267,10 +272,10 @@ export default function EmergencyAssistancePage() {
               <Users className="h-6 w-6" style={{ color: ON_SECONDARY_CONTAINER }} aria-hidden />
             </div>
             <span className="text-center text-sm font-semibold" style={{ color: ON_SURFACE }}>
-              Alert Contacts
+              {t('emergency.alertContacts')}
             </span>
             <span className="mt-1 text-center text-[10px]" style={{ color: ON_SURFACE_VARIANT }}>
-              {alerting ? 'Sending alert…' : 'Text trusted network'}
+              {alerting ? t('emergency.sendingAlert') : t('emergency.textTrustedNetwork')}
             </span>
           </button>
           <button
@@ -286,10 +291,10 @@ export default function EmergencyAssistancePage() {
               <Share2 className="h-6 w-6" style={{ color: ON_PRIMARY_CONTAINER }} aria-hidden />
             </div>
             <span className="text-center text-sm font-semibold" style={{ color: ON_SURFACE }}>
-              Share Link
+              {t('emergency.shareLink')}
             </span>
             <span className="mt-1 text-center text-[10px]" style={{ color: ON_SURFACE_VARIANT }}>
-              Live tracking via URL
+              {t('emergency.liveTrackingUrl')}
             </span>
           </button>
         </div>
@@ -297,17 +302,17 @@ export default function EmergencyAssistancePage() {
         <section>
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-xl font-semibold tracking-tight" style={{ color: ON_SURFACE }}>
-              Safety Toolkit
+              {t('emergency.safetyToolkit')}
             </h2>
             <span
               className="rounded-full px-2 py-1 text-[10px] font-bold"
               style={{ backgroundColor: SURFACE_CONTAINER_HIGHEST, color: SECONDARY }}
             >
-              4 TOOLS AVAILABLE
+              {t('emergency.toolsAvailable')}
             </span>
           </div>
           <div className="space-y-3">
-            {TOOLKIT_ITEMS.map((item) => (
+            {toolkitItems.map((item) => (
               <ToolkitRow
                 key={item.id}
                 title={item.title}
@@ -330,8 +335,7 @@ export default function EmergencyAssistancePage() {
               aria-hidden
             />
             <p className="text-sm leading-relaxed" style={{ color: ON_SECONDARY_FIXED_VARIANT }}>
-              Our response team is monitoring this ride. If we detect an unusual stop or route
-              deviation, we will check in via the app.
+              {t('emergency.monitoringNotice')}
             </p>
           </div>
         </div>

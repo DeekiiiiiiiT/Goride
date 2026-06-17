@@ -12,7 +12,9 @@
     "cap:release": "node scripts/bump-android-version.mjs && pnpm run cap:sync",
     "cap:aab": "node scripts/build-android-aab.mjs",
     "cap:open:android": "cap open android",
-    "cap:run:android": "pnpm run cap:sync && cap run android"
+    "cap:run:android": "pnpm run cap:sync && cap run android",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@capacitor/android": "^7.6.5",
@@ -74,6 +76,7 @@
     "@types/node": "^20.10.0",
     "@vitejs/plugin-react": "^4.7.0",
     "tailwindcss": "4.1.12",
-    "vite": "6.3.5"
+    "vite": "6.3.5",
+    "vitest": "^3.2.4"
   }
 }

@@ -198,3 +198,20 @@ export function paymentSourceForMethodId(id: string): 'demo_card' | 'demo_lynk' 
 export function shortfallPaymentMethodForId(id: string): 'card' | 'lynk' {
   return getPaymentMethodById(id).arrearsKind === 'lynk' ? 'lynk' : 'card';
 }
+
+/** Book-for-others flows (gift ride, book for someone, etc.) — payer is remote, no cash. */
+export const DELEGATED_BOOKING_EXCLUDED_PAYMENT_IDS: TripPaymentMethodId[] = ['cash'];
+
+export function isDigitalTripPaymentMethodId(id: string): boolean {
+  return getPaymentMethodById(id).ridePaymentMethod === 'card';
+}
+
+export function getDefaultDigitalPaymentMethodId(): TripPaymentMethodId {
+  const digital = getAllBookablePaymentMethods().find((m) => m.ridePaymentMethod === 'card');
+  return digital?.id ?? 'apple_pay';
+}
+
+/** When booking for someone else, fall back to a digital method if cash is selected. */
+export function coerceDigitalPaymentMethodId(id: TripPaymentMethodId): TripPaymentMethodId {
+  return isDigitalTripPaymentMethodId(id) ? id : getDefaultDigitalPaymentMethodId();
+}

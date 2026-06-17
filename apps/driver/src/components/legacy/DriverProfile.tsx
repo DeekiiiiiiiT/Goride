@@ -23,7 +23,7 @@ import {
   RefreshCw,
   Users,
   HelpCircle,
-  CreditCard
+  CreditCard,
 } from "lucide-react";
 import { 
   Drawer,
@@ -584,15 +584,30 @@ function DocItem({ label, status, expiry }: { label: string, status: 'valid' | '
    )
 }
 
-function SettingItem({ icon, label, onClick }: { icon: React.ReactNode, label: string, onClick?: () => void }) {
+function SettingItem({
+  icon,
+  label,
+  subtitle,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  subtitle?: string;
+  onClick?: () => void;
+}) {
    return (
       <div 
-        className="p-4 flex items-center gap-3 hover:bg-slate-50 transition-colors cursor-pointer"
+        className="p-4 flex items-center gap-3 hover:bg-slate-50 transition-colors cursor-pointer dark:hover:bg-slate-800/80"
         onClick={onClick}
       >
          <div className="text-slate-500">{icon}</div>
-         <span className="flex-1 text-sm font-medium text-slate-900">{label}</span>
-         <ChevronRight className="h-4 w-4 text-slate-300" />
+         <div className="min-w-0 flex-1">
+           <span className="block text-sm font-medium text-slate-900 dark:text-white">{label}</span>
+           {subtitle ? (
+             <span className="block text-xs text-slate-500 dark:text-slate-400">{subtitle}</span>
+           ) : null}
+         </div>
+         <ChevronRight className="h-4 w-4 text-slate-300 dark:text-slate-500" />
       </div>
    )
 }

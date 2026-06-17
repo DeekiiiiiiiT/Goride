@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
@@ -60,9 +61,9 @@ function formatTxDate(iso: string): string {
   }
 }
 
-function shadowTxTitle(tx: WalletTransactionDto): string {
+function shadowTxTitle(tx: WalletTransactionDto, fallback: string): string {
   if (tx.kind !== 'shadow_trip') return tx.title;
-  return tx.title?.trim() || 'Shadow trip';
+  return tx.title?.trim() || fallback;
 }
 
 function txIsCredit(tx: WalletTransactionDto): boolean {
@@ -85,6 +86,7 @@ function txIcon(tx: WalletTransactionDto) {
 }
 
 export default function WalletPage() {
+  const { t } = useTranslation('wallet');
   const navigate = useNavigate();
   const { selectedId, select } = useDefaultPaymentMethod();
   const [addCashOpen, setAddCashOpen] = useState(false);
@@ -114,7 +116,7 @@ export default function WalletPage() {
         }
       } catch (e) {
         if (!cancelled) {
-          const msg = e instanceof Error ? e.message : 'Could not load wallet';
+          const msg = e instanceof Error ? e.message : t('errors.couldNotLoadWallet');
           setWalletError(msg);
           toast.error(msg);
         }
@@ -136,7 +138,7 @@ export default function WalletPage() {
   }, []);
 
   const notifySoon = () => {
-    toast.message('Coming soon');
+    toast.message(t('common:comingSoon'));
   };
 
   const handleTxClick = (tx: WalletTransactionDto) => {
@@ -161,12 +163,12 @@ export default function WalletPage() {
         counterpartyName: res.ride.guest_passenger_name,
       });
       if (!item) {
-        toast.error('Trip not available');
+        toast.error(t('errors.tripNotAvailable'));
         return;
       }
       setActivityTrip(item);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not load trip');
+      toast.error(e instanceof Error ? e.message : t('errors.couldNotLoadTrip'));
     } finally {
       setViewingTrip(false);
     }
@@ -198,12 +200,12 @@ export default function WalletPage() {
             onClick={() => navigate('/account')}
             className="rounded-full p-2 transition-colors active:scale-95 passenger-row-hover"
             style={{ color: PRIMARY }}
-            aria-label="Back to account"
+            aria-label={t('backToAccount')}
           >
             <ArrowLeft className="h-6 w-6" strokeWidth={2} aria-hidden />
           </button>
           <h1 className="text-xl font-semibold tracking-tight" style={{ color: PRIMARY }}>
-            Wallet
+            {t('title')}
           </h1>
         </div>
         <button
@@ -211,7 +213,7 @@ export default function WalletPage() {
           onClick={notifySoon}
           className="rounded-full p-2 transition-colors active:scale-95 passenger-row-hover"
           style={{ color: ON_SURFACE_VARIANT }}
-          aria-label="Wallet help"
+          aria-label={t('walletHelp')}
         >
           <CircleHelp className="h-6 w-6" aria-hidden />
         </button>
@@ -227,9 +229,11 @@ export default function WalletPage() {
               color: ON_SURFACE,
             }}
           >
-            <p className="font-semibold">Outstanding balance</p>
+            <p className="font-semibold">{t('outstandingBalance')}</p>
             <p className="mt-0.5" style={{ color: ON_SURFACE_VARIANT }}>
-              You owe {formatMoneyMinorPlain(wallet.arrears_minor)} from a previous cash trip.
+              {t('outstandingBalanceDescription', {
+                amount: formatMoneyMinorPlain(wallet.arrears_minor),
+              })}
             </p>
             {CASH_SETTLEMENT_PAY_ARREARS_ENABLED ? (
               <button
@@ -238,11 +242,11 @@ export default function WalletPage() {
                 className="mt-3 w-full rounded-xl py-2.5 text-sm font-semibold text-white"
                 style={{ backgroundColor: PRIMARY }}
               >
-                Pay outstanding balance
+                {t('payOutstandingBalance')}
               </button>
             ) : (
               <p className="mt-2 text-xs" style={{ color: ON_SURFACE_VARIANT }}>
-                Pay your driver in full on your next ride or contact support.
+                {t('payDriverHint')}
               </p>
             )}
           </div>
@@ -260,7 +264,7 @@ export default function WalletPage() {
         >
           <div className="relative z-10">
             <p className="mb-1 text-xs font-bold uppercase tracking-wide" style={{ color: SECONDARY }}>
-              Wallet balance
+              {t('walletBalance')}
             </p>
             <div className="flex items-baseline gap-1">
               {loading ? (
@@ -273,7 +277,9 @@ export default function WalletPage() {
             </div>
             {wallet && wallet.credit_minor > 0 && (
               <p className="mt-2 text-xs" style={{ color: SECONDARY }}>
-                Includes {formatMoneyMinorPlain(wallet.credit_minor)} ride credit
+                {t('includesRideCredit', {
+                  amount: formatMoneyMinorPlain(wallet.credit_minor),
+                })}
               </p>
             )}
             <div className="mt-8 grid grid-cols-2 gap-3">
@@ -284,7 +290,7 @@ export default function WalletPage() {
                 style={{ backgroundColor: PRIMARY, color: ON_PRIMARY }}
               >
                 <Banknote className="h-5 w-5" aria-hidden />
-                Add Cash
+                {t('addCash')}
               </button>
               <button
                 type="button"
@@ -297,7 +303,7 @@ export default function WalletPage() {
                 }}
               >
                 <ArrowUpFromLine className="h-5 w-5" aria-hidden />
-                Withdraw
+                {t('withdraw')}
               </button>
             </div>
           </div>
@@ -311,7 +317,7 @@ export default function WalletPage() {
         <section className="space-y-3">
           <div className="flex items-center justify-between px-1">
             <h2 className="text-xl font-semibold tracking-tight" style={{ color: ON_SURFACE }}>
-              Payment Methods
+              {t('paymentMethods')}
             </h2>
             <button
               type="button"
@@ -319,18 +325,18 @@ export default function WalletPage() {
               className="text-xs font-bold tracking-wide hover:underline"
               style={{ color: PRIMARY }}
             >
-              MANAGE
+              {t('manage')}
             </button>
           </div>
           <p className="px-1 text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-            Your default method is used when you book a trip on Home.
+            {t('defaultMethodHint')}
           </p>
           <WalletPaymentMethodsList selectedId={selectedId} onSelect={select} variant="wallet" />
         </section>
 
         <section className="space-y-4">
           <h2 className="px-1 text-xl font-semibold tracking-tight" style={{ color: ON_SURFACE }}>
-            Recent Transactions
+            {t('recentTransactions')}
           </h2>
           <div
             className="overflow-hidden rounded-[24px]"
@@ -339,11 +345,11 @@ export default function WalletPage() {
             {loading ? (
               <div className="flex items-center justify-center gap-2 p-8" style={{ color: ON_SURFACE_VARIANT }}>
                 <Loader2 className="h-5 w-5 animate-spin" />
-                Loading…
+                {t('common:loading')}
               </div>
             ) : transactions.length === 0 ? (
               <p className="p-6 text-center text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-                No transactions yet.
+                {t('noTransactions')}
               </p>
             ) : (
               transactions.map((tx) => {
@@ -368,7 +374,7 @@ export default function WalletPage() {
                       </div>
                       <div>
                         <p className="font-bold" style={{ color: ON_SURFACE }}>
-                          {shadowTxTitle(tx)}
+                          {shadowTxTitle(tx, t('shadowTrip'))}
                         </p>
                         <p className="text-sm" style={{ color: SECONDARY }}>
                           {formatTxDate(tx.date)}
@@ -403,9 +409,9 @@ export default function WalletPage() {
             className="absolute inset-0 h-full w-full object-cover opacity-40 mix-blend-overlay"
           />
           <div className="relative z-10 min-w-0 flex-1">
-            <h3 className="text-xl font-bold text-white">Earn 5% Back</h3>
+            <h3 className="text-xl font-bold text-white">{t('earnBackTitle')}</h3>
             <p className="text-sm" style={{ color: SURFACE_VARIANT }}>
-              Top up with Roam Rides.
+              {t('earnBackDescription')}
             </p>
           </div>
           <ChevronRight className="relative z-10 ml-auto h-6 w-6 shrink-0 text-white" aria-hidden />

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { ArrowLeft, MoreVertical, Search, UserPlus } from 'lucide-react';
 import type { RiderContactGroupRow, RiderContactRow } from '@roam/types/riderContacts';
@@ -26,6 +27,8 @@ import {
 export default function ContactGroupDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { t } = useTranslation('contacts');
+  const { t: tc } = useTranslation('common');
   const [group, setGroup] = useState<(RiderContactGroupRow & { members: RiderContactRow[] }) | null>(null);
   const [allContacts, setAllContacts] = useState<RiderContactRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,12 +48,12 @@ export default function ContactGroupDetailPage() {
       setGroup(detailRes.group);
       setAllContacts(contactsRes.contacts);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not load group');
+      toast.error(e instanceof Error ? e.message : t('groupDetail.couldNotLoad'));
       navigate('/account/contacts/groups', { replace: true });
     } finally {
       setLoading(false);
     }
-  }, [id, navigate]);
+  }, [id, navigate, t]);
 
   useEffect(() => {
     void load();
@@ -73,15 +76,17 @@ export default function ContactGroupDetailPage() {
     [group],
   );
 
+  const memberCount = group?.member_count ?? group?.members.length ?? 0;
+
   const handleTogglePin = async () => {
     if (!group) return;
     try {
       await contactGroupUpdate(group.id, { is_pinned: !group.is_pinned });
-      toast.success(group.is_pinned ? 'Unpinned' : 'Pinned');
+      toast.success(group.is_pinned ? t('groups.unpinned') : t('groups.pinned'));
       setMenuOpen(false);
       await load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not update group');
+      toast.error(e instanceof Error ? e.message : t('groups.couldNotUpdate'));
     }
   };
 
@@ -89,25 +94,29 @@ export default function ContactGroupDetailPage() {
     if (!group) return;
     try {
       await contactGroupRemoveMember(group.id, contactId);
-      toast.success('Removed from group');
+      toast.success(t('groupDetail.removedFromGroup'));
       setMemberMenuId(null);
       await load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not remove member');
+      toast.error(e instanceof Error ? e.message : t('groupDetail.couldNotRemove'));
     }
   };
 
   const handleAddMembers = async (contactIds: string[]) => {
     if (!group) return;
     await contactGroupAddMembers(group.id, { contact_ids: contactIds });
-    toast.success(`Added ${contactIds.length} member${contactIds.length === 1 ? '' : 's'}`);
+    toast.success(
+      t(contactIds.length === 1 ? 'groupDetail.addedMembers' : 'groupDetail.addedMembers_plural', {
+        count: contactIds.length,
+      }),
+    );
     await load();
   };
 
   if (loading || !group) {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center" style={{ backgroundColor: PAGE_BG }}>
-        <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>Loading…</p>
+        <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>{tc('loading')}</p>
       </div>
     );
   }
@@ -121,7 +130,7 @@ export default function ContactGroupDetailPage() {
             onClick={() => navigate('/account/contacts/groups')}
             className="rounded-full p-2"
             style={{ color: PRIMARY }}
-            aria-label="Back"
+            aria-label={tc('back')}
           >
             <ArrowLeft className="h-6 w-6" />
           </button>
@@ -135,7 +144,7 @@ export default function ContactGroupDetailPage() {
             onClick={() => setMenuOpen((o) => !o)}
             className="rounded-full p-2"
             style={{ color: PRIMARY }}
-            aria-label="Group options"
+            aria-label={t('groupDetail.groupOptionsAria')}
           >
             <MoreVertical className="h-5 w-5" />
           </button>
@@ -145,7 +154,7 @@ export default function ContactGroupDetailPage() {
               style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
             >
               <button type="button" onClick={() => void handleTogglePin()} className="block w-full px-4 py-2.5 text-left text-sm">
-                {group.is_pinned ? 'Unpin group' : 'Pin group'}
+                {group.is_pinned ? t('groupDetail.unpinGroup') : t('groupDetail.pinGroup')}
               </button>
             </div>
           ) : null}
@@ -157,8 +166,8 @@ export default function ContactGroupDetailPage() {
           <GroupIconCircle emoji={group.emoji} color={group.color} size="lg" />
           <h2 className="text-xl font-bold">{group.name}</h2>
           <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-            {group.member_count ?? group.members.length} member{(group.member_count ?? group.members.length) === 1 ? '' : 's'}
-            {group.is_system ? ' · Default group' : null}
+            {t(memberCount === 1 ? 'groups.member' : 'groups.member_plural', { count: memberCount })}
+            {group.is_system ? ` · ${t('groupDetail.defaultGroup')}` : null}
           </p>
         </div>
 
@@ -168,7 +177,7 @@ export default function ContactGroupDetailPage() {
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search members"
+            placeholder={t('groupDetail.searchMembers')}
             className="h-12 w-full rounded-2xl border-none pl-11 pr-4 outline-none focus:ring-2 focus:ring-[#004ac6]"
             style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
           />
@@ -176,7 +185,7 @@ export default function ContactGroupDetailPage() {
 
         {members.length === 0 ? (
           <p className="text-center text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-            {query ? 'No matching members.' : 'No members yet.'}
+            {query ? t('groupDetail.noMatchingMembers') : t('groupDetail.noMembers')}
           </p>
         ) : (
           <ul className="space-y-2">
@@ -210,7 +219,7 @@ export default function ContactGroupDetailPage() {
                   onClick={() => setMemberMenuId((cur) => (cur === m.id ? null : m.id))}
                   className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-2"
                   style={{ color: ON_SURFACE_VARIANT }}
-                  aria-label="Member options"
+                  aria-label={t('groupDetail.memberOptionsAria')}
                 >
                   <MoreVertical className="h-4 w-4" />
                 </button>
@@ -225,7 +234,7 @@ export default function ContactGroupDetailPage() {
                       className="block w-full px-4 py-2.5 text-left text-sm"
                       style={{ color: '#b91c1c' }}
                     >
-                      Remove from group
+                      {t('groupDetail.removeFromGroup')}
                     </button>
                   </div>
                 ) : null}
@@ -243,7 +252,7 @@ export default function ContactGroupDetailPage() {
           style={{ backgroundColor: PRIMARY, color: '#fff' }}
         >
           <UserPlus className="h-5 w-5" />
-          Add members
+          {t('groupDetail.addMembers')}
         </button>
       </div>
 

@@ -1793,6 +1793,13 @@ app.post("/v1/requests", async (c) => {
     }
   }
 
+  if (isDelegatedCreate && !isDigitalRidePayment(paymentMethod)) {
+    return c.json({
+      error: "delegated_digital_payment_required",
+      message: "Book for others trips must be paid with a digital payment method.",
+    }, 400);
+  }
+
   let ride: Record<string, unknown> | null = null;
   const { data: rpcRide, error: rpcError } = await pubSvc().rpc("rides_create_ride_request", {
     p_row: insertRow,

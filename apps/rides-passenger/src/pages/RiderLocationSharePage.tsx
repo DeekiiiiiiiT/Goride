@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Loader2, MapPin, Navigation } from 'lucide-react';
 import { supabase } from '@roam/auth-client';
@@ -27,6 +28,7 @@ type Phase = 'loading' | 'consent' | 'sharing' | 'success' | 'declined' | 'unava
 export default function RiderLocationSharePage() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
+  const { t } = useTranslation('booking');
   const [phase, setPhase] = useState<Phase>('loading');
   const [bookerName, setBookerName] = useState<string | null>(null);
   const [sharedAddress, setSharedAddress] = useState<string | null>(null);
@@ -49,9 +51,9 @@ export default function RiderLocationSharePage() {
       })
       .catch((e) => {
         setPhase('unavailable');
-        toast.error(e instanceof Error ? e.message : 'This link is invalid or expired.');
+        toast.error(e instanceof Error ? e.message : t('locationShare.invalidLink'));
       });
-  }, [token]);
+  }, [token, t]);
 
   const handleShare = async () => {
     if (!token) return;
@@ -74,13 +76,13 @@ export default function RiderLocationSharePage() {
       });
       setSharedAddress(res.request.pickup_address ?? address);
       setPhase('success');
-      toast.success('Location shared');
+      toast.success(t('locationShare.locationShared'));
     } catch (e) {
-      const message = e instanceof Error ? e.message : 'Could not share location';
+      const message = e instanceof Error ? e.message : t('locationShare.couldNotShare');
       if (message.includes('phone_mismatch')) {
-        toast.error('Sign in with the phone number this request was sent to.');
+        toast.error(t('locationShare.phoneMismatch'));
       } else if (/denied|permission|blocked/i.test(message)) {
-        toast.error('Enable location in your device settings, then try again.');
+        toast.error(t('locationShare.enableLocation'));
       } else {
         toast.error(message);
       }
@@ -99,9 +101,9 @@ export default function RiderLocationSharePage() {
       }
       await declinePickupLocation(token);
       setPhase('declined');
-      toast.message('Location request declined');
+      toast.message(t('locationShare.requestDeclined'));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not decline request');
+      toast.error(e instanceof Error ? e.message : t('locationShare.couldNotDecline'));
     } finally {
       setDeclining(false);
     }
@@ -111,7 +113,7 @@ export default function RiderLocationSharePage() {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center gap-2" style={{ backgroundColor: PAGE_BG }}>
         <Loader2 className="h-5 w-5 animate-spin" style={{ color: PRIMARY }} />
-        <p style={{ color: ON_SURFACE_VARIANT }}>Loading…</p>
+        <p style={{ color: ON_SURFACE_VARIANT }}>{t('locationShare.loading')}</p>
       </div>
     );
   }
@@ -128,9 +130,9 @@ export default function RiderLocationSharePage() {
 
         {phase === 'consent' || phase === 'sharing' ? (
           <>
-            <h1 className="text-2xl font-bold" style={{ color: PRIMARY }}>Share pickup location</h1>
+            <h1 className="text-2xl font-bold" style={{ color: PRIMARY }}>{t('locationShare.title')}</h1>
             <p className="text-lg">
-              {bookerName ?? 'Someone'} needs your current location for a Roam pickup.
+              {t('locationShare.needsLocation', { name: bookerName ?? t('locationShare.someone') })}
             </p>
             <button
               type="button"
@@ -144,7 +146,7 @@ export default function RiderLocationSharePage() {
               ) : (
                 <Navigation className="h-5 w-5" aria-hidden />
               )}
-              {phase === 'sharing' ? 'Sharing…' : 'Share my location'}
+              {phase === 'sharing' ? t('locationShare.sharing') : t('locationShare.shareMyLocation')}
             </button>
             <button
               type="button"
@@ -157,16 +159,16 @@ export default function RiderLocationSharePage() {
                 backgroundColor: 'rgba(186, 26, 26, 0.08)',
               }}
             >
-              {declining ? 'Rejecting…' : 'Reject'}
+              {declining ? t('locationShare.rejecting') : t('locationShare.reject')}
             </button>
           </>
         ) : null}
 
         {phase === 'success' ? (
           <>
-            <h1 className="text-2xl font-bold" style={{ color: PRIMARY }}>Location shared</h1>
+            <h1 className="text-2xl font-bold" style={{ color: PRIMARY }}>{t('locationShare.successTitle')}</h1>
             <p style={{ color: ON_SURFACE_VARIANT }}>
-              {bookerName ?? 'The booker'} can use your pickup location to book the ride.
+              {t('locationShare.successDescription', { name: bookerName ?? t('locationShare.theBooker') })}
             </p>
             {sharedAddress ? (
               <p className="text-sm font-medium">{sharedAddress}</p>
@@ -177,16 +179,16 @@ export default function RiderLocationSharePage() {
               className="h-14 w-full rounded-2xl text-lg font-semibold"
               style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_PRIMARY }}
             >
-              Done
+              {t('locationShare.done')}
             </button>
           </>
         ) : null}
 
         {phase === 'declined' ? (
           <>
-            <h1 className="text-2xl font-bold" style={{ color: PRIMARY }}>Request declined</h1>
+            <h1 className="text-2xl font-bold" style={{ color: PRIMARY }}>{t('locationShare.declinedTitle')}</h1>
             <p style={{ color: ON_SURFACE_VARIANT }}>
-              You chose not to share your location. The booker can enter the pickup manually.
+              {t('locationShare.declinedDescription')}
             </p>
             <button
               type="button"
@@ -194,16 +196,16 @@ export default function RiderLocationSharePage() {
               className="h-14 w-full rounded-2xl text-lg font-semibold"
               style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_PRIMARY }}
             >
-              Back to home
+              {t('backToHome')}
             </button>
           </>
         ) : null}
 
         {phase === 'unavailable' ? (
           <>
-            <h1 className="text-2xl font-bold" style={{ color: PRIMARY }}>Link unavailable</h1>
+            <h1 className="text-2xl font-bold" style={{ color: PRIMARY }}>{t('locationShare.unavailableTitle')}</h1>
             <p style={{ color: ON_SURFACE_VARIANT }}>
-              This location request has expired or is no longer active.
+              {t('locationShare.unavailableDescription')}
             </p>
             <button
               type="button"
@@ -211,7 +213,7 @@ export default function RiderLocationSharePage() {
               className="h-14 w-full rounded-2xl text-lg font-semibold"
               style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_PRIMARY }}
             >
-              Back to home
+              {t('backToHome')}
             </button>
           </>
         ) : null}

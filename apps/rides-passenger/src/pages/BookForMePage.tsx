@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation, Trans } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ArrowLeft, ChevronDown, Copy, Loader2, Navigation, Tag, Users, X } from 'lucide-react';
@@ -67,6 +68,7 @@ const ACTIVE_INTENT_UI_STATUSES = new Set<TripIntentRow['status']>([
 ]);
 
 function TripIntentPayerRow({ children }: { children: React.ReactNode }) {
+  const { t } = useTranslation('booking');
   return (
     <div
       className="flex items-center gap-3 rounded-2xl border px-3.5 py-2.5"
@@ -76,7 +78,7 @@ function TripIntentPayerRow({ children }: { children: React.ReactNode }) {
         className="shrink-0 text-xs font-bold uppercase tracking-wider"
         style={{ color: ON_SURFACE_VARIANT }}
       >
-        Payer
+        {t('bookForMe.payer')}
       </span>
       {children}
     </div>
@@ -108,6 +110,8 @@ function PayerNameChip({ name }: { name: string }) {
 
 export default function BookForMePage() {
   const navigate = useNavigate();
+  const { t } = useTranslation('booking');
+  const { t: tc } = useTranslation('common');
   const queryClient = useQueryClient();
   const { tag, loading: tagLoading, saveCustomName, refresh } = useRoamPassengerTag({ ensureOnMount: true });
   const { active: services } = useRidesVehicleTypes();
@@ -243,11 +247,11 @@ export default function BookForMePage() {
 
       applyActiveIntent(trip);
       if (trip?.status === 'claimed' && prevStatus === 'published') {
-        toast.success('Your payer agreed — book your ride now');
+        toast.success(t('bookForMe.payerAgreed'));
       }
       intentStatusRef.current = trip?.status ?? null;
       if (!trip && hadLiveIntent) {
-        toast.message('Your previous trip ended. You can start a new one.');
+        toast.message(t('bookForMe.previousTripEnded'));
       }
     } catch {
       /* ignore */
@@ -304,9 +308,9 @@ export default function BookForMePage() {
     try {
       await tripIntentWithdraw(intent.id);
       clearActiveIntent();
-      toast.message('Trip cancelled');
+      toast.message(t('bookForMe.tripCancelled'));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not cancel trip');
+      toast.error(e instanceof Error ? e.message : t('bookForMe.couldNotCancel'));
     } finally {
       setWithdrawing(false);
     }
@@ -332,8 +336,8 @@ export default function BookForMePage() {
       clearActiveIntent();
       toast.message(
         intent.linked_ride_status === 'completed'
-          ? 'Trip complete — thanks for riding with Roam'
-          : 'Trip cleared',
+          ? t('bookForMe.tripCompleteThanks')
+          : t('bookForMe.tripCleared'),
       );
       navigate('/');
     } catch {
@@ -362,10 +366,10 @@ export default function BookForMePage() {
       const res = await tripIntentBook(intent.id);
       setIntent(res.trip_intent ?? { ...intent, status: 'booked', ride_request_id: res.ride.id });
       await queryClient.invalidateQueries({ queryKey: ['book-for-others', 'activity'] });
-      toast.success('Ride booked — finding a driver');
+      toast.success(t('bookForMe.rideBooked'));
       navigate(`/ride/${res.ride.id}`);
     } catch (e) {
-      const message = e instanceof Error ? e.message : 'Could not book ride';
+      const message = e instanceof Error ? e.message : t('bookForMe.couldNotBook');
       toast.error(message);
       if (message.includes('publish again') || message.includes('Booking window')) {
         setIntent(null);
@@ -397,16 +401,16 @@ export default function BookForMePage() {
   const handleSaveTag = async () => {
     const normalized = normalizeRoamTagInput(customInput);
     if (normalized.length < 3) {
-      toast.error('Use at least 3 characters.');
+      toast.error(t('bookForMe.minCharacters'));
       return;
     }
     setSavingTag(true);
     try {
       await saveCustomName(normalized);
-      toast.success(`Your tag is ${formatRoamTagDisplay(normalized)}`);
+      toast.success(t('bookForMe.tagSaved', { tag: formatRoamTagDisplay(normalized) }));
       setTagOverlayOpen(false);
     } catch (e) {
-      toast.error(roamTagErrorMessage(e instanceof Error ? e.message : '') || 'Could not save tag');
+      toast.error(roamTagErrorMessage(e instanceof Error ? e.message : '') || t('bookForMe.couldNotSaveTag'));
     } finally {
       setSavingTag(false);
     }
@@ -433,9 +437,9 @@ export default function BookForMePage() {
         }
         applyActiveIntent(resolved);
         if (TERMINAL_LINKED_RIDE_STATUSES.has(resolved.linked_ride_status ?? '')) {
-          throw new Error('Your last trip has ended. Tap Back to home below, then start a new one.');
+          throw new Error(t('bookForMe.lastTripEnded'));
         }
-        throw new Error('You already have a live trip. Finish or cancel it below before starting a new one.');
+        throw new Error(t('bookForMe.liveTripExists'));
       }
       if (editable(serverTrip)) {
         setIntent(serverTrip);
@@ -444,7 +448,7 @@ export default function BookForMePage() {
     }
 
     if (!name.trim() || !isValidGuestPhone(phone)) {
-      throw new Error('Enter your name and phone.');
+      throw new Error(t('bookForMe.enterNamePhone'));
     }
     const res = await tripIntentCreate({
       requester_name: name.trim(),
@@ -453,7 +457,7 @@ export default function BookForMePage() {
     });
     if (res.trip_intent.status === 'claimed' || res.trip_intent.status === 'booked') {
       applyActiveIntent(res.trip_intent);
-      throw new Error('You already have a live trip. Cancel it below before starting a new one.');
+      throw new Error(t('bookForMe.cancelBeforeNew'));
     }
     setIntent(res.trip_intent);
     return res.trip_intent;
@@ -469,7 +473,7 @@ export default function BookForMePage() {
       await refresh(true);
       let row = await ensureDraftIntent();
       if (effectiveAudience === 'targeted' && !hasTargetPayer) {
-        throw new Error('Choose who should pay — pick a contact, search a Roam tag, or enter a phone.');
+        throw new Error(t('bookForMe.choosePayer'));
       }
 
       row = (await tripIntentUpdate(row.id, {
@@ -504,12 +508,10 @@ export default function BookForMePage() {
       setStep('published');
       await queryClient.invalidateQueries({ queryKey: ['book-for-others', 'activity'] });
       toast.success(
-        effectiveAudience === 'targeted'
-          ? 'Trip sent — your payer will see it in Active trips'
-          : 'Your trip is live on your tag',
+        effectiveAudience === 'targeted' ? t('bookForMe.tripSent') : t('bookForMe.tripLive'),
       );
     } catch (e) {
-      const message = e instanceof Error ? e.message : 'Could not publish';
+      const message = e instanceof Error ? e.message : t('bookForMe.couldNotPublish');
       toast.error(message);
     } finally {
       setLoading(false);
@@ -524,20 +526,20 @@ export default function BookForMePage() {
       setPickup({ lat: position.lat, lng: position.lng });
       setPickupAddress(address);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not get your location');
+      toast.error(e instanceof Error ? e.message : t('bookForMe.couldNotGetLocation'));
     } finally {
       setPickupLocLoading(false);
     }
   };
 
   const selectedVehicleLabel =
-    services.find((s) => s.slug === vehicleOption)?.label ?? 'Choose vehicle';
+    services.find((s) => s.slug === vehicleOption)?.label ?? t('bookForMe.chooseVehicle');
 
   const copyTag = async () => {
     if (!displayTag) return;
     try {
       await navigator.clipboard.writeText(displayTag);
-      toast.success('Tag copied');
+      toast.success(t('bookForMe.tagCopied'));
     } catch {
       toast.message(displayTag);
     }
@@ -551,7 +553,7 @@ export default function BookForMePage() {
         <button type="button" onClick={() => navigate('/services/book-for-others')} className="rounded-full p-2" style={{ color: PRIMARY }}>
           <ArrowLeft className="h-6 w-6" />
         </button>
-        <h1 className="ml-2 text-xl font-semibold" style={{ color: PRIMARY }}>Gift me ride</h1>
+        <h1 className="ml-2 text-xl font-semibold" style={{ color: PRIMARY }}>{t('bookForMe.title')}</h1>
       </header>
 
       <main className="mx-auto w-full max-w-2xl space-y-4 px-4 py-4 safe-x">
@@ -562,15 +564,26 @@ export default function BookForMePage() {
               {intent.status === 'published' ? (
                 intent.audience === 'targeted' ? (
                   targetTag ? (
-                    <>
-                      <strong>{formatRoamTagDisplay(targetTag.custom_tag_name)}</strong> will see this under{' '}
-                      <strong>Book for others → Active trips → For someone</strong>.
-                    </>
+                    <Trans
+                      i18nKey="bookForMe.published.payerTagHint"
+                      ns="booking"
+                      values={{ tag: formatRoamTagDisplay(targetTag.custom_tag_name) }}
+                      components={{ strong: <strong /> }}
+                    />
                   ) : (
-                    <>Your payer will see this under <strong>Active trips → For someone</strong>.</>
+                    <Trans
+                      i18nKey="bookForMe.published.payerHint"
+                      ns="booking"
+                      components={{ strong: <strong /> }}
+                    />
                   )
                 ) : (
-                  <>Tell them to search <strong>{displayTag}</strong> in Roam</>
+                  <Trans
+                    i18nKey="bookForMe.published.tellThemTag"
+                    ns="booking"
+                    values={{ tag: displayTag }}
+                    components={{ strong: <strong /> }}
+                  />
                 )
               ) : intent.status === 'claimed' || intent.status === 'booked' ? (
                 bookForMeDetail(intent, { bookCountdown })
@@ -587,7 +600,7 @@ export default function BookForMePage() {
             ) : null}
             {intent.status === 'published' && intent.audience !== 'targeted' ? (
               <button type="button" onClick={() => void copyTag()} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl font-semibold" style={{ backgroundColor: PRIMARY, color: '#fff' }}>
-                <Copy className="h-4 w-4" /> Copy tag
+                <Copy className="h-4 w-4" /> {t('bookForMe.copyTag')}
               </button>
             ) : null}
             {intent.status === 'claimed' && (intent.can_book !== false) ? (
@@ -600,7 +613,7 @@ export default function BookForMePage() {
                   style={{ backgroundColor: PRIMARY, color: '#fff' }}
                 >
                   {booking ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  {booking ? 'Booking…' : 'Book ride'}
+                  {booking ? t('bookForMe.booking') : t('bookForMe.bookRide')}
                 </button>
                 <button
                   type="button"
@@ -609,7 +622,7 @@ export default function BookForMePage() {
                   className="w-full text-sm font-medium disabled:opacity-50"
                   style={{ color: '#b42318' }}
                 >
-                  {withdrawing ? 'Cancelling…' : 'Cancel trip'}
+                  {withdrawing ? t('bookForMe.cancelling') : t('bookForMe.cancelTrip')}
                 </button>
               </>
             ) : null}
@@ -622,7 +635,7 @@ export default function BookForMePage() {
                 className="flex h-12 w-full items-center justify-center rounded-xl font-semibold"
                 style={{ backgroundColor: PRIMARY, color: '#fff' }}
               >
-                View live trip
+                {t('bookForMe.viewLiveTrip')}
               </button>
             ) : null}
             {intentFooterAction !== 'none' ? (
@@ -654,7 +667,7 @@ export default function BookForMePage() {
         {tagLoading && !tagLocked ? (
           <div className="flex items-center justify-center gap-2 py-12" style={{ color: ON_SURFACE_VARIANT }}>
             <Loader2 className="h-5 w-5 animate-spin" />
-            Loading your tag…
+            {t('bookForMe.loadingTag')}
           </div>
         ) : null}
 
@@ -662,7 +675,12 @@ export default function BookForMePage() {
           <div className="space-y-4">
             {tagLocked && displayTag ? (
               <p className="text-center text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-                Publishing on <strong style={{ color: PRIMARY }}>{displayTag}</strong>
+                <Trans
+                  i18nKey="bookForMe.publishingOn"
+                  ns="booking"
+                  values={{ tag: displayTag }}
+                  components={{ strong: <strong style={{ color: PRIMARY }} /> }}
+                />
               </p>
             ) : null}
             <RoamModePicker value={roamMode} onChange={setRoamMode} />
@@ -673,7 +691,7 @@ export default function BookForMePage() {
               className="h-12 w-full rounded-2xl font-semibold disabled:opacity-50"
               style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_PRIMARY }}
             >
-              Continue
+              {t('bookForMe.continue')}
             </button>
           </div>
         ) : null}
@@ -682,7 +700,7 @@ export default function BookForMePage() {
           <div className="space-y-3 rounded-[24px] p-5" style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}>
             <div className="space-y-2">
               <RoamPlaceField
-                label="Pickup"
+                label={t('pickup')}
                 value={pickupAddress}
                 onChangeText={setPickupAddress}
                 onResolved={({ address, lat, lng }) => {
@@ -701,11 +719,11 @@ export default function BookForMePage() {
                 style={{ color: PRIMARY, backgroundColor: SURFACE_LOW }}
               >
                 <Navigation className="h-4 w-4 shrink-0" aria-hidden />
-                {pickupLocLoading ? 'Getting your location…' : 'Use my current location'}
+                {pickupLocLoading ? t('bookForMe.gettingLocation') : t('bookForMe.useMyLocation')}
               </button>
             </div>
             <RoamPlaceField
-              label="Destination"
+              label={t('bookForMe.destination')}
               value={dropoffAddress}
               onChangeText={setDropoffAddress}
               onResolved={({ address, lat, lng }) => {
@@ -715,7 +733,7 @@ export default function BookForMePage() {
             />
             <div className="space-y-1">
               <p className="text-xs font-bold uppercase tracking-wide" style={{ color: ON_SURFACE_VARIANT }}>
-                Vehicle
+                {t('bookForMe.vehicle')}
               </p>
               <button
                 type="button"
@@ -728,14 +746,14 @@ export default function BookForMePage() {
               </button>
             </div>
             <button type="button" onClick={() => setStep('payer')} disabled={roamMode === 'shadow_roam' && (!pickup || !dropoff)} className="h-12 w-full rounded-2xl font-semibold disabled:opacity-50" style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_PRIMARY }}>
-              Continue
+              {t('bookForMe.continue')}
             </button>
           </div>
         ) : null}
 
         {step === 'payer' && intent?.status !== 'claimed' && intent?.status !== 'booked' ? (
           <div className="space-y-3 rounded-[24px] p-5" style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}>
-            <p className="font-semibold">Who should pay?</p>
+            <p className="font-semibold">{t('bookForMe.whoShouldPay')}</p>
             {(['targeted', 'any_booker'] as const).map((a) => (
               <button
                 key={a}
@@ -752,7 +770,7 @@ export default function BookForMePage() {
                 style={{ borderColor: audience === a ? PRIMARY : 'rgba(0,0,0,0.08)' }}
               >
                 <Users className="h-5 w-5" style={{ color: PRIMARY }} />
-                <span>{a === 'any_booker' ? 'Anyone with my tag' : 'Specific person'}</span>
+                <span>{a === 'any_booker' ? t('bookForMe.anyoneWithTag') : t('bookForMe.specificPerson')}</span>
               </button>
             ))}
             {audience === 'targeted' ? (
@@ -763,7 +781,7 @@ export default function BookForMePage() {
                   className="rounded-xl px-2 py-3 text-xs font-semibold sm:text-sm"
                   style={{ backgroundColor: SURFACE_LOW, color: PRIMARY }}
                 >
-                  Roam contact
+                  {t('bookForMe.roamContact')}
                 </button>
                 <button
                   type="button"
@@ -771,7 +789,7 @@ export default function BookForMePage() {
                   className="rounded-xl px-2 py-3 text-xs font-semibold sm:text-sm"
                   style={{ backgroundColor: SURFACE_LOW, color: PRIMARY }}
                 >
-                  Phone contact
+                  {t('bookForMe.phoneContact')}
                 </button>
                 <button
                   type="button"
@@ -779,7 +797,7 @@ export default function BookForMePage() {
                   className="rounded-xl px-2 py-3 text-xs font-semibold sm:text-sm"
                   style={{ backgroundColor: SURFACE_LOW, color: PRIMARY }}
                 >
-                  Roam tag
+                  {t('bookForMe.roamTag')}
                 </button>
               </div>
             ) : null}
@@ -800,12 +818,12 @@ export default function BookForMePage() {
             ) : null}
             <button type="button" disabled={loading} onClick={() => void handlePublish()} className="h-14 w-full rounded-2xl font-semibold disabled:opacity-50" style={{ backgroundColor: PRIMARY, color: ON_PRIMARY }}>
               {loading
-                ? 'Publishing…'
+                ? t('bookForMe.publishing')
                 : effectiveAudience === 'targeted' && targetTag
-                  ? `Send to ${formatRoamTagDisplay(targetTag.custom_tag_name)}`
+                  ? t('bookForMe.sendTo', { tag: formatRoamTagDisplay(targetTag.custom_tag_name) })
                   : effectiveAudience === 'targeted'
-                    ? 'Send to payer'
-                    : 'Publish on my tag'}
+                    ? t('bookForMe.sendToPayer')
+                    : t('bookForMe.publishOnTag')}
             </button>
           </div>
         ) : null}
@@ -845,9 +863,9 @@ export default function BookForMePage() {
       <RoamTagLookupSheet
         open={tagPickerOpen}
         onClose={() => setTagPickerOpen(false)}
-        title="Who should pay?"
-        description="Search for the person who will pay using their Roam tag."
-        confirmLabel="Select payer"
+        title={t('bookForMe.whoShouldPay')}
+        description={t('bookForMe.payerSearchDescription')}
+        confirmLabel={t('bookForMe.selectPayer')}
         onSelect={(tag) => {
           setAudience('targeted');
           setTargetTag(tag);
@@ -858,7 +876,7 @@ export default function BookForMePage() {
 
       {tagOverlayOpen ? (
         <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/40 safe-x" role="dialog" aria-modal>
-          <button type="button" className="absolute inset-0" aria-label="Close" onClick={() => navigate(-1)} />
+          <button type="button" className="absolute inset-0" aria-label={tc('close')} onClick={() => navigate(-1)} />
           <div
             className="relative w-full max-w-lg rounded-t-3xl px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-5 shadow-2xl"
             style={{ backgroundColor: SURFACE_LOWEST }}
@@ -866,14 +884,14 @@ export default function BookForMePage() {
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Tag className="h-5 w-5" style={{ color: PRIMARY }} />
-                <h2 className="text-lg font-bold" style={{ color: ON_SURFACE }}>Create your Roam tag</h2>
+                <h2 className="text-lg font-bold" style={{ color: ON_SURFACE }}>{t('bookForMe.createRoamTag')}</h2>
               </div>
-              <button type="button" onClick={() => navigate(-1)} className="rounded-full p-2" aria-label="Close">
+              <button type="button" onClick={() => navigate(-1)} className="rounded-full p-2" aria-label={tc('close')}>
                 <X className="h-5 w-5" style={{ color: ON_SURFACE_VARIANT }} />
               </button>
             </div>
             <p className="mb-4 text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-              Bookers find your trip by searching this tag in Roam.
+              {t('bookForMe.tagDescription')}
             </p>
             <div className="relative mb-4">
               <span
@@ -885,7 +903,7 @@ export default function BookForMePage() {
               <input
                 value={customInput}
                 onChange={(e) => setCustomInput(normalizeRoamTagInput(e.target.value))}
-                placeholder="yourname"
+                placeholder={t('bookForMe.tagPlaceholder')}
                 maxLength={24}
                 className="h-12 w-full rounded-xl pl-9 pr-4 outline-none"
                 style={{ backgroundColor: SURFACE_LOW, color: ON_SURFACE }}
@@ -898,7 +916,7 @@ export default function BookForMePage() {
               className="flex h-12 w-full items-center justify-center rounded-2xl font-semibold disabled:opacity-50"
               style={{ backgroundColor: PRIMARY, color: ON_PRIMARY }}
             >
-              {savingTag ? 'Saving…' : 'Save and continue'}
+              {savingTag ? t('bookForMe.saving') : t('bookForMe.saveAndContinue')}
             </button>
           </div>
         </div>
@@ -906,14 +924,14 @@ export default function BookForMePage() {
 
       {vehicleSheetOpen ? (
         <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/40 safe-x" role="dialog" aria-modal>
-          <button type="button" className="absolute inset-0" aria-label="Close" onClick={() => setVehicleSheetOpen(false)} />
+          <button type="button" className="absolute inset-0" aria-label={tc('close')} onClick={() => setVehicleSheetOpen(false)} />
           <div
             className="relative w-full max-w-lg rounded-t-3xl px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-5 shadow-2xl"
             style={{ backgroundColor: SURFACE_LOWEST }}
           >
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-bold" style={{ color: ON_SURFACE }}>Choose vehicle</h2>
-              <button type="button" onClick={() => setVehicleSheetOpen(false)} className="rounded-full p-2" aria-label="Close">
+              <h2 className="text-lg font-bold" style={{ color: ON_SURFACE }}>{t('bookForMe.chooseVehicle')}</h2>
+              <button type="button" onClick={() => setVehicleSheetOpen(false)} className="rounded-full p-2" aria-label={tc('close')}>
                 <X className="h-5 w-5" style={{ color: ON_SURFACE_VARIANT }} />
               </button>
             </div>
@@ -921,7 +939,7 @@ export default function BookForMePage() {
               {services.length === 0 ? (
                 <div className="flex items-center justify-center gap-2 py-6" style={{ color: ON_SURFACE_VARIANT }}>
                   <Loader2 className="h-5 w-5 animate-spin" />
-                  Loading options…
+                  {t('bookForMe.loadingOptions')}
                 </div>
               ) : (
                 services.map((s) => {

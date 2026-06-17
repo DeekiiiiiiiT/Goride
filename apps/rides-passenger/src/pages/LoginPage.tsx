@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '@roam/auth-client';
@@ -13,6 +14,7 @@ import { PassengerEmailConfirmScreen } from '../components/auth/PassengerEmailCo
 import { PassengerPhoneAuthWizard } from '../components/auth/PassengerPhoneAuthWizard';
 
 export default function LoginPage({ session }: { session: Session | null }) {
+  const { t } = useTranslation('auth');
   const [searchParams] = useSearchParams();
   const returnTo = searchParams.get('return');
   const safeReturn =
@@ -39,9 +41,9 @@ export default function LoginPage({ session }: { session: Session | null }) {
     try {
       const { error: signErr } = await supabase.auth.signInWithPassword({ email, password });
       if (signErr) throw signErr;
-      toast.success('Welcome back');
+      toast.success(t('login.welcomeBack'));
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Authentication failed';
+      const msg = err instanceof Error ? err.message : t('login.authFailed');
       setError(msg);
     } finally {
       setIsLoading(false);
@@ -69,16 +71,16 @@ export default function LoginPage({ session }: { session: Session | null }) {
             <Car className="w-[34px] h-[34px] text-white" strokeWidth={1.75} aria-hidden />
           </div>
           <h1 className="text-[2rem] sm:text-[2.25rem] font-semibold tracking-[-0.035em] text-white drop-shadow-sm leading-tight">
-            Roam Rides
+            {t('login.brandTitle')}
           </h1>
           <p className="mt-3 max-w-[19rem] mx-auto text-[15px] leading-relaxed text-white/85">
             {mainView === 'login'
               ? loginMethod === 'email'
-                ? 'Sign in with Google, email, or phone.'
-                : 'Enter your phone—we’ll send a verification code.'
+                ? t('login.subtitleEmailLogin')
+                : t('login.subtitlePhoneLogin')
               : signupSubView === 'confirm-email'
-                ? 'Check your inbox for a confirmation link.'
-                : 'Create your rider account.'}
+                ? t('login.subtitleConfirmEmail')
+                : t('login.subtitleSignup')}
           </p>
         </header>
 
@@ -143,14 +145,14 @@ export default function LoginPage({ session }: { session: Session | null }) {
                   className="btn-touch flex w-full items-center justify-center gap-2 rounded-xl border-[1.5px] border-white/45 bg-transparent text-[15px] font-semibold text-white hover:bg-white/10 transition"
                 >
                   <Mail className="h-5 w-5 text-emerald-200" />
-                  Continue with email
+                  {t('login.continueWithEmail')}
                 </button>
                 <div className="relative py-3">
                   <div className="absolute inset-0 flex items-center" aria-hidden>
                     <span className="w-full border-t border-white/25" />
                   </div>
                   <div className="relative flex justify-center text-[11px] font-semibold uppercase tracking-[0.12em] text-white/55">
-                    <span className="rounded-full border border-white/20 bg-emerald-950/30 px-3 py-0.5">or phone</span>
+                    <span className="rounded-full border border-white/20 bg-emerald-950/30 px-3 py-0.5">{t('login.orPhone')}</span>
                   </div>
                 </div>
                 <PassengerPhoneAuthWizard
@@ -158,7 +160,7 @@ export default function LoginPage({ session }: { session: Session | null }) {
                   requireTerms
                   onVerified={() => {
                     setError(null);
-                    toast.success('Signed in');
+                    toast.success(t('login.signedIn'));
                   }}
                   onCancel={() => {
                     setMainView('login');
@@ -181,7 +183,7 @@ export default function LoginPage({ session }: { session: Session | null }) {
                   </div>
                   <div className="relative flex justify-center text-[11px] font-semibold uppercase tracking-[0.12em] text-white/55">
                     <span className="rounded-full border border-white/20 bg-emerald-950/30 px-3 py-0.5">
-                      or email
+                      {t('login.orEmail')}
                     </span>
                   </div>
                 </div>
@@ -193,10 +195,10 @@ export default function LoginPage({ session }: { session: Session | null }) {
                     type="email"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
-                    placeholder="you@example.com"
+                    placeholder={t('login.emailPlaceholder')}
                     required
                     autoComplete="email"
-                    aria-label="Email"
+                    aria-label={t('login.emailAria')}
                     className="input-touch w-full rounded-xl border border-white/50 bg-white px-4 text-zinc-900 placeholder:text-zinc-400 outline-none focus:ring-[3px] focus:ring-white/50"
                   />
 
@@ -205,17 +207,17 @@ export default function LoginPage({ session }: { session: Session | null }) {
                       type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={e => setPassword(e.target.value)}
-                      placeholder="Enter your password"
+                      placeholder={t('login.passwordPlaceholder')}
                       required
                       autoComplete="current-password"
-                      aria-label="Password"
+                      aria-label={t('login.passwordAria')}
                       className="input-touch w-full rounded-xl border border-white/50 bg-white px-4 pr-11 text-zinc-900 placeholder:text-zinc-400 outline-none focus:ring-[3px] focus:ring-white/50"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-800"
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      aria-label={showPassword ? t('login.hidePassword') : t('login.showPassword')}
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
@@ -229,10 +231,10 @@ export default function LoginPage({ session }: { session: Session | null }) {
                     {isLoading ? (
                       <>
                         <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
-                        Signing in…
+                        {t('login.signingIn')}
                       </>
                     ) : (
-                      'Sign in'
+                      t('login.signIn')
                     )}
                   </button>
                 </form>
@@ -246,7 +248,7 @@ export default function LoginPage({ session }: { session: Session | null }) {
                       setError(null);
                     }}
                   >
-                    Sign in with phone instead
+                    {t('login.signInWithPhone')}
                   </button>
                 </div>
               </>
@@ -258,7 +260,7 @@ export default function LoginPage({ session }: { session: Session | null }) {
                 requireTerms={false}
                 onVerified={() => {
                   setError(null);
-                  toast.success('Welcome back');
+                  toast.success(t('login.welcomeBack'));
                 }}
                 onCancel={() => {
                   setLoginMethod('email');
@@ -281,7 +283,7 @@ export default function LoginPage({ session }: { session: Session | null }) {
               }}
               className="text-sm font-semibold text-white/90 hover:text-white"
             >
-              Don&apos;t have an account? Sign up
+              {t('login.noAccount')}
             </button>
           ) : (
             <button
@@ -294,14 +296,14 @@ export default function LoginPage({ session }: { session: Session | null }) {
               }}
               className="text-sm font-semibold text-white/90 hover:text-white"
             >
-              Already have an account? Sign in
+              {t('login.hasAccount')}
             </button>
           )}
           <LegalPolicyLinks
             variant="sentence"
             order="terms-first"
             className="text-[11px] font-medium tracking-wide text-white/45"
-            beforePrivacy={`© ${year} Roam · By continuing, you agree to our `}
+            beforePrivacy={t('login.copyrightPrefix', { year })}
             privacyClassName="underline underline-offset-2 hover:text-white/70"
             termsClassName="underline underline-offset-2 hover:text-white/70"
           />

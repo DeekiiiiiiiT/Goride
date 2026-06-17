@@ -21,6 +21,7 @@ import { Textarea } from '@roam/ui';
 import { CalendarIcon, Clock, DollarSign, MapPin, Loader2, Route, Car, WifiOff, Info, XCircle, Plus, Trash2, Package } from "lucide-react";
 import { format } from "date-fns";
 import { ManualTripInput } from '../../utils/tripFactory';
+import { openExternalNavigation } from '../../utils/rideNavigation';
 import { RoutePoint, TripStop } from '../../types/tripSession';
 import { LocationInput } from '@roam/ui';
 import { calculateMultiLegRouteDistance, calculatePathDistance } from '../../utils/locationService';
@@ -322,8 +323,11 @@ export function ManualTripForm({
 
   const handleOpenNavigation = () => {
     if (!formData.dropoffLocation) return;
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(formData.dropoffLocation)}`;
-    window.open(url, '_blank');
+    openExternalNavigation({
+      lat: NaN,
+      lng: NaN,
+      address: formData.dropoffLocation,
+    });
   };
 
   return (

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ArrowLeft, ArrowRight, CircleDot, Clock, Loader2, MapPin } from 'lucide-react';
@@ -59,6 +60,7 @@ function combineDayAndTime(dayId: string, time24: string): string | null {
 }
 
 export default function ScheduleRidePage() {
+  const { t } = useTranslation('booking');
   const navigate = useNavigate();
   const scheduleDays = useMemo(() => buildScheduleDays(7), []);
   const { active: services, loading: typesLoading } = useRidesVehicleTypes();
@@ -111,12 +113,12 @@ export default function ScheduleRidePage() {
       );
       setQuotesBySlug(Object.fromEntries(results));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not get fare estimate.');
+      toast.error(e instanceof Error ? e.message : t('errors.couldNotGetFare'));
       setQuotesBySlug({});
     } finally {
       setQuoting(false);
     }
-  }, [pickupCoords, dropoffCoords, scheduledPickupAt, services]);
+  }, [pickupCoords, dropoffCoords, scheduledPickupAt, services, t]);
 
   useEffect(() => {
     if (!pickupCoords || !dropoffCoords || !scheduledPickupAt || services.length === 0) return;
@@ -129,11 +131,11 @@ export default function ScheduleRidePage() {
 
   const handleSchedule = async () => {
     if (!pickupCoords || !dropoffCoords || !scheduledPickupAt) {
-      toast.error('Enter pickup and destination.');
+      toast.error(t('errors.enterPickupDestination'));
       return;
     }
     if (!selectedQuote?.quote_token) {
-      toast.error('Wait for fare estimate or pick another service.');
+      toast.error(t('errors.waitForFare'));
       return;
     }
     setSubmitting(true);
@@ -154,7 +156,7 @@ export default function ScheduleRidePage() {
       });
       navigate('/services/schedule/confirmed', { state: { confirmation } });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not schedule ride.');
+      toast.error(e instanceof Error ? e.message : t('errors.couldNotSchedule'));
     } finally {
       setSubmitting(false);
     }
@@ -168,11 +170,11 @@ export default function ScheduleRidePage() {
           onClick={() => navigate('/services')}
           className="rounded-full p-2 transition-colors active:scale-95 passenger-row-hover"
           style={{ color: PRIMARY }}
-          aria-label="Back to services"
+          aria-label={t('backToServices')}
         >
           <ArrowLeft className="h-6 w-6" strokeWidth={2} aria-hidden />
         </button>
-        <h1 className="ml-4 text-xl font-semibold tracking-tight">Schedule Ride</h1>
+        <h1 className="ml-4 text-xl font-semibold tracking-tight">{t('scheduleRide')}</h1>
       </header>
 
       <main
@@ -184,7 +186,7 @@ export default function ScheduleRidePage() {
         <section className="mb-4">
           <div className="rounded-[24px] p-6" style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}>
             <span className="mb-4 block text-xs font-bold tracking-wide" style={{ color: SECONDARY }}>
-              PICKUP DATE &amp; TIME
+              {t('pickupDateTime')}
             </span>
             <div className="flex flex-col gap-4">
               <div className="-mx-1 flex gap-3 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -214,11 +216,11 @@ export default function ScheduleRidePage() {
                 onClick={() => setTimeSheetOpen(true)}
                 className="flex w-full items-center justify-between rounded-xl p-4 text-left transition-colors active:scale-[0.99] touch-manipulation"
                 style={{ backgroundColor: SURFACE_LOW }}
-                aria-label="Change departure time"
+                aria-label={t('changeDepartureTime')}
               >
                 <div className="flex flex-col">
                   <span className="text-[10px] font-bold tracking-wide" style={{ color: SECONDARY }}>
-                    DEPART AT
+                    {t('departAt')}
                   </span>
                   <span className="text-2xl font-bold" style={{ color: PRIMARY }}>
                     {formatTimeLabel(departTime)}
@@ -250,10 +252,10 @@ export default function ScheduleRidePage() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <label className="mb-1 block text-xs font-bold tracking-wide" style={{ color: SECONDARY }}>
-                    PICKUP LOCATION
+                    {t('pickupLocation')}
                   </label>
                   <RoamPlaceField
-                    label="Pickup"
+                    label={t('pickup')}
                     hideLabel
                     value={pickup}
                     onChangeText={(v) => {
@@ -264,7 +266,7 @@ export default function ScheduleRidePage() {
                       setPickup(address);
                       setPickupCoords({ lat, lng });
                     }}
-                    placeholder="Enter pickup address"
+                    placeholder={t('enterPickupAddress')}
                     portalSuggestions
                   />
                 </div>
@@ -275,10 +277,10 @@ export default function ScheduleRidePage() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <label className="mb-1 block text-xs font-bold tracking-wide" style={{ color: SECONDARY }}>
-                    DESTINATION
+                    {t('destination')}
                   </label>
                   <RoamPlaceField
-                    label="Destination"
+                    label={t('destinationField')}
                     hideLabel
                     value={destination}
                     onChangeText={(v) => {
@@ -289,7 +291,7 @@ export default function ScheduleRidePage() {
                       setDestination(address);
                       setDropoffCoords({ lat, lng });
                     }}
-                    placeholder="Enter destination"
+                    placeholder={t('enterDestination')}
                     portalSuggestions
                   />
                 </div>
@@ -300,7 +302,7 @@ export default function ScheduleRidePage() {
 
         <section className="mb-4">
           <span className="mb-3 block px-2 text-xs font-bold tracking-wide" style={{ color: SECONDARY }}>
-            SELECT SERVICE
+            {t('selectService')}
           </span>
           {typesLoading ? (
             <div className="flex justify-center py-8">
@@ -335,7 +337,7 @@ export default function ScheduleRidePage() {
                     <div className="min-w-0 flex-1">
                       <h3 className="font-bold">{service.label}</h3>
                       <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-                        {service.description ?? 'Scheduled ride'}
+                        {service.description ?? t('scheduledRideFallback')}
                       </p>
                     </div>
                     <span className="shrink-0 text-lg font-semibold" style={{ color: PRIMARY }}>
@@ -391,15 +393,19 @@ export default function ScheduleRidePage() {
             {submitting ? (
               <>
                 <Loader2 className="h-5 w-5 animate-spin" />
-                Scheduling…
+                {t('scheduling')}
               </>
             ) : (
               <>
                 <span>
-                  Schedule Ride
                   {selectedQuote
-                    ? ` for ${formatMoneyMinor(selectedQuote.fare_estimate_minor, selectedQuote.currency)}`
-                    : ''}
+                    ? t('scheduleRideFor', {
+                        fare: formatMoneyMinor(
+                          selectedQuote.fare_estimate_minor,
+                          selectedQuote.currency,
+                        ),
+                      })
+                    : t('scheduleRide')}
                 </span>
                 <ArrowRight className="h-5 w-5" aria-hidden />
               </>

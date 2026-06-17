@@ -13,6 +13,7 @@ import {
   BarChart3,
   History,
   Navigation,
+  Settings,
   type LucideIcon,
 } from 'lucide-react';
 import { DriverMode } from '../contexts/DriverContext';
@@ -47,14 +48,17 @@ const independentOnlyNavItems: NavItem[] = [
   { id: 'expenses', label: 'Expenses', icon: Receipt },
   { id: 'tax', label: 'Tax Center', icon: FileText },
   { id: 'insurance', label: 'Insurance', icon: Shield },
+  { id: 'settings', label: 'Settings', icon: Settings },
 ];
+
+const settingsNavItem: NavItem = { id: 'settings', label: 'Settings', icon: Settings };
 
 export function getNavigationItems(mode: DriverMode): NavItem[] {
   if (mode === 'independent') {
     // Bottom nav covers Home, Earnings, Trips, and Profile for independent drivers.
     return independentOnlyNavItems;
   }
-  return [...commonNavItems, ...fleetOnlyNavItems];
+  return [...commonNavItems, ...fleetOnlyNavItems, settingsNavItem];
 }
 
 export function getBottomNavItems(): NavItem[] {

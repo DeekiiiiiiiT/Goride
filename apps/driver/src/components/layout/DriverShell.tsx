@@ -52,6 +52,7 @@ import { DriverCashSettlementOverlay } from '../rides/DriverCashSettlementOverla
 import { DriverDigitalTripCompleteOverlay } from '../rides/DriverDigitalTripCompleteOverlay';
 import { DriverArrivedPickupOverlay } from '../rides/DriverArrivedPickupOverlay';
 import { DriverWalletsPage } from '../rides/DriverWalletsPage';
+import { DriverSettingsPage } from '../settings/DriverSettingsPage';
 
 export function DriverShell({ forcePassengerRides = false }: { forcePassengerRides?: boolean }) {
   const { mode, isFleetDriver, isIndependentDriver, fleet, loading } = useDriver();
@@ -79,6 +80,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
       currentPage === 'expenses' ||
       currentPage === 'tax' ||
       currentPage === 'insurance' ||
+      currentPage === 'settings' ||
       currentPage === 'documents');
   const mintDriverLayout =
     mintHomeLayout ||
@@ -195,6 +197,9 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
         return !isFleetDriver ? <TaxCenter /> : null;
       case 'insurance':
         return !isFleetDriver ? <InsuranceCenter /> : null;
+
+      case 'settings':
+        return <DriverSettingsPage />;
 
       default:
         return (

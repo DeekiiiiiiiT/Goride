@@ -13,11 +13,15 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script>
       (function () {
-        var key = 'roam-passenger-theme';
+        var themeKey = 'roam-passenger-theme';
+        var localeKey = 'roam-passenger-locale';
         var mode = 'light';
+        var locale = 'en-GB';
         try {
-          var stored = localStorage.getItem(key);
+          var stored = localStorage.getItem(themeKey);
           if (stored === 'light' || stored === 'dark' || stored === 'auto') mode = stored;
+          var storedLocale = localStorage.getItem(localeKey);
+          if (storedLocale === 'en-GB' || storedLocale === 'es') locale = storedLocale;
         } catch (e) {}
         var dark =
           mode === 'dark' ||
@@ -25,6 +29,8 @@
         var resolved = dark ? 'dark' : 'light';
         document.documentElement.dataset.theme = resolved;
         document.documentElement.dataset.themeMode = mode;
+        document.documentElement.lang = locale;
+        document.documentElement.dataset.locale = locale;
         if (dark) document.documentElement.classList.add('dark');
       })();
     </script>

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import {
   ArrowLeft,
@@ -36,41 +37,39 @@ import {
 const ACTIVE_PROMOS = [
   {
     id: 'rides20',
-    title: '20% off next 3 rides',
-    description:
-      'Valid for all premium and executive class bookings in the city area.',
-    expires: 'EXPIRES DEC 24, 2023',
+    titleKey: 'promo.promos.rides20Title',
+    descriptionKey: 'promo.promos.rides20Description',
+    expiresKey: 'promo.promos.rides20Expires',
     code: 'ROAM20OFF',
     codeStyle: 'primary' as const,
     icon: Car,
     iconBg: 'rgba(0, 74, 198, 0.1)',
     iconColor: PRIMARY,
     comingSoon: true,
-    footerAction: 'DETAILS',
+    footerActionKey: 'promo.details',
     variant: 'light' as const,
   },
   {
     id: 'airport5',
-    title: '$5 off airport trips',
-    description:
-      'Flat discount on any trip originating or ending at International Hub.',
-    expires: 'EXPIRES JAN 05, 2024',
+    titleKey: 'promo.promos.airport5Title',
+    descriptionKey: 'promo.promos.airport5Description',
+    expiresKey: 'promo.promos.airport5Expires',
     code: 'FLYSAFE5',
     codeStyle: 'tertiary' as const,
     icon: Plane,
     iconBg: 'rgba(148, 55, 0, 0.1)',
     iconColor: TERTIARY,
     comingSoon: false,
-    footerAction: 'DETAILS',
+    footerActionKey: 'promo.details',
     variant: 'light' as const,
   },
   {
     id: 'welcome',
-    title: 'First Ride Free',
-    description: 'Welcome to Roam Rides. Enjoy your first ride on us up to $25.',
-    badge: 'NEW MEMBERS ONLY',
+    titleKey: 'promo.promos.welcomeTitle',
+    descriptionKey: 'promo.promos.welcomeDescription',
+    badgeKey: 'promo.newMembersOnly',
     code: 'WELCOMEVIP',
-    footerAction: 'REDEEM NOW',
+    footerActionKey: 'promo.redeemNow',
     icon: Award,
     variant: 'featured' as const,
   },
@@ -120,10 +119,25 @@ function PromoCardFooter({
 
 export default function PromoCodesPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation('support');
+  const { t: tc } = useTranslation('common');
   const [code, setCode] = useState('');
 
+  const promos = useMemo(
+    () =>
+      ACTIVE_PROMOS.map((promo) => ({
+        ...promo,
+        title: t(promo.titleKey),
+        description: t(promo.descriptionKey),
+        expires: 'expiresKey' in promo ? t(promo.expiresKey) : undefined,
+        badge: 'badgeKey' in promo ? t(promo.badgeKey) : undefined,
+        footerAction: t(promo.footerActionKey),
+      })),
+    [t],
+  );
+
   const notifySoon = () => {
-    toast.message('Coming soon');
+    toast.message(tc('comingSoon'));
   };
 
   const handleApply = () => {
@@ -145,7 +159,7 @@ export default function PromoCodesPage() {
           onClick={() => navigate('/account')}
           className="flex h-10 w-10 items-center justify-center rounded-full transition-colors active:scale-95 passenger-row-hover"
           style={{ color: PRIMARY }}
-          aria-label="Back to account"
+          aria-label={t('promo.backAria')}
         >
           <ArrowLeft className="h-6 w-6" strokeWidth={2} aria-hidden />
         </button>
@@ -153,7 +167,7 @@ export default function PromoCodesPage() {
           className="flex-1 text-center text-xl font-semibold tracking-tight"
           style={{ color: PRIMARY }}
         >
-          Promo Codes
+          {t('promo.title')}
         </h1>
         <div className="w-10 shrink-0" aria-hidden />
       </header>
@@ -164,7 +178,7 @@ export default function PromoCodesPage() {
             className="text-xs font-bold uppercase tracking-widest"
             style={{ color: SECONDARY }}
           >
-            Add New Code
+            {t('promo.addNewCode')}
           </h2>
           <div className="flex items-center gap-3">
             <div className="relative min-w-0 flex-1">
@@ -177,7 +191,7 @@ export default function PromoCodesPage() {
                 type="text"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                placeholder="Enter promo code"
+                placeholder={t('promo.enterCode')}
                 className="w-full rounded-xl py-4 pl-12 pr-4 text-base outline-none transition-all focus:ring-2 focus:ring-[#004ac6]"
                 style={{
                   backgroundColor: SURFACE_LOWEST,
@@ -197,7 +211,7 @@ export default function PromoCodesPage() {
                 boxShadow: code.trim() ? '0 10px 25px rgba(0, 74, 198, 0.2)' : undefined,
               }}
             >
-              APPLY
+              {t('promo.apply')}
             </button>
           </div>
         </section>
@@ -205,18 +219,18 @@ export default function PromoCodesPage() {
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold tracking-tight" style={{ color: ON_SURFACE }}>
-              Active Promos
+              {t('promo.activePromos')}
             </h2>
             <span
               className="rounded-full px-3 py-1 text-[11px] font-semibold"
               style={{ backgroundColor: SECONDARY_CONTAINER, color: ON_SECONDARY_CONTAINER }}
             >
-              3 AVAILABLE
+              {t('promo.available')}
             </span>
           </div>
 
           <div className="grid gap-4">
-            {ACTIVE_PROMOS.map((promo) => {
+            {promos.map((promo) => {
               if (promo.variant === 'featured') {
                 const Icon = promo.icon;
                 return (
@@ -272,7 +286,7 @@ export default function PromoCodesPage() {
                           color: ON_SURFACE_VARIANT,
                         }}
                       >
-                        Coming Soon
+                        {t('promo.comingSoon')}
                       </span>
                     </div>
                   ) : null}
@@ -316,7 +330,7 @@ export default function PromoCodesPage() {
             <Ticket className="h-12 w-12" style={{ color: OUTLINE }} aria-hidden />
           </div>
           <p className="max-w-xs text-sm" style={{ color: SECONDARY }}>
-            Check back often for seasonal promotions and loyalty rewards tailored for your commute.
+            {t('promo.footerHint')}
           </p>
         </section>
       </main>

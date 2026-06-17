@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { History, Home, LayoutGrid, User } from 'lucide-react';
 import { ACTIVITY_TAB_ENABLED } from '@/lib/activityTabFlags';
 
@@ -7,18 +8,19 @@ const NAV_ACTIVE = 'var(--home-nav-active, #00a86b)';
 const NAV_INACTIVE = 'var(--home-nav-inactive, #9ca3af)';
 
 const BASE_NAV_ITEMS = [
-  { to: '/', label: 'Home', icon: Home, end: true },
-  { to: '/services', label: 'Services', icon: LayoutGrid, end: false },
-  { to: '/account', label: 'Account', icon: User, end: false },
+  { to: '/', labelKey: 'common:nav.home', icon: Home, end: true },
+  { to: '/services', labelKey: 'common:nav.services', icon: LayoutGrid, end: false },
+  { to: '/account', labelKey: 'common:nav.account', icon: User, end: false },
 ] as const;
 
 export function PassengerBottomNav() {
+  const { t } = useTranslation();
   const navItems = useMemo(() => {
     if (!ACTIVITY_TAB_ENABLED) return [...BASE_NAV_ITEMS];
     return [
       BASE_NAV_ITEMS[0],
       BASE_NAV_ITEMS[1],
-      { to: '/activity', label: 'Activity', icon: History, end: false },
+      { to: '/activity', labelKey: 'common:nav.activity', icon: History, end: false },
       BASE_NAV_ITEMS[2],
     ];
   }, []);
@@ -29,7 +31,7 @@ export function PassengerBottomNav() {
       aria-label="Main"
     >
       <div className="mx-auto flex w-full max-w-xl items-center justify-between px-6 pb-8 pt-3 sm:max-w-2xl">
-        {navItems.map(({ to, label, icon: Icon, end }) => (
+        {navItems.map(({ to, labelKey, icon: Icon, end }) => (
           <NavLink
             key={to}
             to={to}
@@ -60,7 +62,7 @@ export function PassengerBottomNav() {
                       : 'font-bold text-gray-500 dark:text-slate-400'
                   }`}
                 >
-                  {label}
+                  {t(labelKey)}
                 </span>
               </>
             )}

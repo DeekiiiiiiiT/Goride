@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { ArrowLeft, ArrowRight, Bus, BusFront, Minus, Plus } from 'lucide-react';
 
@@ -23,48 +24,7 @@ import {
 const HERO_IMAGE_URL =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuDhQ5Zee_xBm1kMrybLfHH-NM8-tcw6rDRADhLalu3Rt2YZPKH0pETGXyOk1mo9Ixp7s2p2WUrSPHn4ZCzOdHoaPCemiU4YSO6r-GkjNHwy8zV373b-ddJQzEnjThInyTAhpO3v8T_6e61DrPC4vI6h3sWo4l2Vr6OPTUxNc2b6_q6X8XImSaHx---S5eGwtj3O3mF7hrsMT8sB5zOBzevbbFtAxlJXLHJA9Lbtys2B_XU94ytlEg-HzU6XewUHK3mloNIIOmOmtEpt';
 
-const EVENT_TYPES = [
-  'Wedding Ceremony',
-  'Corporate Trip',
-  'Birthday Gala',
-  'Airport Shuttle (Group)',
-  'Private Tour',
-] as const;
-
-const VEHICLES = [
-  {
-    id: 'van' as const,
-    name: 'Luxury Van',
-    capacity: 8,
-    capacityLabel: 'UP TO 8',
-    description: 'Perfect for smaller groups and weddings.',
-    icon: BusFront,
-    iconBg: SECONDARY_CONTAINER,
-    iconColor: ON_SECONDARY_CONTAINER,
-  },
-  {
-    id: 'minibus' as const,
-    name: 'Minibus',
-    capacity: 14,
-    capacityLabel: 'UP TO 14',
-    description: 'Optimal for corporate team transport.',
-    icon: Bus,
-    iconBg: PRIMARY_CONTAINER,
-    iconColor: ON_PRIMARY_CONTAINER,
-  },
-  {
-    id: 'executive' as const,
-    name: 'Executive Bus',
-    capacity: 20,
-    capacityLabel: 'UP TO 20',
-    description: 'Premium comfort for large delegations.',
-    icon: Bus,
-    iconBg: TERTIARY_FIXED,
-    iconColor: ON_TERTIARY_FIXED_VARIANT,
-  },
-] as const;
-
-type VehicleId = (typeof VEHICLES)[number]['id'];
+type VehicleId = 'van' | 'minibus' | 'executive';
 
 function GlassCard({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
@@ -82,13 +42,61 @@ function GlassCard({ children, className = '' }: { children: React.ReactNode; cl
 
 export default function EventBookingPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation('booking');
   const [passengers, setPassengers] = useState(8);
-  const [eventType, setEventType] = useState<string>(EVENT_TYPES[0]);
+  const [eventType, setEventType] = useState<string>('wedding');
   const [eventDate, setEventDate] = useState('');
   const [eventTime, setEventTime] = useState('');
   const [vehicleId, setVehicleId] = useState<VehicleId>('minibus');
 
-  const selectedVehicle = VEHICLES.find((v) => v.id === vehicleId) ?? VEHICLES[1];
+  const eventTypes = useMemo(
+    () => [
+      { id: 'wedding', label: t('event.types.wedding') },
+      { id: 'corporate', label: t('event.types.corporate') },
+      { id: 'birthday', label: t('event.types.birthday') },
+      { id: 'airport', label: t('event.types.airport') },
+      { id: 'tour', label: t('event.types.tour') },
+    ],
+    [t],
+  );
+
+  const vehicles = useMemo(
+    () => [
+      {
+        id: 'van' as const,
+        name: t('event.vehicles.van'),
+        capacity: 8,
+        capacityLabel: t('event.vehicles.vanCapacity'),
+        description: t('event.vehicles.vanDescription'),
+        icon: BusFront,
+        iconBg: SECONDARY_CONTAINER,
+        iconColor: ON_SECONDARY_CONTAINER,
+      },
+      {
+        id: 'minibus' as const,
+        name: t('event.vehicles.minibus'),
+        capacity: 14,
+        capacityLabel: t('event.vehicles.minibusCapacity'),
+        description: t('event.vehicles.minibusDescription'),
+        icon: Bus,
+        iconBg: PRIMARY_CONTAINER,
+        iconColor: ON_PRIMARY_CONTAINER,
+      },
+      {
+        id: 'executive' as const,
+        name: t('event.vehicles.executive'),
+        capacity: 20,
+        capacityLabel: t('event.vehicles.executiveCapacity'),
+        description: t('event.vehicles.executiveDescription'),
+        icon: Bus,
+        iconBg: TERTIARY_FIXED,
+        iconColor: ON_TERTIARY_FIXED_VARIANT,
+      },
+    ],
+    [t],
+  );
+
+  const selectedVehicle = vehicles.find((v) => v.id === vehicleId) ?? vehicles[1];
 
   const adjustPassengers = (delta: number) => {
     setPassengers((n) => Math.min(20, Math.max(1, n + delta)));
@@ -96,14 +104,14 @@ export default function EventBookingPage() {
 
   const handleContinue = () => {
     if (!eventDate || !eventTime) {
-      toast.error('Select event date and time.');
+      toast.error(t('event.selectDateTime'));
       return;
     }
     if (passengers > selectedVehicle.capacity) {
-      toast.error(`This vehicle fits up to ${selectedVehicle.capacity} passengers.`);
+      toast.error(t('event.vehicleCapacity', { capacity: selectedVehicle.capacity }));
       return;
     }
-    toast.message('Event bookings are coming soon.');
+    toast.message(t('event.comingSoon'));
   };
 
   return (
@@ -117,12 +125,12 @@ export default function EventBookingPage() {
           onClick={() => navigate('/services')}
           className="rounded-full p-2 transition-colors active:scale-95 passenger-row-hover"
           style={{ color: PRIMARY }}
-          aria-label="Back to services"
+          aria-label={t('backToServices')}
         >
           <ArrowLeft className="h-6 w-6" strokeWidth={2} aria-hidden />
         </button>
         <h1 className="ml-4 text-xl font-semibold tracking-tight" style={{ color: PRIMARY }}>
-          Event Booking
+          {t('event.title')}
         </h1>
       </header>
 
@@ -132,10 +140,10 @@ export default function EventBookingPage() {
           <div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/60 to-transparent p-6">
             <div className="text-white">
               <p className="text-xs font-bold uppercase tracking-wide opacity-90">
-                Specialized service
+                {t('event.specializedService')}
               </p>
               <h2 className="text-[30px] font-bold leading-tight tracking-tight">
-                Group Experiences
+                {t('event.groupExperiences')}
               </h2>
             </div>
           </div>
@@ -147,7 +155,7 @@ export default function EventBookingPage() {
               className="mb-3 block text-xs font-bold tracking-wide"
               style={{ color: SECONDARY }}
             >
-              PASSENGERS
+              {t('event.passengers')}
             </label>
             <div
               className="flex items-center justify-between rounded-xl p-2"
@@ -158,7 +166,7 @@ export default function EventBookingPage() {
                 onClick={() => adjustPassengers(-1)}
                 className="flex h-10 w-10 items-center justify-center rounded-lg bg-white shadow-sm transition-transform active:scale-95"
                 style={{ color: PRIMARY }}
-                aria-label="Fewer passengers"
+                aria-label={t('event.fewerPassengersAria')}
               >
                 <Minus className="h-5 w-5" aria-hidden />
               </button>
@@ -168,7 +176,7 @@ export default function EventBookingPage() {
                 onClick={() => adjustPassengers(1)}
                 className="flex h-10 w-10 items-center justify-center rounded-lg bg-white shadow-sm transition-transform active:scale-95"
                 style={{ color: PRIMARY }}
-                aria-label="More passengers"
+                aria-label={t('event.morePassengersAria')}
               >
                 <Plus className="h-5 w-5" aria-hidden />
               </button>
@@ -180,7 +188,7 @@ export default function EventBookingPage() {
               className="mb-3 block text-xs font-bold tracking-wide"
               style={{ color: SECONDARY }}
             >
-              EVENT TYPE
+              {t('event.eventType')}
             </label>
             <select
               value={eventType}
@@ -188,9 +196,9 @@ export default function EventBookingPage() {
               className="h-14 w-full rounded-xl border-none px-4 text-base outline-none focus:ring-2 focus:ring-[#004ac6]"
               style={{ backgroundColor: SURFACE_LOW, color: ON_SURFACE }}
             >
-              {EVENT_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {type}
+              {eventTypes.map((type) => (
+                <option key={type.id} value={type.id}>
+                  {type.label}
                 </option>
               ))}
             </select>
@@ -202,12 +210,12 @@ export default function EventBookingPage() {
             className="mb-3 block text-xs font-bold tracking-wide"
             style={{ color: SECONDARY }}
           >
-            SCHEDULE
+            {t('event.schedule')}
           </label>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-                Date
+                {t('event.date')}
               </p>
               <input
                 type="date"
@@ -219,7 +227,7 @@ export default function EventBookingPage() {
             </div>
             <div className="space-y-2">
               <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-                Time
+                {t('event.time')}
               </p>
               <input
                 type="time"
@@ -237,9 +245,9 @@ export default function EventBookingPage() {
             className="block px-2 text-xs font-bold tracking-wide"
             style={{ color: SECONDARY }}
           >
-            SELECT VEHICLE
+            {t('event.selectVehicle')}
           </label>
-          {VEHICLES.map((vehicle) => {
+          {vehicles.map((vehicle) => {
             const selected = vehicle.id === vehicleId;
             const Icon = vehicle.icon;
             return (
@@ -290,11 +298,11 @@ export default function EventBookingPage() {
             className="flex h-14 w-full items-center justify-center gap-2 rounded-xl text-lg font-semibold shadow-lg transition-transform active:scale-95"
             style={{ backgroundColor: PRIMARY, color: ON_PRIMARY }}
           >
-            Continue to Booking
+            {t('event.continueToBooking')}
             <ArrowRight className="h-5 w-5" aria-hidden />
           </button>
           <p className="mt-4 text-center text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-            Prices include professional chauffeur and insurance.
+            {t('event.pricingNote')}
           </p>
         </div>
       </main>

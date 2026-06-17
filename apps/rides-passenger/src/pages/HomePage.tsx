@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
@@ -38,6 +39,11 @@ import {
 import { TripPaymentMethodBar } from '@/components/TripPaymentMethodBar';
 import { TripPaymentMethodSheet } from '@/components/TripPaymentMethodSheet';
 import { useDefaultPaymentMethod } from '@/hooks/useDefaultPaymentMethod';
+import {
+  coerceDigitalPaymentMethodId,
+  DELEGATED_BOOKING_EXCLUDED_PAYMENT_IDS,
+  isDigitalTripPaymentMethodId,
+} from '@/lib/tripPaymentMethods';
 import { useRidesVehicleTypes } from '@/hooks/useRidesVehicleTypes';
 import { formatVehicleEtaLineCompact } from '@/utils/formatRideEta';
 import { usePermissionPolicy } from '@/hooks/usePermissionPolicy';
@@ -86,6 +92,8 @@ function truncateRouteLabel(text: string, maxLen = 44): string {
 }
 
 export default function HomePage() {
+  const { t } = useTranslation('home');
+  const { t: tc } = useTranslation('common');
   const navigate = useNavigate();
   const { setTripPickerActive } = useHomeTripPicker();
   const { keyboardInset, height: viewportHeight } = useVisualViewport();
@@ -175,10 +183,16 @@ export default function HomePage() {
   const [bookError, setBookError] = useState<string | null>(null);
   const { selectedId: selectedPaymentId, selectedMethod: selectedPayment, select: setSelectedPaymentId } =
     useDefaultPaymentMethod();
+  const requiresDigitalPayment = Boolean(guestRecipient);
   const [paymentSheetOpen, setPaymentSheetOpen] = useState(false);
   const [walletArrearsMinor, setWalletArrearsMinor] = useState(0);
   const [walletCurrency, setWalletCurrency] = useState('JMD');
   const [payArrearsOpen, setPayArrearsOpen] = useState(false);
+
+  useEffect(() => {
+    if (!requiresDigitalPayment || isDigitalTripPaymentMethodId(selectedPaymentId)) return;
+    setSelectedPaymentId(coerceDigitalPaymentMethodId(selectedPaymentId));
+  }, [requiresDigitalPayment, selectedPaymentId, setSelectedPaymentId]);
 
   const [quotesBySlug, setQuotesBySlug] = useState<Record<string, FareQuoteResponse>>({});
   const { permissions } = usePermissionPolicy('rider');
@@ -396,10 +410,10 @@ export default function HomePage() {
       toast.error(
         firstErr?.reason instanceof Error
           ? firstErr.reason.message
-          : 'Could not get fares',
+          : t('errors.couldNotGetFares'),
       );
     }
-  }, [pickup, dropoff, serviceSlugs]);
+  }, [pickup, dropoff, serviceSlugs, t]);
 
   /** Stable key so quote fetch only runs when coords or service list actually change. */
   const quoteFetchKey = useMemo(() => {
@@ -447,14 +461,14 @@ export default function HomePage() {
     setBookError(null);
 
     if (!pickup || !dropoff) {
-      const msg = 'Choose pickup and drop-off from the search suggestions.';
+      const msg = t('errors.choosePickupDropoff');
       setBookError(msg);
       toast.error(msg);
       return;
     }
 
     if (initialGpsLoading && !manualRouteReady) {
-      const msg = 'Still finding your location — wait a moment or set pickup on the map.';
+      const msg = t('errors.findingLocationWait');
       setBookError(msg);
       toast.error(msg);
       return;
@@ -462,8 +476,8 @@ export default function HomePage() {
 
     if (!quote?.quote_token) {
       const msg = quotesLoading
-        ? 'Loading fares…'
-        : 'Could not get a fare — edit your trip and try again.';
+        ? t('errors.loadingFares')
+        : t('errors.couldNotGetFare');
       setBookError(msg);
       toast.error(msg);
       if (!quotesLoading) void fetchAllServiceQuotes();
@@ -476,7 +490,7 @@ export default function HomePage() {
         (async () => {
           const { data: { session } } = await supabase.auth.getSession();
           if (!session?.user) {
-            const msg = 'Sign in to book a ride.';
+            const msg = t('errors.signInToBook');
             setBookError(msg);
             toast.error(msg);
             navigate('/login');
@@ -486,7 +500,7 @@ export default function HomePage() {
           if (!locationAllowsBooking) {
             const geo = await checkGeolocationGranted();
             if (!locationOkForBooking(geo)) {
-              const msg = 'Enable location in your device settings to book a ride.';
+              const msg = t('errors.enableLocation');
               setBookError(msg);
               toast.error(msg);
               const next = await requestGeolocationPermission();
@@ -498,9 +512,17 @@ export default function HomePage() {
           }
 
           if (guestRecipient && !guestRecipient.passengerUserId) {
-            const msg = 'The passenger must authorize before you can book.';
+            const msg = t('errors.passengerMustAuthorize');
             setBookError(msg);
             toast.error(msg);
+            return;
+          }
+
+          if (requiresDigitalPayment && !isDigitalTripPaymentMethodId(selectedPaymentId)) {
+            const msg = t('errors.digitalPaymentRequired');
+            setBookError(msg);
+            toast.error(msg);
+            setSelectedPaymentId(coerceDigitalPaymentMethodId(selectedPaymentId));
             return;
           }
 
@@ -551,7 +573,7 @@ export default function HomePage() {
               );
             }
             clearDelegatedBookingDrafts();
-            toast.success('Searching for a driver…');
+            toast.success(t('success.searchingDriver'));
             navigate(`/ride/${ride.id}`);
           } catch (createErr: unknown) {
             const createMsg = createErr instanceof Error ? createErr.message : '';
@@ -575,22 +597,22 @@ export default function HomePage() {
               );
             }
             clearDelegatedBookingDrafts();
-            toast.success('Searching for a driver…');
+            toast.success(t('success.searchingDriver'));
             navigate(`/ride/${ride.id}`);
           }
         })(),
         30_000,
-        'Booking timed out — check your connection and try again.',
+        t('errors.bookingTimedOut'),
       );
     } catch (e: unknown) {
       if (e instanceof RiderArrearsBlockedError) {
         const arrearsFormatted = formatMoneyMinor(e.arrearsMinor, e.currency);
-        const msg = `You have an outstanding balance of ${arrearsFormatted}. Please clear it in your wallet before booking cash rides.`;
+        const msg = t('errors.outstandingBalance', { amount: arrearsFormatted });
         setBookError(msg);
         toast.error(msg, { duration: 8000 });
         return;
       }
-      const msg = e instanceof Error ? e.message : 'Could not request ride';
+      const msg = e instanceof Error ? e.message : t('errors.couldNotRequestRide');
       setBookError(msg);
       toast.error(msg);
       if (e instanceof Error && e.message.includes('expired')) {
@@ -643,7 +665,7 @@ export default function HomePage() {
 
   const locationPill =
     pickupAddress.trim() ||
-    (initialGpsLoading ? 'Finding your location…' : 'Set pickup on map');
+    (initialGpsLoading ? t('findingLocation') : t('setPickupOnMap'));
 
   const profileSrc = avatarUrl ?? DEFAULT_PROFILE_AVATAR_URL;
 
@@ -695,7 +717,7 @@ export default function HomePage() {
               onClick={() => navigate('/account')}
               className="h-10 w-10 overflow-hidden rounded-full border-2 border-white shadow-sm active:scale-95"
               style={{ backgroundColor: '#94a3b8' }}
-              aria-label="Account"
+              aria-label={tc('nav.account')}
             >
               <img src={profileSrc} alt="" className="h-full w-full object-cover" />
             </button>
@@ -724,7 +746,7 @@ export default function HomePage() {
             type="button"
             onClick={handleBackToHome}
             className="home-map-stage__back flex h-11 w-11 items-center justify-center rounded-full shadow-lg transition-transform active:scale-95 touch-manipulation"
-            aria-label="Back to home"
+            aria-label={t('backToHome')}
           >
             <ArrowLeft className="h-5 w-5" strokeWidth={2.25} aria-hidden />
           </button>
@@ -738,10 +760,10 @@ export default function HomePage() {
               color: 'var(--home-primary)',
               border: '1px solid var(--home-sheet-border)',
             }}
-            aria-label="Adjust pickup on map"
+            aria-label={t('adjustPickupOnMap')}
           >
             <Crosshair className="h-4 w-4" aria-hidden />
-            Adjust pin
+            {t('adjustPin')}
           </button>
         </div>
       )}
@@ -759,7 +781,7 @@ export default function HomePage() {
                 className="mb-3 rounded-2xl border px-4 py-2 text-center text-sm"
                 style={{ borderColor: 'var(--home-card-border)', color: 'var(--home-on-surface)' }}
               >
-                Location is required to book. Allow location access in your device settings to continue.
+                {t('locationRequired')}
               </p>
             )}
 
@@ -773,7 +795,7 @@ export default function HomePage() {
                 }}
               >
                 <p>
-                  Outstanding balance:{' '}
+                  {t('outstandingBalance')}{' '}
                   <span className="font-semibold tabular-nums">
                     {formatMoneyMinor(walletArrearsMinor, walletCurrency)}
                   </span>
@@ -784,7 +806,7 @@ export default function HomePage() {
                   className="mt-2 text-sm font-semibold underline"
                   style={{ color: 'var(--home-primary)' }}
                 >
-                  Pay now
+                  {t('payNow')}
                 </button>
               </div>
             )}
@@ -820,10 +842,10 @@ export default function HomePage() {
               }}
             >
               {bookLoading
-                ? 'Booking…'
+                ? t('booking')
                 : guestRecipient
-                  ? `Book for ${guestRecipient.fullName.trim()}`
-                  : "Let's Roam"}
+                  ? t('bookFor', { name: guestRecipient.fullName.trim() })
+                  : t('letsRoam')}
               <ArrowRight className="h-5 w-5" aria-hidden />
             </button>
           </div>
@@ -842,7 +864,7 @@ export default function HomePage() {
               backgroundColor: 'var(--home-panel-solid)',
             }}
           >
-            Location is required to book. Allow location access in your device settings to continue.
+            {t('locationRequired')}
           </p>
         )}
 
@@ -907,7 +929,7 @@ export default function HomePage() {
                       className="text-xs font-bold uppercase tracking-wide"
                       style={{ color: 'var(--home-on-surface-muted)' }}
                     >
-                      Booking for someone else
+                      {t('bookingForSomeoneElse')}
                     </p>
                     <p className="truncate text-sm font-semibold" style={{ color: 'var(--home-on-surface)' }}>
                       {guestRecipient.fullName.trim()}
@@ -918,7 +940,7 @@ export default function HomePage() {
                       </p>
                     ) : (
                       <p className="text-xs" style={{ color: 'var(--home-on-surface-muted)' }}>
-                        SMS updates to{' '}
+                        {t('smsUpdatesTo')}{' '}
                         {buildGuestPhoneE164(guestRecipient.countryCode, guestRecipient.phone)}
                       </p>
                     )}
@@ -928,7 +950,7 @@ export default function HomePage() {
                     onClick={clearGuestRecipient}
                     className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-transform active:scale-95"
                     style={{ color: 'var(--home-on-surface-muted)' }}
-                    aria-label="Cancel booking for someone else"
+                    aria-label={t('cancelBookingForSomeoneElse')}
                   >
                     <X className="h-4 w-4" aria-hidden />
                   </button>
@@ -947,7 +969,7 @@ export default function HomePage() {
                       backgroundColor: 'var(--home-card-bg)',
                       color: 'var(--home-on-surface)',
                     }}
-                    aria-label="Back to home"
+                    aria-label={t('backToHome')}
                   >
                     <ArrowLeft className="h-4 w-4" strokeWidth={2.25} aria-hidden />
                   </button>
@@ -957,7 +979,7 @@ export default function HomePage() {
                     type="button"
                     className="home-route-summary touch-manipulation"
                     onClick={() => setRouteExpanded(true)}
-                    aria-label="Edit pickup and destination"
+                    aria-label={t('editPickupDestination')}
                   >
                     <div className="home-route-summary__dots" aria-hidden>
                       <div
@@ -975,15 +997,15 @@ export default function HomePage() {
                     </div>
                     <div className="home-route-summary__addresses">
                       <p className="home-route-summary__row">
-                        {truncateRouteLabel(pickupAddress || 'Pickup')}
+                        {truncateRouteLabel(pickupAddress || t('pickup'))}
                       </p>
                       <p className="home-route-summary__row">
-                        {truncateRouteLabel(dropoffAddress || 'Destination')}
+                        {truncateRouteLabel(dropoffAddress || t('destination'))}
                       </p>
                     </div>
                     <span className="home-route-summary__edit">
                       <Pencil className="h-3.5 w-3.5" aria-hidden />
-                      Edit
+                      {t('edit')}
                     </span>
                   </button>
                 </div>
@@ -992,7 +1014,7 @@ export default function HomePage() {
                 <>
               <div className="mb-6 flex items-end justify-between gap-3">
                 <h1 className="home-where-to-title home-display">
-                  Where to?
+                  {t('whereTo')}
                 </h1>
                 {coordsReady && routeExpanded && (
                   <button
@@ -1001,7 +1023,7 @@ export default function HomePage() {
                     className="shrink-0 pb-1 text-sm font-semibold touch-manipulation"
                     style={{ color: 'var(--home-primary)' }}
                   >
-                    Done
+                    {t('done')}
                   </button>
                 )}
               </div>
@@ -1033,9 +1055,9 @@ export default function HomePage() {
                     <div className="space-y-3 pl-10">
                       <RoamPlaceField
                         hideLabel
-                        label="Pickup"
+                        label={t('pickup')}
                         value={pickupAddress}
-                        placeholder="Current location"
+                        placeholder={t('currentLocation')}
                         clearable
                         showLocationButton
                         locationLoading={initialGpsLoading}
@@ -1064,9 +1086,9 @@ export default function HomePage() {
                       />
                       <RoamPlaceField
                         hideLabel
-                        label="Destination"
+                        label={t('destination')}
                         value={dropoffAddress}
-                        placeholder="Enter destination"
+                        placeholder={t('enterDestination')}
                         clearable
                         trailingIcon="search"
                         inputClassName={destinationInputClassName}
@@ -1097,9 +1119,9 @@ export default function HomePage() {
                   <div>
                     <RoamPlaceField
                       hideLabel
-                      label="Destination"
+                      label={t('destination')}
                       value={dropoffAddress}
-                      placeholder="Where to?"
+                      placeholder={t('whereTo')}
                       clearable
                       trailingIcon="search"
                       inputClassName={destinationInputClassName}
@@ -1143,7 +1165,7 @@ export default function HomePage() {
                       onClick={() => navigate('/services/book-for-someone')}
                       className="home-quick-action-card touch-manipulation"
                     >
-                      <span className="home-quick-action-card__label">Pick up someone</span>
+                      <span className="home-quick-action-card__label">{t('pickUpSomeone')}</span>
                       <div className="home-quick-action-card__icon">
                         <UserPlus className="h-5 w-5" aria-hidden />
                       </div>
@@ -1153,7 +1175,7 @@ export default function HomePage() {
                       onClick={() => navigate('/services/book-for-me')}
                       className="home-quick-action-card touch-manipulation"
                     >
-                      <span className="home-quick-action-card__label">Gift Ride</span>
+                      <span className="home-quick-action-card__label">{t('giftRide')}</span>
                       <div className="home-quick-action-card__icon">
                         <Gift className="h-5 w-5" aria-hidden />
                       </div>
@@ -1165,7 +1187,7 @@ export default function HomePage() {
                       onClick={() => navigate('/services/courier')}
                       className="home-quick-action-card touch-manipulation"
                     >
-                      <span className="home-quick-action-card__label">Courier</span>
+                      <span className="home-quick-action-card__label">{t('courier')}</span>
                       <div className="home-quick-action-card__icon">
                         <Package className="h-5 w-5" aria-hidden />
                       </div>
@@ -1175,7 +1197,7 @@ export default function HomePage() {
                       onClick={() => navigate('/services/schedule')}
                       className="home-quick-action-card touch-manipulation"
                     >
-                      <span className="home-quick-action-card__label">Reserve Trip</span>
+                      <span className="home-quick-action-card__label">{t('reserveTrip')}</span>
                       <div className="home-quick-action-card__icon">
                         <Clock className="h-5 w-5" aria-hidden />
                       </div>
@@ -1193,7 +1215,7 @@ export default function HomePage() {
                     backgroundColor: 'color-mix(in srgb, var(--home-primary) 8%, transparent)',
                   }}
                 >
-                  Demand is high — surge{' '}
+                  {t('surgeDemand')}{' '}
                   <strong className="tabular-nums">×{surge.toFixed(2)}</strong>
                 </p>
               )}
@@ -1209,7 +1231,7 @@ export default function HomePage() {
                     backgroundColor: 'color-mix(in srgb, var(--home-primary) 8%, transparent)',
                   }}
                 >
-                  Demand is high — surge{' '}
+                  {t('surgeDemand')}{' '}
                   <strong className="tabular-nums">×{surge.toFixed(2)}</strong>
                 </p>
               )}
@@ -1218,7 +1240,7 @@ export default function HomePage() {
             {coordsReady && (
               <div
                 className="home-booking-sheet__services min-h-0 flex-1 px-5"
-                aria-label="Ride services"
+                aria-label={t('rideServices')}
                 role="region"
               >
                 {quotesLoading && (
@@ -1226,7 +1248,7 @@ export default function HomePage() {
                     className="mb-2 shrink-0 text-center text-sm"
                     style={{ color: 'var(--home-on-surface-muted)' }}
                   >
-                    Getting prices…
+                    {t('gettingPrices')}
                   </p>
                 )}
                 <TransportOptionPicker
@@ -1257,6 +1279,7 @@ export default function HomePage() {
         selectedId={selectedPaymentId}
         onClose={() => setPaymentSheetOpen(false)}
         onSelect={setSelectedPaymentId}
+        excludeIds={requiresDigitalPayment ? DELEGATED_BOOKING_EXCLUDED_PAYMENT_IDS : undefined}
       />
 
       {walletArrearsMinor > 0 && CASH_SETTLEMENT_PAY_ARREARS_ENABLED ? (

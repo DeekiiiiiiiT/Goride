@@ -7,6 +7,8 @@ import App from './App';
 import { NativeNavigationBridge } from './components/NativeNavigationBridge';
 import { initCapacitorNative } from './capacitor-native';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { LocaleProvider } from './contexts/LocaleContext';
+import './i18n';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -24,9 +26,11 @@ const root = (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <ThemeProvider>
-          <NativeNavigationBridge />
-          <App />
-          <Toaster position="top-center" richColors />
+          <LocaleProvider>
+            <NativeNavigationBridge />
+            <App />
+            <Toaster position="top-center" richColors />
+          </LocaleProvider>
         </ThemeProvider>
       </BrowserRouter>
     </QueryClientProvider>

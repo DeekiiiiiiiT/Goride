@@ -1,17 +1,15 @@
 import React, { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { ArrowLeft } from 'lucide-react';
 import { ridesGetRequest } from '@/services/ridesEdge';
 import { delegatedRidePath, isShadowBookerTrip } from '@/lib/delegatedRideNavigation';
-import {
-  SHADOW_PAYER_ACTIVE_SUBTITLE,
-  SHADOW_PAYER_ACTIVE_TITLE,
-} from '@/lib/shadowPayerCopy';
 import { ON_SURFACE, ON_SURFACE_VARIANT, PAGE_BG, PRIMARY, PRIMARY_CONTAINER } from '@/lib/passengerTheme';
 
 export default function ShadowTripStatusPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { t } = useTranslation('booking');
 
   useEffect(() => {
     if (!id) return;
@@ -57,7 +55,7 @@ export default function ShadowTripStatusPage() {
           onClick={() => navigate('/services/book-for-others')}
           className="rounded-full p-2 touch-manipulation"
           style={{ color: PRIMARY }}
-          aria-label="Back to Book for others"
+          aria-label={t('shadow.backToBookForOthers')}
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
@@ -66,16 +64,16 @@ export default function ShadowTripStatusPage() {
       <main className="flex flex-1 flex-col items-center justify-center px-6 pb-16 safe-x">
         <div className="w-full max-w-md space-y-6 text-center">
           <h1 className="text-2xl font-bold" style={{ color: ON_SURFACE }}>
-            {SHADOW_PAYER_ACTIVE_TITLE}
+            {t('shadow.activeTitle')}
           </h1>
           <p
             className="rounded-2xl px-4 py-3 text-sm leading-relaxed"
             style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_SURFACE }}
           >
-            {SHADOW_PAYER_ACTIVE_SUBTITLE}
+            {t('shadow.activeSubtitle')}
           </p>
           <p className="text-xs leading-relaxed" style={{ color: ON_SURFACE_VARIANT }}>
-            Need help? Contact support — trips cannot be cancelled after payment.
+            {t('shadow.helpHint')}
           </p>
         </div>
       </main>

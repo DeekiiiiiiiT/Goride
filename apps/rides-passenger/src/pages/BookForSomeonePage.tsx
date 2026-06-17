@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import {
   ArrowLeft,
@@ -91,6 +92,8 @@ type Step = 'locations' | 'recipient';
 export default function BookForSomeonePage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation('booking');
+  const { t: tc } = useTranslation('common');
   const [step, setStep] = useState<Step>('locations');
 
   const [pickupAddress, setPickupAddress] = useState('');
@@ -158,9 +161,9 @@ export default function BookForSomeonePage() {
       await tripIntentClaim(intent.intent_id);
       setIntentSheetOpen(false);
       setPendingIntent(null);
-      toast.success('You agreed to pay for this trip');
+      toast.success(t('bookForSomeone.toast.agreedToPay'));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not agree to pay');
+      toast.error(e instanceof Error ? e.message : t('bookForSomeone.toast.couldNotAgree'));
     } finally {
       setFulfilling(false);
     }
@@ -172,9 +175,9 @@ export default function BookForSomeonePage() {
       await tripIntentReject(intent.intent_id);
       setIntentSheetOpen(false);
       setPendingIntent(null);
-      toast.message('Trip request declined');
+      toast.message(t('bookForSomeone.toast.tripDeclined'));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not decline trip');
+      toast.error(e instanceof Error ? e.message : t('bookForSomeone.toast.couldNotDecline'));
     } finally {
       setRejecting(false);
     }
@@ -192,11 +195,11 @@ export default function BookForSomeonePage() {
         if (openIntentSheet(res.trip_intent)) {
           navigate(location.pathname, { replace: true, state: null });
         } else {
-          toast.error('This trip is no longer available to pay for.');
+          toast.error(t('bookForSomeone.toast.tripNoLongerAvailable'));
         }
       })
       .catch(() => {
-        if (!cancelled) toast.error('Could not load that trip request.');
+        if (!cancelled) toast.error(t('bookForSomeone.toast.couldNotLoadTrip'));
       })
       .finally(() => {
         if (!cancelled) setIntentLoading(false);
@@ -249,11 +252,11 @@ export default function BookForSomeonePage() {
       setPassengerAuthorizationId(authorization.id);
       setAuthorizationUrl(authorization.url);
       setWaitingForName(name);
-      toast.message(`Waiting for ${name} to authorize`, {
-        description: 'Share the link so they can sign in and link their account.',
+      toast.message(t('bookForSomeone.toast.waitingForAuth', { name }), {
+        description: t('bookForSomeone.toast.waitingForAuthDescription'),
       });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not resolve passenger');
+      toast.error(e instanceof Error ? e.message : t('bookForSomeone.toast.couldNotResolve'));
     } finally {
       setPhoneLookupLoading(false);
     }
@@ -315,7 +318,7 @@ export default function BookForSomeonePage() {
     } catch (e) {
       setRoamTagMatch(null);
       const code = e instanceof Error ? e.message : 'lookup_failed';
-      setRoamTagError(roamTagErrorMessage(code) || 'Could not find that Roam Tag.');
+      setRoamTagError(roamTagErrorMessage(code) || t('bookForSomeone.toast.couldNotResolve'));
     } finally {
       setRoamTagLoading(false);
     }
@@ -341,7 +344,7 @@ export default function BookForSomeonePage() {
       setGroups(groupsRes.groups);
       return true;
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not load Roam Contacts');
+      toast.error(e instanceof Error ? e.message : t('bookForSomeone.toast.couldNotLoadContacts'));
       return false;
     } finally {
       setLoading(false);
@@ -361,7 +364,7 @@ export default function BookForSomeonePage() {
           if (authorization.status === 'claimed' && authorization.passenger_user_id) {
             setRecipientStatus('linked');
             setLinkedPassengerUserId(authorization.passenger_user_id);
-            toast.success(`${waitingForName ?? 'Passenger'} is linked — you can continue.`);
+            toast.success(t('bookForSomeone.toast.passengerLinked', { name: waitingForName ?? t('bookForSomeone.passenger') }));
           }
         })
         .catch(() => { /* ignore poll errors */ });
@@ -406,7 +409,7 @@ export default function BookForSomeonePage() {
 
   const handleRiderPickupTargetSelected = async (target: RiderPickupTarget) => {
     if (!target.phone_e164) {
-      toast.error('This rider needs a phone number to receive the location request.');
+      toast.error(t('bookForSomeone.toast.riderNeedsPhone'));
       return;
     }
     setPickupRequestLoading(true);
@@ -425,10 +428,10 @@ export default function BookForSomeonePage() {
       setPickupDeliveryChannel(delivery_channel);
       toast.message(pickupLocationRequestCreatedToast(target.name, delivery_channel, sms_sent));
     } catch (e) {
-      const message = e instanceof Error ? e.message : 'Could not request location';
+      const message = e instanceof Error ? e.message : t('bookForSomeone.toast.couldNotRequestLocation');
       if (message.includes('pickup_location_request_disabled')) return;
       if (message.includes('rate_limited')) {
-        toast.error('Too many requests — try again in a few minutes.');
+        toast.error(t('bookForSomeone.toast.rateLimited'));
       } else {
         toast.error(message);
       }
@@ -448,7 +451,7 @@ export default function BookForSomeonePage() {
       setPickup({ lat, lng });
       setPickupAddress(address);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not get your location');
+      toast.error(e instanceof Error ? e.message : t('bookForSomeone.toast.couldNotGetLocation'));
     } finally {
       setPickupLocLoading(false);
     }
@@ -464,7 +467,7 @@ export default function BookForSomeonePage() {
   }) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      toast.error('Sign in to book a ride for someone else.');
+      toast.error(t('bookForSomeone.toast.signInToBook'));
       navigate('/login');
       return false;
     }
@@ -484,14 +487,14 @@ export default function BookForSomeonePage() {
     if (consumedPickupRequestId && PICKUP_LOCATION_REQUEST) {
       void consumePickupLocationRequest(consumedPickupRequestId).catch(() => undefined);
     }
-    toast.success(`Ready to book for ${params.draftName}.`);
+    toast.success(t('bookForSomeone.toast.readyToBook', { name: params.draftName }));
     navigate('/');
     return true;
   };
 
   const handleLocationsContinue = async () => {
     if (!pickup || !dropoff || !pickupAddress.trim() || !dropoffAddress.trim()) {
-      toast.error('Enter pickup and drop-off locations.');
+      toast.error(t('bookForSomeone.toast.enterLocations'));
       return;
     }
 
@@ -510,7 +513,7 @@ export default function BookForSomeonePage() {
         const rider = pickupIdentifiedRider;
         const draftPhone = rider.phone_e164.replace(/\D/g, '').slice(-10);
         if (!isValidGuestPhone(draftPhone)) {
-          toast.error('This rider needs a valid phone number to book.');
+          toast.error(t('bookForSomeone.toast.riderNeedsValidPhone'));
           return;
         }
 
@@ -532,7 +535,7 @@ export default function BookForSomeonePage() {
           setPhoneProfileMatch(null);
           setStep('recipient');
           void resolvePhoneRecipient(rider.name, draftPhone);
-          toast.message(`Confirm details for ${rider.name} to continue.`);
+          toast.message(t('bookForSomeone.toast.confirmDetails', { name: rider.name }));
           return;
         }
 
@@ -546,7 +549,7 @@ export default function BookForSomeonePage() {
           roamTagName,
         });
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Could not continue to booking');
+        toast.error(e instanceof Error ? e.message : t('bookForSomeone.toast.couldNotContinue'));
       } finally {
         setLocationsContinueLoading(false);
       }
@@ -568,8 +571,8 @@ export default function BookForSomeonePage() {
     if (result.failed > 0) {
       toast.error(
         result.error?.includes('schema')
-          ? 'Contacts could not be saved — Roam server needs an update. Try Add contact instead.'
-          : result.error ?? 'Could not save contacts. Try Add contact instead.',
+          ? t('bookForSomeone.toast.contactsSchemaError')
+          : result.error ?? t('bookForSomeone.toast.couldNotSaveContacts'),
       );
       return;
     }
@@ -585,19 +588,19 @@ export default function BookForSomeonePage() {
     if (saved > 0) {
       toast.success(
         ROAM_CONNECTIONS
-          ? `Sent ${saved} connection request${saved === 1 ? '' : 's'}.`
-          : `Added ${saved} contact${saved === 1 ? '' : 's'} to Roam Contacts.`,
+          ? t(saved === 1 ? 'bookForSomeone.toast.connectionRequestsSent' : 'bookForSomeone.toast.connectionRequestsSent_plural', { count: saved })
+          : t(saved === 1 ? 'bookForSomeone.toast.contactsAdded' : 'bookForSomeone.toast.contactsAdded_plural', { count: saved }),
       );
       await reloadContacts();
       setContacts((prev) => mergeImported(prev));
       return;
     }
     if (result.skipped > 0) {
-      toast.message('Could not add those contacts — check the name and phone number.');
+      toast.message(t('bookForSomeone.toast.couldNotAddContacts'));
       return;
     }
-    toast.message('No contacts were added.');
-  }, [reloadContacts]);
+    toast.message(t('bookForSomeone.toast.noContactsAdded'));
+  }, [reloadContacts, t]);
 
   const handleImportFromPhone = async () => {
     if (canUseInAppDeviceContactPicker()) {
@@ -606,7 +609,7 @@ export default function BookForSomeonePage() {
     }
 
     if (!canUseBrowserContactPicker()) {
-      toast.error('Contact picker is not available here. Use Add contact instead.');
+      toast.error(t('bookForSomeone.toast.pickerUnavailable'));
       return;
     }
 
@@ -614,13 +617,13 @@ export default function BookForSomeonePage() {
     try {
       const picked = await pickDeviceContactsFromBrowser();
       if (!picked.length) {
-        toast.message('No contact selected.');
+        toast.message(t('bookForSomeone.toast.noContactSelected'));
         return;
       }
       const result = await importDeviceContactSelection(picked);
       await handleDeviceImportResult(result);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not access phone contacts');
+      toast.error(e instanceof Error ? e.message : t('bookForSomeone.toast.couldNotAccessContacts'));
     } finally {
       setImporting(false);
     }
@@ -628,7 +631,7 @@ export default function BookForSomeonePage() {
 
   const handleFinish = async () => {
     if (!tripDraft) {
-      toast.error('Set pickup and drop-off first.');
+      toast.error(t('bookForSomeone.toast.setLocationsFirst'));
       setStep('locations');
       return;
     }
@@ -684,21 +687,21 @@ export default function BookForSomeonePage() {
     }
 
     if (!draftName || !draftPhone) {
-      toast.error('Select a contact or enter recipient details.');
+      toast.error(t('bookForSomeone.toast.selectRecipient'));
       return;
     }
     if (!passengerUserId) {
-      toast.error('The passenger must authorize before you can book.');
+      toast.error(t('bookForSomeone.toast.passengerMustAuthorize'));
       return;
     }
     if (!isValidGuestPhone(draftPhone)) {
-      toast.error('Enter a valid 10-digit phone number.');
+      toast.error(t('bookForSomeone.toast.invalidPhone'));
       return;
     }
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      toast.error('Sign in to book a ride for someone else.');
+      toast.error(t('bookForSomeone.toast.signInToBook'));
       navigate('/login');
       return;
     }
@@ -722,7 +725,7 @@ export default function BookForSomeonePage() {
     if (consumedPickupRequestId && PICKUP_LOCATION_REQUEST) {
       void consumePickupLocationRequest(consumedPickupRequestId).catch(() => undefined);
     }
-    toast.success(`Ready to book for ${draftName}.`);
+    toast.success(t('bookForSomeone.toast.readyToBook', { name: draftName }));
     navigate('/');
   };
 
@@ -765,12 +768,12 @@ export default function BookForSomeonePage() {
           onClick={handleBack}
           className="flex h-10 w-10 items-center justify-center rounded-full transition-colors active:scale-95"
           style={{ color: PRIMARY }}
-          aria-label="Back"
+          aria-label={tc('back')}
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
         <h1 className="ml-1 flex-1 text-center text-xl font-bold" style={{ color: PRIMARY }}>
-          Book for Someone Else
+          {t('bookForSomeone.title')}
         </h1>
         <div className="w-10 shrink-0" aria-hidden />
       </header>
@@ -781,7 +784,7 @@ export default function BookForSomeonePage() {
         }`}
       >
         <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: ON_SURFACE_VARIANT }}>
-          {step === 'locations' ? 'Step 1 of 2 · Trip' : 'Step 2 of 2 · Passenger'}
+          {step === 'locations' ? t('bookForSomeone.stepTrip') : t('bookForSomeone.stepPassenger')}
         </span>
         <div
           className="h-1.5 w-full overflow-hidden rounded-full"
@@ -809,7 +812,7 @@ export default function BookForSomeonePage() {
       >
         {step === 'locations' ? (
           <>
-            <h2 className="book-for-someone-locations-title">Locate roamer!</h2>
+            <h2 className="book-for-someone-locations-title">{t('bookForSomeone.locateRoamer')}</h2>
 
             <div className="book-for-someone-glass book-for-someone-glass--compact">
               <section className="book-for-someone-section-block">
@@ -821,12 +824,12 @@ export default function BookForSomeonePage() {
                     className="text-sm font-semibold uppercase tracking-widest"
                     style={{ color: OUTLINE }}
                   >
-                    Pickup
+                    {t('bookForSomeone.pickup')}
                   </span>
                 </div>
 
                 <RoamPlaceField
-                  label="Pickup"
+                  label={t('bookForSomeone.pickup')}
                   hideLabel
                   value={pickupAddress}
                   onChangeText={(text) => {
@@ -839,7 +842,7 @@ export default function BookForSomeonePage() {
                     setPickupAddress(address);
                     setPickup({ lat, lng });
                   }}
-                  placeholder="Where should we pick them up?"
+                  placeholder={t('bookForSomeone.pickupPlaceholder')}
                   clearable
                   showLocationButton
                   onLocationClick={() => void handleUseMyLocationForPickup()}
@@ -862,7 +865,7 @@ export default function BookForSomeonePage() {
                         <UserPlus aria-hidden />
                       </div>
                       <span className="book-for-someone-quick-action__label" style={{ color: ON_SURFACE }}>
-                        {pickupRequestLoading ? 'Sending…' : "Get rider's location"}
+                        {pickupRequestLoading ? t('bookForSomeone.sending') : t('bookForSomeone.getRiderLocation')}
                       </span>
                     </button>
                   ) : null}
@@ -871,13 +874,13 @@ export default function BookForSomeonePage() {
                     disabled={pickupLocLoading}
                     onClick={() => void handleUseMyLocationForPickup()}
                     className={`book-for-someone-quick-action ${PICKUP_LOCATION_REQUEST ? '' : 'col-span-2'}`}
-                    aria-label={pickupLocLoading ? 'Getting location' : 'Use my current location'}
+                    aria-label={pickupLocLoading ? t('bookForSomeone.gettingLocation') : t('bookForSomeone.useMyLocation')}
                   >
                     <div className="book-for-someone-quick-action__icon">
                       <Navigation aria-hidden />
                     </div>
                     <span className="book-for-someone-quick-action__label" style={{ color: ON_SURFACE }}>
-                      {pickupLocLoading ? 'Getting location…' : 'Use my current location'}
+                      {pickupLocLoading ? t('bookForSomeone.gettingLocationEllipsis') : t('bookForSomeone.useMyLocation')}
                     </span>
                   </button>
                 </div>
@@ -898,12 +901,12 @@ export default function BookForSomeonePage() {
                     className="text-sm font-semibold uppercase tracking-widest"
                     style={{ color: OUTLINE }}
                   >
-                    Drop-off
+                    {t('bookForSomeone.dropoff')}
                   </span>
                 </div>
 
                 <RoamPlaceField
-                  label="Drop-off"
+                  label={t('bookForSomeone.dropoff')}
                   hideLabel
                   value={dropoffAddress}
                   onChangeText={(text) => {
@@ -914,7 +917,7 @@ export default function BookForSomeonePage() {
                     setDropoffAddress(address);
                     setDropoff({ lat, lng });
                   }}
-                  placeholder="Where are they going?"
+                  placeholder={t('bookForSomeone.dropoffPlaceholder')}
                   clearable
                   inputClassName={placeFieldInputClass}
                   suggestionButtonClassName={placeFieldSuggestionClass}
@@ -935,7 +938,7 @@ export default function BookForSomeonePage() {
                 <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
               ) : (
                 <>
-                  Continue
+                  {t('bookForSomeone.continue')}
                   <ArrowRight className="h-5 w-5" aria-hidden />
                 </>
               )}
@@ -952,7 +955,7 @@ export default function BookForSomeonePage() {
                   setPickupAddress(address);
                   setPickupSharedViaRequest(true);
                   if (pickupRequestId) setConsumedPickupRequestId(pickupRequestId);
-                  toast.success('Pickup location received');
+                  toast.success(t('bookForSomeone.toast.pickupReceived'));
                 }}
                 onPendingCleared={clearPickupLocationRequest}
                 onSharedSummary={setPickupSharedSummary}
@@ -960,7 +963,7 @@ export default function BookForSomeonePage() {
                   setPickup({ lat, lng });
                   setPickupAddress(address);
                   setPickupSharedViaRequest(true);
-                  toast.message('Pickup restored');
+                  toast.message(t('bookForSomeone.toast.pickupRestored'));
                 }}
               />
             ) : null}
@@ -974,17 +977,17 @@ export default function BookForSomeonePage() {
                 className="book-for-someone-edit-address"
               >
                 <Pencil className="h-4 w-4" aria-hidden />
-                Edit address
+                {t('bookForSomeone.editAddress')}
               </button>
             ) : null}
 
             <section>
-              <h2 className="text-3xl font-extrabold leading-tight tracking-tight">Who is roaming?</h2>
+              <h2 className="text-3xl font-extrabold leading-tight tracking-tight">{t('bookForSomeone.whoIsRoaming')}</h2>
             </section>
 
             <div className="book-for-someone-card space-y-4 p-6">
               <p className="text-[11px] font-bold uppercase tracking-widest" style={{ color: ON_SURFACE_VARIANT }}>
-                Roam Tag
+                {t('bookForSomeone.roamTag')}
               </p>
               <div className="flex items-center gap-3">
                 <div className="relative min-w-0 flex-1">
@@ -1004,7 +1007,7 @@ export default function BookForSomeonePage() {
                     onBlur={() => {
                       if (roamTagInput.length >= 3) void lookupRoamTag(roamTagInput);
                     }}
-                    placeholder="theirname"
+                    placeholder={t('bookForSomeone.roamTagPlaceholder')}
                     maxLength={24}
                     className="book-for-someone-roam-tag-input"
                   />
@@ -1015,7 +1018,7 @@ export default function BookForSomeonePage() {
                   onClick={() => void lookupRoamTag(roamTagInput)}
                   className="book-for-someone-find-btn"
                 >
-                  {roamTagLoading ? '…' : 'Find'}
+                  {roamTagLoading ? '…' : t('bookForSomeone.find')}
                 </button>
               </div>
               {roamTagError ? (
@@ -1064,7 +1067,7 @@ export default function BookForSomeonePage() {
                     className="text-xs font-semibold"
                     style={{ color: ON_SURFACE_VARIANT }}
                   >
-                    Clear
+                    {t('bookForSomeone.clear')}
                   </button>
                 </div>
               ) : null}
@@ -1081,7 +1084,7 @@ export default function BookForSomeonePage() {
                   <Smartphone className="h-8 w-8" aria-hidden />
                 </div>
                 <span className="book-for-someone-action-tile__label">
-                  {importing ? 'Importing…' : 'From phone'}
+                  {importing ? t('bookForSomeone.importing') : t('bookForSomeone.fromPhone')}
                 </span>
               </button>
               <button
@@ -1092,7 +1095,7 @@ export default function BookForSomeonePage() {
                 <div className="book-for-someone-action-tile__icon">
                   <Plus className="h-8 w-8" strokeWidth={2.5} aria-hidden />
                 </div>
-                <span className="book-for-someone-action-tile__label">Add contact</span>
+                <span className="book-for-someone-action-tile__label">{t('bookForSomeone.addContact')}</span>
               </button>
               <button
                 type="button"
@@ -1102,7 +1105,7 @@ export default function BookForSomeonePage() {
                 <div className="book-for-someone-action-tile__icon">
                   <Users className="h-8 w-8" aria-hidden />
                 </div>
-                <span className="book-for-someone-action-tile__label">Roam Contacts</span>
+                <span className="book-for-someone-action-tile__label">{t('bookForSomeone.roamContacts')}</span>
               </button>
             </div>
 
@@ -1113,14 +1116,14 @@ export default function BookForSomeonePage() {
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold"
                     style={{ backgroundColor: 'rgba(0,74,198,0.1)', color: PRIMARY }}
                   >
-                    {(waitingForName ?? 'Passenger').slice(0, 2).toUpperCase()}
+                    {(waitingForName ?? t('bookForSomeone.passenger')).slice(0, 2).toUpperCase()}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold" style={{ color: PRIMARY }}>
-                      Waiting for {waitingForName ?? 'passenger'}
+                      {t('bookForSomeone.waitingFor', { name: waitingForName ?? t('bookForSomeone.passengerLower') })}
                     </p>
                     <p className="mt-1 text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-                      Share this link so they can sign in and authorize the ride.
+                      {t('bookForSomeone.shareAuthLink')}
                     </p>
                   </div>
                 </div>
@@ -1129,10 +1132,10 @@ export default function BookForSomeonePage() {
                   onClick={async () => {
                     try {
                       if (typeof navigator.share === 'function') {
-                        await navigator.share({ title: 'Authorize your Roam ride', url: authorizationUrl });
+                        await navigator.share({ title: t('bookForSomeone.authorizeRideTitle'), url: authorizationUrl });
                       } else {
                         await navigator.clipboard.writeText(authorizationUrl);
-                        toast.success('Link copied');
+                        toast.success(t('bookForSomeone.toast.linkCopied'));
                       }
                     } catch {
                       /* user cancelled share */
@@ -1142,7 +1145,7 @@ export default function BookForSomeonePage() {
                   style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_PRIMARY }}
                 >
                   <Copy className="h-4 w-4" />
-                  Copy authorization link
+                  {t('bookForSomeone.copyAuthLink')}
                 </button>
                 {ROAM_CONNECTIONS ? (
                   <button
@@ -1151,7 +1154,7 @@ export default function BookForSomeonePage() {
                     className="w-full py-1 text-center text-xs font-semibold"
                     style={{ color: PRIMARY }}
                   >
-                    View in Pending
+                    {t('bookForSomeone.viewInPending')}
                   </button>
                 ) : null}
                 <button
@@ -1160,7 +1163,7 @@ export default function BookForSomeonePage() {
                   className="w-full py-1 text-center text-xs font-semibold"
                   style={{ color: ON_SURFACE_VARIANT }}
                 >
-                  Change recipient
+                  {t('bookForSomeone.changeRecipient')}
                 </button>
               </div>
             ) : null}
@@ -1178,7 +1181,7 @@ export default function BookForSomeonePage() {
                     {phoneProfileMatch.display_name ?? formatRoamTagDisplay(phoneProfileMatch.custom_tag_name)}
                   </p>
                   <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-                    Roam member · {formatRoamTagDisplay(phoneProfileMatch.custom_tag_name)}
+                    {t('bookForSomeone.roamMember', { tag: formatRoamTagDisplay(phoneProfileMatch.custom_tag_name) })}
                   </p>
                 </div>
               </div>
@@ -1187,7 +1190,7 @@ export default function BookForSomeonePage() {
             {phoneLookupLoading ? (
               <div className="flex items-center justify-center gap-2 py-4 text-sm" style={{ color: ON_SURFACE_VARIANT }}>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Looking up phone…
+                {t('bookForSomeone.lookingUpPhone')}
               </div>
             ) : null}
 
@@ -1214,7 +1217,7 @@ export default function BookForSomeonePage() {
                   className="text-xs font-semibold"
                   style={{ color: ON_SURFACE_VARIANT }}
                 >
-                  Clear
+                  {t('bookForSomeone.clear')}
                 </button>
               </div>
             ) : null}
@@ -1222,7 +1225,7 @@ export default function BookForSomeonePage() {
             {selected?.places?.length ? (
               <div className="space-y-2">
                 <p className="text-xs font-bold tracking-wide" style={{ color: SECONDARY }}>
-                  USE SAVED PICKUP INSTEAD
+                  {t('bookForSomeone.useSavedPickup')}
                 </p>
                 {selected.places.map((p) => (
                   <button
@@ -1255,7 +1258,7 @@ export default function BookForSomeonePage() {
             className="book-for-someone-continue mx-auto max-w-2xl shadow-lg"
             style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_PRIMARY }}
           >
-            Continue to ride options
+            {t('bookForSomeone.continueToRideOptions')}
             <ArrowRight className="h-5 w-5" aria-hidden />
           </button>
         </div>
@@ -1271,7 +1274,7 @@ export default function BookForSomeonePage() {
               byId.set(result.contact!.id, result.contact!);
               return [...byId.values()].sort((a, b) => a.display_name.localeCompare(b.display_name));
             });
-            toast.success(`${result.contact.display_name} added to Roam Contacts`);
+            toast.success(t('bookForSomeone.toast.contactAdded', { name: result.contact!.display_name }));
             await handleRecipientContactSelected(result.contact);
             return;
           }

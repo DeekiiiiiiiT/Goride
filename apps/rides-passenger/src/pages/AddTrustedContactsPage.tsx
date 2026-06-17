@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ArrowLeft, Plus, Search, ShieldCheck } from 'lucide-react';
@@ -19,6 +20,8 @@ import {
 
 export default function AddTrustedContactsPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation('contacts');
+  const { t: tc } = useTranslation('common');
   const queryClient = useQueryClient();
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -47,10 +50,10 @@ export default function AddTrustedContactsPage() {
 
   useEffect(() => {
     if (slotsLeft <= 0) {
-      toast.error(`You already have ${MAX_TRUSTED_CONTACTS} trusted contacts.`);
+      toast.error(t('addTrusted.alreadyMax', { max: MAX_TRUSTED_CONTACTS }));
       navigate('/account/contacts/trusted', { replace: true });
     }
-  }, [slotsLeft, navigate]);
+  }, [slotsLeft, navigate, t]);
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -60,7 +63,9 @@ export default function AddTrustedContactsPage() {
         return next;
       }
       if (next.size >= slotsLeft) {
-        toast.error(`You can only add ${slotsLeft} more contact${slotsLeft === 1 ? '' : 's'}.`);
+        toast.error(
+          t(slotsLeft === 1 ? 'addTrusted.canOnlyAdd' : 'addTrusted.canOnlyAdd_plural', { count: slotsLeft }),
+        );
         return prev;
       }
       next.add(id);
@@ -75,10 +80,12 @@ export default function AddTrustedContactsPage() {
       await bulkMarkTrusted({ contact_ids: [...selected] });
       await queryClient.invalidateQueries({ queryKey: ['trusted-contacts'] });
       await queryClient.invalidateQueries({ queryKey: ['roam-contacts-all'] });
-      toast.success(`Added ${selected.size} trusted contact${selected.size === 1 ? '' : 's'}.`);
+      toast.success(
+        t(selected.size === 1 ? 'addTrusted.added' : 'addTrusted.added_plural', { count: selected.size }),
+      );
       navigate('/account/contacts/trusted', { replace: true });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not update contacts');
+      toast.error(e instanceof Error ? e.message : t('addTrusted.couldNotUpdate'));
     } finally {
       setSaving(false);
     }
@@ -87,7 +94,9 @@ export default function AddTrustedContactsPage() {
   const handleBack = () => {
     if (selected.size > 0) {
       const ok = window.confirm(
-        `You selected ${selected.size} contact${selected.size === 1 ? '' : 's'}. Add them as trusted before leaving?`,
+        t(selected.size === 1 ? 'addTrusted.leaveConfirm' : 'addTrusted.leaveConfirm_plural', {
+          count: selected.size,
+        }),
       );
       if (ok) {
         void handleSubmit();
@@ -115,12 +124,12 @@ export default function AddTrustedContactsPage() {
           onClick={handleBack}
           className="rounded-full p-2"
           style={{ color: PRIMARY }}
-          aria-label="Back"
+          aria-label={t('addTrusted.backAria')}
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
         <h1 className="text-base font-bold uppercase tracking-tight" style={{ color: PRIMARY }}>
-          Add Trusted Contacts
+          {t('addTrusted.title')}
         </h1>
         {selected.size > 0 ? (
           <button
@@ -130,7 +139,7 @@ export default function AddTrustedContactsPage() {
             className="rounded-full px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
             style={{ backgroundColor: PRIMARY }}
           >
-            {saving ? 'Saving…' : `Add (${selected.size})`}
+            {saving ? t('addTrusted.saving') : t('addTrusted.addCount', { count: selected.size })}
           </button>
         ) : (
           <div className="w-10" />
@@ -148,7 +157,7 @@ export default function AddTrustedContactsPage() {
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search contacts…"
+            placeholder={t('addTrusted.searchPlaceholder')}
             className="h-12 w-full rounded-xl border-none pl-12 pr-4 outline-none focus:ring-2 focus:ring-[#004ac6]"
             style={{ backgroundColor: SURFACE_LOW, color: ON_SURFACE }}
           />
@@ -167,23 +176,23 @@ export default function AddTrustedContactsPage() {
             <Plus className="h-5 w-5" aria-hidden />
           </div>
           <span className="font-semibold" style={{ color: PRIMARY }}>
-            Create New Contact
+            {t('addTrusted.createNew')}
           </span>
         </button>
 
         <p className="mb-3 text-xs font-bold uppercase tracking-widest" style={{ color: ON_SURFACE_VARIANT }}>
-          Roam Contacts
+          {t('addTrusted.roamContacts')}
         </p>
 
         {isLoading ? (
           <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-            Loading…
+            {tc('loading')}
           </p>
         ) : null}
 
         {!isLoading && available.length === 0 ? (
           <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-            No contacts available. Create a contact first.
+            {t('addTrusted.noAvailable')}
           </p>
         ) : null}
 
@@ -239,10 +248,10 @@ export default function AddTrustedContactsPage() {
         >
           <ShieldCheck className="h-5 w-5" aria-hidden />
           {saving
-            ? 'Saving…'
+            ? t('addTrusted.saving')
             : selected.size > 0
-              ? `Mark as Trusted (${selected.size})`
-              : 'Select contacts to continue'}
+              ? t('addTrusted.markAsTrusted', { count: selected.size })
+              : t('addTrusted.selectToContinue')}
         </button>
       </div>
     </div>

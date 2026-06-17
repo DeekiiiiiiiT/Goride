@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -49,29 +50,23 @@ import { persistMinimizedRide, readMinimizeExitPending, setMinimizeExitPending, 
 import { isShadowBookerTrip, navigateToDelegatedRide } from '@/lib/delegatedRideNavigation';
 import { shouldHideLocationsForBooker } from '@/lib/shadowBookerPrivacy';
 
-function statusLabel(s: RideRequestStatus): string {
-  switch (s) {
-    case 'matching':
-      return 'Finding a nearby driver…';
-    case 'driver_assigned':
-      return 'Driver assigned';
-    case 'driver_en_route_pickup':
-      return 'Driver is on the way';
-    case 'driver_arrived_pickup':
-      return 'Driver has arrived';
-    case 'on_trip':
-      return 'On trip';
-    case 'awaiting_cash_settlement':
-      return 'Pay your driver';
-    case 'completed':
-      return 'Trip completed';
-    case 'cancelled':
-      return 'Cancelled';
-    case 'scheduled':
-      return 'Scheduled';
-    default:
-      return s;
+import type { TFunction } from 'i18next';
+
+function statusLabel(s: RideRequestStatus, t: TFunction<'ride'>): string {
+  const key = `statusLabels.${s}` as const;
+  const translated = t(key, { defaultValue: '' });
+  if (translated) return translated;
+  return s;
+}
+
+function getCancelCopy(status: RideRequestStatus | undefined, t: TFunction<'ride'>): string {
+  if (status === 'driver_en_route_pickup') {
+    return t('cancelCopy.driverEnRoute');
   }
+  if (status === 'matching') {
+    return t('cancelCopy.matching');
+  }
+  return t('cancelCopy.default');
 }
 
 const PICKUP_LIVE_STATUSES: RideRequestStatus[] = [
@@ -111,16 +106,6 @@ function showLiveTracking(status: RideRequestStatus | undefined): boolean {
   return Boolean(status && LIVE_TRACKING_STATUSES.includes(status));
 }
 
-function getCancelCopy(status: RideRequestStatus | undefined): string {
-  if (status === 'driver_en_route_pickup') {
-    return 'Your driver is already on the way. Cancelling now may affect their earnings.';
-  }
-  if (status === 'matching') {
-    return 'Your driver search will stop and this booking will be marked as cancelled.';
-  }
-  return 'This ride will be cancelled. You can book again from home.';
-}
-
 const RIDE_SYNC_MS = 5_000;
 const RIDE_ARRIVED_SYNC_MS = 2_000;
 
@@ -143,6 +128,7 @@ function formatSeconds(secs: number): string {
 }
 
 function RiderPinDisplay({ pin }: { pin: string }) {
+  const { t } = useTranslation('ride');
   return (
     <div className="rounded-3xl bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/30 dark:to-slate-900 border border-emerald-200 dark:border-emerald-800 p-5 space-y-3">
       <div className="flex items-center gap-2">
@@ -151,10 +137,10 @@ function RiderPinDisplay({ pin }: { pin: string }) {
         </div>
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
-            Your trip PIN
+            {t('pinTitle')}
           </p>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Tell your driver this code to start the trip
+            {t('pinHint')}
           </p>
         </div>
       </div>
@@ -169,13 +155,14 @@ function RiderPinDisplay({ pin }: { pin: string }) {
         ))}
       </div>
       <p className="text-xs text-center text-zinc-500 dark:text-zinc-400">
-        The driver will ask for this code before starting your trip
+        {t('pinFooter')}
       </p>
     </div>
   );
 }
 
 function RiderWaitTimeDisplay({ waitTime }: { waitTime: WaitTimeInfo }) {
+  const { t } = useTranslation('ride');
   const [remainingSecs, setRemainingSecs] = useState(waitTime.wait_time_grace_remaining_seconds ?? 0);
   
   useEffect(() => {
@@ -197,9 +184,9 @@ function RiderWaitTimeDisplay({ waitTime }: { waitTime: WaitTimeInfo }) {
     <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-zinc-50 border border-zinc-200">
       <Clock className="w-5 h-5 text-zinc-500 shrink-0" />
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-zinc-700 font-medium">Driver waiting</p>
+        <p className="text-sm text-zinc-700 font-medium">{t('driverWaiting')}</p>
         <p className="text-xs text-zinc-500">
-          Grace period: {formatSeconds(remainingSecs)} remaining
+          {t('gracePeriodRemaining', { time: formatSeconds(remainingSecs) })}
         </p>
       </div>
     </div>
@@ -207,6 +194,7 @@ function RiderWaitTimeDisplay({ waitTime }: { waitTime: WaitTimeInfo }) {
 }
 
 export default function RidePage() {
+  const { t } = useTranslation('ride');
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -315,7 +303,7 @@ export default function RidePage() {
     if (!ride || !id || ride.status !== 'completed' || !isDelegatedBooker || historyView) return;
     bookerTracking?.clear();
     const name = ride.guest_passenger_name;
-    toast.message(name ? `Ride for ${name} completed` : 'Your booked ride completed');
+    toast.message(name ? t('toast.rideForCompleted', { name }) : t('toast.bookedRideCompleted'));
     navigate('/', { replace: true });
   }, [ride, id, isDelegatedBooker, historyView, navigate, bookerTracking]);
 
@@ -326,15 +314,15 @@ export default function RidePage() {
       const { invite } = await createPassengerInvite(id);
       const url = invite.url;
       if (typeof navigator.share === 'function') {
-        await navigator.share({ title: 'Your Roam ride', url });
-        toast.success('Invite shared');
+        await navigator.share({ title: t('toast.shareTitle'), url });
+        toast.success(t('toast.inviteShared'));
       } else {
         await navigator.clipboard.writeText(url);
-        toast.success('Invite link copied');
+        toast.success(t('toast.inviteLinkCopied'));
       }
     } catch (e) {
       if (e instanceof Error && e.name === 'AbortError') return;
-      toast.error(e instanceof Error ? e.message : 'Could not create invite');
+      toast.error(e instanceof Error ? e.message : t('toast.couldNotCreateInvite'));
     } finally {
       setSharingInvite(false);
     }
@@ -365,7 +353,7 @@ export default function RidePage() {
 
   useEffect(() => {
     if (error && !data?.ride) {
-      toast.error(error instanceof Error ? error.message : 'Failed to load ride');
+      toast.error(error instanceof Error ? error.message : t('toast.failedToLoadRide'));
     }
   }, [error, data?.ride]);
 
@@ -393,14 +381,14 @@ export default function RidePage() {
       prevStatusRef.current !== 'driver_arrived_pickup'
     ) {
       if (isDelegatedBooker) {
-        toast.success('Driver has arrived', {
-          description: 'Pickup is in progress for your rider.',
+        toast.success(t('toast.driverArrived'), {
+          description: t('toast.driverArrivedBookerDescription'),
         });
       } else if (data?.participant_role === 'passenger' || !data?.is_delegated) {
-        toast.success('Your driver has arrived', {
+        toast.success(t('toast.yourDriverArrived'), {
           description: riderPin
-            ? 'Share your 4-digit PIN when they ask for it.'
-            : 'Your trip PIN will appear when they reach the pickup point.',
+            ? t('toast.pinShareDescription')
+            : t('toast.pinWillAppearDescription'),
         });
       }
     }
@@ -488,13 +476,13 @@ export default function RidePage() {
     setCancelling(true);
     try {
       await ridesCancelRequest(id, 'rider_changed_plans');
-      toast.success('Ride cancelled');
+      toast.success(t('toast.rideCancelled'));
       setCancelDialogOpen(false);
       setLeaveDialogOpen(false);
       bookerTracking?.clear();
       navigate('/', { replace: true });
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Cancel failed');
+      toast.error(e instanceof Error ? e.message : t('toast.cancelFailed'));
     } finally {
       setCancelling(false);
     }
@@ -623,7 +611,7 @@ export default function RidePage() {
             leaveDialogOpen={false}
             setLeaveDialogOpen={setLeaveDialogOpen}
             cancelling={cancelling}
-            cancelCopy={getCancelCopy(ride.status)}
+            cancelCopy={getCancelCopy(ride.status, t)}
             onConfirmCancel={() => void performCancel()}
             showLeaveDialog={false}
           />
@@ -675,7 +663,7 @@ export default function RidePage() {
             leaveDialogOpen={false}
             setLeaveDialogOpen={setLeaveDialogOpen}
             cancelling={cancelling}
-            cancelCopy={getCancelCopy(ride.status)}
+            cancelCopy={getCancelCopy(ride.status, t)}
             onConfirmCancel={() => void performCancel()}
             showLeaveDialog={false}
           />
@@ -710,7 +698,7 @@ export default function RidePage() {
           leaveDialogOpen={false}
           setLeaveDialogOpen={setLeaveDialogOpen}
           cancelling={cancelling}
-          cancelCopy={getCancelCopy(ride.status)}
+          cancelCopy={getCancelCopy(ride.status, t)}
           onConfirmCancel={() => void performCancel()}
           showLeaveDialog={false}
         />
@@ -743,7 +731,7 @@ export default function RidePage() {
           leaveDialogOpen={false}
           setLeaveDialogOpen={setLeaveDialogOpen}
           cancelling={cancelling}
-          cancelCopy={getCancelCopy(ride.status)}
+          cancelCopy={getCancelCopy(ride.status, t)}
           onConfirmCancel={() => void performCancel()}
           showLeaveDialog={false}
         />
@@ -770,7 +758,7 @@ export default function RidePage() {
           leaveDialogOpen={false}
           setLeaveDialogOpen={setLeaveDialogOpen}
           cancelling={cancelling}
-          cancelCopy={getCancelCopy(ride.status)}
+          cancelCopy={getCancelCopy(ride.status, t)}
           onConfirmCancel={() => void performCancel()}
           showLeaveDialog={false}
         />
@@ -778,7 +766,7 @@ export default function RidePage() {
     );
   }
 
-  const cancelCopy = getCancelCopy(ride?.status);
+  const cancelCopy = getCancelCopy(ride?.status, t);
 
   return (
     <div className="min-h-[100dvh] flex flex-col bg-zinc-100">
@@ -788,18 +776,18 @@ export default function RidePage() {
             type="button"
             onClick={handlePassengerMinimize}
             className="btn-touch inline-flex items-center justify-center rounded-2xl border border-zinc-200 bg-white px-3 hover:bg-zinc-50 touch-manipulation active:scale-[0.98]"
-            aria-label="Minimize tracker"
+            aria-label={t('minimizeTracker')}
           >
             <ChevronDown className="w-5 h-5 text-zinc-800" />
           </button>
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-zinc-900 truncate">Live ride</p>
-            <p className="text-xs text-zinc-500 truncate">Live updates when driver is assigned</p>
+            <p className="font-semibold text-zinc-900 truncate">{t('liveRide')}</p>
+            <p className="text-xs text-zinc-500 truncate">{t('liveUpdatesHint')}</p>
           </div>
           {isFetching && (
             <span className="inline-flex items-center gap-1.5 text-xs text-zinc-500 shrink-0">
               <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden />
-              Syncing
+              {t('syncing')}
             </span>
           )}
         </div>
@@ -809,30 +797,30 @@ export default function RidePage() {
         {!ride ? (
           <div className="rounded-3xl bg-white ring-1 ring-zinc-200/90 p-10 flex flex-col items-center gap-4 shadow-lg shadow-zinc-900/5">
             <Loader2 className="w-10 h-10 text-emerald-600 animate-spin" aria-hidden />
-            <p className="text-zinc-600 text-base font-medium">Loading your ride…</p>
+            <p className="text-zinc-600 text-base font-medium">{t('loadingRide')}</p>
           </div>
         ) : (
           <>
             <div className="rounded-3xl bg-white border border-zinc-200/90 p-5 sm:p-6 shadow-xl shadow-zinc-900/6 space-y-4">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                  Status
+                  {t('status')}
                 </span>
                 {(ride.status === 'matching' || ride.status === 'driver_en_route_pickup') && (
                   <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" aria-hidden />
                 )}
               </div>
               <p className="text-xl sm:text-2xl font-semibold text-zinc-900 leading-snug">
-                {statusLabel(ride.status)}
+                {statusLabel(ride.status, t)}
               </p>
               <div className="space-y-3 pt-1 border-t border-zinc-100">
                 <div>
-                  <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide mb-1">Pickup</p>
-                  <p className="text-base text-zinc-700 leading-relaxed">{ride.pickup_address ?? 'Pickup'}</p>
+                  <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide mb-1">{t('pickup')}</p>
+                  <p className="text-base text-zinc-700 leading-relaxed">{ride.pickup_address ?? t('pickup')}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide mb-1">Drop-off</p>
-                  <p className="text-base text-zinc-700 leading-relaxed">{ride.dropoff_address ?? 'Drop-off'}</p>
+                  <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide mb-1">{t('dropoff')}</p>
+                  <p className="text-base text-zinc-700 leading-relaxed">{ride.dropoff_address ?? t('dropoff')}</p>
                 </div>
               </div>
             </div>
@@ -841,14 +829,14 @@ export default function RidePage() {
 
             {pinAwaitingPickup && (
               <p className="text-sm text-center text-zinc-500 px-2 leading-relaxed">
-                Your trip PIN will appear when your driver reaches the pickup location.
+                {t('pinAwaitingPickup')}
               </p>
             )}
 
             {pinLoadingAtPickup && (
               <div className="rounded-3xl bg-emerald-50 border border-emerald-200 p-5 text-center space-y-2">
                 <Loader2 className="w-6 h-6 text-emerald-600 animate-spin mx-auto" aria-hidden />
-                <p className="text-sm font-medium text-emerald-900">Loading your trip PIN…</p>
+                <p className="text-sm font-medium text-emerald-900">{t('loadingPin')}</p>
               </div>
             )}
 
@@ -863,7 +851,7 @@ export default function RidePage() {
                 className="btn-touch flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 text-base font-semibold text-emerald-900 hover:bg-emerald-100 touch-manipulation active:scale-[0.99] disabled:opacity-60"
               >
                 <Share2 className="h-5 w-5" aria-hidden />
-                {sharingInvite ? 'Creating link…' : 'Share with passenger'}
+                {sharingInvite ? t('creatingLink') : t('shareWithPassenger')}
               </button>
             )}
 
@@ -874,7 +862,7 @@ export default function RidePage() {
                 disabled={cancelling}
                 className="btn-touch w-full rounded-2xl border border-zinc-300 bg-white text-base font-semibold text-zinc-800 hover:bg-zinc-50 touch-manipulation active:scale-[0.99] disabled:opacity-60"
               >
-                {ride.status === 'matching' ? 'Cancel search' : 'Cancel ride'}
+                {ride.status === 'matching' ? t('cancelSearch') : t('cancelRide')}
               </button>
             )}
 
@@ -915,6 +903,7 @@ function RidePageDialogs({
   onConfirmCancel: () => void;
   showLeaveDialog?: boolean;
 }) {
+  const { t } = useTranslation('ride');
   return (
     <>
       <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
@@ -924,7 +913,7 @@ function RidePageDialogs({
         >
           <AlertDialogHeader>
             <AlertDialogTitle className="text-xl font-semibold text-zinc-900">
-              Cancel this ride?
+              {t('cancelDialogTitle')}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-base text-zinc-600 leading-relaxed">
               {cancelCopy}
@@ -935,7 +924,7 @@ function RidePageDialogs({
               disabled={cancelling}
               className="btn-touch rounded-2xl mt-0 h-12 w-full border-2 border-zinc-200 bg-white text-base font-semibold text-zinc-900 hover:bg-zinc-50"
             >
-              Keep waiting
+              {t('keepWaiting')}
             </AlertDialogCancel>
             <AlertDialogAction
               disabled={cancelling}
@@ -945,7 +934,7 @@ function RidePageDialogs({
               }}
               className="btn-touch rounded-2xl h-12 w-full bg-red-600 text-base font-semibold text-white hover:bg-red-700 shadow-sm"
             >
-              {cancelling ? 'Cancelling…' : 'Yes, cancel ride'}
+              {cancelling ? t('cancelling') : t('yesCancelRide')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -959,10 +948,10 @@ function RidePageDialogs({
         >
           <AlertDialogHeader>
             <AlertDialogTitle className="text-xl font-semibold text-zinc-900">
-              Cancel before leaving?
+              {t('leaveDialogTitle')}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-base text-zinc-600 leading-relaxed">
-              This ride is still active. Going home without cancelling keeps it open for your driver.
+              {t('leaveDialogDescription')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex flex-col gap-3 sm:flex-col">
@@ -970,7 +959,7 @@ function RidePageDialogs({
               disabled={cancelling}
               className="btn-touch rounded-2xl mt-0 h-12 w-full border-2 border-zinc-200 bg-white text-base font-semibold text-zinc-900 hover:bg-zinc-50"
             >
-              Keep ride
+              {t('keepRide')}
             </AlertDialogCancel>
             <AlertDialogAction
               disabled={cancelling}
@@ -980,7 +969,7 @@ function RidePageDialogs({
               }}
               className="btn-touch rounded-2xl h-12 w-full bg-red-600 text-base font-semibold text-white hover:bg-red-700 shadow-sm"
             >
-              {cancelling ? 'Cancelling…' : 'Cancel ride & go home'}
+              {cancelling ? t('cancelling') : t('cancelRideAndGoHome')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

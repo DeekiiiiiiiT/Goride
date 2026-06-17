@@ -1,5 +1,11 @@
 /** Status-aware copy and actions for Book for me (requester) trip intents. */
 
+import i18n from '@/i18n';
+
+function t(key: string, opts?: Record<string, unknown>): string {
+  return i18n.t(key, { ns: 'booking', ...opts });
+}
+
 export const TERMINAL_LINKED_RIDE_STATUSES = new Set(['completed', 'cancelled']);
 
 export type BookForMeIntentPhase = {
@@ -38,13 +44,13 @@ export function bookForMeFooterAction(intent: BookForMeIntentPhase): BookForMeFo
 
 export function bookForMeHeadline(intent: BookForMeIntentPhase): string {
   if (intent.status === 'booked') {
-    if (intent.linked_ride_status === 'cancelled') return 'Ride ended';
-    if (intent.linked_ride_status === 'completed') return 'Trip complete';
-    if (isLiveLinkedRideStatus(intent.linked_ride_status)) return 'Trip in progress';
-    return 'Finding a driver';
+    if (intent.linked_ride_status === 'cancelled') return t('bookForMe.headline.rideEnded');
+    if (intent.linked_ride_status === 'completed') return t('bookForMe.headline.tripComplete');
+    if (isLiveLinkedRideStatus(intent.linked_ride_status)) return t('bookForMe.headline.tripInProgress');
+    return t('bookForMe.headline.findingDriver');
   }
-  if (intent.status === 'claimed') return 'Payer agreed — book your ride';
-  return 'Your trip is waiting for a payer';
+  if (intent.status === 'claimed') return t('bookForMe.headline.payerAgreed');
+  return t('bookForMe.headline.waitingForPayer');
 }
 
 export function bookForMeDetail(
@@ -53,29 +59,29 @@ export function bookForMeDetail(
 ): string {
   if (intent.status === 'booked') {
     if (intent.linked_ride_status === 'cancelled') {
-      return 'This ride was cancelled. Tap Back to home when you are ready to book again.';
+      return t('bookForMe.detail.rideCancelled');
     }
     if (intent.linked_ride_status === 'completed') {
-      return 'Your trip finished successfully. Tap Back to home when you are done.';
+      return t('bookForMe.detail.tripFinished');
     }
     if (isLiveLinkedRideStatus(intent.linked_ride_status)) {
-      return 'Your ride is underway. Open the live trip to track your driver.';
+      return t('bookForMe.detail.rideUnderway');
     }
-    return 'Your booker paid — we are matching a driver. You can cancel below if your plans changed.';
+    return t('bookForMe.detail.bookerPaid');
   }
   if (intent.status === 'claimed') {
     const countdown = opts?.bookCountdown;
     return countdown
-      ? `You have ${countdown} left to book. Trip details are locked.`
-      : 'Book now — trip details are locked.';
+      ? t('bookForMe.detail.bookCountdown', { countdown })
+      : t('bookForMe.detail.bookNow');
   }
   return '';
 }
 
 export function bookForMeFooterLabel(action: BookForMeFooterAction, loading: boolean): string {
-  if (loading) return action === 'dismiss' ? 'Closing…' : 'Cancelling…';
-  if (action === 'dismiss') return 'Back to home';
-  if (action === 'withdraw') return 'Cancel trip';
+  if (loading) return action === 'dismiss' ? t('bookForMe.footer.closing') : t('bookForMe.cancelling');
+  if (action === 'dismiss') return t('bookForMe.footer.backToHome');
+  if (action === 'withdraw') return t('bookForMe.cancelTrip');
   return '';
 }
 

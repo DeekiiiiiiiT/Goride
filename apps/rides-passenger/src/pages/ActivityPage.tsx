@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 import { Loader2, RefreshCw } from 'lucide-react';
 import type { ActivityPipelineItem, ActivityTripCategory, ActivityTripHistoryItem } from '@roam/types/rides';
@@ -22,12 +23,6 @@ import {
 
 type FilterKey = 'all' | ActivityTripCategory;
 
-const FILTERS: { key: FilterKey; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'for_others', label: 'Booked for others' },
-  { key: 'for_me', label: 'Gift me' },
-];
-
 function ActivityTripSkeleton() {
   return (
     <div className="space-y-2.5">
@@ -43,10 +38,23 @@ function ActivityTripSkeleton() {
 }
 
 export default function ActivityPage() {
+  const { t } = useTranslation('activity');
+  const { t: tc } = useTranslation('common');
   const location = useLocation();
   const [filter, setFilter] = useState<FilterKey>('all');
   const [pipelineItem, setPipelineItem] = useState<ActivityPipelineItem | null>(null);
   const [selectedTrip, setSelectedTrip] = useState<ActivityTripHistoryItem | null>(null);
+
+  const filters = useMemo(
+    () =>
+      [
+        { key: 'all' as const, label: t('filters.all') },
+        { key: 'for_others' as const, label: t('filters.forOthers') },
+        { key: 'for_me' as const, label: t('filters.forMe') },
+      ] satisfies { key: FilterKey; label: string }[],
+    [t],
+  );
+
   const upcomingQuery = useActivityUpcoming();
   const {
     data,
@@ -93,7 +101,7 @@ export default function ActivityPage() {
         style={{ backgroundColor: SURFACE_LOWEST }}
       >
         <h1 className="text-xl font-semibold tracking-tight" style={{ color: PRIMARY }}>
-          Activity
+          {t('title')}
         </h1>
         <button
           type="button"
@@ -101,7 +109,7 @@ export default function ActivityPage() {
           disabled={isFetching || upcomingQuery.isFetching}
           className="rounded-full p-2 transition-colors active:scale-95 disabled:opacity-50"
           style={{ color: ON_SURFACE_VARIANT }}
-          aria-label="Refresh activity"
+          aria-label={t('refreshAria')}
         >
           <RefreshCw
             className={`h-5 w-5 ${isFetching || upcomingQuery.isFetching ? 'animate-spin' : ''}`}
@@ -119,19 +127,19 @@ export default function ActivityPage() {
         <section aria-labelledby="activity-recent-heading">
           <div className="mb-1 flex items-center justify-between gap-3">
             <h2 id="activity-recent-heading" className="text-base font-semibold" style={{ color: ON_SURFACE }}>
-              Recent trips
+              {t('recentTrips')}
             </h2>
           </div>
           <p className="mb-3 text-[12px]" style={{ color: ON_SURFACE_VARIANT }}>
-            Last {windowDays} days
+            {t('lastDays', { days: windowDays })}
           </p>
 
           <div
             className="mb-4 flex gap-2 overflow-x-auto pb-1"
             role="tablist"
-            aria-label="Filter trips"
+            aria-label={t('filterAria')}
           >
-            {FILTERS.map(({ key, label }) => {
+            {filters.map(({ key, label }) => {
               const active = filter === key;
               return (
                 <button
@@ -161,10 +169,10 @@ export default function ActivityPage() {
               style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
             >
               <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-                {error instanceof Error ? error.message : 'Could not load trips'}
+                {error instanceof Error ? error.message : t('loadError')}
               </p>
               <p className="text-xs" style={{ color: ON_SURFACE_VARIANT }}>
-                If this persists, redeploy the rides edge function.
+                {t('loadErrorHint')}
               </p>
               <button
                 type="button"
@@ -172,7 +180,7 @@ export default function ActivityPage() {
                 className="text-sm font-semibold"
                 style={{ color: PRIMARY }}
               >
-                Try again
+                {t('tryAgain')}
               </button>
             </div>
           ) : trips.length === 0 ? (
@@ -180,7 +188,7 @@ export default function ActivityPage() {
               className="rounded-[20px] px-4 py-10 text-center text-sm"
               style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW, color: ON_SURFACE_VARIANT }}
             >
-              No trips in the last {windowDays} days
+              {t('noTrips', { days: windowDays })}
             </p>
           ) : (
             <ul role="list" className="space-y-2.5">
@@ -203,10 +211,10 @@ export default function ActivityPage() {
               {isFetchingNextPage ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                  Loading…
+                  {tc('loading')}
                 </>
               ) : (
-                'Load more'
+                t('loadMore')
               )}
             </button>
           ) : null}

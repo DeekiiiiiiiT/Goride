@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { ArrowLeft, Box, Flag, MapPin, Package } from 'lucide-react';
 
@@ -26,13 +27,7 @@ import {
 const MAP_PREVIEW_URL =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuCTQHtpO8lskolVcg4AENYfX9MDvFjmK-bi3cxJKlEo9LkpwfhfYpnWXclBHBPJYoK6ct3JJkDOkQbQACPuwhJPlcqzzgHUCcxrDMsP3jVpZfBIzQJwxDTcIg10w0iJBexXUricikEUf027GcrezCN4AxAW_zIjP5f9LqBbE5cO067KBlaJVT1Oco8JYvXvnTvPiMd7hAAqhyCK4MbrmxwPVxMwrwlSFXsQCgve2NMpGE_p2E3qcqpq_siBR5PE68uxMsSkoMWkGXgl';
 
-const PACKAGE_SIZES = [
-  { id: 'small' as const, label: 'Small', weight: 'Up to 5kg', icon: Package },
-  { id: 'medium' as const, label: 'Medium', weight: 'Up to 15kg', icon: Box },
-  { id: 'large' as const, label: 'Large', weight: 'Up to 30kg', icon: Box },
-];
-
-type PackageSize = (typeof PACKAGE_SIZES)[number]['id'];
+type PackageSize = 'small' | 'medium' | 'large';
 
 function PackageSizeCard({
   label,
@@ -87,17 +82,24 @@ function PackageSizeCard({
 
 export default function CourierServicePage() {
   const navigate = useNavigate();
+  const { t } = useTranslation('booking');
   const [pickup, setPickup] = useState('');
   const [dropoff, setDropoff] = useState('');
   const [packageSize, setPackageSize] = useState<PackageSize>('medium');
   const [instructions, setInstructions] = useState('');
 
+  const packageSizes = [
+    { id: 'small' as const, label: t('courier.sizes.small'), weight: t('courier.sizes.smallWeight'), icon: Package },
+    { id: 'medium' as const, label: t('courier.sizes.medium'), weight: t('courier.sizes.mediumWeight'), icon: Box },
+    { id: 'large' as const, label: t('courier.sizes.large'), weight: t('courier.sizes.largeWeight'), icon: Box },
+  ];
+
   const handleRequest = () => {
     if (!pickup.trim() || !dropoff.trim()) {
-      toast.error('Enter pickup and drop-off addresses.');
+      toast.error(t('courier.enterAddresses'));
       return;
     }
-    toast.message('Courier requests are coming soon.');
+    toast.message(t('courier.comingSoon'));
   };
 
   return (
@@ -111,12 +113,12 @@ export default function CourierServicePage() {
           onClick={() => navigate('/services')}
           className="rounded-full p-2 transition-colors active:scale-95 passenger-row-hover"
           style={{ color: PRIMARY }}
-          aria-label="Back to services"
+          aria-label={t('backToServices')}
         >
           <ArrowLeft className="h-6 w-6" strokeWidth={2} aria-hidden />
         </button>
         <h1 className="ml-2 text-xl font-semibold tracking-tight" style={{ color: PRIMARY }}>
-          Courier Service
+          {t('courier.title')}
         </h1>
       </header>
 
@@ -143,13 +145,13 @@ export default function CourierServicePage() {
                   className="mb-1 block text-xs font-bold tracking-wide"
                   style={{ color: ON_SURFACE_VARIANT }}
                 >
-                  PICKUP LOCATION
+                  {t('courier.pickupLocation')}
                 </label>
                 <input
                   type="text"
                   value={pickup}
                   onChange={(e) => setPickup(e.target.value)}
-                  placeholder="Enter pickup address"
+                  placeholder={t('courier.enterPickupAddress')}
                   className="w-full rounded-xl border-none px-4 py-3 text-base outline-none focus:ring-2 focus:ring-[#004ac6]"
                   style={{ backgroundColor: SURFACE_LOW, color: ON_SURFACE }}
                 />
@@ -167,13 +169,13 @@ export default function CourierServicePage() {
                   className="mb-1 block text-xs font-bold tracking-wide"
                   style={{ color: ON_SURFACE_VARIANT }}
                 >
-                  DROP-OFF LOCATION
+                  {t('courier.dropoffLocation')}
                 </label>
                 <input
                   type="text"
                   value={dropoff}
                   onChange={(e) => setDropoff(e.target.value)}
-                  placeholder="Enter destination"
+                  placeholder={t('courier.enterDestination')}
                   className="w-full rounded-xl border-none px-4 py-3 text-base outline-none focus:ring-2 focus:ring-[#004ac6]"
                   style={{ backgroundColor: SURFACE_LOW, color: ON_SURFACE }}
                 />
@@ -187,10 +189,10 @@ export default function CourierServicePage() {
             className="mb-3 px-1 text-xs font-bold tracking-wide"
             style={{ color: ON_SURFACE_VARIANT }}
           >
-            PACKAGE SIZE
+            {t('courier.packageSize')}
           </h2>
           <div className="grid grid-cols-3 gap-3">
-            {PACKAGE_SIZES.map((size) => (
+            {packageSizes.map((size) => (
               <PackageSizeCard
                 key={size.id}
                 label={size.label}
@@ -210,7 +212,7 @@ export default function CourierServicePage() {
             <div className="flex items-center gap-2 rounded-full bg-white/90 px-3 py-1.5 backdrop-blur-md">
               <span className="h-2 w-2 animate-pulse rounded-full" style={{ backgroundColor: ERROR }} />
               <span className="text-[11px] font-semibold" style={{ color: ON_SURFACE }}>
-                Drivers nearby: 12
+                {t('courier.driversNearby')}
               </span>
             </div>
           </div>
@@ -221,12 +223,12 @@ export default function CourierServicePage() {
             className="mb-3 block px-1 text-xs font-bold tracking-wide"
             style={{ color: ON_SURFACE_VARIANT }}
           >
-            SPECIAL INSTRUCTIONS
+            {t('courier.specialInstructions')}
           </label>
           <textarea
             value={instructions}
             onChange={(e) => setInstructions(e.target.value)}
-            placeholder="e.g. Leave at the front desk, gate code 1234..."
+            placeholder={t('courier.instructionsPlaceholder')}
             className="h-24 w-full resize-none rounded-[24px] border-none p-4 text-sm outline-none focus:ring-2 focus:ring-[#004ac6]"
             style={{ backgroundColor: SURFACE_LOWEST, color: ON_SURFACE, boxShadow: CARD_SHADOW }}
           />
@@ -238,18 +240,18 @@ export default function CourierServicePage() {
         >
           <div className="flex flex-col">
             <span className="text-xs font-bold tracking-wide" style={{ color: ON_PRIMARY_FIXED }}>
-              ESTIMATED ARRIVAL
+              {t('courier.estimatedArrival')}
             </span>
             <span className="text-xl font-semibold" style={{ color: ON_PRIMARY_FIXED }}>
-              25 - 35 mins
+              {t('courier.arrivalRange')}
             </span>
           </div>
           <div className="flex flex-col text-right">
             <span className="text-xs font-bold tracking-wide" style={{ color: ON_PRIMARY_FIXED }}>
-              TOTAL FARE
+              {t('courier.totalFare')}
             </span>
             <span className="text-xl font-semibold" style={{ color: ON_PRIMARY_FIXED }}>
-              $18.50
+              {t('courier.fareAmount')}
             </span>
           </div>
         </section>
@@ -260,7 +262,7 @@ export default function CourierServicePage() {
           className="mb-4 w-full rounded-xl py-4 text-lg font-semibold shadow-lg transition-all active:scale-95"
           style={{ backgroundColor: PRIMARY, color: ON_PRIMARY }}
         >
-          Request Courier
+          {t('courier.requestCourier')}
         </button>
       </main>
     </div>

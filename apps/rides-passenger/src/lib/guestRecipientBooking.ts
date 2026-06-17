@@ -1,3 +1,4 @@
+/** Draft for book-for-others trips on Home — always requires digital payment (see tripPaymentMethods). */
 export type GuestRecipientDraft = {
   fullName: string;
   /** Local number digits (no country code). */

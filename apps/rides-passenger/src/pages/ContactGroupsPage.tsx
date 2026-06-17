@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { ArrowLeft, Pin, Plus } from 'lucide-react';
 import type { RiderContactGroupRow, RiderContactRow } from '@roam/types/riderContacts';
@@ -33,6 +34,8 @@ type SortMode = 'recent' | 'name';
 
 export default function ContactGroupsPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation('contacts');
+  const { t: tc } = useTranslation('common');
   const [groups, setGroups] = useState<RiderContactGroupRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
@@ -49,7 +52,7 @@ export default function ContactGroupsPage() {
       const res = await contactGroupsList();
       setGroups(res.groups);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not load groups');
+      toast.error(e instanceof Error ? e.message : t('groups.couldNotLoad'));
     } finally {
       setLoading(false);
     }
@@ -72,29 +75,29 @@ export default function ContactGroupsPage() {
 
   const handleCreate = async (payload: { name: string; emoji: string; color: string }) => {
     await contactGroupCreate(payload);
-    toast.success('Group created');
+    toast.success(t('groups.groupCreated'));
     await load();
   };
 
   const handleTogglePin = async (group: RiderContactGroupRow) => {
     try {
       await contactGroupUpdate(group.id, { is_pinned: !group.is_pinned });
-      toast.success(group.is_pinned ? 'Unpinned' : 'Pinned');
+      toast.success(group.is_pinned ? t('groups.unpinned') : t('groups.pinned'));
       setMenuGroupId(null);
       await load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not update group');
+      toast.error(e instanceof Error ? e.message : t('groups.couldNotUpdate'));
     }
   };
 
   const handleDelete = async (group: RiderContactGroupRow) => {
     try {
       await contactGroupDelete(group.id);
-      toast.success('Group deleted');
+      toast.success(t('groups.groupDeleted'));
       setMenuGroupId(null);
       await load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not delete group');
+      toast.error(e instanceof Error ? e.message : t('groups.couldNotDelete'));
     }
   };
 
@@ -110,14 +113,14 @@ export default function ContactGroupsPage() {
       setAddGroupId(group.id);
       setAddOpen(true);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not load contacts');
+      toast.error(e instanceof Error ? e.message : t('groups.couldNotLoadContacts'));
     }
   };
 
   const handleAddMembers = async (contactIds: string[]) => {
     if (!addGroupId) return;
     await contactGroupAddMembers(addGroupId, { contact_ids: contactIds });
-    toast.success(`Added ${contactIds.length} contact${contactIds.length === 1 ? '' : 's'}`);
+    toast.success(t(contactIds.length === 1 ? 'groups.addedContacts' : 'groups.addedContacts_plural', { count: contactIds.length }));
     setAddOpen(false);
     setAddGroupId(null);
     await load();
@@ -141,12 +144,12 @@ export default function ContactGroupsPage() {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               {g.is_pinned ? (
-                <Pin className="h-3.5 w-3.5 shrink-0" style={{ color: PRIMARY }} aria-label="Pinned" />
+                <Pin className="h-3.5 w-3.5 shrink-0" style={{ color: PRIMARY }} aria-label={t('groups.pinnedAria')} />
               ) : null}
               <p className="truncate font-semibold">{g.name}</p>
             </div>
             <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-              {g.member_count ?? 0} member{(g.member_count ?? 0) === 1 ? '' : 's'}
+              {t(g.member_count === 1 ? 'groups.member' : 'groups.member_plural', { count: g.member_count ?? 0 })}
             </p>
           </div>
           <GroupMemberAvatarStack
@@ -181,12 +184,12 @@ export default function ContactGroupsPage() {
           onClick={() => navigate('/account/contacts/roam')}
           className="rounded-full p-2"
           style={{ color: PRIMARY }}
-          aria-label="Back"
+          aria-label={tc('back')}
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
         <h1 className="ml-2 text-xl font-semibold" style={{ color: PRIMARY }}>
-          Groups
+          {t('groups.title')}
         </h1>
       </header>
 
@@ -194,7 +197,7 @@ export default function ContactGroupsPage() {
         <section>
           <div className="mb-3 flex items-center justify-between">
             <p className="text-xs font-bold tracking-wide" style={{ color: ON_SURFACE_VARIANT }}>
-              ALL GROUPS
+              {t('groups.allGroups')}
             </p>
             <div className="flex rounded-full p-0.5" style={{ backgroundColor: SURFACE_LOW }}>
               <button
@@ -206,7 +209,7 @@ export default function ContactGroupsPage() {
                   color: sortMode === 'recent' ? PRIMARY : ON_SURFACE_VARIANT,
                 }}
               >
-                Recent
+                {t('groups.recent')}
               </button>
               <button
                 type="button"
@@ -217,18 +220,18 @@ export default function ContactGroupsPage() {
                   color: sortMode === 'name' ? PRIMARY : ON_SURFACE_VARIANT,
                 }}
               >
-                Name
+                {t('groups.name')}
               </button>
             </div>
           </div>
 
           {loading ? (
             <p className="text-center text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-              Loading…
+              {tc('loading')}
             </p>
           ) : !hasGroups ? (
             <p className="text-center text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-              No groups yet. Create one to organize contacts.
+              {t('groups.noGroups')}
             </p>
           ) : (
             <ul className="space-y-2">
@@ -253,7 +256,7 @@ export default function ContactGroupsPage() {
           color: '#fff',
           bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px) + 1rem)',
         }}
-        aria-label="Create group"
+        aria-label={t('groups.createGroupAria')}
       >
         <Plus className="h-6 w-6" />
       </button>

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ArrowLeft, Info, Moon, RefreshCw, ShieldHalf } from 'lucide-react';
@@ -29,6 +30,7 @@ import {
 
 export default function TrustedContactsPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation('contacts');
   const queryClient = useQueryClient();
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [testShareOpen, setTestShareOpen] = useState(false);
@@ -51,8 +53,8 @@ export default function TrustedContactsPage() {
   const contacts = data?.contacts ?? [];
 
   const contactCountLabel = useMemo(
-    () => `${contacts.length} of ${MAX_TRUSTED_CONTACTS}`,
-    [contacts.length],
+    () => t('trusted.contactCount', { current: contacts.length, max: MAX_TRUSTED_CONTACTS }),
+    [contacts.length, t],
   );
 
   const setSharingPreference = async (pref: SafetySharingPreference) => {
@@ -61,7 +63,7 @@ export default function TrustedContactsPage() {
       await updateSafetySharing({ default_sharing_preference: pref });
       await queryClient.invalidateQueries({ queryKey: ['passenger-profile'] });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not save preference');
+      toast.error(e instanceof Error ? e.message : t('trusted.couldNotSavePref'));
     } finally {
       setSavingPref(false);
     }
@@ -84,9 +86,9 @@ export default function TrustedContactsPage() {
     try {
       await contactsUpdate(contactId, { trusted_for_safety: false });
       await queryClient.invalidateQueries({ queryKey: ['trusted-contacts'] });
-      toast.message(`${name} removed from trusted contacts`);
+      toast.message(t('trusted.removed', { name }));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not update contact');
+      toast.error(e instanceof Error ? e.message : t('trusted.couldNotUpdate'));
     } finally {
       setRemovingId(null);
     }
@@ -94,7 +96,7 @@ export default function TrustedContactsPage() {
 
   const goAdd = () => {
     if (contacts.length >= MAX_TRUSTED_CONTACTS) {
-      toast.error(`You can add up to ${MAX_TRUSTED_CONTACTS} trusted contacts.`);
+      toast.error(t('trusted.maxTrusted', { max: MAX_TRUSTED_CONTACTS }));
       return;
     }
     navigate('/account/contacts/trusted/add');
@@ -114,12 +116,12 @@ export default function TrustedContactsPage() {
           onClick={() => navigate('/account/contacts')}
           className="rounded-full p-2 transition-colors active:scale-95 passenger-row-hover"
           style={{ color: PRIMARY }}
-          aria-label="Back to contacts"
+          aria-label={t('trusted.backAria')}
         >
           <ArrowLeft className="h-6 w-6" strokeWidth={2} aria-hidden />
         </button>
         <h1 className="text-xl font-semibold tracking-tight" style={{ color: PRIMARY }}>
-          Trusted Contacts
+          {t('trusted.title')}
         </h1>
       </header>
 
@@ -134,10 +136,9 @@ export default function TrustedContactsPage() {
             }}
           >
             <div className="relative z-10">
-              <h2 className="mb-2 text-xl font-semibold tracking-tight text-white">Travel with Confidence</h2>
+              <h2 className="mb-2 text-xl font-semibold tracking-tight text-white">{t('trusted.heroTitle')}</h2>
               <p className="max-w-md text-base text-white/90">
-                Share your real-time trip status with the people you trust. They&apos;ll know your
-                driver, vehicle, and ETA.
+                {t('trusted.heroDescription')}
               </p>
             </div>
             <ShieldHalf
@@ -149,7 +150,7 @@ export default function TrustedContactsPage() {
 
         <section className="space-y-4">
           <h3 className="px-2 text-xs font-bold uppercase tracking-widest" style={{ color: SECONDARY }}>
-            Sharing Preferences
+            {t('trusted.sharingPreferences')}
           </h3>
           <div
             className="overflow-hidden rounded-[24px] border border-[rgba(0,74,198,0.08)]"
@@ -162,8 +163,8 @@ export default function TrustedContactsPage() {
               icon={<RefreshCw className="h-6 w-6" aria-hidden />}
               iconBg="rgba(0, 74, 198, 0.1)"
               iconColor={PRIMARY}
-              title="Share all trips"
-              description="Automatically alert contacts on every ride"
+              title={t('trusted.shareAllTrips')}
+              description={t('trusted.shareAllDescription')}
             />
             <div className="mx-5 h-px bg-black/[0.06]" />
             <SafetyPreferenceToggle
@@ -173,8 +174,8 @@ export default function TrustedContactsPage() {
               icon={<Moon className="h-6 w-6" aria-hidden />}
               iconBg="rgba(208, 225, 251, 0.5)"
               iconColor={SECONDARY}
-              title="Night trips only"
-              description="Only share rides between 9 PM and 6 AM"
+              title={t('trusted.nightTripsOnly')}
+              description={t('trusted.nightTripsDescription')}
             />
           </div>
         </section>
@@ -182,7 +183,7 @@ export default function TrustedContactsPage() {
         <section className="space-y-4">
           <div className="flex items-center justify-between px-2">
             <h3 className="text-xs font-bold uppercase tracking-widest" style={{ color: SECONDARY }}>
-              Current Contacts
+              {t('trusted.currentContacts')}
             </h3>
             <span
               className="rounded-full px-3 py-1 text-[11px] font-bold"
@@ -194,7 +195,7 @@ export default function TrustedContactsPage() {
 
           {isLoading ? (
             <p className="px-2 text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-              Loading contacts…
+              {t('trusted.loadingContacts')}
             </p>
           ) : null}
 
@@ -228,7 +229,7 @@ export default function TrustedContactsPage() {
               className="w-full rounded-2xl border py-3 text-sm font-semibold transition-colors active:scale-[0.98]"
               style={{ borderColor: 'rgba(0,74,198,0.2)', color: PRIMARY }}
             >
-              Test Share
+              {t('trusted.testShare')}
             </button>
           ) : null}
         </section>
@@ -239,7 +240,7 @@ export default function TrustedContactsPage() {
         >
           <Info className="h-5 w-5 shrink-0" style={{ color: PRIMARY }} aria-hidden />
           <p className="text-sm leading-relaxed" style={{ color: ON_SURFACE_VARIANT }}>
-            Trusted contacts receive SMS links to view trip status. They don&apos;t need the Roam app.
+            {t('trusted.info')}
           </p>
         </section>
       </main>
@@ -250,7 +251,7 @@ export default function TrustedContactsPage() {
         open={testShareOpen}
         onClose={() => setTestShareOpen(false)}
         contacts={contacts}
-        onSuccess={() => toast.success('Test alert sent. Your contacts will receive messages like this during rides.')}
+        onSuccess={() => toast.success(t('trusted.testAlertSent'))}
       />
     </div>
   );

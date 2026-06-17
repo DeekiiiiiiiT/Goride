@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, BadgeCheck, Loader2, Mail, Phone, Tag, User } from 'lucide-react';
@@ -69,6 +70,8 @@ function formatPhoneE164(phone: string | null | undefined): string | null {
 }
 
 export default function ProfilePage() {
+  const { t } = useTranslation('profile');
+  const { t: ta } = useTranslation('account');
   const navigate = useNavigate();
   const [user, setUser] = useState<SupabaseUser | null>(null);
 
@@ -99,11 +102,11 @@ export default function ProfilePage() {
     const meta = user?.user_metadata;
     const name = (meta?.name as string | undefined)?.trim();
     if (name) return name;
-    return user?.email?.split('@')[0] ?? 'Rider';
-  }, [profile?.display_name, user]);
+    return user?.email?.split('@')[0] ?? ta('defaultRiderName');
+  }, [profile?.display_name, user, ta]);
 
-  const email = user?.email?.trim() || 'Not set';
-  const phone = formatPhoneE164(profile?.phone_e164) ?? 'Not set';
+  const email = user?.email?.trim() || t('notSet');
+  const phone = formatPhoneE164(profile?.phone_e164) ?? t('notSet');
 
   const avatarUrl =
     (user?.user_metadata?.avatar_url as string | undefined) ||
@@ -123,11 +126,11 @@ export default function ProfilePage() {
           onClick={() => navigate('/account')}
           className="-ml-2 rounded-full p-1 transition-transform active:scale-95"
           style={{ color: PROFILE_PRIMARY }}
-          aria-label="Back"
+          aria-label={t('backAria')}
         >
           <ArrowLeft className="h-6 w-6" strokeWidth={2.5} />
         </button>
-        <h1 className="ml-4 text-xl font-bold tracking-tight text-gray-900 dark:text-white">Profile</h1>
+        <h1 className="ml-4 text-xl font-bold tracking-tight text-gray-900 dark:text-white">{t('title')}</h1>
       </header>
 
       <main className="mx-auto w-full max-w-xl flex-1 safe-x">
@@ -152,23 +155,23 @@ export default function ProfilePage() {
             {loading ? (
               <div className="flex items-center justify-center px-5 py-12">
                 <Loader2 className="h-6 w-6 animate-spin" style={{ color: PROFILE_PRIMARY }} aria-hidden />
-                <span className="sr-only">Loading profile</span>
+                <span className="sr-only">{t('loadingAria')}</span>
               </div>
             ) : (
               <>
                 <ProfileFieldRow
                   icon={<User className="h-5 w-5" strokeWidth={2} />}
-                  label="Name"
+                  label={t('name')}
                   value={displayName}
                 />
                 <ProfileFieldRow
                   icon={<Mail className="h-5 w-5" strokeWidth={2} />}
-                  label="Email"
+                  label={t('email')}
                   value={email}
                 />
                 <ProfileFieldRow
                   icon={<Phone className="h-5 w-5" strokeWidth={2} />}
-                  label="Phone"
+                  label={t('phone')}
                   value={phone}
                   trailing={
                     profile?.phone_verified ? (
@@ -178,7 +181,7 @@ export default function ProfilePage() {
                           className="text-[10px] font-bold uppercase"
                           style={{ color: PROFILE_PRIMARY }}
                         >
-                          Verified
+                          {t('verified')}
                         </span>
                       </div>
                     ) : null
@@ -186,8 +189,8 @@ export default function ProfilePage() {
                 />
                 <ProfileFieldRow
                   icon={<Tag className="h-5 w-5" strokeWidth={2} />}
-                  label="Roam Tag"
-                  value={roamTag ?? 'Not set'}
+                  label={t('roamTag')}
+                  value={roamTag ?? t('notSet')}
                   valueClassName={roamTag ? 'text-[#00a86b]' : undefined}
                   isLast
                 />

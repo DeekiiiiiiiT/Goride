@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { ArrowLeft, Shield } from 'lucide-react';
 import {
@@ -39,6 +40,8 @@ import {
 
 export default function ContactDetailPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation('contacts');
+  const { t: tc } = useTranslation('common');
   const { id } = useParams<{ id: string }>();
   const isNew = id === 'new';
 
@@ -69,7 +72,7 @@ export default function ContactDetailPage() {
       setTrusted(contact.trusted_for_safety);
       setGroupIds(contact.groups?.map((g) => g.id) ?? []);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Contact not found');
+      toast.error(e instanceof Error ? e.message : t('detail.notFound'));
       navigate('/account/contacts/roam');
     } finally {
       setLoading(false);
@@ -83,11 +86,11 @@ export default function ContactDetailPage() {
 
   const handleSave = async () => {
     if (!displayName.trim() || !phone.trim()) {
-      toast.error('Name and phone are required.');
+      toast.error(t('detail.namePhoneRequired'));
       return;
     }
     if (!isValidGuestPhone(phone)) {
-      toast.error('Enter a valid phone number.');
+      toast.error(t('detail.invalidPhone'));
       return;
     }
 
@@ -96,7 +99,7 @@ export default function ContactDetailPage() {
       const alreadyTrusted = !isNew && id && trustedRes.contacts.some((c) => c.id === id);
       const trustedCount = trustedRes.contacts.length - (alreadyTrusted ? 1 : 0);
       if (trustedCount >= MAX_TRUSTED_CONTACTS) {
-        toast.error(`You can trust up to ${MAX_TRUSTED_CONTACTS} contacts. Remove one to add another.`);
+        toast.error(t('detail.trustedLimit', { max: MAX_TRUSTED_CONTACTS }));
         return;
       }
     }
@@ -124,16 +127,16 @@ export default function ContactDetailPage() {
           navigate('/account/contacts/pending', { replace: true });
         } else {
           const { contact } = await contactsCreate(body);
-          toast.success('Contact saved');
+          toast.success(t('detail.contactSaved'));
           navigate(`/account/contacts/${contact.id}`, { replace: true });
         }
       } else if (id) {
         await contactsUpdate(id, body);
-        toast.success('Contact updated');
+        toast.success(t('detail.contactUpdated'));
         await loadContact();
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not save');
+      toast.error(e instanceof Error ? e.message : t('detail.couldNotSave'));
     } finally {
       setSaving(false);
     }
@@ -153,7 +156,7 @@ export default function ContactDetailPage() {
   if (loading) {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center" style={{ backgroundColor: PAGE_BG }}>
-        <p style={{ color: ON_SURFACE_VARIANT }}>Loading…</p>
+        <p style={{ color: ON_SURFACE_VARIANT }}>{tc('loading')}</p>
       </div>
     );
   }
@@ -165,7 +168,7 @@ export default function ContactDetailPage() {
           <ArrowLeft className="h-6 w-6" />
         </button>
         <h1 className="ml-2 text-xl font-semibold" style={{ color: PRIMARY }}>
-          {isNew ? 'New contact' : displayName || 'Contact'}
+          {isNew ? t('detail.newContact') : displayName || t('detail.contact')}
         </h1>
       </header>
 
@@ -188,7 +191,7 @@ export default function ContactDetailPage() {
               icon={<Shield className="h-6 w-6" aria-hidden />}
               iconBg="rgba(0, 74, 198, 0.1)"
               iconColor={PRIMARY}
-              title="Trusted contact for safety"
+              title={t('detail.trustedForSafety')}
             />
           </div>
         </div>
@@ -200,7 +203,7 @@ export default function ContactDetailPage() {
           className="h-14 w-full rounded-2xl text-lg font-semibold disabled:opacity-50"
           style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_PRIMARY }}
         >
-          {saving ? 'Saving…' : 'Save contact'}
+          {saving ? t('detail.saving') : t('detail.saveContact')}
         </button>
 
         {!isNew && id ? (
@@ -211,18 +214,18 @@ export default function ContactDetailPage() {
               className="h-14 w-full rounded-2xl text-lg font-semibold"
               style={{ backgroundColor: PRIMARY, color: '#fff' }}
             >
-              Book a ride for them
+              {t('detail.bookRideForThem')}
             </button>
             <button
               type="button"
               onClick={() => void contactsDelete(id).then(() => {
-                toast.message('Contact removed');
+                toast.message(t('detail.contactRemoved'));
                 navigate('/account/contacts/roam');
               })}
               className="w-full py-2 text-sm font-semibold"
               style={{ color: ERROR }}
             >
-              Delete contact
+              {t('detail.deleteContact')}
             </button>
           </>
         ) : null}

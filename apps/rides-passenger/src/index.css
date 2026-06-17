@@ -18,6 +18,7 @@
 @import "./styles/cash-settlement.css";
 @import "./styles/scheduled-ride-confirm.css";
 @import "./styles/activity-scheduled-sheet.css";
+@import "./styles/haulage.css";
 
 :root {
   --font-sans: system-ui, -apple-system, "Segoe UI", "Inter", sans-serif;

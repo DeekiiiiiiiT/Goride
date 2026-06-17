@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { ArrowLeft, Plus, Search, SlidersHorizontal, Smartphone, Tag } from 'lucide-react';
 import type { RiderContactGroupRow, RiderContactRow } from '@roam/types/riderContacts';
@@ -33,6 +34,8 @@ import {
 
 export default function ContactsPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation('contacts');
+  const { t: tc } = useTranslation('common');
   const [contacts, setContacts] = useState<RiderContactRow[]>([]);
   const [groups, setGroups] = useState<RiderContactGroupRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,7 +58,7 @@ export default function ContactsPage() {
       setContacts(listRes.contacts);
       setGroups(groupsRes.groups);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not load contacts');
+      toast.error(e instanceof Error ? e.message : t('roam.toast.couldNotLoad'));
     } finally {
       setLoading(false);
     }
@@ -91,24 +94,24 @@ export default function ContactsPage() {
     contacts: RiderContactRow[];
   }) => {
     if (result.failed > 0) {
-      toast.error(result.error ?? 'Could not save contacts.');
+      toast.error(result.error ?? t('roam.toast.couldNotSave'));
       return;
     }
     const saved = result.imported + result.updated;
     if (saved > 0) {
       toast.success(
         ROAM_CONNECTIONS
-          ? `Sent ${saved} connection request${saved === 1 ? '' : 's'}`
-          : `Added ${saved} contact${saved === 1 ? '' : 's'} to Roam Contacts`,
+          ? t(saved === 1 ? 'roam.toast.connectionRequestsSent' : 'roam.toast.connectionRequestsSent_plural', { count: saved })
+          : t(saved === 1 ? 'roam.toast.contactsAdded' : 'roam.toast.contactsAdded_plural', { count: saved }),
       );
       await load();
       return;
     }
     if (result.skipped > 0 && ROAM_CONNECTIONS) {
-      toast.message('Some contacts already have pending requests.');
+      toast.message(t('roam.toast.pendingRequests'));
       return;
     }
-    toast.message('No contacts were added.');
+    toast.message(t('roam.toast.noContactsAdded'));
   };
 
   const handleImport = async () => {
@@ -118,7 +121,7 @@ export default function ContactsPage() {
     }
 
     if (!canUseBrowserContactPicker()) {
-      toast.error('Contact import is not available here. Add contacts manually.');
+      toast.error(t('roam.toast.importUnavailable'));
       return;
     }
 
@@ -126,7 +129,7 @@ export default function ContactsPage() {
     try {
       const picked = await pickDeviceContactsFromBrowser();
       if (!picked.length) {
-        toast.message('No contact selected.');
+        toast.message(t('roam.toast.noContactSelected'));
         return;
       }
       setBrowserConfirmOpen(true);
@@ -135,7 +138,7 @@ export default function ContactsPage() {
       const previews = await previewDeviceContactsOnRoam(picked);
       setBrowserConfirmPreviews(previews);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Import failed');
+      toast.error(e instanceof Error ? e.message : t('roam.toast.importFailed'));
       setBrowserConfirmOpen(false);
     } finally {
       setBrowserConfirmLoading(false);
@@ -152,7 +155,7 @@ export default function ContactsPage() {
       setBrowserConfirmOpen(false);
       await handleDeviceImportResult(result);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Import failed');
+      toast.error(e instanceof Error ? e.message : t('roam.toast.importFailed'));
     } finally {
       setImporting(false);
     }
@@ -166,12 +169,12 @@ export default function ContactsPage() {
           onClick={() => navigate('/account/contacts')}
           className="rounded-full p-2"
           style={{ color: PRIMARY }}
-          aria-label="Back"
+          aria-label={tc('back')}
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
         <h1 className="ml-2 text-xl font-semibold" style={{ color: PRIMARY }}>
-          Roam Contacts
+          {t('roam.title')}
         </h1>
       </header>
 
@@ -182,7 +185,7 @@ export default function ContactsPage() {
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search contacts"
+            placeholder={t('roam.searchPlaceholder')}
             className="h-12 w-full rounded-2xl border-none pl-11 pr-4 outline-none focus:ring-2 focus:ring-[#004ac6]"
             style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
           />
@@ -196,7 +199,7 @@ export default function ContactsPage() {
             style={{ backgroundColor: PRIMARY, color: '#fff' }}
           >
             <Plus className="h-4 w-4" />
-            Add contact
+            {t('roam.addContact')}
           </button>
           <button
             type="button"
@@ -205,7 +208,7 @@ export default function ContactsPage() {
             style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW, color: PRIMARY }}
           >
             <Tag className="h-4 w-4" />
-            Roam Tag
+            {t('roam.roamTag')}
           </button>
           <button
             type="button"
@@ -215,7 +218,7 @@ export default function ContactsPage() {
             style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW, color: PRIMARY }}
           >
             <Smartphone className="h-4 w-4" />
-            {importing ? 'Importing…' : 'Phone contacts'}
+            {importing ? t('roam.importing') : t('roam.phoneContacts')}
           </button>
           <button
             type="button"
@@ -224,7 +227,7 @@ export default function ContactsPage() {
             style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW, color: PRIMARY }}
           >
             <SlidersHorizontal className="h-4 w-4" />
-            Organize
+            {t('roam.organize')}
           </button>
         </div>
 
@@ -237,11 +240,11 @@ export default function ContactsPage() {
 
         {loading ? (
           <p className="text-center text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-            Loading…
+            {tc('loading')}
           </p>
         ) : sorted.length === 0 ? (
           <p className="text-center text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-            No contacts yet. Add someone you book rides for.
+            {t('roam.noContacts')}
           </p>
         ) : (
           <ul className="space-y-2">
@@ -307,7 +310,7 @@ export default function ContactsPage() {
         onClose={() => setRoamTagSheetOpen(false)}
         onAdded={() => {
           toast.success(
-            ROAM_CONNECTIONS ? 'Connection request sent' : 'Contact added to Roam Contacts',
+            ROAM_CONNECTIONS ? t('roam.connectionRequestSent') : t('roam.contactAdded'),
           );
           void load();
         }}

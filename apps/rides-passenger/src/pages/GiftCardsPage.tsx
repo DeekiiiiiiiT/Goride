@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import {
   ArrowLeft,
@@ -25,16 +26,10 @@ import {
 const GIFT_BANNER_URL =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuAe7-ykiff6goxLKNI3mNzbXr79HAwcfVc6bUKjTEAqJxWV87mezWuGBJS-TpET5vI9FeD-IKzXpbRXU4E0xTdeZf3xLD_bhjjXG7Iuk6rX4BvR9ZsHyBVo8N9OMRUgGNMaM2urf7jmaJkQsOfrIxMvgION7bsGXeIoGC7b2GpzYGBlDFPoFbR4H8k-tG3GTrVoGrXgS6-4FROAhCe4XSpJrwMBhZJ7hVvSXZxvMjsbdTe4A8lU6z0c-4CYDWMzivMN-CpikSThGOM1';
 
-const PRESETS = [
-  { id: 'starter', label: 'STARTER', amount: 25 },
-  { id: 'popular', label: 'POPULAR', amount: 50, badge: 'Best' },
-  { id: 'premium', label: 'PREMIUM', amount: 100 },
-] as const;
-
 const DEMO_ACTIVITY = [
   {
     id: 'redeem',
-    title: 'Gift Card Redeemed',
+    titleKey: 'giftCards.activity.redeemed',
     date: 'Oct 24, 2023',
     amount: '+$50.00',
     positive: true,
@@ -42,7 +37,7 @@ const DEMO_ACTIVITY = [
   },
   {
     id: 'ride',
-    title: 'Ride to Airport',
+    titleKey: 'giftCards.activity.ride',
     date: 'Oct 20, 2023',
     amount: '-$22.40',
     positive: false,
@@ -95,14 +90,34 @@ function PresetCard({
 
 export default function GiftCardsPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation('support');
+  const { t: tc } = useTranslation('common');
   const [code, setCode] = useState('');
   const [customAmount, setCustomAmount] = useState('');
   const [customFocused, setCustomFocused] = useState(false);
 
   const balance = 0;
 
+  const presets = useMemo(
+    () => [
+      { id: 'starter' as const, label: t('giftCards.presets.starter'), amount: 25 },
+      { id: 'popular' as const, label: t('giftCards.presets.popular'), amount: 50, badge: t('giftCards.presets.best') },
+      { id: 'premium' as const, label: t('giftCards.presets.premium'), amount: 100 },
+    ],
+    [t],
+  );
+
+  const activity = useMemo(
+    () =>
+      DEMO_ACTIVITY.map((item) => ({
+        ...item,
+        title: t(item.titleKey),
+      })),
+    [t],
+  );
+
   const notifySoon = () => {
-    toast.message('Coming soon');
+    toast.message(tc('comingSoon'));
   };
 
   const handleApply = () => {
@@ -125,19 +140,19 @@ export default function GiftCardsPage() {
             onClick={() => navigate('/account')}
             className="shrink-0 rounded-full p-2 transition-colors active:scale-95 passenger-row-hover"
             style={{ color: PRIMARY }}
-            aria-label="Back to account"
+            aria-label={t('giftCards.backAria')}
           >
             <ArrowLeft className="h-6 w-6" strokeWidth={2} aria-hidden />
           </button>
           <h1 className="truncate text-xl font-semibold tracking-tight" style={{ color: ON_SURFACE }}>
-            Gift Cards
+            {t('giftCards.title')}
           </h1>
         </div>
         <span
           className="shrink-0 text-lg font-bold tracking-tight"
           style={{ color: PRIMARY }}
         >
-          Roam Rides
+          {t('giftCards.brand')}
         </span>
       </header>
 
@@ -147,13 +162,13 @@ export default function GiftCardsPage() {
           style={{ backgroundColor: PRIMARY, boxShadow: CARD_SHADOW_STRONG }}
         >
           <div className="relative z-10">
-            <p className="mb-1 text-xs font-bold uppercase tracking-wide opacity-80">Current balance</p>
+            <p className="mb-1 text-xs font-bold uppercase tracking-wide opacity-80">{t('giftCards.currentBalance')}</p>
             <h2 className="text-[40px] font-bold tracking-tight">
               ${balance.toFixed(2)}
             </h2>
             <div className="mt-6 flex items-center gap-2">
               <Wallet className="h-5 w-5 shrink-0" fill="currentColor" aria-hidden />
-              <p className="text-sm">Ready to use for your next ride</p>
+              <p className="text-sm">{t('giftCards.readyToUse')}</p>
             </div>
           </div>
           <div className="absolute -right-12 -top-12 h-48 w-48 rounded-full bg-white/10 blur-3xl" aria-hidden />
@@ -162,7 +177,7 @@ export default function GiftCardsPage() {
 
         <section className="space-y-4">
           <h3 className="text-xl font-semibold tracking-tight" style={{ color: ON_SURFACE }}>
-            Redeem a Gift Card
+            {t('giftCards.redeemTitle')}
           </h3>
           <div
             className="rounded-[24px] p-6"
@@ -173,7 +188,7 @@ export default function GiftCardsPage() {
                 type="text"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                placeholder="Enter gift card code"
+                placeholder={t('giftCards.enterCode')}
                 className="w-full flex-1 rounded-xl border-none px-4 py-3 text-base outline-none transition-all focus:ring-2 focus:ring-[#004ac6]"
                 style={{
                   backgroundColor: SURFACE_LOW,
@@ -186,11 +201,11 @@ export default function GiftCardsPage() {
                 className="shrink-0 rounded-xl px-8 py-3 font-bold transition-all active:scale-95 hover:opacity-90"
                 style={{ backgroundColor: PRIMARY, color: ON_PRIMARY }}
               >
-                Apply
+                {t('giftCards.apply')}
               </button>
             </div>
             <p className="mt-3 px-1 text-sm" style={{ color: SECONDARY }}>
-              Codes are usually 16 digits long.
+              {t('giftCards.codeHint')}
             </p>
           </div>
         </section>
@@ -198,20 +213,20 @@ export default function GiftCardsPage() {
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-xl font-semibold tracking-tight" style={{ color: ON_SURFACE }}>
-              Buy a Gift Card
+              {t('giftCards.buyTitle')}
             </h3>
             <button
               type="button"
               onClick={notifySoon}
               className="rounded-full p-1 transition-opacity hover:opacity-70"
-              aria-label="Gift card info"
+              aria-label={t('giftCards.infoAria')}
             >
               <Info className="h-5 w-5" style={{ color: SECONDARY }} />
             </button>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            {PRESETS.map((preset) => (
+            {presets.map((preset) => (
               <PresetCard
                 key={preset.id}
                 label={preset.label}
@@ -236,7 +251,7 @@ export default function GiftCardsPage() {
                 className="mb-2 text-xs font-bold tracking-wide transition-colors group-hover:text-[#004ac6]"
                 style={{ color: SECONDARY }}
               >
-                CUSTOM
+                {t('giftCards.presets.custom')}
               </span>
               <div className="flex items-center">
                 <span className="text-[30px] font-bold tracking-tight" style={{ color: ON_SURFACE }}>
@@ -250,7 +265,7 @@ export default function GiftCardsPage() {
                   onChange={(e) => setCustomAmount(e.target.value)}
                   onFocus={() => setCustomFocused(true)}
                   onBlur={() => setCustomFocused(false)}
-                  placeholder="Other"
+                  placeholder={t('giftCards.presets.other')}
                   className="w-16 border-none bg-transparent p-0 text-[30px] font-bold tracking-tight outline-none focus:ring-0"
                   style={{ color: ON_SURFACE }}
                 />
@@ -267,7 +282,7 @@ export default function GiftCardsPage() {
             <div className="absolute inset-0 flex items-center bg-gradient-to-r from-[#00174b]/60 to-transparent p-8">
               <div className="max-w-[200px] text-white">
                 <p className="mb-2 text-xl font-semibold leading-snug">
-                  Give the gift of premium travel.
+                  {t('giftCards.bannerTitle')}
                 </p>
                 <button
                   type="button"
@@ -275,7 +290,7 @@ export default function GiftCardsPage() {
                   className="rounded-full px-4 py-2 text-xs font-bold tracking-wide shadow-lg transition-colors passenger-row-hover"
                   style={{ backgroundColor: SURFACE_LOWEST, color: PRIMARY }}
                 >
-                  LEARN MORE
+                  {t('giftCards.learnMore')}
                 </button>
               </div>
             </div>
@@ -284,14 +299,14 @@ export default function GiftCardsPage() {
 
         <section className="space-y-4">
           <h3 className="text-xl font-semibold tracking-tight" style={{ color: ON_SURFACE }}>
-            Recent Activity
+            {t('giftCards.recentActivity')}
           </h3>
           <div
             className="overflow-hidden rounded-[24px]"
             style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
           >
             <div className="space-y-0 divide-y-0 p-2">
-            {DEMO_ACTIVITY.map((item) => {
+            {activity.map((item) => {
               const Icon = item.icon;
               return (
                 <div
@@ -334,7 +349,7 @@ export default function GiftCardsPage() {
               className="w-full py-4 text-xs font-bold tracking-wide transition-colors passenger-row-hover"
               style={{ color: PRIMARY }}
             >
-              VIEW FULL HISTORY
+              {t('giftCards.viewFullHistory')}
             </button>
           </div>
         </section>

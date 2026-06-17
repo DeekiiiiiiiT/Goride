@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { supabase } from '@roam/auth-client';
 import { claimPassengerInvite, getPassengerInvitePreview } from '@/services/contactsEdge';
@@ -9,6 +10,7 @@ import { ON_SURFACE, ON_SURFACE_VARIANT, PAGE_BG, PRIMARY, PRIMARY_CONTAINER, ON
 export default function PassengerInviteLandingPage() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
+  const { t } = useTranslation('auth');
   const [preview, setPreview] = useState<Awaited<ReturnType<typeof getPassengerInvitePreview>>['invite'] | null>(null);
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState(false);
@@ -18,9 +20,9 @@ export default function PassengerInviteLandingPage() {
     persistInviteReturnToken(token);
     void getPassengerInvitePreview(token)
       .then((r) => setPreview(r.invite))
-      .catch((e) => toast.error(e instanceof Error ? e.message : 'Invite not found'))
+      .catch((e) => toast.error(e instanceof Error ? e.message : t('invite.inviteNotFound')))
       .finally(() => setLoading(false));
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     void (async () => {
@@ -31,20 +33,20 @@ export default function PassengerInviteLandingPage() {
       try {
         const res = await claimPassengerInvite(inviteToken);
         clearInviteReturnToken();
-        toast.success('You can now track your ride.');
+        toast.success(t('invite.canTrack'));
         navigate(`/ride/${res.ride_id}`, { replace: true });
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Could not claim invite');
+        toast.error(e instanceof Error ? e.message : t('invite.couldNotClaim'));
       } finally {
         setClaiming(false);
       }
     })();
-  }, [token, navigate]);
+  }, [token, navigate, t]);
 
   if (loading) {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center" style={{ backgroundColor: PAGE_BG }}>
-        <p style={{ color: ON_SURFACE_VARIANT }}>Loading invite…</p>
+        <p style={{ color: ON_SURFACE_VARIANT }}>{t('invite.loading')}</p>
       </div>
     );
   }
@@ -52,22 +54,22 @@ export default function PassengerInviteLandingPage() {
   return (
     <div className="flex min-h-[100dvh] flex-col items-center justify-center px-6 safe-x" style={{ backgroundColor: PAGE_BG, color: ON_SURFACE }}>
       <div className="w-full max-w-md space-y-6 text-center">
-        <h1 className="text-2xl font-bold" style={{ color: PRIMARY }}>Your Roam ride</h1>
+        <h1 className="text-2xl font-bold" style={{ color: PRIMARY }}>{t('invite.title')}</h1>
         {preview ? (
           <>
-            <p className="text-lg">Hi {preview.guest_name ?? 'there'}, a ride has been booked for you.</p>
+            <p className="text-lg">{t('invite.greeting', { name: preview.guest_name ?? t('invite.greetingFallback') })}</p>
             {preview.pickup_address ? (
-              <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>Pickup: {preview.pickup_address}</p>
+              <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>{t('invite.pickup', { address: preview.pickup_address })}</p>
             ) : null}
             {preview.dropoff_address ? (
-              <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>Drop-off: {preview.dropoff_address}</p>
+              <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>{t('invite.dropoff', { address: preview.dropoff_address })}</p>
             ) : null}
           </>
         ) : (
-          <p style={{ color: ON_SURFACE_VARIANT }}>This invite is invalid or expired.</p>
+          <p style={{ color: ON_SURFACE_VARIANT }}>{t('invite.invalid')}</p>
         )}
         <p className="text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-          Sign in or create a Roam account with {preview?.phone_masked ?? 'your phone'} to track the ride and chat with your driver.
+          {t('invite.signInHint', { phone: preview?.phone_masked ?? t('invite.yourPhone') })}
         </p>
         <button
           type="button"
@@ -76,7 +78,7 @@ export default function PassengerInviteLandingPage() {
           className="h-14 w-full rounded-2xl text-lg font-semibold disabled:opacity-50"
           style={{ backgroundColor: PRIMARY_CONTAINER, color: ON_PRIMARY }}
         >
-          {claiming ? 'Joining ride…' : 'Continue with Roam'}
+          {claiming ? t('invite.joining') : t('invite.continue')}
         </button>
       </div>
     </div>

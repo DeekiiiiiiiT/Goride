@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
@@ -66,12 +67,13 @@ function ToggleSwitch({
 }
 
 export default function ManagePaymentMethodsPage() {
+  const { t } = useTranslation('wallet');
   const navigate = useNavigate();
   const { selectedId, select } = useDefaultPaymentMethod();
   const [autoRefill, setAutoRefill] = useState(true);
 
   const notifySoon = () => {
-    toast.message('Coming soon');
+    toast.message(t('common:comingSoon'));
   };
 
   return (
@@ -89,12 +91,12 @@ export default function ManagePaymentMethodsPage() {
             onClick={() => navigate('/account/wallet')}
             className="rounded-full p-2 transition-colors active:scale-95 passenger-row-hover"
             style={{ color: PRIMARY }}
-            aria-label="Back to wallet"
+            aria-label={t('backToWallet')}
           >
             <ArrowLeft className="h-6 w-6" strokeWidth={2} aria-hidden />
           </button>
           <h1 className="text-xl font-semibold tracking-tight" style={{ color: PRIMARY }}>
-            Payment Methods
+            {t('paymentMethods')}
           </h1>
         </div>
       </header>
@@ -102,10 +104,10 @@ export default function ManagePaymentMethodsPage() {
       <main className="mx-auto w-full max-w-md flex-1 space-y-8 px-5 py-6 safe-x">
         <section>
           <h2 className="text-[30px] font-bold leading-tight tracking-tight" style={{ color: ON_SURFACE }}>
-            Manage Payment Methods
+            {t('managePaymentMethods')}
           </h2>
           <p className="mt-1 text-sm" style={{ color: SECONDARY }}>
-            Control your primary and backup payment sources for seamless rides.
+            {t('managePaymentMethodsDescription')}
           </p>
         </section>
 
@@ -113,16 +115,15 @@ export default function ManagePaymentMethodsPage() {
           <SectionLabel
             trailing={
               <span className="text-sm font-semibold" style={{ color: PRIMARY }}>
-                {listTripPaymentMethods().length} methods
+                {t('methodsCount', { count: listTripPaymentMethods().length })}
               </span>
             }
           >
-            Saved methods
+            {t('savedMethods')}
           </SectionLabel>
 
           <p className="text-sm" style={{ color: SECONDARY }}>
-            Tap a method to set your default for new trips. Card and Apple Pay are demo only; cash
-            trips use the live settlement flow.
+            {t('savedMethodsHint')}
           </p>
 
           <WalletPaymentMethodsList selectedId={selectedId} onSelect={select} variant="manage" />
@@ -137,12 +138,12 @@ export default function ManagePaymentMethodsPage() {
             }}
           >
             <PlusCircle className="h-5 w-5" aria-hidden />
-            <span>Add card (coming soon)</span>
+            <span>{t('addCardComingSoon')}</span>
           </button>
         </section>
 
         <section className="space-y-4">
-          <SectionLabel>Preferences</SectionLabel>
+          <SectionLabel>{t('preferences')}</SectionLabel>
           <div
             className="overflow-hidden rounded-xl border divide-y"
             style={{
@@ -156,16 +157,16 @@ export default function ManagePaymentMethodsPage() {
               <div className="flex items-center gap-4">
                 <RefreshCw className="h-6 w-6 shrink-0" style={{ color: SECONDARY }} aria-hidden />
                 <div>
-                  <p className="font-medium">Auto-refill Roam Credits</p>
+                  <p className="font-medium">{t('autoRefill')}</p>
                   <p className="text-sm" style={{ color: SECONDARY }}>
-                    Refill when below $10.00
+                    {t('autoRefillDescription')}
                   </p>
                 </div>
               </div>
               <ToggleSwitch
                 checked={autoRefill}
                 onChange={setAutoRefill}
-                ariaLabel="Auto-refill Roam Credits"
+                ariaLabel={t('autoRefillAria')}
               />
             </div>
 
@@ -176,7 +177,7 @@ export default function ManagePaymentMethodsPage() {
             >
               <div className="flex items-center gap-4">
                 <Receipt className="h-6 w-6" style={{ color: SECONDARY }} aria-hidden />
-                <span className="font-medium">Payment history & invoices</span>
+                <span className="font-medium">{t('paymentHistory')}</span>
               </div>
               <ChevronRight className="h-5 w-5" style={{ color: OUTLINE_VARIANT }} aria-hidden />
             </button>
@@ -196,8 +197,7 @@ export default function ManagePaymentMethodsPage() {
             aria-hidden
           />
           <p className="text-sm leading-relaxed" style={{ color: ON_SECONDARY_CONTAINER }}>
-            Roam uses industry-standard encryption to protect your financial information. Your full
-            card details are never stored on your device.
+            {t('encryptionNotice')}
           </p>
         </section>
       </main>
