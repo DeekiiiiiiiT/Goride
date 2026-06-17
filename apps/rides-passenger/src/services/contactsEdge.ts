@@ -24,6 +24,7 @@ import type {
   PassengerLookupResult,
   UpdatePassengerAuthorizationPhoneResponse,
 } from '@roam/types/passengerAuthorization';
+import { passengerApiErrorMessage } from '@/lib/passengerApiErrors';
 
 async function contactsHeaders(): Promise<HeadersInit> {
   const { data: { user } } = await supabase.auth.getUser();
@@ -41,15 +42,13 @@ async function contactsHeaders(): Promise<HeadersInit> {
 
 const base = API_ENDPOINTS.rides;
 
-import { passengerApiErrorMessage } from '@/lib/passengerApiErrors';
-
 async function parseError(res: Response): Promise<never> {
   const text = await res.text();
   let message = text || `HTTP ${res.status}`;
   try {
     const body = JSON.parse(text) as { message?: string; error?: string };
     const code = body.error ?? '';
-    message = passengerApiErrorMessage(code, body.message ?? code || message);
+    message = passengerApiErrorMessage(code, body.message ?? (code || message));
   } catch {
     /* use raw */
   }
