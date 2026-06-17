@@ -1,6 +1,6 @@
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { jsonEdgeForbidden, ridesUserSurfaceRole } from "../_shared/authEdge.ts";
+import { deniesPassengerSurface, jsonEdgeForbidden } from "../_shared/authEdge.ts";
 import type { RidesContactsDb } from "../_shared/ridesContactsDb.ts";
 import { generatePublicCode, generateToken, normalizePhoneE164 } from "./rideAccess.ts";
 
@@ -153,7 +153,7 @@ export function registerBookingRequestRoutes(app: Hono, deps: BookingRequestDeps
   app.get("/v1/booking-requests/me/active", async (c) => {
     const auth = await deps.requireUser(c.req.header("Authorization"));
     if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-    if (ridesUserSurfaceRole(auth.user) !== "passenger") {
+    if (deniesPassengerSurface(auth.user)) {
       return jsonEdgeForbidden(c, "forbidden_role");
     }
 
@@ -169,7 +169,7 @@ export function registerBookingRequestRoutes(app: Hono, deps: BookingRequestDeps
   app.post("/v1/booking-requests", async (c) => {
     const auth = await deps.requireUser(c.req.header("Authorization"));
     if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-    if (ridesUserSurfaceRole(auth.user) !== "passenger") {
+    if (deniesPassengerSurface(auth.user)) {
       return jsonEdgeForbidden(c, "forbidden_role");
     }
 

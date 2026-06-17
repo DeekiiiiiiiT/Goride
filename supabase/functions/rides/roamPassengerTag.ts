@@ -1,7 +1,7 @@
 import type { Context, Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { jsonEdgeForbidden, ridesUserSurfaceRole } from "../_shared/authEdge.ts";
+import { allowsPassengerSurface, deniesPassengerSurface, jsonEdgeForbidden } from "../_shared/authEdge.ts";
 import { getRidesAdminDb } from "../_shared/ridesAdminDb.ts";
 import type { RidesContactsDb } from "../_shared/ridesContactsDb.ts";
 import {
@@ -109,8 +109,7 @@ export function registerRoamPassengerTagRoutes(app: Hono, deps: RoamTagDeps) {
   const requirePassenger = async (c: Context) => {
     const auth = await deps.requireUser(c.req.header("Authorization"));
     if ("error" in auth) return { error: auth, response: c.json({ error: auth.error }, auth.status) };
-    const role = ridesUserSurfaceRole(auth.user);
-    if (role && role !== "passenger") {
+    if (deniesPassengerSurface(auth.user)) {
       return { error: null, response: jsonEdgeForbidden(c, "forbidden_role") };
     }
     return { user: auth.user, response: null };
@@ -204,8 +203,7 @@ export function registerRoamPassengerTagRoutes(app: Hono, deps: RoamTagDeps) {
 
     const auth = await deps.requireUser(c.req.header("Authorization"));
     if (!("error" in auth)) {
-      const role = ridesUserSurfaceRole(auth.user);
-      if (role === "passenger") {
+      if (allowsPassengerSurface(auth.user)) {
         if (auth.user.id === userId) {
           return c.json({ error: "cannot_book_self" }, 400);
         }

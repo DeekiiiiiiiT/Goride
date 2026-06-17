@@ -1,6 +1,6 @@
 import type { Context, Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { jsonEdgeForbidden, ridesUserSurfaceRole } from "../_shared/authEdge.ts";
+import { deniesPassengerSurface, jsonEdgeForbidden } from "../_shared/authEdge.ts";
 import type { RidesContactsDb, RidesContactsTables } from "../_shared/ridesContactsDb.ts";
 import { normalizePhoneE164 } from "./rideAccess.ts";
 import {
@@ -176,8 +176,7 @@ export function registerContactsRoutes(app: Hono, deps: ContactsDeps) {
   const requirePassenger = async (c: Context) => {
     const auth = await deps.requireUser(c.req.header("Authorization"));
     if ("error" in auth) return { error: auth, response: c.json({ error: auth.error }, auth.status) };
-    const role = ridesUserSurfaceRole(auth.user);
-    if (role && role !== "passenger") {
+    if (deniesPassengerSurface(auth.user)) {
       return { error: null, response: jsonEdgeForbidden(c, "forbidden_role") };
     }
     return { user: auth.user, response: null };

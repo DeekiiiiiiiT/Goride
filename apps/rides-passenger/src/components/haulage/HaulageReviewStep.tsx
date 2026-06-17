@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Route } from 'lucide-react';
 import { formatMoneyMinor } from '@roam/types/rides';
 import { HaulageFreightCart } from '@/components/haulage/HaulageFreightCart';
+import { HaulageStickyFooter } from '@/components/haulage/HaulageShell';
 import { useHaulageBooking } from '@/contexts/HaulageBookingContext';
 import { estimateDurationMinutes, estimateHaulageTotalMinor } from '@/lib/haulage/pricing';
 import { formatTimeLabel } from '@/lib/scheduleTime';
@@ -100,11 +101,8 @@ export function HaulageReviewStep({ onBook, showFooter = true }: Props) {
       </section>
 
       {showFooter ? (
-        <div
-          className="fixed right-0 bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] left-0 z-40 border-t px-4 py-4 safe-x"
-          style={{ borderColor: OUTLINE_VARIANT, backgroundColor: SURFACE_LOWEST }}
-        >
-          <div className="mx-auto flex max-w-lg items-center justify-between gap-4">
+        <HaulageStickyFooter>
+          <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: ON_SURFACE_VARIANT }}>
                 {t('review.estimatedTotal')}
@@ -121,7 +119,7 @@ export function HaulageReviewStep({ onBook, showFooter = true }: Props) {
               {t('review.bookFreight')}
             </button>
           </div>
-        </div>
+        </HaulageStickyFooter>
       ) : null}
     </div>
   );

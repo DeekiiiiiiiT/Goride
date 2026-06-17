@@ -9,7 +9,7 @@
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { cors } from "https://deno.land/x/hono@v4.3.11/middleware.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { jsonEdgeForbidden, ridesUserSurfaceRole, allowsPassengerSurface } from "../_shared/authEdge.ts";
+import { deniesPassengerSurface, jsonEdgeForbidden, ridesUserSurfaceRole, allowsPassengerSurface } from "../_shared/authEdge.ts";
 import { buildFareQuote, gridCellKey } from "./fare/buildQuote.ts";
 import { FareRuleNotFoundError } from "./fare/rules.ts";
 import { rankDriversByDriveTime } from "./fare/distanceMatrix.ts";
@@ -1570,8 +1570,7 @@ app.post("/v1/requests", async (c) => {
   }
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-  const r = ridesUserSurfaceRole(auth.user);
-  if (r && r !== "passenger") {
+  if (deniesPassengerSurface(auth.user)) {
     return jsonEdgeForbidden(c, "forbidden_role");
   }
 
@@ -1894,8 +1893,7 @@ async function loadActiveRideForUser(userId: string): Promise<{
 app.get("/v1/requests/me/active", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-  const r = ridesUserSurfaceRole(auth.user);
-  if (r && r !== "passenger") {
+  if (deniesPassengerSurface(auth.user)) {
     return jsonEdgeForbidden(c, "forbidden_role");
   }
 

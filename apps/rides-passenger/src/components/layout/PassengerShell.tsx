@@ -4,6 +4,7 @@ import { HomeTripPickerProvider, useHomeTripPicker } from '@/contexts/HomeTripPi
 import { useBookerTracking } from '@/contexts/BookerTrackingContext';
 import { BookerActiveTripChip, shouldHideActiveTripFab } from '@/components/BookerActiveTripChip';
 import { PassengerBottomNav } from './PassengerBottomNav';
+import { shouldHidePassengerBottomNav } from '@/lib/passengerBottomNav';
 import { ensureRoamPassengerTag } from '@/services/roamTagEdge';
 import { usePassengerActiveRideRedirect } from '@/hooks/usePassengerActiveRideRedirect';
 import { IncomingPickupLocationShellGate } from '@/components/pickup-location/IncomingPickupLocationShellGate';
@@ -19,6 +20,7 @@ function PassengerShellInner() {
   const { mode } = useBookerTracking();
   const chipVisible =
     mode === 'minimized' && !tripPickerActive && !shouldHideActiveTripFab(pathname);
+  const bottomNavVisible = !tripPickerActive && !shouldHidePassengerBottomNav(pathname);
 
   return (
     <div
@@ -30,7 +32,7 @@ function PassengerShellInner() {
       {chipVisible && <BookerActiveTripChip />}
       <IncomingPickupLocationShellGate />
       <IncomingConnectionRequestShellGate />
-      {!tripPickerActive && <PassengerBottomNav />}
+      {bottomNavVisible ? <PassengerBottomNav /> : null}
     </div>
   );
 }

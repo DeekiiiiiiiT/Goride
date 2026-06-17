@@ -58,6 +58,8 @@ export function roamTagErrorMessage(code: string): string {
       return 'Enter a valid Roam Tag (letters, numbers, underscores).';
     case 'lookup_failed':
       return 'Could not look up that Roam Tag. Try again.';
+    case 'forbidden_role':
+      return 'This account cannot use Roam Tag from here. Sign out, then sign back in through Roam Rides.';
     default:
       return code;
   }

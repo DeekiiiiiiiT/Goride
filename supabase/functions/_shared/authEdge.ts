@@ -29,9 +29,19 @@ export function allowsPassengerSurface(user: {
 }): boolean {
   const roles = getJwtRoles(user);
   if (roles.includes("passenger")) return true;
+  const legacyRole = user.user_metadata?.role;
+  if (typeof legacyRole === "string" && legacyRole.trim() === "passenger") return true;
   const role = ridesUserSurfaceRole(user);
   if (!role) return true;
   return role === "passenger";
+}
+
+/** Shared gate for contacts, Roam Tag, book-for-others, and related passenger APIs. */
+export function deniesPassengerSurface(user: {
+  user_metadata?: Record<string, unknown>;
+  app_metadata?: Record<string, unknown>;
+}): boolean {
+  return !allowsPassengerSurface(user);
 }
 
 /** All roles on JWT: app_metadata.roles[], else primary, else user_metadata.role */

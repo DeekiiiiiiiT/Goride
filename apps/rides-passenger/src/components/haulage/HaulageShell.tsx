@@ -72,6 +72,22 @@ export function HaulageStepper({ stepIndex, stepCount }: { stepIndex: number; st
   );
 }
 
+export function HaulageStickyFooter({ children }: { children: React.ReactNode }) {
+  return (
+    <footer
+      className="fixed inset-x-0 bottom-0 z-40 px-4 pt-3 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] safe-x"
+      style={{
+        backgroundColor: PAGE_BG,
+        boxShadow: '0 -12px 32px rgba(0, 0, 0, 0.06)',
+      }}
+    >
+      <div className="mx-auto max-w-lg">{children}</div>
+    </footer>
+  );
+}
+
+export const HAULAGE_FOOTER_CLEARANCE = 'pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]';
+
 export function HaulagePrimaryButton({
   children,
   onClick,

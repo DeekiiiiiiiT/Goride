@@ -1,6 +1,6 @@
 import type { Context, Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { jsonEdgeForbidden, ridesUserSurfaceRole } from "../_shared/authEdge.ts";
+import { deniesPassengerSurface, jsonEdgeForbidden } from "../_shared/authEdge.ts";
 import type { RidesContactsDb } from "../_shared/ridesContactsDb.ts";
 import { resolveRoamUserByPhone } from "./resolveRoamUserByPhone.ts";
 import {
@@ -148,7 +148,7 @@ export function registerPassengerAuthorizationRoutes(app: Hono, deps: AuthDeps) 
   app.get("/v1/passengers/lookup", async (c: Context) => {
     const auth = await deps.requireUser(c.req.header("Authorization"));
     if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-    if (ridesUserSurfaceRole(auth.user) !== "passenger") {
+    if (deniesPassengerSurface(auth.user)) {
       return jsonEdgeForbidden(c, "forbidden_role");
     }
 
@@ -177,7 +177,7 @@ export function registerPassengerAuthorizationRoutes(app: Hono, deps: AuthDeps) 
   app.post("/v1/passenger-authorizations", async (c) => {
     const auth = await deps.requireUser(c.req.header("Authorization"));
     if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-    if (ridesUserSurfaceRole(auth.user) !== "passenger") {
+    if (deniesPassengerSurface(auth.user)) {
       return jsonEdgeForbidden(c, "forbidden_role");
     }
 
@@ -236,7 +236,7 @@ export function registerPassengerAuthorizationRoutes(app: Hono, deps: AuthDeps) 
   app.get("/v1/passenger-authorizations/mine", async (c) => {
     const auth = await deps.requireUser(c.req.header("Authorization"));
     if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-    if (ridesUserSurfaceRole(auth.user) !== "passenger") {
+    if (deniesPassengerSurface(auth.user)) {
       return jsonEdgeForbidden(c, "forbidden_role");
     }
 
@@ -283,7 +283,7 @@ export function registerPassengerAuthorizationRoutes(app: Hono, deps: AuthDeps) 
   app.post("/v1/passenger-authorizations/id/:id/cancel", async (c) => {
     const auth = await deps.requireUser(c.req.header("Authorization"));
     if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-    if (ridesUserSurfaceRole(auth.user) !== "passenger") {
+    if (deniesPassengerSurface(auth.user)) {
       return jsonEdgeForbidden(c, "forbidden_role");
     }
 
@@ -318,7 +318,7 @@ export function registerPassengerAuthorizationRoutes(app: Hono, deps: AuthDeps) 
   app.post("/v1/passenger-authorizations/id/:id/update-phone", async (c) => {
     const auth = await deps.requireUser(c.req.header("Authorization"));
     if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-    if (ridesUserSurfaceRole(auth.user) !== "passenger") {
+    if (deniesPassengerSurface(auth.user)) {
       return jsonEdgeForbidden(c, "forbidden_role");
     }
 
@@ -444,7 +444,7 @@ export function registerPassengerAuthorizationRoutes(app: Hono, deps: AuthDeps) 
   app.post("/v1/passenger-authorizations/:token/claim", async (c) => {
     const auth = await deps.requireUser(c.req.header("Authorization"));
     if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-    if (ridesUserSurfaceRole(auth.user) !== "passenger") {
+    if (deniesPassengerSurface(auth.user)) {
       return jsonEdgeForbidden(c, "forbidden_role");
     }
 
