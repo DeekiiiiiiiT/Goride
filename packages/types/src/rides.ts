@@ -425,6 +425,12 @@ export interface ActiveRideSummaryResponse {
 
 export type WalletTransactionKind = 'shadow_trip' | 'open_trip' | 'topup' | 'journal';
 
+export interface WalletTransactionBreakdownLineDto {
+  label: string;
+  amount_minor: number;
+  entry_type?: string;
+}
+
 export interface WalletTransactionDto {
   id: string;
   kind: WalletTransactionKind;
@@ -439,6 +445,10 @@ export interface WalletTransactionDto {
   driver_name?: string | null;
   pickup_at?: string | null;
   dropoff_at?: string | null;
+  /** Payment journal entry type (when kind is journal). */
+  entry_type?: string;
+  /** Split payment lines when one trip used multiple methods. */
+  breakdown?: WalletTransactionBreakdownLineDto[];
 }
 
 export interface WalletTransactionsResponse {

@@ -157,6 +157,7 @@ import { TierConfig } from '../../types/data';
 import { getEffectiveTripEarnings } from '../../utils/tripEarnings';
 import { normalizePlatform } from '../../utils/normalizePlatform';
 import { getTripPhysicalCashCollected, sumTripPhysicalCashCollected } from '../../utils/tripPhysicalCash';
+import { expandDriverTransactionIds } from '../../utils/expandDriverTransactionIds';
 import { isDriverCashPaymentTransaction } from '../../utils/driverCashPayment';
 import { isUberCashEligibleMetricPeriod, isValidDriverMetricPeriod } from '../../utils/driverMetricPeriod';
 import { calculateAverageEnroute, estimateEnrouteFallback } from '../../utils/enrouteStrategy';
@@ -719,11 +720,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       setLocalLoading(true);
       try {
           // Collect all relevant driver IDs to query
-          const driverIds = [
+          const driverIds = expandDriverTransactionIds([
               driverId,
               driver?.uberDriverId,
-              driver?.inDriveDriverId
-          ].filter(Boolean) as string[];
+              driver?.inDriveDriverId,
+          ]);
 
           const [driverTx, allClaims] = await Promise.all([
               api.getAllTransactionsForDrivers(driverIds),
@@ -938,6 +939,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
       const newTx: Partial<FinancialTransaction> = {
           driverId,
+          driverName: driver?.name || driverName,
           amount: amount,
           date: payment.date,
           description: payment.notes || (payment.transactionType === 'float' ? "Cash Float Issued" : "Cash Payment from Driver"),
@@ -4382,6 +4384,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                 {paymentTransactions.length} cash payment{paymentTransactions.length !== 1 ? 's' : ''} on record
                                                 {transactions.length > 0 ? ` (${transactions.length.toLocaleString()} total transactions loaded)` : ''}
                                             </p>
+                                            {paymentTransactions.length <= 1 && transactions.length <= 10 && (
+                                              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 sm:max-w-md">
+                                                Older cash logs may be stored under a linked platform ID or hidden until the server update is deployed. This screen does not delete payment history.
+                                              </p>
+                                            )}
                                             <Button 
                                                 size="sm"
                                                 className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"

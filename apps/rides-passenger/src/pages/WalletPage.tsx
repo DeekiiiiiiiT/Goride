@@ -11,10 +11,13 @@ import {
   Loader2,
   Wallet,
 } from 'lucide-react';
-import type { WalletBalanceDto, WalletTransactionDto } from '@roam/types/rides';
+import type { WalletBalanceDto, WalletTransactionDto, ActivityTripHistoryItem } from '@roam/types/rides';
 import { formatMoneyMinorPlain } from '@roam/types/rides';
 import { walletGetTransactions } from '@/services/tripIntentEdge';
 import { walletGetBalance } from '@/services/walletEdge';
+import { ridesGetRequest } from '@/services/ridesEdge';
+import { activityTripFromRide } from '@/lib/activityTripNavigation';
+import { isShadowBookerTrip } from '@/lib/delegatedRideNavigation';
 import { WALLET_BALANCE_CHANGED_EVENT, notifyWalletBalanceChanged } from '@/lib/walletEvents';
 
 import {
@@ -36,6 +39,8 @@ import { AddFundsSheet } from '@/components/wallet/AddFundsSheet';
 import { WithdrawSheet } from '@/components/wallet/WithdrawSheet';
 import { PayArrearsSheet } from '@/components/wallet/PayArrearsSheet';
 import { WalletPaymentMethodsList } from '@/components/wallet/WalletPaymentMethodsList';
+import { WalletTransactionDetailSheet } from '@/components/wallet/WalletTransactionDetailSheet';
+import { ActivityTripDetailsSheet } from '@/components/activity/ActivityTripDetailsSheet';
 import { useDefaultPaymentMethod } from '@/hooks/useDefaultPaymentMethod';
 import { CASH_SETTLEMENT_PAY_ARREARS_ENABLED } from '@/lib/cashSettlementFlags';
 
@@ -89,6 +94,9 @@ export default function WalletPage() {
   const [loading, setLoading] = useState(true);
   const [walletError, setWalletError] = useState<string | null>(null);
   const [payArrearsOpen, setPayArrearsOpen] = useState(false);
+  const [selectedTx, setSelectedTx] = useState<WalletTransactionDto | null>(null);
+  const [activityTrip, setActivityTrip] = useState<ActivityTripHistoryItem | null>(null);
+  const [viewingTrip, setViewingTrip] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -132,8 +140,35 @@ export default function WalletPage() {
   };
 
   const handleTxClick = (tx: WalletTransactionDto) => {
-    if (tx.kind === 'shadow_trip' && tx.ride_id) {
-      navigate(`/shadow-trip/${tx.ride_id}/receipt`);
+    setSelectedTx(tx);
+  };
+
+  const handleViewTrip = async (rideId: string) => {
+    setViewingTrip(true);
+    try {
+      const res = await ridesGetRequest(rideId);
+      const participantRole = res.participant_role === 'booker' ? 'booker' : 'passenger';
+      const roamMode = res.roam_mode ?? res.ride.roam_mode;
+      if (
+        isShadowBookerTrip(participantRole, roamMode, res.booker_visibility)
+        && (res.ride.status === 'completed' || res.ride.status === 'cancelled')
+      ) {
+        navigate(`/shadow-trip/${rideId}/receipt`);
+        return;
+      }
+      const item = activityTripFromRide(res.ride, {
+        participantRole,
+        counterpartyName: res.ride.guest_passenger_name,
+      });
+      if (!item) {
+        toast.error('Trip not available');
+        return;
+      }
+      setActivityTrip(item);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not load trip');
+    } finally {
+      setViewingTrip(false);
     }
   };
 
@@ -145,7 +180,7 @@ export default function WalletPage() {
 
   const balanceMajor = wallet ? wallet.balance_minor / 100 : 0;
 
-  const overlayOpen = addCashOpen || withdrawOpen || payArrearsOpen;
+  const overlayOpen = addCashOpen || withdrawOpen || payArrearsOpen || selectedTx != null;
 
   return (
     <>
@@ -317,16 +352,12 @@ export default function WalletPage() {
                 const amount = positive
                   ? `+${formatMoneyMinorPlain(amountMinor)}`
                   : `-${formatMoneyMinorPlain(amountMinor)}`;
-                const clickable = tx.kind === 'shadow_trip' && Boolean(tx.ride_id);
-                const Row = clickable ? 'button' : 'div';
                 return (
-                  <Row
+                  <button
                     key={tx.id}
-                    type={clickable ? 'button' : undefined}
-                    onClick={clickable ? () => handleTxClick(tx) : undefined}
-                    className={`flex w-full items-center justify-between p-4 transition-colors passenger-row-hover ${
-                      clickable ? 'text-left' : ''
-                    }`}
+                    type="button"
+                    onClick={() => handleTxClick(tx)}
+                    className="flex w-full items-center justify-between p-4 text-left transition-colors passenger-row-hover"
                   >
                     <div className="flex items-center gap-4">
                       <div
@@ -344,15 +375,16 @@ export default function WalletPage() {
                         </p>
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="flex items-center gap-2">
                       <p
                         className="font-bold tabular-nums"
                         style={{ color: positive ? PRIMARY : ON_SURFACE }}
                       >
                         {amount}
                       </p>
+                      <ChevronRight className="h-4 w-4 shrink-0" style={{ color: ON_SURFACE_VARIANT }} aria-hidden />
                     </div>
-                  </Row>
+                  </button>
                 );
               })
             )}
@@ -408,6 +440,20 @@ export default function WalletPage() {
             }
           }}
         />
+      ) : null}
+      <WalletTransactionDetailSheet
+        transaction={selectedTx}
+        onClose={() => setSelectedTx(null)}
+        onViewTrip={(rideId) => void handleViewTrip(rideId)}
+      />
+      <ActivityTripDetailsSheet
+        trip={activityTrip}
+        onClose={() => setActivityTrip(null)}
+      />
+      {viewingTrip ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/20">
+          <Loader2 className="h-8 w-8 animate-spin" style={{ color: PRIMARY }} aria-hidden />
+        </div>
       ) : null}
     </>
   );

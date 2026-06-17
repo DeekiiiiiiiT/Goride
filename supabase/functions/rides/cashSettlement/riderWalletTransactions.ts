@@ -9,6 +9,12 @@ import {
 } from "../../_shared/paymentAccounts.ts";
 import { riderAccountKeyForUser } from "./buildJournalEntries.ts";
 
+export interface RiderWalletTransactionBreakdownLine {
+  label: string;
+  amount_minor: number;
+  entry_type: string;
+}
+
 export interface RiderWalletTransactionRow {
   id: string;
   kind: "journal";
@@ -19,9 +25,17 @@ export interface RiderWalletTransactionRow {
   is_credit: boolean;
   ride_request_id: string | null;
   entry_type: string;
+  breakdown?: RiderWalletTransactionBreakdownLine[];
+  source_ids?: string[];
+  metadata?: Record<string, unknown>;
 }
 
 const CARD_TRIP_ENTRY_TYPES = ["card_trip_digital_credit"] as const;
+
+const TRIP_PAYMENT_ENTRY_TYPES = new Set([
+  "wallet_fare_from_rider",
+  "card_trip_digital_credit",
+]);
 
 function pubRidesClient(): SupabaseClient {
   return createClient(
@@ -80,6 +94,71 @@ async function listCardTripChargeJournalRows(
   return (data ?? []) as Array<Record<string, unknown>>;
 }
 
+function breakdownLabel(
+  entryType: string,
+  metadata?: Record<string, unknown>,
+): string {
+  if (entryType === "wallet_fare_from_rider") return "Wallet";
+  if (entryType === "card_trip_digital_credit") {
+    if (metadata?.payment_source === "demo_lynk") return "Lynk";
+    return "Card";
+  }
+  return riderWalletTransactionTitle(entryType, metadata);
+}
+
+/** Merge wallet + card portions of the same trip into one rider-visible payment. */
+export function consolidateTripPayments(
+  rows: RiderWalletTransactionRow[],
+): RiderWalletTransactionRow[] {
+  const byRide = new Map<string, RiderWalletTransactionRow[]>();
+  const standalone: RiderWalletTransactionRow[] = [];
+
+  for (const row of rows) {
+    if (row.ride_request_id && TRIP_PAYMENT_ENTRY_TYPES.has(row.entry_type)) {
+      const list = byRide.get(row.ride_request_id) ?? [];
+      list.push(row);
+      byRide.set(row.ride_request_id, list);
+    } else {
+      standalone.push(row);
+    }
+  }
+
+  const consolidated: RiderWalletTransactionRow[] = [...standalone];
+
+  for (const [rideId, parts] of byRide) {
+    if (parts.length === 1) {
+      consolidated.push(parts[0]);
+      continue;
+    }
+
+    const breakdown: RiderWalletTransactionBreakdownLine[] = parts.map((part) => ({
+      label: breakdownLabel(part.entry_type, part.metadata),
+      amount_minor: part.amount_minor,
+      entry_type: part.entry_type,
+    }));
+
+    const totalMinor = breakdown.reduce((sum, line) => sum + line.amount_minor, 0);
+    const date = parts.map((part) => part.date).sort((a, b) => b.localeCompare(a))[0];
+
+    consolidated.push({
+      id: `trip-payment:${rideId}`,
+      kind: "journal",
+      title: "Trip payment",
+      amount_minor: totalMinor,
+      currency: parts[0].currency,
+      date,
+      is_credit: false,
+      ride_request_id: rideId,
+      entry_type: "trip_payment",
+      breakdown,
+      source_ids: parts.map((part) => part.id),
+    });
+  }
+
+  consolidated.sort((a, b) => b.date.localeCompare(a.date));
+  return consolidated;
+}
+
 function mapCardTripChargeRow(
   row: Record<string, unknown>,
 ): RiderWalletTransactionRow {
@@ -95,6 +174,7 @@ function mapCardTripChargeRow(
     is_credit: false,
     ride_request_id: row.ride_request_id ? String(row.ride_request_id) : null,
     entry_type: entryType,
+    metadata,
   };
 }
 
@@ -111,6 +191,7 @@ function mapAccountJournalRow(
     is_credit: row.is_credit,
     ride_request_id: row.ride_request_id,
     entry_type: row.entry_type,
+    metadata: row.metadata,
   };
 }
 
@@ -123,7 +204,7 @@ export async function listRiderWalletTransactions(
 ): Promise<RiderWalletTransactionRow[]> {
   const accountKey = riderAccountKeyForUser(riderUserId);
   const account = await getAccountByKey(db, accountKey, currency);
-  const fetchLimit = Math.max(limit, 50);
+  const fetchLimit = Math.max(limit * 2, 50);
 
   const accountRows = account
     ? mapJournalRowsForAccount(
@@ -145,8 +226,8 @@ export async function listRiderWalletTransactions(
     merged.push(row);
   }
 
-  merged.sort((a, b) => b.date.localeCompare(a.date));
-  return merged.slice(0, limit);
+  const consolidated = consolidateTripPayments(merged);
+  return consolidated.slice(0, limit);
 }
 
 export function riderWalletTransactionToDto(row: RiderWalletTransactionRow): {
@@ -158,6 +239,8 @@ export function riderWalletTransactionToDto(row: RiderWalletTransactionRow): {
   date: string;
   is_credit: boolean;
   ride_id?: string;
+  entry_type?: string;
+  breakdown?: RiderWalletTransactionBreakdownLine[];
 } {
   return {
     id: row.id,
@@ -168,5 +251,7 @@ export function riderWalletTransactionToDto(row: RiderWalletTransactionRow): {
     date: row.date,
     is_credit: row.is_credit,
     ride_id: row.ride_request_id ?? undefined,
+    entry_type: row.entry_type,
+    breakdown: row.breakdown,
   };
 }

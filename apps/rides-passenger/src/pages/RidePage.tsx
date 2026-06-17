@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ChevronDown, Loader2, Clock, Share2 } from 'lucide-react';
@@ -45,7 +45,7 @@ import {
 } from '@/utils/riderActiveRideSession';
 import type { AssignedDriverSummaryDto } from '@roam/types/delegatedRide';
 import { useBookerTrackingOptional } from '@/contexts/BookerTrackingContext';
-import { persistMinimizedRide, readMinimizeExitPending, setMinimizeExitPending } from '@/lib/bookerTracking';
+import { persistMinimizedRide, readMinimizeExitPending, setMinimizeExitPending, clearMinimizeExitPending } from '@/lib/bookerTracking';
 import { isShadowBookerTrip, navigateToDelegatedRide } from '@/lib/delegatedRideNavigation';
 import { shouldHideLocationsForBooker } from '@/lib/shadowBookerPrivacy';
 
@@ -209,6 +209,8 @@ function RiderWaitTimeDisplay({ waitTime }: { waitTime: WaitTimeInfo }) {
 export default function RidePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const historyView = searchParams.get('view') === 'history';
   const queryClient = useQueryClient();
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
@@ -221,6 +223,7 @@ export default function RidePage() {
   const trackingMode = bookerTracking?.mode ?? 'full';
   const exitPending = Boolean(
     id &&
+      !historyView &&
       (bookerTracking?.exitPendingRideId === id || readMinimizeExitPending() === id),
   );
   const heavyTrackingEnabled = trackingMode === 'full' && !exitPending;
@@ -231,6 +234,13 @@ export default function RidePage() {
       navigate('/', { replace: true });
     }
   }, [id, exitPending, navigate]);
+
+  useEffect(() => {
+    if (!id || !historyView) return;
+    if (readMinimizeExitPending() === id) {
+      clearMinimizeExitPending();
+    }
+  }, [id, historyView]);
 
   const { data, error, refetch, isFetching } = useQuery({
     queryKey: ['ride', id],
@@ -302,12 +312,12 @@ export default function RidePage() {
   const canShareWithPassenger = false;
 
   useEffect(() => {
-    if (!ride || !id || ride.status !== 'completed' || !isDelegatedBooker) return;
+    if (!ride || !id || ride.status !== 'completed' || !isDelegatedBooker || historyView) return;
     bookerTracking?.clear();
     const name = ride.guest_passenger_name;
     toast.message(name ? `Ride for ${name} completed` : 'Your booked ride completed');
     navigate('/', { replace: true });
-  }, [ride, id, isDelegatedBooker, navigate, bookerTracking]);
+  }, [ride, id, isDelegatedBooker, historyView, navigate, bookerTracking]);
 
   const shareWithPassenger = async () => {
     if (!id || sharingInvite) return;

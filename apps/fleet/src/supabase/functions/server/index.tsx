@@ -2670,13 +2670,23 @@ app.get("/make-server-37f42386/transactions", requireAuth({ requireOrg: true }),
     const offsetParam = c.req.query("offset");
     const offset = offsetParam ? parseInt(offsetParam) : 0;
 
-    const idsToFilter = new Set<string>();
-    if (driverIdParam) idsToFilter.add(driverIdParam);
+    const rawDriverIds = new Set<string>();
+    if (driverIdParam) rawDriverIds.add(driverIdParam.trim());
     if (driverIdsParam) {
         driverIdsParam.split(',').forEach(id => {
-            if (id.trim()) idsToFilter.add(id.trim());
+            if (id.trim()) rawDriverIds.add(id.trim());
         });
     }
+
+    // Roam + linked Uber/InDrive + lowercase — same as ledger driver-overview
+    const idsToFilter = new Set<string>();
+    for (const rawId of rawDriverIds) {
+      for (const variant of await expandStatementSummaryDriverIds(rawId)) {
+        idsToFilter.add(variant);
+      }
+    }
+
+    const isDriverScoped = idsToFilter.size > 0;
 
     // When filtering by specific driver(s), use a much higher default limit
     // to avoid truncating financial data (payments, floats, tolls).
@@ -2684,14 +2694,14 @@ app.get("/make-server-37f42386/transactions", requireAuth({ requireOrg: true }),
     // Unscoped (global) queries keep the conservative default of 100.
     const limit = limitParam
         ? parseInt(limitParam)
-        : (idsToFilter.size > 0 ? 5000 : 100);
+        : (isDriverScoped ? 5000 : 100);
 
     let query = supabase
         .from("kv_store_37f42386")
         .select("value")
         .like("key", "transaction:%");
 
-    if (idsToFilter.size > 0) {
+    if (isDriverScoped) {
         const orConditions = Array.from(idsToFilter)
             .map(id => `value->>driverId.eq.${id}`)
             .join(',');
@@ -2705,7 +2715,7 @@ app.get("/make-server-37f42386/transactions", requireAuth({ requireOrg: true }),
     if (error) throw error;
 
     // Phase 8.4: Strip heavy metadata if exists
-    const transactions = (data || []).map((d: any) => {
+    let transactions = (data || []).map((d: any) => {
         const v = d.value || {};
         // Only strip if it looks like it contains base64 or heavy binary metadata
         if (v.metadata?.receiptBase64) {
@@ -2714,8 +2724,55 @@ app.get("/make-server-37f42386/transactions", requireAuth({ requireOrg: true }),
         return v;
     });
 
-    // Phase 3: Use filterByOrgSafe for feature-flag controlled strict filtering
-    const filtered = await filterByOrgSafe(transactions, c, { endpoint: '/transactions' });
+    // Driver-scoped wallet queries must include pre-org-backfill cash logs (strict org filter hides them).
+    let filtered = isDriverScoped
+      ? filterByOrg(transactions, c, { endpoint: '/transactions' })
+      : await filterByOrgSafe(transactions, c, { endpoint: '/transactions' });
+
+    // Recovery pass: find legacy cash rows (strict org filter or ID casing may hide them).
+    if (isDriverScoped && offset === 0) {
+      const idSet = idsToFilter;
+      const havePayment = filtered.some((t: any) => {
+        const cat = String(t?.category || "");
+        const type = String(t?.type || "");
+        return (cat === "Cash Collection" || type === "Payment_Received") && Number(t?.amount) > 0;
+      });
+      if (!havePayment || filtered.length < 10) {
+        const RECOVERY_PAGE = 1000;
+        const RECOVERY_MAX = 20000;
+        const recovered: any[] = [];
+        let recOffset = 0;
+        while (recOffset < RECOVERY_MAX) {
+          const { data: cashRows, error: cashErr } = await supabase
+            .from("kv_store_37f42386")
+            .select("value")
+            .like("key", "transaction:%")
+            .or("value->>category.eq.Cash Collection,value->>type.eq.Payment_Received")
+            .order("value->>date", { ascending: false })
+            .range(recOffset, recOffset + RECOVERY_PAGE - 1);
+          if (cashErr) break;
+          const page = (cashRows || []).map((d: any) => d.value).filter(Boolean);
+          for (const tx of page) {
+            const txDriverId = String(tx.driverId || "").trim();
+            if (!txDriverId || !idSet.has(txDriverId)) continue;
+            recovered.push(tx);
+          }
+          if (page.length < RECOVERY_PAGE) break;
+          recOffset += RECOVERY_PAGE;
+        }
+        if (recovered.length > 0) {
+          const merged = filterByOrg([...filtered, ...recovered], c, { endpoint: '/transactions/cash-recovery' });
+          const byId = new Map<string, any>();
+          for (const tx of merged) {
+            if (tx?.id) byId.set(String(tx.id), tx);
+          }
+          filtered = Array.from(byId.values()).sort(
+            (a, b) => new Date(String(b.date || 0)).getTime() - new Date(String(a.date || 0)).getTime(),
+          );
+        }
+      }
+    }
+
     return c.json(filtered);
   } catch (e: any) {
     return c.json({ error: e.message }, 500);

@@ -563,6 +563,7 @@ export function registerCashSettlementRoutes(app: Hono, deps: RegisterDeps): voi
         description: row.title,
         created_at: row.date,
         is_credit: row.is_credit,
+        breakdown: row.breakdown,
         metadata: {},
       })),
     });
