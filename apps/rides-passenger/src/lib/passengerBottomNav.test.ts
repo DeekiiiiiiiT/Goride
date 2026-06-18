@@ -8,6 +8,7 @@ describe('shouldHidePassengerBottomNav', () => {
     expect(shouldHidePassengerBottomNav('/services/schedule')).toBe(true);
     expect(shouldHidePassengerBottomNav('/services/schedule/confirmed')).toBe(true);
     expect(shouldHidePassengerBottomNav('/services/book-for-someone')).toBe(true);
+    expect(shouldHidePassengerBottomNav('/account/contacts/places/new')).toBe(true);
   });
 
   it('keeps nav on hub and tab screens', () => {
@@ -15,6 +16,7 @@ describe('shouldHidePassengerBottomNav', () => {
     expect(shouldHidePassengerBottomNav('/services')).toBe(false);
     expect(shouldHidePassengerBottomNav('/services/book-for-others')).toBe(false);
     expect(shouldHidePassengerBottomNav('/account')).toBe(false);
+    expect(shouldHidePassengerBottomNav('/account/contacts')).toBe(false);
     expect(shouldHidePassengerBottomNav('/activity')).toBe(false);
   });
 });

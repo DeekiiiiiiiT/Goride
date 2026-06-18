@@ -19,6 +19,7 @@ type Props = {
   open: boolean;
   address: string;
   defaultIcon?: PassengerSavedPlaceIcon;
+  initialName?: string;
   onClose: () => void;
   onSave: (name: string, icon: PassengerSavedPlaceIcon) => void;
 };
@@ -27,6 +28,7 @@ export function SaveLocationDetailsSheet({
   open,
   address,
   defaultIcon = 'saved',
+  initialName = '',
   onClose,
   onSave,
 }: Props) {
@@ -36,9 +38,9 @@ export function SaveLocationDetailsSheet({
 
   useEffect(() => {
     if (!open) return;
-    setName('');
+    setName(initialName);
     setIcon(defaultIcon);
-  }, [open, defaultIcon, address]);
+  }, [open, defaultIcon, initialName, address]);
 
   useEffect(() => {
     if (!open) return;
@@ -141,7 +143,7 @@ export function SaveLocationDetailsSheet({
                       transform: selected ? 'scale(1.05)' : undefined,
                     }}
                   >
-                    <SavedPlaceIconGlyph icon={item.id} className="h-5 w-5" filled={selected} />
+                    <SavedPlaceIconGlyph icon={item.id} className="h-5 w-5" selected={selected} />
                     <span className="text-[10px] font-bold uppercase tracking-wider">{t(item.labelKey)}</span>
                   </button>
                 );

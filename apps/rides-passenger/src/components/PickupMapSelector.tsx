@@ -30,6 +30,10 @@ type Props = {
   enableSnapToRoad?: boolean;
   /** Root container height / layout classes */
   className?: string;
+  /** Fired when the user drags the map (not programmatic pans). */
+  onUserMapMove?: () => void;
+  /** Hide the built-in center pin (e.g. when the parent renders its own). */
+  hideCenterPin?: boolean;
 };
 
 export function PickupMapSelector(props: Props) {
@@ -46,6 +50,8 @@ function GooglePickupMapSelector({
   isLoading = false,
   enableSnapToRoad = true,
   className = 'h-56',
+  onUserMapMove,
+  hideCenterPin = false,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -128,6 +134,7 @@ function GooglePickupMapSelector({
 
         map.addListener('dragend', () => {
           setIsDragging(false);
+          onUserMapMove?.();
         });
 
         // Reverse geocode after map movement stops (idle event)
@@ -284,31 +291,33 @@ function GooglePickupMapSelector({
       <div ref={containerRef} className="h-full w-full" aria-label="Pickup location map" />
 
       {/* Center pin (fixed in center of map) */}
-      <div className="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-full pointer-events-none">
-        <div className={`transition-transform ${isDragging ? 'scale-110 -translate-y-2' : ''}`}>
-          <svg
-            width="32"
-            height="44"
-            viewBox="0 0 32 44"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            className="drop-shadow-lg"
-          >
-            <path
-              d="M16 0C7.163 0 0 7.163 0 16c0 12 16 28 16 28s16-16 16-28c0-8.837-7.163-16-16-16z"
-              fill="#059669"
-            />
-            <circle cx="16" cy="16" r="6" fill="white" />
-          </svg>
+      {!hideCenterPin ? (
+        <div className="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-full pointer-events-none">
+          <div className={`transition-transform ${isDragging ? 'scale-110 -translate-y-2' : ''}`}>
+            <svg
+              width="32"
+              height="44"
+              viewBox="0 0 32 44"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              className="drop-shadow-lg"
+            >
+              <path
+                d="M16 0C7.163 0 0 7.163 0 16c0 12 16 28 16 28s16-16 16-28c0-8.837-7.163-16-16-16z"
+                fill="#059669"
+              />
+              <circle cx="16" cy="16" r="6" fill="white" />
+            </svg>
+          </div>
+          {/* Pin shadow */}
+          <div
+            className={`absolute left-1/2 -translate-x-1/2 w-3 h-1 bg-black/20 rounded-full blur-sm transition-all ${
+              isDragging ? 'scale-150 opacity-30' : 'opacity-50'
+            }`}
+            style={{ top: '100%', marginTop: 2 }}
+          />
         </div>
-        {/* Pin shadow */}
-        <div
-          className={`absolute left-1/2 -translate-x-1/2 w-3 h-1 bg-black/20 rounded-full blur-sm transition-all ${
-            isDragging ? 'scale-150 opacity-30' : 'opacity-50'
-          }`}
-          style={{ top: '100%', marginTop: 2 }}
-        />
-      </div>
+      ) : null}
 
       {/* Crosshair indicator when dragging */}
       {isDragging && (

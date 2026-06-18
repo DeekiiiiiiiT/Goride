@@ -6,6 +6,7 @@ const FOCUSED_FLOW_PREFIXES = [
   '/services/event',
   '/services/book-for-someone',
   '/services/book-for-me',
+  '/account/contacts/places',
 ] as const;
 
 /** Hide the main tab bar on multi-step booking and checkout screens. */

@@ -28,6 +28,8 @@ type Props = {
   isLoading?: boolean;
   enableSnapToRoad?: boolean;
   className?: string;
+  onUserMapMove?: () => void;
+  hideCenterPin?: boolean;
 };
 
 /** Capacitor-safe pickup pin selector using OpenStreetMap tiles. */
@@ -38,11 +40,14 @@ export function LeafletPickupMapSelector({
   isLoading = false,
   enableSnapToRoad = true,
   className = 'h-56',
+  onUserMapMove,
+  hideCenterPin = false,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const accuracyCircleRef = useRef<L.Circle | null>(null);
   const reverseGeocodeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const userDraggedRef = useRef(false);
 
   const [mapStatus, setMapStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [isLocating, setIsLocating] = useState(false);
@@ -128,15 +133,25 @@ export function LeafletPickupMapSelector({
         accuracyCircleRef.current.addTo(map);
       }
 
-      map.on('movestart', () => setIsDragging(true));
+      map.on('dragstart', () => {
+        userDraggedRef.current = true;
+        setIsDragging(true);
+      });
       map.on('moveend', () => {
         setIsDragging(false);
         const c = map.getCenter();
+        if (userDraggedRef.current) {
+          userDraggedRef.current = false;
+          onUserMapMove?.();
+        }
         reverseGeocodeCenter(c.lat, c.lng);
       });
 
       mapRef.current = map;
-      if (!cancelled) setMapStatus('ready');
+      if (!cancelled) {
+        setMapStatus('ready');
+        requestAnimationFrame(() => map.invalidateSize());
+      }
     } catch {
       if (!cancelled) setMapStatus('error');
     }
@@ -211,30 +226,32 @@ export function LeafletPickupMapSelector({
 
       <div ref={containerRef} className="h-full w-full" aria-label="Pickup location map" />
 
-      <div className="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-full pointer-events-none">
-        <div className={`transition-transform ${isDragging ? 'scale-110 -translate-y-2' : ''}`}>
-          <svg
-            width="32"
-            height="44"
-            viewBox="0 0 32 44"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            className="drop-shadow-lg"
-          >
-            <path
-              d="M16 0C7.163 0 0 7.163 0 16c0 12 16 28 16 28s16-16 16-28c0-8.837-7.163-16-16-16z"
-              fill="#059669"
-            />
-            <circle cx="16" cy="16" r="6" fill="white" />
-          </svg>
+      {!hideCenterPin ? (
+        <div className="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-full pointer-events-none">
+          <div className={`transition-transform ${isDragging ? 'scale-110 -translate-y-2' : ''}`}>
+            <svg
+              width="32"
+              height="44"
+              viewBox="0 0 32 44"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              className="drop-shadow-lg"
+            >
+              <path
+                d="M16 0C7.163 0 0 7.163 0 16c0 12 16 28 16 28s16-16 16-28c0-8.837-7.163-16-16-16z"
+                fill="#059669"
+              />
+              <circle cx="16" cy="16" r="6" fill="white" />
+            </svg>
+          </div>
+          <div
+            className={`absolute left-1/2 -translate-x-1/2 w-3 h-1 bg-black/20 rounded-full blur-sm transition-all ${
+              isDragging ? 'scale-150 opacity-30' : 'opacity-50'
+            }`}
+            style={{ top: '100%', marginTop: 2 }}
+          />
         </div>
-        <div
-          className={`absolute left-1/2 -translate-x-1/2 w-3 h-1 bg-black/20 rounded-full blur-sm transition-all ${
-            isDragging ? 'scale-150 opacity-30' : 'opacity-50'
-          }`}
-          style={{ top: '100%', marginTop: 2 }}
-        />
-      </div>
+      ) : null}
 
       {isDragging && (
         <div className="absolute left-1/2 top-1/2 z-[5] -translate-x-1/2 -translate-y-1/2 pointer-events-none">

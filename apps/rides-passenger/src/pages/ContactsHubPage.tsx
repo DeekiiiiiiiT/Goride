@@ -6,8 +6,8 @@ import {
   ArrowLeft,
   BadgeCheck,
   Clock,
-  MapPinPlus,
   MessageCircle,
+  Pencil,
   Phone,
   Plus,
   ShieldCheck,
@@ -22,9 +22,11 @@ import {
   listOutgoingConnectionRequests,
   listOutgoingPassengerAuthorizations,
 } from '@/services/roamConnectionsEdge';
+import type { PassengerSavedPlaceRow } from '@roam/types/passengerSavedPlaces';
 import { useSavedPlaces } from '@/hooks/useSavedPlaces';
 import { getHomePlace, getOtherPlaces, getWorkPlace } from '@/lib/savedPlaces';
-import { SavedPlaceIconGlyph } from '@/components/contacts/SavedPlaceIconGlyph';
+import { SavedPlaceDetailSheet } from '@/components/contacts/SavedPlaceDetailSheet';
+import { SavedPlaceIconBadge } from '@/components/contacts/SavedPlaceIconGlyph';
 import {
   CARD_SHADOW,
   ON_SURFACE,
@@ -127,6 +129,7 @@ export default function ContactsHubPage() {
   const [contacts, setContacts] = useState<RiderContactRow[]>([]);
   const [loadingContacts, setLoadingContacts] = useState(true);
   const [pendingBadge, setPendingBadge] = useState(0);
+  const [detailPlace, setDetailPlace] = useState<PassengerSavedPlaceRow | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -179,13 +182,22 @@ export default function ContactsHubPage() {
     }
   };
 
-  const handleDeletePlace = async (id: string) => {
+  const handleDeletePlace = async (place: PassengerSavedPlaceRow) => {
     try {
-      await remove(id);
+      await remove(place.id);
+      setDetailPlace(null);
       toast.success(t('places.deleted'));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : t('places.deleteFailed'));
     }
+  };
+
+  const handleSlotDelete = async (place: PassengerSavedPlaceRow) => {
+    await handleDeletePlace(place);
+  };
+
+  const openEditPlace = (place: PassengerSavedPlaceRow) => {
+    navigate(`/account/contacts/places/new?edit=${place.id}`);
   };
 
   const openAddPlace = (icon?: 'home' | 'work') => {
@@ -367,39 +379,90 @@ export default function ContactsHubPage() {
               </p>
             ) : null}
             <div className="grid grid-cols-2 gap-4">
-              {[homePlace, workPlace].map((place, i) => {
-                const isHome = i === 0;
-                const label = isHome ? t('places.home') : t('places.work');
-                const slotIcon = isHome ? 'home' : 'work';
-                return (
-                  <button
-                    key={label}
-                    type="button"
-                    onClick={() => openAddPlace(slotIcon)}
-                    className="flex flex-col items-start gap-4 rounded-[2rem] p-6 text-left active:scale-[0.98]"
-                    style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
-                  >
-                    <div
-                      className="flex h-12 w-12 items-center justify-center rounded-2xl shadow-sm"
-                      style={
-                        isHome
-                          ? { background: 'linear-gradient(135deg, #003ea8 0%, #2563eb 100%)', color: '#fff' }
-                          : { backgroundColor: SURFACE_LOWEST, border: '1px solid rgba(0,74,198,0.1)', color: PRIMARY }
-                      }
+              <div
+                className="relative flex flex-col rounded-[2rem] p-6"
+                style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
+              >
+                {homePlace ? (
+                  <div className="absolute right-4 top-4 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openEditPlace(homePlace)}
+                      className="flex h-8 w-8 items-center justify-center rounded-full active:scale-90"
+                      style={{ backgroundColor: SURFACE_LOW, color: PRIMARY }}
+                      aria-label={t('places.editPlace')}
                     >
-                      <SavedPlaceIconGlyph icon={isHome ? 'home' : 'work'} className="h-6 w-6" filled={isHome} />
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-semibold" style={{ color: ON_SURFACE }}>
-                        {label}
-                      </h4>
-                      <p className="text-xs" style={{ color: ON_SURFACE_VARIANT }}>
-                        {place?.address ?? t('places.tapToSet')}
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleSlotDelete(homePlace)}
+                      className="flex h-8 w-8 items-center justify-center rounded-full active:scale-90"
+                      style={{ backgroundColor: SURFACE_LOW, color: ON_SURFACE_VARIANT }}
+                      aria-label={t('places.delete')}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => (homePlace ? setDetailPlace(homePlace) : openAddPlace('home'))}
+                  className="flex w-full flex-col items-start gap-4 text-left active:scale-[0.98]"
+                >
+                  <SavedPlaceIconBadge icon="home" />
+                  <div className="min-w-0 pr-14">
+                    <h4 className="text-sm font-semibold" style={{ color: ON_SURFACE }}>
+                      {t('places.home')}
+                    </h4>
+                    {!homePlace ? (
+                      <p className="mt-1 text-xs" style={{ color: ON_SURFACE_VARIANT }}>
+                        {t('places.tapToSet')}
                       </p>
+                    ) : null}
+                  </div>
+                </button>
+              </div>
+
+              {workPlace ? (
+                <div
+                  className="relative flex flex-col rounded-[2rem] p-6"
+                  style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
+                >
+                  <div className="absolute right-4 top-4 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openEditPlace(workPlace)}
+                      className="flex h-8 w-8 items-center justify-center rounded-full active:scale-90"
+                      style={{ backgroundColor: SURFACE_LOW, color: PRIMARY }}
+                      aria-label={t('places.editPlace')}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleSlotDelete(workPlace)}
+                      className="flex h-8 w-8 items-center justify-center rounded-full active:scale-90"
+                      style={{ backgroundColor: SURFACE_LOW, color: ON_SURFACE_VARIANT }}
+                      aria-label={t('places.delete')}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDetailPlace(workPlace)}
+                    className="flex w-full flex-col items-start gap-4 text-left active:scale-[0.98]"
+                  >
+                    <SavedPlaceIconBadge icon="work" />
+                    <div className="min-w-0 pr-14">
+                      <h4 className="text-sm font-semibold" style={{ color: ON_SURFACE }}>
+                        {t('places.work')}
+                      </h4>
                     </div>
                   </button>
-                );
-              })}
+                </div>
+              ) : null}
             </div>
 
             {otherPlaces.length > 0 ? (
@@ -414,47 +477,44 @@ export default function ContactsHubPage() {
                   {otherPlaces.map((place) => (
                     <div
                       key={place.id}
-                      className="flex items-center gap-4 rounded-[2rem] p-4"
+                      className="relative flex items-center gap-4 rounded-[2rem] p-4"
                       style={{ backgroundColor: SURFACE_LOWEST, boxShadow: CARD_SHADOW }}
                     >
-                      <div
-                        className="flex h-10 w-10 items-center justify-center rounded-xl"
-                        style={{ backgroundColor: SURFACE_CONTAINER, color: PRIMARY }}
+                      <button
+                        type="button"
+                        onClick={() => setDetailPlace(place)}
+                        className="flex min-w-0 flex-1 items-center gap-4 text-left active:scale-[0.98]"
                       >
-                        <SavedPlaceIconGlyph icon={place.icon} className="h-5 w-5" />
-                      </div>
-                      <div className="min-w-0 flex-1">
+                        <SavedPlaceIconBadge icon={place.icon} size="sm" />
                         <p className="text-sm font-semibold" style={{ color: ON_SURFACE }}>
                           {place.name}
                         </p>
-                        <p className="truncate text-xs" style={{ color: ON_SURFACE_VARIANT }}>
-                          {place.address}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => void handleDeletePlace(place.id)}
-                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full active:scale-90"
-                        style={{ backgroundColor: SURFACE_LOW, color: ON_SURFACE_VARIANT }}
-                        aria-label={t('places.delete')}
-                      >
-                        <Trash2 className="h-4 w-4" />
                       </button>
+                      <div className="flex shrink-0 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openEditPlace(place)}
+                          className="flex h-9 w-9 items-center justify-center rounded-full active:scale-90"
+                          style={{ backgroundColor: SURFACE_LOW, color: PRIMARY }}
+                          aria-label={t('places.editPlace')}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleDeletePlace(place)}
+                          className="flex h-9 w-9 items-center justify-center rounded-full active:scale-90"
+                          style={{ backgroundColor: SURFACE_LOW, color: ON_SURFACE_VARIANT }}
+                          aria-label={t('places.delete')}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
             ) : null}
-
-            <button
-              type="button"
-              onClick={() => openAddPlace()}
-              className="flex w-full items-center justify-center gap-2 rounded-3xl border-2 border-dashed py-4 text-sm font-semibold transition-all active:scale-[0.98]"
-              style={{ borderColor: 'rgba(195,198,215,0.3)', color: ON_SURFACE_VARIANT }}
-            >
-              <MapPinPlus className="h-5 w-5" />
-              {t('places.pinNewPlace')}
-            </button>
           </div>
         )}
       </main>
@@ -462,12 +522,29 @@ export default function ContactsHubPage() {
       <button
         type="button"
         onClick={handleFab}
-        className="fixed bottom-24 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-2xl active:scale-90"
-        style={{ background: 'linear-gradient(135deg, #003ea8 0%, #2563eb 100%)' }}
+        className="fixed right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-2xl active:scale-90"
+        style={{
+          background: 'linear-gradient(135deg, #003ea8 0%, #2563eb 100%)',
+          bottom: 'calc(7rem + env(safe-area-inset-bottom, 0px))',
+        }}
         aria-label={tab === 'places' ? t('places.addNewTitle') : t('hub.addContact')}
       >
         <Plus className="h-7 w-7" />
       </button>
+
+      <SavedPlaceDetailSheet
+        place={detailPlace}
+        onClose={() => setDetailPlace(null)}
+        onEdit={() => {
+          if (!detailPlace) return;
+          openEditPlace(detailPlace);
+          setDetailPlace(null);
+        }}
+        onDelete={() => {
+          if (!detailPlace) return;
+          void handleDeletePlace(detailPlace);
+        }}
+      />
     </div>
   );
 }
