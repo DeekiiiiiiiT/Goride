@@ -23,7 +23,7 @@ function HaulerApp() {
   if (!user) return <HaulerLoginPage />;
 
   if (isHaulUiBlockedRole(user)) {
-    return <WrongHaulSurfaceGate onSignOut={() => void signOut()} />;
+    return <WrongHaulSurfaceGate user={user} onSignOut={() => void signOut()} />;
   }
 
   return (

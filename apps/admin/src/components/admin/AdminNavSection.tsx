@@ -11,6 +11,7 @@ type AdminNavSectionProps = {
   onToggle: () => void;
   onNavigate: (page: string) => void;
   isActive: boolean;
+  nested?: boolean;
 };
 
 const sectionBtnActive =
@@ -31,6 +32,7 @@ export function AdminNavSection({
   onToggle,
   onNavigate,
   isActive,
+  nested = false,
 }: AdminNavSectionProps) {
   if (children.length === 0) return null;
 
@@ -40,11 +42,12 @@ export function AdminNavSection({
         type="button"
         onClick={onToggle}
         className={`
-          w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+          w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-colors
+          ${nested ? 'text-[13px]' : 'px-3 py-2.5 gap-3'}
           ${isActive ? sectionBtnActive : sectionBtnIdle}
         `}
       >
-        <SectionIcon className="w-4.5 h-4.5 shrink-0" />
+        <SectionIcon className={`${nested ? 'w-4 h-4' : 'w-4.5 h-4.5'} shrink-0`} />
         <span className="truncate">{label}</span>
         {open
           ? <ChevronDown className="w-3.5 h-3.5 ml-auto text-slate-500" />
@@ -52,7 +55,7 @@ export function AdminNavSection({
         }
       </button>
       {open && (
-        <div className="ml-4 mt-1 space-y-0.5 border-l border-slate-200 dark:border-slate-800 pl-2">
+        <div className={`${nested ? 'ml-3' : 'ml-4'} mt-1 space-y-0.5 border-l border-slate-200 dark:border-slate-800 pl-2`}>
           {children.map((child) => {
             const ChildIcon = child.icon;
             const active = currentPage === child.id && !child.href;

@@ -110,11 +110,12 @@ export function isHaulUiBlockedRole(rawOrUser: string | null | undefined | JwtUs
   if (rawOrUser && typeof rawOrUser === 'object') {
     const user = rawOrUser as JwtUser;
     if (hasPrivilegedJwtRole(user)) return true;
-    const roles = getJwtRoles(user);
-    if (roles.includes('hauler')) return false;
     const surface = userMetadataSurface(user);
     if (surface === 'hauler') return false;
-    if (surface === 'driver' || roles.includes('driver')) return false;
+    if (surface === 'driver') return false;
+    const roles = getJwtRoles(user);
+    if (roles.includes('hauler')) return false;
+    if (roles.includes('driver')) return false;
     if (roles.length > 0) {
       return !roles.some((r) => HAUL_SURFACE_ROLES.has(r));
     }

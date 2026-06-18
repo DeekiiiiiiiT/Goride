@@ -1,6 +1,7 @@
 import React from 'react';
 import { isDriverActiveRideStatus } from '@roam/types/rides';
 import { isNativeCapacitorPlatform } from '@roam/types';
+import { useDispatchConfig } from '@roam/hauler-dispatch';
 import { useRideDispatchContext } from '../../contexts/RideDispatchContext';
 import { ActiveRidePanel } from './ActiveRidePanel';
 import { OnlineGaugeSlider } from './OnlineGaugeSlider';
@@ -12,6 +13,7 @@ type Props = {
 };
 
 export function RideDispatchHome({ embedded = false }: Props) {
+  const { ui } = useDispatchConfig();
   const {
     online,
     goingOnline,
@@ -56,6 +58,7 @@ export function RideDispatchHome({ embedded = false }: Props) {
           permissions={permissions}
           open={permissionOnboardingOpen}
           onClose={() => setPermissionOnboardingOpen(false)}
+          variant={embedded ? 'inline' : 'modal'}
         />
 
         {!embedded && !online && presenceError && (
@@ -65,25 +68,41 @@ export function RideDispatchHome({ embedded = false }: Props) {
         )}
 
         {presenceError && embedded && (
-          <p className="shrink-0 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-center text-sm text-red-600 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400">
+          <p className="shrink-0 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-center text-sm text-red-300">
             {presenceError}
           </p>
         )}
 
-        {!online && locationGoOnlineBlocked && (
-          <div className="shrink-0 space-y-2 rounded-xl bg-amber-50 px-3 py-3 text-center dark:bg-amber-950/40">
-            <p className="text-sm text-amber-800 dark:text-amber-300">
+        {!permissionOnboardingOpen && !online && locationGoOnlineBlocked && (
+          <div
+            className={
+              embedded
+                ? 'shrink-0 space-y-3 rounded-2xl border border-slate-800 bg-slate-900/80 p-4 text-center'
+                : 'shrink-0 space-y-2 rounded-xl bg-amber-50 px-3 py-3 text-center dark:bg-amber-950/40'
+            }
+          >
+            <p
+              className={
+                embedded
+                  ? 'text-sm text-slate-300'
+                  : 'text-sm text-amber-800 dark:text-amber-300'
+              }
+            >
               {isNativeCapacitorPlatform()
                 ? 'Location is required to go online. Allow precise location — ideally “Allow all the time” on Android.'
-                : 'Location permission is required to go online. Use Allow above or enable location in your browser settings.'}
+                : 'Location is required to go online. Allow it above or enable location in your browser settings.'}
             </p>
             <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
               <button
                 type="button"
-                className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white"
+                className={
+                  embedded
+                    ? 'rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-400'
+                    : 'rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white'
+                }
                 onClick={() => void toggleOnline()}
               >
-                {isNativeCapacitorPlatform() ? 'Allow location & go online' : 'Allow location & go online'}
+                {ui.goOnlineLabel}
               </button>
               {isNativeCapacitorPlatform() && (
                 <button
@@ -98,22 +117,52 @@ export function RideDispatchHome({ embedded = false }: Props) {
           </div>
         )}
 
+        {embedded && !permissionOnboardingOpen && !online && !locationGoOnlineBlocked && !showActiveRide && (
+          <div className="shrink-0 space-y-3 rounded-2xl border border-slate-800 bg-slate-900/80 p-5 text-center">
+            <p className="text-sm text-slate-400">{ui.idleOfflineMessage}</p>
+            <button
+              type="button"
+              disabled={goingOnline || goOnlineDisabled}
+              className="w-full rounded-lg bg-amber-500 py-2.5 text-sm font-semibold text-slate-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => void toggleOnline()}
+            >
+              {goingOnline ? 'Going online…' : ui.goOnlineLabel}
+            </button>
+          </div>
+        )}
+
         {!embedded && !online && !locationGoOnlineBlocked && !showActiveRide && (
           <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4 shrink-0">
-            Slide the gauge below to receive Roam ride requests from passengers nearby.
+            {ui.idleOfflineMessage}
           </p>
         )}
 
-        {!embedded && showWaiting && (
-          <div className="flex flex-1 flex-col items-center justify-center gap-3 py-8 text-center">
+        {showWaiting && (
+          <div
+            className={
+              embedded
+                ? 'flex flex-col items-center justify-center gap-3 rounded-2xl border border-slate-800 bg-slate-900/80 py-10 text-center'
+                : 'flex flex-1 flex-col items-center justify-center gap-3 py-8 text-center'
+            }
+          >
             <span className="relative flex h-3 w-3">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-              <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500" />
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-60" />
+              <span
+                className={`relative inline-flex h-3 w-3 rounded-full ${
+                  embedded ? 'bg-amber-500' : 'bg-emerald-500'
+                }`}
+              />
             </span>
-            <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Waiting for ride requests</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs">
-              Stay on this screen. You will be notified when a passenger books nearby.
+            <p
+              className={
+                embedded
+                  ? 'text-sm font-medium text-slate-200'
+                  : 'text-sm font-medium text-slate-700 dark:text-slate-200'
+              }
+            >
+              {ui.waitingTitle}
             </p>
+            <p className="text-xs text-slate-500 max-w-xs">{ui.waitingDescription}</p>
           </div>
         )}
 

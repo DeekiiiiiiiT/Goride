@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { AdminNavSection } from './AdminNavSection';
+import { AdminNavGroup } from './AdminNavGroup';
 import {
   NAV_ITEMS,
   PLATFORM_CHILDREN,
@@ -133,6 +134,11 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const [ridesOpen, setRidesOpen] = useSectionOpen(currentPage, ridesIds);
   const [haulOpen, setHaulOpen] = useSectionOpen(currentPage, haulIds);
   const [driverOpen, setDriverOpen] = useSectionOpen(currentPage, driverIds);
+  const businessSegmentIds = useMemo(
+    () => [...enterpriseIds, ...fleetIds, ...driverIds, ...ridesIds, ...haulIds, ...dashIds],
+    [enterpriseIds, fleetIds, driverIds, ridesIds, haulIds, dashIds],
+  );
+  const [businessSegmentsOpen, setBusinessSegmentsOpen] = useSectionOpen(currentPage, businessSegmentIds);
   const [fuelOpen, setFuelOpen] = useSectionOpen(currentPage, fuelIds);
   const [tollOpen, setTollOpen] = useSectionOpen(currentPage, tollIds);
   const [vehicleDbOpen, setVehicleDbOpen] = useSectionOpen(currentPage, vehicleIds);
@@ -156,23 +162,16 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const userEmail = user?.email || '';
   const initials = userName.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
 
-  const sections: Array<{
-    key: string;
-    label: string;
-    icon: React.ComponentType<{ className?: string }>;
-    children: NavChild[];
-    open: boolean;
-    setOpen: (v: boolean) => void;
-    isActive: boolean;
-  }> = [
-    {
-      key: 'platform',
-      ...SECTION_META.platform,
-      children: visiblePlatform,
-      open: platformOpen,
-      setOpen: setPlatformOpen,
-      isActive: platformIds.includes(currentPage),
-    },
+  const platformSection = {
+    key: 'platform',
+    ...SECTION_META.platform,
+    children: visiblePlatform,
+    open: platformOpen,
+    setOpen: setPlatformOpen,
+    isActive: platformIds.includes(currentPage),
+  };
+
+  const businessSegmentSections = [
     {
       key: 'enterprise',
       ...SECTION_META.enterprise,
@@ -316,19 +315,30 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
             );
           })}
 
-          {sections.map((section) => (
+          {visiblePlatform.length > 0 && (
             <AdminNavSection
-              key={section.key}
-              label={section.label}
-              icon={section.icon}
-              children={section.children}
+              key={platformSection.key}
+              label={platformSection.label}
+              icon={platformSection.icon}
+              children={platformSection.children}
               currentPage={currentPage}
-              open={section.open}
-              onToggle={() => section.setOpen(!section.open)}
+              open={platformSection.open}
+              onToggle={() => platformSection.setOpen(!platformSection.open)}
               onNavigate={handleNav}
-              isActive={section.isActive}
+              isActive={platformSection.isActive}
             />
-          ))}
+          )}
+
+          <AdminNavGroup
+            label={SECTION_META.businessSegments.label}
+            icon={SECTION_META.businessSegments.icon}
+            sections={businessSegmentSections}
+            currentPage={currentPage}
+            open={businessSegmentsOpen}
+            onToggle={() => setBusinessSegmentsOpen(!businessSegmentsOpen)}
+            onNavigate={handleNav}
+            isActive={businessSegmentIds.includes(currentPage)}
+          />
 
           {infraSections.map((section) => (
             <AdminNavSection

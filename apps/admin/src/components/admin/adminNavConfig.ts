@@ -30,6 +30,7 @@ import {
   Search,
   Store,
   Brain,
+  Layers,
 } from 'lucide-react';
 
 export type NavChild = {
@@ -192,6 +193,7 @@ export const LEGACY_PAGE_REDIRECTS: Record<string, string> = {
 
 export const SECTION_META = {
   platform: { label: 'Platform', icon: Shield },
+  businessSegments: { label: 'Business Segments', icon: Layers },
   enterprise: { label: 'Roam Enterprise', icon: Building2 },
   fleet: { label: 'Roam Fleet', icon: Truck },
   dash: { label: 'Roam Dash', icon: Utensils },

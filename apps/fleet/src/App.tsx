@@ -183,7 +183,7 @@ function AppContent() {
   }
 
   if (user && isPassengerOnlyMetadataRole(user.user_metadata?.role as string | undefined)) {
-    return <PassengerFleetSurfaceGate onSignOut={signOut} />;
+    return <PassengerFleetSurfaceGate user={user} onSignOut={signOut} />;
   }
 
   const signupPath =
