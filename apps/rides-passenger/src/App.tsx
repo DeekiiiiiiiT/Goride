@@ -29,6 +29,7 @@ import TrustedContactsPage from './pages/TrustedContactsPage';
 import AddTrustedContactsPage from './pages/AddTrustedContactsPage';
 import TripSharePublicPage from './pages/TripSharePublicPage';
 import ContactsHubPage from './pages/ContactsHubPage';
+import AddNewPlacePage from './pages/AddNewPlacePage';
 import ContactsPage from './pages/ContactsPage';
 import ContactGroupsPage from './pages/ContactGroupsPage';
 import ContactGroupDetailPage from './pages/ContactGroupDetailPage';
@@ -190,6 +191,7 @@ export default function App() {
           <Route path="/account/support" element={<SupportCenterPage />} />
           <Route path="/account/trusted-contacts" element={<Navigate to="/account/contacts/trusted" replace />} />
           <Route path="/account/contacts" element={<ContactsHubPage />} />
+          <Route path="/account/contacts/places/new" element={<AddNewPlacePage />} />
           <Route path="/account/contacts/pending" element={<PendingContactsPage />} />
           <Route path="/account/contacts/roam" element={<ContactsPage />} />
           <Route path="/account/contacts/trusted" element={<TrustedContactsPage />} />

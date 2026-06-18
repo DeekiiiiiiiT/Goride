@@ -20,6 +20,7 @@ export type RidesContactsTables = {
   roam_connections: string;
   user_blocks: string;
   abuse_reports: string;
+  passenger_saved_places: string;
 };
 
 const NATIVE_TABLES: RidesContactsTables = {
@@ -38,6 +39,7 @@ const NATIVE_TABLES: RidesContactsTables = {
   roam_connections: "roam_connections",
   user_blocks: "user_blocks",
   abuse_reports: "abuse_reports",
+  passenger_saved_places: "passenger_saved_places",
 };
 
 const PUBLIC_TABLES: RidesContactsTables = {
@@ -56,6 +58,7 @@ const PUBLIC_TABLES: RidesContactsTables = {
   roam_connections: "rides_roam_connections",
   user_blocks: "rides_user_blocks",
   abuse_reports: "rides_abuse_reports",
+  passenger_saved_places: "rides_passenger_saved_places",
 };
 
 export type RidesContactsDb = {

@@ -75,6 +75,7 @@ import type { AppPermissionSurface } from "../_shared/appPermissionCatalog.ts";
 import { registerRideChatRoutes } from "./rideChat.ts";
 import { autocompletePlaces, fetchPlaceDetails, isPlacesConfigured, reverseGeocodeCoordinates } from "./fare/places.ts";
 import { registerContactsRoutes } from "./contacts.ts";
+import { registerSavedPlacesRoutes } from "./savedPlaces.ts";
 import { getRidesContactsDb } from "../_shared/ridesContactsDb.ts";
 import { registerPassengerInviteRoutes } from "./passengerInvites.ts";
 import { registerPassengerAuthorizationRoutes, consumePassengerAuthorization } from "./passengerAuthorizations.ts";
@@ -2738,6 +2739,7 @@ registerRideChatRoutes(app, {
 });
 
 registerContactsRoutes(app, { getContactsDb: getRidesContactsDb, requireUser, audit });
+registerSavedPlacesRoutes(app, { getContactsDb: getRidesContactsDb, requireUser });
 registerPassengerInviteRoutes(app, {
   getContactsDb: getRidesContactsDb,
   pubSvc,

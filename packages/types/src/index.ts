@@ -40,6 +40,7 @@ export * from './delegatedRide';
 export * from './passengerAuthorization';
 export * from './pickupLocationRequest';
 export * from './riderContacts';
+export * from './passengerSavedPlaces';
 export * from './roamPassengerTag';
 export * from './passengerProfile';
 export * from './tripShare';

@@ -21,6 +21,8 @@ import { DEFAULT_PROFILE_AVATAR_URL } from '@/lib/roamHomeAssets';
 import type { FareQuoteResponse } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
 import { RoamPlaceField } from '@/components/RoamPlaceField';
+import { SavedPlacesQuickChips } from '@/components/contacts/SavedPlacesQuickChips';
+import type { PassengerSavedPlaceRow } from '@roam/types/passengerSavedPlaces';
 import { BookingHeroMap } from '@/components/BookingHeroMap';
 import { PickupMapOverlay } from '@/components/PickupMapOverlay';
 import { type PickupLocation } from '@/components/PickupMapSelector';
@@ -627,6 +629,14 @@ export default function HomePage() {
     setQuickActionsHidden(true);
   }, []);
 
+  const applySavedPlaceToDestination = useCallback((place: PassengerSavedPlaceRow) => {
+    dismissQuickActions();
+    setDestinationChosen(true);
+    setDropoffAddress(place.address);
+    setDropoff({ lat: place.lat, lng: place.lng });
+    clearQuotes();
+  }, [dismissQuickActions]);
+
   const surge = quote?.surge_multiplier ?? null;
   const locationAllowsBooking =
     !locationBlocked || (isNativeCapacitorPlatform() && manualRouteReady);
@@ -1113,6 +1123,10 @@ export default function HomePage() {
                           setDropoff({ lat, lng });
                         }}
                       />
+                      <SavedPlacesQuickChips
+                        className="mt-3"
+                        onSelect={applySavedPlaceToDestination}
+                      />
                     </div>
                   </>
                 ) : (
@@ -1145,6 +1159,10 @@ export default function HomePage() {
                         setDropoffAddress(address);
                         setDropoff({ lat, lng });
                       }}
+                    />
+                    <SavedPlacesQuickChips
+                      className="mt-3"
+                      onSelect={applySavedPlaceToDestination}
                     />
                   </div>
                 )}
