@@ -178,8 +178,8 @@ export function ActivityLog() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-white">Activity Log</h1>
-          <p className="text-sm text-slate-400 mt-0.5">
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Activity Log</h1>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
             {filtered.length} entr{filtered.length !== 1 ? 'ies' : 'y'}
             {filtered.length !== entries.length ? ` (filtered from ${entries.length})` : ''}
           </p>
@@ -187,7 +187,7 @@ export function ActivityLog() {
         <button
           onClick={() => refetch()}
           disabled={isLoading}
-          className="inline-flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-sm rounded-lg transition-colors disabled:opacity-50"
+          className="inline-flex items-center gap-2 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 dark:text-slate-300 text-sm rounded-lg transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           Refresh
@@ -203,13 +203,13 @@ export function ActivityLog() {
             placeholder="Search by actor or target email..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+            className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
           />
         </div>
         <select
           value={categoryFilter}
           onChange={e => { setCategoryFilter(e.target.value); setVisibleCount(50); }}
-          className="appearance-none px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/50 cursor-pointer"
+          className="appearance-none px-3 py-2 bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/50 cursor-pointer"
         >
           {CATEGORY_FILTERS.map(f => (
             <option key={f.value} value={f.value}>{f.label}</option>
@@ -218,7 +218,7 @@ export function ActivityLog() {
         <select
           value={dateFilter}
           onChange={e => { setDateFilter(e.target.value); setVisibleCount(50); }}
-          className="appearance-none px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/50 cursor-pointer"
+          className="appearance-none px-3 py-2 bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/50 cursor-pointer"
         >
           {DATE_FILTERS.map(f => (
             <option key={f.value} value={f.value}>{f.label}</option>
@@ -243,13 +243,13 @@ export function ActivityLog() {
       {/* Empty state */}
       {!isLoading && !error && filtered.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="bg-slate-800 p-4 rounded-2xl mb-4">
+          <div className="bg-slate-100 p-4 rounded-2xl mb-4 dark:bg-slate-800">
             <ClipboardList className="w-8 h-8 text-slate-500" />
           </div>
-          <h3 className="text-base font-semibold text-white mb-1">
+          <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-1">
             {entries.length === 0 ? 'No activity recorded yet' : 'No matching entries'}
           </h3>
-          <p className="text-sm text-slate-400 max-w-xs">
+          <p className="text-sm text-slate-600 dark:text-slate-400 max-w-xs">
             {entries.length === 0
               ? 'Actions will appear here as you manage users.'
               : 'Try adjusting your search or filters.'}
@@ -259,8 +259,8 @@ export function ActivityLog() {
 
       {/* Timeline */}
       {!isLoading && !error && visibleEntries.length > 0 && (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl">
-          <div className="divide-y divide-slate-800/60">
+        <div className="bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-xl">
+          <div className="divide-y divide-slate-200 dark:divide-slate-800/60">
             {visibleEntries.map((entry, idx) => {
               const cfg = ACTION_CONFIG[entry.action] || {
                 icon: ClipboardList,
@@ -272,7 +272,7 @@ export function ActivityLog() {
               const [iconText, iconBg] = cfg.color.split(' ');
 
               return (
-                <div key={`${entry.timestamp}-${idx}`} className="flex gap-4 px-5 py-4 hover:bg-slate-800/30 transition-colors">
+                <div key={`${entry.timestamp}-${idx}`} className="flex gap-4 px-5 py-4 hover:bg-slate-50 transition-colors dark:hover:bg-slate-800/30">
                   {/* Icon */}
                   <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${iconBg}`}>
                     <Icon className={`w-4.5 h-4.5 ${iconText}`} />
@@ -281,10 +281,10 @@ export function ActivityLog() {
                   {/* Content */}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-slate-200 leading-relaxed">
-                      <span className="font-semibold text-white">{entry.actorName}</span>
+                      <span className="font-semibold text-slate-900 dark:text-white">{entry.actorName}</span>
                       {' '}{cfg.label}{' '}
                       {entry.targetEmail && (
-                        <span className="font-semibold text-white">{entry.targetEmail}</span>
+                        <span className="font-semibold text-slate-900 dark:text-white">{entry.targetEmail}</span>
                       )}
                     </p>
                     {entry.details && (
@@ -303,7 +303,7 @@ export function ActivityLog() {
 
           {/* Load More */}
           {hasMore && (
-            <div className="px-5 py-3 border-t border-slate-800">
+            <div className="px-5 py-3 border-t border-slate-200 dark:border-slate-800">
               <button
                 onClick={() => setVisibleCount(v => v + 50)}
                 className="w-full text-center text-sm text-amber-400 hover:text-amber-300 font-medium transition-colors"

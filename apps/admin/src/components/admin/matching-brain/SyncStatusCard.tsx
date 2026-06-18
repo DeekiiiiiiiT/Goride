@@ -92,7 +92,7 @@ export function SyncStatusCard({ policyId, canEdit, session }: SyncStatusCardPro
     <Card>
       <CardHeader className="flex flex-row items-start justify-between gap-4">
         <div>
-          <CardTitle className="text-white flex items-center gap-2">
+          <CardTitle className="text-slate-900 dark:text-white flex items-center gap-2">
             Sync Status
             {status?.in_sync && (
               <Badge variant="default" className="bg-green-500 text-xs">In Sync</Badge>
@@ -178,9 +178,9 @@ export function SyncStatusCard({ policyId, canEdit, session }: SyncStatusCardPro
                 </button>
 
                 {expanded && (
-                  <div className="rounded-lg border border-slate-700 overflow-hidden">
+                  <div className="rounded-lg border border-slate-200 overflow-hidden dark:border-slate-700">
                     <table className="w-full text-sm">
-                      <thead className="bg-slate-800">
+                      <thead className="bg-slate-50 dark:bg-slate-800">
                         <tr>
                           <th className="px-3 py-2 text-left text-slate-400 font-medium">Setting</th>
                           <th className="px-3 py-2 text-left text-slate-400 font-medium">Matching Brain</th>
@@ -189,7 +189,7 @@ export function SyncStatusCard({ policyId, canEdit, session }: SyncStatusCardPro
                       </thead>
                       <tbody>
                         {status.differences.map((diff) => (
-                          <tr key={diff.field} className="border-t border-slate-700">
+                          <tr key={diff.field} className="border-t border-slate-200 dark:border-slate-700">
                             <td className="px-3 py-2 text-slate-300 font-mono text-xs">
                               {diff.field}
                             </td>
@@ -214,7 +214,7 @@ export function SyncStatusCard({ policyId, canEdit, session }: SyncStatusCardPro
             ) : null}
 
             {status.matching_updated_at && (
-              <div className="flex gap-4 text-xs text-slate-500 pt-2 border-t border-slate-800">
+              <div className="flex gap-4 text-xs text-slate-500 pt-2 border-t border-slate-200 dark:border-slate-800">
                 <span>Matching Brain: {new Date(status.matching_updated_at).toLocaleString()}</span>
                 {status.legacy_updated_at && (
                   <span>Legacy: {new Date(status.legacy_updated_at).toLocaleString()}</span>

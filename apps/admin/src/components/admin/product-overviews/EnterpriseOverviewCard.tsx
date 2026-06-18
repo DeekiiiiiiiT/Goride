@@ -41,11 +41,11 @@ export function EnterpriseOverviewCard({ onNavigate }: EnterpriseOverviewCardPro
     <div className="p-6 space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+          <h2 className="text-xl font-semibold text-slate-900 dark:text-white flex items-center gap-2">
             <Building2 className="w-5 h-5 text-sky-400" />
             Roam Enterprise
           </h2>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
             Enterprise customer orgs and their team memberships.
           </p>
         </div>
@@ -60,26 +60,26 @@ export function EnterpriseOverviewCard({ onNavigate }: EnterpriseOverviewCardPro
           <button
             type="button"
             onClick={() => onNavigate('enterprise-customers')}
-            className="text-left rounded-xl border border-slate-800 bg-slate-900/60 p-5 hover:border-slate-700 transition-colors group"
+            className="text-left rounded-xl border border-slate-200 bg-white p-5 hover:border-slate-300 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-slate-700 transition-colors group"
           >
             <div className="flex items-center justify-between mb-2">
               <Users className="w-5 h-5 text-sky-400" />
               <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-slate-400" />
             </div>
-            <p className="text-3xl font-bold text-white">{customers}</p>
-            <p className="text-sm text-slate-400 mt-1">Customer accounts</p>
+            <p className="text-3xl font-bold text-slate-900 dark:text-white">{customers}</p>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">Customer accounts</p>
           </button>
           <button
             type="button"
             onClick={() => onNavigate('enterprise-team-members')}
-            className="text-left rounded-xl border border-slate-800 bg-slate-900/60 p-5 hover:border-slate-700 transition-colors group"
+            className="text-left rounded-xl border border-slate-200 bg-white p-5 hover:border-slate-300 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-slate-700 transition-colors group"
           >
             <div className="flex items-center justify-between mb-2">
               <UserCog className="w-5 h-5 text-cyan-400" />
               <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-slate-400" />
             </div>
-            <p className="text-3xl font-bold text-white">{team}</p>
-            <p className="text-sm text-slate-400 mt-1">Team members</p>
+            <p className="text-3xl font-bold text-slate-900 dark:text-white">{team}</p>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">Team members</p>
           </button>
         </div>
       )}
@@ -88,14 +88,14 @@ export function EnterpriseOverviewCard({ onNavigate }: EnterpriseOverviewCardPro
         <button
           type="button"
           onClick={() => onNavigate('enterprise-customers')}
-          className="px-4 py-2 text-sm rounded-lg bg-slate-800 border border-slate-700 text-slate-200 hover:bg-slate-800"
+          className="px-4 py-2 text-sm rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-700"
         >
           Open customer accounts
         </button>
         <button
           type="button"
           onClick={() => onNavigate('enterprise-team-members')}
-          className="px-4 py-2 text-sm rounded-lg bg-slate-800 border border-slate-700 text-slate-200 hover:bg-slate-800"
+          className="px-4 py-2 text-sm rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-700"
         >
           Open team members
         </button>

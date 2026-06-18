@@ -19,7 +19,7 @@ import {
   clearCashSettlementPending,
   readCashSettlementPending,
 } from '../utils/cashSettlementPendingStorage';
-import { slugFromBodyLabel } from '../components/rides/rideDispatchUtils';
+import { slugFromBodyLabel, useDispatchConfig } from '@roam/hauler-dispatch';
 import { useActiveRideTracking } from './useActiveRideTracking';
 import { openExternalNavigation } from '../utils/rideNavigation';
 import { useDriverPermissionPolicy } from './usePermissionPolicy';
@@ -68,8 +68,6 @@ const RIDE_SYNC_MS = 30_000;
 const RIDE_WAIT_SYNC_MS = 2_000;
 const OFFER_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3';
 
-const DEFAULT_BODY_TYPE_SLUG = 'sedan';
-
 function buildExactCashSettlementResult(ride: RideRequestRow): CashSettlementResponse {
   const fareMinor = Number(ride.fare_final_minor ?? ride.fare_estimate_minor ?? 0);
   return {
@@ -83,6 +81,9 @@ function buildExactCashSettlementResult(ride: RideRequestRow): CashSettlementRes
 }
 
 export function useRideDispatch() {
+  const dispatchConfig = useDispatchConfig();
+  const defaultBodyTypeSlug = dispatchConfig.defaultBodyTypeSlug;
+
   const [online, setOnline] = useState(false);
   const [goingOnline, setGoingOnline] = useState(false);
   const [offers, setOffers] = useState<DriverOfferWithRide[]>([]);
@@ -101,7 +102,7 @@ export function useRideDispatch() {
   const knownOfferIds = useRef<Set<string>>(new Set());
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const pendingGoOnlineAfterSettings = useRef(false);
-  const bodyTypeSlugRef = useRef(DEFAULT_BODY_TYPE_SLUG);
+  const bodyTypeSlugRef = useRef(defaultBodyTypeSlug);
   const lastPresenceSuccessAt = useRef(0);
   const locationFailureStreak = useRef(0);
 
@@ -209,7 +210,7 @@ export function useRideDispatch() {
         .eq('user_id', user.id)
         .maybeSingle();
       if (!profile?.id) {
-        setBodyTypeSlug(DEFAULT_BODY_TYPE_SLUG);
+        setBodyTypeSlug(defaultBodyTypeSlug);
         setVehicleReady(true);
         return;
       }
@@ -228,12 +229,12 @@ export function useRideDispatch() {
       }
 
       const label = (vehicle as { body_type?: string | null } | null)?.body_type?.trim();
-      setBodyTypeSlug(label ? slugFromBodyLabel(label) || DEFAULT_BODY_TYPE_SLUG : DEFAULT_BODY_TYPE_SLUG);
+      setBodyTypeSlug(label ? slugFromBodyLabel(label) || defaultBodyTypeSlug : defaultBodyTypeSlug);
       setVehicleReady(true);
     })();
   }, []);
 
-  const effectiveBodyTypeSlug = bodyTypeSlug ?? DEFAULT_BODY_TYPE_SLUG;
+  const effectiveBodyTypeSlug = bodyTypeSlug ?? defaultBodyTypeSlug;
   bodyTypeSlugRef.current = effectiveBodyTypeSlug;
 
   const clearGeoWatch = useCallback(() => {
@@ -258,19 +259,21 @@ export function useRideDispatch() {
         lng: coords.lng,
         available_for_rides: false,
         body_type_slug: effectiveBodyTypeSlug,
+        dispatch_mode: dispatchConfig.dispatchMode,
       });
     } catch (e: unknown) {
       console.warn('offline presence failed', e);
     }
-  }, [effectiveBodyTypeSlug]);
+  }, [effectiveBodyTypeSlug, dispatchConfig.dispatchMode]);
 
   const refreshOffers = useCallback(async () => {
     try {
       const { offers: nextOffers } = await ridesDriverPendingOffers();
-      const nextIds = new Set(nextOffers.map((o) => o.id));
-      const hasNew = nextOffers.some((o) => !knownOfferIds.current.has(o.id));
+      const filtered = nextOffers.filter(dispatchConfig.filterOffer);
+      const nextIds = new Set(filtered.map((o) => o.id));
+      const hasNew = filtered.some((o) => !knownOfferIds.current.has(o.id));
       knownOfferIds.current = nextIds;
-      setOffers(nextOffers);
+      setOffers(filtered);
       if (hasNew && online && audioRef.current) {
         audioRef.current.play().catch(() => {});
         if (navigator.vibrate) navigator.vibrate(200);
@@ -372,6 +375,7 @@ export function useRideDispatch() {
           heading_degrees: heading ?? undefined,
           available_for_rides: true,
           body_type_slug: bodyTypeSlugRef.current,
+          dispatch_mode: dispatchConfig.dispatchMode,
         });
         setPresenceError(null);
         lastPresenceSuccessAt.current = Date.now();

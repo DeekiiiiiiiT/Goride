@@ -561,8 +561,8 @@ export function CustomerAccounts({
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-white">{resolvedTitle}</h1>
-          <p className="text-sm text-slate-400 mt-0.5 max-w-xl">{resolvedSubtitle}</p>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white">{resolvedTitle}</h1>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5 max-w-xl">{resolvedSubtitle}</p>
           <p className="text-xs text-slate-500 mt-2">
             {displayed.length} result{displayed.length !== 1 ? 's' : ''}
             {displayed.length !== customers.length ? ` (filtered from ${customers.length})` : ''}
@@ -581,7 +581,7 @@ export function CustomerAccounts({
           <button
             onClick={handleExport}
             disabled={displayed.length === 0}
-            className="inline-flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-sm rounded-lg transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 dark:text-slate-300 text-sm rounded-lg transition-colors disabled:opacity-50"
           >
             <Download className="w-4 h-4" />
             Export
@@ -589,7 +589,7 @@ export function CustomerAccounts({
           <button
             onClick={refetch}
             disabled={loading}
-            className="inline-flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-sm rounded-lg transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 dark:text-slate-300 text-sm rounded-lg transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
@@ -607,7 +607,7 @@ export function CustomerAccounts({
             placeholder="Search by name or email..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50"
+            className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50"
           />
         </div>
 
@@ -617,7 +617,7 @@ export function CustomerAccounts({
           <select
             value={bizFilter}
             onChange={e => setBizFilter(e.target.value)}
-            className="appearance-none pl-9 pr-8 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 cursor-pointer"
+            className="appearance-none pl-9 pr-8 py-2 bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 cursor-pointer"
           >
             <option value="all">All Types</option>
             {bizTypes.map(bt => (
@@ -631,7 +631,7 @@ export function CustomerAccounts({
           <select
             value={statusFilter}
             onChange={e => setStatusFilter(e.target.value)}
-            className="appearance-none pl-3 pr-8 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 cursor-pointer"
+            className="appearance-none pl-3 pr-8 py-2 bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 cursor-pointer"
           >
             <option value="all">All Statuses</option>
             <option value="active">Active</option>
@@ -659,13 +659,13 @@ export function CustomerAccounts({
       {/* Empty state */}
       {!loading && !error && displayed.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="bg-slate-800 p-4 rounded-2xl mb-4">
+          <div className="bg-slate-100 p-4 rounded-2xl mb-4 dark:bg-slate-800">
             <Users className="w-8 h-8 text-slate-500" />
           </div>
-          <h3 className="text-base font-semibold text-white mb-1">
+          <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-1">
             {search || bizFilter !== 'all' || statusFilter !== 'all' ? 'No matching accounts' : 'No customer accounts yet'}
           </h3>
-          <p className="text-sm text-slate-400 max-w-xs">
+          <p className="text-sm text-slate-600 dark:text-slate-400 max-w-xs">
             {search || bizFilter !== 'all' || statusFilter !== 'all'
               ? 'Try adjusting your search or filter.'
               : 'Fleet managers will appear here after they sign up.'}
@@ -675,11 +675,11 @@ export function CustomerAccounts({
 
       {/* Table */}
       {!loading && !error && displayed.length > 0 && (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl">
+        <div className="bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-xl">
           <div className="overflow-x-auto" style={{ overflow: 'visible' }}>
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-800 text-left">
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-left">
                   <SortableHeader label="Name" col="name" />
                   <SortableHeader label="Email" col="email" />
                   <SortableHeader label="Business Type" col="businessType" />
@@ -691,19 +691,19 @@ export function CustomerAccounts({
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
                 {paginatedList.map(c => {
                   const Icon = BIZ_ICON[c.businessType] || Car;
                   const colorCls = BIZ_COLOR[c.businessType] || BIZ_COLOR.rideshare;
                   return (
-                    <tr key={c.id} className="hover:bg-slate-800/50 cursor-pointer transition-colors" onClick={() => setSelectedOrgId(c.id)}>
+                    <tr key={c.id} className="hover:bg-slate-50 cursor-pointer transition-colors dark:hover:bg-slate-800/50" onClick={() => setSelectedOrgId(c.id)}>
                       {/* Name */}
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-300 shrink-0">
+                          <div className="w-8 h-8 rounded-full bg-slate-200 flex dark:bg-slate-800 items-center justify-center text-xs font-bold text-slate-300 shrink-0">
                             {(c.name || c.email)[0]?.toUpperCase() || '?'}
                           </div>
-                          <span className="font-medium text-white truncate max-w-[200px]">
+                          <span className="font-medium text-slate-900 dark:text-white truncate max-w-[200px]">
                             {c.name || '(No name)'}
                           </span>
                         </div>
@@ -752,7 +752,7 @@ export function CustomerAccounts({
                           {canEdit && (
                             <button
                               onClick={() => openEditModal(c)}
-                              className="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+                              className="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-900 dark:hover:bg-slate-700 dark:text-slate-400 dark:hover:text-slate-900 transition-colors dark:hover:text-white"
                               title="Edit customer"
                             >
                               <Pencil className="w-4 h-4" />
@@ -769,7 +769,7 @@ export function CustomerAccounts({
                                   setOpenDropdown(c.id);
                                 }
                               }}
-                              className="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+                              className="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-900 dark:hover:bg-slate-700 dark:text-slate-400 dark:hover:text-slate-900 transition-colors dark:hover:text-white"
                               title="More actions"
                             >
                               <MoreVertical className="w-4 h-4" />
@@ -777,12 +777,12 @@ export function CustomerAccounts({
                             {openDropdown === c.id && (
                               <div
                                 ref={dropdownRef}
-                                className="fixed w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl py-1"
+                                className="fixed w-48 bg-white border border-slate-200 rounded-lg dark:bg-slate-800 dark:border-slate-700 shadow-xl py-1"
                                 style={{ top: dropdownPos.top, left: dropdownPos.left, zIndex: 9999 }}
                               >
                                 {canResetPassword && (
                                   <button
-                                    className="w-full px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2"
+                                    className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-700 flex items-center gap-2"
                                     onClick={() => handleResetPassword(c)}
                                   >
                                     <Mail className="w-4 h-4" /> Reset Password
@@ -790,19 +790,19 @@ export function CustomerAccounts({
                                 )}
                                 {isPlatformOwner && (
                                   <button
-                                    className="w-full px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2"
+                                    className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-700 flex items-center gap-2"
                                     onClick={() => { setOpenDropdown(null); setSetPasswordTarget(c); }}
                                   >
                                     <KeyRound className="w-4 h-4" /> Set New Password
                                   </button>
                                 )}
                                 <button
-                                  className="w-full px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2"
+                                  className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-700 flex items-center gap-2"
                                   onClick={() => handleForceLogout(c)}
                                 >
                                   <LogOut className="w-4 h-4" /> Force Logout
                                 </button>
-                                <div className="border-t border-slate-700 my-1" />
+                                <div className="border-t border-slate-200 my-1 dark:border-slate-700" />
                                 {canSuspend && (
                                   <>
                                     {c.isSuspended ? (
@@ -824,7 +824,7 @@ export function CustomerAccounts({
                                 )}
                                 {canFullDelete && (
                                   <>
-                                    <div className="border-t border-slate-700 my-1" />
+                                    <div className="border-t border-slate-200 my-1 dark:border-slate-700" />
                                     <button
                                       className="w-full px-3 py-2 text-left text-sm text-red-500 hover:bg-slate-700 flex items-center gap-2"
                                       onClick={() => handleOpenDeleteModal(c)}
@@ -849,14 +849,14 @@ export function CustomerAccounts({
 
       {/* Pagination controls */}
       {!loading && !error && displayed.length > 0 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 gap-3">
+        <div className="flex flex-col sm:flex-row items-center justify-between bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-xl px-4 py-3 gap-3">
           {/* Left: rows per page */}
-          <div className="flex items-center gap-2 text-sm text-slate-400">
+          <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
             <span>Rows per page:</span>
             <select
               value={rowsPerPage}
               onChange={e => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
-              className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+              className="bg-white border border-slate-300 rounded px-2 py-1 text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
             >
               <option value={10}>10</option>
               <option value={25}>25</option>
@@ -864,7 +864,7 @@ export function CustomerAccounts({
             </select>
           </div>
           {/* Center: showing X–Y of Z */}
-          <span className="text-sm text-slate-400">
+          <span className="text-sm text-slate-600 dark:text-slate-400">
             Showing {Math.min((currentPage - 1) * rowsPerPage + 1, displayed.length)}{'-'}{Math.min(currentPage * rowsPerPage, displayed.length)} of {displayed.length}
           </span>
           {/* Right: prev/next buttons */}
@@ -872,17 +872,17 @@ export function CustomerAccounts({
             <button
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className="p-1.5 rounded hover:bg-slate-800 text-slate-400 disabled:opacity-30 transition-colors"
+              className="p-1.5 rounded hover:bg-slate-100 text-slate-500 dark:hover:bg-slate-800 dark:text-slate-400 disabled:opacity-30 transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="text-sm text-slate-300 px-2">
+            <span className="text-sm text-slate-700 dark:text-slate-300 px-2">
               {currentPage} / {totalPages || 1}
             </span>
             <button
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
               disabled={currentPage >= totalPages}
-              className="p-1.5 rounded hover:bg-slate-800 text-slate-400 disabled:opacity-30 transition-colors"
+              className="p-1.5 rounded hover:bg-slate-100 text-slate-500 dark:hover:bg-slate-800 dark:text-slate-400 disabled:opacity-30 transition-colors"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
@@ -893,8 +893,8 @@ export function CustomerAccounts({
       {/* Edit Customer Modal */}
       {editingCustomer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-md p-6 space-y-4">
-            <h2 className="text-lg font-bold text-white">Edit Customer</h2>
+          <div className="bg-white border border-slate-300 dark:bg-slate-900 dark:border-slate-700 rounded-xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white">Edit Customer</h2>
 
             {/* Name */}
             <div>
@@ -903,7 +903,7 @@ export function CustomerAccounts({
                 type="text"
                 value={editName}
                 onChange={e => setEditName(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50"
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50"
                 placeholder="Customer name"
               />
             </div>
@@ -914,7 +914,7 @@ export function CustomerAccounts({
               <select
                 value={editBizType}
                 onChange={e => setEditBizType(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 cursor-pointer"
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 cursor-pointer"
               >
                 {Object.entries(BIZ_LABEL).map(([key, label]) => (
                   <option key={key} value={key}>{label}</option>
@@ -926,7 +926,7 @@ export function CustomerAccounts({
             <div className="flex justify-end gap-3 pt-2">
               <button
                 onClick={() => setEditingCustomer(null)}
-                className="px-4 py-2 text-sm text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors"
+                className="px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 border border-slate-300 dark:text-slate-300 dark:hover:text-white dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 rounded-lg transition-colors"
               >
                 Cancel
               </button>
@@ -945,12 +945,12 @@ export function CustomerAccounts({
       {/* Create Customer Modal */}
       {createOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-md p-6 space-y-4">
+          <div className="bg-white border border-slate-300 dark:bg-slate-900 dark:border-slate-700 rounded-xl shadow-2xl w-full max-w-md p-6 space-y-4">
             {!createResult ? (
               <>
                 <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-bold text-white">Create Customer Account</h2>
-                  <button onClick={closeCreateModal} className="p-1 text-slate-400 hover:text-white">
+                  <h2 className="text-lg font-bold text-slate-900 dark:text-white">Create Customer Account</h2>
+                  <button onClick={closeCreateModal} className="p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white">
                     <X className="w-5 h-5" />
                   </button>
                 </div>
@@ -961,7 +961,7 @@ export function CustomerAccounts({
                     type="text"
                     value={createName}
                     onChange={e => setCreateName(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50"
                     placeholder="e.g. Marcus Williams"
                   />
                 </div>
@@ -972,7 +972,7 @@ export function CustomerAccounts({
                     type="email"
                     value={createEmail}
                     onChange={e => setCreateEmail(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50"
                     placeholder="marcus@fleet.com"
                   />
                 </div>
@@ -982,7 +982,7 @@ export function CustomerAccounts({
                   <select
                     value={createBizType}
                     onChange={e => setCreateBizType(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 cursor-pointer"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 cursor-pointer"
                   >
                     {Object.entries(BIZ_LABEL).map(([key, label]) => (
                       <option key={key} value={key}>{label}</option>
@@ -993,7 +993,7 @@ export function CustomerAccounts({
                 <div className="flex justify-end gap-3 pt-2">
                   <button
                     onClick={closeCreateModal}
-                    className="px-4 py-2 text-sm text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors"
+                    className="px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 border border-slate-300 dark:text-slate-300 dark:hover:text-white dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 rounded-lg transition-colors"
                   >
                     Cancel
                   </button>
@@ -1010,8 +1010,8 @@ export function CustomerAccounts({
             ) : (
               <>
                 <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-bold text-white">Account Created Successfully</h2>
-                  <button onClick={closeCreateModal} className="p-1 text-slate-400 hover:text-white">
+                  <h2 className="text-lg font-bold text-slate-900 dark:text-white">Account Created Successfully</h2>
+                  <button onClick={closeCreateModal} className="p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white">
                     <X className="w-5 h-5" />
                   </button>
                 </div>
@@ -1029,11 +1029,11 @@ export function CustomerAccounts({
                       type="text"
                       readOnly
                       value={createResult.password}
-                      className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-mono focus:outline-none"
+                      className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white font-mono focus:outline-none"
                     />
                     <button
                       onClick={handleCopyCreatePassword}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-sm rounded-lg transition-colors"
+                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 dark:text-slate-300 text-sm rounded-lg transition-colors"
                     >
                       {createCopied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                       {createCopied ? 'Copied' : 'Copy'}
@@ -1088,12 +1088,12 @@ export function CustomerAccounts({
       {/* Full Delete Modal (superadmin only) */}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-md p-6 space-y-4">
+          <div className="bg-white border border-slate-300 dark:bg-slate-900 dark:border-slate-700 rounded-xl shadow-2xl w-full max-w-md p-6 space-y-4">
             <div className="flex items-center gap-3 text-red-400">
               <div className="bg-red-500/20 p-2 rounded-full">
                 <AlertTriangle className="w-5 h-5" />
               </div>
-              <h2 className="text-lg font-bold text-white">Delete Platform Account</h2>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Delete Platform Account</h2>
             </div>
 
             <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
@@ -1102,7 +1102,7 @@ export function CustomerAccounts({
               </p>
             </div>
 
-            <div className="space-y-2 text-sm text-slate-300">
+            <div className="space-y-2 text-sm text-slate-700 dark:text-slate-300">
               <p>
                 Deleting <strong>{deleteTarget.name || deleteTarget.email}</strong> will:
               </p>
@@ -1123,7 +1123,7 @@ export function CustomerAccounts({
                 type="text"
                 value={deleteConfirmEmail}
                 onChange={e => setDeleteConfirmEmail(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500/50"
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500/50"
                 placeholder={deleteTarget.email}
               />
             </div>
@@ -1131,7 +1131,7 @@ export function CustomerAccounts({
             <div className="flex justify-end gap-3 pt-2">
               <button
                 onClick={() => { setDeleteTarget(null); setDeleteConfirmEmail(''); }}
-                className="px-4 py-2 text-sm text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors"
+                className="px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 border border-slate-300 dark:text-slate-300 dark:hover:text-white dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 rounded-lg transition-colors"
               >
                 Cancel
               </button>
@@ -1156,7 +1156,7 @@ export function CustomerAccounts({
       <th className="px-4 py-3 whitespace-nowrap">
         <button
           onClick={() => toggleSort(col)}
-          className="inline-flex items-center gap-1 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:text-white transition-colors"
+          className="inline-flex items-center gap-1 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:text-slate-900 transition-colors dark:hover:text-white"
         >
           {label}
           <SortIcon col={col} />

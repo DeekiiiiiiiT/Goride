@@ -23,6 +23,8 @@ Include **scheme + host + port + path** where your apps handle the post-auth lan
 | Dash merchant | `http://localhost:5175/` | `https://partner.roamdash.co/` (if used) |
 | Rides passenger | `http://localhost:5180/login` | `https://roam-s.co/login` |
 | Rides passenger (Android app) | — | `co.roamenterprise.rides://login` |
+| Roam Haul (hauler) | `http://localhost:3004/` | `https://roamhaul.co/` |
+| Roam Haul admin | `http://localhost:3004/admin` | `https://roamhaul.co/admin` |
 
 Also add:
 

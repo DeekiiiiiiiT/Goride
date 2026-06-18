@@ -168,7 +168,7 @@ export function InTripAutomationSection({ policy, canEdit, onSave }: InTripAutom
         </label>
       </div>
 
-      <div className="border-t border-slate-700 mt-6 pt-4 space-y-3">
+      <div className="border-t border-slate-200 mt-6 pt-4 dark:border-slate-700 space-y-3">
         <label className={`${toggleRowClass} ${disabled ? 'cursor-default' : 'cursor-pointer'}`}>
           <div className="space-y-0.5">
             <SettingLabel

@@ -98,16 +98,16 @@ export function SetPasswordModal({ isOpen, userId, userName, userEmail, accessTo
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+      <div className="bg-white border border-slate-300 dark:bg-slate-900 dark:border-slate-700 rounded-xl shadow-2xl w-full max-w-sm p-6 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-white flex items-center gap-2">
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <KeyRound className="w-5 h-5 text-amber-400" /> Set New Password
           </h2>
-          <button onClick={handleClose} className="p-1 text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
+          <button onClick={handleClose} className="p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white"><X className="w-5 h-5" /></button>
         </div>
 
-        <p className="text-sm text-slate-400">
-          Set a new password for <span className="text-white font-medium">{userName || userEmail}</span>
+        <p className="text-sm text-slate-600 dark:text-slate-400">
+          Set a new password for <span className="text-slate-900 dark:text-slate-900 dark:text-slate-900 dark:text-white font-medium">{userName || userEmail}</span>
         </p>
 
         <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
@@ -121,22 +121,22 @@ export function SetPasswordModal({ isOpen, userId, userName, userEmail, accessTo
             <button
               onClick={handleAutoGenerate}
               disabled={loading}
-              className="w-full flex items-center gap-3 px-4 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors text-left disabled:opacity-50"
+              className="w-full flex items-center gap-3 px-4 py-3 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 transition-colors text-left disabled:opacity-50"
             >
               <Shuffle className="w-5 h-5 text-amber-400 shrink-0" />
               <div>
-                <p className="text-sm font-medium text-white">Auto-Generate</p>
+                <p className="text-sm font-medium text-slate-900 dark:text-white">Auto-Generate</p>
                 <p className="text-xs text-slate-500">Generate a secure 12-character password</p>
               </div>
             </button>
             <button
               onClick={() => setMode('manual')}
               disabled={loading}
-              className="w-full flex items-center gap-3 px-4 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors text-left disabled:opacity-50"
+              className="w-full flex items-center gap-3 px-4 py-3 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 transition-colors text-left disabled:opacity-50"
             >
               <KeyRound className="w-5 h-5 text-slate-400 shrink-0" />
               <div>
-                <p className="text-sm font-medium text-white">Set Manually</p>
+                <p className="text-sm font-medium text-slate-900 dark:text-white">Set Manually</p>
                 <p className="text-xs text-slate-500">Type a custom password (min 8 chars)</p>
               </div>
             </button>
@@ -152,7 +152,7 @@ export function SetPasswordModal({ isOpen, userId, userName, userEmail, accessTo
                 value={manualPassword}
                 onChange={e => setManualPassword(e.target.value)}
                 placeholder="Min 8 characters"
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-mono placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white font-mono placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
               />
               {manualPassword.length > 0 && manualPassword.length < 8 && (
                 <p className="text-xs text-red-400 mt-1">{8 - manualPassword.length} more characters needed</p>
@@ -160,7 +160,7 @@ export function SetPasswordModal({ isOpen, userId, userName, userEmail, accessTo
             </div>
             <div className="flex justify-end gap-3">
               <button onClick={() => { setMode('choose'); setManualPassword(''); }}
-                className="px-4 py-2 text-sm text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors">
+                className="px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 border border-slate-300 dark:text-slate-300 dark:hover:text-white dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 rounded-lg transition-colors">
                 Back
               </button>
               <button
@@ -193,10 +193,10 @@ export function SetPasswordModal({ isOpen, userId, userName, userEmail, accessTo
                       type="text"
                       readOnly
                       value={password}
-                      className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-mono focus:outline-none"
+                      className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white font-mono focus:outline-none"
                     />
                     <button onClick={handleCopy}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-sm rounded-lg transition-colors">
+                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 dark:text-slate-300 text-sm rounded-lg transition-colors">
                       {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                       {copied ? 'Copied' : 'Copy'}
                     </button>

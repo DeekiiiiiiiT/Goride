@@ -34,7 +34,7 @@ export function DriverUsersPage({ onOpenUser }: DriverUsersPageProps) {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-slate-400">
+      <p className="text-sm text-slate-600 dark:text-slate-400">
         Roam Driver product directory (driver Edge function). Open a profile for lifecycle actions or fleet linking.
       </p>
 
@@ -48,7 +48,7 @@ export function DriverUsersPage({ onOpenUser }: DriverUsersPageProps) {
               setPage(1);
             }}
             placeholder="Search name, email, phone…"
-            className="w-full pl-10 pr-4 py-2 rounded-lg bg-slate-900 border border-slate-800 text-sm text-white placeholder:text-slate-600"
+            className="w-full pl-10 pr-4 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 text-sm text-slate-900 placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-600"
           />
         </div>
       </div>
@@ -59,7 +59,7 @@ export function DriverUsersPage({ onOpenUser }: DriverUsersPageProps) {
         </div>
       )}
 
-      <div className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden">
+      <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/40 overflow-hidden">
         {isLoading ? (
           <div className="flex justify-center py-16">
             <Loader2 className="w-6 h-6 text-amber-400 animate-spin" />
@@ -68,7 +68,7 @@ export function DriverUsersPage({ onOpenUser }: DriverUsersPageProps) {
           <p className="text-sm text-slate-500 text-center py-12">No drivers match this query.</p>
         ) : (
           <table className="w-full text-sm">
-            <thead className="bg-slate-900/90 border-b border-slate-800">
+            <thead className="bg-slate-50 border-b border-slate-200 dark:bg-slate-900/90 dark:border-slate-800">
               <tr className="text-left text-xs text-slate-500 uppercase tracking-wider">
                 <th className="px-4 py-3 font-medium">Driver</th>
                 <th className="px-4 py-3 font-medium hidden md:table-cell">Status</th>
@@ -76,11 +76,11 @@ export function DriverUsersPage({ onOpenUser }: DriverUsersPageProps) {
                 <th className="px-4 py-3 font-medium text-right"> </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60">
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
               {rows.map((d) => (
-                <tr key={d.user_id} className="hover:bg-slate-800/40">
+                <tr key={d.user_id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                   <td className="px-4 py-3">
-                    <p className="text-white font-medium">{d.display_name || '—'}</p>
+                    <p className="text-slate-900 dark:text-slate-900 dark:text-slate-900 dark:text-white font-medium">{d.display_name || '—'}</p>
                     <p className="text-xs text-slate-500">{d.email}</p>
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell">
@@ -120,7 +120,7 @@ export function DriverUsersPage({ onOpenUser }: DriverUsersPageProps) {
               type="button"
               disabled={page <= 1}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="px-3 py-1 rounded border border-slate-800 disabled:opacity-40"
+              className="px-3 py-1 rounded border border-slate-200 disabled:opacity-40 dark:border-slate-800"
             >
               Previous
             </button>
@@ -128,7 +128,7 @@ export function DriverUsersPage({ onOpenUser }: DriverUsersPageProps) {
               type="button"
               disabled={page * limit >= (data?.total ?? 0)}
               onClick={() => setPage((p) => p + 1)}
-              className="px-3 py-1 rounded border border-slate-800 disabled:opacity-40"
+              className="px-3 py-1 rounded border border-slate-200 disabled:opacity-40 dark:border-slate-800"
             >
               Next
             </button>

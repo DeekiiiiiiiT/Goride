@@ -11,7 +11,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip";
 
 const ENGINE_CATALOG_HINT_TOOLTIP_CLASS =
-  "z-[300] max-w-[min(22rem,calc(100vw-2rem))] border border-slate-600/90 bg-slate-900 px-3 py-2.5 text-left text-xs font-normal leading-relaxed text-slate-50 shadow-xl";
+  "z-[300] max-w-[min(22rem,calc(100vw-2rem))] border border-slate-300 bg-white px-3 py-2.5 text-left text-xs font-normal leading-relaxed text-slate-900 dark:border-slate-600/90 dark:bg-slate-900 dark:text-slate-50 shadow-xl";
 
 /** Sentinel for empty selection (must not appear in real catalog strings). */
 export const ENGINE_FIELD_UNSET = "__roam_engine_unset__";

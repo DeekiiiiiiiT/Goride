@@ -1,38 +1,54 @@
 # Haulage regression checklist
 
-Run after every haulage phase deploy. **Existing rides flows must pass unchanged.**
+Use before and after Roam Haul releases.
 
-## Rideshare (unchanged)
+## Rider (roam-s.co)
 
-- [ ] Home: quote UberX / Comfort / UberXL
-- [ ] Book immediate ride; driver receives offer
-- [ ] Driver accept → en route → arrived → on trip → complete
-- [ ] Cash / digital payment paths unchanged
+- [ ] `/services/haulage` loads catalog (`HAULAGE_CATALOG_ENABLED`)
+- [ ] Quote returns fare (`HAULAGE_QUOTE_ENABLED`)
+- [ ] Booking creates `ride_requests` + `haulage_bookings` (`HAULAGE_BOOKING_ENABLED`)
+- [ ] Confirmation page shows request id
+- [ ] Activity feed shows haulage trip
 
-## Courier (unchanged)
+## Hauler (roamhaul.co)
 
-- [ ] Courier service appears in vehicle picker
-- [ ] Quote and book courier job
+- [ ] Hauler login accepts `surface: hauler` accounts
+- [ ] Wrong-surface gate blocks rides-only drivers
+- [ ] Going online sends `dispatch_mode: haulage` on presence
+- [ ] Haul offers appear; rideshare offers do not
+- [ ] Trip request overlay shows haulage manifest
+- [ ] Accept → en route → arrived → on trip → complete
 
-## Scheduled rides (unchanged)
+## Rideshare driver (roamdriver.co)
 
-- [ ] Schedule ride 30+ min ahead
-- [ ] Appears in activity upcoming
-- [ ] Cron dispatches near pickup window
+- [ ] No haulage offers when online
+- [ ] No haulage manifest on trip request overlay
+- [ ] Rideshare dispatch unchanged
 
-## Haulage (new)
+## Haul admin (roamhaul.co/admin)
 
-- [ ] `GET /v1/haulage/catalog` returns seeded categories/items
-- [ ] Admin: edit variant weight; rider catalog reflects change
-- [ ] Quote with 2+ items returns manifest + tier
-- [ ] Book immediate haulage; driver offer shows manifest
-- [ ] Book scheduled haulage; status `scheduled` until dispatch
-- [ ] Stairs / prep affect quote total
-- [ ] Activity shows haulage booking
+- [ ] `haul_admin` can sign in
+- [ ] Catalog list loads from `/haul/admin/haulage/items`
+- [ ] Variant weight/dimension edits persist
 
-## Automated
+## Rides admin (roam-s.co/admin)
 
-```bash
-cd apps/rides-passenger && npm test
-cd apps/driver && npm test
-```
+- [ ] No Haulage nav under Services
+- [ ] Rideshare/courier/event admin unchanged
+
+## Platform admin (dominion)
+
+- [ ] Roam Haul section shows overview card
+- [ ] Link opens roamhaul.co/admin
+
+## Edge / DB
+
+- [ ] `haul` function health: `GET /haul/health`
+- [ ] `dispatch_mode` column on `rides.driver_locations`
+- [ ] `fare_rules` row for `vehicle_type: haulage`
+- [ ] Dispatch constraints filter by body type when enabled
+
+## Dual-role account
+
+- [ ] Same user can use roamdriver.co and roamhaul.co with separate sessions
+- [ ] Presence mode matches active app

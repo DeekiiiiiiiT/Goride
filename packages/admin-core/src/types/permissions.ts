@@ -22,7 +22,9 @@ export type ProductAdminRole =
   | 'rides_admin'     // Full Rides admin access
   | 'rides_ops'       // Rides operations (fare, surge)
   | 'driver_admin'    // Full Driver admin access
-  | 'driver_ops';     // Driver operations (compliance, support)
+  | 'driver_ops'      // Driver operations (compliance, support)
+  | 'haul_admin'      // Full Roam Haul admin access
+  | 'haul_ops';       // Roam Haul operations
 
 /** All roles that can access product admin portals */
 export type AdminRole = typeof PLATFORM_ROLES[number] | ProductAdminRole;
@@ -35,6 +37,7 @@ export const PRODUCT_ADMIN_ACCESS = {
   dash: [...PLATFORM_ROLES, 'dash_admin', 'dash_ops'],
   rides: [...PLATFORM_ROLES, 'rides_admin', 'rides_ops'],
   driver: [...PLATFORM_ROLES, 'driver_admin', 'driver_ops'],
+  haul: [...PLATFORM_ROLES, 'haul_admin', 'haul_ops'],
 } as const;
 
 export type ProductKey = keyof typeof PRODUCT_ADMIN_ACCESS;

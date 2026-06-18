@@ -171,11 +171,11 @@ export function MerchantVerificationManager() {
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-white flex items-center gap-2">
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-white flex items-center gap-2">
             <Utensils className="w-5 h-5 text-emerald-400" />
             Roam Dash — Merchant Verification
           </h1>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
             Review and approve restaurant applications. Only approved merchants appear on the customer app.
           </p>
         </div>
@@ -194,7 +194,7 @@ export function MerchantVerificationManager() {
 
       {/* Tabs with counts */}
       <Tabs value={tab} onValueChange={(v) => setTab(v as TabId)}>
-        <TabsList className="bg-slate-800/40 flex flex-wrap h-auto p-1">
+        <TabsList className="bg-slate-100 flex flex-wrap dark:bg-slate-800/40 h-auto p-1">
           {TABS.map((t) => {
             const count =
               t.id === "all"
@@ -236,10 +236,10 @@ export function MerchantVerificationManager() {
       </div>
 
       {/* Table */}
-      <div className="border rounded-lg overflow-hidden bg-slate-900/30 border-slate-800">
+      <div className="border rounded-lg overflow-hidden bg-white border border-slate-200 dark:bg-slate-900/30 dark:border-slate-800">
         <Table>
           <TableHeader>
-            <TableRow className="hover:bg-transparent border-slate-800">
+            <TableRow className="hover:bg-transparent border-slate-200 dark:border-slate-800">
               <TableHead>Logo</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Cuisine</TableHead>
@@ -268,7 +268,7 @@ export function MerchantVerificationManager() {
               items.map((m) => (
                 <TableRow
                   key={m.id}
-                  className="cursor-pointer hover:bg-slate-800/30 border-slate-800"
+                  className="cursor-pointer hover:bg-slate-50 border-slate-200 dark:hover:bg-slate-800/30 dark:border-slate-800"
                   onClick={() => void openDetail(m)}
                 >
                   <TableCell>
@@ -276,15 +276,15 @@ export function MerchantVerificationManager() {
                       <img
                         src={m.logo_url}
                         alt=""
-                        className="w-10 h-10 rounded-md object-cover border border-slate-700"
+                        className="w-10 h-10 rounded-md object-cover border border-slate-300 dark:border-slate-700"
                       />
                     ) : (
-                      <div className="w-10 h-10 rounded-md bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-500">
+                      <div className="w-10 h-10 rounded-md bg-slate-100 border border-slate-300 dark:bg-slate-800 dark:border-slate-700 flex items-center justify-center text-slate-500">
                         <Store className="w-4 h-4" />
                       </div>
                     )}
                   </TableCell>
-                  <TableCell className="font-medium text-white">
+                  <TableCell className="font-medium text-slate-900 dark:text-white">
                     <div>{m.name}</div>
                     {m.email && (
                       <div className="text-xs text-slate-400 mt-0.5">{m.email}</div>

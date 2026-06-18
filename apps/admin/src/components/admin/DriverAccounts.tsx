@@ -251,7 +251,7 @@ export function DriverAccounts() {
   function SortableHeader({ label, col }: { label: string; col: SortKey }) {
     return (
       <th className="px-4 py-3 whitespace-nowrap">
-        <button onClick={() => toggleSort(col)} className="inline-flex items-center gap-1 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:text-white transition-colors">
+        <button onClick={() => toggleSort(col)} className="inline-flex items-center gap-1 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:text-slate-900 transition-colors dark:hover:text-white">
           {label}
           <SortIcon col={col} />
         </button>
@@ -462,8 +462,8 @@ export function DriverAccounts() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-white">Driver Accounts</h1>
-          <p className="text-sm text-slate-400 mt-0.5">
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Driver Accounts</h1>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
             {displayed.length} result{displayed.length !== 1 ? 's' : ''}
             {displayed.length !== drivers.length ? ` (filtered from ${drivers.length})` : ''}
           </p>
@@ -472,7 +472,7 @@ export function DriverAccounts() {
           <button
             onClick={handleExport}
             disabled={displayed.length === 0}
-            className="inline-flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-sm rounded-lg transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 dark:text-slate-300 text-sm rounded-lg transition-colors disabled:opacity-50"
           >
             <Download className="w-4 h-4" />
             Export
@@ -480,7 +480,7 @@ export function DriverAccounts() {
           <button
             onClick={() => refetch()}
             disabled={loading}
-            className="inline-flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-sm rounded-lg transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 dark:text-slate-300 text-sm rounded-lg transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
@@ -491,12 +491,12 @@ export function DriverAccounts() {
       {/* Summary stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Total Drivers', value: stats.total, color: 'text-white' },
+          { label: 'Total Drivers', value: stats.total, color: 'text-slate-900 dark:text-white' },
           { label: 'Linked', value: stats.linked, color: 'text-emerald-400' },
           { label: 'Unlinked', value: stats.unlinked, color: 'text-amber-400' },
           { label: 'Suspended', value: stats.suspended, color: 'text-red-400' },
         ].map(s => (
-          <div key={s.label} className="bg-slate-900 border border-slate-800 rounded-lg px-4 py-3">
+          <div key={s.label} className="bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-lg px-4 py-3">
             <p className="text-xs text-slate-500 mb-0.5">{s.label}</p>
             <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
           </div>
@@ -512,7 +512,7 @@ export function DriverAccounts() {
             placeholder="Search by name or email..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50"
+            className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50"
           />
         </div>
         <div className="relative">
@@ -520,7 +520,7 @@ export function DriverAccounts() {
           <select
             value={orgFilter}
             onChange={e => setOrgFilter(e.target.value)}
-            className="appearance-none pl-9 pr-8 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 cursor-pointer"
+            className="appearance-none pl-9 pr-8 py-2 bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 cursor-pointer"
           >
             <option value="all">All Organizations</option>
             <option value="unlinked">Unlinked</option>
@@ -533,7 +533,7 @@ export function DriverAccounts() {
           <select
             value={statusFilter}
             onChange={e => setStatusFilter(e.target.value)}
-            className="appearance-none pl-3 pr-8 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 cursor-pointer"
+            className="appearance-none pl-3 pr-8 py-2 bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 cursor-pointer"
           >
             <option value="all">All Statuses</option>
             <option value="active">Active</option>
@@ -561,13 +561,13 @@ export function DriverAccounts() {
       {/* Empty */}
       {!loading && !error && displayed.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="bg-slate-800 p-4 rounded-2xl mb-4">
+          <div className="bg-slate-100 p-4 rounded-2xl mb-4 dark:bg-slate-800">
             <Car className="w-8 h-8 text-slate-500" />
           </div>
-          <h3 className="text-base font-semibold text-white mb-1">
+          <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-1">
             {search || orgFilter !== 'all' || statusFilter !== 'all' ? 'No matching drivers' : 'No driver accounts yet'}
           </h3>
-          <p className="text-sm text-slate-400 max-w-xs">
+          <p className="text-sm text-slate-600 dark:text-slate-400 max-w-xs">
             {search || orgFilter !== 'all' || statusFilter !== 'all'
               ? 'Try adjusting your search or filter.'
               : 'Drivers will appear here after they sign up.'}
@@ -577,11 +577,11 @@ export function DriverAccounts() {
 
       {/* Table */}
       {!loading && !error && displayed.length > 0 && (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl">
+        <div className="bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-xl">
           <div className="overflow-x-auto" style={{ overflow: 'visible' }}>
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-800 text-left">
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-left">
                   <SortableHeader label="Name" col="name" />
                   <SortableHeader label="Email" col="email" />
                   <SortableHeader label="Organization" col="organizationName" />
@@ -593,15 +593,15 @@ export function DriverAccounts() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
                 {paginatedList.map(d => (
-                  <tr key={d.id} className="hover:bg-slate-800/40 transition-colors">
+                  <tr key={d.id} className="hover:bg-slate-50 transition-colors dark:hover:bg-slate-800/40">
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-300 shrink-0">
+                        <div className="w-8 h-8 rounded-full bg-slate-200 flex dark:bg-slate-800 items-center justify-center text-xs font-bold text-slate-300 shrink-0">
                           {(d.name || d.email)[0]?.toUpperCase() || '?'}
                         </div>
-                        <span className="font-medium text-white truncate max-w-[200px]">{d.name || '(No name)'}</span>
+                        <span className="font-medium text-slate-900 dark:text-white truncate max-w-[200px]">{d.name || '(No name)'}</span>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-slate-400 whitespace-nowrap truncate max-w-[220px]">{d.email}</td>
@@ -647,7 +647,7 @@ export function DriverAccounts() {
                             setDropdownPos({ top: rect.bottom + 4, left: rect.right - 192 });
                             setOpenDropdown(d.id);
                           }}
-                          className="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+                          className="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-900 dark:hover:bg-slate-700 dark:text-slate-400 dark:hover:text-slate-900 transition-colors dark:hover:text-white"
                           title="More actions"
                         >
                           <MoreVertical className="w-4 h-4" />
@@ -655,12 +655,12 @@ export function DriverAccounts() {
                         {openDropdown === d.id && (
                           <div
                             ref={dropdownRef}
-                            className="fixed w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl py-1"
+                            className="fixed w-48 bg-white border border-slate-200 rounded-lg dark:bg-slate-800 dark:border-slate-700 shadow-xl py-1"
                             style={{ top: dropdownPos.top, left: dropdownPos.left, zIndex: 9999 }}
                           >
                             {canLinkUnlink && !d.isLinked && (
                               <button
-                                className="w-full px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2"
+                                className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-700 flex items-center gap-2"
                                 onClick={() => openLinkModal(d.id)}
                               >
                                 <Link2 className="w-4 h-4" /> Link to Organization
@@ -674,10 +674,10 @@ export function DriverAccounts() {
                                 <Unlink className="w-4 h-4" /> Unlink from Org
                               </button>
                             )}
-                            {canLinkUnlink && <div className="border-t border-slate-700 my-1" />}
+                            {canLinkUnlink && <div className="border-t border-slate-200 my-1 dark:border-slate-700" />}
                             {canResetPassword && (
                               <button
-                                className="w-full px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2"
+                                className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-700 flex items-center gap-2"
                                 onClick={() => handleResetPassword(d)}
                               >
                                 <Mail className="w-4 h-4" /> Reset Password
@@ -685,19 +685,19 @@ export function DriverAccounts() {
                             )}
                             {isPlatformOwner && (
                               <button
-                                className="w-full px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2"
+                                className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-700 flex items-center gap-2"
                                 onClick={() => { setOpenDropdown(null); setSetPasswordTarget(d); }}
                               >
                                 <KeyRound className="w-4 h-4" /> Set New Password
                               </button>
                             )}
                             <button
-                              className="w-full px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2"
+                              className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-700 flex items-center gap-2"
                               onClick={() => handleForceLogout(d)}
                             >
                               <LogOut className="w-4 h-4" /> Force Logout
                             </button>
-                            <div className="border-t border-slate-700 my-1" />
+                            <div className="border-t border-slate-200 my-1 dark:border-slate-700" />
                             {canSuspend && (
                               d.isSuspended ? (
                                 <button
@@ -729,28 +729,28 @@ export function DriverAccounts() {
 
       {/* Pagination */}
       {!loading && !error && displayed.length > 0 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 gap-3">
-          <div className="flex items-center gap-2 text-sm text-slate-400">
+        <div className="flex flex-col sm:flex-row items-center justify-between bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-xl px-4 py-3 gap-3">
+          <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
             <span>Rows per page:</span>
             <select
               value={rowsPerPage}
               onChange={e => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
-              className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+              className="bg-white border border-slate-300 rounded px-2 py-1 text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
             >
               <option value={10}>10</option>
               <option value={25}>25</option>
               <option value={50}>50</option>
             </select>
           </div>
-          <span className="text-sm text-slate-400">
+          <span className="text-sm text-slate-600 dark:text-slate-400">
             Showing {Math.min((currentPage - 1) * rowsPerPage + 1, displayed.length)}{'-'}{Math.min(currentPage * rowsPerPage, displayed.length)} of {displayed.length}
           </span>
           <div className="flex items-center gap-1">
-            <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-1.5 rounded hover:bg-slate-800 text-slate-400 disabled:opacity-30 transition-colors">
+            <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-1.5 rounded hover:bg-slate-100 text-slate-500 dark:hover:bg-slate-800 dark:text-slate-400 disabled:opacity-30 transition-colors">
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="text-sm text-slate-300 px-2">{currentPage} / {totalPages || 1}</span>
-            <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages} className="p-1.5 rounded hover:bg-slate-800 text-slate-400 disabled:opacity-30 transition-colors">
+            <span className="text-sm text-slate-700 dark:text-slate-300 px-2">{currentPage} / {totalPages || 1}</span>
+            <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages} className="p-1.5 rounded hover:bg-slate-100 text-slate-500 dark:hover:bg-slate-800 dark:text-slate-400 disabled:opacity-30 transition-colors">
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
@@ -760,10 +760,10 @@ export function DriverAccounts() {
       {/* Link to Organization Modal */}
       {linkDriverId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-md p-6 space-y-4">
+          <div className="bg-white border border-slate-300 dark:bg-slate-900 dark:border-slate-700 rounded-xl shadow-2xl w-full max-w-md p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white">Link Driver to Organization</h2>
-              <button onClick={() => setLinkDriverId(null)} className="p-1 text-slate-400 hover:text-white">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Link Driver to Organization</h2>
+              <button onClick={() => setLinkDriverId(null)} className="p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -777,7 +777,7 @@ export function DriverAccounts() {
                   value={linkSearch}
                   onChange={e => setLinkSearch(e.target.value)}
                   placeholder="Search by name or email..."
-                  className="w-full pl-9 pr-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50"
+                  className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50"
                 />
               </div>
             </div>
@@ -793,7 +793,7 @@ export function DriverAccounts() {
                     className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors ${
                       linkSelectedOrg === o.id
                         ? 'bg-amber-500/20 border border-amber-500/50 text-white'
-                        : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-transparent'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-transparent dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300'
                     }`}
                   >
                     <span className="font-medium">{o.name || '(No name)'}</span>
@@ -806,7 +806,7 @@ export function DriverAccounts() {
             <div className="flex justify-end gap-3 pt-2">
               <button
                 onClick={() => setLinkDriverId(null)}
-                className="px-4 py-2 text-sm text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors"
+                className="px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 border border-slate-300 dark:text-slate-300 dark:hover:text-white dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 rounded-lg transition-colors"
               >
                 Cancel
               </button>

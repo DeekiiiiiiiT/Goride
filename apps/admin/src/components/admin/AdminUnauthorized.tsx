@@ -15,7 +15,7 @@ export function AdminUnauthorized() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-8">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex items-center justify-center p-8">
       <div className="max-w-md w-full text-center">
         {/* Icon */}
         <div className="inline-flex items-center justify-center bg-red-500/15 p-4 rounded-2xl mb-6">
@@ -23,7 +23,7 @@ export function AdminUnauthorized() {
         </div>
 
         {/* Title */}
-        <h1 className="text-2xl font-bold text-white mb-2">Access Denied</h1>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Access Denied</h1>
         <p className="text-slate-400 mb-8 leading-relaxed">
           You do not have permission to access the Super Admin Portal.
           This area is restricted to platform administrators only.
@@ -33,14 +33,14 @@ export function AdminUnauthorized() {
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <a
             href="/"
-            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors text-sm font-medium border border-slate-700"
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-white hover:bg-slate-50 text-slate-900 rounded-lg transition-colors text-sm font-medium border border-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-white dark:border-slate-700"
           >
             <ArrowLeft className="w-4 h-4" />
             Go to Fleet Dashboard
           </a>
           <button
             onClick={handleSignOut}
-            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors text-sm font-medium border border-slate-700"
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 rounded-lg transition-colors text-sm font-medium border border-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 dark:border-slate-700"
           >
             <LogOut className="w-4 h-4" />
             Sign Out

@@ -51,7 +51,7 @@ export function KeysTab() {
 
 function InfoStrip() {
   return (
-    <div className="bg-slate-900/40 border border-slate-800 rounded-xl px-4 py-3 flex items-start gap-2.5 text-sm text-slate-400">
+    <div className="bg-white border border-slate-200 dark:bg-slate-900/40 dark:border-slate-800 rounded-xl px-4 py-3 flex items-start gap-2.5 text-sm text-slate-600 dark:text-slate-400">
       <Info className="w-4 h-4 text-sky-400 mt-0.5 shrink-0" />
       <p>
         Keys are stored as Supabase Edge Function secrets. The command center validates new keys with the provider before
@@ -66,15 +66,15 @@ function KeyCard({ row, onRotate }: { row: ApiKeyMeta; onRotate: () => void }) {
   const meta = PROVIDER_META[row.provider];
   const Icon = meta.icon;
   return (
-    <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4">
+    <div className="bg-white border border-slate-200 dark:bg-slate-900/40 dark:border-slate-800 rounded-xl p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3 min-w-0">
-          <div className="bg-slate-800/80 p-2 rounded-lg shrink-0">
+          <div className="bg-slate-100 p-2 rounded-lg dark:bg-slate-800/80 shrink-0">
             <Icon className={`w-4 h-4 ${meta.color}`} />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-white truncate">{meta.label}</h3>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-white truncate">{meta.label}</h3>
               {row.configured ? (
                 <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.5 rounded font-semibold">
                   <CheckCircle2 className="w-3 h-3" /> Set
@@ -90,13 +90,13 @@ function KeyCard({ row, onRotate }: { row: ApiKeyMeta; onRotate: () => void }) {
         </div>
         <button
           onClick={onRotate}
-          className="inline-flex items-center gap-1.5 text-[11px] font-medium bg-slate-800/60 hover:bg-slate-800 border border-slate-700 text-slate-300 px-2.5 py-1.5 rounded-lg transition-colors shrink-0"
+          className="inline-flex items-center gap-1.5 text-[11px] font-medium bg-slate-100 hover:bg-slate-200 border border-slate-300 dark:bg-slate-800/60 dark:hover:bg-slate-800 dark:border-slate-700 text-slate-300 px-2.5 py-1.5 rounded-lg transition-colors shrink-0"
         >
           <RotateCcw className="w-3.5 h-3.5" /> Rotate
         </button>
       </div>
 
-      <div className="mt-3 bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2 font-mono text-xs text-slate-400">
+      <div className="mt-3 bg-slate-50 border border-slate-200 dark:bg-slate-950/60 dark:border-slate-800 rounded-lg px-3 py-2 font-mono text-xs text-slate-400">
         {row.maskedKey || '—'}
       </div>
 
@@ -134,15 +134,15 @@ function RotateModal({ target, onClose }: { target: ApiKeyMeta; onClose: () => v
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" onClick={onClose}>
       <div
-        className="bg-slate-950 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl"
+        className="bg-white border border-slate-300 dark:bg-slate-950 dark:border-slate-800 rounded-2xl w-full max-w-md shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
-          <div className="flex items-center gap-2 text-white">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-800">
+          <div className="flex items-center gap-2 text-slate-900 dark:text-white">
             <KeyRound className="w-4 h-4 text-amber-400" />
             <h2 className="text-sm font-semibold">Rotate {PROVIDER_META[target.provider].label} key</h2>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-white">
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-900 dark:hover:text-white">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -161,7 +161,7 @@ function RotateModal({ target, onClose }: { target: ApiKeyMeta; onClose: () => v
               value={value}
               onChange={(e) => setValue(e.target.value)}
               placeholder="sk-..."
-              className="w-full bg-slate-900/60 border border-slate-800 text-slate-200 font-mono text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-amber-500/50"
+              className="w-full bg-white border border-slate-200 dark:bg-slate-900/60 dark:border-slate-800 text-slate-200 font-mono text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-amber-500/50"
             />
           </div>
 
@@ -172,7 +172,7 @@ function RotateModal({ target, onClose }: { target: ApiKeyMeta; onClose: () => v
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Scheduled rotation, exposure suspicion, ..."
-              className="w-full bg-slate-900/60 border border-slate-800 text-slate-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-amber-500/50"
+              className="w-full bg-white border border-slate-200 dark:bg-slate-900/60 dark:border-slate-800 text-slate-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-amber-500/50"
             />
           </div>
 
@@ -184,7 +184,7 @@ function RotateModal({ target, onClose }: { target: ApiKeyMeta; onClose: () => v
               type="text"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value.toUpperCase())}
-              className="w-full bg-slate-900/60 border border-slate-800 text-slate-200 font-mono text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-amber-500/50"
+              className="w-full bg-white border border-slate-200 dark:bg-slate-900/60 dark:border-slate-800 text-slate-200 font-mono text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-amber-500/50"
             />
           </div>
 
@@ -196,7 +196,7 @@ function RotateModal({ target, onClose }: { target: ApiKeyMeta; onClose: () => v
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-slate-800">
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-slate-200 dark:border-slate-800">
           <button
             onClick={onClose}
             disabled={rotate.isPending}

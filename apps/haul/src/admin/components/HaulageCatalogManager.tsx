@@ -3,10 +3,7 @@ import { useOutletContext } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import { Loader2, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
-import {
-  listHaulageAdminItems,
-  updateHaulageVariant,
-} from '../services/ridesAdminService';
+import { listHaulageAdminItems, updateHaulageVariant } from '../services/haulAdminService';
 
 type OutletContext = { session: Session };
 
@@ -79,7 +76,7 @@ export function HaulageCatalogManager() {
   if (loading) {
     return (
       <div className="flex justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
+        <Loader2 className="h-8 w-8 animate-spin text-amber-400" />
       </div>
     );
   }
@@ -107,7 +104,7 @@ export function HaulageCatalogManager() {
                     setEditing(v);
                     setWeightKg(String(v.weight_kg));
                   }}
-                  className="rounded p-1 text-slate-400 hover:text-emerald-300"
+                  className="rounded p-1 text-slate-400 hover:text-amber-300"
                 >
                   <Pencil className="h-4 w-4" />
                 </button>
@@ -141,7 +138,7 @@ export function HaulageCatalogManager() {
               <button
                 type="button"
                 onClick={() => void saveVariant()}
-                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
+                className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950"
               >
                 Save
               </button>

@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { useDriver } from '../../contexts/DriverContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { RideDispatchProvider } from '../../contexts/RideDispatchContext';
+import { DispatchConfigProvider, RIDESHARE_DISPATCH_CONFIG } from '@roam/hauler-dispatch';
 import { getBottomNavItems, getNavigationItems } from '../../config/navigation';
 import {
   Menu,
@@ -538,15 +539,17 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
   );
 
   return isIndependentDriver ? (
-    <RideDispatchProvider>
-      {shell}
-      <DriverTripRequestOverlay />
-      <DriverEnRouteOverlay />
-      <DriverOnTripOverlay />
-      <DriverCashSettlementOverlay />
-      <DriverDigitalTripCompleteOverlay />
-      <DriverArrivedPickupOverlay />
-    </RideDispatchProvider>
+    <DispatchConfigProvider config={RIDESHARE_DISPATCH_CONFIG}>
+      <RideDispatchProvider>
+        {shell}
+        <DriverTripRequestOverlay />
+        <DriverEnRouteOverlay />
+        <DriverOnTripOverlay />
+        <DriverCashSettlementOverlay />
+        <DriverDigitalTripCompleteOverlay />
+        <DriverArrivedPickupOverlay />
+      </RideDispatchProvider>
+    </DispatchConfigProvider>
   ) : (
     shell
   );

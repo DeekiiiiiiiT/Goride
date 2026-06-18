@@ -55,7 +55,6 @@ import { TripCalculatorPage } from './admin/pages/TripCalculatorPage';
 import { TransportSolutionsLayout } from './admin/pages/TransportSolutionsLayout';
 import { ServicesLayout } from './admin/pages/ServicesLayout';
 import { ServiceCategoryPage } from './admin/pages/ServiceCategoryPage';
-import { HaulageServicePage } from './admin/pages/HaulageServicePage';
 import { SurgePage } from './admin/pages/SurgePage';
 import { ControlPanelPage } from './admin/pages/ControlPanelPage';
 import { AppPermissionsPage } from './admin/pages/AppPermissionsPage';
@@ -159,7 +158,6 @@ export default function App() {
           <Route path="rideshare" element={<ServiceCategoryPage category="rideshare" />} />
           <Route path="courier" element={<ServiceCategoryPage category="courier" />} />
           <Route path="event" element={<ServiceCategoryPage category="event" />} />
-          <Route path="haulage" element={<HaulageServicePage />} />
         </Route>
         <Route path="surge" element={<SurgePage />} />
         <Route path="control-panel" element={<ControlPanelPage />} />

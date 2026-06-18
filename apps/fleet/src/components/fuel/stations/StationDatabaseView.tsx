@@ -14,7 +14,6 @@ import { VerifiedStationsTab } from './VerifiedStationsTab';
 import { LearntLocationsTab } from './LearntLocationsTab';
 import { EvidenceInboxTab } from './EvidenceInboxTab';
 import { SpatialReviewTab } from './SpatialReviewTab';
-import { UnverifiedVendorsTab } from './UnverifiedVendorsTab';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../ui/tabs';
 import { Switch } from '../../ui/switch';
 import { Label } from '../../ui/label';
@@ -458,10 +457,6 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
                 Spatial review
                 <Badge variant="outline" className="h-4 px-1 text-[8px] border-violet-200 text-violet-600">GPS</Badge>
               </TabsTrigger>
-              <TabsTrigger value="unverified-vendors" className="flex items-center gap-1.5">
-                Unverified Vendors
-                <Badge variant="outline" className="h-4 px-1 text-[8px] border-red-200 text-red-500">GATE</Badge>
-              </TabsTrigger>
             </TabsList>
           </div>
 
@@ -697,17 +692,6 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
           {/* --- Spatial review (ambiguous GPS between verified stations) --- */}
           <TabsContent value="spatial-review" className="m-0 p-0 border-0">
             <SpatialReviewTab onResolved={() => fetchData()} />
-          </TabsContent>
-
-          {/* --- Unverified Vendors Tab --- */}
-          <TabsContent value="unverified-vendors" className="m-0 p-0 border-0">
-             <UnverifiedVendorsTab 
-               onRefresh={() => fetchData()}
-               onSelectVendor={(vendor) => {
-                 // TODO: Open vendor detail modal
-                 console.log('Selected vendor:', vendor);
-               }}
-             />
           </TabsContent>
         </Tabs>
       </div>

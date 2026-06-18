@@ -7,6 +7,7 @@
 | [roamfleet.co](https://roamfleet.co) | Rideshare fleet managers | [roamfleet.co/admin](https://roamfleet.co/admin) — fleet product ops |
 | [roamdriver.co](https://roamdriver.co) | Drivers | `/admin` — driver product ops |
 | [roam-s.co](https://roam-s.co) | Riders | `/admin` — rides product ops |
+| [roamhaul.co](https://roamhaul.co) | Haulers | `/admin` — haul product ops |
 
 Fleet managers are tagged `productLine: fleet` and `businessType: rideshare`.
 

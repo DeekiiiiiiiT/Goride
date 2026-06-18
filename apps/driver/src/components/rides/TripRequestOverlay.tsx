@@ -9,7 +9,8 @@ import {
   formatOfferDistanceMi,
   offerSecondsRemaining,
 } from './rideDispatchUtils';
-import { HaulageManifestCard, isHaulageRide } from './HaulageManifestCard';
+import { useDispatchConfig } from '@roam/hauler-dispatch';
+import { HaulageManifestCard } from './HaulageManifestCard';
 
 const TIMER_RADIUS = 36;
 const TIMER_CIRCUMFERENCE = 2 * Math.PI * TIMER_RADIUS;
@@ -33,6 +34,7 @@ function offerWindowSeconds(offer: DriverOfferWithRide): number {
 }
 
 export function TripRequestOverlay({ offer, queueHint, onAccept, onDecline }: Props) {
+  const dispatchConfig = useDispatchConfig();
   const [secondsLeft, setSecondsLeft] = useState(() => offerSecondsRemaining(offer.expires_at));
   const [accepting, setAccepting] = useState(false);
   const totalSeconds = useMemo(() => offerWindowSeconds(offer), [offer.created_at, offer.expires_at]);
@@ -165,7 +167,7 @@ export function TripRequestOverlay({ offer, queueHint, onAccept, onDecline }: Pr
             </div>
           </div>
 
-          {ride?.haulage_manifest && isHaulageRide(ride.vehicle_option) ? (
+          {dispatchConfig.dispatchMode === 'haulage' && ride?.haulage_manifest ? (
             <HaulageManifestCard manifest={ride.haulage_manifest} compact />
           ) : null}
         </div>

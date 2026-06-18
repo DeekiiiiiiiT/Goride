@@ -135,8 +135,8 @@ export function SurgeCellsManager() {
     <div className="p-6 space-y-6 text-slate-200">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-xl font-semibold text-white">Surge pricing</h2>
-          <p className="text-sm text-slate-400 mt-1 max-w-xl">
+          <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Surge pricing</h2>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1 max-w-xl">
             Grid cells drive dynamic pricing when demand exceeds supply. Multipliers are clamped
             between 1.0 and 3.0 on the server.
           </p>
@@ -161,10 +161,10 @@ export function SurgeCellsManager() {
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && applySearch()}
-            className="pl-9 bg-slate-800 border-slate-600"
+            className="pl-9 bg-white border-slate-300 dark:bg-slate-800 dark:border-slate-600"
           />
         </div>
-        <Button onClick={applySearch} variant="secondary" className="bg-slate-800">
+        <Button onClick={applySearch} variant="secondary" className="bg-slate-100 dark:bg-slate-800">
           Search
         </Button>
       </div>
@@ -174,10 +174,10 @@ export function SurgeCellsManager() {
           <Loader2 className="w-8 h-8 animate-spin text-amber-400" />
         </div>
       ) : (
-        <div className="rounded-xl border border-slate-800 overflow-hidden">
+        <div className="rounded-xl border border-slate-200 overflow-hidden dark:border-slate-800">
           <Table>
             <TableHeader>
-              <TableRow className="border-slate-800 hover:bg-transparent">
+              <TableRow className="border-slate-200 hover:bg-transparent dark:border-slate-800">
                 <TableHead className="text-slate-400">Cell key</TableHead>
                 <TableHead className="text-slate-400">Multiplier</TableHead>
                 <TableHead className="text-slate-400">Open requests</TableHead>
@@ -195,7 +195,7 @@ export function SurgeCellsManager() {
                 </TableRow>
               ) : (
                 cells.map((c) => (
-                  <TableRow key={c.cell_key} className="border-slate-800">
+                  <TableRow key={c.cell_key} className="border-slate-200 dark:border-slate-800">
                     <TableCell className="font-mono text-xs max-w-[200px] truncate" title={c.cell_key}>
                       {c.cell_key}
                     </TableCell>
@@ -210,7 +210,7 @@ export function SurgeCellsManager() {
                         <button
                           type="button"
                           onClick={() => openEdit(c)}
-                          className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800"
+                          className="p-2 text-slate-500 hover:text-slate-900 rounded-lg hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800"
                           aria-label="Edit multiplier"
                         >
                           <Pencil className="w-4 h-4" />
@@ -219,7 +219,7 @@ export function SurgeCellsManager() {
                           type="button"
                           disabled={resettingKey === c.cell_key}
                           onClick={() => void resetDemand(c.cell_key, false)}
-                          className="p-2 text-slate-400 hover:text-amber-300 rounded-lg hover:bg-slate-800 disabled:opacity-50"
+                          className="p-2 text-slate-500 hover:text-amber-600 rounded-lg hover:bg-slate-100 dark:text-slate-400 dark:hover:text-amber-300 dark:hover:bg-slate-800 disabled:opacity-50"
                           title="Clear open requests"
                         >
                           {resettingKey === c.cell_key ? (
@@ -239,7 +239,7 @@ export function SurgeCellsManager() {
       )}
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm text-slate-400">
+        <div className="flex items-center justify-between text-sm text-slate-600 dark:text-slate-400">
           <span>
             Page {page} of {totalPages} ({total} cells)
           </span>
@@ -267,7 +267,7 @@ export function SurgeCellsManager() {
       )}
 
       <Dialog open={!!editCell} onOpenChange={(open) => !open && setEditCell(null)}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-slate-100 max-w-sm">
+        <DialogContent className="bg-white border-slate-300 text-slate-900 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100 max-w-sm">
           <DialogHeader>
             <DialogTitle>Edit surge multiplier</DialogTitle>
           </DialogHeader>
@@ -283,7 +283,7 @@ export function SurgeCellsManager() {
                   step={0.05}
                   value={multiplier}
                   onChange={(e) => setMultiplier(Number(e.target.value))}
-                  className="bg-slate-800 border-slate-600"
+                  className="bg-white border-slate-300 dark:bg-slate-800 dark:border-slate-600"
                 />
               </div>
               <Button

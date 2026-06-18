@@ -310,7 +310,7 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
           <button
             onClick={loadSettings}
             disabled={loading}
-            className="inline-flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-sm rounded-lg transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 dark:text-slate-300 text-sm rounded-lg transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -322,7 +322,7 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
                 ? 'bg-emerald-600 text-white'
                 : dirty
                   ? 'bg-amber-600 hover:bg-amber-500 text-white'
-                  : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
+                  : 'bg-slate-100 text-slate-500 cursor-not-allowed border border-slate-300 dark:bg-slate-800 dark:border-slate-700'
               }
             `}
           >
@@ -378,7 +378,7 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
               type="text"
               value={settings.platformName}
               onChange={e => updateField('platformName', e.target.value)}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
               placeholder="Roam Fleet"
             />
           </div>
@@ -389,7 +389,7 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
             <select
               value={settings.defaultCurrency}
               onChange={e => updateField('defaultCurrency', e.target.value)}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
             >
               {CURRENCY_OPTIONS.map(c => (
                 <option key={c.value} value={c.value}>{c.label}</option>
@@ -403,7 +403,7 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
             <select
               value={settings.fleetTimezone}
               onChange={e => updateField('fleetTimezone', e.target.value)}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
             >
               {TIMEZONE_OPTIONS.map(t => (
                 <option key={t.value} value={t.value}>{t.label}</option>
@@ -418,7 +418,7 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
               type="text"
               value={settings.platformVersion}
               onChange={e => updateField('platformVersion', e.target.value)}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
               placeholder="1.0.0"
             />
           </div>
@@ -431,7 +431,7 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
               className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors w-full
                 ${settings.maintenanceMode
                   ? 'bg-amber-500/15 border-amber-500/40 text-amber-400'
-                  : 'bg-slate-800 border-slate-700 text-slate-400'
+                  : 'bg-slate-100 border-slate-300 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400'
                 }
               `}
             >
@@ -456,7 +456,7 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
                 }
               }}
               rows={2}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 resize-none"
+              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 resize-none"
               placeholder="We're performing scheduled maintenance. Back soon!"
             />
             <div className="flex items-center justify-between mt-1">
@@ -494,15 +494,15 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
                 className={`w-full flex items-center gap-4 rounded-xl border-2 px-4 py-3.5 text-left transition-all
                   ${enabled
                     ? 'border-amber-500/40 bg-amber-500/5'
-                    : 'border-slate-800 bg-slate-900/50 opacity-60'
+                    : 'border-slate-200 bg-white opacity-60 dark:border-slate-800 dark:bg-slate-900/50'
                   }
                 `}
               >
-                <div className={`p-2 rounded-lg ${enabled ? 'bg-amber-500/15' : 'bg-slate-800'}`}>
+                <div className={`p-2 rounded-lg ${enabled ? 'bg-amber-500/15' : 'bg-slate-100 dark:bg-slate-800'}`}>
                   <IconComp className={`w-5 h-5 ${enabled ? 'text-amber-400' : 'text-slate-500'}`} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-medium ${enabled ? 'text-white' : 'text-slate-500'}`}>
+                  <p className={`text-sm font-medium ${enabled ? 'text-slate-900 dark:text-white' : 'text-slate-500'}`}>
                     {bt.label}
                   </p>
                   <p className="text-xs text-slate-500 truncate">{bt.description}</p>
@@ -569,7 +569,7 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
           <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
             <KeyRound className="w-3.5 h-3.5" /> API Keys & Secrets
           </h3>
-          <div className="bg-slate-800/40 border border-slate-700 rounded-lg px-4 py-3 flex items-start gap-3 text-sm">
+          <div className="bg-slate-50 border border-slate-200 dark:bg-slate-800/40 dark:border-slate-700 rounded-lg px-4 py-3 flex items-start gap-3 text-sm">
             <Activity className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
             <div className="flex-1">
               <p className="text-slate-300">
@@ -584,7 +584,7 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
         </div>
 
         {/* Sub-area 2: Password Policy */}
-        <div className="mb-5 pt-4 border-t border-slate-800">
+        <div className="mb-5 pt-4 border-t border-slate-200 dark:border-slate-800">
           <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-1.5">
             <Lock className="w-3.5 h-3.5" /> Password Policy
           </h3>
@@ -615,7 +615,7 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
                     key={opt.key}
                     onClick={() => updateField('securityPolicies', { ...settings.securityPolicies, [opt.key]: !val })}
                     className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs transition-colors
-                      ${val ? 'bg-amber-500/15 border-amber-500/40 text-amber-400' : 'bg-slate-800 border-slate-700 text-slate-400'}
+                      ${val ? 'bg-amber-500/15 border-amber-500/40 text-amber-400' : 'bg-slate-100 border-slate-300 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400'}
                     `}
                   >
                     {val ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
@@ -625,12 +625,12 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
               })}
             </div>
             {/* Preview */}
-            <div className="bg-slate-800/50 border border-slate-800 rounded-lg px-3 py-2">
+            <div className="bg-slate-50 border border-slate-200 dark:bg-slate-800/50 dark:border-slate-800 rounded-lg px-3 py-2">
               <p className="text-xs text-slate-400">
-                Passwords must be at least <span className="text-white font-medium">{settings.securityPolicies?.minPasswordLength ?? 8}</span> characters
-                {settings.securityPolicies?.requireUppercase && <>, contain an <span className="text-white font-medium">uppercase letter</span></>}
-                {settings.securityPolicies?.requireNumber && <>, a <span className="text-white font-medium">number</span></>}
-                {settings.securityPolicies?.requireSpecialChar && <>, and a <span className="text-white font-medium">special character</span></>}
+                Passwords must be at least <span className="text-slate-900 dark:text-white font-medium">{settings.securityPolicies?.minPasswordLength ?? 8}</span> characters
+                {settings.securityPolicies?.requireUppercase && <>, contain an <span className="text-slate-900 dark:text-white font-medium">uppercase letter</span></>}
+                {settings.securityPolicies?.requireNumber && <>, a <span className="text-slate-900 dark:text-white font-medium">number</span></>}
+                {settings.securityPolicies?.requireSpecialChar && <>, and a <span className="text-slate-900 dark:text-white font-medium">special character</span></>}
                 .
               </p>
             </div>
@@ -638,7 +638,7 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
         </div>
 
         {/* Sub-area 3: Session Management */}
-        <div className="mb-5 pt-4 border-t border-slate-800">
+        <div className="mb-5 pt-4 border-t border-slate-200 dark:border-slate-800">
           <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-1.5">
             <Timer className="w-3.5 h-3.5" /> Session Management
           </h3>
@@ -647,7 +647,7 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
             <select
               value={settings.securityPolicies?.sessionTimeoutMinutes ?? 0}
               onChange={e => updateField('securityPolicies', { ...settings.securityPolicies, sessionTimeoutMinutes: parseInt(e.target.value) })}
-              className="w-full sm:w-64 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+              className="w-full sm:w-64 px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
             >
               <option value={60}>1 hour</option>
               <option value={240}>4 hours</option>
@@ -666,7 +666,7 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
         </div>
 
         {/* Sub-area 4: Login Protection */}
-        <div className="mb-5 pt-4 border-t border-slate-800">
+        <div className="mb-5 pt-4 border-t border-slate-200 dark:border-slate-800">
           <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-1.5">
             <ShieldAlert className="w-3.5 h-3.5" /> Login Protection
           </h3>
@@ -679,7 +679,7 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
                 max={20}
                 value={settings.securityPolicies?.maxLoginAttempts ?? 0}
                 onChange={e => updateField('securityPolicies', { ...settings.securityPolicies, maxLoginAttempts: Math.max(0, Math.min(20, parseInt(e.target.value) || 0)) })}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
                 placeholder="0 = unlimited"
               />
             </div>
@@ -689,7 +689,7 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
                 <select
                   value={settings.securityPolicies?.lockoutDurationMinutes ?? 15}
                   onChange={e => updateField('securityPolicies', { ...settings.securityPolicies, lockoutDurationMinutes: parseInt(e.target.value) })}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
                 >
                   <option value={5}>5 minutes</option>
                   <option value={15}>15 minutes</option>
@@ -728,15 +728,15 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
             className={`w-full flex items-center gap-4 rounded-xl border-2 px-4 py-3.5 text-left transition-all
               ${settings.enabledModules.fuelManagement
                 ? 'border-amber-500/40 bg-amber-500/5'
-                : 'border-slate-800 bg-slate-900/50 opacity-60'
+                : 'border-slate-200 bg-white opacity-60 dark:border-slate-800 dark:bg-slate-900/50'
               }
             `}
           >
-            <div className={`p-2 rounded-lg ${settings.enabledModules.fuelManagement ? 'bg-amber-500/15' : 'bg-slate-800'}`}>
+            <div className={`p-2 rounded-lg ${settings.enabledModules.fuelManagement ? 'bg-amber-500/15' : 'bg-slate-100 dark:bg-slate-800'}`}>
               <Fuel className={`w-5 h-5 ${settings.enabledModules.fuelManagement ? 'text-amber-400' : 'text-slate-500'}`} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className={`text-sm font-medium ${settings.enabledModules.fuelManagement ? 'text-white' : 'text-slate-500'}`}>
+              <p className={`text-sm font-medium ${settings.enabledModules.fuelManagement ? 'text-slate-900 dark:text-white' : 'text-slate-500'}`}>
                 Fuel Management
               </p>
               <p className="text-xs text-slate-500 truncate">Track and manage fuel consumption and costs.</p>
@@ -754,15 +754,15 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
             className={`w-full flex items-center gap-4 rounded-xl border-2 px-4 py-3.5 text-left transition-all
               ${settings.enabledModules.tollManagement
                 ? 'border-amber-500/40 bg-amber-500/5'
-                : 'border-slate-800 bg-slate-900/50 opacity-60'
+                : 'border-slate-200 bg-white opacity-60 dark:border-slate-800 dark:bg-slate-900/50'
               }
             `}
           >
-            <div className={`p-2 rounded-lg ${settings.enabledModules.tollManagement ? 'bg-amber-500/15' : 'bg-slate-800'}`}>
+            <div className={`p-2 rounded-lg ${settings.enabledModules.tollManagement ? 'bg-amber-500/15' : 'bg-slate-100 dark:bg-slate-800'}`}>
               <MapPin className={`w-5 h-5 ${settings.enabledModules.tollManagement ? 'text-amber-400' : 'text-slate-500'}`} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className={`text-sm font-medium ${settings.enabledModules.tollManagement ? 'text-white' : 'text-slate-500'}`}>
+              <p className={`text-sm font-medium ${settings.enabledModules.tollManagement ? 'text-slate-900 dark:text-white' : 'text-slate-500'}`}>
                 Toll Management
               </p>
               <p className="text-xs text-slate-500 truncate">Automate toll payments and track toll expenses.</p>
@@ -780,15 +780,15 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
             className={`w-full flex items-center gap-4 rounded-xl border-2 px-4 py-3.5 text-left transition-all
               ${settings.enabledModules.driverPortal
                 ? 'border-amber-500/40 bg-amber-500/5'
-                : 'border-slate-800 bg-slate-900/50 opacity-60'
+                : 'border-slate-200 bg-white opacity-60 dark:border-slate-800 dark:bg-slate-900/50'
               }
             `}
           >
-            <div className={`p-2 rounded-lg ${settings.enabledModules.driverPortal ? 'bg-amber-500/15' : 'bg-slate-800'}`}>
+            <div className={`p-2 rounded-lg ${settings.enabledModules.driverPortal ? 'bg-amber-500/15' : 'bg-slate-100 dark:bg-slate-800'}`}>
               <Car className={`w-5 h-5 ${settings.enabledModules.driverPortal ? 'text-amber-400' : 'text-slate-500'}`} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className={`text-sm font-medium ${settings.enabledModules.driverPortal ? 'text-white' : 'text-slate-500'}`}>
+              <p className={`text-sm font-medium ${settings.enabledModules.driverPortal ? 'text-slate-900 dark:text-white' : 'text-slate-500'}`}>
                 Driver Portal
               </p>
               <p className="text-xs text-slate-500 truncate">Provide drivers with a portal to manage their schedules and earnings.</p>
@@ -806,15 +806,15 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
             className={`w-full flex items-center gap-4 rounded-xl border-2 px-4 py-3.5 text-left transition-all
               ${settings.enabledModules.fleetEquipment
                 ? 'border-amber-500/40 bg-amber-500/5'
-                : 'border-slate-800 bg-slate-900/50 opacity-60'
+                : 'border-slate-200 bg-white opacity-60 dark:border-slate-800 dark:bg-slate-900/50'
               }
             `}
           >
-            <div className={`p-2 rounded-lg ${settings.enabledModules.fleetEquipment ? 'bg-amber-500/15' : 'bg-slate-800'}`}>
+            <div className={`p-2 rounded-lg ${settings.enabledModules.fleetEquipment ? 'bg-amber-500/15' : 'bg-slate-100 dark:bg-slate-800'}`}>
               <Package className={`w-5 h-5 ${settings.enabledModules.fleetEquipment ? 'text-amber-400' : 'text-slate-500'}`} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className={`text-sm font-medium ${settings.enabledModules.fleetEquipment ? 'text-white' : 'text-slate-500'}`}>
+              <p className={`text-sm font-medium ${settings.enabledModules.fleetEquipment ? 'text-slate-900 dark:text-white' : 'text-slate-500'}`}>
                 Fleet Equipment
               </p>
               <p className="text-xs text-slate-500 truncate">Manage and track the equipment in your fleet.</p>
@@ -832,15 +832,15 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
             className={`w-full flex items-center gap-4 rounded-xl border-2 px-4 py-3.5 text-left transition-all
               ${settings.enabledModules.claimableLoss
                 ? 'border-amber-500/40 bg-amber-500/5'
-                : 'border-slate-800 bg-slate-900/50 opacity-60'
+                : 'border-slate-200 bg-white opacity-60 dark:border-slate-800 dark:bg-slate-900/50'
               }
             `}
           >
-            <div className={`p-2 rounded-lg ${settings.enabledModules.claimableLoss ? 'bg-amber-500/15' : 'bg-slate-800'}`}>
+            <div className={`p-2 rounded-lg ${settings.enabledModules.claimableLoss ? 'bg-amber-500/15' : 'bg-slate-100 dark:bg-slate-800'}`}>
               <FileText className={`w-5 h-5 ${settings.enabledModules.claimableLoss ? 'text-amber-400' : 'text-slate-500'}`} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className={`text-sm font-medium ${settings.enabledModules.claimableLoss ? 'text-white' : 'text-slate-500'}`}>
+              <p className={`text-sm font-medium ${settings.enabledModules.claimableLoss ? 'text-slate-900 dark:text-white' : 'text-slate-500'}`}>
                 Claimable Loss
               </p>
               <p className="text-xs text-slate-500 truncate">Manage and track claimable losses for your fleet.</p>
@@ -858,15 +858,15 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
             className={`w-full flex items-center gap-4 rounded-xl border-2 px-4 py-3.5 text-left transition-all
               ${settings.enabledModules.performanceAnalytics
                 ? 'border-amber-500/40 bg-amber-500/5'
-                : 'border-slate-800 bg-slate-900/50 opacity-60'
+                : 'border-slate-200 bg-white opacity-60 dark:border-slate-800 dark:bg-slate-900/50'
               }
             `}
           >
-            <div className={`p-2 rounded-lg ${settings.enabledModules.performanceAnalytics ? 'bg-amber-500/15' : 'bg-slate-800'}`}>
+            <div className={`p-2 rounded-lg ${settings.enabledModules.performanceAnalytics ? 'bg-amber-500/15' : 'bg-slate-100 dark:bg-slate-800'}`}>
               <BarChart3 className={`w-5 h-5 ${settings.enabledModules.performanceAnalytics ? 'text-amber-400' : 'text-slate-500'}`} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className={`text-sm font-medium ${settings.enabledModules.performanceAnalytics ? 'text-white' : 'text-slate-500'}`}>
+              <p className={`text-sm font-medium ${settings.enabledModules.performanceAnalytics ? 'text-slate-900 dark:text-white' : 'text-slate-500'}`}>
                 Performance Analytics
               </p>
               <p className="text-xs text-slate-500 truncate">Analyze and visualize performance metrics for your fleet.</p>
@@ -949,15 +949,15 @@ function RegistrationSection({ settings, updateField, setSettings, setDirty }: {
               className={`w-full flex items-center gap-4 rounded-xl border-2 px-4 py-3.5 text-left transition-all
                 ${selected
                   ? 'border-emerald-500/40 bg-emerald-500/5'
-                  : 'border-slate-800 bg-slate-900/50 opacity-60 hover:opacity-80'
+                  : 'border-slate-200 bg-white opacity-60 hover:opacity-80 dark:border-slate-800 dark:bg-slate-900/50'
                 }
               `}
             >
-              <div className={`p-2 rounded-lg ${selected ? 'bg-emerald-500/15' : 'bg-slate-800'}`}>
+              <div className={`p-2 rounded-lg ${selected ? 'bg-emerald-500/15' : 'bg-slate-100 dark:bg-slate-800'}`}>
                 <IconComp className={`w-5 h-5 ${selected ? 'text-emerald-400' : 'text-slate-500'}`} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className={`text-sm font-medium ${selected ? 'text-white' : 'text-slate-500'}`}>
+                <p className={`text-sm font-medium ${selected ? 'text-slate-900 dark:text-white' : 'text-slate-500'}`}>
                   {mode.label}
                 </p>
                 <p className="text-xs text-slate-500">{mode.description}</p>
@@ -982,7 +982,7 @@ function RegistrationSection({ settings, updateField, setSettings, setDirty }: {
               value={domainInput}
               onChange={e => setDomainInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addDomain(); } }}
-              className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+              className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
               placeholder="Type a domain (e.g. myfleet.com) and press Enter"
             />
             <button
@@ -1018,7 +1018,7 @@ function RegistrationSection({ settings, updateField, setSettings, setDirty }: {
           className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors w-full
             ${settings.requireApproval
               ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
-              : 'bg-slate-800 border-slate-700 text-slate-400'
+              : 'bg-slate-100 border-slate-300 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400'
             }
           `}
         >
@@ -1049,7 +1049,7 @@ function RegistrationSection({ settings, updateField, setSettings, setDirty }: {
             }
           }}
           rows={3}
-          className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 resize-none"
+          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 resize-none"
           placeholder="Welcome to Roam Fleet! Your account has been set up..."
         />
         <div className="flex items-center justify-between mt-1">
@@ -1098,7 +1098,7 @@ function AnnouncementSection({ settings, updateField }: {
         <button
           onClick={() => updateAnn({ enabled: !ann.enabled })}
           className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors w-full
-            ${ann.enabled ? 'bg-orange-500/15 border-orange-500/40 text-orange-400' : 'bg-slate-800 border-slate-700 text-slate-400'}
+            ${ann.enabled ? 'bg-orange-500/15 border-orange-500/40 text-orange-400' : 'bg-slate-100 border-slate-300 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400'}
           `}
         >
           {ann.enabled ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
@@ -1114,7 +1114,7 @@ function AnnouncementSection({ settings, updateField }: {
               value={ann.message}
               onChange={e => { if (e.target.value.length <= 300) updateAnn({ message: e.target.value }); }}
               rows={2}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 resize-none"
+              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 resize-none"
               placeholder="We're upgrading our systems this weekend..."
             />
             <span className={`text-[10px] font-mono float-right ${ann.message.length > 270 ? 'text-amber-400' : 'text-slate-600'}`}>
@@ -1134,11 +1134,11 @@ function AnnouncementSection({ settings, updateField }: {
                     className={`rounded-lg border-2 px-3 py-2.5 text-left transition-all text-xs
                       ${sel
                         ? t.color === 'blue' ? 'border-blue-500/40 bg-blue-500/10' : t.color === 'amber' ? 'border-amber-500/40 bg-amber-500/10' : 'border-red-500/40 bg-red-500/10'
-                        : 'border-slate-800 bg-slate-900/50 opacity-60 hover:opacity-80'
+                        : 'border-slate-200 bg-white opacity-60 hover:opacity-80 dark:border-slate-800 dark:bg-slate-900/50'
                       }
                     `}
                   >
-                    <p className={`font-medium ${sel ? 'text-white' : 'text-slate-500'}`}>{t.label}</p>
+                    <p className={`font-medium ${sel ? 'text-slate-900 dark:text-white' : 'text-slate-500'}`}>{t.label}</p>
                     <p className="text-[10px] text-slate-500 mt-0.5">{t.desc}</p>
                   </button>
                 );
@@ -1152,12 +1152,12 @@ function AnnouncementSection({ settings, updateField }: {
               <div>
                 <label className="block text-[10px] text-slate-500 mb-1">Start showing</label>
                 <input type="date" value={ann.startDate || ''} onChange={e => updateAnn({ startDate: e.target.value || null })}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50" />
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50" />
               </div>
               <div>
                 <label className="block text-[10px] text-slate-500 mb-1">Stop showing</label>
                 <input type="date" value={ann.endDate || ''} onChange={e => updateAnn({ endDate: e.target.value || null })}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50" />
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50" />
               </div>
             </div>
             <p className="text-[10px] text-slate-500 mt-1">Leave blank to show immediately / until you disable it.</p>
@@ -1167,7 +1167,7 @@ function AnnouncementSection({ settings, updateField }: {
             <button
               onClick={() => updateAnn({ dismissible: !ann.dismissible })}
               className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors w-full
-                ${ann.dismissible ? 'bg-orange-500/15 border-orange-500/40 text-orange-400' : 'bg-slate-800 border-slate-700 text-slate-400'}
+                ${ann.dismissible ? 'bg-orange-500/15 border-orange-500/40 text-orange-400' : 'bg-slate-100 border-slate-300 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400'}
               `}
             >
               {ann.dismissible ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
@@ -1295,16 +1295,16 @@ function DangerZoneSection({ accessToken, settings, setSettings, setSaving, setS
       icon={<AlertTriangle className="w-4 h-4 text-red-400" />}
       title="Danger Zone"
       description="Destructive operations and advanced system tools. Handle with care."
-      className="bg-slate-900 border-2 border-red-500/30 rounded-xl p-5"
+      className="bg-white border-2 border-red-500/30 dark:bg-slate-900 rounded-xl p-5"
     >
       <div className="space-y-4">
         {/* Export */}
-        <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 flex items-start gap-3">
+        <div className="bg-slate-50 border border-slate-200 dark:bg-slate-800/50 dark:border-slate-700 rounded-lg p-4 flex items-start gap-3">
           <div className="p-2 rounded-lg bg-blue-500/15 shrink-0 mt-0.5">
             <Download className="w-5 h-5 text-blue-400" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white">Export Platform Data</p>
+            <p className="text-sm font-medium text-slate-900 dark:text-white">Export Platform Data</p>
             <p className="text-xs text-slate-500 mt-0.5">Download a full JSON backup of all platform data, including settings, customers, drivers, fuel logs, toll logs, and audit trail.</p>
             <button onClick={handleExport} disabled={exportLoading}
               className="mt-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50">
@@ -1314,12 +1314,12 @@ function DangerZoneSection({ accessToken, settings, setSettings, setSaving, setS
         </div>
 
         {/* Purge Test Data */}
-        <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 flex items-start gap-3">
+        <div className="bg-slate-50 border border-slate-200 dark:bg-slate-800/50 dark:border-slate-700 rounded-lg p-4 flex items-start gap-3">
           <div className="p-2 rounded-lg bg-amber-500/15 shrink-0 mt-0.5">
             <Trash2 className="w-5 h-5 text-amber-400" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white">Purge Test Data</p>
+            <p className="text-sm font-medium text-slate-900 dark:text-white">Purge Test Data</p>
             <p className="text-xs text-slate-500 mt-0.5">Remove synthetic/test data generated by the Chaos Seeder. This does NOT delete real customer accounts, drivers, or settings.</p>
             {!purgeConfirm ? (
               <button onClick={() => setPurgeConfirm(true)}
@@ -1345,12 +1345,12 @@ function DangerZoneSection({ accessToken, settings, setSettings, setSaving, setS
         </div>
 
         {/* System Health */}
-        <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 flex items-start gap-3">
+        <div className="bg-slate-50 border border-slate-200 dark:bg-slate-800/50 dark:border-slate-700 rounded-lg p-4 flex items-start gap-3">
           <div className="p-2 rounded-lg bg-emerald-500/15 shrink-0 mt-0.5">
             <HeartPulse className="w-5 h-5 text-emerald-400" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white">System Health</p>
+            <p className="text-sm font-medium text-slate-900 dark:text-white">System Health</p>
             <p className="text-xs text-slate-500 mt-0.5">Check database connectivity, KV row count, and last settings update.</p>
             <button onClick={handleHealthCheck} disabled={healthLoading}
               className="mt-2 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50">
@@ -1358,23 +1358,23 @@ function DangerZoneSection({ accessToken, settings, setSettings, setSaving, setS
             </button>
             {healthData && (
               <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <div className="bg-slate-900 rounded-lg px-3 py-2">
+                <div className="bg-slate-50 rounded-lg px-3 py-2 dark:bg-slate-900">
                   <p className="text-[10px] text-slate-500">DB Status</p>
                   <p className={`text-sm font-medium ${healthData.dbStatus === 'healthy' ? 'text-emerald-400' : 'text-red-400'}`}>
                     {healthData.dbStatus === 'healthy' ? 'Healthy' : 'Error'}
                   </p>
                 </div>
-                <div className="bg-slate-900 rounded-lg px-3 py-2">
+                <div className="bg-slate-50 rounded-lg px-3 py-2 dark:bg-slate-900">
                   <p className="text-[10px] text-slate-500">KV Rows</p>
-                  <p className="text-sm font-medium text-white">{healthData.kvRowCount ?? '—'}</p>
+                  <p className="text-sm font-medium text-slate-900 dark:text-white">{healthData.kvRowCount ?? '—'}</p>
                 </div>
-                <div className="bg-slate-900 rounded-lg px-3 py-2">
+                <div className="bg-slate-50 rounded-lg px-3 py-2 dark:bg-slate-900">
                   <p className="text-[10px] text-slate-500">Last Update</p>
-                  <p className="text-sm font-medium text-white">{healthData.lastSettingsUpdate ? new Date(healthData.lastSettingsUpdate).toLocaleDateString() : '—'}</p>
+                  <p className="text-sm font-medium text-slate-900 dark:text-white">{healthData.lastSettingsUpdate ? new Date(healthData.lastSettingsUpdate).toLocaleDateString() : '—'}</p>
                 </div>
-                <div className="bg-slate-900 rounded-lg px-3 py-2">
+                <div className="bg-slate-50 rounded-lg px-3 py-2 dark:bg-slate-900">
                   <p className="text-[10px] text-slate-500">Server Time</p>
-                  <p className="text-sm font-medium text-white">{healthData.serverTime ? new Date(healthData.serverTime).toLocaleTimeString() : '—'}</p>
+                  <p className="text-sm font-medium text-slate-900 dark:text-white">{healthData.serverTime ? new Date(healthData.serverTime).toLocaleTimeString() : '—'}</p>
                 </div>
               </div>
             )}
@@ -1402,7 +1402,7 @@ function DangerZoneSection({ accessToken, settings, setSettings, setSaving, setS
                   value={resetText}
                   onChange={e => setResetText(e.target.value)}
                   placeholder="Type RESET"
-                  className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-red-500/50 mb-2"
+                  className="w-full px-3 py-1.5 bg-white border border-slate-300 dark:bg-slate-900 dark:border-slate-700 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-red-500/50 mb-2"
                 />
                 <div className="flex gap-2">
                   <button onClick={handleReset} disabled={resetText !== 'RESET' || resetLoading}
@@ -1446,7 +1446,7 @@ function SettingsSection({
   className?: string;
 }) {
   return (
-    <div className={className || 'bg-white border border-slate-200 rounded-xl p-5 dark:bg-slate-900 dark:border-slate-800'}>
+    <div className={className || 'bg-white border border-slate-200 rounded-xl p-5 dark:bg-slate-900 dark:border-slate-200 dark:border-slate-200 dark:border-slate-800'}>
       <div className="flex items-center gap-2 mb-1">
         {icon}
         <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{title}</h2>
@@ -1459,16 +1459,16 @@ function SettingsSection({
 
 function ReadOnlyField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-slate-800/50 border border-slate-800 rounded-lg px-3 py-2.5">
+    <div className="bg-slate-50 border border-slate-200 dark:bg-slate-800/50 dark:border-slate-800 rounded-lg px-3 py-2.5">
       <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider mb-0.5">{label}</p>
-      <p className="text-sm text-slate-300 truncate">{value}</p>
+      <p className="text-sm text-slate-700 dark:text-slate-300 truncate">{value}</p>
     </div>
   );
 }
 
 function SecretField({ label, configured }: { label: string; configured: boolean }) {
   return (
-    <div className="bg-slate-800/50 border border-slate-800 rounded-lg px-3 py-2.5 flex items-center justify-between">
+    <div className="bg-slate-50 border border-slate-200 dark:bg-slate-800/50 dark:border-slate-800 rounded-lg px-3 py-2.5 flex items-center justify-between">
       <div>
         <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider mb-0.5">{label}</p>
         <p className="text-sm text-slate-500 font-mono">{'•'.repeat(20)}</p>
@@ -1514,7 +1514,7 @@ function SecurityEmergencyActions({ accessToken }: { accessToken?: string }) {
   };
 
   return (
-    <div className="pt-4 border-t border-slate-800">
+    <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
       <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-1.5">
         <Ban className="w-3.5 h-3.5" /> Emergency Actions
       </h3>

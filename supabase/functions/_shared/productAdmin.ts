@@ -6,7 +6,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getJwtRoles, jwtPrimaryRole } from "./authEdge.ts";
 
 /** Product identifiers */
-export type ProductKey = "fleet" | "enterprise" | "dash" | "rides" | "driver";
+export type ProductKey = "fleet" | "enterprise" | "dash" | "rides" | "driver" | "haul";
 
 /** Platform roles that have access to all product admins */
 export const PLATFORM_ROLES = new Set([
@@ -22,6 +22,7 @@ export const PRODUCT_ADMIN_ROLES: Record<ProductKey, Set<string>> = {
   dash: new Set([...PLATFORM_ROLES, "dash_admin", "dash_ops"]),
   rides: new Set([...PLATFORM_ROLES, "rides_admin", "rides_ops"]),
   driver: new Set([...PLATFORM_ROLES, "driver_admin", "driver_ops"]),
+  haul: new Set([...PLATFORM_ROLES, "haul_admin", "haul_ops"]),
 };
 
 export type ProductAdminUser = {

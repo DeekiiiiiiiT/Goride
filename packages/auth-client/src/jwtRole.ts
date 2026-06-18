@@ -69,6 +69,19 @@ export function canUseDriverSurface(user: JwtUser, hasProfile: boolean): boolean
   return legacy === 'driver';
 }
 
+/**
+ * Hauler app eligibility: hauler surface/role, or existing driver profile (dual-role).
+ */
+export function canUseHaulerSurface(user: JwtUser, hasProfile: boolean): boolean {
+  if (hasProfile) return true;
+  if (getJwtRoles(user).includes('hauler')) return true;
+  if (getJwtRoles(user).includes('driver')) return true;
+  const surface = userMetadataSurface(user);
+  if (surface === 'hauler' || surface === 'driver') return true;
+  const legacy = user.user_metadata?.role;
+  return legacy === 'hauler' || legacy === 'driver';
+}
+
 /** True when the user holds a non-rides privileged role (admin/fleet/platform). */
 export function hasPrivilegedJwtRole(user: JwtUser): boolean {
   const roles = getJwtRoles(user);
@@ -90,6 +103,8 @@ export function hasPrivilegedJwtRole(user: JwtUser): boolean {
     'rides_ops',
     'driver_admin',
     'driver_ops',
+    'haul_admin',
+    'haul_ops',
   ]);
   return roles.some((r) => privileged.has(r));
 }

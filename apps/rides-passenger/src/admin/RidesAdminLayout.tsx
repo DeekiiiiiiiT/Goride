@@ -26,7 +26,6 @@ import {
   LayoutGrid,
   CalendarDays,
   Package,
-  Truck,
 } from 'lucide-react';
 import { RidesAdminLoginForm } from './components/RidesAdminLoginForm';
 
@@ -173,7 +172,6 @@ const SERVICES_ITEMS: NavItem[] = [
     label: 'Event booking',
     icon: CalendarDays,
   },
-  { id: 'services-haulage', path: '/admin/services/haulage', label: 'Haulage', icon: Truck },
 ];
 
 const CASH_SETTLEMENT_ITEMS: NavItem[] = [

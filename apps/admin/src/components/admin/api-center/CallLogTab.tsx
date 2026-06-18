@@ -21,7 +21,7 @@ export function CallLogTab() {
 
   return (
     <div className="space-y-4">
-      <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center gap-2">
+      <div className="bg-white border border-slate-200 dark:bg-slate-900/40 dark:border-slate-800 rounded-xl p-3 flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute inset-y-0 left-3 h-full w-3.5 text-slate-500" />
           <input
@@ -29,14 +29,14 @@ export function CallLogTab() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search route, model, or error..."
-            className="w-full pl-9 pr-3 py-1.5 bg-slate-900/60 border border-slate-800 text-slate-200 text-xs rounded-lg focus:outline-none focus:border-amber-500/50"
+            className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-200 dark:bg-slate-900/60 dark:border-slate-800 text-slate-200 text-xs rounded-lg focus:outline-none focus:border-amber-500/50"
           />
         </div>
         <Filter className="w-3.5 h-3.5 text-slate-500" />
         <select
           value={provider}
           onChange={(e) => setProvider(e.target.value)}
-          className="bg-slate-900/60 border border-slate-800 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-amber-500/50"
+          className="bg-white border border-slate-200 dark:bg-slate-900/60 dark:border-slate-800 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-amber-500/50"
         >
           <option value="">All providers</option>
           {PROVIDER_ORDER.map((p) => (
@@ -46,7 +46,7 @@ export function CallLogTab() {
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
-          className="bg-slate-900/60 border border-slate-800 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-amber-500/50"
+          className="bg-white border border-slate-200 dark:bg-slate-900/60 dark:border-slate-800 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-amber-500/50"
         >
           <option value="">Any status</option>
           <option value="success">Success</option>
@@ -61,7 +61,7 @@ export function CallLogTab() {
         </div>
       )}
 
-      <section className="bg-slate-900/40 border border-slate-800 rounded-xl overflow-hidden">
+      <section className="bg-white border border-slate-200 dark:bg-slate-900/40 dark:border-slate-800 rounded-xl overflow-hidden">
         {isLoading ? (
           <div className="flex items-center justify-center py-16 text-slate-500">
             <Loader2 className="w-5 h-5 animate-spin" />
@@ -71,7 +71,7 @@ export function CallLogTab() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
-              <thead className="bg-slate-900/60 text-slate-500 uppercase text-[10px] tracking-wider">
+              <thead className="bg-slate-50 text-slate-500 dark:bg-slate-900/60 uppercase text-[10px] tracking-wider">
                 <tr>
                   <th className="text-left font-medium px-4 py-2.5">Time</th>
                   <th className="text-left font-medium px-4 py-2.5">Provider</th>
@@ -108,7 +108,7 @@ function LogRow({ row, expanded, onToggle }: { row: CallLogRow; expanded: boolea
     <>
       <tr
         onClick={onToggle}
-        className={`cursor-pointer transition-colors ${isError ? 'bg-red-500/5 hover:bg-red-500/10' : 'hover:bg-slate-800/40'}`}
+        className={`cursor-pointer transition-colors ${isError ? 'bg-red-500/5 hover:bg-red-500/10' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'}`}
       >
         <td className="px-4 py-2.5 text-slate-400 whitespace-nowrap">{fmtDateTime(row.timestamp)}</td>
         <td className="px-4 py-2.5">
@@ -136,7 +136,7 @@ function LogRow({ row, expanded, onToggle }: { row: CallLogRow; expanded: boolea
         </td>
       </tr>
       {expanded && (
-        <tr className="bg-slate-950/50">
+        <tr className="bg-slate-50 dark:bg-slate-50 dark:bg-slate-50 dark:bg-slate-50 dark:bg-slate-950/50">
           <td colSpan={8} className="px-4 py-3 font-mono text-[11px] text-slate-400 space-y-1">
             <div><span className="text-slate-500">model</span>: {row.model || '—'}</div>
             <div><span className="text-slate-500">service</span>: {row.service || '—'}</div>

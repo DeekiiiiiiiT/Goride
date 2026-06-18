@@ -1,0 +1,5 @@
+@import 'tailwindcss' source(none);
+@source './**/*.{js,ts,jsx,tsx}';
+@source '../../../packages/admin-core/src/**/*.{js,ts,jsx,tsx}';
+@source '../driver/src/**/*.{js,ts,jsx,tsx}';
+@import '../../../packages/admin-core/src/styles/admin-portal.css';

@@ -242,7 +242,7 @@ const WHEELS_BRAKES_FIELD_HINTS = {
 } as const;
 
 const CATALOG_FORM_TOOLTIP_CLASS =
-  "z-[300] max-w-[min(22rem,calc(100vw-2rem))] border border-slate-600/90 bg-slate-900 px-3 py-2.5 text-left text-xs font-normal leading-relaxed text-slate-50 shadow-xl";
+  "z-[300] max-w-[min(22rem,calc(100vw-2rem))] border border-slate-300 bg-white px-3 py-2.5 text-left text-xs font-normal leading-relaxed text-slate-900 dark:border-slate-600/90 dark:bg-slate-900 dark:text-slate-50 shadow-xl";
 
 type FormState = {
   makeSelection: MakeSelection;
@@ -866,8 +866,8 @@ export function VehicleCatalogManager() {
     <div className="flex flex-col gap-4 p-4 sm:p-6 text-slate-200">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-white">Motor vehicles</h2>
-          <p className="text-sm text-slate-400">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Motor vehicles</h2>
+          <p className="text-sm text-slate-600 dark:text-slate-400">
             Platform-wide reference variants—use separate rows and year ranges for major facelifts (e.g.
             Pre-Facelift vs Facelift). Used as reference data for fleets.
           </p>
@@ -884,7 +884,7 @@ export function VehicleCatalogManager() {
           <Button
             type="button"
             variant="outline"
-            className="gap-2 border-slate-600 bg-slate-800/80 text-slate-200 hover:bg-slate-700 hover:text-white"
+            className="gap-2 border-slate-300 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 dark:border-slate-600 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
             onClick={handleImportPick}
             disabled={loading || importStep === "importing"}
             title="Import rows from CSV (export first to use as a template)"
@@ -895,7 +895,7 @@ export function VehicleCatalogManager() {
           <Button
             type="button"
             variant="outline"
-            className="gap-2 border-slate-600 bg-slate-800/80 text-slate-200 hover:bg-slate-700 hover:text-white"
+            className="gap-2 border-slate-300 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 dark:border-slate-600 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
             onClick={handleExportCsv}
             disabled={loading}
             title={
@@ -914,7 +914,7 @@ export function VehicleCatalogManager() {
           <Button
             type="button"
             variant="outline"
-            className="gap-2 border-red-500/40 bg-slate-800/80 text-red-400 hover:bg-red-950/40 hover:text-red-300"
+            className="gap-2 border-red-300 bg-white text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-500/40 dark:bg-slate-800/80 dark:text-red-400 dark:hover:bg-red-950/40 dark:hover:text-red-300"
             disabled={loading || items.length === 0 || importStep === "importing"}
             title="Remove every row in the motor vehicle catalog (cannot be undone)"
             onClick={() => {
@@ -939,10 +939,10 @@ export function VehicleCatalogManager() {
           <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
         </div>
       ) : (
-        <div className="rounded-lg border border-slate-800 bg-slate-900/60 shadow-sm overflow-hidden [&_tbody_td]:!text-slate-200 [&_thead_th]:!text-slate-300">
-          <Table className="[&_th]:!text-slate-300 [&_td]:!text-slate-200 [&_tbody_tr]:border-slate-800 [&_tbody_tr:hover]:bg-slate-800/40">
+        <div className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/60 shadow-sm overflow-hidden [&_tbody_td]:!text-slate-200 [&_thead_th]:!text-slate-300">
+          <Table className="[&_th]:!text-slate-600 [&_td]:!text-slate-700 [&_tbody_tr]:border-slate-200 [&_tbody_tr:hover]:bg-slate-50 dark:[&_th]:!text-slate-300 dark:[&_td]:!text-slate-200 dark:[&_tbody_tr]:border-slate-800 dark:[&_tbody_tr:hover]:bg-slate-800/40">
           <TableHeader>
-            <TableRow className="border-slate-700 hover:bg-transparent bg-slate-800/90">
+            <TableRow className="border-slate-200 hover:bg-transparent bg-slate-50 dark:border-slate-700 dark:bg-slate-800/90">
               <TableHead className="!bg-transparent text-slate-300">Make</TableHead>
               <TableHead className="!bg-transparent text-slate-300">Model</TableHead>
               <TableHead className="!bg-transparent text-slate-300">Years</TableHead>
@@ -964,7 +964,7 @@ export function VehicleCatalogManager() {
           </TableHeader>
           <TableBody>
             {items.length === 0 ? (
-              <TableRow className="hover:bg-transparent border-slate-800">
+              <TableRow className="hover:bg-transparent border-slate-200 dark:border-slate-800">
                 <TableCell colSpan={7} className="text-center text-slate-500 py-12">
                   No vehicles yet. Add one to get started.
                 </TableCell>
@@ -976,9 +976,9 @@ export function VehicleCatalogManager() {
                 rowsOut.push(
                   <TableRow
                     key={`make:${makeGroup.make}`}
-                    className="border-slate-700 !bg-slate-800 hover:!bg-slate-700/95 [&_td]:!bg-slate-800 hover:[&_td]:!bg-slate-700/95 [&_td]:!text-slate-100"
+                    className="border-slate-200 !bg-slate-50 hover:!bg-slate-100 [&_td]:!bg-slate-50 hover:[&_td]:!bg-slate-100 [&_td]:!text-slate-900 dark:border-slate-700 dark:!bg-slate-800 dark:hover:!bg-slate-700/95 dark:[&_td]:!bg-slate-800 dark:hover:[&_td]:!bg-slate-700/95 dark:[&_td]:!text-slate-100"
                   >
-                    <TableCell className="!bg-slate-800 font-semibold !text-slate-100">
+                    <TableCell className="!bg-slate-50 font-semibold !text-slate-900 dark:!bg-slate-800 dark:!text-slate-100">
                       <button
                         type="button"
                         className="inline-flex items-center gap-2 rounded-md py-1 pr-2 text-left -ml-1 text-slate-100 hover:bg-slate-700/80"
@@ -999,12 +999,12 @@ export function VehicleCatalogManager() {
                         {makeGroup.make}
                       </button>
                     </TableCell>
-                    <TableCell className="!bg-slate-800 !text-slate-400 text-sm font-medium" colSpan={5}>
+                    <TableCell className="!bg-slate-50 !text-slate-600 text-sm font-medium dark:!bg-slate-800 dark:!text-slate-400" colSpan={5}>
                       {makeGroup.modelGroups.length} model
                       {makeGroup.modelGroups.length === 1 ? "" : "s"} · {makeGroup.variantCount} variant
                       {makeGroup.variantCount === 1 ? "" : "s"}
                     </TableCell>
-                    <TableCell className="!bg-slate-800" />
+                    <TableCell className="!bg-slate-50 dark:!bg-slate-800" />
                   </TableRow>,
                 );
                 if (!makeOpen) return rowsOut;
@@ -1015,12 +1015,12 @@ export function VehicleCatalogManager() {
                   rowsOut.push(
                     <TableRow
                       key={`model:${mk}`}
-                      className="border-slate-700/80 !bg-slate-900/85 hover:!bg-slate-800/90 [&_td]:!bg-slate-900/85 hover:[&_td]:!bg-slate-800/90 [&_td]:!text-slate-100"
+                      className="border-slate-200 !bg-white hover:!bg-slate-50 [&_td]:!bg-white hover:[&_td]:!bg-slate-50 [&_td]:!text-slate-900 dark:border-slate-700/80 dark:!bg-slate-900/85 dark:hover:!bg-slate-800/90 dark:[&_td]:!bg-slate-900/85 dark:hover:[&_td]:!bg-slate-800/90 dark:[&_td]:!text-slate-100"
                     >
-                      <TableCell className="!bg-slate-900/85 pl-8 font-medium !text-slate-100">
+                      <TableCell className="!bg-white pl-8 font-medium !text-slate-900 dark:!bg-slate-900/85 dark:!text-slate-100">
                         <button
                           type="button"
-                          className="inline-flex items-center gap-2 rounded-md py-1 pr-2 text-left -ml-1 text-slate-100 hover:bg-slate-800"
+                          className="inline-flex items-center gap-2 rounded-md py-1 pr-2 text-left -ml-1 text-slate-900 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-800"
                           onClick={() =>
                             setExpandedModels((prev) => {
                               const next = new Set(prev);
@@ -1038,10 +1038,10 @@ export function VehicleCatalogManager() {
                           {mg.model}
                         </button>
                       </TableCell>
-                      <TableCell className="!bg-slate-900/85 !text-slate-400 text-sm font-medium" colSpan={5}>
+                      <TableCell className="!bg-white !text-slate-600 text-sm font-medium dark:!bg-slate-900/85 dark:!text-slate-400" colSpan={5}>
                         {mg.rows.length} variant{mg.rows.length === 1 ? "" : "s"}
                       </TableCell>
-                      <TableCell className="!bg-slate-900/85" />
+                      <TableCell className="!bg-white dark:!bg-slate-900/85" />
                     </TableRow>,
                   );
                   if (!modelOpen) continue;
@@ -1049,10 +1049,10 @@ export function VehicleCatalogManager() {
                     rowsOut.push(
                       <TableRow
                         key={row.id}
-                        className="border-slate-800 !bg-slate-950/40 hover:!bg-slate-800/35 data-[state=selected]:!bg-slate-800/50 [&_td]:!text-slate-200"
+                        className="border-slate-200 !bg-slate-50 hover:!bg-slate-100 data-[state=selected]:!bg-slate-100 [&_td]:!text-slate-700 dark:border-slate-800 dark:!bg-slate-950/40 dark:hover:!bg-slate-800/35 dark:data-[state=selected]:!bg-slate-800/50 dark:[&_td]:!text-slate-200"
                       >
                         <TableCell
-                          className="w-8 min-w-[2rem] border-l-2 border-slate-600 bg-slate-900/50 pl-3"
+                          className="w-8 min-w-[2rem] border-l-2 border-slate-300 bg-slate-50 pl-3 dark:border-slate-600 dark:bg-slate-900/50"
                           aria-hidden
                         />
                         <TableCell className="!text-slate-100 font-medium">{row.model}</TableCell>
@@ -1074,7 +1074,7 @@ export function VehicleCatalogManager() {
                               type="button"
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 text-slate-400 hover:text-white hover:bg-slate-800"
+                              className="h-8 w-8 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800"
                               onClick={() => setViewRecord(row)}
                               title="View details"
                             >
@@ -1084,7 +1084,7 @@ export function VehicleCatalogManager() {
                               type="button"
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 text-slate-400 hover:text-white hover:bg-slate-800"
+                              className="h-8 w-8 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800"
                               onClick={() => openEdit(row)}
                               title="Edit"
                             >
@@ -1885,7 +1885,7 @@ export function VehicleCatalogManager() {
                   Math.round((importProgress.current / importProgress.total) * 100),
                 )}
                 className="h-2.5 bg-slate-200"
-                indicatorClassName="bg-slate-900"
+                indicatorClassName="bg-slate-300 dark:bg-slate-900"
               />
               <div className="flex items-center gap-2 text-xs text-slate-500">
                 <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" aria-hidden />

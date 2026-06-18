@@ -2,7 +2,7 @@
  * Admin CRUD for haulage freight catalog + body capacity.
  */
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
-import { requireProductAdmin } from "../../_shared/productAdmin.ts";
+import { requireProductAdminAny } from "../../_shared/productAdmin.ts";
 import { invalidateHaulageCatalogCache } from "../haulage/catalogDb.ts";
 import { invalidateVehicleTypesCache } from "../fare/vehicleTypesDb.ts";
 import { invalidateServiceMatchingCache } from "../fare/serviceMatching.ts";
@@ -23,7 +23,7 @@ export function registerHaulageCatalogAdminRoutes(
   ridesDbOrResponse: (c: { json: (body: unknown, status?: number) => Response }) => Promise<DbBundle | Response>,
 ) {
   admin.get("/haulage/categories", async (c) => {
-    const adminUser = await requireProductAdmin(c, "rides");
+    const adminUser = await requireProductAdminAny(c, ["haul", "rides"]);
     if (adminUser instanceof Response) return adminUser;
     const resolved = await ridesDbOrResponse(c);
     if (resolved instanceof Response) return resolved;
@@ -34,7 +34,7 @@ export function registerHaulageCatalogAdminRoutes(
   });
 
   admin.post("/haulage/categories", async (c) => {
-    const adminUser = await requireProductAdmin(c, "rides");
+    const adminUser = await requireProductAdminAny(c, ["haul", "rides"]);
     if (adminUser instanceof Response) return adminUser;
     const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
     const resolved = await ridesDbOrResponse(c);
@@ -56,7 +56,7 @@ export function registerHaulageCatalogAdminRoutes(
   });
 
   admin.patch("/haulage/categories/:id", async (c) => {
-    const adminUser = await requireProductAdmin(c, "rides");
+    const adminUser = await requireProductAdminAny(c, ["haul", "rides"]);
     if (adminUser instanceof Response) return adminUser;
     const id = decodeURIComponent(c.req.param("id"));
     const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
@@ -73,7 +73,7 @@ export function registerHaulageCatalogAdminRoutes(
   });
 
   admin.get("/haulage/items", async (c) => {
-    const adminUser = await requireProductAdmin(c, "rides");
+    const adminUser = await requireProductAdminAny(c, ["haul", "rides"]);
     if (adminUser instanceof Response) return adminUser;
     const categoryId = c.req.query("category_id")?.trim();
     const resolved = await ridesDbOrResponse(c);
@@ -103,7 +103,7 @@ export function registerHaulageCatalogAdminRoutes(
   });
 
   admin.post("/haulage/items", async (c) => {
-    const adminUser = await requireProductAdmin(c, "rides");
+    const adminUser = await requireProductAdminAny(c, ["haul", "rides"]);
     if (adminUser instanceof Response) return adminUser;
     const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
     const resolved = await ridesDbOrResponse(c);
@@ -128,7 +128,7 @@ export function registerHaulageCatalogAdminRoutes(
   });
 
   admin.patch("/haulage/items/:id", async (c) => {
-    const adminUser = await requireProductAdmin(c, "rides");
+    const adminUser = await requireProductAdminAny(c, ["haul", "rides"]);
     if (adminUser instanceof Response) return adminUser;
     const id = decodeURIComponent(c.req.param("id"));
     const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
@@ -148,7 +148,7 @@ export function registerHaulageCatalogAdminRoutes(
   });
 
   admin.put("/haulage/items/:itemId/variants/:variantId", async (c) => {
-    const adminUser = await requireProductAdmin(c, "rides");
+    const adminUser = await requireProductAdminAny(c, ["haul", "rides"]);
     if (adminUser instanceof Response) return adminUser;
     const itemId = decodeURIComponent(c.req.param("itemId"));
     const variantId = decodeURIComponent(c.req.param("variantId"));
@@ -180,7 +180,7 @@ export function registerHaulageCatalogAdminRoutes(
   });
 
   admin.patch("/vehicle-types/:slug/capacity", async (c) => {
-    const adminUser = await requireProductAdmin(c, "rides");
+    const adminUser = await requireProductAdminAny(c, ["haul", "rides"]);
     if (adminUser instanceof Response) return adminUser;
     const slug = decodeURIComponent(c.req.param("slug")).trim().toLowerCase();
     const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;

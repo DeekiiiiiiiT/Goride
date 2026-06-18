@@ -11,6 +11,7 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@roam/admin-core': path.resolve(__dirname, '../../packages/admin-core/src'),
+      '@roam/hauler-dispatch': path.resolve(__dirname, '../../packages/hauler-dispatch/src'),
     },
   },
   build: {

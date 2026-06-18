@@ -23,6 +23,7 @@ import { EnterpriseOverviewCard } from './product-overviews/EnterpriseOverviewCa
 import { FleetOverviewCard } from './product-overviews/FleetOverviewCard';
 import { RidesOverviewCard } from './product-overviews/RidesOverviewCard';
 import { DriverOverviewCard } from './product-overviews/DriverOverviewCard';
+import { HaulOverviewCard } from './product-overviews/HaulOverviewCard';
 import { PartsSourcingManager } from './parts-sourcing/PartsSourcingManager';
 import { StationDatabaseView } from '../fuel/stations/StationDatabaseView';
 import { GasStationAnalytics } from '../fuel/stations/GasStationAnalytics';
@@ -159,7 +160,7 @@ export function AdminPortal() {
         </div>
       )}
       {currentPage === 'global-identity' && (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden min-h-[560px] p-2">
+        <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/40 overflow-hidden min-h-[560px] p-2">
           <GlobalIdentitySearch />
         </div>
       )}
@@ -235,18 +236,23 @@ export function AdminPortal() {
         </div>
       )}
       {currentPage === 'roam-dash-overview' && (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden min-h-[600px]">
+        <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/40 overflow-hidden min-h-[600px]">
           <DashOverviewCard />
         </div>
       )}
       {currentPage === 'roam-rides-overview' && (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden min-h-[600px]">
+        <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/40 overflow-hidden min-h-[600px]">
           <RidesOverviewCard />
         </div>
       )}
       {currentPage === 'roam-driver-overview' && (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden min-h-[600px]">
+        <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/40 overflow-hidden min-h-[600px]">
           <DriverOverviewCard />
+        </div>
+      )}
+      {currentPage === 'roam-haul-overview' && (
+        <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/40 overflow-hidden min-h-[600px]">
+          <HaulOverviewCard />
         </div>
       )}
       {currentPage === 'settings' && <PlatformSettings />}

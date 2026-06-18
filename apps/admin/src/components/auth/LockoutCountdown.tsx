@@ -63,7 +63,7 @@ export function LockoutCountdown({
           Too many failed login attempts on {portalName}. Please wait before trying again.
         </p>
 
-        <div className="bg-slate-900 border border-red-800/40 rounded-lg px-6 py-4 mb-4 inline-block min-w-[200px]">
+        <div className="bg-white border border-red-300 dark:bg-slate-900 dark:border-red-800/40 rounded-lg px-6 py-4 mb-4 inline-block min-w-[200px]">
           <div className="flex items-center justify-center gap-2 mb-1.5">
             <Clock className="h-4 w-4 text-red-400" />
             <span className="text-xs font-medium text-red-400 uppercase tracking-wider">

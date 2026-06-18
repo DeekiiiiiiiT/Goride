@@ -234,7 +234,7 @@ export function TeamMembers({ productLine }: TeamMembersProps) {
   function SortableHeader({ label, col }: { label: string; col: SortKey }) {
     return (
       <th className="px-4 py-3 whitespace-nowrap">
-        <button onClick={() => toggleSort(col)} className="inline-flex items-center gap-1 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:text-white transition-colors">
+        <button onClick={() => toggleSort(col)} className="inline-flex items-center gap-1 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:text-slate-900 transition-colors dark:hover:text-white">
           {label}
           <SortIcon col={col} />
         </button>
@@ -410,8 +410,8 @@ export function TeamMembers({ productLine }: TeamMembersProps) {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-white">{title}</h1>
-          <p className="text-sm text-slate-400 mt-0.5 max-w-xl">{description}</p>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white">{title}</h1>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5 max-w-xl">{description}</p>
           <p className="text-xs text-slate-500 mt-2">
             {displayed.length} result{displayed.length !== 1 ? 's' : ''}
             {displayed.length !== members.length ? ` (filtered from ${members.length})` : ''}
@@ -419,11 +419,11 @@ export function TeamMembers({ productLine }: TeamMembersProps) {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={handleExport} disabled={displayed.length === 0}
-            className="inline-flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-sm rounded-lg transition-colors disabled:opacity-50">
+            className="inline-flex items-center gap-2 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 dark:text-slate-300 text-sm rounded-lg transition-colors disabled:opacity-50">
             <Download className="w-4 h-4" /> Export
           </button>
           <button onClick={() => refetch()} disabled={loading}
-            className="inline-flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-sm rounded-lg transition-colors disabled:opacity-50">
+            className="inline-flex items-center gap-2 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 dark:text-slate-300 text-sm rounded-lg transition-colors disabled:opacity-50">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
           </button>
         </div>
@@ -432,12 +432,12 @@ export function TeamMembers({ productLine }: TeamMembersProps) {
       {/* Summary stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Total Members', value: stats.total, color: 'text-white' },
+          { label: 'Total Members', value: stats.total, color: 'text-slate-900 dark:text-white' },
           { label: 'Fleet Managers', value: stats.managers, color: 'text-blue-400' },
           { label: 'Fleet Accountants', value: stats.accountants, color: 'text-emerald-400' },
           { label: 'Fleet Viewers', value: stats.viewers, color: 'text-slate-300' },
         ].map(s => (
-          <div key={s.label} className="bg-slate-900 border border-slate-800 rounded-lg px-4 py-3">
+          <div key={s.label} className="bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-lg px-4 py-3">
             <p className="text-xs text-slate-500 mb-0.5">{s.label}</p>
             <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
           </div>
@@ -449,10 +449,10 @@ export function TeamMembers({ productLine }: TeamMembersProps) {
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
           <input type="text" placeholder="Search by name or email..." value={search} onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50" />
+            className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50" />
         </div>
         <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)}
-          className="appearance-none px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/50 cursor-pointer">
+          className="appearance-none px-3 py-2 bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/50 cursor-pointer">
           <option value="all">All Roles</option>
           <option value="fleet_manager">Fleet Manager</option>
           <option value="fleet_accountant">Fleet Accountant</option>
@@ -461,13 +461,13 @@ export function TeamMembers({ productLine }: TeamMembersProps) {
         <div className="relative">
           <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
           <select value={orgFilter} onChange={e => setOrgFilter(e.target.value)}
-            className="appearance-none pl-9 pr-8 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/50 cursor-pointer">
+            className="appearance-none pl-9 pr-8 py-2 bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/50 cursor-pointer">
             <option value="all">All Organizations</option>
             {orgNames.map(n => <option key={n} value={n}>{n}</option>)}
           </select>
         </div>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-          className="appearance-none px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/50 cursor-pointer">
+          className="appearance-none px-3 py-2 bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/50 cursor-pointer">
           <option value="all">All Statuses</option>
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
@@ -492,11 +492,11 @@ export function TeamMembers({ productLine }: TeamMembersProps) {
       {/* Empty */}
       {!loading && !error && displayed.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="bg-slate-800 p-4 rounded-2xl mb-4"><UsersRound className="w-8 h-8 text-slate-500" /></div>
-          <h3 className="text-base font-semibold text-white mb-1">
+          <div className="bg-slate-100 p-4 rounded-2xl mb-4 dark:bg-slate-800"><UsersRound className="w-8 h-8 text-slate-500" /></div>
+          <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-1">
             {search || roleFilter !== 'all' || orgFilter !== 'all' || statusFilter !== 'all' ? 'No matching team members' : 'No team members yet'}
           </h3>
-          <p className="text-sm text-slate-400 max-w-xs">
+          <p className="text-sm text-slate-600 dark:text-slate-400 max-w-xs">
             {search || roleFilter !== 'all' || orgFilter !== 'all' || statusFilter !== 'all' ? 'Try adjusting your filters.' : 'Fleet team members will appear here once fleet owners invite them.'}
           </p>
         </div>
@@ -504,11 +504,11 @@ export function TeamMembers({ productLine }: TeamMembersProps) {
 
       {/* Table */}
       {!loading && !error && displayed.length > 0 && (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl">
+        <div className="bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-xl">
           <div className="overflow-x-auto" style={{ overflow: 'visible' }}>
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-800 text-left">
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-left">
                   <SortableHeader label="Name" col="name" />
                   <SortableHeader label="Email" col="email" />
                   <SortableHeader label="Role" col="role" />
@@ -521,15 +521,15 @@ export function TeamMembers({ productLine }: TeamMembersProps) {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
                 {paginatedList.map(m => (
-                  <tr key={m.id} className="hover:bg-slate-800/40 transition-colors">
+                  <tr key={m.id} className="hover:bg-slate-50 transition-colors dark:hover:bg-slate-800/40">
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-300 shrink-0">
+                        <div className="w-8 h-8 rounded-full bg-slate-200 flex dark:bg-slate-800 items-center justify-center text-xs font-bold text-slate-300 shrink-0">
                           {(m.name || m.email)[0]?.toUpperCase() || '?'}
                         </div>
-                        <span className="font-medium text-white truncate max-w-[200px]">{m.name || '(No name)'}</span>
+                        <span className="font-medium text-slate-900 dark:text-white truncate max-w-[200px]">{m.name || '(No name)'}</span>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-slate-400 whitespace-nowrap truncate max-w-[220px]">{m.email}</td>
@@ -565,35 +565,35 @@ export function TeamMembers({ productLine }: TeamMembersProps) {
                             setDropdownPos({ top: rect.bottom + 4, left: rect.right - 192 });
                             setOpenDropdown(m.id);
                           }}
-                          className="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+                          className="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-900 dark:hover:bg-slate-700 dark:text-slate-400 dark:hover:text-slate-900 transition-colors dark:hover:text-white"
                           title="More actions"
                         >
                           <MoreVertical className="w-4 h-4" />
                         </button>
                         {openDropdown === m.id && (
-                          <div ref={dropdownRef} className="fixed w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl py-1"
+                          <div ref={dropdownRef} className="fixed w-48 bg-white border border-slate-200 rounded-lg dark:bg-slate-800 dark:border-slate-700 shadow-xl py-1"
                             style={{ top: dropdownPos.top, left: dropdownPos.left, zIndex: 9999 }}>
                             {isPlatformOwner && (
-                              <button className="w-full px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2"
+                              <button className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-700 flex items-center gap-2"
                                 onClick={() => { setOpenDropdown(null); setChangeRoleMember(m); setNewRole(m.role); }}>
                                 <UserCog className="w-4 h-4" /> Change Role
                               </button>
                             )}
-                            <button className="w-full px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2"
+                            <button className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-700 flex items-center gap-2"
                               onClick={() => handleResetPassword(m)}>
                               <Mail className="w-4 h-4" /> Reset Password
                             </button>
                             {isPlatformOwner && (
-                              <button className="w-full px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2"
+                              <button className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-700 flex items-center gap-2"
                                 onClick={() => { setOpenDropdown(null); setSetPasswordTarget(m); }}>
                                 <KeyRound className="w-4 h-4" /> Set New Password
                               </button>
                             )}
-                            <button className="w-full px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2"
+                            <button className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-700 flex items-center gap-2"
                               onClick={() => handleForceLogout(m)}>
                               <LogOut className="w-4 h-4" /> Force Logout
                             </button>
-                            <div className="border-t border-slate-700 my-1" />
+                            <div className="border-t border-slate-200 my-1 dark:border-slate-700" />
                             {m.isSuspended ? (
                               <button className="w-full px-3 py-2 text-left text-sm text-emerald-400 hover:bg-slate-700 flex items-center gap-2"
                                 onClick={() => handleToggleSuspend(m)}>
@@ -607,7 +607,7 @@ export function TeamMembers({ productLine }: TeamMembersProps) {
                             )}
                             {isPlatformOwner && (
                               <>
-                                <div className="border-t border-slate-700 my-1" />
+                                <div className="border-t border-slate-200 my-1 dark:border-slate-700" />
                                 <button className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-slate-700 flex items-center gap-2"
                                   onClick={() => handleRemove(m)}>
                                   <Trash2 className="w-4 h-4" /> Remove from Org
@@ -628,25 +628,25 @@ export function TeamMembers({ productLine }: TeamMembersProps) {
 
       {/* Pagination */}
       {!loading && !error && displayed.length > 0 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 gap-3">
-          <div className="flex items-center gap-2 text-sm text-slate-400">
+        <div className="flex flex-col sm:flex-row items-center justify-between bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-xl px-4 py-3 gap-3">
+          <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
             <span>Rows per page:</span>
             <select value={rowsPerPage} onChange={e => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
-              className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50">
+              className="bg-white border border-slate-300 rounded px-2 py-1 text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50">
               <option value={10}>10</option><option value={25}>25</option><option value={50}>50</option>
             </select>
           </div>
-          <span className="text-sm text-slate-400">
+          <span className="text-sm text-slate-600 dark:text-slate-400">
             Showing {Math.min((currentPage - 1) * rowsPerPage + 1, displayed.length)}-{Math.min(currentPage * rowsPerPage, displayed.length)} of {displayed.length}
           </span>
           <div className="flex items-center gap-1">
             <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
-              className="p-1.5 rounded hover:bg-slate-800 text-slate-400 disabled:opacity-30 transition-colors">
+              className="p-1.5 rounded hover:bg-slate-100 text-slate-500 dark:hover:bg-slate-800 dark:text-slate-400 disabled:opacity-30 transition-colors">
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="text-sm text-slate-300 px-2">{currentPage} / {totalPages || 1}</span>
+            <span className="text-sm text-slate-700 dark:text-slate-300 px-2">{currentPage} / {totalPages || 1}</span>
             <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages}
-              className="p-1.5 rounded hover:bg-slate-800 text-slate-400 disabled:opacity-30 transition-colors">
+              className="p-1.5 rounded hover:bg-slate-100 text-slate-500 dark:hover:bg-slate-800 dark:text-slate-400 disabled:opacity-30 transition-colors">
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
@@ -656,18 +656,18 @@ export function TeamMembers({ productLine }: TeamMembersProps) {
       {/* Change Role Modal */}
       {changeRoleMember && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+          <div className="bg-white border border-slate-300 dark:bg-slate-900 dark:border-slate-700 rounded-xl shadow-2xl w-full max-w-sm p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white">Change Role</h2>
-              <button onClick={() => setChangeRoleMember(null)} className="p-1 text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Change Role</h2>
+              <button onClick={() => setChangeRoleMember(null)} className="p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white"><X className="w-5 h-5" /></button>
             </div>
-            <p className="text-sm text-slate-400">
-              Change role for <span className="text-white font-medium">{changeRoleMember.name || changeRoleMember.email}</span>
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              Change role for <span className="text-slate-900 dark:text-slate-900 dark:text-slate-900 dark:text-white font-medium">{changeRoleMember.name || changeRoleMember.email}</span>
             </p>
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1">New Role</label>
               <select value={newRole} onChange={e => setNewRole(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50">
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50">
                 <option value="fleet_manager">Fleet Manager</option>
                 <option value="fleet_accountant">Fleet Accountant</option>
                 <option value="fleet_viewer">Fleet Viewer</option>
@@ -675,7 +675,7 @@ export function TeamMembers({ productLine }: TeamMembersProps) {
             </div>
             <div className="flex justify-end gap-3 pt-2">
               <button onClick={() => setChangeRoleMember(null)}
-                className="px-4 py-2 text-sm text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors">
+                className="px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 border border-slate-300 dark:text-slate-300 dark:hover:text-white dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 rounded-lg transition-colors">
                 Cancel
               </button>
               <button onClick={handleChangeRoleSubmit} disabled={newRole === changeRoleMember.role || changeRoleLoading}

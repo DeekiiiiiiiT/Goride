@@ -157,7 +157,7 @@ export function MatchingBrainPage() {
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Matching Brain</h1>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Matching Brain</h1>
           <p className="text-slate-400">
             Central dispatch configuration for all Roam products
           </p>
@@ -186,15 +186,15 @@ export function MatchingBrainPage() {
       )}
 
       {success && (
-        <Alert className="border-green-500 bg-green-500/10">
-          <CheckCircle2 className="h-4 w-4 text-green-500" />
-          <AlertTitle className="text-green-400">Success</AlertTitle>
-          <AlertDescription className="text-green-300">{success}</AlertDescription>
+        <Alert className="border-green-200 bg-green-50 dark:border-green-500 dark:bg-green-500/10">
+          <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-500" />
+          <AlertTitle className="text-green-800 dark:text-green-400">Success</AlertTitle>
+          <AlertDescription className="text-green-700 dark:text-green-300">{success}</AlertDescription>
         </Alert>
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="bg-slate-900 border border-slate-800">
+        <TabsList className="bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
           <TabsTrigger value="dispatch">
             <Settings className="h-4 w-4 mr-2" />
             Dispatch
@@ -325,7 +325,7 @@ export function MatchingBrainPage() {
           
           <Card>
             <CardHeader>
-              <CardTitle className="text-white">Feature Flags</CardTitle>
+              <CardTitle className="text-slate-900 dark:text-white">Feature Flags</CardTitle>
               <CardDescription className="text-slate-400">
                 Environment variables controlling brain behavior
               </CardDescription>
@@ -336,9 +336,9 @@ export function MatchingBrainPage() {
                   {Object.entries(status.flags).map(([key, value]) => (
                     <div
                       key={key}
-                      className="flex items-center justify-between p-2 border border-slate-700 rounded bg-slate-900/50"
+                      className="flex items-center justify-between p-2 border border-slate-200 rounded bg-white dark:border-slate-700 dark:bg-slate-900/50"
                     >
-                      <code className="text-sm text-slate-300">{key}</code>
+                      <code className="text-sm text-slate-700 dark:text-slate-300">{key}</code>
                       <Badge variant={value === "1" ? "default" : "secondary"}>
                         {value || "0"}
                       </Badge>

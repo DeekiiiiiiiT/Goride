@@ -22,6 +22,8 @@
     "deploy:payments": "npx supabase functions deploy payments --use-api --project-ref csfllzzastacofsvcdsc",
     "dev:rides-passenger": "pnpm --filter @roam/rides-passenger dev",
     "build:rides-passenger": "pnpm --filter @roam/rides-passenger build",
+    "dev:haul": "pnpm --filter @roam/haul dev",
+    "build:haul": "pnpm --filter @roam/haul build",
     "cap:driver:sync": "pnpm --filter @roam/driver cap:sync",
     "cap:driver:release": "pnpm --filter @roam/driver cap:release",
     "cap:driver:aab": "pnpm --filter @roam/driver cap:aab",
@@ -30,7 +32,8 @@
     "cap:rides:release": "pnpm --filter @roam/rides-passenger cap:release",
     "cap:rides:aab": "pnpm --filter @roam/rides-passenger cap:aab",
     "cap:rides:android": "pnpm --filter @roam/rides-passenger cap:open:android",
-    "deploy:rides": "npx supabase functions deploy rides --use-api --project-ref csfllzzastacofsvcdsc"
+    "deploy:rides": "npx supabase functions deploy rides --use-api --project-ref csfllzzastacofsvcdsc",
+    "deploy:haul": "npx supabase functions deploy haul --use-api --project-ref csfllzzastacofsvcdsc"
   },
   "devDependencies": {
     "typescript": "^5.4.0"

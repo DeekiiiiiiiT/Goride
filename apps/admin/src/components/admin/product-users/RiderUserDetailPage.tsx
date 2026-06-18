@@ -107,16 +107,16 @@ export function RiderUserDetailPage({ userId, onBack }: RiderUserDetailPageProps
       <button
         type="button"
         onClick={onBack}
-        className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-white"
+        className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
       >
         <ArrowLeft className="w-4 h-4" />
         Back to directory
       </button>
 
-      <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-5 space-y-4">
+      <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/50 p-5 space-y-4">
         <div>
-          <h1 className="text-lg font-semibold text-white">{rider.display_name || 'Rider'}</h1>
-          <p className="text-sm text-slate-400">{rider.email}</p>
+          <h1 className="text-lg font-semibold text-slate-900 dark:text-white">{rider.display_name || 'Rider'}</h1>
+          <p className="text-sm text-slate-600 dark:text-slate-400">{rider.email}</p>
           <span
             className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-xs capitalize ${
               rider.account_status === 'active'
@@ -132,11 +132,11 @@ export function RiderUserDetailPage({ userId, onBack }: RiderUserDetailPageProps
         <div className="grid grid-cols-2 gap-3 text-xs text-slate-400">
           <div>
             <p className="text-slate-500">Lifetime spend</p>
-            <p className="text-white font-medium">{formatMoneyMinor(rider.stats.lifetime_spend_minor)}</p>
+            <p className="text-slate-900 dark:text-slate-900 dark:text-slate-900 dark:text-white font-medium">{formatMoneyMinor(rider.stats.lifetime_spend_minor)}</p>
           </div>
           <div>
             <p className="text-slate-500">Trips completed</p>
-            <p className="text-white font-medium">{rider.stats.completed_trips}</p>
+            <p className="text-slate-900 dark:text-slate-900 dark:text-slate-900 dark:text-white font-medium">{rider.stats.completed_trips}</p>
           </div>
         </div>
       </div>
@@ -146,7 +146,7 @@ export function RiderUserDetailPage({ userId, onBack }: RiderUserDetailPageProps
         <input
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-sm text-white"
+          className="w-full px-3 py-2 rounded-lg bg-white border border-slate-300 dark:bg-slate-950 dark:border-slate-800 text-sm text-slate-900 dark:text-white"
         />
       </div>
 
@@ -156,7 +156,7 @@ export function RiderUserDetailPage({ userId, onBack }: RiderUserDetailPageProps
             type="button"
             disabled={busy}
             onClick={() => suspendMut.mutate()}
-            className="px-3 py-2 text-xs rounded-lg bg-slate-800 border border-slate-700 text-amber-200"
+            className="px-3 py-2 text-xs rounded-lg bg-white border border-slate-300 text-amber-700 dark:bg-slate-800 dark:border-slate-700 dark:text-amber-200"
           >
             Suspend
           </button>
@@ -182,7 +182,7 @@ export function RiderUserDetailPage({ userId, onBack }: RiderUserDetailPageProps
             type="button"
             disabled={busy}
             onClick={() => signOutMut.mutate()}
-            className="px-3 py-2 text-xs rounded-lg bg-slate-800 border border-slate-700 text-slate-200"
+            className="px-3 py-2 text-xs rounded-lg bg-white border border-slate-300 text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
           >
             Sign out all devices
           </button>

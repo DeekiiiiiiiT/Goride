@@ -58,7 +58,7 @@ export function OverviewTab({ onNavigate }: { onNavigate?: (page: string) => voi
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border
                 ${range === r
                   ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                  : 'bg-slate-900/40 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800'}
+                  : 'bg-white text-slate-600 border-slate-200 hover:text-slate-900 hover:bg-slate-50 dark:bg-slate-900/40 dark:text-slate-400 dark:border-slate-800 dark:hover:text-white dark:hover:bg-slate-800'}
               `}
             >
               {r === 'today' ? 'Today' : r === '7d' ? 'Last 7 days' : r === 'mtd' ? 'Month to date' : 'Last 30 days'}
@@ -67,7 +67,7 @@ export function OverviewTab({ onNavigate }: { onNavigate?: (page: string) => voi
         </div>
         <button
           onClick={() => qc.invalidateQueries({ queryKey: ['api-center'] })}
-          className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-900/40 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs rounded-lg transition-colors"
+          className="inline-flex items-center gap-2 px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 dark:bg-slate-900/40 dark:hover:bg-slate-800 dark:border-slate-800 dark:text-slate-300 text-xs rounded-lg transition-colors"
         >
           <RefreshCw className="w-3.5 h-3.5" /> Refresh
         </button>
@@ -122,7 +122,7 @@ function StatCard({ label, value, tint }: { label: string; value: string; tint: 
     tint === 'sky'     ? 'border-sky-500/20' :
     tint === 'red'     ? 'border-red-500/30' :
     tint === 'emerald' ? 'border-emerald-500/20' :
-                         'border-slate-800';
+                         'border-slate-200 dark:border-slate-200 dark:border-slate-800';
   const color =
     tint === 'amber'   ? 'text-amber-300' :
     tint === 'sky'     ? 'text-sky-300' :
@@ -130,7 +130,7 @@ function StatCard({ label, value, tint }: { label: string; value: string; tint: 
     tint === 'emerald' ? 'text-emerald-300' :
                          'text-slate-300';
   return (
-    <div className={`bg-slate-900/40 border rounded-xl px-4 py-3 ${ring}`}>
+    <div className={`bg-white border border-slate-200 rounded-xl dark:bg-slate-900/40 dark:border-slate-800 px-4 py-3 ${ring}`}>
       <div className="text-[11px] uppercase tracking-wider text-slate-500">{label}</div>
       <div className={`text-xl font-semibold mt-1 ${color}`}>{value}</div>
     </div>
@@ -165,15 +165,15 @@ function ProviderCard({
   const barColor = budgetPct >= 100 ? 'bg-red-500' : budgetPct >= 80 ? 'bg-amber-500' : 'bg-emerald-500';
 
   return (
-    <div className={`bg-slate-900/40 border rounded-xl overflow-hidden ${killDisabled ? 'border-red-500/30' : 'border-slate-800'}`}>
+    <div className={`bg-white border border-slate-200 rounded-xl dark:bg-slate-900/40 dark:border-slate-800 overflow-hidden ${killDisabled ? 'border-red-500/30' : 'border-slate-200 dark:border-slate-200 dark:border-slate-800'}`}>
       <div className="flex items-start justify-between px-4 pt-4">
         <div className="flex items-start gap-3">
-          <div className="bg-slate-800/80 p-2 rounded-lg">
+          <div className="bg-slate-100 p-2 rounded-lg dark:bg-slate-800/80">
             <Icon className={`w-4 h-4 ${meta.color}`} />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-white">{meta.label}</h3>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{meta.label}</h3>
               {killDisabled && (
                 <span className="text-[10px] uppercase tracking-wider bg-red-500/15 text-red-300 border border-red-500/30 px-1.5 py-0.5 rounded font-semibold">
                   Disabled
@@ -197,7 +197,7 @@ function ProviderCard({
           className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1.5 rounded-lg border transition-colors
             ${killDisabled
               ? 'bg-red-500/10 border-red-500/30 text-red-300 hover:bg-red-500/20'
-              : 'bg-slate-800/60 border-slate-700 text-slate-300 hover:bg-slate-800'}
+              : 'bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200 dark:bg-slate-800/60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'}
           `}
         >
           {killDisabled ? <ShieldOff className="w-3.5 h-3.5" /> : <ShieldCheck className="w-3.5 h-3.5" />}
@@ -222,7 +222,7 @@ function ProviderCard({
               : 'No cap set'}
           </span>
         </div>
-        <div className="relative h-1.5 bg-slate-800 rounded-full mt-1 overflow-hidden">
+        <div className="relative h-1.5 bg-slate-200 rounded-full dark:bg-slate-800 mt-1 overflow-hidden">
           <div className={`absolute inset-y-0 left-0 ${barColor}`} style={{ width: `${Math.min(100, budgetPct)}%` }} />
         </div>
         {hardStop && budgetPct >= 100 && (
@@ -232,7 +232,7 @@ function ProviderCard({
         )}
       </div>
 
-      <div className="flex items-center justify-between px-4 py-3 mt-3 border-t border-slate-800 bg-slate-900/60">
+      <div className="flex items-center justify-between px-4 py-3 mt-3 border-t border-slate-200 dark:border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/60">
         <button
           onClick={() => onNavigate?.('api-center-usage')}
           className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-400 hover:text-amber-300 transition-colors"

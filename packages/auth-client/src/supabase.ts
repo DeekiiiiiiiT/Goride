@@ -35,5 +35,15 @@ export const supabaseDriverApp = createRoamAuthClient(`sb-${projectId}-auth-driv
  */
 export const supabaseDriverAdmin = createRoamAuthClient(`sb-${projectId}-auth-admin`);
 
+/**
+ * Roam Haul consumer app (`/`). Isolated from haul admin and other Roam apps.
+ */
+export const supabaseHaulApp = createRoamAuthClient(`sb-${projectId}-auth-haul`);
+
+/**
+ * Roam Haul admin portal (`/admin`).
+ */
+export const supabaseHaulAdmin = createRoamAuthClient(`sb-${projectId}-auth-haul-admin`);
+
 /** Default export for packages that expect a single client (driver app surface). */
 export const supabase = supabaseDriverApp;

@@ -565,6 +565,8 @@ export interface DispatchAutomationSettings {
   wait_time_max_minutes: number;
 }
 
+export type DriverDispatchMode = 'haulage' | 'rideshare';
+
 export interface DriverPresenceBody {
   lat: number;
   lng: number;
@@ -572,6 +574,8 @@ export interface DriverPresenceBody {
   available_for_rides?: boolean;
   /** Normalized rides body-type slug (from Commando motor vehicle catalog). */
   body_type_slug?: string;
+  /** When set, driver only receives offers for this product mode. */
+  dispatch_mode?: DriverDispatchMode;
 }
 
 export interface DriverTransitionBody {

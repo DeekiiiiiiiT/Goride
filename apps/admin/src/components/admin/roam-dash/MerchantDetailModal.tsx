@@ -317,7 +317,7 @@ export function MerchantDetailModal({
                       No history yet.
                     </p>
                   ) : (
-                    <ol className="relative border-l border-slate-700 ml-3 space-y-4">
+                    <ol className="relative border-l border-slate-300 ml-3 dark:border-slate-700 space-y-4">
                       {auditLog.map((entry) => (
                         <li key={entry.id} className="ml-4">
                           <span className="absolute -left-1.5 flex items-center justify-center w-3 h-3 rounded-full bg-amber-500/80 ring-4 ring-slate-900" />

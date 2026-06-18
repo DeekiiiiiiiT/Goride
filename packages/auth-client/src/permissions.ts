@@ -31,6 +31,8 @@ export type Role =
   | 'rides_ops'
   | 'driver_admin'
   | 'driver_ops'
+  | 'haul_admin'
+  | 'haul_ops'
   | 'fleet_admin'
   | 'fleet_ops'
   | 'enterprise_admin'
@@ -41,7 +43,9 @@ export type Role =
   | 'fleet_accountant'
   | 'fleet_viewer'
   // Driver
-  | 'driver';
+  | 'driver'
+  // Hauler (Roam Haul consumer)
+  | 'hauler';
 
 /** Roles that have historically been stored in Supabase user_metadata. */
 export type LegacyRole = 'superadmin' | 'admin' | 'manager' | 'viewer';
@@ -119,6 +123,18 @@ export const ROLE_META: Record<Role, RoleMeta> = {
     description: 'Manage driver compliance and support tools.',
     tier: 'platform',
   },
+  haul_admin: {
+    level: 800,
+    label: 'Haul Admin',
+    description: 'Full access to Roam Haul admin — catalog, transport, hauler ops.',
+    tier: 'platform',
+  },
+  haul_ops: {
+    level: 600,
+    label: 'Haul Operations',
+    description: 'Manage haulage catalog and hauler operations.',
+    tier: 'platform',
+  },
   fleet_admin: {
     level: 800,
     label: 'Fleet Admin',
@@ -175,6 +191,12 @@ export const ROLE_META: Record<Role, RoleMeta> = {
     level: 100,
     label: 'Driver',
     description: 'Driver portal — earnings, expenses, trips, profile.',
+    tier: 'driver',
+  },
+  hauler: {
+    level: 100,
+    label: 'Hauler',
+    description: 'Roam Haul — freight dispatch, manifest, earnings.',
     tier: 'driver',
   },
 };
@@ -378,6 +400,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   rides_ops: [],
   driver_admin: [],
   driver_ops: [],
+  haul_admin: [],
+  haul_ops: [],
 
   // Customer
   fleet_owner: ALL_CUSTOMER_PERMISSIONS,
@@ -387,6 +411,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
 
   // Driver
   driver: [],
+  hauler: [],
 };
 
 // ---------------------------------------------------------------------------

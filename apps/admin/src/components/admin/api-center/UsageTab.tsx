@@ -55,7 +55,7 @@ export function UsageTab() {
           <select
             value={provider}
             onChange={(e) => setProvider(e.target.value as Provider)}
-            className="bg-slate-900/60 border border-slate-800 text-slate-200 text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-500/50"
+            className="bg-white border border-slate-200 dark:bg-slate-900/60 dark:border-slate-800 text-slate-200 text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-500/50"
           >
             {PROVIDER_ORDER.map((p) => (
               <option key={p} value={p}>{PROVIDER_META[p].label}</option>
@@ -68,7 +68,7 @@ export function UsageTab() {
               className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors
                 ${range === r
                   ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                  : 'bg-slate-900/40 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800'}
+                  : 'bg-white text-slate-600 border-slate-200 hover:text-slate-900 hover:bg-slate-50 dark:bg-slate-900/40 dark:text-slate-400 dark:border-slate-800 dark:hover:text-white dark:hover:bg-slate-800'}
               `}
             >
               {r === '7d' ? 'Last 7 days' : r === 'mtd' ? 'Month to date' : 'Last 30 days'}
@@ -78,7 +78,7 @@ export function UsageTab() {
         <button
           onClick={downloadCsv}
           disabled={series.length === 0}
-          className="inline-flex items-center gap-2 bg-slate-900/40 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-40"
+          className="inline-flex items-center gap-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 dark:bg-slate-900/40 dark:hover:bg-slate-800 dark:border-slate-800 dark:text-slate-300 text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-40"
         >
           <Download className="w-3.5 h-3.5" /> Export CSV
         </button>
@@ -111,9 +111,9 @@ export function UsageTab() {
             <SparklineSvg series={series} accessor={(p) => p.costUSD} stroke="#f59e0b" formatY={(v) => `$${v.toFixed(2)}`} />
           </ChartCard>
 
-          <section className="bg-slate-900/40 border border-slate-800 rounded-xl overflow-hidden">
-            <header className="px-4 py-3 border-b border-slate-800">
-              <h3 className="text-sm font-semibold text-white">Top routes (last 24h)</h3>
+          <section className="bg-white border border-slate-200 dark:bg-slate-900/40 dark:border-slate-800 rounded-xl overflow-hidden">
+            <header className="px-4 py-3 border-b border-slate-200 dark:border-slate-800">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Top routes (last 24h)</h3>
             </header>
             <div className="divide-y divide-slate-800">
               {topRoutes.length === 0 && (
@@ -139,7 +139,7 @@ export function UsageTab() {
 function StatBlock({ label, value, tone = 'slate' }: { label: string; value: string; tone?: 'amber' | 'red' | 'slate' }) {
   const color = tone === 'amber' ? 'text-amber-300' : tone === 'red' ? 'text-red-300' : 'text-white';
   return (
-    <div className="bg-slate-900/40 border border-slate-800 rounded-xl px-4 py-3">
+    <div className="bg-white border border-slate-200 dark:bg-slate-900/40 dark:border-slate-800 rounded-xl px-4 py-3">
       <div className="text-[11px] uppercase tracking-wider text-slate-500">{label}</div>
       <div className={`text-xl font-semibold mt-1 ${color}`}>{value}</div>
     </div>
@@ -149,10 +149,10 @@ function StatBlock({ label, value, tone = 'slate' }: { label: string; value: str
 function ChartCard({ title, color, children }: { title: string; color: 'sky' | 'amber'; children: React.ReactNode }) {
   const dot = color === 'sky' ? 'bg-sky-500/60' : 'bg-amber-500/60';
   return (
-    <section className="bg-slate-900/40 border border-slate-800 rounded-xl overflow-hidden">
-      <header className="px-4 py-3 border-b border-slate-800 flex items-center gap-2">
+    <section className="bg-white border border-slate-200 dark:bg-slate-900/40 dark:border-slate-800 rounded-xl overflow-hidden">
+      <header className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center gap-2">
         <span className={`w-2 h-2 rounded-full ${dot}`} />
-        <h3 className="text-sm font-semibold text-white">{title}</h3>
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{title}</h3>
       </header>
       <div className="p-4">{children}</div>
     </section>

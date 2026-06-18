@@ -44,10 +44,10 @@ export function CrossProductStatusPanel({ status, loading }: CrossProductStatusP
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-slate-800/50 rounded-lg p-4">
+        <div className="bg-slate-50 rounded-lg p-4 dark:bg-slate-800/50">
           <div className="flex items-center gap-2 mb-3">
             <Car className="w-4 h-4 text-amber-400" />
-            <span className="text-sm font-medium text-white">Roam Driver</span>
+            <span className="text-sm font-medium text-slate-900 dark:text-white">Roam Driver</span>
             {status.products.driver?.exists ? (
               <CircleCheck className="w-4 h-4 text-emerald-400 ml-auto" />
             ) : (
@@ -88,10 +88,10 @@ export function CrossProductStatusPanel({ status, loading }: CrossProductStatusP
           )}
         </div>
 
-        <div className="bg-slate-800/50 rounded-lg p-4">
+        <div className="bg-slate-50 rounded-lg p-4 dark:bg-slate-800/50">
           <div className="flex items-center gap-2 mb-3">
             <Navigation className="w-4 h-4 text-emerald-400" />
-            <span className="text-sm font-medium text-white">Roam Rides</span>
+            <span className="text-sm font-medium text-slate-900 dark:text-white">Roam Rides</span>
             {status.products.rider?.exists ? (
               <CircleCheck className="w-4 h-4 text-emerald-400 ml-auto" />
             ) : (
@@ -130,10 +130,10 @@ export function CrossProductStatusPanel({ status, loading }: CrossProductStatusP
           )}
         </div>
 
-        <div className="bg-slate-800/50 rounded-lg p-4">
+        <div className="bg-slate-50 rounded-lg p-4 dark:bg-slate-800/50">
           <div className="flex items-center gap-2 mb-3">
             <Truck className="w-4 h-4 text-blue-400" />
-            <span className="text-sm font-medium text-white">Roam Fleet</span>
+            <span className="text-sm font-medium text-slate-900 dark:text-white">Roam Fleet</span>
             {status.products.fleet?.exists ? (
               <CircleCheck className="w-4 h-4 text-emerald-400 ml-auto" />
             ) : (
@@ -175,7 +175,7 @@ export function CrossProductStatusPanel({ status, loading }: CrossProductStatusP
       </div>
 
       {status.auth_status && (
-        <div className="pt-2 border-t border-slate-800">
+        <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
           <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Auth Status</h4>
           <div className="flex flex-wrap gap-4 text-xs text-slate-400">
             <div>

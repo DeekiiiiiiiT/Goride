@@ -45,7 +45,7 @@ export function BudgetsTab() {
 
   return (
     <div className="space-y-5">
-      <div className="bg-slate-900/40 border border-slate-800 rounded-xl px-4 py-3 flex items-start gap-2.5 text-sm text-slate-400">
+      <div className="bg-white border border-slate-200 dark:bg-slate-900/40 dark:border-slate-800 rounded-xl px-4 py-3 flex items-start gap-2.5 text-sm text-slate-600 dark:text-slate-400">
         <Info className="w-4 h-4 text-sky-400 mt-0.5 shrink-0" />
         <p>
           Budgets are evaluated against the <strong className="text-slate-200">local cost estimate</strong> computed by
@@ -74,13 +74,13 @@ export function BudgetsTab() {
             const server = (data || []).find((b) => b.provider === row.provider);
             const dirty = JSON.stringify(server) !== JSON.stringify(row);
             return (
-              <div key={row.provider} className="bg-slate-900/40 border border-slate-800 rounded-xl p-4">
+              <div key={row.provider} className="bg-white border border-slate-200 dark:bg-slate-900/40 dark:border-slate-800 rounded-xl p-4">
                 <div className="flex items-center gap-3">
-                  <div className="bg-slate-800/80 p-2 rounded-lg">
+                  <div className="bg-slate-100 p-2 rounded-lg dark:bg-slate-800/80">
                     <Icon className={`w-4 h-4 ${meta.color}`} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-semibold text-white">{meta.label}</h3>
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{meta.label}</h3>
                     <p className="text-[11px] text-slate-500">{meta.description}</p>
                   </div>
                   {savedId === row.provider && (
@@ -110,7 +110,7 @@ export function BudgetsTab() {
                       className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-xs font-medium transition-colors
                         ${row.hardStop
                           ? 'bg-red-500/10 border-red-500/30 text-red-300'
-                          : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:bg-slate-800 hover:text-white'}
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:bg-slate-900/60 dark:border-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white'}
                       `}
                     >
                       <span className="inline-flex items-center gap-2">
@@ -131,7 +131,7 @@ export function BudgetsTab() {
                     className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors
                       ${dirty
                         ? 'bg-amber-600 hover:bg-amber-500 text-white'
-                        : 'bg-slate-800/60 text-slate-500 border border-slate-800 cursor-not-allowed'}
+                        : 'bg-slate-100 text-slate-500 border border-slate-200 dark:bg-slate-800/60 dark:border-slate-800 cursor-not-allowed'}
                     `}
                   >
                     {save.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
@@ -159,7 +159,7 @@ function Field({ label, hint, value, onChange }: { label: string; hint: string; 
           step={0.01}
           value={value}
           onChange={(e) => onChange(Math.max(0, Number(e.target.value) || 0))}
-          className="w-full pl-6 pr-3 py-2 bg-slate-900/60 border border-slate-800 text-slate-200 text-sm rounded-lg focus:outline-none focus:border-amber-500/50 font-mono"
+          className="w-full pl-6 pr-3 py-2 bg-white border border-slate-200 dark:bg-slate-900/60 dark:border-slate-800 text-slate-200 text-sm rounded-lg focus:outline-none focus:border-amber-500/50 font-mono"
         />
       </div>
       <div className="text-[10px] text-slate-500 mt-1">{hint}</div>

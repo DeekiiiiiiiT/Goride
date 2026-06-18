@@ -28,4 +28,5 @@ export const API_ENDPOINTS = {
   notifications: `${BASE_URL}/notifications`,
   rides: `${BASE_URL}/rides`,
   driver: `${BASE_URL}/driver`,
+  haul: `${BASE_URL}/haul`,
 };

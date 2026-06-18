@@ -147,7 +147,7 @@ export function AdminLoginPage() {
 
   if (checking) {
     return (
-      <div className="flex items-center justify-center h-screen bg-slate-950">
+      <div className="flex items-center justify-center h-screen bg-slate-100 dark:bg-slate-950">
         <Loader2 className="w-6 h-6 text-slate-400 animate-spin" />
       </div>
     );
@@ -156,16 +156,16 @@ export function AdminLoginPage() {
   const isSetup = !adminExists;
 
   return (
-    <div className="min-h-screen bg-slate-950 flex">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex">
       {/* Left panel — branding */}
-      <div className="hidden lg:flex lg:w-1/2 flex-col items-center justify-center p-12 bg-gradient-to-br from-slate-900 to-slate-950 border-r border-slate-800">
+      <div className="hidden lg:flex lg:w-1/2 flex-col items-center justify-center p-12 bg-gradient-to-br from-slate-100 to-slate-200 border-r border-slate-200 dark:from-slate-900 dark:to-slate-950 dark:border-slate-800">
         <div className="flex items-center gap-3 mb-6">
           <div className="bg-amber-500/20 p-3 rounded-xl">
             <Shield className="w-8 h-8 text-amber-400" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-white tracking-tight">Roam Fleet</h1>
-            <p className="text-slate-400 text-sm">Super Admin Portal</p>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Roam Fleet</h1>
+            <p className="text-slate-600 dark:text-slate-400 text-sm">Super Admin Portal</p>
           </div>
         </div>
         <p className="text-slate-500 text-center max-w-sm leading-relaxed">
@@ -182,12 +182,12 @@ export function AdminLoginPage() {
               <Shield className="w-6 h-6 text-amber-400" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-white tracking-tight">Roam Fleet</h1>
+              <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">Roam Fleet</h1>
               <p className="text-slate-400 text-xs">Super Admin Portal</p>
             </div>
           </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8">
+          <div className="bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-2xl p-8">
             {/* Header */}
             <div className="flex items-center gap-3 mb-6">
               <div className={`p-2 rounded-lg ${isSetup ? 'bg-emerald-500/20' : 'bg-blue-500/20'}`}>
@@ -197,7 +197,7 @@ export function AdminLoginPage() {
                 }
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-white">
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
                   {isSetup ? 'Initial Setup' : 'Admin Login'}
                 </h2>
                 <p className="text-slate-400 text-sm">
@@ -240,38 +240,38 @@ export function AdminLoginPage() {
             <form onSubmit={isSetup ? handleSetup : handleLogin} className="space-y-4">
               {isSetup && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1.5">Full Name</label>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Full Name</label>
                   <input
                     type="text"
                     value={name}
                     onChange={e => setName(e.target.value)}
                     placeholder="Platform Administrator"
-                    className="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 text-sm"
+                    className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-white dark:placeholder:text-slate-500"
                   />
                 </div>
               )}
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Email</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Email</label>
                 <input
                   type="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   placeholder="admin@roamfleet.co"
                   required
-                  className="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 text-sm"
+                  className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-white dark:placeholder:text-slate-500"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Password</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Password</label>
                 <input
                   type="password"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   placeholder={isSetup ? 'Create a strong password' : 'Enter password'}
                   required
-                  className="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 text-sm"
+                  className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-white dark:placeholder:text-slate-500"
                 />
               </div>
 
@@ -294,7 +294,7 @@ export function AdminLoginPage() {
             )}
 
             {/* Footer link back to regular app */}
-            <div className="mt-6 pt-4 border-t border-slate-800 text-center">
+            <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800 text-center">
               <a
                 href="/"
                 className="text-slate-500 hover:text-slate-300 text-sm transition-colors"

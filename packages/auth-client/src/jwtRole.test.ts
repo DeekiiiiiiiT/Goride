@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   canUseDriverSurface,
+  canUseHaulerSurface,
   getJwtRoles,
   hasAnyJwtRole,
   hasProductAdminRole,
@@ -55,6 +56,11 @@ describe('hasProductAdminRole', () => {
     const user = { user_metadata: { role: 'driver' } };
     expect(hasProductAdminRole(user, 'driver')).toBe(false);
   });
+
+  it('grants haul admin when role is in app_metadata', () => {
+    const user = { app_metadata: { role: 'haul_admin' } };
+    expect(hasProductAdminRole(user, 'haul')).toBe(true);
+  });
 });
 
 describe('canUseDriverSurface', () => {
@@ -64,6 +70,16 @@ describe('canUseDriverSurface', () => {
 
   it('allows legacy driver role', () => {
     expect(canUseDriverSurface({ user_metadata: { role: 'driver' } }, false)).toBe(true);
+  });
+});
+
+describe('canUseHaulerSurface', () => {
+  it('allows hauler surface', () => {
+    expect(canUseHaulerSurface({ user_metadata: { surface: 'hauler' } }, false)).toBe(true);
+  });
+
+  it('allows driver profile for dual-role', () => {
+    expect(canUseHaulerSurface({ user_metadata: { role: 'driver' } }, true)).toBe(true);
   });
 });
 

@@ -18,11 +18,11 @@ export function DriverOverviewCard({ onOpenAdmin }: DriverOverviewCardProps) {
     <div className="p-6 space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+          <h2 className="text-xl font-semibold text-slate-900 dark:text-white flex items-center gap-2">
             <Car className="w-5 h-5 text-violet-400" />
             Roam Driver Overview
           </h2>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
             Read-only summary. Full driver management at roamdriver.co/admin.
           </p>
         </div>
@@ -62,9 +62,9 @@ export function DriverOverviewCard({ onOpenAdmin }: DriverOverviewCardProps) {
         />
       </div>
 
-      <div className="rounded-lg border border-slate-700 bg-slate-800/30 p-4">
-        <h3 className="text-sm font-medium text-white mb-2">Quick Actions</h3>
-        <p className="text-sm text-slate-400">
+      <div className="rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/30 p-4">
+        <h3 className="text-sm font-medium text-slate-900 dark:text-white mb-2">Quick Actions</h3>
+        <p className="text-sm text-slate-600 dark:text-slate-400">
           To monitor driver presence, review compliance, or manage offers, open the full Driver Admin portal.
         </p>
         <button
@@ -94,12 +94,12 @@ function StatCard({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="rounded-lg border border-slate-700 bg-slate-800/30 p-4">
+    <div className="rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/30 p-4">
       <div className="flex items-center justify-between mb-2">
         <p className="text-xs text-slate-500 uppercase tracking-wide">{title}</p>
         {icon}
       </div>
-      <p className="text-2xl font-semibold text-white">{value}</p>
+      <p className="text-2xl font-semibold text-slate-900 dark:text-white">{value}</p>
       <p className="text-xs text-slate-500 mt-1">{subtitle}</p>
     </div>
   );

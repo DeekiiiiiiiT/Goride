@@ -86,7 +86,7 @@ export function GlobalIdentitySearch() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-slate-600 dark:text-slate-400">
           Look up any auth user by email and review driver, rider, and fleet membership without opening a customer
           record.
         </p>
@@ -100,7 +100,7 @@ export function GlobalIdentitySearch() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="user@company.com"
-            className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-slate-900 border border-slate-800 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+            className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 text-sm text-slate-900 placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
           />
         </div>
         <button
@@ -114,12 +114,12 @@ export function GlobalIdentitySearch() {
       </form>
 
       {status ? (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 space-y-4">
+        <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/60 p-5 space-y-4">
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => setConfirmOpen(true)}
-              className="inline-flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg bg-slate-800 border border-slate-700 text-slate-200 hover:bg-slate-700"
+              className="inline-flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-700"
             >
               <LogOut className="w-3.5 h-3.5" />
               Force sign out everywhere
@@ -142,7 +142,7 @@ export function GlobalIdentitySearch() {
                       value={deleteEmailConfirm}
                       onChange={(e) => setDeleteEmailConfirm(e.target.value)}
                       placeholder={`Type ${status.email} to confirm`}
-                      className="flex-1 px-3 py-2 text-xs rounded-lg bg-slate-950 border border-red-900/40 text-white placeholder:text-slate-600"
+                      className="flex-1 px-3 py-2 text-xs rounded-lg bg-white border border-red-300 text-slate-900 placeholder:text-slate-400 dark:bg-slate-950 dark:border-red-900/40 dark:text-white dark:placeholder:text-slate-600"
                     />
                     <button
                       type="button"

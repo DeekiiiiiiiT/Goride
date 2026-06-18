@@ -319,7 +319,7 @@ const VALID_ROLES = new Set<string>(Object.keys(ROLE_META));
 const PRODUCT_ADMIN_ROLES = new Set([
   'fleet_admin', 'fleet_ops', 'driver_admin', 'driver_ops',
   'rides_admin', 'rides_ops', 'dash_admin', 'dash_ops',
-  'enterprise_admin', 'enterprise_ops',
+  'enterprise_admin', 'enterprise_ops', 'haul_admin', 'haul_ops',
 ]);
 
 const PLATFORM_RAW_ROLES = [

@@ -53,8 +53,8 @@ export function SettingsSection({
     <Card className={className}>
       <CardHeader className="flex flex-row items-start justify-between gap-4">
         <div className="min-w-0">
-          <CardTitle className="text-base font-medium text-white">{title}</CardTitle>
-          <CardDescription className="text-sm text-slate-400 mt-1">
+          <CardTitle className="text-base font-medium text-slate-900 dark:text-white">{title}</CardTitle>
+          <CardDescription className="text-sm text-slate-600 dark:text-slate-400 mt-1">
             {description}
           </CardDescription>
         </div>
@@ -131,8 +131,8 @@ export function SettingLabel({
   className,
 }: SettingLabelProps) {
   const labelClass = variant === 'field'
-    ? 'text-xs text-slate-400 uppercase tracking-wide'
-    : 'text-sm text-slate-300';
+    ? 'text-xs text-slate-600 dark:text-slate-400 uppercase tracking-wide'
+    : 'text-sm text-slate-700 dark:text-slate-300';
 
   return (
     <span className={`inline-flex items-center gap-1.5 ${className || ''}`}>
@@ -150,7 +150,7 @@ export function SettingLabel({
           </TooltipTrigger>
           <TooltipContent
             side="top"
-            className="max-w-xs bg-slate-800 text-slate-100 border border-slate-700 text-left leading-snug"
+            className="max-w-xs bg-white text-slate-900 border border-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-700 text-left leading-snug"
           >
             {tooltip}
           </TooltipContent>
@@ -173,7 +173,7 @@ export function isSectionDisabled(canEdit: boolean, isEditing: boolean): boolean
  * Matches the dark theme styling used across the admin portal.
  */
 export const settingsInputClass = 
-  'w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white text-sm ' +
+  'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white ' +
   'disabled:opacity-60 disabled:cursor-not-allowed ' +
   'focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500';
 

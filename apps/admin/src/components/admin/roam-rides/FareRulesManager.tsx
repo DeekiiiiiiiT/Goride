@@ -121,8 +121,8 @@ export function FareRulesManager() {
     <div className="p-6 space-y-6 text-slate-200">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-xl font-semibold text-white">Fare rules</h2>
-          <p className="text-sm text-slate-400 mt-1 max-w-xl">
+          <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Fare rules</h2>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1 max-w-xl">
             Control upfront pricing for Roam Rides (rider app) and driver offers. Amounts are in major
             units (e.g. JMD dollars). Quotes refresh within about one minute after you save.
           </p>
@@ -138,10 +138,10 @@ export function FareRulesManager() {
           <Loader2 className="w-8 h-8 animate-spin text-amber-400" />
         </div>
       ) : (
-        <div className="rounded-xl border border-slate-800 overflow-hidden">
+        <div className="rounded-xl border border-slate-200 overflow-hidden dark:border-slate-800">
           <Table>
             <TableHeader>
-              <TableRow className="border-slate-800 hover:bg-transparent">
+              <TableRow className="border-slate-200 hover:bg-transparent dark:border-slate-800">
                 <TableHead className="text-slate-400">City</TableHead>
                 <TableHead className="text-slate-400">Vehicle</TableHead>
                 <TableHead className="text-slate-400">Base</TableHead>
@@ -162,7 +162,7 @@ export function FareRulesManager() {
                 </TableRow>
               ) : (
                 rules.map((r) => (
-                  <TableRow key={r.id} className="border-slate-800">
+                  <TableRow key={r.id} className="border-slate-200 dark:border-slate-800">
                     <TableCell className="font-medium">{r.city}</TableCell>
                     <TableCell>{r.vehicle_type}</TableCell>
                     <TableCell className="tabular-nums">{fmt(r.base_fare_minor, r.currency)}</TableCell>
@@ -185,7 +185,7 @@ export function FareRulesManager() {
                       <button
                         type="button"
                         onClick={() => openEdit(r)}
-                        className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800"
+                        className="p-2 text-slate-500 hover:text-slate-900 rounded-lg hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800"
                         aria-label="Edit"
                       >
                         <Pencil className="w-4 h-4" />
@@ -200,7 +200,7 @@ export function FareRulesManager() {
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-slate-100 max-w-md">
+        <DialogContent className="bg-white border-slate-300 text-slate-900 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100 max-w-md">
           <DialogHeader>
             <DialogTitle>{editing ? 'Edit fare rule' : 'New fare rule'}</DialogTitle>
           </DialogHeader>
@@ -211,7 +211,7 @@ export function FareRulesManager() {
                 <Input
                   value={form.city}
                   onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
-                  className="bg-slate-800 border-slate-600"
+                  className="bg-white border-slate-300 dark:bg-slate-800 dark:border-slate-600"
                 />
               </div>
               <div className="space-y-2">
@@ -219,7 +219,7 @@ export function FareRulesManager() {
                 <Input
                   value={form.vehicle_type}
                   onChange={(e) => setForm((f) => ({ ...f, vehicle_type: e.target.value }))}
-                  className="bg-slate-800 border-slate-600"
+                  className="bg-white border-slate-300 dark:bg-slate-800 dark:border-slate-600"
                 />
               </div>
             </div>
@@ -228,7 +228,7 @@ export function FareRulesManager() {
               <Input
                 value={form.currency ?? 'JMD'}
                 onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value }))}
-                className="bg-slate-800 border-slate-600"
+                className="bg-white border-slate-300 dark:bg-slate-800 dark:border-slate-600"
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -251,7 +251,7 @@ export function FareRulesManager() {
                     onChange={(e) =>
                       setForm((f) => ({ ...f, [key]: Number(e.target.value) }))
                     }
-                    className="bg-slate-800 border-slate-600"
+                    className="bg-white border-slate-300 dark:bg-slate-800 dark:border-slate-600"
                   />
                 </div>
               ))}

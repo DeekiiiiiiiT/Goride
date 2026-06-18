@@ -174,7 +174,7 @@ export function ProductProfileEditor({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-white">Product Profiles</CardTitle>
+        <CardTitle className="text-slate-900 dark:text-white">Product Profiles</CardTitle>
         <CardDescription className="text-slate-400">
           Each product inherits from a base policy. Use overrides for per-product customization.
         </CardDescription>
@@ -193,11 +193,11 @@ export function ProductProfileEditor({
               return (
                 <div
                   key={profile.id}
-                  className="border border-slate-700 rounded-lg bg-slate-900/50 overflow-hidden"
+                  className="border border-slate-200 rounded-lg bg-white dark:border-slate-700 dark:bg-slate-900/50 overflow-hidden"
                 >
                   {/* Header */}
                   <div
-                    className="flex items-center justify-between p-3 cursor-pointer hover:bg-slate-800/50"
+                    className="flex items-center justify-between p-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50"
                     onClick={() => setExpandedProfile(isExpanded ? null : profile.id)}
                   >
                     <div className="flex items-center gap-3">
@@ -209,10 +209,10 @@ export function ProductProfileEditor({
                         )}
                       </button>
                       <div>
-                        <p className="font-medium text-white">
+                        <p className="font-medium text-slate-900 dark:text-white">
                           {PRODUCT_LABELS[profile.product_key] || profile.product_key}
                         </p>
-                        <p className="text-sm text-slate-400">
+                        <p className="text-sm text-slate-600 dark:text-slate-400">
                           {SURFACE_LABELS[profile.surface_key] || profile.surface_key}
                         </p>
                       </div>
@@ -234,7 +234,7 @@ export function ProductProfileEditor({
 
                   {/* Expanded Content */}
                   {isExpanded && (
-                    <div className="border-t border-slate-700 p-4">
+                    <div className="border-t border-slate-200 dark:border-slate-700 p-4">
                       {error && isEditing && (
                         <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
                           {error}
@@ -243,7 +243,7 @@ export function ProductProfileEditor({
 
                       <div className="flex items-center justify-between mb-4">
                         <label className={`${toggleRowClass} flex-1`}>
-                          <span className="text-sm text-slate-300">Profile Active</span>
+                          <span className="text-sm text-slate-700 dark:text-slate-300">Profile Active</span>
                           <Switch
                             checked={profile.is_active}
                             onCheckedChange={() => handleToggleActive(profile)}
@@ -301,7 +301,7 @@ export function ProductProfileEditor({
                                 className={`p-2 rounded border ${
                                   isOverridden
                                     ? 'border-amber-500/50 bg-amber-500/5'
-                                    : 'border-slate-700 bg-slate-950/50'
+                                    : 'border-slate-700 bg-slate-50 dark:bg-slate-50 dark:bg-slate-50 dark:bg-slate-50 dark:bg-slate-950/50'
                                 }`}
                               >
                                 <div className="flex items-center justify-between mb-1">

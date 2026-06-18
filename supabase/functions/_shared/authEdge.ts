@@ -36,6 +36,23 @@ export function allowsPassengerSurface(user: {
   return role === "passenger";
 }
 
+/** Driver / hauler dispatch routes — allow driver or hauler surface and roles. */
+export function allowsHaulerOrDriverSurface(user: {
+  user_metadata?: Record<string, unknown>;
+  app_metadata?: Record<string, unknown>;
+}): boolean {
+  const roles = getJwtRoles(user);
+  if (roles.includes("driver") || roles.includes("hauler")) return true;
+  const role = ridesUserSurfaceRole(user);
+  if (role === "driver" || role === "hauler") return true;
+  const legacyRole = user.user_metadata?.role;
+  if (typeof legacyRole === "string") {
+    const r = legacyRole.trim();
+    if (r === "driver" || r === "hauler") return true;
+  }
+  return false;
+}
+
 /** Shared gate for contacts, Roam Tag, book-for-others, and related passenger APIs. */
 export function deniesPassengerSurface(user: {
   user_metadata?: Record<string, unknown>;

@@ -56,11 +56,11 @@ export function RidesOverviewCard({ onOpenAdmin }: RidesOverviewCardProps) {
     <div className="p-6 space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+          <h2 className="text-xl font-semibold text-slate-900 dark:text-white flex items-center gap-2">
             <Navigation className="w-5 h-5 text-emerald-400" />
             Roam Rides Overview
           </h2>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
             Read-only summary. Full pricing control at roam-s.co/admin.
           </p>
         </div>
@@ -103,9 +103,9 @@ export function RidesOverviewCard({ onOpenAdmin }: RidesOverviewCardProps) {
         </div>
       )}
 
-      <div className="rounded-lg border border-slate-700 bg-slate-800/30 p-4">
-        <h3 className="text-sm font-medium text-white mb-2">Quick Actions</h3>
-        <p className="text-sm text-slate-400">
+      <div className="rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/30 p-4">
+        <h3 className="text-sm font-medium text-slate-900 dark:text-white mb-2">Quick Actions</h3>
+        <p className="text-sm text-slate-600 dark:text-slate-400">
           To modify fare rules, adjust surge multipliers, or monitor rides, open the full Rides Admin portal.
         </p>
         <button
@@ -135,14 +135,14 @@ function StatCard({
       className={`rounded-lg border p-4 ${
         highlight
           ? 'border-amber-500/50 bg-amber-500/10'
-          : 'border-slate-700 bg-slate-800/30'
+          : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/30'
       }`}
     >
       <div className="flex items-center justify-between mb-2">
         <p className="text-xs text-slate-500 uppercase tracking-wide">{title}</p>
         {icon}
       </div>
-      <p className={`text-2xl font-semibold ${highlight ? 'text-amber-300' : 'text-white'}`}>
+      <p className={`text-2xl font-semibold ${highlight ? 'text-amber-300' : 'text-slate-900 dark:text-white'}`}>
         {value}
       </p>
     </div>

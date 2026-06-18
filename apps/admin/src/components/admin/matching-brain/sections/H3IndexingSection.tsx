@@ -111,7 +111,7 @@ export function H3IndexingSection({ policy, canEdit, onSave }: H3IndexingSection
             label="H3 Resolution"
             tooltip={TOOLTIPS.h3_resolution}
           />
-          <span className="text-sm font-medium text-white">
+          <span className="text-sm font-medium text-slate-900 dark:text-white">
             {formData.h3_resolution}
           </span>
         </div>

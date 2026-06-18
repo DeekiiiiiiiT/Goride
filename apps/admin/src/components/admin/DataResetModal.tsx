@@ -248,7 +248,7 @@ export function DataResetModal({ isOpen, onClose, onSuccess }: DataResetModalPro
                     <AlertTriangle className="h-4 w-4 text-white" />
                 </div>
                 <div className="text-left flex-1">
-                    <div className="font-semibold text-white">Reset Everything</div>
+                    <div className="font-semibold text-slate-900 dark:text-white">Reset Everything</div>
                     <div className="text-xs text-rose-100 leading-relaxed">
                         Wipes all trips and transactions immediately.
                     </div>

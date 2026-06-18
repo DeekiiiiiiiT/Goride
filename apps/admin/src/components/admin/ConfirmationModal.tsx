@@ -48,15 +48,15 @@ export function ConfirmationModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-sm p-6 space-y-4">
-        <h2 className="text-lg font-bold text-white">{title}</h2>
-        <p className="text-sm text-slate-400 leading-relaxed">{message}</p>
+      <div className="bg-white border border-slate-300 dark:bg-slate-900 dark:border-slate-700 rounded-xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+        <h2 className="text-lg font-bold text-slate-900 dark:text-white">{title}</h2>
+        <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">{message}</p>
 
         <div className="flex justify-end gap-3 pt-2">
           <button
             onClick={onCancel}
             disabled={loading}
-            className="px-4 py-2 text-sm text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors disabled:opacity-50"
+            className="px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 border border-slate-300 dark:text-slate-300 dark:hover:text-white dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 rounded-lg transition-colors disabled:opacity-50"
           >
             {cancelLabel}
           </button>

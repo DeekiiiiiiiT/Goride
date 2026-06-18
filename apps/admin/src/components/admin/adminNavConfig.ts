@@ -79,6 +79,11 @@ export const ROAM_DRIVER_CHILDREN: NavChild[] = [
   { id: 'roam-driver-admin-link', label: 'Open Driver Admin →', icon: ExternalLink, href: 'https://roamdriver.co/admin' },
 ];
 
+export const ROAM_HAUL_CHILDREN: NavChild[] = [
+  { id: 'roam-haul-overview', label: 'Overview', icon: BarChart3 },
+  { id: 'roam-haul-admin-link', label: 'Open Haul Admin →', icon: ExternalLink, href: 'https://roamhaul.co/admin' },
+];
+
 export const FUEL_MANAGEMENT_CHILDREN: NavChild[] = [
   { id: 'fuel-stations', label: 'Station Database', icon: Database },
   { id: 'fuel-analytics', label: 'Fuel Analytics', icon: BarChart3 },
@@ -134,6 +139,7 @@ const SHARED_PLATFORM_PAGES = [
   'driver-users',
   'roam-rides-overview',
   'rides-users',
+  'roam-haul-overview',
   'roam-dash-overview',
   'dash-merchants',
   'fuel-stations',
@@ -190,5 +196,6 @@ export const SECTION_META = {
   fleet: { label: 'Roam Fleet', icon: Truck },
   dash: { label: 'Roam Dash', icon: Utensils },
   rides: { label: 'Roam Rides', icon: Navigation },
+  haul: { label: 'Roam Haul', icon: Truck },
   driver: { label: 'Roam Driver', icon: Car },
 } as const;

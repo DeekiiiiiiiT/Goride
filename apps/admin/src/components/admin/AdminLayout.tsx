@@ -19,6 +19,7 @@ import {
   ROAM_FLEET_CHILDREN,
   ROAM_DASH_CHILDREN,
   ROAM_RIDES_CHILDREN,
+  ROAM_HAUL_CHILDREN,
   ROAM_DRIVER_CHILDREN,
   FUEL_MANAGEMENT_CHILDREN,
   TOLL_MANAGEMENT_CHILDREN,
@@ -54,6 +55,7 @@ function allNavChildren(): NavChild[] {
     ...ROAM_FLEET_CHILDREN,
     ...ROAM_DASH_CHILDREN,
     ...ROAM_RIDES_CHILDREN,
+    ...ROAM_HAUL_CHILDREN,
     ...ROAM_DRIVER_CHILDREN,
     ...FUEL_MANAGEMENT_CHILDREN,
     ...TOLL_MANAGEMENT_CHILDREN,
@@ -102,6 +104,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const visibleFleet = filterChildren(ROAM_FLEET_CHILDREN);
   const visibleDash = filterChildren(ROAM_DASH_CHILDREN);
   const visibleRides = filterChildren(ROAM_RIDES_CHILDREN);
+  const visibleHaul = filterChildren(ROAM_HAUL_CHILDREN);
   const visibleDriver = filterChildren(ROAM_DRIVER_CHILDREN);
   const visibleFuel = filterChildren(FUEL_MANAGEMENT_CHILDREN);
   const visibleToll = filterChildren(TOLL_MANAGEMENT_CHILDREN);
@@ -115,6 +118,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const fleetIds = useMemo(() => visibleFleet.filter((c) => !c.href).map((c) => c.id), [visibleFleet]);
   const dashIds = useMemo(() => visibleDash.filter((c) => !c.href).map((c) => c.id), [visibleDash]);
   const ridesIds = useMemo(() => visibleRides.filter((c) => !c.href).map((c) => c.id), [visibleRides]);
+  const haulIds = useMemo(() => visibleHaul.filter((c) => !c.href).map((c) => c.id), [visibleHaul]);
   const driverIds = useMemo(() => visibleDriver.filter((c) => !c.href).map((c) => c.id), [visibleDriver]);
   const fuelIds = useMemo(() => visibleFuel.map((c) => c.id), [visibleFuel]);
   const tollIds = useMemo(() => visibleToll.map((c) => c.id), [visibleToll]);
@@ -127,6 +131,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const [fleetOpen, setFleetOpen] = useSectionOpen(currentPage, fleetIds);
   const [dashOpen, setDashOpen] = useSectionOpen(currentPage, dashIds);
   const [ridesOpen, setRidesOpen] = useSectionOpen(currentPage, ridesIds);
+  const [haulOpen, setHaulOpen] = useSectionOpen(currentPage, haulIds);
   const [driverOpen, setDriverOpen] = useSectionOpen(currentPage, driverIds);
   const [fuelOpen, setFuelOpen] = useSectionOpen(currentPage, fuelIds);
   const [tollOpen, setTollOpen] = useSectionOpen(currentPage, tollIds);
@@ -199,6 +204,14 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
       open: ridesOpen,
       setOpen: setRidesOpen,
       isActive: ridesIds.includes(currentPage),
+    },
+    {
+      key: 'haul',
+      ...SECTION_META.haul,
+      children: visibleHaul,
+      open: haulOpen,
+      setOpen: setHaulOpen,
+      isActive: haulIds.includes(currentPage),
     },
     {
       key: 'dash',

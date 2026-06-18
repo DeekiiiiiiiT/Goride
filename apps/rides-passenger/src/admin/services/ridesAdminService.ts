@@ -1011,28 +1011,6 @@ export async function getReasonCodes(
   return { reason_codes: data.reason_codes ?? {} };
 }
 
-export async function listHaulageAdminItems(
-  accessToken: string,
-): Promise<{ items: unknown[] }> {
-  const res = await adminFetch(accessToken, `${RIDES_BASE}/admin/haulage/items`);
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
-}
-
-export async function updateHaulageVariant(
-  accessToken: string,
-  itemId: string,
-  variantId: string,
-  patch: Record<string, unknown>,
-): Promise<void> {
-  const res = await adminFetch(
-    accessToken,
-    `${RIDES_BASE}/admin/haulage/items/${encodeURIComponent(itemId)}/variants/${encodeURIComponent(variantId)}`,
-    { method: 'PUT', body: JSON.stringify(patch) },
-  );
-  if (!res.ok) throw new Error(await parseError(res));
-}
-
 export async function listRidersWithArrears(
   accessToken: string,
   opts: { currency?: string; page?: number; limit?: number } = {},

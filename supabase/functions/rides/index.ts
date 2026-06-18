@@ -9,7 +9,7 @@
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { cors } from "https://deno.land/x/hono@v4.3.11/middleware.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { deniesPassengerSurface, jsonEdgeForbidden, ridesUserSurfaceRole, allowsPassengerSurface } from "../_shared/authEdge.ts";
+import { deniesPassengerSurface, jsonEdgeForbidden, ridesUserSurfaceRole, allowsPassengerSurface, allowsHaulerOrDriverSurface } from "../_shared/authEdge.ts";
 import { buildFareQuote, gridCellKey } from "./fare/buildQuote.ts";
 import { FareRuleNotFoundError } from "./fare/rules.ts";
 import { rankDriversByDriveTime } from "./fare/distanceMatrix.ts";
@@ -179,7 +179,7 @@ function pubSvc(): SupabaseClient {
   );
 }
 
-const DRIVER_LOCATIONS_SELECT_FULL = "user_id, lat, lng, updated_at, body_type_slug";
+const DRIVER_LOCATIONS_SELECT_FULL = "user_id, lat, lng, updated_at, body_type_slug, dispatch_mode";
 const DRIVER_LOCATIONS_SELECT_BASE = "user_id, lat, lng, updated_at";
 
 async function queryFreshDriverLocations(
@@ -1169,10 +1169,22 @@ async function runMatchingWave(
   type Cand = { user_id: string; lat: number; lng: number; d: number; body_type_slug: string | null };
   const candidates: Cand[] = [];
   let filteredOutBodyType = 0;
+  let filteredOutDispatchMode = 0;
+  const isHaulageJob = serviceSlug === "haulage";
   for (const row of locs ?? []) {
     const uid = row.user_id as string;
     if (excluded.has(uid)) continue;
     if (!eligibleIds.has(uid)) continue;
+    const rowDispatchMode = (row as { dispatch_mode?: string | null }).dispatch_mode ?? null;
+    if (isHaulageJob) {
+      if (rowDispatchMode !== "haulage") {
+        filteredOutDispatchMode++;
+        continue;
+      }
+    } else if (rowDispatchMode === "haulage") {
+      filteredOutDispatchMode++;
+      continue;
+    }
     const rawBodySlug = (row as { body_type_slug?: string | null }).body_type_slug ?? null;
     // GPS rows written before slug support (or cleared by validation) are null — assume sedan so
     // require_body_type_for_offers does not zero out the candidate pool during beta.
@@ -1369,7 +1381,7 @@ app.get("/v1/app-permission-policy", async (c) => {
   if (surface === "driver") {
     const auth = await requireUser(c.req.header("Authorization"));
     if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-    if (ridesUserSurfaceRole(auth.user) !== "driver") {
+    if (!allowsHaulerOrDriverSurface(auth.user)) {
       return jsonEdgeForbidden(c, "forbidden_role");
     }
   }
@@ -2094,8 +2106,7 @@ app.post("/v1/requests/:id/cancel", async (c) => {
 app.post("/v1/drivers/presence", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-  const r = ridesUserSurfaceRole(auth.user);
-  if (r !== "driver") return jsonEdgeForbidden(c, "forbidden_role");
+  if (!allowsHaulerOrDriverSurface(auth.user)) return jsonEdgeForbidden(c, "forbidden_role");
 
   const body = await c.req.json().catch(() => ({}));
   const lat = Number(body.lat);
@@ -2136,7 +2147,10 @@ app.post("/v1/drivers/presence", async (c) => {
   }
 
   if (goingOnline && !bodyTypeSlug) {
-    bodyTypeSlug = "sedan";
+    const mode = typeof body.dispatch_mode === "string" ? body.dispatch_mode.trim() : "";
+    const surfaceMode = ridesUserSurfaceRole(auth.user) === "hauler" ? "haulage" : "rideshare";
+    const effectiveMode = mode === "haulage" || mode === "rideshare" ? mode : surfaceMode;
+    bodyTypeSlug = effectiveMode === "haulage" ? "cargo-van" : "sedan";
   }
 
   const headingRaw = body.heading_degrees != null ? Number(body.heading_degrees) : null;
@@ -2150,6 +2164,13 @@ app.post("/v1/drivers/presence", async (c) => {
     // H3 computation failed, proceed without it
   }
 
+  const dispatchModeRaw = typeof body.dispatch_mode === "string"
+    ? body.dispatch_mode.trim().toLowerCase()
+    : "";
+  const dispatchMode = dispatchModeRaw === "haulage" || dispatchModeRaw === "rideshare"
+    ? dispatchModeRaw
+    : (ridesUserSurfaceRole(auth.user) === "hauler" ? "haulage" : "rideshare");
+
   const upsert = {
     user_id: auth.user.id,
     lat,
@@ -2158,6 +2179,7 @@ app.post("/v1/drivers/presence", async (c) => {
     available_for_rides: Boolean(body.available_for_rides ?? true),
     body_type_slug: bodyTypeSlug,
     h3_cell: h3Cell,
+    dispatch_mode: dispatchMode,
     updated_at: new Date().toISOString(),
   };
 
@@ -2169,6 +2191,7 @@ app.post("/v1/drivers/presence", async (c) => {
     p_available_for_rides: upsert.available_for_rides,
     p_body_type_slug: upsert.body_type_slug,
     p_h3_cell: upsert.h3_cell,
+    p_dispatch_mode: upsert.dispatch_mode,
   });
 
   if (rpcError) {
@@ -2186,7 +2209,7 @@ app.post("/v1/drivers/presence", async (c) => {
 app.get("/v1/drivers/offers", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-  if (ridesUserSurfaceRole(auth.user) !== "driver") return jsonEdgeForbidden(c, "forbidden_role");
+  if (!allowsHaulerOrDriverSurface(auth.user)) return jsonEdgeForbidden(c, "forbidden_role");
 
   const db = svc();
   const nowIso = new Date().toISOString();
@@ -2227,7 +2250,7 @@ app.get("/v1/drivers/offers", async (c) => {
 app.post("/v1/drivers/offers/:offerId/accept", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-  if (ridesUserSurfaceRole(auth.user) !== "driver") return jsonEdgeForbidden(c, "forbidden_role");
+  if (!allowsHaulerOrDriverSurface(auth.user)) return jsonEdgeForbidden(c, "forbidden_role");
 
   const offerId = c.req.param("offerId");
   const db = svc();
@@ -2348,7 +2371,7 @@ app.post("/v1/drivers/offers/:offerId/accept", async (c) => {
 app.post("/v1/drivers/offers/:offerId/decline", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-  if (ridesUserSurfaceRole(auth.user) !== "driver") return jsonEdgeForbidden(c, "forbidden_role");
+  if (!allowsHaulerOrDriverSurface(auth.user)) return jsonEdgeForbidden(c, "forbidden_role");
 
   const offerId = c.req.param("offerId");
   const db = svc();
@@ -2366,7 +2389,7 @@ app.post("/v1/drivers/offers/:offerId/decline", async (c) => {
 app.get("/v1/drivers/me/trips", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-  if (ridesUserSurfaceRole(auth.user) !== "driver") return jsonEdgeForbidden(c, "forbidden_role");
+  if (!allowsHaulerOrDriverSurface(auth.user)) return jsonEdgeForbidden(c, "forbidden_role");
 
   const page = Math.max(1, Number(c.req.query("page") ?? 1));
   const limit = Math.min(100, Math.max(1, Number(c.req.query("limit") ?? 25)));
@@ -2387,7 +2410,7 @@ app.get("/v1/drivers/me/trips", async (c) => {
 app.get("/v1/drivers/me/active-ride", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-  if (ridesUserSurfaceRole(auth.user) !== "driver") return jsonEdgeForbidden(c, "forbidden_role");
+  if (!allowsHaulerOrDriverSurface(auth.user)) return jsonEdgeForbidden(c, "forbidden_role");
 
   const result = await getDriverActiveRideRequest(svc(), pubSvc(), auth.user.id);
   if ("error" in result) {
@@ -2408,7 +2431,7 @@ app.get("/v1/drivers/me/active-ride", async (c) => {
 app.get("/v1/drivers/me/earnings", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-  if (ridesUserSurfaceRole(auth.user) !== "driver") return jsonEdgeForbidden(c, "forbidden_role");
+  if (!allowsHaulerOrDriverSurface(auth.user)) return jsonEdgeForbidden(c, "forbidden_role");
 
   const rawPeriod = (c.req.query("period") ?? "week").toLowerCase();
   const period: DriverEarningsPeriod = rawPeriod === "today" || rawPeriod === "all"
@@ -2430,7 +2453,7 @@ function driverTransitions(): Record<RideStatus, RideStatus[]> {
 app.post("/v1/drivers/ride-location", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-  if (ridesUserSurfaceRole(auth.user) !== "driver") return jsonEdgeForbidden(c, "forbidden_role");
+  if (!allowsHaulerOrDriverSurface(auth.user)) return jsonEdgeForbidden(c, "forbidden_role");
 
   const body = await c.req.json().catch(() => ({}));
   const rideId = typeof body.ride_id === "string" ? body.ride_id : "";
@@ -2570,7 +2593,7 @@ app.get("/v1/requests/:id/live", async (c) => {
 app.patch("/v1/requests/:id/driver-transition", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-  if (ridesUserSurfaceRole(auth.user) !== "driver") return jsonEdgeForbidden(c, "forbidden_role");
+  if (!allowsHaulerOrDriverSurface(auth.user)) return jsonEdgeForbidden(c, "forbidden_role");
 
   const id = c.req.param("id");
   const body = await c.req.json().catch(() => ({}));

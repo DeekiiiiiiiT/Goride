@@ -265,7 +265,7 @@ export function SystemHardeningPanel() {
                 </CardContent>
             </Card>
 
-            <div className="bg-slate-900 rounded-xl p-6 text-white overflow-hidden relative">
+            <div className="bg-slate-100 rounded-xl p-6 text-slate-900 dark:bg-slate-900 dark:text-white overflow-hidden relative">
                 <div className="relative z-10">
                     <h3 className="text-lg font-bold mb-1 flex items-center gap-2">
                         <CheckCircle2 className="w-5 h-5 text-emerald-400" />

@@ -17,16 +17,16 @@ function DashboardCard({ icon, label, value, subtitle, color, onClick }: Dashboa
   return (
     <button
       onClick={onClick}
-      className="bg-slate-900 border border-slate-800 rounded-xl p-5 text-left hover:border-slate-700 transition-colors group w-full"
+      className="bg-white border border-slate-200 rounded-xl p-5 text-left hover:border-slate-300 hover:shadow-sm dark:bg-slate-900 dark:border-slate-800 dark:hover:border-slate-300 dark:hover:border-slate-300 dark:hover:border-slate-300 dark:hover:border-slate-300 dark:hover:border-slate-700 transition-colors group w-full"
     >
       <div className="flex items-start justify-between mb-4">
         <div className={`p-2.5 rounded-lg ${color}`}>
           {icon}
         </div>
-        <ArrowRight className="w-4 h-4 text-slate-600 group-hover:text-slate-400 transition-colors" />
+        <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-slate-600 dark:text-slate-600 dark:group-hover:text-slate-400 transition-colors" />
       </div>
-      <p className="text-2xl font-bold text-white mb-1">{value}</p>
-      <p className="text-sm font-medium text-slate-300">{label}</p>
+      <p className="text-2xl font-bold text-slate-900 dark:text-white mb-1">{value}</p>
+      <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{label}</p>
       <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>
     </button>
   );
@@ -145,8 +145,8 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
     <div className="space-y-8">
       {/* Welcome */}
       <div>
-        <h1 className="text-xl font-bold text-white mb-1">Platform Overview</h1>
-        <p className="text-sm text-slate-400">
+        <h1 className="text-xl font-bold text-slate-900 dark:text-white mb-1">Platform Overview</h1>
+        <p className="text-sm text-slate-600 dark:text-slate-400">
           Manage customer accounts, databases, and platform settings.
         </p>
       </div>
@@ -229,7 +229,7 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
 
       {/* Product-line breakout */}
       <div className="space-y-4">
-        <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">Dominion splits</h2>
+        <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Dominion splits</h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <DashboardCard
             icon={<Building2 className="w-5 h-5 text-sky-400" />}
@@ -268,7 +268,7 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
 
       {/* Quick actions */}
       <div>
-        <h2 className="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wider">Quick Actions</h2>
+        <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-3 uppercase tracking-wider">Quick Actions</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <QuickAction
             label="Customer accounts — Enterprise"
@@ -325,13 +325,13 @@ function QuickAction({ label, description, onClick }: { label: string; descripti
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-3 bg-slate-900/50 border border-slate-800 rounded-lg px-4 py-3 hover:border-slate-700 hover:bg-slate-900 transition-colors text-left group"
+      className="flex items-center gap-3 bg-white border border-slate-200 rounded-lg px-4 py-3 hover:border-slate-300 hover:bg-slate-50 dark:bg-slate-900/50 dark:border-slate-800 dark:hover:border-slate-300 dark:hover:border-slate-300 dark:hover:border-slate-300 dark:hover:border-slate-300 dark:hover:border-slate-700 dark:hover:bg-slate-900 transition-colors text-left group"
     >
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-slate-200 group-hover:text-white transition-colors">{label}</p>
+        <p className="text-sm font-medium text-slate-900 dark:text-slate-200 group-hover:text-slate-950 dark:group-hover:text-slate-900 transition-colors dark:hover:text-white">{label}</p>
         <p className="text-xs text-slate-500">{description}</p>
       </div>
-      <ArrowRight className="w-4 h-4 text-slate-600 group-hover:text-slate-400 transition-colors shrink-0" />
+      <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-slate-600 dark:text-slate-600 dark:group-hover:text-slate-400 transition-colors shrink-0" />
     </button>
   );
 }
