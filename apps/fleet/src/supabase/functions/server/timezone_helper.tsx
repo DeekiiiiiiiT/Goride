@@ -10,6 +10,7 @@
  */
 
 import * as kv from "./kv_store.tsx";
+import { LEGACY_PLATFORM_SETTINGS_KEY, platformSettingsKvKey } from "./platform_settings.ts";
 
 // ─── Constants ───────────────────────────────────────────────────────
 const DEFAULT_TIMEZONE = "America/Jamaica";
@@ -18,23 +19,25 @@ const CACHE_TTL_MS = 60_000; // 1 minute
 // ─── Cache ───────────────────────────────────────────────────────────
 let cachedTimezone: string | null = null;
 let cacheExpiry = 0;
+let lastProductLine: "fleet" | "enterprise" = "fleet";
 
 // ─── Public API ──────────────────────────────────────────────────────
 
 /**
  * Reads the fleet timezone from KV with a 1-minute cache.
- * Returns an IANA timezone string (e.g. "America/Jamaica").
+ * Dual-read: platform:settings:{productLine} → legacy platform:settings → default.
  */
-export async function getFleetTimezone(): Promise<string> {
+export async function getFleetTimezone(productLine: "fleet" | "enterprise" = "fleet"): Promise<string> {
   const now = Date.now();
-  if (cachedTimezone && now < cacheExpiry) {
+  if (cachedTimezone && now < cacheExpiry && lastProductLine === productLine) {
     return cachedTimezone;
   }
 
   try {
-    // KV stores the settings object directly at "platform:settings"
-    // (see PUT /admin/platform-settings in index.tsx)
-    const record = await kv.get("platform:settings") as Record<string, any> | null;
+    let record = await kv.get(platformSettingsKvKey(productLine)) as Record<string, any> | null;
+    if (!record || typeof record !== "object") {
+      record = await kv.get(LEGACY_PLATFORM_SETTINGS_KEY) as Record<string, any> | null;
+    }
     const tz =
       record && typeof record === "object" && record.fleetTimezone
         ? record.fleetTimezone
@@ -52,6 +55,7 @@ export async function getFleetTimezone(): Promise<string> {
 
     cachedTimezone = tz;
     cacheExpiry = now + CACHE_TTL_MS;
+    lastProductLine = productLine;
     return tz;
   } catch (err) {
     console.log(`[timezone_helper] Error reading fleet timezone from KV: ${err}`);

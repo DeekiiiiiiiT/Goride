@@ -107,6 +107,9 @@ export function DashOverviewCard({ onOpenAdmin }: DashOverviewCardProps) {
         >
           Go to Dash Admin <ExternalLink className="w-3 h-3" />
         </button>
+        <p className="mt-2 text-sm text-slate-500">
+          Segment settings: Dash Admin → Platform Settings
+        </p>
       </div>
     </div>
   );

@@ -26,6 +26,7 @@ export function HaulOverviewCard({ onOpenAdmin }: HaulOverviewCardProps) {
             Freight catalog, transport solutions, and hauler operations at roamhaul.co/admin.
           </p>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={handleOpenAdmin}
@@ -34,6 +35,16 @@ export function HaulOverviewCard({ onOpenAdmin }: HaulOverviewCardProps) {
           Open Haul Admin
           <ExternalLink className="w-4 h-4" />
         </button>
+        <a
+          href="https://roamhaul.co/admin/settings"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+        >
+          Platform settings
+          <ExternalLink className="w-3.5 h-3.5" />
+        </a>
+        </div>
       </div>
     </div>
   );

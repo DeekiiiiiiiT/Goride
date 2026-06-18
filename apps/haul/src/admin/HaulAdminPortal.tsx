@@ -2,14 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { Routes, Route, Outlet, Link, useLocation } from 'react-router-dom';
 import { supabaseHaulAdmin as supabase, hasProductAdminRole, jwtPrimaryRole } from '@roam/auth-client';
 import type { Session } from '@supabase/supabase-js';
-import { LayoutDashboard, Package, LogOut, Loader2, ShieldAlert } from 'lucide-react';
+import { LayoutDashboard, Package, LogOut, Loader2, ShieldAlert, Settings } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import { HaulAdminLoginForm } from './components/HaulAdminLoginForm';
 import { HaulageCatalogManager } from './components/HaulageCatalogManager';
+import { PlatformSettingsPage } from './pages/PlatformSettingsPage';
 
 const NAV = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/catalog', label: 'Freight catalog', icon: Package },
+  { path: '/settings', label: 'Platform Settings', icon: Settings },
 ];
 
 function AdminLayout({ session }: { session: Session }) {
@@ -109,6 +111,7 @@ export function HaulAdminPortal() {
       <Route element={<AdminLayout session={session} />}>
         <Route index element={<Dashboard />} />
         <Route path="catalog" element={<HaulageCatalogManager />} />
+        <Route path="settings" element={<PlatformSettingsPage />} />
       </Route>
     </Routes>
   );

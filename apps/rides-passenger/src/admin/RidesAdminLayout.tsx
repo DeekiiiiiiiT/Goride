@@ -26,6 +26,7 @@ import {
   LayoutGrid,
   CalendarDays,
   Package,
+  Settings,
 } from 'lucide-react';
 import { RidesAdminLoginForm } from './components/RidesAdminLoginForm';
 
@@ -181,6 +182,7 @@ const CASH_SETTLEMENT_ITEMS: NavItem[] = [
 ];
 
 const SECONDARY_NAV_ITEMS: NavItem[] = [
+  { id: 'settings', path: '/admin/settings', label: 'Platform Settings', icon: Settings },
   { id: 'app-permissions', path: '/admin/app-permissions', label: 'App Permissions', icon: Shield },
   { id: 'play-store', path: '/admin/play-store', label: 'Play Store', icon: Store },
   { id: 'rides', path: '/admin/rides', label: 'Ride Operations', icon: Car },

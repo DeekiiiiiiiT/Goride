@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Users, Fuel, MapPin, Settings, ArrowRight, Loader2, Activity, Car, UserCog, Shield, Utensils, Navigation, Building2, Truck } from 'lucide-react';
 import { API_ENDPOINTS } from '../../services/apiConfig';
+import { withSettingsSegmentHeaders } from '@roam/api-client';
 import { useAuth } from '../auth/AuthContext';
 import { getMerchantStats } from '../../services/dashMerchantVerificationService';
 
@@ -119,7 +120,9 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
   const loadPlatformSettings = async () => {
     try {
       const res = await fetch(`${API_ENDPOINTS.admin}/admin/platform-settings`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: withSettingsSegmentHeaders('enterprise', {
+          Authorization: `Bearer ${accessToken}`,
+        }),
       });
       if (res.ok) {
         const data = await res.json();

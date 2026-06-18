@@ -114,6 +114,14 @@ export function RidesOverviewCard({ onOpenAdmin }: RidesOverviewCardProps) {
         >
           Go to Rides Admin <ExternalLink className="w-3 h-3" />
         </button>
+        <a
+          href="https://roam-s.co/admin/settings"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-2 block text-sm text-slate-500 hover:text-slate-300"
+        >
+          Platform settings →
+        </a>
       </div>
     </div>
   );

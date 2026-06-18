@@ -13,6 +13,7 @@
     "@roam/ui": "workspace:*",
     "@roam/api-client": "workspace:*",
     "@roam/auth-client": "workspace:*",
+    "@roam/admin-core": "workspace:*",
     "@supabase/supabase-js": "^2",
     "@tanstack/react-query": "*",
     "lucide-react": "^0.487.0",

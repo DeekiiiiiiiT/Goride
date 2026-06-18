@@ -43,14 +43,25 @@ import {
 } from "./org_scope.ts";
 import {
   resolveProductLine,
-  platformSettingsKvKey,
-  LEGACY_PLATFORM_SETTINGS_KEY,
   inferProductLineFromUser,
   assertFleetOwnerProductLine,
   isEnabledBusinessType,
   isProductLine,
   type ProductLine,
 } from "./product_line.ts";
+import {
+  resolveSettingsSegment,
+  getPlatformSettingsCached,
+  invalidatePlatformSettingsCache,
+  getSegmentSettingsSummary,
+  getLatestSettingsUpdatedAt,
+  platformSettingsKvKey,
+  LEGACY_PLATFORM_SETTINGS_KEY,
+  segmentToProductLine,
+  verifySettingsAccess,
+  buildPlatformStatusPayload,
+  type SettingsSegment,
+} from "./platform_settings.ts";
 import { requireProductAdmin } from "./product_admin_guard.ts";
 import {
   appendCanonicalLedgerEvents,
@@ -519,66 +530,15 @@ app.use('*', async (c, next) => {
 // ---------------------------------------------------------------------------
 // Maintenance Mode Middleware
 // ---------------------------------------------------------------------------
-// Reads platform:settings from cache/KV. If maintenanceMode is true, blocks
-// all non-admin, non-auth, non-status routes with 503.
+// Reads platform settings from cache/KV via platform_settings.ts
 // ---------------------------------------------------------------------------
-async function getPlatformSettingsCached(productLine?: ProductLine): Promise<any> {
-  const line = productLine ?? 'fleet';
-  const cacheKey = platformSettingsKvKey(line);
-  const cached = memCache.platformSettingsCache.get(cacheKey);
-  if (cached) return cached;
-
-  let settings = await kv.get(cacheKey);
-  if (!settings && line === 'fleet') {
-    settings = await kv.get(LEGACY_PLATFORM_SETTINGS_KEY);
-  }
-  if (!settings && line === 'enterprise') {
-    settings = await kv.get(LEGACY_PLATFORM_SETTINGS_KEY);
-  }
-  if (settings) {
-    memCache.platformSettingsCache.set(cacheKey, settings);
-  }
-  return settings || {};
-}
 
 // Public endpoint: GET /platform-status (no auth required)
 app.get("/make-server-37f42386/platform-status", async (c) => {
   try {
-    const productLine = resolveProductLine(c);
-    const settings = await getPlatformSettingsCached(productLine);
-    const defaultName = productLine === 'enterprise' ? 'Roam Enterprise' : 'Roam Fleet';
-    return c.json({
-      productLine,
-      maintenanceMode: settings.maintenanceMode || false,
-      maintenanceMessage: settings.maintenanceMessage || "We're performing scheduled maintenance. Back soon!",
-      platformName: settings.platformName || defaultName,
-      registrationMode: settings.registrationMode || 'open',
-      allowedDomains: settings.allowedDomains || [],
-      defaultCurrency: settings.defaultCurrency || 'JMD',
-      fleetTimezone: settings.fleetTimezone || 'America/Jamaica',
-      enabledBusinessTypes: settings.enabledBusinessTypes || {
-        rideshare: true,
-        delivery: true,
-        taxi: true,
-        trucking: true,
-        shipping: true,
-      },
-      announcement: (() => {
-        const ann = settings.announcement;
-        if (!ann || !ann.enabled) return null;
-        const now = new Date().toISOString().split('T')[0];
-        if (ann.startDate && now < ann.startDate) return null;
-        if (ann.endDate && now > ann.endDate) return null;
-        return { message: ann.message, type: ann.type, dismissible: ann.dismissible };
-      })(),
-      sessionTimeoutMinutes: settings.securityPolicies?.sessionTimeoutMinutes ?? 0,
-      passwordPolicy: {
-        minLength: settings.securityPolicies?.minPasswordLength ?? 8,
-        requireUppercase: settings.securityPolicies?.requireUppercase ?? false,
-        requireNumber: settings.securityPolicies?.requireNumber ?? false,
-        requireSpecialChar: settings.securityPolicies?.requireSpecialChar ?? false,
-      },
-    });
+    const segment = resolveSettingsSegment(c);
+    const settings = await getPlatformSettingsCached(segment);
+    return c.json(buildPlatformStatusPayload(segment, settings));
   } catch (e: any) {
     console.log(`platform-status GET error: ${e.message}`);
     return c.json({ maintenanceMode: false, maintenanceMessage: '', platformName: 'Roam Fleet' });
@@ -15107,7 +15067,7 @@ app.post("/make-server-37f42386/admin/migrate-product-lines", async (c) => {
   }
 });
 
-// POST /admin/migrate-platform-settings — copy legacy key to fleet + enterprise
+// POST /admin/migrate-platform-settings — copy legacy key to fleet + enterprise (idempotent)
 app.post("/make-server-37f42386/admin/migrate-platform-settings", async (c) => {
   try {
     const auth = await verifySuperadmin(c);
@@ -15146,8 +15106,8 @@ app.post("/make-server-37f42386/admin/migrate-platform-settings", async (c) => {
 
     await kv.set(platformSettingsKvKey("fleet"), fleetSettings);
     await kv.set(platformSettingsKvKey("enterprise"), enterpriseSettings);
-    memCache.platformSettingsCache.invalidate(platformSettingsKvKey("fleet"));
-    memCache.platformSettingsCache.invalidate(platformSettingsKvKey("enterprise"));
+    invalidatePlatformSettingsCache("fleet");
+    invalidatePlatformSettingsCache("enterprise");
 
     return c.json({ success: true });
   } catch (e: any) {
@@ -15743,14 +15703,29 @@ app.delete("/make-server-37f42386/admin/toll-stations/:id", async (c) => {
 // GET /admin/platform-settings
 app.get("/make-server-37f42386/admin/platform-settings", async (c) => {
   try {
+    const auth = await verifySettingsAccess(c);
+    if (auth instanceof Response) return auth;
+
+    const segment = resolveSettingsSegment(c);
+    const settings = await getPlatformSettingsCached(segment);
+    const productLine = segmentToProductLine(segment);
+    return c.json({ settings: settings || null, segment, productLine });
+  } catch (e: any) {
+    console.log(`admin/platform-settings GET error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// GET /admin/platform-settings/segments — diagnostic summary (superadmin)
+app.get("/make-server-37f42386/admin/platform-settings/segments", async (c) => {
+  try {
     const auth = await verifySuperadmin(c);
     if (auth instanceof Response) return auth;
 
-    const productLine = resolveProductLine(c);
-    const settings = await getPlatformSettingsCached(productLine);
-    return c.json({ settings: settings || null, productLine });
+    const segments = await getSegmentSettingsSummary();
+    return c.json({ segments });
   } catch (e: any) {
-    console.log(`admin/platform-settings GET error: ${e.message}`);
+    console.log(`admin/platform-settings/segments GET error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
 });
@@ -15794,8 +15769,7 @@ app.get("/make-server-37f42386/admin/system-health", async (c) => {
     let lastSettingsUpdate: string | null = null;
     let kvRowCount = 0;
     try {
-      const settings = await kv.get('platform:settings');
-      if (settings?.updatedAt) lastSettingsUpdate = settings.updatedAt;
+      lastSettingsUpdate = await getLatestSettingsUpdatedAt();
     } catch (e: any) {
       dbStatus = 'error';
       console.log(`[HealthCheck] DB connectivity error: ${e.message}`);
@@ -15853,21 +15827,22 @@ app.post("/make-server-37f42386/admin/terminate-all-sessions", async (c) => {
 // PUT /admin/platform-settings
 app.put("/make-server-37f42386/admin/platform-settings", async (c) => {
   try {
-    const auth = await verifySuperadmin(c);
+    const auth = await verifySettingsAccess(c);
     if (auth instanceof Response) return auth;
 
-    const productLine = resolveProductLine(c);
-    const settingsKey = platformSettingsKvKey(productLine);
+    const segment = resolveSettingsSegment(c);
+    const settingsKey = platformSettingsKvKey(segment);
 
     // Read old settings BEFORE overwriting so we can diff for audit
     const oldSettings = await kv.get(settingsKey);
 
     const settings = await c.req.json();
     settings.updatedAt = new Date().toISOString();
+    // Writes go to segment keys only — LEGACY_PLATFORM_SETTINGS_KEY is read-only (dual-read fallback).
     await kv.set(settingsKey, settings);
 
     // Immediately invalidate cached settings so maintenance mode propagates instantly
-    memCache.platformSettingsCache.invalidate(settingsKey);
+    invalidatePlatformSettingsCache(segment);
 
     // Build a human-readable diff for the audit log
     let details = "Initial settings configuration";

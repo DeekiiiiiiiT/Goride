@@ -16,6 +16,8 @@
     "@roam/api-client": "workspace:*",
     "@roam/auth-client": "workspace:*",
     "@roam/business-config": "workspace:*",
+    "@roam/admin-core": "workspace:*",
+    "@roam/platform-settings": "workspace:*",
     "@google/generative-ai": "*",
     "@jsr/supabase__supabase-js": "^2.49.8",
     "@radix-ui/react-accordion": "^1.2.3",

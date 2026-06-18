@@ -19,6 +19,7 @@ import {
   ScrollText,
   Shield,
   Store,
+  Settings,
 } from 'lucide-react';
 import { Toaster } from 'sonner';
 import { DriverAdminLoginForm } from './components/DriverAdminLoginForm';
@@ -33,6 +34,7 @@ import { DriverAppPermissionsPage } from './pages/AppPermissionsPage';
 import { SupportToolsPage } from './pages/SupportToolsPage';
 import { DriverPlayStoreLaunchPage } from './pages/PlayStoreLaunchPage';
 import { AdminConfirmProvider } from './contexts/AdminConfirmContext';
+import { PlatformSettingsPage } from './pages/PlatformSettingsPage';
 
 const NAV_ITEMS = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -42,6 +44,7 @@ const NAV_ITEMS = [
   { path: '/offers', label: 'Offer Monitor', icon: Bell, end: false },
   { path: '/compliance', label: 'Compliance', icon: ShieldCheck, end: false },
   { path: '/permissions', label: 'App Permissions', icon: Shield, end: false },
+  { path: '/settings', label: 'Platform Settings', icon: Settings, end: false },
   { path: '/play-store', label: 'Play Store', icon: Store, end: false },
   { path: '/support', label: 'Support Tools', icon: HeadphonesIcon, end: false },
 ];
@@ -266,6 +269,7 @@ export function DriverAdminPortal() {
           <Route path="permissions" element={<DriverAppPermissionsPage />} />
           <Route path="play-store" element={<DriverPlayStoreLaunchPage />} />
           <Route path="support" element={<SupportToolsPage />} />
+          <Route path="settings" element={<PlatformSettingsPage />} />
         </Route>
       </Routes>
     </AdminConfirmProvider>

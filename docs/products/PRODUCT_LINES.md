@@ -19,14 +19,34 @@ Fleet managers are tagged `productLine: fleet` and `businessType: rideshare`.
 
 Enterprise fleet managers are tagged `productLine: enterprise` with their chosen `businessType`.
 
+## Roam Dash
+
+| Domain | Audience | Admin |
+|--------|----------|-------|
+| [roamdash.co](https://roamdash.co) | Merchants & ops | `/admin` — dash product ops |
+
 ## Shared backend
 
-One Supabase project. Platform settings are stored separately:
+One Supabase project. Platform settings are stored per segment:
 
-- `platform:settings:fleet`
-- `platform:settings:enterprise`
+| Segment | KV key | Settings UI |
+|---------|--------|-------------|
+| Global | `platform:settings:global` | [roamdominion.co](https://roamdominion.co) → Global Settings |
+| Fleet | `platform:settings:fleet` | Dominion → Roam Fleet; roamfleet.co/admin |
+| Enterprise | `platform:settings:enterprise` | Dominion → Roam Enterprise; roamenterprise.co/admin |
+| Rides | `platform:settings:rides` | roam-s.co/admin |
+| Driver | `platform:settings:driver` | roamdriver.co/admin |
+| Haul | `platform:settings:haul` | roamhaul.co/admin |
+| Dash | `platform:settings:dash` | roamdash.co/admin |
 
-Clients send `X-Roam-Product-Line: fleet|enterprise` (from `VITE_PRODUCT_LINE`).
+Legacy key `platform:settings` is read-only (dual-read fallback for fleet/enterprise migration).
+
+Clients send:
+
+- `X-Roam-Settings-Segment` — primary segment selector
+- `X-Roam-Product-Line: fleet|enterprise` — backward compat (from `VITE_PRODUCT_LINE`)
+
+Full architecture: [`docs/platform/SETTINGS_ARCHITECTURE.md`](../platform/SETTINGS_ARCHITECTURE.md)
 
 ## Vercel env
 
@@ -40,5 +60,5 @@ Clients send `X-Roam-Product-Line: fleet|enterprise` (from `VITE_PRODUCT_LINE`).
 
 After deploy, run once from enterprise admin session:
 
-1. `POST /make-server-37f42386/admin/migrate-platform-settings`
+1. `POST /make-server-37f42386/admin/migrate-platform-settings` (idempotent)
 2. `POST /make-server-37f42386/admin/migrate-product-lines`

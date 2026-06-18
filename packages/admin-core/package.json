@@ -5,6 +5,7 @@
   "types": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./settings": "./src/settings/index.ts",
     "./styles/admin-login.css": "./src/styles/admin-login.css",
     "./styles/rides-admin-login.css": "./src/styles/rides-admin-login.css",
     "./*": "./src/*"
@@ -17,6 +18,8 @@
     "@roam/types": "workspace:*",
     "@roam/ui": "workspace:*",
     "@roam/auth-client": "workspace:*",
+    "@roam/api-client": "workspace:*",
+    "@roam/platform-settings": "workspace:*",
     "@supabase/supabase-js": "^2",
     "lucide-react": "^0.487.0",
     "sonner": "^2.0.3",

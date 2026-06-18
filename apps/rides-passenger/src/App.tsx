@@ -66,6 +66,7 @@ import { RiderDetailPage } from './admin/pages/users/RiderDetailPage';
 import { DisputesPage } from './admin/pages/DisputesPage';
 import { SettlementOverridesPage } from './admin/pages/SettlementOverridesPage';
 import { OutstandingBalancesPage } from './admin/pages/OutstandingBalancesPage';
+import { PlatformSettingsPage } from './admin/pages/PlatformSettingsPage';
 import { SplashScreen } from './components/layout/SplashScreen';
 import { BookerTrackingProvider } from './contexts/BookerTrackingContext';
 import { PassengerShell } from './components/layout/PassengerShell';
@@ -168,6 +169,7 @@ export default function App() {
         <Route path="disputes" element={<DisputesPage />} />
         <Route path="outstanding-balances" element={<OutstandingBalancesPage />} />
         <Route path="settlement-overrides" element={<SettlementOverridesPage />} />
+        <Route path="settings" element={<PlatformSettingsPage />} />
       </Route>
 
       {/* Public delegated-booking entry (signup gate) */}

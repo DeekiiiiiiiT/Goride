@@ -49,16 +49,70 @@ export const PLATFORM_CHILDREN: NavChild[] = [
   { id: 'activity-log', label: 'Activity Log', icon: ClipboardList },
 ];
 
+export const GLOBAL_SETTINGS_CHILDREN: NavChild[] = [
+  { id: 'global-settings-general', label: 'General', icon: Globe },
+  { id: 'global-settings-security', label: 'Security', icon: Shield },
+  { id: 'global-settings-danger', label: 'Danger Zone', icon: AlertTriangle },
+];
+
+export const FLEET_SETTINGS_CHILDREN: NavChild[] = [
+  { id: 'fleet-settings-general', label: 'General', icon: Globe },
+  { id: 'fleet-settings-features', label: 'Features', icon: Zap },
+  { id: 'fleet-settings-registration', label: 'Registration', icon: UserPlus },
+  { id: 'fleet-settings-security', label: 'Security', icon: Shield },
+  { id: 'fleet-settings-announcements', label: 'Announcements', icon: Megaphone },
+];
+
+export const ENTERPRISE_SETTINGS_CHILDREN: NavChild[] = [
+  { id: 'enterprise-settings-general', label: 'General', icon: Globe },
+  { id: 'enterprise-settings-features', label: 'Features', icon: Zap },
+  { id: 'enterprise-settings-registration', label: 'Registration', icon: UserPlus },
+  { id: 'enterprise-settings-security', label: 'Security', icon: Shield },
+  { id: 'enterprise-settings-announcements', label: 'Announcements', icon: Megaphone },
+];
+
+/** @deprecated Legacy IDs — use GLOBAL/FLEET/ENTERPRISE settings children */
+export const SETTINGS_CHILDREN: NavChild[] = [
+  { id: 'settings-general', label: 'General', icon: Globe },
+  { id: 'settings-features', label: 'Features', icon: Zap },
+  { id: 'settings-registration', label: 'Registration', icon: UserPlus },
+  { id: 'settings-security', label: 'Security', icon: Shield },
+  { id: 'settings-announcements', label: 'Announcements', icon: Megaphone },
+  { id: 'settings-danger', label: 'Danger Zone', icon: AlertTriangle },
+];
+
 export const ROAM_ENTERPRISE_CHILDREN: NavChild[] = [
   { id: 'enterprise-overview', label: 'Overview', icon: BarChart3 },
   { id: 'enterprise-customers', label: 'Customer Accounts', icon: Users },
   { id: 'enterprise-team-members', label: 'Team Members', icon: UserCog },
+  ...ENTERPRISE_SETTINGS_CHILDREN,
+];
+
+export const FUEL_MANAGEMENT_CHILDREN: NavChild[] = [
+  { id: 'fuel-stations', label: 'Station Database', icon: Database },
+  { id: 'fuel-analytics', label: 'Fuel Analytics', icon: BarChart3 },
+];
+
+export const TOLL_MANAGEMENT_CHILDREN: NavChild[] = [
+  { id: 'toll-stations', label: 'Toll Database', icon: MapPin },
+  { id: 'toll-info', label: 'Toll Info', icon: Info },
+];
+
+export const VEHICLE_DATABASE_CHILDREN: NavChild[] = [
+  { id: 'motor-vehicles', label: 'Motor Vehicles', icon: Car },
+  { id: 'pending-motor-vehicles', label: 'Pending motor vehicles', icon: Inbox },
+  { id: 'maintenance-templates', label: 'Maintenance templates', icon: Wrench },
+  { id: 'parts-sourcing', label: 'Parts sourcing', icon: ShoppingCart },
 ];
 
 export const ROAM_FLEET_CHILDREN: NavChild[] = [
   { id: 'fleet-overview', label: 'Overview', icon: BarChart3 },
   { id: 'fleet-customers', label: 'Customer Accounts', icon: Users },
   { id: 'fleet-team-members', label: 'Team Members', icon: UserCog },
+  ...FUEL_MANAGEMENT_CHILDREN,
+  ...TOLL_MANAGEMENT_CHILDREN,
+  ...VEHICLE_DATABASE_CHILDREN,
+  ...FLEET_SETTINGS_CHILDREN,
   { id: 'fleet-admin-link', label: 'Open Fleet Admin →', icon: ExternalLink, href: 'https://roamfleet.co/admin' },
 ];
 
@@ -85,32 +139,6 @@ export const ROAM_HAUL_CHILDREN: NavChild[] = [
   { id: 'roam-haul-admin-link', label: 'Open Haul Admin →', icon: ExternalLink, href: 'https://roamhaul.co/admin' },
 ];
 
-export const FUEL_MANAGEMENT_CHILDREN: NavChild[] = [
-  { id: 'fuel-stations', label: 'Station Database', icon: Database },
-  { id: 'fuel-analytics', label: 'Fuel Analytics', icon: BarChart3 },
-];
-
-export const TOLL_MANAGEMENT_CHILDREN: NavChild[] = [
-  { id: 'toll-stations', label: 'Toll Database', icon: MapPin },
-  { id: 'toll-info', label: 'Toll Info', icon: Info },
-];
-
-export const VEHICLE_DATABASE_CHILDREN: NavChild[] = [
-  { id: 'motor-vehicles', label: 'Motor Vehicles', icon: Car },
-  { id: 'pending-motor-vehicles', label: 'Pending motor vehicles', icon: Inbox },
-  { id: 'maintenance-templates', label: 'Maintenance templates', icon: Wrench },
-  { id: 'parts-sourcing', label: 'Parts sourcing', icon: ShoppingCart },
-];
-
-export const SETTINGS_CHILDREN: NavChild[] = [
-  { id: 'settings-general', label: 'General', icon: Globe },
-  { id: 'settings-features', label: 'Features', icon: Zap },
-  { id: 'settings-registration', label: 'Registration', icon: UserPlus },
-  { id: 'settings-security', label: 'Security', icon: Shield },
-  { id: 'settings-announcements', label: 'Announcements', icon: Megaphone },
-  { id: 'settings-danger', label: 'Danger Zone', icon: AlertTriangle },
-];
-
 export const API_CENTER_CHILDREN: NavChild[] = [
   { id: 'api-center-overview', label: 'Overview', icon: Gauge },
   { id: 'api-center-usage', label: 'Usage & Costs', icon: BarChart3 },
@@ -121,6 +149,11 @@ export const API_CENTER_CHILDREN: NavChild[] = [
 ];
 
 export const DATABASE_MANAGEMENT_ITEM = { id: 'db-management', label: 'Database Management', icon: Database };
+
+const GLOBAL_SETTINGS_PAGES = GLOBAL_SETTINGS_CHILDREN.map((c) => c.id);
+const FLEET_SETTINGS_PAGES = FLEET_SETTINGS_CHILDREN.map((c) => c.id);
+const ENTERPRISE_SETTINGS_PAGES = ENTERPRISE_SETTINGS_CHILDREN.map((c) => c.id);
+const LEGACY_SETTINGS_PAGES = SETTINGS_CHILDREN.map((c) => c.id);
 
 const SHARED_PLATFORM_PAGES = [
   'dashboard',
@@ -151,6 +184,9 @@ const SHARED_PLATFORM_PAGES = [
   'pending-motor-vehicles',
   'maintenance-templates',
   'parts-sourcing',
+  ...GLOBAL_SETTINGS_PAGES,
+  ...FLEET_SETTINGS_PAGES,
+  ...ENTERPRISE_SETTINGS_PAGES,
 ];
 
 export const PLATFORM_ROLE_PAGES: Record<string, string[]> = {
@@ -164,12 +200,7 @@ export const PLATFORM_ROLE_PAGES: Record<string, string[]> = {
     'api-center-logs',
     'api-center-billing',
     'settings',
-    'settings-general',
-    'settings-features',
-    'settings-registration',
-    'settings-security',
-    'settings-announcements',
-    'settings-danger',
+    ...LEGACY_SETTINGS_PAGES,
     'db-management',
     'db-settings',
   ],
@@ -189,6 +220,13 @@ export const LEGACY_PAGE_REDIRECTS: Record<string, string> = {
   'team-members': 'enterprise-team-members',
   drivers: 'driver-users',
   'roam-dash-merchants': 'dash-merchants',
+  settings: 'global-settings-general',
+  'settings-general': 'global-settings-general',
+  'settings-features': 'fleet-settings-features',
+  'settings-registration': 'fleet-settings-registration',
+  'settings-security': 'global-settings-security',
+  'settings-announcements': 'fleet-settings-announcements',
+  'settings-danger': 'global-settings-danger',
 };
 
 export const SECTION_META = {
@@ -201,3 +239,11 @@ export const SECTION_META = {
   haul: { label: 'Roam Haul', icon: Truck },
   driver: { label: 'Roam Driver', icon: Car },
 } as const;
+
+export function settingsTabFromPageId(pageId: string): string | null {
+  if (pageId.startsWith('global-settings-')) return pageId.replace('global-settings-', '');
+  if (pageId.startsWith('fleet-settings-')) return pageId.replace('fleet-settings-', '');
+  if (pageId.startsWith('enterprise-settings-')) return pageId.replace('enterprise-settings-', '');
+  if (pageId.startsWith('settings-')) return pageId.replace('settings-', '');
+  return null;
+}

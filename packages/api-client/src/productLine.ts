@@ -1,6 +1,27 @@
 export type ProductLine = 'fleet' | 'enterprise';
 
+export type SettingsSegment =
+  | 'global'
+  | 'fleet'
+  | 'enterprise'
+  | 'rides'
+  | 'driver'
+  | 'haul'
+  | 'dash';
+
+export type ProductLineSegment = 'fleet' | 'enterprise';
+
 const VALID: ProductLine[] = ['fleet', 'enterprise'];
+
+const VALID_SEGMENTS: SettingsSegment[] = [
+  'global',
+  'fleet',
+  'enterprise',
+  'rides',
+  'driver',
+  'haul',
+  'dash',
+];
 
 function readEnvProductLine(): ProductLine | undefined {
   const raw =
@@ -14,12 +35,35 @@ function readEnvProductLine(): ProductLine | undefined {
 /** Build-time product line (defaults to fleet for roamfleet.co). */
 export const PRODUCT_LINE: ProductLine = readEnvProductLine() ?? 'fleet';
 
+export function isSettingsSegment(value: string): value is SettingsSegment {
+  return (VALID_SEGMENTS as string[]).includes(value);
+}
+
 export function getProductLineHeaders(): Record<string, string> {
   return { 'X-Roam-Product-Line': PRODUCT_LINE };
+}
+
+export function getSettingsSegmentHeaders(segment: SettingsSegment): Record<string, string> {
+  return { 'X-Roam-Settings-Segment': segment };
 }
 
 export function withProductLineHeaders(
   headers: Record<string, string> = {},
 ): Record<string, string> {
   return { ...headers, ...getProductLineHeaders() };
+}
+
+export function withSettingsSegmentHeaders(
+  segment: SettingsSegment,
+  headers: Record<string, string> = {},
+): Record<string, string> {
+  const productLineSegment =
+    segment === 'fleet' || segment === 'enterprise' ? segment : undefined;
+  return {
+    ...headers,
+    ...getSettingsSegmentHeaders(segment),
+    ...(productLineSegment
+      ? { 'X-Roam-Product-Line': productLineSegment }
+      : {}),
+  };
 }

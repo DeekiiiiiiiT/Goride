@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, hasProductAdminRole, jwtPrimaryRole } from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
-import { LayoutDashboard, Store, ClipboardList, Loader2, ShieldAlert } from 'lucide-react';
+import { LayoutDashboard, Store, ClipboardList, Loader2, ShieldAlert, Settings } from 'lucide-react';
 import { Toaster } from 'sonner';
 import { AdminShell } from '@roam/admin-core';
 import type { AdminConfig } from '@roam/admin-core';
 import { MerchantManager } from './pages/MerchantManager';
+import { PlatformSettingsPage } from './pages/PlatformSettingsPage';
 import { AdminLoginForm } from './components/AdminLoginForm';
 
-type AdminPage = 'dashboard' | 'merchants' | 'orders';
+type AdminPage = 'dashboard' | 'merchants' | 'orders' | 'settings';
 
 const ALLOWED_ROLES = [
   'platform_owner',
@@ -27,6 +28,7 @@ const DASH_ADMIN_CONFIG: AdminConfig = {
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'merchants', label: 'Merchants', icon: Store },
     { id: 'orders', label: 'Orders', icon: ClipboardList },
+    { id: 'settings', label: 'Platform Settings', icon: Settings },
   ],
   allowedRoles: ALLOWED_ROLES,
   backToAppUrl: '/',
@@ -115,6 +117,8 @@ export function DashAdminPortal() {
             <p className="text-slate-400">Order management tools are coming soon.</p>
           </div>
         );
+      case 'settings':
+        return <PlatformSettingsPage session={session} />;
       case 'dashboard':
       default:
         return (

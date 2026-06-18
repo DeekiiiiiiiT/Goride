@@ -4,7 +4,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import type { ProductLine } from "./product_line.ts";
 
-export type FleetProductKey = "fleet" | "enterprise" | "dash" | "rides" | "driver";
+export type FleetProductKey = "fleet" | "enterprise" | "dash" | "rides" | "driver" | "haul";
 
 const PLATFORM_ROLES = new Set([
   "platform_owner",
@@ -18,6 +18,7 @@ const PRODUCT_ADMIN_ROLES: Record<FleetProductKey, Set<string>> = {
   dash: new Set([...PLATFORM_ROLES, "dash_admin", "dash_ops"]),
   rides: new Set([...PLATFORM_ROLES, "rides_admin", "rides_ops"]),
   driver: new Set([...PLATFORM_ROLES, "driver_admin", "driver_ops"]),
+  haul: new Set([...PLATFORM_ROLES, "haul_admin", "haul_ops"]),
 };
 
 export type ProductAdminUser = {

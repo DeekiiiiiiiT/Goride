@@ -73,6 +73,14 @@ export function DriverOverviewCard({ onOpenAdmin }: DriverOverviewCardProps) {
         >
           Go to Driver Admin <ExternalLink className="w-3 h-3" />
         </button>
+        <a
+          href="https://roamdriver.co/admin/settings"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-2 block text-sm text-slate-500 hover:text-slate-300"
+        >
+          Platform settings →
+        </a>
       </div>
 
       <p className="text-xs text-slate-500">

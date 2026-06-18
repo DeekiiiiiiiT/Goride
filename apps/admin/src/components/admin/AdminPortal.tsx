@@ -9,6 +9,7 @@ import { ActivityLog } from './ActivityLog';
 import { TollDatabaseView } from '../toll/TollDatabaseView';
 import { TollInfoPage } from '../toll/TollInfoPage';
 import { PlatformSettings } from './PlatformSettings';
+import { GlobalPlatformSettingsPage } from '@roam/admin-core/settings';
 import { ApiCommandCenter } from './api-center/ApiCommandCenter';
 import { DatabaseManagement } from '../database/DatabaseManagement';
 import { BusinessTypeCustomers } from '../database/BusinessTypeCustomers';
@@ -31,7 +32,7 @@ import { fuelService } from '../../services/fuelService';
 import { FuelEntry } from '../../types/fuel';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { useAuth } from '../auth/AuthContext';
-import { LEGACY_PAGE_REDIRECTS } from './adminNavConfig';
+import { LEGACY_PAGE_REDIRECTS, settingsTabFromPageId } from './adminNavConfig';
 import { MerchantVerificationManager } from './roam-dash/MerchantVerificationManager';
 import { GlobalIdentitySearch } from './platform/GlobalIdentitySearch';
 import { MatchingBrainPage } from './matching-brain/MatchingBrainPage';
@@ -52,7 +53,7 @@ type NavExtras = { userId?: string; customer?: unknown } | null;
  * AdminPortal — Dominion platform shell that routes purely via internal page IDs.
  */
 export function AdminPortal() {
-  const { session } = useAuth();
+  const { session, user } = useAuth();
   const queryClient = useQueryClient();
   const [currentPageRaw, setCurrentPageRaw] = useState(() => normalizePortalPage('dashboard'));
   const [fuelLogs, setFuelLogs] = useState<FuelEntry[]>([]);
@@ -255,9 +256,26 @@ export function AdminPortal() {
           <HaulOverviewCard />
         </div>
       )}
-      {currentPage === 'settings' && <PlatformSettings />}
-      {currentPage.startsWith('settings-') && (
-        <PlatformSettings activeTab={currentPage.replace('settings-', '')} />
+      {currentPage.startsWith('global-settings-') && (
+        <GlobalPlatformSettingsPage
+          apiBaseUrl={API_ENDPOINTS.admin}
+          accessToken={session?.access_token}
+          userEmail={user?.email}
+          userRole={(user?.user_metadata?.role as string | undefined) ?? 'superadmin'}
+          activeTab={settingsTabFromPageId(currentPage) ?? 'general'}
+        />
+      )}
+      {currentPage.startsWith('fleet-settings-') && (
+        <PlatformSettings
+          segment="fleet"
+          activeTab={settingsTabFromPageId(currentPage) ?? 'general'}
+        />
+      )}
+      {currentPage.startsWith('enterprise-settings-') && (
+        <PlatformSettings
+          segment="enterprise"
+          activeTab={settingsTabFromPageId(currentPage) ?? 'general'}
+        />
       )}
       {(currentPage === 'api-center' || currentPage.startsWith('api-center-')) && (
         <ApiCommandCenter
