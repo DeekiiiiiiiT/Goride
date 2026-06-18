@@ -34,7 +34,8 @@ import { DeleteConfirmationDialog } from './DeleteConfirmationDialog';
 import { createManualTrip, ManualTripInput } from '../../utils/tripFactory';
 import { startOfDay, endOfDay, subDays, startOfWeek, startOfMonth } from 'date-fns';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { resolveMissingTripAddresses } from '../../utils/addressResolver';
+import { useTripAddressResolution } from '../../hooks/useTripAddressResolution';
+import { getTripVehicleLabel } from '../../utils/tripManifestHelpers';
 
 // Helper to parse "YYYY-MM-DD" as local midnight to avoid UTC conversion issues
 const parseLocalDate = (dateStr: string) => {
@@ -78,7 +79,8 @@ export function TripLogsPage() {
         const drivers = await api.getDrivers();
         return drivers.map((d: any) => ({
             id: d.id, 
-            name: d.name || 'Unknown'
+            name: d.name || d.driverName || 'Unknown',
+            driverId: d.driverId,
         }));
     }
   });
@@ -89,7 +91,9 @@ export function TripLogsPage() {
         const vehicles = await api.getVehicles();
         return vehicles.map((v: any) => ({
             id: v.id, 
-            plate: v.plateNumber || v.id
+            plate: v.plateNumber || v.licensePlate || v.id,
+            currentDriverId: v.currentDriverId,
+            currentDriverName: v.currentDriverName,
         }));
     }
   });
@@ -161,10 +165,7 @@ export function TripLogsPage() {
   const trips = tripData?.data || [];
   const hasMore = (tripData?.data?.length || 0) === pageSize;
 
-  // Background Address Resolution - DISABLED to prevent infinite re-render loop.
-  // The effect depended on `trips` array reference which changes on every query,
-  // and invalidateQueries inside it would trigger another query → new reference → loop.
-  // TODO: Re-implement with a stable dependency (e.g. trip IDs string) and a "resolved" cache.
+  useTripAddressResolution(trips, queryClient, availableVehicles, availableDrivers);
 
   // 4. Stats Query (Independent of page)
   const statsParams = useMemo(() => {
@@ -438,7 +439,9 @@ export function TripLogsPage() {
                               <TableCell className="align-top">
                                 <div className="flex flex-col">
                                     <span className="font-medium text-slate-900">{trip.driverName || 'Unknown Driver'}</span>
-                                    <span className="text-xs text-slate-500 font-mono mb-1">{trip.vehicleId || 'No Vehicle'}</span>
+                                    <span className="text-xs text-slate-500 font-mono mb-1">
+                                      {getTripVehicleLabel(trip, availableVehicles, availableDrivers)}
+                                    </span>
                                     {trip.isLiveRecorded && (
                                         <Badge variant="outline" className="w-fit text-[10px] h-5 px-1 bg-indigo-50 text-indigo-700 border-indigo-200">
                                             Live Trip

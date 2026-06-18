@@ -39,6 +39,46 @@ export interface ManualTripInput {
   intermediateStops?: { id: string; address: string; coords?: { lat: number; lon: number } }[];
 }
 
+export type TripIdentityUser = {
+  id: string;
+  email?: string;
+  user_metadata?: { name?: string };
+};
+
+export type TripIdentityDriver = {
+  id?: string;
+  driverId?: string;
+  name?: string;
+  driverName?: string;
+  assignedVehicleId?: string;
+  vehicleId?: string;
+  vehicle?: string;
+} | null;
+
+export function resolveTripIdentity(user: TripIdentityUser, driverRecord?: TripIdentityDriver) {
+  return {
+    driverId: driverRecord?.id || driverRecord?.driverId || user.id,
+    driverName:
+      driverRecord?.driverName ||
+      driverRecord?.name ||
+      user.user_metadata?.name ||
+      user.email ||
+      'Unknown',
+    vehicleId:
+      driverRecord?.assignedVehicleId ||
+      driverRecord?.vehicleId ||
+      driverRecord?.vehicle ||
+      '',
+  };
+}
+
+export function withTripVehicle(data: ManualTripInput, fallbackVehicleId: string): ManualTripInput {
+  return {
+    ...data,
+    vehicleId: data.vehicleId || fallbackVehicleId,
+  };
+}
+
 export function createManualTrip(data: ManualTripInput, driverId: string, driverName?: string): Trip {
   // Construct ISO timestamp from date and time components
   // Assuming local time, but we store as ISO. 

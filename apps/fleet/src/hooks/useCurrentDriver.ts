@@ -49,7 +49,8 @@ export function useCurrentDriver() {
             }
 
             if (match) {
-                console.log(`[DriverSync] Resolved Identity: ${user.email} -> ${match.driverName} (${match.id})`);
+                console.log(`[DriverSync] Resolved Identity: ${user.email} -> ${match.driverName || match.name} (${match.id})`);
+                match.name = match.driverName || match.name;
                 
                 // Enhanced Vehicle Resolution: If driver record doesn't have assignedVehicleId, try to find it in vehicles list
                 if (!match.assignedVehicleId) {
@@ -72,6 +73,44 @@ export function useCurrentDriver() {
                 }
             } else {
                 console.warn(`[DriverSync] Could not link '${user.email}' to any driver record.`);
+                // Fallback: resolve via fleet vehicle assignment name (e.g. currentDriverName on vehicle)
+                try {
+                    const vehicles = await api.getVehicles();
+                    const userName = (user.user_metadata?.name || user.email?.split('@')[0] || '').trim().toLowerCase();
+                    if (userName.length >= 3) {
+                        const assignedVehicle = vehicles.find((v: any) => {
+                            const assignedName = (v.currentDriverName || '').trim().toLowerCase();
+                            if (!assignedName) return false;
+                            return (
+                                assignedName === userName ||
+                                assignedName.includes(userName) ||
+                                userName.includes(assignedName)
+                            );
+                        });
+                        if (assignedVehicle?.currentDriverId) {
+                            match = drivers.find(
+                                (d: any) =>
+                                    d.id === assignedVehicle.currentDriverId ||
+                                    d.driverId === assignedVehicle.currentDriverId
+                            );
+                            if (match) {
+                                console.log(
+                                    `[DriverSync] Resolved via vehicle assignment: ${assignedVehicle.currentDriverName} (${match.id})`
+                                );
+                                match.name = match.driverName || match.name;
+                                match.assignedVehicleId = assignedVehicle.id;
+                                match.assignedVehiclePlate =
+                                    assignedVehicle.plateNumber || assignedVehicle.licensePlate || 'Unknown Plate';
+                                match.assignedVehicleName =
+                                    assignedVehicle.vehicleName ||
+                                    `${assignedVehicle.make || ''} ${assignedVehicle.model || ''}`.trim();
+                                match.vehicle = assignedVehicle.id;
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.warn("[DriverSync] Vehicle assignment name fallback failed", err);
+                }
             }
 
             setDriverRecord(match || { id: user.id, email: user.email, name: user.user_metadata?.name });

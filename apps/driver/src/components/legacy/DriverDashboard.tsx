@@ -21,7 +21,7 @@ import { TripFareDialog, type TripFareInitialData } from '../trips/TripFareDialo
 import { TripTimer } from '../trips/TripTimer';
 import { DriverMintHome } from '../home/DriverMintHome';
 import { useDriver } from '../../contexts/DriverContext';
-import { createManualTrip, ManualTripInput } from '../../utils/tripFactory';
+import { createManualTrip, ManualTripInput, resolveTripIdentity, withTripVehicle } from '../../utils/tripFactory';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
@@ -323,7 +323,12 @@ export function DriverDashboard({ onNavigate }: DriverDashboardProps = {}) {
     if (!user?.id) return;
 
     try {
-      const trip = createManualTrip(data, user.id, driverRecord?.name || user.email);
+      const identity = resolveTripIdentity(user, driverRecord);
+      const trip = createManualTrip(
+        withTripVehicle(data, identity.vehicleId),
+        identity.driverId,
+        identity.driverName
+      );
       await api.saveTrips([trip]);
 
       toast.success("Trip Logged Successfully", {

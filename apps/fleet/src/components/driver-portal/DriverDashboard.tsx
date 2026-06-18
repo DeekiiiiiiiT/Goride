@@ -18,7 +18,7 @@ import { FuelLogForm } from './FuelLogForm';
 import { ServiceRequestForm } from './ServiceRequestForm';
 import { ManualTripForm } from '../trips/ManualTripForm';
 import { TripTimer } from '../trips/TripTimer';
-import { createManualTrip, ManualTripInput } from '../../utils/tripFactory';
+import { createManualTrip, ManualTripInput, resolveTripIdentity, withTripVehicle } from '../../utils/tripFactory';
 import { useAuth } from '../auth/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
@@ -333,7 +333,12 @@ export function DriverDashboard() {
     if (!user?.id) return;
     
     try {
-      const trip = createManualTrip(data, user.id, driverRecord?.name || user.email);
+      const identity = resolveTripIdentity(user, driverRecord);
+      const trip = createManualTrip(
+        withTripVehicle(data, identity.vehicleId),
+        identity.driverId,
+        identity.driverName
+      );
       await api.saveTrips([trip]);
       
       toast.success("Trip Logged Successfully", {
