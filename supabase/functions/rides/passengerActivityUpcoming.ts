@@ -2,9 +2,11 @@ import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { allowsPassengerSurface, jsonEdgeForbidden } from "../_shared/authEdge.ts";
 import type { PassengerActivityHistoryDeps } from "./passengerActivityHistory.ts";
 import { loadScheduledPipelineItems } from "./scheduledRides/activityPipeline.ts";
+import { loadHaulagePipelineItems } from "./haulage/manifestJoin.ts";
 import { isScheduledRidesEnabled } from "./scheduledRides/flags.ts";
+import { isHaulageBookingEnabled } from "./haulage/buildHaulageQuote.ts";
 
-export type ActivityPipelineKind = "schedule" | "courier" | "event";
+export type ActivityPipelineKind = "schedule" | "courier" | "event" | "haulage";
 
 export type ActivityPipelineItem = {
   kind: ActivityPipelineKind;
@@ -27,6 +29,10 @@ export async function buildActivityPipelineItems(
   if (isScheduledRidesEnabled()) {
     const scheduled = await loadScheduledPipelineItems(deps.svc, deps.pubSvc, userId);
     items.push(...scheduled);
+  }
+  if (isHaulageBookingEnabled()) {
+    const haulage = await loadHaulagePipelineItems(deps.pubSvc(), userId);
+    items.push(...haulage);
   }
   return items;
 }

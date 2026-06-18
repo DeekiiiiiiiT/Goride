@@ -22,7 +22,7 @@ function AppContent() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-slate-950 text-slate-500">
+      <div className="flex items-center justify-center h-screen bg-slate-100 text-slate-600 dark:bg-slate-950 dark:text-slate-400">
         Loading...
       </div>
     );

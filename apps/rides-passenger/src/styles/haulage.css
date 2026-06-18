@@ -1,14 +1,75 @@
 .haulage-page {
-  --haulage-primary: var(--passenger-primary, #006c49);
-  --haulage-primary-container: var(--passenger-primary-container, #2af5ad);
-  --haulage-surface: var(--passenger-page-bg, #f7f9fb);
-  --haulage-card-border: var(--passenger-outline-variant, #bacbbf);
+  --haulage-primary: #006c49;
+  --haulage-card-border: #bacbbf;
+  --haulage-outline: #6b7b71;
+}
+
+.haulage-grid-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  text-align: center;
+  cursor: pointer;
+  touch-action: manipulation;
+  background-color: #ffffff;
+  border: 1px solid #e0e3e5;
+  border-radius: 1rem;
+  box-shadow: 0 2px 8px -1px rgba(0, 0, 0, 0.04);
+  transition: transform 0.2s ease, border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.haulage-grid-card:active {
+  transform: scale(0.96);
+}
+
+.haulage-grid-card--active {
+  border-color: #006c49;
+  background-color: #f2f4f6;
+  box-shadow: 0 4px 12px -2px rgba(0, 108, 73, 0.15);
+}
+
+.haulage-grid-card__label {
+  font-size: 13px;
+  line-height: 1.25;
+  font-weight: 600;
+  color: #191c1e;
+}
+
+.haulage-emoji {
+  font-size: 1.75rem;
+  line-height: 1;
+}
+
+.haulage-category-header {
+  position: sticky;
+  top: 64px;
+  z-index: 40;
+  background: rgba(247, 249, 251, 0.95);
+  backdrop-filter: blur(8px);
+  touch-action: manipulation;
+}
+
+.haulage-category-header:active {
+  opacity: 0.85;
+}
+
+.haulage-search-bar:focus-within {
+  border-color: #006c49;
+  box-shadow: 0 0 0 3px rgba(42, 245, 173, 0.2);
+}
+
+.haulage-variant-overlay-btn:active {
+  background-color: #006c49;
+  border-color: #006c49;
+  color: #ffffff;
 }
 
 .haulage-tactile-card {
   background-color: #ffffff;
   border: 1px solid var(--haulage-card-border);
-  box-shadow: var(--passenger-card-shadow, 0 4px 20px rgba(0, 0, 0, 0.04));
+  box-shadow: 0 2px 8px -1px rgba(0, 0, 0, 0.04);
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
@@ -22,10 +83,11 @@
     inset 0 2px 0 rgba(255, 255, 255, 0.4),
     0 4px 12px rgba(0, 108, 73, 0.25);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
+  color: #002113;
 }
 
 .haulage-primary-btn:active:not(:disabled) {
-  transform: scale(0.98);
+  transform: scale(0.96);
 }
 
 .haulage-primary-btn:disabled {
@@ -61,9 +123,9 @@
 }
 
 .haulage-variant-radio:checked + .haulage-variant-label {
-  background-color: var(--haulage-primary-container);
-  color: var(--haulage-primary);
-  border-color: var(--haulage-primary);
+  background-color: #006c49;
+  color: #ffffff;
+  border-color: #006c49;
 }
 
 .haulage-sheet-enter {
@@ -77,4 +139,9 @@
   to {
     transform: translateY(0);
   }
+}
+
+.haulage-page .material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  vertical-align: middle;
 }

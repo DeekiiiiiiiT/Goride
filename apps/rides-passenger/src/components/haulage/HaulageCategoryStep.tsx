@@ -1,7 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronRight } from 'lucide-react';
-import { HAULAGE_CATEGORIES } from '@/lib/haulage/catalog';
+import { ChevronRight, Loader2 } from 'lucide-react';
 import { HaulageIcon } from '@/components/haulage/HaulageIcon';
 import { HaulageTactileCard } from '@/components/haulage/HaulageShell';
 import { useHaulageBooking } from '@/contexts/HaulageBookingContext';
@@ -9,12 +8,28 @@ import {
   ON_SURFACE,
   ON_SURFACE_VARIANT,
   PRIMARY,
-  PRIMARY_CONTAINER,
+  SURFACE_CONTAINER_HIGH,
 } from '@/lib/passengerTheme';
 
 export function HaulageCategoryStep() {
   const { t } = useTranslation('haulage');
-  const { setCategory } = useHaulageBooking();
+  const { catalog, catalogLoading, catalogError, setCategory } = useHaulageBooking();
+
+  if (catalogLoading) {
+    return (
+      <div className="flex justify-center py-16">
+        <Loader2 className="h-8 w-8 animate-spin" style={{ color: PRIMARY }} />
+      </div>
+    );
+  }
+
+  if (catalogError || !catalog?.categories.length) {
+    return (
+      <p className="text-center text-sm" style={{ color: ON_SURFACE_VARIANT }}>
+        {t('catalogUnavailable', { defaultValue: 'Catalog is temporarily unavailable.' })}
+      </p>
+    );
+  }
 
   return (
     <div>
@@ -28,22 +43,22 @@ export function HaulageCategoryStep() {
       </div>
 
       <ul className="space-y-4">
-        {HAULAGE_CATEGORIES.map((category) => (
+        {catalog.categories.map((category) => (
           <li key={category.id}>
             <HaulageTactileCard onClick={() => setCategory(category.id)} className="p-5">
               <div className="flex items-center gap-4">
                 <div
                   className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl"
-                  style={{ backgroundColor: PRIMARY_CONTAINER, color: PRIMARY }}
+                  style={{ backgroundColor: SURFACE_CONTAINER_HIGH, color: PRIMARY }}
                 >
-                  <HaulageIcon name={category.icon} className="h-7 w-7" />
+                  <HaulageIcon name={category.icon} className="text-[1.75rem]" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold" style={{ color: ON_SURFACE }}>
-                    {t(category.titleKey)}
+                    {category.title}
                   </p>
                   <p className="mt-0.5 text-xs" style={{ color: ON_SURFACE_VARIANT }}>
-                    {t(category.descriptionKey)}
+                    {category.description}
                   </p>
                 </div>
                 <ChevronRight className="h-5 w-5 shrink-0" style={{ color: ON_SURFACE_VARIANT }} />

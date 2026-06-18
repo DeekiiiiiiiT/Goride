@@ -10,6 +10,7 @@ import {
 } from "./ridesVehicleTypes.ts";
 
 export type TransportSolutionKind = "vehicle" | "service";
+export type ServiceCategory = "rideshare" | "courier" | "event" | "haulage";
 
 export type VehicleTypeRow = {
   slug: string;
@@ -21,6 +22,7 @@ export type VehicleTypeRow = {
   sort_order: number;
   is_active: boolean;
   solution_kind?: TransportSolutionKind | string | null;
+  service_category?: ServiceCategory | string | null;
   commando_body_type?: string | null;
 };
 
@@ -34,6 +36,7 @@ export type VehicleTypeDto = {
   sort_order: number;
   is_active: boolean;
   solution_kind: TransportSolutionKind;
+  service_category: ServiceCategory | null;
   commando_body_type: string | null;
 };
 
@@ -45,7 +48,19 @@ function inferSolutionKind(slug: string, kind?: string | null): TransportSolutio
 const CACHE_TTL_MS = 30_000;
 let cache: { rows: VehicleTypeRow[]; at: number } | null = null;
 
+function inferServiceCategory(slug: string, stored?: string | null): ServiceCategory {
+  if (stored === "rideshare" || stored === "courier" || stored === "event" || stored === "haulage") {
+    return stored;
+  }
+  const normalized = slug.trim().toLowerCase();
+  if (normalized === "courier") return "courier";
+  if (normalized === "event-booking" || normalized === "event") return "event";
+  if (normalized === "haulage") return "haulage";
+  return "rideshare";
+}
+
 function rowToDto(r: VehicleTypeRow): VehicleTypeDto {
+  const kind = inferSolutionKind(r.slug, r.solution_kind);
   return {
     slug: r.slug,
     label: r.label,
@@ -55,7 +70,8 @@ function rowToDto(r: VehicleTypeRow): VehicleTypeDto {
     tagline: r.tagline,
     sort_order: r.sort_order ?? 0,
     is_active: r.is_active !== false,
-    solution_kind: inferSolutionKind(r.slug, r.solution_kind),
+    solution_kind: kind,
+    service_category: kind === "service" ? inferServiceCategory(r.slug, r.service_category) : null,
     commando_body_type: r.commando_body_type ?? null,
   };
 }
@@ -71,6 +87,7 @@ function fallbackRows(): VehicleTypeRow[] {
     sort_order: (i + 1) * 10,
     is_active: true,
     solution_kind: inferSolutionKind(v.slug),
+    service_category: inferServiceCategory(v.slug),
   }));
 }
 

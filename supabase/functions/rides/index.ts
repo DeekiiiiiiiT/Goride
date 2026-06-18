@@ -121,6 +121,9 @@ import {
   notifyShadowBookerOfTripCompleted,
 } from "./rideNotifications.ts";
 import { registerScheduledRidesRoutes } from "./scheduledRides/scheduledRidesRoutes.ts";
+import { registerHaulageRoutes } from "./haulage/haulageRoutes.ts";
+import { attachHaulageManifestIfNeeded } from "./haulage/manifestJoin.ts";
+import { filterDriversForHaulageJob } from "./haulage/dispatchConstraints.ts";
 import {
   isMatchingBrainEnabled,
   delegateStartMatching,
@@ -249,6 +252,8 @@ async function loadRideRequestById(id: string): Promise<Record<string, unknown> 
   }
 
   ride = await enrichRideRoamModeFromBooking(ride, getRidesContactsDb, svc());
+
+  ride = await attachHaulageManifestIfNeeded(pubSvc(), ride);
 
   return ride;
 }
@@ -1197,6 +1202,15 @@ async function runMatchingWave(
   }
   candidates.sort((a, b) => a.d - b.d || a.user_id.localeCompare(b.user_id));
 
+  const haulageFiltered = await filterDriversForHaulageJob(
+    pubSvc(),
+    rideId,
+    serviceSlug,
+    candidates.map((c) => ({ driver_user_id: c.user_id, body_type_slug: c.body_type_slug })),
+  );
+  const haulageAllowed = new Set(haulageFiltered.map((c) => c.driver_user_id));
+  const finalCandidates = candidates.filter((c) => haulageAllowed.has(c.user_id));
+
   // #region agent log
   debugAgentLog("A-B", "index.ts:runMatchingWave", "matching wave candidate pool", {
     rideId,
@@ -1204,7 +1218,7 @@ async function runMatchingWave(
     locCount: (locs ?? []).length,
     excludedCount: excluded.size,
     eligibleCount: eligibleIds.size,
-    candidateCount: candidates.length,
+    candidateCount: finalCandidates.length,
     filteredOutBodyType,
     radiusKm,
   }, true);
@@ -1218,7 +1232,7 @@ async function runMatchingWave(
     radius_km: radiusKm,
     loc_rows: locCount,
     eligible_drivers: eligibleIds.size,
-    candidates: candidates.length,
+    candidates: finalCandidates.length,
     filtered_body_type: filteredOutBodyType,
     service_slug: serviceSlug,
     tiers_count: tiersCount,
@@ -1236,7 +1250,7 @@ async function runMatchingWave(
 
   const { ranked, source: matchingRouteSource } = await rankDriversByDriveTime(
     { lat: pickupLat, lng: pickupLng },
-    candidates.map((c) => ({
+    finalCandidates.map((c) => ({
       user_id: c.user_id,
       lat: c.lat,
       lng: c.lng,
@@ -2898,6 +2912,21 @@ registerScheduledRidesRoutes(app, {
   startMatchingForRide,
   clientIp,
   rateLimit,
+});
+
+registerHaulageRoutes(app, {
+  svc,
+  pubSvc,
+  requireUser,
+  readSurgeMultiplier,
+  getRidesAdminDb,
+  loadRideRequestByIdempotencyKey,
+  cancelPriorMatchingRidesForRider,
+  bumpSurgeDemand,
+  startMatchingForRide,
+  clientIp,
+  rateLimit,
+  audit,
 });
 
 registerCashSettlementRoutes(app, {

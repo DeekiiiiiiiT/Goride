@@ -3,7 +3,7 @@
  * Keep in sync with supabase/functions/rides/fare/ridesVehicleTypes.ts
  */
 
-export type RidesVehicleTypeSlug = 'uberx' | 'comfort' | 'uberxl' | 'courier';
+export type RidesVehicleTypeSlug = 'uberx' | 'comfort' | 'uberxl' | 'courier' | 'haulage';
 
 export type RidesVehicleType = {
   slug: RidesVehicleTypeSlug;
@@ -38,6 +38,13 @@ export const RIDES_VEHICLE_TYPES: readonly RidesVehicleType[] = [
     label: 'Courier',
     description:
       'Variable — car, motorcycle, bicycle, or scooter depending on your market',
+    seats: 0,
+    capacityLabel: 'Variable',
+  },
+  {
+    slug: 'haulage',
+    label: 'Haulage',
+    description: 'Move large items and heavy loads',
     seats: 0,
     capacityLabel: 'Variable',
   },

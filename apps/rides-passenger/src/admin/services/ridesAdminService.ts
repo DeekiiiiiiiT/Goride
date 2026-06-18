@@ -154,7 +154,7 @@ async function parseError(res: Response): Promise<string> {
       const list = Array.isArray(allowed) && allowed.length ? allowed.join(', ') : '';
       return list
         ? `Select a valid service. Active services: ${list}`
-        : 'Select a valid service (Transport Solutions → Services) before saving this rule.';
+        : 'Select a valid service (Services) before saving this rule.';
     }
     if (body.error === 'use_release_or_settle') {
       return body.message ?? 'Cash trips use Release to cash settlement or Settle & complete.';
@@ -1009,6 +1009,28 @@ export async function getReasonCodes(
   if (!res.ok) throw new Error(await parseError(res));
   const data = await res.json();
   return { reason_codes: data.reason_codes ?? {} };
+}
+
+export async function listHaulageAdminItems(
+  accessToken: string,
+): Promise<{ items: unknown[] }> {
+  const res = await adminFetch(accessToken, `${RIDES_BASE}/admin/haulage/items`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function updateHaulageVariant(
+  accessToken: string,
+  itemId: string,
+  variantId: string,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  const res = await adminFetch(
+    accessToken,
+    `${RIDES_BASE}/admin/haulage/items/${encodeURIComponent(itemId)}/variants/${encodeURIComponent(variantId)}`,
+    { method: 'PUT', body: JSON.stringify(patch) },
+  );
+  if (!res.ok) throw new Error(await parseError(res));
 }
 
 export async function listRidersWithArrears(

@@ -23,7 +23,19 @@ function inferSolutionKind(slug: string, kind?: string | null): "vehicle" | "ser
   return slug === "courier" ? "service" : "vehicle";
 }
 
+function inferServiceCategory(slug: string, stored?: string | null): "rideshare" | "courier" | "event" | "haulage" {
+  if (stored === "rideshare" || stored === "courier" || stored === "event" || stored === "haulage") {
+    return stored;
+  }
+  const normalized = slug.trim().toLowerCase();
+  if (normalized === "courier") return "courier";
+  if (normalized === "event-booking" || normalized === "event") return "event";
+  if (normalized === "haulage") return "haulage";
+  return "rideshare";
+}
+
 function dto(row: VehicleTypeRow): VehicleTypeDto {
+  const kind = inferSolutionKind(row.slug, row.solution_kind);
   return {
     slug: row.slug,
     label: row.label,
@@ -33,7 +45,8 @@ function dto(row: VehicleTypeRow): VehicleTypeDto {
     tagline: row.tagline,
     sort_order: row.sort_order ?? 0,
     is_active: row.is_active !== false,
-    solution_kind: inferSolutionKind(row.slug, row.solution_kind),
+    solution_kind: kind,
+    service_category: kind === "service" ? inferServiceCategory(row.slug, row.service_category) : null,
     commando_body_type: row.commando_body_type ?? null,
   };
 }
@@ -121,6 +134,10 @@ function parseServiceCreate(body: Record<string, unknown>) {
     ? parseInt(body.sort_order, 10)
     : 0;
 
+  const service_category = typeof body.service_category === "string"
+    ? inferServiceCategory(slug, body.service_category)
+    : inferServiceCategory(slug);
+
   return {
     slug,
     patch: {
@@ -129,6 +146,7 @@ function parseServiceCreate(body: Record<string, unknown>) {
       description,
       seats,
       solution_kind: "service" as const,
+      service_category,
       ...(capacity_label !== undefined ? { capacity_label } : {}),
       ...(tagline !== undefined ? { tagline } : {}),
       sort_order: Number.isFinite(sort_order) ? sort_order : 0,
@@ -185,6 +203,12 @@ function parsePatch(body: Record<string, unknown>, existing: VehicleTypeRow) {
     if (Number.isFinite(sort_order)) patch.sort_order = sort_order;
   }
   if (body.is_active !== undefined) patch.is_active = Boolean(body.is_active);
+  if (body.service_category !== undefined) {
+    patch.service_category = inferServiceCategory(
+      existing.slug,
+      typeof body.service_category === "string" ? body.service_category : null,
+    );
+  }
 
   return { patch } as const;
 }

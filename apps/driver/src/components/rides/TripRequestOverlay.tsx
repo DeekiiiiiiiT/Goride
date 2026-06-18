@@ -9,6 +9,7 @@ import {
   formatOfferDistanceMi,
   offerSecondsRemaining,
 } from './rideDispatchUtils';
+import { HaulageManifestCard, isHaulageRide } from './HaulageManifestCard';
 
 const TIMER_RADIUS = 36;
 const TIMER_CIRCUMFERENCE = 2 * Math.PI * TIMER_RADIUS;
@@ -163,6 +164,10 @@ export function TripRequestOverlay({ offer, queueHint, onAccept, onDecline }: Pr
               </p>
             </div>
           </div>
+
+          {ride?.haulage_manifest && isHaulageRide(ride.vehicle_option) ? (
+            <HaulageManifestCard manifest={ride.haulage_manifest} compact />
+          ) : null}
         </div>
 
         <div className="flex items-center justify-between gap-3 px-1">

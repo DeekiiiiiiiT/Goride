@@ -31,6 +31,7 @@ import { registerPlatformLedgerAdminRoutes } from "./admin/platformLedger.ts";
 import { registerPlayStoreLaunchAdminRoutes } from "./admin/playStoreLaunch.ts";
 import { registerDisputeAdminRoutes } from "./admin/disputeAdmin.ts";
 import { registerSettlementOverrideRoutes } from "./admin/settlementOverrides.ts";
+import { registerHaulageCatalogAdminRoutes } from "./admin/haulageCatalog.ts";
 
 export type RidesAdminDb = Awaited<ReturnType<typeof getRidesAdminDb>>;
 
@@ -663,6 +664,8 @@ export function registerAdminRoutes(
   registerDisputeAdminRoutes(admin, ridesDbOrResponse, adminAudit);
 
   registerSettlementOverrideRoutes(admin, ridesDbOrResponse, adminAudit);
+
+  registerHaulageCatalogAdminRoutes(admin, ridesDbOrResponse);
 
   app.route("/admin", admin);
 }

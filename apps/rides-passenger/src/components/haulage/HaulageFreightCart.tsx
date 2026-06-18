@@ -2,8 +2,8 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Trash2 } from 'lucide-react';
 import type { HaulageFreightItem } from '@/lib/haulage/types';
-import { getItemTemplate } from '@/lib/haulage/catalog';
 import { HaulageIcon } from '@/components/haulage/HaulageIcon';
+import { useHaulageBooking } from '@/contexts/HaulageBookingContext';
 import {
   ON_SURFACE,
   ON_SURFACE_VARIANT,
@@ -22,6 +22,7 @@ type Props = {
 
 export function HaulageFreightCart({ items, onRemove, readOnly = false }: Props) {
   const { t } = useTranslation('haulage');
+  const { catalog } = useHaulageBooking();
 
   if (items.length === 0) return null;
 
@@ -43,8 +44,7 @@ export function HaulageFreightCart({ items, onRemove, readOnly = false }: Props)
       </div>
       <ul className="space-y-2">
         {items.map((item) => {
-          const template = getItemTemplate(item.templateId);
-          const iconName = template?.icon ?? 'package';
+          const iconName = catalog?.items.find((i) => i.id === item.templateId)?.icon ?? 'package';
           return (
             <li
               key={item.clientId}
@@ -59,10 +59,10 @@ export function HaulageFreightCart({ items, onRemove, readOnly = false }: Props)
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold" style={{ color: ON_SURFACE }}>
-                  {t(item.titleKey)} · {t(item.variantLabelKey)}
+                  {item.itemTitle} · {item.variantLabel}
                 </p>
                 <p className="text-xs" style={{ color: ON_SURFACE_VARIANT }}>
-                  {t(item.subtitleKey)} · {item.weightKg}kg
+                  {item.subtitle} · {item.weightKg}kg
                   {item.fragile ? ` · ${t('cart.fragile')}` : ''}
                 </p>
               </div>

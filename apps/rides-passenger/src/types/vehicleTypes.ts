@@ -5,6 +5,64 @@ import {
 
 export type TransportSolutionKind = 'vehicle' | 'service';
 
+export type ServiceCategory = 'rideshare' | 'courier' | 'event' | 'haulage';
+
+export const SERVICE_CATEGORIES: ReadonlyArray<{
+  id: ServiceCategory;
+  label: string;
+  description: string;
+}> = [
+  {
+    id: 'rideshare',
+    label: 'Rideshare',
+    description: 'On-demand passenger rides (Roam S, Comfort, XL, etc.).',
+  },
+  {
+    id: 'courier',
+    label: 'Courier',
+    description: 'Send packages across town.',
+  },
+  {
+    id: 'event',
+    label: 'Event booking',
+    description: 'Weddings, parties, and group trips.',
+  },
+  {
+    id: 'haulage',
+    label: 'Haulage',
+    description: 'Move large items and heavy loads.',
+  },
+] as const;
+
+const EVENT_SLUGS = new Set(['event-booking', 'event']);
+const COURIER_SLUGS = new Set(['courier']);
+const HAULAGE_SLUGS = new Set(['haulage']);
+
+export function inferServiceCategory(
+  slug: string,
+  stored?: string | null,
+): ServiceCategory {
+  if (
+    stored === 'rideshare' ||
+    stored === 'courier' ||
+    stored === 'event' ||
+    stored === 'haulage'
+  ) {
+    return stored;
+  }
+  const normalized = slug.trim().toLowerCase();
+  if (COURIER_SLUGS.has(normalized)) return 'courier';
+  if (EVENT_SLUGS.has(normalized)) return 'event';
+  if (HAULAGE_SLUGS.has(normalized)) return 'haulage';
+  return 'rideshare';
+}
+
+export function resolveServiceCategory(
+  row: Pick<RidesVehicleTypeDto, 'slug' | 'service_category'>,
+): ServiceCategory {
+  return inferServiceCategory(row.slug, row.service_category);
+}
+
 /** Matches rides admin API: lowercase id, starts with a letter. */
 export const TRANSPORT_SOLUTION_SLUG_RE = /^[a-z][a-z0-9_-]{0,30}$/;
 
@@ -35,6 +93,7 @@ export type RidesVehicleTypeDto = {
   sort_order: number;
   is_active: boolean;
   solution_kind: TransportSolutionKind;
+  service_category?: ServiceCategory | null;
   commando_body_type?: string | null;
 };
 
@@ -49,6 +108,7 @@ export type RidesVehicleTypeInput = {
   sort_order?: number;
   is_active?: boolean;
   solution_kind: TransportSolutionKind;
+  service_category?: ServiceCategory | null;
 };
 
 export type ServiceBodyTypeLink = {
@@ -76,6 +136,7 @@ export function fallbackVehicleTypes(): RidesVehicleTypeDto[] {
     sort_order: (i + 1) * 10,
     is_active: true,
     solution_kind: inferSolutionKind(v.slug),
+    service_category: inferServiceCategory(v.slug),
   }));
 }
 

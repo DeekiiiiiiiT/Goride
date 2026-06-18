@@ -13,6 +13,15 @@ type AdminNavSectionProps = {
   isActive: boolean;
 };
 
+const sectionBtnActive =
+  'bg-amber-500/15 text-amber-700 dark:text-amber-300';
+const sectionBtnIdle =
+  'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800';
+const childBtnActive =
+  'bg-amber-500/10 text-amber-700 dark:text-amber-300';
+const childBtnIdle =
+  'text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:text-white dark:hover:bg-slate-800';
+
 export function AdminNavSection({
   label,
   icon: SectionIcon,
@@ -32,10 +41,7 @@ export function AdminNavSection({
         onClick={onToggle}
         className={`
           w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-          ${isActive
-            ? 'bg-amber-500/15 text-amber-300'
-            : 'text-slate-400 hover:text-white hover:bg-slate-800'
-          }
+          ${isActive ? sectionBtnActive : sectionBtnIdle}
         `}
       >
         <SectionIcon className="w-4.5 h-4.5 shrink-0" />
@@ -46,7 +52,7 @@ export function AdminNavSection({
         }
       </button>
       {open && (
-        <div className="ml-4 mt-1 space-y-0.5 border-l border-slate-800 pl-2">
+        <div className="ml-4 mt-1 space-y-0.5 border-l border-slate-200 dark:border-slate-800 pl-2">
           {children.map((child) => {
             const ChildIcon = child.icon;
             const active = currentPage === child.id && !child.href;
@@ -57,7 +63,7 @@ export function AdminNavSection({
                   href={child.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-slate-500 hover:text-white hover:bg-slate-800"
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${childBtnIdle}`}
                 >
                   <ChildIcon className="w-4 h-4 shrink-0" />
                   <span className="truncate">{child.label}</span>
@@ -71,15 +77,12 @@ export function AdminNavSection({
                 onClick={() => onNavigate(child.id)}
                 className={`
                   w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
-                  ${active
-                    ? 'bg-amber-500/10 text-amber-300'
-                    : 'text-slate-500 hover:text-white hover:bg-slate-800'
-                  }
+                  ${active ? childBtnActive : childBtnIdle}
                 `}
               >
                 <ChildIcon className="w-4 h-4 shrink-0" />
                 <span className="truncate">{child.label}</span>
-                {active && <ChevronRight className="w-3 h-3 ml-auto text-amber-400/60" />}
+                {active && <ChevronRight className="w-3 h-3 ml-auto text-amber-500/60 dark:text-amber-400/60" />}
               </button>
             );
           })}

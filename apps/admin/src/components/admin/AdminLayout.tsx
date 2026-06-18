@@ -249,7 +249,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   ];
 
   return (
-    <div className="dark flex h-screen bg-slate-950">
+    <div className="flex h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       {mobileOpen && (
         <div
           className="fixed inset-0 bg-black/60 z-40 lg:hidden"
@@ -259,24 +259,24 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
 
       <aside
         className={`
-          fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 border-r border-slate-800 flex flex-col
+          fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 dark:bg-slate-900 dark:border-slate-800 flex flex-col
           transform transition-transform duration-200 ease-in-out
           lg:relative lg:translate-x-0
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
         `}
       >
-        <div className="h-16 flex items-center gap-3 px-5 border-b border-slate-800 shrink-0">
+        <div className="h-16 flex items-center gap-3 px-5 border-b border-slate-200 dark:border-slate-800 shrink-0">
           <div className="bg-amber-500/20 p-2 rounded-lg">
-            <Shield className="w-5 h-5 text-amber-400" />
+            <Shield className="w-5 h-5 text-amber-500 dark:text-amber-400" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-sm font-bold text-white truncate">Roam Dominion</h1>
+            <h1 className="text-sm font-bold text-slate-900 dark:text-white truncate">Roam Dominion</h1>
             <p className="text-[11px] text-slate-500 truncate">Platform Admin</p>
           </div>
           <button
             type="button"
             onClick={() => setMobileOpen(false)}
-            className="lg:hidden ml-auto p-1 text-slate-400 hover:text-white"
+            className="lg:hidden ml-auto p-1 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
           >
             <X className="w-5 h-5" />
           </button>
@@ -293,7 +293,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
                 onClick={() => handleNav(item.id)}
                 className={`
                   w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-                  ${active ? 'bg-amber-500/15 text-amber-300' : 'text-slate-400 hover:text-white hover:bg-slate-800'}
+                  ${active ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800'}
                 `}
               >
                 <Icon className="w-4.5 h-4.5 shrink-0" />
@@ -363,7 +363,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
               onClick={() => handleNav('db-management')}
               className={`
                 w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-                ${isDbPage ? 'bg-amber-500/15 text-amber-300' : 'text-slate-400 hover:text-white hover:bg-slate-800'}
+                ${isDbPage ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800'}
               `}
             >
               <Database className="w-4.5 h-4.5 shrink-0" />
@@ -373,18 +373,18 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
           )}
         </nav>
 
-        <div className="border-t border-slate-800 p-4 shrink-0">
+        <div className="border-t border-slate-200 dark:border-slate-800 p-4 shrink-0">
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-9 h-9 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-300 text-xs font-bold shrink-0">
+            <div className="w-9 h-9 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-700 dark:text-amber-300 text-xs font-bold shrink-0">
               {initials}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-white truncate">{userName}</p>
+              <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{userName}</p>
               <p className="text-[11px] text-slate-500 truncate">{userEmail}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-wider text-amber-400/80 bg-amber-500/10 px-2 py-0.5 rounded font-semibold">
+            <span className="text-[10px] uppercase tracking-wider text-amber-700 dark:text-amber-400/80 bg-amber-500/10 px-2 py-0.5 rounded font-semibold">
               {resolved === 'platform_support' ? 'Support' : resolved === 'platform_analyst' ? 'Analyst' : 'Super Admin'}
             </span>
             <button
@@ -400,16 +400,16 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 bg-slate-900/50 border-b border-slate-800 flex items-center px-4 lg:px-6 shrink-0 backdrop-blur-sm">
+        <header className="h-16 bg-white/80 border-b border-slate-200 dark:bg-slate-900/50 dark:border-slate-800 flex items-center px-4 lg:px-6 shrink-0 backdrop-blur-sm">
           <button
             type="button"
             onClick={() => setMobileOpen(true)}
-            className="lg:hidden p-2 -ml-2 text-slate-400 hover:text-white mr-3"
+            className="lg:hidden p-2 -ml-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white mr-3"
           >
             <Menu className="w-5 h-5" />
           </button>
-          <h2 className="text-base font-semibold text-white">{pageTitle(currentPage)}</h2>
-          <a href="/" className="ml-auto text-xs text-slate-500 hover:text-slate-300 transition-colors">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-white">{pageTitle(currentPage)}</h2>
+          <a href="/" className="ml-auto text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
             Back to Fleet Dashboard
           </a>
         </header>

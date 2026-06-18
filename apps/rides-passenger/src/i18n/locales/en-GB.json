@@ -1075,7 +1075,23 @@
     "items": {
       "heading": "Select {{category}}",
       "subheading": "Specify the haulage items for your specialized delivery. High-value handling is guaranteed.",
+      "subheadingGrid": "Tap to add items to your specialized delivery.",
+      "searchPlaceholder": "Search appliances...",
       "sizeModel": "Size / model",
+      "subgroups": {
+        "majorKitchen": "Major kitchen appliances",
+        "laundry": "Laundry appliances",
+        "midSized": "Mid-sized & home",
+        "climateControl": "Climate control",
+        "utilityOutdoor": "Utility & outdoor",
+        "smallAppliances": "Small appliances"
+      },
+      "commonVariants": {
+        "standard": "Standard",
+        "compact": "Compact",
+        "large": "Large",
+        "commercial": "Commercial"
+      },
       "refrigerator": {
         "title": "Refrigerator",
         "subtitle": "Cooling & storage systems",
@@ -1115,6 +1131,106 @@
           "drawer": "Drawer model",
           "portable": "Portable"
         }
+      },
+      "freezer": {
+        "title": "Freezer",
+        "subtitle": "Cold storage units",
+        "variants": {
+          "upright": "Upright",
+          "chest": "Chest",
+          "compact": "Compact",
+          "commercial": "Commercial"
+        }
+      },
+      "wallOven": {
+        "title": "Wall oven",
+        "subtitle": "Built-in cooking",
+        "variants": {
+          "single": "Single oven",
+          "double": "Double oven",
+          "compact": "Compact",
+          "commercial": "Commercial"
+        }
+      },
+      "dryer": {
+        "title": "Dryer",
+        "subtitle": "Laundry drying systems",
+        "variants": {
+          "electric": "Electric",
+          "gas": "Gas",
+          "compact": "Compact",
+          "commercial": "Commercial"
+        }
+      },
+      "stackedCombo": {
+        "title": "Stacked combo",
+        "subtitle": "Washer & dryer stack",
+        "variants": {
+          "standard": "Standard stack",
+          "compact": "Compact stack",
+          "ventless": "Ventless",
+          "commercial": "Commercial"
+        }
+      },
+      "microwave": {
+        "title": "Microwave",
+        "subtitle": "Countertop cooking"
+      },
+      "wineCooler": {
+        "title": "Wine cooler",
+        "subtitle": "Temperature-controlled storage"
+      },
+      "waterCooler": {
+        "title": "Water cooler",
+        "subtitle": "Dispensing units"
+      },
+      "airConditioner": {
+        "title": "Air conditioner",
+        "subtitle": "Cooling systems",
+        "variants": {
+          "window": "Window unit",
+          "portable": "Portable",
+          "split": "Split system",
+          "commercial": "Commercial"
+        }
+      },
+      "dehumidifier": {
+        "title": "Dehumidifier",
+        "subtitle": "Moisture control"
+      },
+      "waterHeater": {
+        "title": "Water heater",
+        "subtitle": "Hot water systems",
+        "variants": {
+          "tank": "Tank",
+          "tankless": "Tankless",
+          "hybrid": "Hybrid",
+          "commercial": "Commercial"
+        }
+      },
+      "bbqGrill": {
+        "title": "BBQ grill",
+        "subtitle": "Outdoor cooking",
+        "variants": {
+          "gas": "Gas grill",
+          "charcoal": "Charcoal",
+          "pellet": "Pellet",
+          "builtIn": "Built-in"
+        }
+      },
+      "countertopBundle": {
+        "title": "Countertop bundle",
+        "subtitle": "Small kitchen appliances",
+        "variants": {
+          "small": "Small bundle",
+          "medium": "Medium bundle",
+          "large": "Large bundle",
+          "mixed": "Mixed bundle"
+        }
+      },
+      "vacuumCleaner": {
+        "title": "Vacuum cleaner",
+        "subtitle": "Floor care appliances"
       },
       "sofa": {
         "title": "Sofa",

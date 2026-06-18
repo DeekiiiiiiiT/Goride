@@ -1,125 +1,180 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown } from 'lucide-react';
-import { getCategoryById, getItemsForCategory } from '@/lib/haulage/catalog';
+import type { HaulageItemDto } from '@roam/types/haulage';
+import { getItemGroupsForCatalogCategory } from '@/hooks/useHaulageCatalog';
 import { HaulageFreightCart } from '@/components/haulage/HaulageFreightCart';
 import { HaulageIcon } from '@/components/haulage/HaulageIcon';
 import { useHaulageBooking } from '@/contexts/HaulageBookingContext';
-import {
-  ON_SURFACE,
-  ON_SURFACE_VARIANT,
-  OUTLINE_VARIANT,
-  PRIMARY,
-  SURFACE_CONTAINER_HIGH,
-  SURFACE_LOWEST,
-} from '@/lib/passengerTheme';
+
+function GridCard({
+  template,
+  selected,
+  onSelect,
+}: {
+  template: HaulageItemDto;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`haulage-grid-card ${selected ? 'haulage-grid-card--active' : ''}`}
+    >
+      {template.emoji ? (
+        <div className="haulage-emoji">{template.emoji}</div>
+      ) : (
+        <div className="flex h-9 w-9 items-center justify-center text-[var(--haulage-primary,#006c49)]">
+          <HaulageIcon name={template.icon} className="text-[1.75rem]" />
+        </div>
+      )}
+      <span className="haulage-grid-card__label">{template.title}</span>
+      <div className="mt-auto">
+        <span
+          className={`material-symbols-outlined text-xl ${selected ? 'text-[var(--haulage-primary,#006c49)]' : 'text-[#bacbbf]'}`}
+          aria-hidden
+        >
+          {selected ? 'check_circle' : 'add_circle'}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+function groupKey(subgroupId: string | null): string {
+  return subgroupId ?? 'default';
+}
 
 export function HaulageItemSelectStep() {
   const { t } = useTranslation('haulage');
-  const { draft, openSpecSheet, removeFreightItem } = useHaulageBooking();
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
+  const { catalog, draft, openVariantSheet, removeFreightItem } = useHaulageBooking();
+  const [search, setSearch] = useState('');
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
 
-  const category = draft.categoryId ? getCategoryById(draft.categoryId) : null;
-  const items = draft.categoryId ? getItemsForCategory(draft.categoryId) : [];
+  const category = catalog?.categories.find((c) => c.id === draft.categoryId);
+  const itemGroups = useMemo(
+    () => (catalog && draft.categoryId ? getItemGroupsForCatalogCategory(catalog, draft.categoryId) : []),
+    [catalog, draft.categoryId],
+  );
+  const isAppliances = draft.categoryId === 'appliances';
+
+  useEffect(() => {
+    if (!draft.categoryId || !itemGroups.length) {
+      setExpandedGroups(new Set());
+      return;
+    }
+    const firstTitled = itemGroups.find((group) => group.title);
+    setExpandedGroups(firstTitled ? new Set([groupKey(firstTitled.subgroupId)]) : new Set());
+  }, [draft.categoryId, itemGroups]);
+
+  const selectedKeys = useMemo(
+    () => new Set(draft.items.map((item) => `${item.templateId}:${item.variantId}`)),
+    [draft.items],
+  );
+
+  const normalizedSearch = search.trim().toLowerCase();
+
+  const filteredGroups = useMemo(() => {
+    if (!normalizedSearch) return itemGroups;
+    return itemGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((template) => {
+          const title = template.title.toLowerCase();
+          const subtitle = template.subtitle.toLowerCase();
+          return title.includes(normalizedSearch) || subtitle.includes(normalizedSearch);
+        }),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [itemGroups, normalizedSearch]);
+
+  useEffect(() => {
+    if (!normalizedSearch) return;
+    setExpandedGroups(new Set(filteredGroups.map((group) => groupKey(group.subgroupId))));
+  }, [normalizedSearch, filteredGroups]);
+
+  const toggleGroup = (key: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   if (!category) return null;
-
-  const toggleExpand = (templateId: string) => {
-    setExpandedId((prev) => (prev === templateId ? null : templateId));
-  };
-
-  const selectVariant = (templateId: string, variantId: string) => {
-    setSelectedVariants((prev) => ({ ...prev, [templateId]: variantId }));
-    openSpecSheet({ templateId, variantId });
-  };
 
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-2xl font-bold" style={{ color: ON_SURFACE }}>
-          {t('items.heading', { category: t(category.titleKey) })}
+        <h2 className="text-2xl font-bold text-[#191c1e]">
+          {t('items.heading', { category: category.title })}
         </h2>
-        <p className="mt-2 text-sm" style={{ color: ON_SURFACE_VARIANT }}>
-          {t('items.subheading')}
-        </p>
+        <p className="mt-1 text-sm text-[#3b4a41]">{t('items.subheadingGrid')}</p>
       </div>
 
-      <ul className="space-y-4">
-        {items.map((template) => {
-          const isOpen = expandedId === template.id;
-          const selectedVariant = selectedVariants[template.id];
+      {isAppliances ? (
+        <div className="mb-6">
+          <div className="haulage-search-bar flex items-center gap-3 rounded-full border border-[#bacbbf] bg-white px-5 py-2.5 transition-all duration-300">
+            <span className="material-symbols-outlined text-xl text-[#3b4a41]" aria-hidden>
+              search
+            </span>
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t('items.searchPlaceholder')}
+              className="w-full border-none bg-transparent text-sm text-[#191c1e] outline-none placeholder:text-[#6b7b71] focus:ring-0"
+            />
+          </div>
+        </div>
+      ) : null}
+
+      <div className="space-y-4">
+        {filteredGroups.map((group) => {
+          const key = groupKey(group.subgroupId);
+          const isExpanded = !group.title || expandedGroups.has(key);
+
           return (
-            <li key={template.id}>
-              <div
-                className="overflow-hidden rounded-xl border shadow-sm"
-                style={{
-                  borderColor: isOpen ? PRIMARY : OUTLINE_VARIANT,
-                  backgroundColor: isOpen ? SURFACE_CONTAINER_HIGH : SURFACE_LOWEST,
-                }}
-              >
+            <section key={key}>
+              {group.title ? (
                 <button
                   type="button"
-                  onClick={() => toggleExpand(template.id)}
-                  className="flex w-full items-center justify-between p-5 text-left touch-manipulation"
+                  onClick={() => toggleGroup(key)}
+                  aria-expanded={isExpanded}
+                  className="haulage-category-header mb-1 flex w-full items-center justify-between gap-3 rounded-lg py-3 text-left"
                 >
-                  <div className="flex items-center gap-4">
-                    <div
-                      className="flex h-12 w-12 items-center justify-center rounded-lg"
-                      style={{ backgroundColor: SURFACE_CONTAINER_HIGH, color: PRIMARY }}
-                    >
-                      <HaulageIcon name={template.icon} className="h-7 w-7" />
-                    </div>
-                    <div>
-                      <p className="font-semibold" style={{ color: ON_SURFACE }}>
-                        {t(template.titleKey)}
-                      </p>
-                      <p className="text-xs" style={{ color: ON_SURFACE_VARIANT }}>
-                        {t(template.subtitleKey)}
-                      </p>
-                    </div>
-                  </div>
-                  <ChevronDown
-                    className={`h-5 w-5 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-                    style={{ color: ON_SURFACE_VARIANT }}
-                  />
+                  <h3 className="text-sm font-bold uppercase tracking-[0.12em] text-[var(--haulage-primary,#006c49)]">
+                    {group.title}
+                  </h3>
+                  <span
+                    className="material-symbols-outlined shrink-0 text-2xl text-[var(--haulage-primary,#006c49)]"
+                    aria-hidden
+                  >
+                    {isExpanded ? 'expand_less' : 'expand_more'}
+                  </span>
                 </button>
-
-                <div className={`haulage-accordion-content ${isOpen ? 'haulage-accordion-content--open' : ''}`}>
-                  <div className="haulage-accordion-inner">
-                    <div className="border-t px-5 pb-5 pt-4" style={{ borderColor: OUTLINE_VARIANT }}>
-                      <p className="mb-3 text-[10px] font-bold uppercase tracking-wide" style={{ color: ON_SURFACE_VARIANT }}>
-                        {t('items.sizeModel')}
-                      </p>
-                      <div className="grid grid-cols-2 gap-2">
-                        {template.variants.map((variant) => (
-                          <div key={variant.id}>
-                            <input
-                              type="radio"
-                              id={`${template.id}_${variant.id}`}
-                              name={template.id}
-                              className="haulage-variant-radio hidden"
-                              checked={selectedVariant === variant.id}
-                              onChange={() => selectVariant(template.id, variant.id)}
-                            />
-                            <label
-                              htmlFor={`${template.id}_${variant.id}`}
-                              className="haulage-variant-label flex cursor-pointer items-center justify-center rounded-lg border p-3 text-sm font-semibold transition-colors"
-                              style={{ borderColor: OUTLINE_VARIANT }}
-                            >
-                              {t(variant.labelKey)}
-                            </label>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+              ) : null}
+              <div
+                className={`haulage-accordion-content ${isExpanded ? 'haulage-accordion-content--open' : ''}`}
+              >
+                <div className="haulage-accordion-inner">
+                  <div className="grid grid-cols-2 gap-3 pb-2 sm:grid-cols-3">
+                    {group.items.map((template) => (
+                      <GridCard
+                        key={template.id}
+                        template={template}
+                        selected={template.variants.some((v) => selectedKeys.has(`${template.id}:${v.id}`))}
+                        onSelect={() => openVariantSheet(template.id)}
+                      />
+                    ))}
                   </div>
                 </div>
               </div>
-            </li>
+            </section>
           );
         })}
-      </ul>
+      </div>
 
       {draft.items.length > 0 ? (
         <div className="mt-6">

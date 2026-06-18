@@ -6,7 +6,6 @@ import {
   LayoutDashboard,
   CircleDollarSign,
   TrendingUp,
-  SlidersHorizontal,
   Car,
   ScrollText,
   Users,
@@ -14,6 +13,7 @@ import {
   Menu,
   X,
   ChevronRight,
+  ChevronDown,
   Loader2,
   ShieldAlert,
   ExternalLink,
@@ -22,6 +22,11 @@ import {
   AlertTriangle,
   Banknote,
   Wallet,
+  Calculator,
+  LayoutGrid,
+  CalendarDays,
+  Package,
+  Truck,
 } from 'lucide-react';
 import { RidesAdminLoginForm } from './components/RidesAdminLoginForm';
 
@@ -30,31 +35,165 @@ interface NavItem {
   path: string;
   label: string;
   icon: React.ElementType;
-  deprecated?: boolean;
-  externalHint?: string;
+  end?: boolean;
 }
 
-function isControlPanelDeprecated(): boolean {
-  if (typeof window === 'undefined') return false;
-  const value = import.meta.env.VITE_CONTROL_PANEL_DEPRECATED;
-  if (!value) return false;
-  const normalized = String(value).toLowerCase().trim();
-  return normalized === '1' || normalized === 'true' || normalized === 'yes';
+function isNavItemActive(currentPath: string, item: NavItem): boolean {
+  if (item.end) {
+    return currentPath === item.path;
+  }
+  return (
+    currentPath === item.path ||
+    (item.path !== '/admin' && currentPath.startsWith(item.path))
+  );
 }
 
-const NAV_ITEMS: NavItem[] = [
+function useSectionOpen(isChildActive: boolean) {
+  const [open, setOpen] = useState(isChildActive);
+  useEffect(() => {
+    if (isChildActive) setOpen(true);
+  }, [isChildActive]);
+  return [open, setOpen] as const;
+}
+
+function NavLink({
+  item,
+  currentPath,
+  onNavigate,
+  nested = false,
+}: {
+  item: NavItem;
+  currentPath: string;
+  onNavigate: (path: string) => void;
+  nested?: boolean;
+}) {
+  const Icon = item.icon;
+  const isActive = isNavItemActive(currentPath, item);
+
+  return (
+    <button
+      onClick={() => onNavigate(item.path)}
+      className={`w-full flex items-center gap-3 rounded-lg text-sm font-medium transition-colors ${
+        nested ? 'px-3 py-2' : 'px-3 py-2.5'
+      } ${
+        isActive
+          ? 'bg-emerald-500/10 text-emerald-300'
+          : 'text-slate-500 hover:text-white hover:bg-slate-800'
+      }`}
+    >
+      <Icon className="w-4 h-4 shrink-0" />
+      <span className="truncate">{item.label}</span>
+      {isActive && <ChevronRight className="w-3 h-3 ml-auto text-emerald-400/60" />}
+    </button>
+  );
+}
+
+function NavSection({
+  label,
+  icon: SectionIcon,
+  items,
+  currentPath,
+  onNavigate,
+}: {
+  label: string;
+  icon: React.ElementType;
+  items: NavItem[];
+  currentPath: string;
+  onNavigate: (path: string) => void;
+}) {
+  const isActive = items.some((item) => isNavItemActive(currentPath, item));
+  const [open, setOpen] = useSectionOpen(isActive);
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+          isActive
+            ? 'bg-emerald-500/10 text-emerald-300'
+            : 'text-slate-500 hover:text-white hover:bg-slate-800'
+        }`}
+      >
+        <SectionIcon className="w-4 h-4 shrink-0" />
+        <span className="truncate">{label}</span>
+        {open ? (
+          <ChevronDown className="w-3.5 h-3.5 ml-auto text-slate-500" />
+        ) : (
+          <ChevronRight className="w-3.5 h-3.5 ml-auto text-slate-500" />
+        )}
+      </button>
+      {open && (
+        <div className="ml-4 mt-1 space-y-0.5 border-l border-slate-800 pl-2">
+          {items.map((item) => (
+            <NavLink
+              key={item.id}
+              item={item}
+              currentPath={currentPath}
+              onNavigate={onNavigate}
+              nested
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const TOP_NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', path: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'users', path: '/admin/users', label: 'User Management', icon: Users },
   { id: 'ledger', path: '/admin/ledger', label: 'Trip Ledger', icon: ScrollText },
-  { id: 'fare-rules', path: '/admin/fare-rules', label: 'Fare Rules', icon: CircleDollarSign },
+];
+
+const PRICING_TRANSPORT_ITEMS: NavItem[] = [
+  { id: 'fare-rules', path: '/admin/fare-rules', label: 'Fare Rules', icon: CircleDollarSign, end: true },
   { id: 'surge', path: '/admin/surge', label: 'Surge Pricing', icon: TrendingUp },
+  {
+    id: 'transport-solutions',
+    path: '/admin/fare-rules/transport-solutions',
+    label: 'Transport Solutions',
+    icon: Car,
+  },
+  {
+    id: 'trip-calculator',
+    path: '/admin/fare-rules/calculator',
+    label: 'Trip calculator',
+    icon: Calculator,
+    end: true,
+  },
+];
+
+const SERVICES_ITEMS: NavItem[] = [
+  { id: 'services-rideshare', path: '/admin/services/rideshare', label: 'Rideshare', icon: Car },
+  { id: 'services-courier', path: '/admin/services/courier', label: 'Courier', icon: Package },
+  {
+    id: 'services-event',
+    path: '/admin/services/event',
+    label: 'Event booking',
+    icon: CalendarDays,
+  },
+  { id: 'services-haulage', path: '/admin/services/haulage', label: 'Haulage', icon: Truck },
+];
+
+const CASH_SETTLEMENT_ITEMS: NavItem[] = [
   { id: 'disputes', path: '/admin/disputes', label: 'Cash Disputes', icon: AlertTriangle },
   { id: 'outstanding-balances', path: '/admin/outstanding-balances', label: 'Outstanding Balances', icon: Wallet },
   { id: 'settlement-overrides', path: '/admin/settlement-overrides', label: 'Settlement Overrides', icon: Banknote },
-  { id: 'control-panel', path: '/admin/control-panel', label: 'Control Panel', icon: SlidersHorizontal, deprecated: true, externalHint: 'Use Matching Brain' },
+];
+
+const SECONDARY_NAV_ITEMS: NavItem[] = [
   { id: 'app-permissions', path: '/admin/app-permissions', label: 'App Permissions', icon: Shield },
   { id: 'play-store', path: '/admin/play-store', label: 'Play Store', icon: Store },
   { id: 'rides', path: '/admin/rides', label: 'Ride Operations', icon: Car },
+];
+
+const ALL_NAV_ITEMS = [
+  ...TOP_NAV_ITEMS,
+  ...PRICING_TRANSPORT_ITEMS,
+  ...SERVICES_ITEMS,
+  ...CASH_SETTLEMENT_ITEMS,
+  ...SECONDARY_NAV_ITEMS,
 ];
 
 export function RidesAdminLayout() {
@@ -158,23 +297,19 @@ export function RidesAdminLayout() {
   const currentPath = location.pathname;
 
   const pageTitle = (() => {
-    if (currentPath.startsWith('/admin/fare-rules/calculator')) return 'Trip calculator';
-    if (
-      currentPath.startsWith('/admin/fare-rules/transport-solutions') ||
-      currentPath.startsWith('/admin/fare-rules/vehicle-types')
-    ) {
-      return 'Transport Solutions';
-    }
     if (currentPath.startsWith('/admin/users/') && currentPath !== '/admin/users') {
       return 'Rider detail';
     }
-    const item = NAV_ITEMS.find(
-      (i) =>
-        currentPath === i.path ||
-        (i.path !== '/admin' && currentPath.startsWith(i.path)),
-    );
+    const item = ALL_NAV_ITEMS.filter((i) => isNavItemActive(currentPath, i)).sort(
+      (a, b) => b.path.length - a.path.length,
+    )[0];
     return item?.label ?? 'Dashboard';
   })();
+
+  const handleNavigate = (path: string) => {
+    navigate(path);
+    setMobileOpen(false);
+  };
 
   return (
     <div className="rides-admin-portal dark flex h-screen bg-slate-950">
@@ -215,37 +350,43 @@ export function RidesAdminLayout() {
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-          {NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const isActive = currentPath === item.path || 
-              (item.path !== '/admin' && currentPath.startsWith(item.path));
-            const showDeprecated = item.deprecated && isControlPanelDeprecated();
-            return (
-              <button
-                key={item.id}
-                onClick={() => {
-                  navigate(item.path);
-                  setMobileOpen(false);
-                }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-emerald-500/10 text-emerald-300'
-                    : showDeprecated
-                    ? 'text-slate-600 hover:text-slate-400 hover:bg-slate-800/50'
-                    : 'text-slate-500 hover:text-white hover:bg-slate-800'
-                }`}
-              >
-                <Icon className={`w-4 h-4 shrink-0 ${showDeprecated ? 'opacity-50' : ''}`} />
-                <span className={`truncate ${showDeprecated ? 'line-through decoration-slate-600' : ''}`}>{item.label}</span>
-                {showDeprecated && (
-                  <span className="text-[10px] text-amber-500/80 bg-amber-500/10 px-1.5 py-0.5 rounded">
-                    Deprecated
-                  </span>
-                )}
-                {isActive && !showDeprecated && <ChevronRight className="w-3 h-3 ml-auto text-emerald-400/60" />}
-              </button>
-            );
-          })}
+          {TOP_NAV_ITEMS.map((item) => (
+            <NavLink
+              key={item.id}
+              item={item}
+              currentPath={currentPath}
+              onNavigate={handleNavigate}
+            />
+          ))}
+          <NavSection
+            label="Pricing & Transport"
+            icon={CircleDollarSign}
+            items={PRICING_TRANSPORT_ITEMS}
+            currentPath={currentPath}
+            onNavigate={handleNavigate}
+          />
+          <NavSection
+            label="Services"
+            icon={LayoutGrid}
+            items={SERVICES_ITEMS}
+            currentPath={currentPath}
+            onNavigate={handleNavigate}
+          />
+          <NavSection
+            label="Cash Settlement"
+            icon={Banknote}
+            items={CASH_SETTLEMENT_ITEMS}
+            currentPath={currentPath}
+            onNavigate={handleNavigate}
+          />
+          {SECONDARY_NAV_ITEMS.map((item) => (
+            <NavLink
+              key={item.id}
+              item={item}
+              currentPath={currentPath}
+              onNavigate={handleNavigate}
+            />
+          ))}
         </nav>
 
         {/* User section */}

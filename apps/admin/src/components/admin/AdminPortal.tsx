@@ -38,6 +38,8 @@ import { DriverUsersPage } from './product-users/DriverUsersPage';
 import { DriverUserDetailPage } from './product-users/DriverUserDetailPage';
 import { RiderUsersPage } from './product-users/RiderUsersPage';
 import { RiderUserDetailPage } from './product-users/RiderUserDetailPage';
+import { applyPortalTheme } from '../../hooks/usePortalTheme';
+import { api } from '../../services/api';
 
 function normalizePortalPage(page: string): string {
   return LEGACY_PAGE_REDIRECTS[page] ?? page;
@@ -132,17 +134,27 @@ export function AdminPortal() {
     }
   }, [currentPage, loadFuelLogs]);
 
+  useEffect(() => {
+    api.getPreferences()
+      .then((prefs) => {
+        if (prefs?.darkMode !== undefined) {
+          applyPortalTheme(prefs.darkMode);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <AdminLayout currentPage={currentPage} onNavigate={setCurrentPage}>
       {currentPage === 'dashboard' && <AdminDashboard onNavigate={setCurrentPage} />}
 
       {currentPage === 'enterprise-overview' && (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden min-h-[560px]">
+        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] dark:border-slate-800 dark:bg-slate-900/40">
           <EnterpriseOverviewCard onNavigate={setCurrentPage} />
         </div>
       )}
       {currentPage === 'fleet-overview' && (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden min-h-[560px]">
+        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] dark:border-slate-800 dark:bg-slate-900/40">
           <FleetOverviewCard onNavigate={setCurrentPage} />
         </div>
       )}
@@ -177,7 +189,7 @@ export function AdminPortal() {
 
       {currentPage === 'platform-team' && <PlatformTeam />}
       {currentPage === 'matching-brain' && (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden min-h-[560px]">
+        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] dark:border-slate-800 dark:bg-slate-900/40">
           <MatchingBrainPage />
         </div>
       )}

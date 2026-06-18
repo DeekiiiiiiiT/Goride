@@ -1,13 +1,10 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft } from 'lucide-react';
 import {
-  ON_SURFACE,
   ON_SURFACE_VARIANT,
   OUTLINE_VARIANT,
   PAGE_BG,
   PRIMARY,
-  SURFACE_LOW,
 } from '@/lib/passengerTheme';
 
 type Props = {
@@ -21,14 +18,11 @@ export function HaulageSubheader({ onBack, stepIndex, stepCount }: Props) {
 
   return (
     <header
-      className="sticky top-0 z-10 border-b safe-t"
-      style={{
-        backgroundColor: PAGE_BG,
-        borderColor: OUTLINE_VARIANT,
-      }}
+      className="sticky top-0 z-50 border-b bg-[color:var(--passenger-page-bg,#f7f9fb)]/90 shadow-sm backdrop-blur-md safe-t"
+      style={{ borderColor: OUTLINE_VARIANT }}
     >
-      <div className="mx-auto flex h-16 max-w-lg items-center justify-between px-4">
-        <div className="flex min-w-0 items-center gap-3">
+      <div className="mx-auto flex h-16 max-w-2xl items-center justify-between px-6">
+        <div className="flex items-center gap-4">
           <button
             type="button"
             onClick={onBack}
@@ -36,16 +30,15 @@ export function HaulageSubheader({ onBack, stepIndex, stepCount }: Props) {
             style={{ color: PRIMARY }}
             aria-label={t('backAria')}
           >
-            <ArrowLeft className="h-6 w-6" strokeWidth={2} aria-hidden />
+            <span className="material-symbols-outlined" aria-hidden>
+              arrow_back
+            </span>
           </button>
-          <h1 className="truncate text-lg font-semibold" style={{ color: PRIMARY }}>
+          <h1 className="text-xl font-semibold" style={{ color: PRIMARY }}>
             {t('title')}
           </h1>
         </div>
-        <span
-          className="shrink-0 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wide"
-          style={{ backgroundColor: SURFACE_LOW, color: ON_SURFACE_VARIANT }}
-        >
+        <span className="text-xs font-bold tracking-wide" style={{ color: ON_SURFACE_VARIANT }}>
           {t('stepOf', { current: stepIndex + 1, total: stepCount })}
         </span>
       </div>
@@ -75,13 +68,14 @@ export function HaulageStepper({ stepIndex, stepCount }: { stepIndex: number; st
 export function HaulageStickyFooter({ children }: { children: React.ReactNode }) {
   return (
     <footer
-      className="fixed inset-x-0 bottom-0 z-40 px-4 pt-3 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] safe-x"
+      className="fixed inset-x-0 bottom-0 z-40 border-t px-4 py-4 safe-x"
       style={{
         backgroundColor: PAGE_BG,
-        boxShadow: '0 -12px 32px rgba(0, 0, 0, 0.06)',
+        borderColor: OUTLINE_VARIANT,
+        boxShadow: '0px -4px 20px rgba(0, 0, 0, 0.04)',
       }}
     >
-      <div className="mx-auto max-w-lg">{children}</div>
+      <div className="mx-auto max-w-2xl">{children}</div>
     </footer>
   );
 }
@@ -106,8 +100,7 @@ export function HaulagePrimaryButton({
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className={`haulage-primary-btn flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-base font-semibold touch-manipulation ${className}`}
-      style={{ color: ON_SURFACE }}
+      className={`haulage-primary-btn flex w-full items-center justify-center gap-3 rounded-xl px-8 py-4 text-base font-semibold touch-manipulation ${className}`}
     >
       {children}
     </button>
@@ -130,7 +123,7 @@ export function HaulageTactileCard({
     <Tag
       type={onClick ? 'button' : undefined}
       onClick={onClick}
-      className={`haulage-tactile-card w-full rounded-xl text-left touch-manipulation ${active ? 'ring-2 ring-[var(--passenger-primary,#006c49)]' : ''} ${className}`}
+      className={`haulage-tactile-card w-full rounded-xl text-left touch-manipulation ${active ? 'ring-2' : ''} ${className}`}
       style={active ? { borderColor: PRIMARY } : undefined}
     >
       {children}

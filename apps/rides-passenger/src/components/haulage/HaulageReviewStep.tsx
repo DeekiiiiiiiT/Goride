@@ -1,11 +1,13 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Route } from 'lucide-react';
+import { Loader2, Route } from 'lucide-react';
 import { formatMoneyMinor } from '@roam/types/rides';
+import { toast } from 'sonner';
+import { HaulageCheckoutQuestions } from '@/components/haulage/HaulageCheckoutQuestions';
 import { HaulageFreightCart } from '@/components/haulage/HaulageFreightCart';
 import { HaulageStickyFooter } from '@/components/haulage/HaulageShell';
 import { useHaulageBooking } from '@/contexts/HaulageBookingContext';
-import { estimateDurationMinutes, estimateHaulageTotalMinor } from '@/lib/haulage/pricing';
+import { haulageQuote } from '@/services/haulageEdge';
 import { formatTimeLabel } from '@/lib/scheduleTime';
 import {
   ON_SURFACE,
@@ -18,6 +20,18 @@ import {
   TERTIARY_FIXED,
 } from '@/lib/passengerTheme';
 
+function buildScheduledPickupAt(pickupTime: string): string | null {
+  const parts = pickupTime.split(':').map((p) => Number(p));
+  const hours = parts[0];
+  const minutes = parts[1] ?? 0;
+  if (!Number.isFinite(hours)) return null;
+  const d = new Date();
+  d.setSeconds(0, 0);
+  d.setHours(hours, minutes, 0, 0);
+  if (d.getTime() - Date.now() < 30 * 60_000) return null;
+  return d.toISOString();
+}
+
 type Props = {
   onBook?: () => void;
   showFooter?: boolean;
@@ -25,15 +39,56 @@ type Props = {
 
 export function HaulageReviewStep({ onBook, showFooter = true }: Props) {
   const { t } = useTranslation('haulage');
-  const { draft } = useHaulageBooking();
+  const { draft, setQuote } = useHaulageBooking();
+  const [quoting, setQuoting] = useState(false);
+  const [distanceKm, setDistanceKm] = useState<number | null>(null);
+  const [durationMin, setDurationMin] = useState<number | null>(null);
 
-  const { totalMinor, distanceKm } = useMemo(
-    () => estimateHaulageTotalMinor(draft.items, draft.pickup, draft.dropoff),
-    [draft.items, draft.pickup, draft.dropoff],
-  );
+  useEffect(() => {
+    if (!draft.pickup || !draft.dropoff || draft.items.length === 0) return;
+    let cancelled = false;
+    setQuoting(true);
+    void haulageQuote({
+      items: draft.items.map((item) => ({
+        item_id: item.templateId,
+        variant_id: item.variantId,
+        qty: 1,
+      })),
+      pickup: draft.pickup,
+      dropoff: draft.dropoff,
+      stairs_level: draft.stairsLevel,
+      prep_status: draft.prepStatus,
+      scheduled_pickup_at: buildScheduledPickupAt(draft.pickupTime),
+    })
+      .then((quote) => {
+        if (cancelled) return;
+        setQuote(quote.quote_token, quote.breakdown.total_minor, quote.breakdown.currency);
+        setDistanceKm(quote.distance_km);
+        setDurationMin(quote.duration_minutes);
+      })
+      .catch(() => {
+        if (!cancelled) toast.error(t('review.quoteFailed', { defaultValue: 'Could not get a quote.' }));
+      })
+      .finally(() => {
+        if (!cancelled) setQuoting(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    draft.pickup,
+    draft.dropoff,
+    draft.items,
+    draft.stairsLevel,
+    draft.prepStatus,
+    draft.pickupTime,
+    setQuote,
+    t,
+  ]);
 
-  const durationMin = estimateDurationMinutes(distanceKm);
-  const fareLabel = formatMoneyMinor(totalMinor, 'USD');
+  const fareLabel = draft.quotedTotalMinor != null && draft.currency
+    ? formatMoneyMinor(draft.quotedTotalMinor, draft.currency)
+    : '—';
 
   return (
     <div className="space-y-4">
@@ -54,8 +109,14 @@ export function HaulageReviewStep({ onBook, showFooter = true }: Props) {
             })}
           </div>
         ) : null}
+        {quoting ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-white/50">
+            <Loader2 className="h-6 w-6 animate-spin" style={{ color: PRIMARY }} />
+          </div>
+        ) : null}
       </div>
 
+      <HaulageCheckoutQuestions />
       <HaulageFreightCart items={draft.items} readOnly />
 
       <section
@@ -114,7 +175,8 @@ export function HaulageReviewStep({ onBook, showFooter = true }: Props) {
             <button
               type="button"
               onClick={onBook}
-              className="haulage-primary-btn shrink-0 rounded-xl px-6 py-3 text-sm font-bold uppercase tracking-wide"
+              disabled={quoting || !draft.quoteToken}
+              className="haulage-primary-btn shrink-0 rounded-xl px-6 py-3 text-sm font-bold uppercase tracking-wide disabled:opacity-50"
             >
               {t('review.bookFreight')}
             </button>

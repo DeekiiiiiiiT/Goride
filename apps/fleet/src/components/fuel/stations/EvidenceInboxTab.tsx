@@ -381,14 +381,14 @@ export function EvidenceInboxTab({ onPromoted, onVerifyLocation }: EvidenceInbox
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 bg-sky-50 border border-sky-100 p-4 rounded-lg">
+      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 rounded-lg border border-sky-200 bg-sky-50 p-4 dark:border-sky-200/30 dark:bg-sky-950/30">
         <div className="flex gap-3">
-          <div className="bg-sky-100 p-2 rounded-full h-fit">
-            <ClipboardList className="h-5 w-5 text-sky-700" />
+          <div className="bg-sky-100 p-2 rounded-full h-fit dark:bg-sky-900/50">
+            <ClipboardList className="h-5 w-5 text-sky-700 dark:text-sky-300" />
           </div>
           <div className="space-y-1">
-            <h4 className="font-semibold text-sky-950">Evidence inbox — gate-held fuel</h4>
-            <p className="text-sm text-sky-900/90 leading-relaxed max-w-3xl">
+            <h4 className="font-semibold text-sky-950 dark:text-sky-100">Evidence inbox — gate-held fuel</h4>
+            <p className="text-sm text-sky-900/90 dark:text-sky-200/90 leading-relaxed max-w-3xl">
               These are <span className="font-medium">pending fuel reimbursements</span> blocked because the stop is not linked to a
               verified station yet. Use the <span className="font-medium">Actions</span> menu for the same resolve flows as{' '}
               <span className="font-medium">Learnt (STAGING)</span> — merge to an existing station, promote, verify location, or discard.

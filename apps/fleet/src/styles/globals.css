@@ -269,4 +269,56 @@ html {
   .bg-amber-50 { background-color: rgb(120 53 15 / 0.2); }      /* → amber-900/20 */
   .border-amber-200 { border-color: rgb(245 158 11 / 0.3); }    /* → amber-500/30 */
   .hover\:bg-amber-50:hover { background-color: rgb(120 53 15 / 0.3); }
+
+  /* Sky */
+  .text-sky-950 { color: #e0f2fe; }
+  .text-sky-900 { color: #bae6fd; }
+  .text-sky-800 { color: #7dd3fc; }
+  .text-sky-700 { color: #38bdf8; }
+  .text-sky-600 { color: #38bdf8; }
+  .bg-sky-50 { background-color: rgb(12 74 110 / 0.35); }
+  .bg-sky-50\/60 { background-color: rgb(12 74 110 / 0.28); }
+  .bg-sky-100 { background-color: rgb(12 74 110 / 0.45); }
+  .border-sky-100 { border-color: rgb(56 189 248 / 0.25); }
+  .border-sky-200 { border-color: rgb(56 189 248 / 0.35); }
+
+  /* Violet */
+  .text-violet-600 { color: #a78bfa; }
+  .border-violet-200 { border-color: rgb(139 92 246 / 0.3); }
+
+  /* Red */
+  .text-red-900 { color: #fecaca; }
+  .text-red-800 { color: #fca5a5; }
+  .text-red-700 { color: #fca5a5; }
+  .text-red-600 { color: #f87171; }
+  .bg-red-50 { background-color: rgb(127 29 29 / 0.2); }
+  .border-red-100 { border-color: rgb(239 68 68 / 0.25); }
+  .border-red-200 { border-color: rgb(239 68 68 / 0.3); }
+
+  /* Blue */
+  .text-blue-900 { color: #bfdbfe; }
+  .text-blue-800 { color: #93c5fd; }
+  .text-blue-700 { color: #93c5fd; }
+  .text-blue-600 { color: #60a5fa; }
+  .bg-blue-50 { background-color: rgb(30 58 138 / 0.2); }
+  .border-blue-100 { border-color: rgb(59 130 246 / 0.25); }
+  .border-blue-200 { border-color: rgb(59 130 246 / 0.3); }
+
+  /* Extended emerald / indigo shades */
+  .text-indigo-950 { color: #e0e7ff; }
+  .text-indigo-800 { color: #a5b4fc; }
+  .text-emerald-950 { color: #d1fae5; }
+  .text-emerald-900 { color: #a7f3d0; }
+  .text-emerald-800 { color: #6ee7b7; }
+  .text-amber-950 { color: #fef3c7; }
+  .text-amber-900 { color: #fde68a; }
+  .text-amber-800 { color: #fcd34d; }
+  .text-rose-950 { color: #ffe4e6; }
+  .text-rose-900 { color: #fecdd3; }
+  .text-rose-800 { color: #fda4af; }
+  .text-slate-950 { color: #f8fafc; }
+  .bg-emerald-50\/20 { background-color: rgb(6 78 59 / 0.15); }
+  .bg-emerald-50\/30 { background-color: rgb(6 78 59 / 0.22); }
+  .bg-rose-50\/20 { background-color: rgb(136 19 55 / 0.15); }
+  .bg-slate-800\/50 { background-color: rgb(30 41 59 / 0.5); }
 }

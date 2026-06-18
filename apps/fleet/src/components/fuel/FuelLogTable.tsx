@@ -56,7 +56,8 @@ import { useFuelCycles } from '../../hooks/useFuelCycles';
 import { useFuelAnchors } from '../../hooks/useFuelAnchors';
 
 import { DateRange } from "react-day-picker";
-import { DatePickerWithRange } from "../ui/date-range-picker";
+import { format } from "date-fns";
+import { PeriodWeekDropdown } from "../ui/PeriodWeekDropdown";
 import { downloadBlob, jsonToCsv } from '../../utils/csv-helper';
 import { FUEL_CSV_COLUMNS } from '../../types/csv-schemas';
 import { Download } from 'lucide-react';
@@ -114,6 +115,9 @@ export function FuelLogTable({
         const ids = Array.from(new Set(entries.map(e => e.driverId).filter(Boolean))) as string[];
         return ids.map(id => ({ id, name: getDriverName(id) })).sort((a, b) => a.name.localeCompare(b.name));
     }, [entries, getDriverName]);
+
+    const periodStart = dateRange?.from ? format(dateRange.from, 'yyyy-MM-dd') : undefined;
+    const periodEnd = dateRange?.to ? format(dateRange.to, 'yyyy-MM-dd') : undefined;
 
     const activeFilterCount = [
         filterType !== 'all',
@@ -513,7 +517,22 @@ export function FuelLogTable({
                             </div></PopoverContent>
                         </Popover>
                     </div>
-                    {onDateRangeChange && <DatePickerWithRange date={dateRange} setDate={onDateRangeChange} />}
+                    {onDateRangeChange && (
+                        <PeriodWeekDropdown
+                            selectedStart={periodStart}
+                            selectedEnd={periodEnd}
+                            placeholder="Select week period"
+                            buttonClassName="h-9 text-xs"
+                            onSelect={(period) => {
+                                const [sy, sm, sd] = period.startDate.split('-').map(Number);
+                                const [ey, em, ed] = period.endDate.split('-').map(Number);
+                                onDateRangeChange({
+                                    from: new Date(sy, sm - 1, sd),
+                                    to: new Date(ey, em - 1, ed),
+                                });
+                            }}
+                        />
+                    )}
                 </div>
                 <div className="text-xs text-slate-500">Showing {activeView === 'transactions' ? filteredEntries.length : filteredCycles.length} records</div>
                 <TooltipProvider>

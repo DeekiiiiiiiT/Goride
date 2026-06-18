@@ -53,7 +53,9 @@ import { FareRulesLayout } from './admin/pages/FareRulesLayout';
 import { FareRulesPage } from './admin/pages/FareRulesPage';
 import { TripCalculatorPage } from './admin/pages/TripCalculatorPage';
 import { TransportSolutionsLayout } from './admin/pages/TransportSolutionsLayout';
-import { TransportSolutionKindPage } from './admin/pages/TransportSolutionKindPage';
+import { ServicesLayout } from './admin/pages/ServicesLayout';
+import { ServiceCategoryPage } from './admin/pages/ServiceCategoryPage';
+import { HaulageServicePage } from './admin/pages/HaulageServicePage';
 import { SurgePage } from './admin/pages/SurgePage';
 import { ControlPanelPage } from './admin/pages/ControlPanelPage';
 import { AppPermissionsPage } from './admin/pages/AppPermissionsPage';
@@ -137,16 +139,27 @@ export default function App() {
         <Route path="users/:userId" element={<RiderDetailPage />} />
         <Route path="fare-rules" element={<FareRulesLayout />}>
           <Route index element={<FareRulesPage />} />
-          <Route path="transport-solutions" element={<TransportSolutionsLayout />}>
-            <Route index element={<Navigate to="vehicles" replace />} />
-            <Route path="vehicles" element={<TransportSolutionKindPage kind="vehicle" />} />
-            <Route path="services" element={<TransportSolutionKindPage kind="service" />} />
-          </Route>
+          <Route path="transport-solutions" element={<TransportSolutionsLayout />} />
+          <Route
+            path="transport-solutions/services"
+            element={<Navigate to="/admin/services/rideshare" replace />}
+          />
+          <Route
+            path="transport-solutions/vehicles"
+            element={<Navigate to="/admin/fare-rules/transport-solutions" replace />}
+          />
           <Route
             path="vehicle-types"
-            element={<Navigate to="/admin/fare-rules/transport-solutions/vehicles" replace />}
+            element={<Navigate to="/admin/fare-rules/transport-solutions" replace />}
           />
           <Route path="calculator" element={<TripCalculatorPage />} />
+        </Route>
+        <Route path="services" element={<ServicesLayout />}>
+          <Route index element={<Navigate to="rideshare" replace />} />
+          <Route path="rideshare" element={<ServiceCategoryPage category="rideshare" />} />
+          <Route path="courier" element={<ServiceCategoryPage category="courier" />} />
+          <Route path="event" element={<ServiceCategoryPage category="event" />} />
+          <Route path="haulage" element={<HaulageServicePage />} />
         </Route>
         <Route path="surge" element={<SurgePage />} />
         <Route path="control-panel" element={<ControlPanelPage />} />

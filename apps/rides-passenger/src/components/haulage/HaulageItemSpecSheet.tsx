@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, PlusCircle, Wrench, AlertTriangle } from 'lucide-react';
-import { getItemTemplate } from '@/lib/haulage/catalog';
+import { getCatalogItem } from '@/hooks/useHaulageCatalog';
 import {
-  buildFreightItemFromPending,
+  buildFreightItemFromCatalog,
   useHaulageBooking,
 } from '@/contexts/HaulageBookingContext';
 import { HaulagePrimaryButton } from '@/components/haulage/HaulageShell';
@@ -21,7 +21,7 @@ import {
 
 export function HaulageItemSpecSheet() {
   const { t } = useTranslation('haulage');
-  const { pendingItem, specSheetOpen, closeSpecSheet, addFreightItem } = useHaulageBooking();
+  const { catalog, pendingItem, specSheetOpen, closeSpecSheet, addFreightItem } = useHaulageBooking();
 
   const [lengthCm, setLengthCm] = useState('');
   const [widthCm, setWidthCm] = useState('');
@@ -31,7 +31,7 @@ export function HaulageItemSpecSheet() {
   const [requiresDisassembly, setRequiresDisassembly] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const template = pendingItem ? getItemTemplate(pendingItem.templateId) : null;
+  const template = pendingItem ? getCatalogItem(catalog, pendingItem.templateId) : null;
   const variant = template?.variants.find((v) => v.id === pendingItem?.variantId);
 
   useEffect(() => {
@@ -64,12 +64,12 @@ export function HaulageItemSpecSheet() {
       return;
     }
     const spec = parseItemSpec(input);
-    const item = buildFreightItemFromPending(pendingItem, {
+    const item = buildFreightItemFromCatalog(catalog, pendingItem, {
       ...spec,
       fragile,
       requiresDisassembly,
     });
-    if (!item) return;
+    if (!item || item.weightKg <= 0) return;
     addFreightItem(item);
   };
 
@@ -91,7 +91,7 @@ export function HaulageItemSpecSheet() {
 
         <div className="px-6 pb-4">
           <h2 className="text-xl font-bold" style={{ color: ON_SURFACE }}>
-            {t('spec.heading', { item: t(template.titleKey) })}
+            {t('spec.heading', { item: template.title })}
           </h2>
           <p className="mt-1 text-sm" style={{ color: ON_SURFACE_VARIANT }}>
             {t('spec.subheading')}

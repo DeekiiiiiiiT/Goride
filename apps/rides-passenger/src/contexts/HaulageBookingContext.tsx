@@ -1,15 +1,21 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { createIdempotencyKey } from '@/lib/idempotencyKey';
-import { getItemTemplate } from '@/lib/haulage/catalog';
+import type { HaulageCatalogResponse, HaulageVariantDto } from '@roam/types/haulage';
+import { getCatalogItem } from '@/hooks/useHaulageCatalog';
 import type {
   HaulageBookingDraft,
-  HaulageCategoryId,
   HaulageFreightItem,
   HaulagePendingItem,
   HaulagePlace,
+  HaulagePrepStatus,
+  HaulageStairsLevel,
   HaulageStep,
 } from '@/lib/haulage/types';
 import { HAULAGE_STEPS } from '@/lib/haulage/types';
+
+function variantHasCompleteSpecs(variant: HaulageVariantDto): boolean {
+  return variant.weight_kg > 0 && !Number.isNaN(variant.weight_kg);
+}
 
 const INITIAL_DRAFT: HaulageBookingDraft = {
   categoryId: null,
@@ -18,28 +24,39 @@ const INITIAL_DRAFT: HaulageBookingDraft = {
   dropoff: null,
   pickupTime: '10:00',
   paymentMethodId: null,
+  stairsLevel: 'none',
+  prepStatus: 'ready',
+  quoteToken: null,
+  quotedTotalMinor: null,
+  currency: null,
 };
 
 type HaulageBookingContextValue = {
+  catalog: HaulageCatalogResponse | undefined;
+  catalogLoading: boolean;
+  catalogError: Error | null;
   draft: HaulageBookingDraft;
   step: HaulageStep;
   stepIndex: number;
   stepCount: number;
   pendingItem: HaulagePendingItem | null;
   specSheetOpen: boolean;
-  setCategory: (categoryId: HaulageCategoryId) => void;
-  setPendingItem: (pending: HaulagePendingItem | null) => void;
+  variantSheetTemplateId: string | null;
+  setCategory: (categoryId: string) => void;
+  openVariantSheet: (templateId: string) => void;
+  closeVariantSheet: () => void;
   openSpecSheet: (pending: HaulagePendingItem) => void;
   closeSpecSheet: () => void;
-  addFreightItem: (
-    item: Omit<HaulageFreightItem, 'clientId'>,
-  ) => void;
-  updateFreightItem: (clientId: string, patch: Partial<HaulageFreightItem>) => void;
+  selectVariant: (pending: HaulagePendingItem) => void;
+  addFreightItem: (item: Omit<HaulageFreightItem, 'clientId'>) => void;
   removeFreightItem: (clientId: string) => void;
   setPickup: (place: HaulagePlace | null) => void;
   setDropoff: (place: HaulagePlace | null) => void;
   setPickupTime: (time: string) => void;
   setPaymentMethodId: (id: string) => void;
+  setStairsLevel: (level: HaulageStairsLevel) => void;
+  setPrepStatus: (status: HaulagePrepStatus) => void;
+  setQuote: (token: string, totalMinor: number, currency: string) => void;
   goToStep: (step: HaulageStep) => void;
   goNext: () => void;
   goBack: () => boolean;
@@ -56,23 +73,45 @@ function createClientId(): string {
   return createIdempotencyKey();
 }
 
-export function HaulageBookingProvider({ children }: { children: React.ReactNode }) {
+type ProviderProps = {
+  children: React.ReactNode;
+  catalog?: HaulageCatalogResponse;
+  catalogLoading?: boolean;
+  catalogError?: Error | null;
+};
+
+export function HaulageBookingProvider({
+  children,
+  catalog,
+  catalogLoading = false,
+  catalogError = null,
+}: ProviderProps) {
   const [draft, setDraft] = useState<HaulageBookingDraft>(INITIAL_DRAFT);
   const [step, setStep] = useState<HaulageStep>('category');
   const [pendingItem, setPendingItem] = useState<HaulagePendingItem | null>(null);
   const [specSheetOpen, setSpecSheetOpen] = useState(false);
+  const [variantSheetTemplateId, setVariantSheetTemplateId] = useState<string | null>(null);
 
   const stepIndex = HAULAGE_STEPS.indexOf(step);
   const stepCount = HAULAGE_STEPS.length;
 
-  const setCategory = useCallback((categoryId: HaulageCategoryId) => {
-    setDraft((prev) => ({ ...prev, categoryId, items: [] }));
+  const setCategory = useCallback((categoryId: string) => {
+    setDraft((prev) => ({ ...prev, categoryId, items: [], quoteToken: null, quotedTotalMinor: null }));
     setStep('items');
+  }, []);
+
+  const openVariantSheet = useCallback((templateId: string) => {
+    setVariantSheetTemplateId(templateId);
+  }, []);
+
+  const closeVariantSheet = useCallback(() => {
+    setVariantSheetTemplateId(null);
   }, []);
 
   const openSpecSheet = useCallback((pending: HaulagePendingItem) => {
     setPendingItem(pending);
     setSpecSheetOpen(true);
+    setVariantSheetTemplateId(null);
   }, []);
 
   const closeSpecSheet = useCallback(() => {
@@ -80,47 +119,71 @@ export function HaulageBookingProvider({ children }: { children: React.ReactNode
     setPendingItem(null);
   }, []);
 
-  const addFreightItem = useCallback((item: Omit<HaulageFreightItem, 'clientId'>) => {
-    setDraft((prev) => ({
-      ...prev,
-      items: [...prev.items, { ...item, clientId: createClientId() }],
-    }));
-    closeSpecSheet();
-  }, [closeSpecSheet]);
-
-  const updateFreightItem = useCallback(
-    (clientId: string, patch: Partial<HaulageFreightItem>) => {
+  const addFreightItem = useCallback(
+    (item: Omit<HaulageFreightItem, 'clientId'>) => {
       setDraft((prev) => ({
         ...prev,
-        items: prev.items.map((item) =>
-          item.clientId === clientId ? { ...item, ...patch } : item,
-        ),
+        items: [...prev.items, { ...item, clientId: createClientId() }],
+        quoteToken: null,
+        quotedTotalMinor: null,
       }));
+      closeSpecSheet();
     },
-    [],
+    [closeSpecSheet],
+  );
+
+  const selectVariant = useCallback(
+    (pending: HaulagePendingItem) => {
+      const template = getCatalogItem(catalog, pending.templateId);
+      const variant = template?.variants.find((v) => v.id === pending.variantId);
+      const needsManual = template?.requires_manual_specs ||
+        (variant ? !variantHasCompleteSpecs(variant) : true);
+      if (needsManual) {
+        openSpecSheet(pending);
+        return;
+      }
+      const built = buildFreightItemFromCatalog(catalog, pending);
+      if (!built) return;
+      addFreightItem(built);
+    },
+    [catalog, openSpecSheet, addFreightItem],
   );
 
   const removeFreightItem = useCallback((clientId: string) => {
     setDraft((prev) => ({
       ...prev,
       items: prev.items.filter((item) => item.clientId !== clientId),
+      quoteToken: null,
+      quotedTotalMinor: null,
     }));
   }, []);
 
   const setPickup = useCallback((place: HaulagePlace | null) => {
-    setDraft((prev) => ({ ...prev, pickup: place }));
+    setDraft((prev) => ({ ...prev, pickup: place, quoteToken: null, quotedTotalMinor: null }));
   }, []);
 
   const setDropoff = useCallback((place: HaulagePlace | null) => {
-    setDraft((prev) => ({ ...prev, dropoff: place }));
+    setDraft((prev) => ({ ...prev, dropoff: place, quoteToken: null, quotedTotalMinor: null }));
   }, []);
 
   const setPickupTime = useCallback((time: string) => {
-    setDraft((prev) => ({ ...prev, pickupTime: time }));
+    setDraft((prev) => ({ ...prev, pickupTime: time, quoteToken: null, quotedTotalMinor: null }));
   }, []);
 
   const setPaymentMethodId = useCallback((id: string) => {
     setDraft((prev) => ({ ...prev, paymentMethodId: id }));
+  }, []);
+
+  const setStairsLevel = useCallback((stairsLevel: HaulageStairsLevel) => {
+    setDraft((prev) => ({ ...prev, stairsLevel, quoteToken: null, quotedTotalMinor: null }));
+  }, []);
+
+  const setPrepStatus = useCallback((prepStatus: HaulagePrepStatus) => {
+    setDraft((prev) => ({ ...prev, prepStatus, quoteToken: null, quotedTotalMinor: null }));
+  }, []);
+
+  const setQuote = useCallback((quoteToken: string, quotedTotalMinor: number, currency: string) => {
+    setDraft((prev) => ({ ...prev, quoteToken, quotedTotalMinor, currency }));
   }, []);
 
   const canAdvanceFromStep = useCallback(
@@ -133,7 +196,7 @@ export function HaulageBookingProvider({ children }: { children: React.ReactNode
         case 'locations':
           return draft.pickup != null && draft.dropoff != null;
         case 'review':
-          return true;
+          return draft.quoteToken != null;
         case 'payment':
           return draft.paymentMethodId != null;
         default:
@@ -166,27 +229,35 @@ export function HaulageBookingProvider({ children }: { children: React.ReactNode
     setStep('category');
     setPendingItem(null);
     setSpecSheetOpen(false);
+    setVariantSheetTemplateId(null);
   }, []);
 
   const value = useMemo<HaulageBookingContextValue>(
     () => ({
+      catalog,
+      catalogLoading,
+      catalogError,
       draft,
       step,
       stepIndex,
       stepCount,
       pendingItem,
       specSheetOpen,
+      variantSheetTemplateId,
       setCategory,
-      setPendingItem,
+      openVariantSheet,
+      closeVariantSheet,
       openSpecSheet,
-      closeSpecSheet,
+      selectVariant,
       addFreightItem,
-      updateFreightItem,
       removeFreightItem,
       setPickup,
       setDropoff,
       setPickupTime,
       setPaymentMethodId,
+      setStairsLevel,
+      setPrepStatus,
+      setQuote,
       goToStep,
       goNext,
       goBack,
@@ -194,22 +265,30 @@ export function HaulageBookingProvider({ children }: { children: React.ReactNode
       canAdvanceFromStep,
     }),
     [
+      catalog,
+      catalogLoading,
+      catalogError,
       draft,
       step,
       stepIndex,
       stepCount,
       pendingItem,
       specSheetOpen,
+      variantSheetTemplateId,
       setCategory,
+      openVariantSheet,
+      closeVariantSheet,
       openSpecSheet,
-      closeSpecSheet,
+      selectVariant,
       addFreightItem,
-      updateFreightItem,
       removeFreightItem,
       setPickup,
       setDropoff,
       setPickupTime,
       setPaymentMethodId,
+      setStairsLevel,
+      setPrepStatus,
+      setQuote,
       goToStep,
       goNext,
       goBack,
@@ -218,9 +297,7 @@ export function HaulageBookingProvider({ children }: { children: React.ReactNode
     ],
   );
 
-  return (
-    <HaulageBookingContext.Provider value={value}>{children}</HaulageBookingContext.Provider>
-  );
+  return <HaulageBookingContext.Provider value={value}>{children}</HaulageBookingContext.Provider>;
 }
 
 export function useHaulageBooking(): HaulageBookingContextValue {
@@ -231,25 +308,38 @@ export function useHaulageBooking(): HaulageBookingContextValue {
   return ctx;
 }
 
-export function buildFreightItemFromPending(
+export function buildFreightItemFromCatalog(
+  catalog: HaulageCatalogResponse | undefined,
   pending: HaulagePendingItem,
-  spec: Pick<
+  manualSpec?: Pick<
     HaulageFreightItem,
     'lengthCm' | 'widthCm' | 'heightCm' | 'weightKg' | 'fragile' | 'requiresDisassembly'
   >,
 ): Omit<HaulageFreightItem, 'clientId'> | null {
-  const template = getItemTemplate(pending.templateId);
+  const template = getCatalogItem(catalog, pending.templateId);
   if (!template) return null;
   const variant = template.variants.find((v) => v.id === pending.variantId);
   if (!variant) return null;
 
+  const requiresManualSpecs = template.requires_manual_specs || !variantHasCompleteSpecs(variant);
+
+  if (requiresManualSpecs && !manualSpec) {
+    return null;
+  }
+
   return {
-    categoryId: template.categoryId,
+    categoryId: template.category_id,
     templateId: template.id,
     variantId: variant.id,
-    variantLabelKey: variant.labelKey,
-    titleKey: template.titleKey,
-    subtitleKey: template.subtitleKey,
-    ...spec,
+    itemTitle: template.title,
+    variantLabel: variant.label,
+    subtitle: template.subtitle,
+    lengthCm: manualSpec?.lengthCm ?? variant.length_cm,
+    widthCm: manualSpec?.widthCm ?? variant.width_cm,
+    heightCm: manualSpec?.heightCm ?? variant.height_cm,
+    weightKg: manualSpec?.weightKg ?? variant.weight_kg,
+    fragile: manualSpec?.fragile ?? variant.fragile_default,
+    requiresDisassembly: manualSpec?.requiresDisassembly ?? variant.requires_disassembly_default,
+    requiresManualSpecs: false,
   };
 }

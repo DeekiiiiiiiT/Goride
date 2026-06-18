@@ -39,9 +39,13 @@ import {
   Trash2,
   HeartPulse,
   RotateCcw,
+  Moon,
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { API_ENDPOINTS } from '../../services/apiConfig';
+import { usePortalTheme } from '../../hooks/usePortalTheme';
+import { Switch } from '../ui/switch';
+import { api } from '../../services/api';
 
 // -------------------------------------------------------------------
 // Types
@@ -170,6 +174,7 @@ const TIMEZONE_OPTIONS = [
 export function PlatformSettings({ activeTab: externalTab }: { activeTab?: string } = {}) {
   const { session, user } = useAuth();
   const accessToken = session?.access_token;
+  const { isDark, setDarkMode } = usePortalTheme();
 
   const [settings, setSettings] = useState<PlatformSettingsData>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
@@ -270,6 +275,16 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
     setDirty(true);
   };
 
+  const handleDarkModeChange = async (checked: boolean) => {
+    setDarkMode(checked);
+    try {
+      const prefs = await api.getPreferences().catch(() => ({}));
+      await api.savePreferences({ ...(prefs || {}), darkMode: checked });
+    } catch {
+      // Preference is still stored locally via applyPortalTheme
+    }
+  };
+
   // ---------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------
@@ -286,8 +301,8 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-white">Platform Settings</h1>
-          <p className="text-sm text-slate-400 mt-0.5">
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Platform Settings</h1>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
             Configure global platform options that affect all customer accounts.
           </p>
         </div>
@@ -333,6 +348,22 @@ export function PlatformSettings({ activeTab: externalTab }: { activeTab?: strin
 
       {/* ── Tab: General ── */}
       {activeTab === 'general' && <>
+      <SettingsSection
+        icon={<Moon className="w-4 h-4 text-violet-500 dark:text-violet-400" />}
+        title="Appearance"
+        description="Personal display preferences for this admin portal."
+      >
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/50">
+          <div>
+            <p className="text-sm font-medium text-slate-900 dark:text-white">Dark mode</p>
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+              Use a dark interface. Synced with your fleet dashboard preference.
+            </p>
+          </div>
+          <Switch checked={isDark} onCheckedChange={handleDarkModeChange} aria-label="Toggle dark mode" />
+        </div>
+      </SettingsSection>
+
       {/* ── Section: General ── */}
       <SettingsSection
         icon={<Globe className="w-4 h-4 text-blue-400" />}
@@ -1415,12 +1446,12 @@ function SettingsSection({
   className?: string;
 }) {
   return (
-    <div className={className || "bg-slate-900 border border-slate-800 rounded-xl p-5"}>
+    <div className={className || 'bg-white border border-slate-200 rounded-xl p-5 dark:bg-slate-900 dark:border-slate-800'}>
       <div className="flex items-center gap-2 mb-1">
         {icon}
-        <h2 className="text-sm font-semibold text-white">{title}</h2>
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{title}</h2>
       </div>
-      <p className="text-xs text-slate-500 mb-4">{description}</p>
+      <p className="text-xs text-slate-600 dark:text-slate-500 mb-4">{description}</p>
       {children}
     </div>
   );

@@ -19,8 +19,11 @@ import {
   normalizeTransportSolutionSlug,
   validateTransportSolutionSlug,
   vehicleCapacityDisplay,
+  SERVICE_CATEGORIES,
+  resolveServiceCategory,
   type RidesVehicleTypeDto,
   type RidesVehicleTypeInput,
+  type ServiceCategory,
   type TransportSolutionKind,
 } from '@/types/vehicleTypes';
 
@@ -81,6 +84,7 @@ function emptyForm(kind: TransportSolutionKind): RidesVehicleTypeInput & { slug:
     sort_order: 50,
     is_active: true,
     solution_kind: kind,
+    service_category: kind === 'service' ? 'rideshare' : null,
   };
 }
 
@@ -228,9 +232,10 @@ const KIND_META: Record<
 
 type VehicleTypesManagerProps = {
   kind: TransportSolutionKind;
+  serviceCategory?: ServiceCategory;
 };
 
-export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
+export function VehicleTypesManager({ kind, serviceCategory }: VehicleTypesManagerProps) {
   const { session } = useOutletContext<OutletContext>();
   const { allVehicles, allServices, loading, reload } = useVehicleTypesContext();
   const items = kind === 'vehicle' ? allVehicles : allServices;
@@ -329,12 +334,16 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
     };
   }, [kind, allServices, session.access_token]);
 
-  const openCreate = () => {
+  const openCreate = (category: ServiceCategory = 'rideshare') => {
     setEditing(null);
     setSelectedCommandoBody('');
     setCatalogSeatingTotal(null);
     setLinkedBodyTypes([]);
-    setForm({ ...emptyForm(kind), sort_order: (items.length + 1) * 10 });
+    setForm({
+      ...emptyForm(kind),
+      service_category: kind === 'service' ? category : null,
+      sort_order: (items.length + 1) * 10,
+    });
     setDialogOpen(true);
   };
 
@@ -372,6 +381,7 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
       sort_order: row.sort_order,
       is_active: row.is_active,
       solution_kind: row.solution_kind,
+      service_category: row.service_category ?? resolveServiceCategory(row),
     });
     if (row.solution_kind === 'service') {
       void getServiceBodyTypes(session.access_token, row.slug)
@@ -468,6 +478,7 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
           sort_order: form.sort_order ?? 0,
           is_active: form.is_active !== false,
           solution_kind: 'service',
+          service_category: form.service_category ?? 'rideshare',
         };
         let serviceSlug = editing?.slug ?? '';
         if (editing) {
@@ -511,16 +522,39 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
           <Loader2 className="w-4 h-4 animate-spin" />
           Loading…
         </p>
+      ) : kind === 'service' ? (
+        <div className="space-y-8">
+          {(serviceCategory
+            ? SERVICE_CATEGORIES.filter((category) => category.id === serviceCategory)
+            : SERVICE_CATEGORIES
+          ).map((category) => {
+            const categoryItems = items.filter(
+              (row) => resolveServiceCategory(row) === category.id,
+            );
+            return (
+              <Section
+                key={category.id}
+                title={category.label}
+                description={category.description}
+                items={categoryItems}
+                addLabel={`Add ${category.label.toLowerCase()} service`}
+                onAdd={() => openCreate(category.id)}
+                onEdit={openEdit}
+                onDelete={(row) => void handleDelete(row)}
+                serviceBodyLabels={serviceBodyLabels}
+              />
+            );
+          })}
+        </div>
       ) : (
         <Section
           title={meta.title}
           description={meta.description}
           items={items}
           addLabel={meta.addLabel}
-          onAdd={openCreate}
+          onAdd={() => openCreate()}
           onEdit={openEdit}
           onDelete={(row) => void handleDelete(row)}
-          serviceBodyLabels={kind === 'service' ? serviceBodyLabels : undefined}
         />
       )}
 
@@ -609,6 +643,25 @@ export function VehicleTypesManager({ kind }: VehicleTypesManagerProps) {
               )}
               {form.solution_kind === 'service' && (
                 <>
+                  <label className="block">
+                    <span className="text-sm text-slate-300">Product line</span>
+                    <select
+                      className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white"
+                      value={form.service_category ?? 'rideshare'}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          service_category: e.target.value as ServiceCategory,
+                        }))
+                      }
+                    >
+                      {SERVICE_CATEGORIES.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <label className="block">
                     <span className="text-sm text-slate-300">Display name</span>
                     <input

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2 } from 'lucide-react';
 import { formatMoneyMinor } from '@roam/types/rides';
@@ -10,7 +10,6 @@ import { HaulageFreightCart } from '@/components/haulage/HaulageFreightCart';
 import { HaulagePrimaryButton } from '@/components/haulage/HaulageShell';
 import { useHaulageBooking } from '@/contexts/HaulageBookingContext';
 import { useDefaultPaymentMethod } from '@/hooks/useDefaultPaymentMethod';
-import { estimateHaulageTotalMinor } from '@/lib/haulage/pricing';
 import { submitHaulageBooking } from '@/services/haulageEdge';
 import {
   ON_SURFACE,
@@ -37,12 +36,9 @@ export function HaulagePaymentStep() {
     }
   }, [selectedPaymentId, setPaymentMethodId]);
 
-  const { totalMinor } = useMemo(
-    () => estimateHaulageTotalMinor(draft.items, draft.pickup, draft.dropoff),
-    [draft.items, draft.pickup, draft.dropoff],
-  );
-
-  const fareLabel = formatMoneyMinor(totalMinor, 'USD');
+  const fareLabel = draft.quotedTotalMinor != null && draft.currency
+    ? formatMoneyMinor(draft.quotedTotalMinor, draft.currency)
+    : '—';
 
   const handlePaymentSelect = (id: string) => {
     setSelectedPaymentId(id);
@@ -51,7 +47,7 @@ export function HaulagePaymentStep() {
   };
 
   const handleSubmit = async () => {
-    if (!selectedPaymentId || !draft.pickup || !draft.dropoff || draft.items.length === 0) {
+    if (!selectedPaymentId || !draft.pickup || !draft.dropoff || draft.items.length === 0 || !draft.quoteToken) {
       toast.error(t('payment.incomplete'));
       return;
     }
@@ -60,6 +56,7 @@ export function HaulagePaymentStep() {
       const confirmation = await submitHaulageBooking({
         ...draft,
         paymentMethodId: selectedPaymentId,
+        quoteToken: draft.quoteToken,
       });
       navigate('/services/haulage/confirmed', { state: { confirmation } });
     } catch {

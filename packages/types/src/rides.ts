@@ -3,6 +3,8 @@
  * @see docs/passenger-rides/RIDES_SPEC.md
  */
 
+import type { HaulageBookingManifest } from './haulage';
+
 export type RideBookingKind = 'immediate' | 'scheduled';
 
 export type ScheduledCancelReason =
@@ -325,6 +327,8 @@ export interface RideRequestRow {
   scheduled_cancel_reason?: ScheduledCancelReason | null;
   created_at: string;
   updated_at: string;
+  /** Joined when vehicle_option is haulage (not a ride_requests column). */
+  haulage_manifest?: HaulageBookingManifest | null;
 }
 
 export interface DriverMyTripsResponse {
@@ -732,7 +736,7 @@ export interface ActivityTripsResponse {
   window_days: number;
 }
 
-export type ActivityPipelineKind = 'schedule' | 'courier' | 'event';
+export type ActivityPipelineKind = 'schedule' | 'courier' | 'event' | 'haulage';
 
 export interface ActivityPipelineItem {
   kind: ActivityPipelineKind;

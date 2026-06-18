@@ -46,3 +46,4 @@ export * from './passengerProfile';
 export * from './tripShare';
 export * from './roamConnections';
 export * from './matching';
+export * from './haulage';
