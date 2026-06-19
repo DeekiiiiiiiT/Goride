@@ -1,0 +1,174 @@
+@import 'tailwindcss';
+@source './**/*.{js,ts,jsx,tsx}';
+
+@theme {
+  --color-fleet-slate: #0f172a;
+  --color-rides-blue: #4f46e5;
+  --color-haul-indigo: #312e81;
+  --color-dash-cyan: #06b6d4;
+  --color-secondary-container: #fea619;
+  --color-on-secondary-container: #684000;
+  --color-on-surface: #0b1c30;
+  --color-on-surface-variant: #45474c;
+  --color-outline-variant: #c5c6cd;
+  --color-outline: #75777d;
+  --color-surface: #f8f9ff;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #eff4ff;
+  --color-surface-container-high: #dce9ff;
+  --color-surface-container: #e5eeff;
+  --color-surface-variant: #d3e4fe;
+  --color-background: #f8f9ff;
+  --color-surface-muted: #f8fafc;
+  --color-primary: #000000;
+  --color-secondary: #855300;
+  --color-secondary-fixed: #ffddb8;
+  --color-on-primary-fixed-variant: #3c475b;
+  --color-surface-bright: #f8f9ff;
+  --color-on-secondary-fixed: #2a1700;
+
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+
+  --spacing-margin-mobile: 16px;
+  --spacing-margin-desktop: 64px;
+  --spacing-gutter: 24px;
+  --spacing-container-max: 1280px;
+
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --radius-full: 9999px;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background-color: var(--color-background);
+  color: var(--color-on-surface);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+.bento-card-hover {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.bento-card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px -8px rgba(10, 22, 40, 0.1);
+}
+
+.bento-card-hover:hover .bento-icon {
+  transform: scale(1.1) rotate(-5deg);
+}
+
+.bento-icon {
+  transition: transform 0.3s ease;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(226, 232, 240, 0.5);
+}
+
+.kinetic-shadow {
+  box-shadow:
+    0 4px 6px -1px rgba(15, 23, 42, 0.05),
+    0 2px 4px -2px rgba(15, 23, 42, 0.05);
+}
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.haul-bento-card {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.haul-bento-card:hover {
+  transform: translateY(-4px);
+}
+
+.kinetic-gradient {
+  background: linear-gradient(135deg, #101c2e 0%, #0b1c30 100%);
+}
+
+.kinetic-gradient-light {
+  background: linear-gradient(135deg, #f8f9ff 0%, #e5eeff 100%);
+}
+
+.kinetic-grid {
+  background-image:
+    linear-gradient(#e2e8f0 1px, transparent 1px),
+    linear-gradient(90deg, #e2e8f0 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.dark {
+  color-scheme: dark;
+  --color-on-surface: #eaf1ff;
+  --color-on-surface-variant: #c5c6cd;
+  --color-surface: #0b1c30;
+  --color-surface-container-lowest: #101c2e;
+  --color-background: #0b1c30;
+  --color-surface-muted: #101c2e;
+  --color-outline-variant: #45474c;
+  --color-surface-container-low: #213145;
+  --color-surface-container-high: #2a3a52;
+  --color-surface-container: #1e2d42;
+  --color-surface-bright: #213145;
+  --color-surface-variant: #3c475b;
+}
+
+.dark .kinetic-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+.sr-only:focus {
+  position: static;
+  width: auto;
+  height: auto;
+  padding: inherit;
+  margin: inherit;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}

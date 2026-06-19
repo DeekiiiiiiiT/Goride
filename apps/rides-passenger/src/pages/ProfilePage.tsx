@@ -99,19 +99,13 @@ export default function ProfilePage() {
   const displayName = useMemo(() => {
     const fromProfile = profile?.display_name?.trim();
     if (fromProfile) return fromProfile;
-    const meta = user?.user_metadata;
-    const name = (meta?.name as string | undefined)?.trim();
-    if (name) return name;
     return user?.email?.split('@')[0] ?? ta('defaultRiderName');
   }, [profile?.display_name, user, ta]);
 
   const email = user?.email?.trim() || t('notSet');
   const phone = formatPhoneE164(profile?.phone_e164) ?? t('notSet');
 
-  const avatarUrl =
-    (user?.user_metadata?.avatar_url as string | undefined) ||
-    (user?.user_metadata?.picture as string | undefined) ||
-    null;
+  const avatarUrl = null;
 
   const loading = profileLoading || tagLoading;
 

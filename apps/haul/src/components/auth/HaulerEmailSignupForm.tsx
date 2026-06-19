@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, Loader2, Lock, Mail } from 'lucide-react';
 import { LegalPolicyAcceptanceLabel } from '@roam/ui';
+import { GOOGLE_OAUTH_EMAIL_ONLY_SCOPES } from '@roam/auth-client';
 import { supabase } from '../../utils/supabase/client';
 import {
   getHaulAuthRedirectUrl,
@@ -219,6 +220,7 @@ export function HaulerGoogleSignupButton({
         provider: 'google',
         options: {
           redirectTo,
+          scopes: GOOGLE_OAUTH_EMAIL_ONLY_SCOPES,
           queryParams: { prompt: 'select_account' },
         },
       });

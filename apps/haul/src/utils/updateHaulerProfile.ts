@@ -33,6 +33,7 @@ export async function updateHaulerProfile(user: User, data: ProfileUpdateData): 
 
   const row = {
     display_name: displayName,
+    first_name: data.fullName.trim(),
     phone: data.phone.trim(),
     ...(photoUrl ? { profile_photo_url: photoUrl } : {}),
   };
@@ -48,7 +49,9 @@ export async function updateHaulerProfile(user: User, data: ProfileUpdateData): 
   await supabase.auth.updateUser({
     data: {
       name: data.fullName.trim(),
-      ...(photoUrl ? { avatar_url: photoUrl } : {}),
+      avatar_url: photoUrl ?? null,
+      picture: null,
+      full_name: null,
     },
   });
 }

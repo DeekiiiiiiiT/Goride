@@ -40,7 +40,7 @@ export function HaulProfileSection({ route, onNavigate, onGoToEarnings, onSignOu
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
 
   const name = profile?.displayName ?? profile?.fullName ?? user?.email ?? 'Driver';
-  const avatar = profile?.profilePhotoUrl ?? (user?.user_metadata?.avatar_url as string | undefined);
+  const avatar = profile?.profilePhotoUrl;
 
   if (route === 'edit') {
     return <HaulEditProfilePage onBack={() => onNavigate('hub')} />;

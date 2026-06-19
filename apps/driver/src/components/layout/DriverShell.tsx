@@ -56,7 +56,7 @@ import { DriverWalletsPage } from '../rides/DriverWalletsPage';
 import { DriverSettingsPage } from '../settings/DriverSettingsPage';
 
 export function DriverShell({ forcePassengerRides = false }: { forcePassengerRides?: boolean }) {
-  const { mode, isFleetDriver, isIndependentDriver, fleet, loading } = useDriver();
+  const { mode, isFleetDriver, isIndependentDriver, fleet, loading, profile } = useDriver();
   const { user, signOut } = useAuth();
   const { driverRecord } = useCurrentDriver();
   const { needsCheckIn, isLoading: checkInHookLoading, submitCheckIn } = useWeeklyCheckIn(driverRecord?.id);
@@ -93,14 +93,13 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
   const profileFlowActive =
     currentPage === 'profile' || (isIndependentDriver && currentPage === 'documents');
 
-  const avatarUrl =
-    (user?.user_metadata?.avatar_url as string | undefined) ||
-    (user?.user_metadata?.picture as string | undefined) ||
-    null;
-  const profileInitial =
-    user?.user_metadata?.name?.[0]?.toUpperCase() ||
-    user?.email?.[0]?.toUpperCase() ||
-    'D';
+  const profileDisplayName =
+    profile?.displayName ||
+    [profile?.firstName, profile?.lastName].filter(Boolean).join(' ').trim() ||
+    user?.email?.split('@')[0] ||
+    'Driver';
+  const avatarUrl = profile?.profilePhotoUrl ?? null;
+  const profileInitial = profileDisplayName[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || 'D';
 
   useEffect(() => {
     if (currentPage !== 'checkin' || !isFleetDriver) return;
@@ -493,7 +492,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-slate-900 truncate dark:text-white">
-                    {user?.user_metadata?.name || user?.email?.split('@')[0] || 'Driver'}
+                    {profileDisplayName}
                   </p>
                   <p className="text-xs text-slate-600 truncate dark:text-slate-400">{user?.email}</p>
                 </div>

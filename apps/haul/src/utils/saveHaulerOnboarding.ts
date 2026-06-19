@@ -54,6 +54,7 @@ export async function saveHaulerOnboarding(
 
   const profileRow = {
     display_name: displayName,
+    first_name: profile.fullName.trim(),
     phone: profile.phone,
     profile_photo_url: photoUrl,
     onboarding_complete: false,
@@ -80,8 +81,10 @@ export async function saveHaulerOnboarding(
   await supabase.auth.updateUser({
     data: {
       surface: 'hauler',
-      name: profile.fullName,
-      avatar_url: photoUrl ?? undefined,
+      name: profile.fullName.trim(),
+      avatar_url: photoUrl,
+      picture: null,
+      full_name: null,
     },
   });
 

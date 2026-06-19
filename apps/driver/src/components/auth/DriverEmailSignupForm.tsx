@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Loader2, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { LegalPolicyAcceptanceLabel } from '@roam/ui';
+import { GOOGLE_OAUTH_EMAIL_ONLY_SCOPES } from '@roam/auth-client';
 import { supabase } from '../../utils/supabase/client';
 import { getDriverAuthRedirectUrl } from '../../utils/driverAuthRedirect';
 import { isNativeCapacitorPlatform } from '@roam/types';
@@ -226,6 +227,7 @@ export function GoogleSignupButton({
         options: {
           redirectTo,
           skipBrowserRedirect: native,
+          scopes: GOOGLE_OAUTH_EMAIL_ONLY_SCOPES,
           queryParams: { prompt: 'select_account' },
         },
       });

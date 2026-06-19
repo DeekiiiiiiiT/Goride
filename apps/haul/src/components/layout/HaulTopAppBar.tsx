@@ -1,6 +1,5 @@
 import React from 'react';
 import { Menu, User } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
 import { useHauler } from '../../contexts/HaulerContext';
 
 type Props = {
@@ -10,9 +9,8 @@ type Props = {
 };
 
 export function HaulTopAppBar({ online = false, onMenuClick, onProfileClick }: Props) {
-  const { user } = useAuth();
   const { profile } = useHauler();
-  const avatar = profile?.profilePhotoUrl ?? user?.user_metadata?.avatar_url;
+  const avatar = profile?.profilePhotoUrl;
 
   return (
     <header className="fixed top-0 z-50 flex h-[72px] w-full items-center justify-between border-b border-[#534434] bg-[#0b1326]/80 backdrop-blur-md safe-t safe-x">

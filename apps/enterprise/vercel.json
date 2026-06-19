@@ -6,8 +6,8 @@
   "framework": null,
   "rewrites": [
     {
-      "source": "/((?!privacy(?:/.*)?|terms(?:/.*)?).*)",
-      "destination": "/"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }

@@ -129,9 +129,6 @@ export default function AccountPage() {
   }, []);
 
   const displayName = useMemo(() => {
-    const meta = user?.user_metadata;
-    const name = (meta?.name as string | undefined)?.trim();
-    if (name) return name;
     return user?.email?.split('@')[0] ?? t('defaultRiderName');
   }, [user, t]);
 
@@ -145,10 +142,7 @@ export default function AccountPage() {
     return '@rider';
   }, [user, roamTagLabel]);
 
-  const avatarUrl =
-    (user?.user_metadata?.avatar_url as string | undefined) ||
-    (user?.user_metadata?.picture as string | undefined) ||
-    null;
+  const avatarUrl = null;
 
   const walletBalanceLabel = useMemo(() => {
     if (wallet) return formatMoneyMinorPlain(wallet.balance_minor);
