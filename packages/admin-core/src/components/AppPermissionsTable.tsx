@@ -89,16 +89,16 @@ export function AppPermissionsTable({
   return (
     <div className="space-y-6">
       {!canEdit && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
           View only — you can see policy values but cannot save. Ask an admin with write access for
           this surface, or use an account whose JWT includes the required role.
         </div>
       )}
 
-      <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-4 flex gap-3">
-        <Shield className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" aria-hidden />
-        <div className="text-sm text-slate-300 space-y-1">
-          <p className="font-medium text-white">Product policy — not device settings</p>
+      <div className="rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/40 p-4 flex gap-3">
+        <Shield className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" aria-hidden />
+        <div className="text-sm text-slate-700 dark:text-slate-300 space-y-1">
+          <p className="font-medium text-slate-900 dark:text-white">Product policy — not device settings</p>
           <p>
             These toggles control whether {surfaceLabel} apps <strong>prompt</strong> for or{' '}
             <strong>block</strong> features. They do not grant permissions on users&apos; phones.

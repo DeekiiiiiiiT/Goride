@@ -13,6 +13,7 @@ import {
 import { useAuth } from '../auth/AuthContext';
 import { AdminNavSection } from './AdminNavSection';
 import { AdminNavGroup } from './AdminNavGroup';
+import { ThemeToggle } from './ThemeToggle';
 import {
   NAV_ITEMS,
   PLATFORM_CHILDREN,
@@ -445,9 +446,12 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
             <Menu className="w-5 h-5" />
           </button>
           <h2 className="text-base font-semibold text-slate-900 dark:text-white">{pageTitle(currentPage)}</h2>
-          <a href="/" className="ml-auto text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
-            Back to Fleet Dashboard
-          </a>
+          <div className="ml-auto flex items-center gap-1">
+            <ThemeToggle />
+            <a href="/" className="px-2 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
+              Back to Fleet Dashboard
+            </a>
+          </div>
         </header>
         <main className="flex-1 overflow-auto p-4 lg:p-8">
           <div className="mx-auto max-w-7xl">{children}</div>

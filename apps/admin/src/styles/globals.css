@@ -13,7 +13,7 @@
   --secondary: oklch(0.95 0.0058 264.53);
   --secondary-foreground: #030213;
   --muted: #ececf0;
-  --muted-foreground: #717182;
+  --muted-foreground: #475569;
   --accent: #e9ebef;
   --accent-foreground: #030213;
   --destructive: #d4183d;
@@ -181,6 +181,38 @@
 
 html {
   font-size: var(--font-size);
+}
+
+/**
+ * Global light-mode compatibility for components authored with dark-theme Tailwind
+ * (text-slate-300, text-amber-400, etc.) without explicit light: variants.
+ */
+:root:not(.dark) {
+  /* Slate text */
+  .text-slate-300 { color: #334155; }
+  .text-slate-400 { color: #334155; }
+  .text-slate-500 { color: #475569; }
+
+  /* Accent text on light backgrounds */
+  .text-amber-300 { color: #92400e; }
+  .text-amber-400 { color: #b45309; }
+  .text-orange-400 { color: #c2410c; }
+  .text-blue-300 { color: #1e40af; }
+  .text-blue-400 { color: #1d4ed8; }
+  .text-red-300 { color: #991b1b; }
+  .text-red-400 { color: #dc2626; }
+  .text-emerald-400 { color: #047857; }
+  .text-indigo-400 { color: #4338ca; }
+  .text-violet-400 { color: #6d28d9; }
+  .text-cyan-400 { color: #0e7490; }
+
+  /* Opacity variants */
+  .text-blue-300\/80 { color: rgb(30 58 138 / 0.95); }
+  .text-emerald-300 { color: #047857; }
+  .text-orange-300 { color: #c2410c; }
+  .text-amber-200 { color: #92400e; }
+  .text-sky-300 { color: #0369a1; }
+  .text-violet-300 { color: #5b21b6; }
 }
 
 /**

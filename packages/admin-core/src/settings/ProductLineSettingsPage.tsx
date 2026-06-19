@@ -297,7 +297,7 @@ export function ProductLineSettingsPage({
 
       {/* Error */}
       {error && (
-        <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/30 text-red-300 rounded-lg px-4 py-3 text-sm">
+        <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/30 text-red-800 dark:text-red-300 rounded-lg px-4 py-3 text-sm">
           <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
           <span>{error}</span>
         </div>
@@ -316,7 +316,7 @@ export function ProductLineSettingsPage({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {/* Platform Name */}
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1.5">Platform Name</label>
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-400 mb-1.5">Platform Name</label>
             <input
               type="text"
               value={settings.platformName}
@@ -328,7 +328,7 @@ export function ProductLineSettingsPage({
 
           {/* Default Currency */}
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1.5">Default Currency</label>
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-400 mb-1.5">Default Currency</label>
             <select
               value={settings.defaultCurrency}
               onChange={e => updateField('defaultCurrency', e.target.value)}
@@ -342,7 +342,7 @@ export function ProductLineSettingsPage({
 
           {/* Fleet Timezone */}
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1.5">Fleet Timezone</label>
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-400 mb-1.5">Fleet Timezone</label>
             <select
               value={settings.fleetTimezone}
               onChange={e => updateField('fleetTimezone', e.target.value)}
@@ -356,7 +356,7 @@ export function ProductLineSettingsPage({
 
           {/* Platform Version */}
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1.5">Platform Version</label>
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-400 mb-1.5">Platform Version</label>
             <input
               type="text"
               value={settings.platformVersion}
@@ -368,12 +368,12 @@ export function ProductLineSettingsPage({
 
           {/* Maintenance Mode */}
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1.5">Maintenance Mode</label>
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-400 mb-1.5">Maintenance Mode</label>
             <button
               onClick={() => updateField('maintenanceMode', !settings.maintenanceMode)}
               className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors w-full
                 ${settings.maintenanceMode
-                  ? 'bg-amber-500/15 border-amber-500/40 text-amber-400'
+                  ? 'bg-amber-500/15 border-amber-500/40 text-amber-700 dark:text-amber-400'
                   : 'bg-slate-100 border-slate-300 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400'
                 }
               `}
@@ -390,7 +390,7 @@ export function ProductLineSettingsPage({
         {/* Maintenance Message — only shown when maintenance mode is enabled */}
         {settings.maintenanceMode && (
           <div className="mt-4">
-            <label className="block text-xs font-medium text-slate-400 mb-1.5">Maintenance Message</label>
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-400 mb-1.5">Maintenance Message</label>
             <textarea
               value={settings.maintenanceMessage}
               onChange={e => {
@@ -406,13 +406,13 @@ export function ProductLineSettingsPage({
               <p className="text-[10px] text-slate-500">
                 Shown to users on the maintenance page. Leave blank for the default message.
               </p>
-              <span className={`text-[10px] font-mono ${settings.maintenanceMessage.length > 180 ? 'text-amber-400' : 'text-slate-600'}`}>
+              <span className={`text-[10px] font-mono ${settings.maintenanceMessage.length > 180 ? 'text-amber-700 dark:text-amber-400' : 'text-slate-600'}`}>
                 {settings.maintenanceMessage.length}/200
               </span>
             </div>
             <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2.5 mt-2">
-              <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
-              <p className="text-xs text-amber-300/80">
+              <AlertCircle className="w-4 h-4 text-amber-700 dark:text-amber-400 mt-0.5 shrink-0" />
+              <p className="text-xs text-amber-800 dark:text-amber-900 dark:text-amber-300/80">
                 When maintenance mode is active, all fleet managers, team members, and drivers are blocked from using the platform. Only platform administrators can access the admin portal.
               </p>
             </div>
@@ -443,7 +443,7 @@ export function ProductLineSettingsPage({
                 `}
               >
                 <div className={`p-2 rounded-lg ${enabled ? 'bg-amber-500/15' : 'bg-slate-100 dark:bg-slate-800'}`}>
-                  <IconComp className={`w-5 h-5 ${enabled ? 'text-amber-400' : 'text-slate-500'}`} />
+                  <IconComp className={`w-5 h-5 ${enabled ? 'text-amber-700 dark:text-amber-400' : 'text-slate-500'}`} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className={`text-sm font-medium ${enabled ? 'text-slate-900 dark:text-white' : 'text-slate-500'}`}>
@@ -451,7 +451,7 @@ export function ProductLineSettingsPage({
                   </p>
                   <p className="text-xs text-slate-500 truncate">{bt.description}</p>
                 </div>
-                <div className={`shrink-0 ${enabled ? 'text-amber-400' : 'text-slate-600'}`}>
+                <div className={`shrink-0 ${enabled ? 'text-amber-700 dark:text-amber-400' : 'text-slate-600'}`}>
                   {enabled
                     ? <ToggleRight className="w-6 h-6" />
                     : <ToggleLeft className="w-6 h-6" />
@@ -464,7 +464,7 @@ export function ProductLineSettingsPage({
 
         <div className="flex items-start gap-2 bg-blue-500/10 border border-blue-500/20 rounded-lg px-3 py-2.5 mt-3">
           <Info className="w-4 h-4 text-blue-400 mt-0.5 shrink-0" />
-          <p className="text-xs text-blue-300/80">
+          <p className="text-xs text-blue-900 dark:text-blue-300/80">
             Changes take effect on the signup page immediately after saving. Existing fleet manager accounts are not affected.
           </p>
         </div>
@@ -512,17 +512,17 @@ export function ProductLineSettingsPage({
       >
         {/* Sub-area 1: API Keys — moved to API Command Center */}
         <div className="mb-5">
-          <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+          <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
             <KeyRound className="w-3.5 h-3.5" /> API Keys & Secrets
           </h3>
           <div className="bg-slate-50 border border-slate-200 dark:bg-slate-800/40 dark:border-slate-700 rounded-lg px-4 py-3 flex items-start gap-3 text-sm">
-            <Activity className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+            <Activity className="w-4 h-4 text-amber-700 dark:text-amber-400 mt-0.5 shrink-0" />
             <div className="flex-1">
-              <p className="text-slate-300">
-                API key management has moved to the <strong className="text-amber-300">API Command Center</strong>.
+              <p className="text-slate-700 dark:text-slate-300">
+                API key management has moved to the <strong className="text-amber-800 dark:text-amber-300">API Command Center</strong>.
               </p>
               <p className="text-xs text-slate-500 mt-1">
-                Use the sidebar to open <strong className="text-slate-300">API Command Center → API Keys</strong> to
+                Use the sidebar to open <strong className="text-slate-700 dark:text-slate-300">API Command Center → API Keys</strong> to
                 view masked keys, see rotation history, and rotate keys via the Supabase Management API.
               </p>
             </div>
@@ -531,12 +531,12 @@ export function ProductLineSettingsPage({
 
         {/* Sub-area 2: Password Policy */}
         <div className="mb-5 pt-4 border-t border-slate-200 dark:border-slate-800">
-          <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+          <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-1.5">
             <Lock className="w-3.5 h-3.5" /> Password Policy
           </h3>
           <div className="space-y-3">
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">Minimum Password Length</label>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-400 mb-1.5">Minimum Password Length</label>
               <div className="flex items-center gap-3">
                 <input
                   type="range"
@@ -546,7 +546,7 @@ export function ProductLineSettingsPage({
                   onChange={e => updateField('securityPolicies', { ...settings.securityPolicies, minPasswordLength: parseInt(e.target.value) })}
                   className="flex-1 accent-amber-500"
                 />
-                <span className="text-sm font-mono text-amber-400 w-8 text-center">{settings.securityPolicies?.minPasswordLength ?? 8}</span>
+                <span className="text-sm font-mono text-amber-700 dark:text-amber-400 w-8 text-center">{settings.securityPolicies?.minPasswordLength ?? 8}</span>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -561,7 +561,7 @@ export function ProductLineSettingsPage({
                     key={opt.key}
                     onClick={() => updateField('securityPolicies', { ...settings.securityPolicies, [opt.key]: !val })}
                     className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs transition-colors
-                      ${val ? 'bg-amber-500/15 border-amber-500/40 text-amber-400' : 'bg-slate-100 border-slate-300 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400'}
+                      ${val ? 'bg-amber-500/15 border-amber-500/40 text-amber-700 dark:text-amber-400' : 'bg-slate-100 border-slate-300 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400'}
                     `}
                   >
                     {val ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
@@ -572,7 +572,7 @@ export function ProductLineSettingsPage({
             </div>
             {/* Preview */}
             <div className="bg-slate-50 border border-slate-200 dark:bg-slate-800/50 dark:border-slate-800 rounded-lg px-3 py-2">
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-700 dark:text-slate-400">
                 Passwords must be at least <span className="text-slate-900 dark:text-white font-medium">{settings.securityPolicies?.minPasswordLength ?? 8}</span> characters
                 {settings.securityPolicies?.requireUppercase && <>, contain an <span className="text-slate-900 dark:text-white font-medium">uppercase letter</span></>}
                 {settings.securityPolicies?.requireNumber && <>, a <span className="text-slate-900 dark:text-white font-medium">number</span></>}
@@ -585,11 +585,11 @@ export function ProductLineSettingsPage({
 
         {/* Sub-area 3: Session Management */}
         <div className="mb-5 pt-4 border-t border-slate-200 dark:border-slate-800">
-          <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+          <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-1.5">
             <Timer className="w-3.5 h-3.5" /> Session Management
           </h3>
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1.5">Auto-logout after inactivity</label>
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-400 mb-1.5">Auto-logout after inactivity</label>
             <select
               value={settings.securityPolicies?.sessionTimeoutMinutes ?? 0}
               onChange={e => updateField('securityPolicies', { ...settings.securityPolicies, sessionTimeoutMinutes: parseInt(e.target.value) })}
@@ -605,7 +605,7 @@ export function ProductLineSettingsPage({
           </div>
           <div className="flex items-start gap-2 bg-blue-500/10 border border-blue-500/20 rounded-lg px-3 py-2.5 mt-2">
             <Info className="w-4 h-4 text-blue-400 mt-0.5 shrink-0" />
-            <p className="text-xs text-blue-300/80">
+            <p className="text-xs text-blue-900 dark:text-blue-300/80">
               This applies to all fleet managers, team members, and drivers. Platform administrators are not affected.
             </p>
           </div>
@@ -613,12 +613,12 @@ export function ProductLineSettingsPage({
 
         {/* Sub-area 4: Login Protection */}
         <div className="mb-5 pt-4 border-t border-slate-200 dark:border-slate-800">
-          <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+          <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-1.5">
             <ShieldAlert className="w-3.5 h-3.5" /> Login Protection
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">Maximum failed login attempts</label>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-400 mb-1.5">Maximum failed login attempts</label>
               <input
                 type="number"
                 min={0}
@@ -631,7 +631,7 @@ export function ProductLineSettingsPage({
             </div>
             {(settings.securityPolicies?.maxLoginAttempts ?? 0) > 0 && (
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Lockout duration</label>
+                <label className="block text-xs font-medium text-slate-700 dark:text-slate-400 mb-1.5">Lockout duration</label>
                 <select
                   value={settings.securityPolicies?.lockoutDurationMinutes ?? 15}
                   onChange={e => updateField('securityPolicies', { ...settings.securityPolicies, lockoutDurationMinutes: parseInt(e.target.value) })}
@@ -647,8 +647,8 @@ export function ProductLineSettingsPage({
           </div>
           {(settings.securityPolicies?.maxLoginAttempts ?? 0) === 0 && (
             <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2.5 mt-2">
-              <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
-              <p className="text-xs text-amber-300/80">
+              <AlertCircle className="w-4 h-4 text-amber-700 dark:text-amber-400 mt-0.5 shrink-0" />
+              <p className="text-xs text-amber-800 dark:text-amber-900 dark:text-amber-300/80">
                 Unlimited login attempts are not recommended for production environments.
               </p>
             </div>
@@ -679,7 +679,7 @@ export function ProductLineSettingsPage({
             `}
           >
             <div className={`p-2 rounded-lg ${settings.enabledModules.fuelManagement ? 'bg-amber-500/15' : 'bg-slate-100 dark:bg-slate-800'}`}>
-              <Fuel className={`w-5 h-5 ${settings.enabledModules.fuelManagement ? 'text-amber-400' : 'text-slate-500'}`} />
+              <Fuel className={`w-5 h-5 ${settings.enabledModules.fuelManagement ? 'text-amber-700 dark:text-amber-400' : 'text-slate-500'}`} />
             </div>
             <div className="flex-1 min-w-0">
               <p className={`text-sm font-medium ${settings.enabledModules.fuelManagement ? 'text-slate-900 dark:text-white' : 'text-slate-500'}`}>
@@ -687,7 +687,7 @@ export function ProductLineSettingsPage({
               </p>
               <p className="text-xs text-slate-500 truncate">Track and manage fuel consumption and costs.</p>
             </div>
-            <div className={`shrink-0 ${settings.enabledModules.fuelManagement ? 'text-amber-400' : 'text-slate-600'}`}>
+            <div className={`shrink-0 ${settings.enabledModules.fuelManagement ? 'text-amber-700 dark:text-amber-400' : 'text-slate-600'}`}>
               {settings.enabledModules.fuelManagement
                 ? <ToggleRight className="w-6 h-6" />
                 : <ToggleLeft className="w-6 h-6" />
@@ -705,7 +705,7 @@ export function ProductLineSettingsPage({
             `}
           >
             <div className={`p-2 rounded-lg ${settings.enabledModules.tollManagement ? 'bg-amber-500/15' : 'bg-slate-100 dark:bg-slate-800'}`}>
-              <MapPin className={`w-5 h-5 ${settings.enabledModules.tollManagement ? 'text-amber-400' : 'text-slate-500'}`} />
+              <MapPin className={`w-5 h-5 ${settings.enabledModules.tollManagement ? 'text-amber-700 dark:text-amber-400' : 'text-slate-500'}`} />
             </div>
             <div className="flex-1 min-w-0">
               <p className={`text-sm font-medium ${settings.enabledModules.tollManagement ? 'text-slate-900 dark:text-white' : 'text-slate-500'}`}>
@@ -713,7 +713,7 @@ export function ProductLineSettingsPage({
               </p>
               <p className="text-xs text-slate-500 truncate">Automate toll payments and track toll expenses.</p>
             </div>
-            <div className={`shrink-0 ${settings.enabledModules.tollManagement ? 'text-amber-400' : 'text-slate-600'}`}>
+            <div className={`shrink-0 ${settings.enabledModules.tollManagement ? 'text-amber-700 dark:text-amber-400' : 'text-slate-600'}`}>
               {settings.enabledModules.tollManagement
                 ? <ToggleRight className="w-6 h-6" />
                 : <ToggleLeft className="w-6 h-6" />
@@ -731,7 +731,7 @@ export function ProductLineSettingsPage({
             `}
           >
             <div className={`p-2 rounded-lg ${settings.enabledModules.driverPortal ? 'bg-amber-500/15' : 'bg-slate-100 dark:bg-slate-800'}`}>
-              <Car className={`w-5 h-5 ${settings.enabledModules.driverPortal ? 'text-amber-400' : 'text-slate-500'}`} />
+              <Car className={`w-5 h-5 ${settings.enabledModules.driverPortal ? 'text-amber-700 dark:text-amber-400' : 'text-slate-500'}`} />
             </div>
             <div className="flex-1 min-w-0">
               <p className={`text-sm font-medium ${settings.enabledModules.driverPortal ? 'text-slate-900 dark:text-white' : 'text-slate-500'}`}>
@@ -739,7 +739,7 @@ export function ProductLineSettingsPage({
               </p>
               <p className="text-xs text-slate-500 truncate">Provide drivers with a portal to manage their schedules and earnings.</p>
             </div>
-            <div className={`shrink-0 ${settings.enabledModules.driverPortal ? 'text-amber-400' : 'text-slate-600'}`}>
+            <div className={`shrink-0 ${settings.enabledModules.driverPortal ? 'text-amber-700 dark:text-amber-400' : 'text-slate-600'}`}>
               {settings.enabledModules.driverPortal
                 ? <ToggleRight className="w-6 h-6" />
                 : <ToggleLeft className="w-6 h-6" />
@@ -757,7 +757,7 @@ export function ProductLineSettingsPage({
             `}
           >
             <div className={`p-2 rounded-lg ${settings.enabledModules.fleetEquipment ? 'bg-amber-500/15' : 'bg-slate-100 dark:bg-slate-800'}`}>
-              <Package className={`w-5 h-5 ${settings.enabledModules.fleetEquipment ? 'text-amber-400' : 'text-slate-500'}`} />
+              <Package className={`w-5 h-5 ${settings.enabledModules.fleetEquipment ? 'text-amber-700 dark:text-amber-400' : 'text-slate-500'}`} />
             </div>
             <div className="flex-1 min-w-0">
               <p className={`text-sm font-medium ${settings.enabledModules.fleetEquipment ? 'text-slate-900 dark:text-white' : 'text-slate-500'}`}>
@@ -765,7 +765,7 @@ export function ProductLineSettingsPage({
               </p>
               <p className="text-xs text-slate-500 truncate">Manage and track the equipment in your fleet.</p>
             </div>
-            <div className={`shrink-0 ${settings.enabledModules.fleetEquipment ? 'text-amber-400' : 'text-slate-600'}`}>
+            <div className={`shrink-0 ${settings.enabledModules.fleetEquipment ? 'text-amber-700 dark:text-amber-400' : 'text-slate-600'}`}>
               {settings.enabledModules.fleetEquipment
                 ? <ToggleRight className="w-6 h-6" />
                 : <ToggleLeft className="w-6 h-6" />
@@ -783,7 +783,7 @@ export function ProductLineSettingsPage({
             `}
           >
             <div className={`p-2 rounded-lg ${settings.enabledModules.claimableLoss ? 'bg-amber-500/15' : 'bg-slate-100 dark:bg-slate-800'}`}>
-              <FileText className={`w-5 h-5 ${settings.enabledModules.claimableLoss ? 'text-amber-400' : 'text-slate-500'}`} />
+              <FileText className={`w-5 h-5 ${settings.enabledModules.claimableLoss ? 'text-amber-700 dark:text-amber-400' : 'text-slate-500'}`} />
             </div>
             <div className="flex-1 min-w-0">
               <p className={`text-sm font-medium ${settings.enabledModules.claimableLoss ? 'text-slate-900 dark:text-white' : 'text-slate-500'}`}>
@@ -791,7 +791,7 @@ export function ProductLineSettingsPage({
               </p>
               <p className="text-xs text-slate-500 truncate">Manage and track claimable losses for your fleet.</p>
             </div>
-            <div className={`shrink-0 ${settings.enabledModules.claimableLoss ? 'text-amber-400' : 'text-slate-600'}`}>
+            <div className={`shrink-0 ${settings.enabledModules.claimableLoss ? 'text-amber-700 dark:text-amber-400' : 'text-slate-600'}`}>
               {settings.enabledModules.claimableLoss
                 ? <ToggleRight className="w-6 h-6" />
                 : <ToggleLeft className="w-6 h-6" />
@@ -809,7 +809,7 @@ export function ProductLineSettingsPage({
             `}
           >
             <div className={`p-2 rounded-lg ${settings.enabledModules.performanceAnalytics ? 'bg-amber-500/15' : 'bg-slate-100 dark:bg-slate-800'}`}>
-              <BarChart3 className={`w-5 h-5 ${settings.enabledModules.performanceAnalytics ? 'text-amber-400' : 'text-slate-500'}`} />
+              <BarChart3 className={`w-5 h-5 ${settings.enabledModules.performanceAnalytics ? 'text-amber-700 dark:text-amber-400' : 'text-slate-500'}`} />
             </div>
             <div className="flex-1 min-w-0">
               <p className={`text-sm font-medium ${settings.enabledModules.performanceAnalytics ? 'text-slate-900 dark:text-white' : 'text-slate-500'}`}>
@@ -817,7 +817,7 @@ export function ProductLineSettingsPage({
               </p>
               <p className="text-xs text-slate-500 truncate">Analyze and visualize performance metrics for your fleet.</p>
             </div>
-            <div className={`shrink-0 ${settings.enabledModules.performanceAnalytics ? 'text-amber-400' : 'text-slate-600'}`}>
+            <div className={`shrink-0 ${settings.enabledModules.performanceAnalytics ? 'text-amber-700 dark:text-amber-400' : 'text-slate-600'}`}>
               {settings.enabledModules.performanceAnalytics
                 ? <ToggleRight className="w-6 h-6" />
                 : <ToggleLeft className="w-6 h-6" />
@@ -921,7 +921,7 @@ function RegistrationSection({ settings, updateField, setSettings, setDirty }: {
       {/* Allowed Domains — only when domain_restricted */}
       {settings.registrationMode === 'domain_restricted' && (
         <div className="mb-4">
-          <label className="block text-xs font-medium text-slate-400 mb-1.5">Allowed Domains</label>
+          <label className="block text-xs font-medium text-slate-700 dark:text-slate-400 mb-1.5">Allowed Domains</label>
           <div className="flex gap-2">
             <input
               type="text"
@@ -951,14 +951,14 @@ function RegistrationSection({ settings, updateField, setSettings, setDirty }: {
             </div>
           )}
           {settings.allowedDomains.length === 0 && (
-            <p className="text-[10px] text-amber-400 mt-1">No domains added yet. Users won't be able to register until at least one domain is added.</p>
+            <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-1">No domains added yet. Users won't be able to register until at least one domain is added.</p>
           )}
         </div>
       )}
 
       {/* Require Admin Approval */}
       <div className="mb-4">
-        <label className="block text-xs font-medium text-slate-400 mb-1.5">Require Admin Approval</label>
+        <label className="block text-xs font-medium text-slate-700 dark:text-slate-400 mb-1.5">Require Admin Approval</label>
         <button
           onClick={() => updateField('requireApproval', !settings.requireApproval)}
           className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors w-full
@@ -976,8 +976,8 @@ function RegistrationSection({ settings, updateField, setSettings, setDirty }: {
         </button>
         {settings.requireApproval && (
           <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2.5 mt-2">
-            <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
-            <p className="text-xs text-amber-300/80">
+            <AlertCircle className="w-4 h-4 text-amber-700 dark:text-amber-400 mt-0.5 shrink-0" />
+            <p className="text-xs text-amber-800 dark:text-amber-900 dark:text-amber-300/80">
               When enabled, new registrations will appear in Customer Accounts with a "Pending Approval" badge. You must approve each account before the fleet manager can log in.
             </p>
           </div>
@@ -986,7 +986,7 @@ function RegistrationSection({ settings, updateField, setSettings, setDirty }: {
 
       {/* Welcome Message */}
       <div>
-        <label className="block text-xs font-medium text-slate-400 mb-1.5">Welcome Message</label>
+        <label className="block text-xs font-medium text-slate-700 dark:text-slate-400 mb-1.5">Welcome Message</label>
         <textarea
           value={settings.welcomeEmailMessage}
           onChange={e => {
@@ -1002,7 +1002,7 @@ function RegistrationSection({ settings, updateField, setSettings, setDirty }: {
           <p className="text-[10px] text-slate-500">
             Shown to new users on their first login. Leave blank to skip.
           </p>
-          <span className={`text-[10px] font-mono ${settings.welcomeEmailMessage.length > 450 ? 'text-amber-400' : 'text-slate-600'}`}>
+          <span className={`text-[10px] font-mono ${settings.welcomeEmailMessage.length > 450 ? 'text-amber-700 dark:text-amber-400' : 'text-slate-600'}`}>
             {settings.welcomeEmailMessage.length}/500
           </span>
         </div>
@@ -1055,7 +1055,7 @@ function AnnouncementSection({ settings, updateField }: {
       {ann.enabled && (
         <>
           <div className="mb-4">
-            <label className="block text-xs font-medium text-slate-400 mb-1.5">Message</label>
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-400 mb-1.5">Message</label>
             <textarea
               value={ann.message}
               onChange={e => { if (e.target.value.length <= 300) updateAnn({ message: e.target.value }); }}
@@ -1063,13 +1063,13 @@ function AnnouncementSection({ settings, updateField }: {
               className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 resize-none"
               placeholder="We're upgrading our systems this weekend..."
             />
-            <span className={`text-[10px] font-mono float-right ${ann.message.length > 270 ? 'text-amber-400' : 'text-slate-600'}`}>
+            <span className={`text-[10px] font-mono float-right ${ann.message.length > 270 ? 'text-amber-700 dark:text-amber-400' : 'text-slate-600'}`}>
               {ann.message.length}/300
             </span>
           </div>
 
           <div className="mb-4">
-            <label className="block text-xs font-medium text-slate-400 mb-1.5">Type</label>
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-400 mb-1.5">Type</label>
             <div className="grid grid-cols-3 gap-2">
               {TYPES.map(t => {
                 const sel = ann.type === t.value;
@@ -1093,7 +1093,7 @@ function AnnouncementSection({ settings, updateField }: {
           </div>
 
           <div className="mb-4">
-            <label className="block text-xs font-medium text-slate-400 mb-1.5">Schedule (optional)</label>
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-400 mb-1.5">Schedule (optional)</label>
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-[10px] text-slate-500 mb-1">Start showing</label>
@@ -1123,7 +1123,7 @@ function AnnouncementSection({ settings, updateField }: {
 
           {ann.message && (
             <div className="mt-2">
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">Live Preview</label>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-400 mb-1.5">Live Preview</label>
               <div className={`flex items-center gap-3 px-4 py-3 rounded-lg ${colorMap[ann.type].bg}`}>
                 {React.createElement(colorMap[ann.type].icon, { className: `w-4 h-4 ${colorMap[ann.type].text} shrink-0` })}
                 <p className={`text-sm flex-1 ${colorMap[ann.type].text}`}>{ann.message}</p>
@@ -1267,7 +1267,7 @@ function DangerZoneSection({ accessToken, apiBaseUrl, segment, settings, setSett
         {/* Purge Test Data */}
         <div className="bg-slate-50 border border-slate-200 dark:bg-slate-800/50 dark:border-slate-700 rounded-lg p-4 flex items-start gap-3">
           <div className="p-2 rounded-lg bg-amber-500/15 shrink-0 mt-0.5">
-            <Trash2 className="w-5 h-5 text-amber-400" />
+            <Trash2 className="w-5 h-5 text-amber-700 dark:text-amber-400" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-slate-900 dark:text-white">Purge Test Data</p>
@@ -1279,14 +1279,14 @@ function DangerZoneSection({ accessToken, apiBaseUrl, segment, settings, setSett
               </button>
             ) : (
               <div className="mt-2 bg-red-500/10 border border-red-500/30 rounded-lg p-3">
-                <p className="text-xs text-red-300 mb-2">Are you sure? This will delete all entries marked as synthetic. This action cannot be undone.</p>
+                <p className="text-xs text-red-800 dark:text-red-300 mb-2">Are you sure? This will delete all entries marked as synthetic. This action cannot be undone.</p>
                 <div className="flex gap-2">
                   <button onClick={handlePurge} disabled={purgeLoading}
                     className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50">
                     {purgeLoading ? 'Purging...' : 'Yes, Purge'}
                   </button>
                   <button onClick={() => setPurgeConfirm(false)}
-                    className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-medium rounded-lg transition-colors">
+                    className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-700 dark:text-slate-300 text-xs font-medium rounded-lg transition-colors">
                     Cancel
                   </button>
                 </div>
@@ -1338,7 +1338,7 @@ function DangerZoneSection({ accessToken, apiBaseUrl, segment, settings, setSett
             <RotateCcw className="w-5 h-5 text-red-400" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-red-300">Reset Platform Settings</p>
+            <p className="text-sm font-medium text-red-800 dark:text-red-300">Reset Platform Settings</p>
             <p className="text-xs text-slate-500 mt-0.5">Restore all settings to their factory defaults. This resets general config, feature flags, registration mode, security policies, and announcements.</p>
             {!resetConfirm ? (
               <button onClick={() => setResetConfirm(true)}
@@ -1347,13 +1347,13 @@ function DangerZoneSection({ accessToken, apiBaseUrl, segment, settings, setSett
               </button>
             ) : (
               <div className="mt-2 bg-red-500/10 border border-red-500/30 rounded-lg p-3">
-                <p className="text-xs text-red-300 mb-2">Are you sure? This will reset ALL platform settings to defaults. Type <strong>RESET</strong> to confirm.</p>
+                <p className="text-xs text-red-800 dark:text-red-300 mb-2">Are you sure? This will reset ALL platform settings to defaults. Type <strong>RESET</strong> to confirm.</p>
                 <input
                   type="text"
                   value={resetText}
                   onChange={e => setResetText(e.target.value)}
                   placeholder="Type RESET"
-                  className="w-full px-3 py-1.5 bg-white border border-slate-300 dark:bg-slate-900 dark:border-slate-700 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-red-500/50 mb-2"
+                  className="w-full px-3 py-1.5 bg-white border border-slate-300 dark:bg-slate-900 dark:border-slate-700 rounded-lg text-sm text-slate-900 placeholder:text-slate-500 dark:text-white dark:placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-red-500/50 mb-2"
                 />
                 <div className="flex gap-2">
                   <button onClick={handleReset} disabled={resetText !== 'RESET' || resetLoading}
@@ -1361,7 +1361,7 @@ function DangerZoneSection({ accessToken, apiBaseUrl, segment, settings, setSett
                     {resetLoading ? 'Resetting...' : 'Confirm Reset'}
                   </button>
                   <button onClick={() => { setResetConfirm(false); setResetText(''); }}
-                    className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-medium rounded-lg transition-colors">
+                    className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-700 dark:text-slate-300 text-xs font-medium rounded-lg transition-colors">
                     Cancel
                   </button>
                 </div>
@@ -1402,7 +1402,7 @@ function SettingsSection({
         {icon}
         <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{title}</h2>
       </div>
-      <p className="text-xs text-slate-600 dark:text-slate-500 mb-4">{description}</p>
+      <p className="text-xs text-slate-600 dark:text-slate-400 mb-4">{description}</p>
       {children}
     </div>
   );
@@ -1466,7 +1466,7 @@ function SecurityEmergencyActions({ accessToken, apiBaseUrl }: { accessToken?: s
 
   return (
     <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
-      <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+      <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-1.5">
         <Ban className="w-3.5 h-3.5" /> Emergency Actions
       </h3>
       <div className="bg-red-500/5 border-2 border-red-500/20 rounded-xl px-4 py-4">
@@ -1475,7 +1475,7 @@ function SecurityEmergencyActions({ accessToken, apiBaseUrl }: { accessToken?: s
             <ShieldAlert className="w-5 h-5 text-red-400" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-red-300">Terminate All Sessions</p>
+            <p className="text-sm font-medium text-red-800 dark:text-red-300">Terminate All Sessions</p>
             <p className="text-xs text-slate-500 mt-0.5">Force all users to re-authenticate. Use this after a security incident.</p>
           </div>
         </div>
@@ -1488,7 +1488,7 @@ function SecurityEmergencyActions({ accessToken, apiBaseUrl }: { accessToken?: s
           </button>
         ) : (
           <div className="mt-3 bg-red-500/10 border border-red-500/30 rounded-lg p-3">
-            <p className="text-xs text-red-300 mb-3">
+            <p className="text-xs text-red-800 dark:text-red-300 mb-3">
               This will sign out <strong>ALL users</strong> (fleet managers, team members, and drivers) across the platform. Platform administrators will also be signed out. Are you sure?
             </p>
             <div className="flex gap-2">
@@ -1501,7 +1501,7 @@ function SecurityEmergencyActions({ accessToken, apiBaseUrl }: { accessToken?: s
               </button>
               <button
                 onClick={() => setConfirming(false)}
-                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-medium rounded-lg transition-colors"
+                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-700 dark:text-slate-300 text-xs font-medium rounded-lg transition-colors"
               >
                 Cancel
               </button>

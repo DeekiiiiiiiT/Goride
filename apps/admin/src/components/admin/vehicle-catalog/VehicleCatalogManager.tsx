@@ -939,27 +939,27 @@ export function VehicleCatalogManager() {
           <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
         </div>
       ) : (
-        <div className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/60 shadow-sm overflow-hidden [&_tbody_td]:!text-slate-200 [&_thead_th]:!text-slate-300">
-          <Table className="[&_th]:!text-slate-600 [&_td]:!text-slate-700 [&_tbody_tr]:border-slate-200 [&_tbody_tr:hover]:bg-slate-50 dark:[&_th]:!text-slate-300 dark:[&_td]:!text-slate-200 dark:[&_tbody_tr]:border-slate-800 dark:[&_tbody_tr:hover]:bg-slate-800/40">
+        <div className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/60 shadow-sm overflow-hidden">
+          <Table className="[&_th]:!text-slate-700 [&_td]:!text-slate-800 [&_tbody_tr]:border-slate-200 [&_tbody_tr:hover]:bg-slate-50 dark:[&_th]:!text-slate-300 dark:[&_td]:!text-slate-200 dark:[&_tbody_tr]:border-slate-800 dark:[&_tbody_tr:hover]:bg-slate-800/40">
           <TableHeader>
             <TableRow className="border-slate-200 hover:bg-transparent bg-slate-50 dark:border-slate-700 dark:bg-slate-800/90">
-              <TableHead className="!bg-transparent text-slate-300">Make</TableHead>
-              <TableHead className="!bg-transparent text-slate-300">Model</TableHead>
-              <TableHead className="!bg-transparent text-slate-300">Years</TableHead>
+              <TableHead className="!bg-transparent text-slate-700 dark:text-slate-300">Make</TableHead>
+              <TableHead className="!bg-transparent text-slate-700 dark:text-slate-300">Model</TableHead>
+              <TableHead className="!bg-transparent text-slate-700 dark:text-slate-300">Years</TableHead>
               <TableHead
-                className="hidden md:table-cell !bg-transparent text-slate-300"
+                className="hidden md:table-cell !bg-transparent text-slate-700 dark:text-slate-300"
                 title="Series, facelift phase, or trim grade"
               >
                 Series / facelift
               </TableHead>
               <TableHead
-                className="hidden lg:table-cell !bg-transparent text-slate-300"
+                className="hidden lg:table-cell !bg-transparent text-slate-700 dark:text-slate-300"
                 title="Full model code or chassis"
               >
                 Code
               </TableHead>
-              <TableHead className="hidden lg:table-cell !bg-transparent text-slate-300">Body</TableHead>
-              <TableHead className="w-[140px] text-right !bg-transparent text-slate-300">Actions</TableHead>
+              <TableHead className="hidden lg:table-cell !bg-transparent text-slate-700 dark:text-slate-300">Body</TableHead>
+              <TableHead className="w-[140px] text-right !bg-transparent text-slate-700 dark:text-slate-300">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -981,7 +981,7 @@ export function VehicleCatalogManager() {
                     <TableCell className="!bg-slate-50 font-semibold !text-slate-900 dark:!bg-slate-800 dark:!text-slate-100">
                       <button
                         type="button"
-                        className="inline-flex items-center gap-2 rounded-md py-1 pr-2 text-left -ml-1 text-slate-100 hover:bg-slate-700/80"
+                        className="inline-flex items-center gap-2 rounded-md py-1 pr-2 text-left -ml-1 text-slate-900 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-700/80"
                         onClick={() =>
                           setExpandedMakes((prev) => {
                             const next = new Set(prev);
@@ -1055,17 +1055,17 @@ export function VehicleCatalogManager() {
                           className="w-8 min-w-[2rem] border-l-2 border-slate-300 bg-slate-50 pl-3 dark:border-slate-600 dark:bg-slate-900/50"
                           aria-hidden
                         />
-                        <TableCell className="!text-slate-100 font-medium">{row.model}</TableCell>
-                        <TableCell className="!text-slate-200 tabular-nums">
+                        <TableCell className="!text-slate-900 dark:!text-slate-100 font-medium">{row.model}</TableCell>
+                        <TableCell className="!text-slate-700 dark:!text-slate-200 tabular-nums">
                           {formatCatalogProductionWindow(row)}
                         </TableCell>
-                        <TableCell className="hidden md:table-cell text-slate-400">
+                        <TableCell className="hidden md:table-cell text-slate-600 dark:text-slate-400">
                           {row.trim_series ?? "—"}
                         </TableCell>
-                        <TableCell className="hidden lg:table-cell text-slate-400">
+                        <TableCell className="hidden lg:table-cell text-slate-600 dark:text-slate-400">
                           {row.full_model_code ?? row.chassis_code ?? row.generation ?? "—"}
                         </TableCell>
-                        <TableCell className="hidden lg:table-cell text-slate-400">
+                        <TableCell className="hidden lg:table-cell text-slate-600 dark:text-slate-400">
                           {row.body_type ?? "—"}
                         </TableCell>
                         <TableCell className="text-right">

@@ -234,7 +234,7 @@ export function TeamMembers({ productLine }: TeamMembersProps) {
   function SortableHeader({ label, col }: { label: string; col: SortKey }) {
     return (
       <th className="px-4 py-3 whitespace-nowrap">
-        <button onClick={() => toggleSort(col)} className="inline-flex items-center gap-1 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:text-slate-900 transition-colors dark:hover:text-white">
+        <button onClick={() => toggleSort(col)} className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 uppercase tracking-wider hover:text-slate-900 transition-colors dark:text-slate-400 dark:hover:text-white">
           {label}
           <SortIcon col={col} />
         </button>
@@ -433,9 +433,9 @@ export function TeamMembers({ productLine }: TeamMembersProps) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { label: 'Total Members', value: stats.total, color: 'text-slate-900 dark:text-white' },
-          { label: 'Fleet Managers', value: stats.managers, color: 'text-blue-400' },
-          { label: 'Fleet Accountants', value: stats.accountants, color: 'text-emerald-400' },
-          { label: 'Fleet Viewers', value: stats.viewers, color: 'text-slate-300' },
+          { label: 'Fleet Managers', value: stats.managers, color: 'text-blue-700 dark:text-blue-400' },
+          { label: 'Fleet Accountants', value: stats.accountants, color: 'text-emerald-700 dark:text-emerald-400' },
+          { label: 'Fleet Viewers', value: stats.viewers, color: 'text-slate-700 dark:text-slate-300' },
         ].map(s => (
           <div key={s.label} className="bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-lg px-4 py-3">
             <p className="text-xs text-slate-500 mb-0.5">{s.label}</p>
@@ -517,7 +517,7 @@ export function TeamMembers({ productLine }: TeamMembersProps) {
                   <SortableHeader label="Last Active" col="lastSignIn" />
                   <SortableHeader label="Status" col="status" />
                   <th className="px-4 py-3 text-right">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions</span>
+                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Actions</span>
                   </th>
                 </tr>
               </thead>
@@ -526,21 +526,21 @@ export function TeamMembers({ productLine }: TeamMembersProps) {
                   <tr key={m.id} className="hover:bg-slate-50 transition-colors dark:hover:bg-slate-800/40">
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-slate-200 flex dark:bg-slate-800 items-center justify-center text-xs font-bold text-slate-300 shrink-0">
+                        <div className="w-8 h-8 rounded-full bg-slate-200 flex dark:bg-slate-800 items-center justify-center text-xs font-bold text-slate-700 dark:text-slate-300 shrink-0">
                           {(m.name || m.email)[0]?.toUpperCase() || '?'}
                         </div>
                         <span className="font-medium text-slate-900 dark:text-white truncate max-w-[200px]">{m.name || '(No name)'}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-slate-400 whitespace-nowrap truncate max-w-[220px]">{m.email}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400 whitespace-nowrap truncate max-w-[220px]">{m.email}</td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${roleBadgeClasses(m.role)}`}>
                         {roleLabel(m.role)}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-slate-300 whitespace-nowrap truncate max-w-[180px]">{m.organizationName || 'N/A'}</td>
-                    <td className="px-4 py-3 text-slate-400 whitespace-nowrap">{formatDate(m.createdAt)}</td>
-                    <td className="px-4 py-3 text-slate-400 whitespace-nowrap">{formatRelative(m.lastSignIn)}</td>
+                    <td className="px-4 py-3 text-slate-700 dark:text-slate-300 whitespace-nowrap truncate max-w-[180px]">{m.organizationName || 'N/A'}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">{formatDate(m.createdAt)}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">{formatRelative(m.lastSignIn)}</td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {m.isSuspended ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/15 text-red-400">
@@ -551,7 +551,7 @@ export function TeamMembers({ productLine }: TeamMembersProps) {
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Active
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-700/50 text-slate-400">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-200 text-slate-700 dark:bg-slate-700/50 dark:text-slate-400">
                           <span className="w-1.5 h-1.5 rounded-full bg-slate-500" /> Inactive
                         </span>
                       )}

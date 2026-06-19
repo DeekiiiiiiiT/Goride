@@ -23,7 +23,7 @@ export function CrossProductStatusPanel({ status, loading }: CrossProductStatusP
   return (
     <div className="space-y-4">
       {(status.email || status.name || status.phone) && (
-        <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-400">
+        <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-600 dark:text-slate-400">
           <div>
             <span className="text-slate-500">Email: </span>
             <span className="text-slate-200">{status.email}</span>
@@ -56,7 +56,7 @@ export function CrossProductStatusPanel({ status, loading }: CrossProductStatusP
           </div>
           {status.products.driver?.exists ? (
             <div className="space-y-1 text-xs">
-              <div className="flex justify-between text-slate-400">
+              <div className="flex justify-between text-slate-600 dark:text-slate-400">
                 <span>Status</span>
                 <span
                   className={`font-medium ${
@@ -66,19 +66,19 @@ export function CrossProductStatusPanel({ status, loading }: CrossProductStatusP
                         ? 'text-amber-400'
                         : status.products.driver.status === 'deactivated'
                           ? 'text-red-400'
-                          : 'text-slate-300'
+                          : 'text-slate-700 dark:text-slate-300'
                   }`}
                 >
                   {status.products.driver.status || 'Unknown'}
                 </span>
               </div>
-              <div className="flex justify-between text-slate-400">
+              <div className="flex justify-between text-slate-600 dark:text-slate-400">
                 <span>Mode</span>
-                <span className="text-slate-300">{status.products.driver.mode || '—'}</span>
+                <span className="text-slate-700 dark:text-slate-300">{status.products.driver.mode || '—'}</span>
               </div>
-              <div className="flex justify-between text-slate-400">
+              <div className="flex justify-between text-slate-600 dark:text-slate-400">
                 <span>Onboarding</span>
-                <span className="text-slate-300">
+                <span className="text-slate-700 dark:text-slate-300">
                   {status.products.driver.onboarding_complete ? 'Complete' : 'Incomplete'}
                 </span>
               </div>
@@ -100,7 +100,7 @@ export function CrossProductStatusPanel({ status, loading }: CrossProductStatusP
           </div>
           {status.products.rider?.exists ? (
             <div className="space-y-1 text-xs">
-              <div className="flex justify-between text-slate-400">
+              <div className="flex justify-between text-slate-600 dark:text-slate-400">
                 <span>Status</span>
                 <span
                   className={`font-medium ${
@@ -110,16 +110,16 @@ export function CrossProductStatusPanel({ status, loading }: CrossProductStatusP
                         ? 'text-amber-400'
                         : status.products.rider.account_status === 'banned'
                           ? 'text-red-400'
-                          : 'text-slate-300'
+                          : 'text-slate-700 dark:text-slate-300'
                   }`}
                 >
                   {status.products.rider.account_status || 'Unknown'}
                 </span>
               </div>
               {status.products.rider.display_name && (
-                <div className="flex justify-between text-slate-400">
+                <div className="flex justify-between text-slate-600 dark:text-slate-400">
                   <span>Name</span>
-                  <span className="text-slate-300 truncate max-w-[120px]">
+                  <span className="text-slate-700 dark:text-slate-300 truncate max-w-[120px]">
                     {status.products.rider.display_name}
                   </span>
                 </div>
@@ -142,11 +142,11 @@ export function CrossProductStatusPanel({ status, loading }: CrossProductStatusP
           </div>
           {status.products.fleet?.exists ? (
             <div className="space-y-1 text-xs">
-              <div className="flex justify-between text-slate-400">
+              <div className="flex justify-between text-slate-600 dark:text-slate-400">
                 <span>Role</span>
-                <span className="text-slate-300">{status.products.fleet.role || '—'}</span>
+                <span className="text-slate-700 dark:text-slate-300">{status.products.fleet.role || '—'}</span>
               </div>
-              <div className="flex justify-between text-slate-400">
+              <div className="flex justify-between text-slate-600 dark:text-slate-400">
                 <span>Status</span>
                 <span
                   className={`font-medium ${
@@ -155,16 +155,16 @@ export function CrossProductStatusPanel({ status, loading }: CrossProductStatusP
                       ? 'text-emerald-400'
                       : status.products.fleet.account_status === 'suspended'
                         ? 'text-amber-400'
-                        : 'text-slate-300'
+                        : 'text-slate-700 dark:text-slate-300'
                   }`}
                 >
                   {status.products.fleet.account_status || 'Active'}
                 </span>
               </div>
               {status.products.fleet.business_type && (
-                <div className="flex justify-between text-slate-400">
+                <div className="flex justify-between text-slate-600 dark:text-slate-400">
                   <span>Type</span>
-                  <span className="text-slate-300 capitalize">{status.products.fleet.business_type}</span>
+                  <span className="text-slate-700 dark:text-slate-300 capitalize">{status.products.fleet.business_type}</span>
                 </div>
               )}
             </div>
@@ -176,8 +176,8 @@ export function CrossProductStatusPanel({ status, loading }: CrossProductStatusP
 
       {status.auth_status && (
         <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
-          <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Auth Status</h4>
-          <div className="flex flex-wrap gap-4 text-xs text-slate-400">
+          <h4 className="text-xs font-medium text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">Auth Status</h4>
+          <div className="flex flex-wrap gap-4 text-xs text-slate-600 dark:text-slate-400">
             <div>
               <span className="text-slate-500">Auth ban: </span>
               {status.auth_status.is_banned ? (
