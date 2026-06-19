@@ -1,14 +1,13 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   ArrowRight,
   ChevronRight,
   HelpCircle,
-  Smartphone,
   Truck,
   Wallet,
 } from 'lucide-react';
 import { HaulAtmosphericBg } from './HaulAtmosphericBg';
-
+import { useOnboardingScrollLock, useOnboardingSwipe } from '../../hooks/useOnboardingSwipe';
 const ROUTE_PREVIEW = './images/haul-route-preview.png';
 const STEP_COUNT = 4;
 
@@ -35,6 +34,13 @@ function StepIndicators({ activeIndex }: { activeIndex: number }) {
   );
 }
 
+const PREVIEW_TIMER_R = 38;
+const PREVIEW_TIMER_CIRCUMFERENCE = 2 * Math.PI * PREVIEW_TIMER_R;
+const PREVIEW_SECONDS_LEFT = 28;
+const PREVIEW_TOTAL_SECONDS = 45;
+const PREVIEW_TIMER_OFFSET =
+  PREVIEW_TIMER_CIRCUMFERENCE * (1 - PREVIEW_SECONDS_LEFT / PREVIEW_TOTAL_SECONDS);
+
 function AcceptJobsStep() {
   return (
     <>
@@ -43,7 +49,7 @@ function AcceptJobsStep() {
           ROAM HAUL
         </span>
       </header>
-      <div className="relative mb-8 flex aspect-square w-full max-w-md items-center justify-center">
+      <div className="relative mb-5 flex w-full max-w-xs items-center justify-center py-2">
         <div
           className="absolute inset-0 animate-[spin_20s_linear_infinite] rounded-full border border-[#534434]/30 opacity-20"
           aria-hidden
@@ -54,18 +60,99 @@ function AcceptJobsStep() {
         />
         <div className="relative">
           <div className="absolute inset-0 scale-125 rounded-full bg-[#ffc174]/20 blur-3xl" aria-hidden />
-          <div className="relative flex h-48 w-48 items-center justify-center overflow-hidden rounded-3xl border border-[#534434] bg-[#222a3d] shadow-[inset_0_0_20px_rgba(245,158,11,0.05)]">
-            <Smartphone className="h-20 w-20 text-[#ffc174]" strokeWidth={1.25} aria-hidden />
-            <div className="absolute top-3 right-3 flex h-8 w-8 animate-bounce items-center justify-center rounded-full border-4 border-[#222a3d] bg-[#ffb4ab]">
-              <span className="text-sm font-bold text-white">1</span>
+          <div
+            className="relative flex aspect-[9/16] w-44 flex-col overflow-hidden rounded-[2rem] border-2 border-[#534434] bg-[#0b1326] shadow-[0_20px_50px_rgba(0,0,0,0.45),inset_0_0_20px_rgba(245,158,11,0.05)]"
+            aria-hidden
+          >
+            <div className="flex h-7 shrink-0 items-center justify-center">
+              <div className="h-1 w-10 rounded-full bg-[#2d3449]" />
             </div>
+            <div className="flex flex-1 flex-col items-center px-3 pb-4">
+              <div className="mb-1.5 flex h-9 w-9 items-center justify-center rounded-full bg-[#f59e0b] text-[#472a00]">
+                <span
+                  className="material-symbols-outlined text-xl"
+                  style={{ fontVariationSettings: "'FILL' 1" }}
+                >
+                  local_shipping
+                </span>
+              </div>
+              <p className="text-[9px] font-bold tracking-[0.15em] text-[#ffc174] uppercase">
+                New Freight Request
+              </p>
+              <p className="mt-0.5 text-[8px] text-[#d8c3ad]">High priority haul nearby</p>
+
+              <div className="relative my-2 flex h-[72px] w-[72px] items-center justify-center">
+                <svg className="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 100 100">
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r={PREVIEW_TIMER_R}
+                    fill="transparent"
+                    stroke="#2d3449"
+                    strokeWidth="5"
+                  />
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r={PREVIEW_TIMER_R}
+                    fill="transparent"
+                    stroke="#ffc174"
+                    strokeWidth="5"
+                    strokeDasharray={PREVIEW_TIMER_CIRCUMFERENCE}
+                    strokeDashoffset={PREVIEW_TIMER_OFFSET}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <div className="flex flex-col items-center">
+                  <span className="text-2xl leading-none font-extrabold text-[#dae2fd]">
+                    {PREVIEW_SECONDS_LEFT}
+                  </span>
+                  <span className="text-[7px] font-medium tracking-wide text-[#d8c3ad] uppercase">
+                    sec
+                  </span>
+                </div>
+              </div>
+
+              <div className="w-full rounded-lg border border-[#534434] bg-[#171f33] px-2 py-1.5 text-center">
+                <p className="text-[7px] font-medium tracking-widest text-[#d8c3ad] uppercase">
+                  Estimated Payout
+                </p>
+                <p className="text-xl leading-tight font-extrabold text-[#ffc174]">$2,450</p>
+              </div>
+
+              <div className="mt-2 grid w-full grid-cols-3 gap-1 rounded-lg border border-[#534434] bg-[#171f33] p-1.5 text-center">
+                <div>
+                  <p className="text-sm font-bold text-[#dae2fd]">4.2</p>
+                  <p className="text-[6px] text-[#d8c3ad] uppercase">km</p>
+                </div>
+                <div className="border-x border-[#534434]">
+                  <p className="text-sm font-bold text-[#dae2fd]">~32</p>
+                  <p className="text-[6px] text-[#d8c3ad] uppercase">min</p>
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-[#dae2fd]">6</p>
+                  <p className="text-[6px] text-[#d8c3ad] uppercase">items</p>
+                </div>
+              </div>
+
+              <div className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg bg-[#ffc174] py-1.5 text-[9px] font-semibold text-[#472a00]">
+                <span
+                  className="material-symbols-outlined text-xs"
+                  style={{ fontVariationSettings: "'FILL' 1" }}
+                >
+                  check_circle
+                </span>
+                Accept Request
+              </div>
+            </div>
+          </div>
+          <div className="absolute -top-2 -right-2 flex h-8 w-8 animate-bounce items-center justify-center rounded-full border-4 border-[#0b1326] bg-[#ffb4ab]">
+            <span className="text-sm font-bold text-white">1</span>
           </div>
           <div className="absolute -top-4 -left-4 flex h-12 w-12 animate-[haul-float_4s_ease-in-out_infinite] items-center justify-center rounded-xl border border-[#534434] bg-[#171f33] shadow-2xl">
             <Truck className="h-5 w-5 text-[#ffc174]" aria-hidden />
           </div>
-          <div
-            className="absolute -right-6 -bottom-2 flex h-14 w-14 animate-[haul-float_4s_ease-in-out_infinite_1s] items-center justify-center rounded-xl border border-[#534434] bg-[#171f33] shadow-2xl"
-          >
+          <div className="absolute -right-6 -bottom-2 flex h-14 w-14 animate-[haul-float_4s_ease-in-out_infinite_1s] items-center justify-center rounded-xl border border-[#534434] bg-[#171f33] shadow-2xl">
             <Wallet className="h-5 w-5 text-[#7bd0ff]" aria-hidden />
           </div>
         </div>
@@ -85,24 +172,36 @@ function AcceptJobsStep() {
 function ViewManifestStep() {
   return (
     <>
-      <div className="relative mb-8 flex h-48 w-48 items-center justify-center">
-        <div className="absolute inset-0 scale-95 rotate-6 rounded-3xl bg-[rgba(30,41,59,0.7)] opacity-50 backdrop-blur-md" aria-hidden />
-        <div className="absolute inset-0 -rotate-3 rounded-3xl border border-[#334155] bg-[rgba(30,41,59,0.7)] backdrop-blur-md" aria-hidden />
-        <div className="relative flex flex-col items-center gap-2">
-          <span className="material-symbols-outlined text-[80px] text-[#ffc174]" style={{ fontVariationSettings: "'FILL' 1" }}>
+      <div className="relative mb-5 flex h-48 w-full max-w-[220px] items-center justify-center">
+        <div
+          className="absolute inset-2 scale-95 rotate-6 rounded-3xl bg-[#1e293b]/70 opacity-50 backdrop-blur-md"
+          aria-hidden
+        />
+        <div
+          className="absolute inset-2 -rotate-3 rounded-3xl border border-[#334155] bg-[#1e293b]/80 backdrop-blur-md"
+          aria-hidden
+        />
+        <div className="relative flex h-44 w-44 flex-col items-center justify-center gap-3 rounded-3xl border border-[#334155] bg-[#1e293b] shadow-[0_20px_40px_rgba(0,0,0,0.35)]">
+          <span
+            className="material-symbols-outlined text-[72px] leading-none text-[#ffc174]"
+            style={{ fontVariationSettings: "'FILL' 1" }}
+            aria-hidden
+          >
             assignment
           </span>
-          <div className="flex gap-1">
+          <div className="flex gap-1.5" aria-hidden>
             <div className="h-1.5 w-12 rounded-full bg-[#ffc174]/30" />
             <div className="h-1.5 w-8 rounded-full bg-[#ffc174]/30" />
           </div>
         </div>
-        <div className="absolute -right-4 -bottom-2 flex animate-bounce items-center gap-2 rounded-xl border border-[#334155] bg-[rgba(30,41,59,0.7)] px-4 py-2 shadow-xl backdrop-blur-md">
-          <span className="material-symbols-outlined text-[20px] text-[#ffc174]">scale</span>
+        <div className="absolute -right-1 bottom-0 flex animate-bounce items-center gap-2 rounded-xl border border-[#334155] bg-[#171f33] px-3 py-2 shadow-xl">
+          <span className="material-symbols-outlined text-[18px] text-[#ffc174]" aria-hidden>
+            scale
+          </span>
           <span className="text-sm font-medium text-[#dae2fd]">42,000 lbs</span>
         </div>
       </div>
-      <div className="mb-8 space-y-4 text-center">
+      <div className="mb-4 space-y-3 text-center">
         <h1 className="text-[28px] leading-9 font-bold tracking-tight text-white">View Manifest</h1>
         <p className="mx-auto max-w-[280px] text-lg leading-relaxed text-[#d8c3ad]">
           See exactly what you&apos;re hauling —{' '}
@@ -110,7 +209,7 @@ function ViewManifestStep() {
           <span className="text-[#dae2fd]">weight</span>, and special handling notes.
         </p>
       </div>
-      <div className="relative mb-8 w-full overflow-hidden rounded-2xl border border-[#334155] bg-[rgba(30,41,59,0.7)] p-4 text-left backdrop-blur-md">
+      <div className="relative mb-2 w-full overflow-hidden rounded-2xl border border-[#334155] bg-[rgba(30,41,59,0.7)] p-4 text-left backdrop-blur-md">
         <div className="mb-2 flex items-center justify-between">
           <span className="text-[10px] font-bold tracking-widest text-[#ffc174] uppercase">
             Live Manifest Preview
@@ -127,7 +226,9 @@ function ViewManifestStep() {
             <span className="text-sm text-[#dae2fd]">48&apos; x 8.5&apos; x 9&apos;</span>
           </div>
           <div className="flex items-start gap-2 pt-1">
-            <span className="material-symbols-outlined text-base text-[#ffc174]">warning</span>
+            <span className="material-symbols-outlined mt-0.5 shrink-0 text-base text-[#ffc174]" aria-hidden>
+              warning
+            </span>
             <p className="text-xs text-[#d8c3ad] italic">
               Requires oversized permits for Route 66 crossing.
             </p>
@@ -165,13 +266,13 @@ function NavigateDeliverStep() {
           </div>
         </div>
       </div>
-      <div className="mb-6 space-y-4 text-center">
+      <div className="mb-5 space-y-4 text-center">
         <h2 className="text-[28px] leading-9 font-bold text-white">Navigate &amp; Deliver</h2>
         <p className="mx-auto max-w-xs text-lg text-[#d8c3ad]">
           Turn-by-turn directions to pickup and dropoff locations
         </p>
       </div>
-      <div className="mb-8 flex w-full items-center gap-4 rounded-xl border border-[#334155] bg-[rgba(30,41,59,0.7)] p-4 text-left backdrop-blur-md">
+      <div className="mb-2 flex w-full items-center gap-4 rounded-xl border border-[#334155] bg-[rgba(30,41,59,0.7)] p-4 text-left backdrop-blur-md">
         <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-[#534434] bg-[#0b1326]">
           <img src={ROUTE_PREVIEW} alt="" className="h-full w-full object-cover opacity-80" />
         </div>
@@ -188,14 +289,15 @@ function NavigateDeliverStep() {
 function GetPaidStep() {
   return (
     <>
-      <div className="relative mb-8 flex aspect-square w-full max-w-[320px] items-center justify-center">
-        <div className="absolute h-64 w-64 animate-pulse rounded-full border border-[#f59e0b]/20" aria-hidden />
-        <div
-          className="absolute h-48 w-48 animate-ping rounded-full border border-[#f59e0b]/10"
-          style={{ animationDuration: '3s' }}
-          aria-hidden
-        />
-        <div className="relative flex aspect-[4/5] w-full max-w-[320px] flex-col gap-4 overflow-hidden rounded-xl border border-[#334155] bg-[#1E293B] p-6 shadow-2xl">
+      <div className="haul-onboarding-get-paid__hero relative mx-auto mb-8 w-full max-w-[320px]">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden>
+          <div className="h-64 w-64 animate-pulse rounded-full border border-[#f59e0b]/20" />
+          <div
+            className="absolute h-48 w-48 animate-ping rounded-full border border-[#f59e0b]/10"
+            style={{ animationDuration: '3s' }}
+          />
+        </div>
+        <div className="haul-onboarding-get-paid__card relative flex aspect-[4/5] w-full flex-col gap-4 overflow-hidden rounded-xl border border-[#334155] bg-[#1E293B] p-6 shadow-2xl">
           <div className="absolute -top-12 -right-12 h-32 w-32 rounded-full bg-[#f59e0b]/20 blur-3xl" aria-hidden />
           <div className="-rotate-6 flex h-16 w-16 items-center justify-center rounded-xl border border-[#f59e0b]/30 bg-[#f59e0b]/20 shadow-lg">
             <Wallet className="h-10 w-10 text-[#f59e0b]" aria-hidden />
@@ -228,9 +330,9 @@ function GetPaidStep() {
           </div>
         </div>
       </div>
-      <div className="space-y-4 text-center">
+      <div className="space-y-4 px-2 text-center">
         <h1 className="text-[28px] leading-9 font-bold tracking-tight text-[#F8FAFC]">Get Paid</h1>
-        <p className="px-2 text-base leading-relaxed text-[#94A3B8]">
+        <p className="text-base leading-relaxed text-[#94A3B8]">
           Instant earnings deposited to your account after each delivery. No waiting periods, just
           pure profit.
         </p>
@@ -248,27 +350,63 @@ const STEPS = [
 
 export function HaulOnboardingCarousel({ onFinish, onSkip }: Props) {
   const [stepIndex, setStepIndex] = useState(0);
-  const Step = STEPS[stepIndex].render;
   const isLast = stepIndex === STEP_COUNT - 1;
 
-  const handleNext = () => {
-    if (isLast) {
+  useOnboardingScrollLock(true);
+
+  const advanceStep = useCallback(() => {
+    setStepIndex((index) => Math.min(STEP_COUNT - 1, index + 1));
+  }, []);
+
+  const handleNext = useCallback(() => {
+    if (stepIndex === STEP_COUNT - 1) {
       onFinish();
       return;
     }
-    setStepIndex((i) => i + 1);
-  };
+    setStepIndex((index) => index + 1);
+  }, [onFinish, stepIndex]);
+
+  const handlePrev = useCallback(() => {
+    setStepIndex((index) => Math.max(0, index - 1));
+  }, []);
+
+  const { containerRef, dragOffset, isDragging } = useOnboardingSwipe({
+    stepIndex,
+    stepCount: STEP_COUNT,
+    onNext: advanceStep,
+    onPrev: handlePrev,
+  });
 
   return (
-    <div className="haul-onboarding flex min-h-[100dvh] flex-col bg-[#0b1326] text-[#dae2fd]">
+    <div className="haul-onboarding haul-onboarding-screen bg-[#0b1326] text-[#dae2fd]">
       <HaulAtmosphericBg variant={stepIndex === 0 ? 'industrial' : 'default'} />
 
-      <main className="relative z-10 mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center px-4 py-6">
-        <Step />
-      </main>
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+        <div ref={containerRef} className="haul-onboarding-screen__main">
+          <div
+            className="haul-onboarding-screen__track"
+            style={{
+              width: `${STEP_COUNT * 100}%`,
+              transform: `translateX(calc(-${(stepIndex * 100) / STEP_COUNT}% + ${dragOffset}px))`,
+              transition: isDragging ? 'none' : 'transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+            }}
+          >
+            {STEPS.map(({ id, render: Step }) => (
+              <div
+                key={id}
+                className={`haul-onboarding-screen__slide${id === 'get-paid' ? ' haul-onboarding-screen__slide--get-paid' : ''}`}
+                style={{ flexBasis: `${100 / STEP_COUNT}%` }}
+              >
+                <div className="haul-onboarding-screen__slide-content">
+                  <Step />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
 
-      <footer className="relative z-10 space-y-6 px-4 pb-8">
-        <StepIndicators activeIndex={stepIndex} />
+        <footer className="haul-onboarding-screen__footer space-y-6 px-4 pt-2 pb-8">
+          <StepIndicators activeIndex={stepIndex} />
 
         <div className="mx-auto flex w-full max-w-md flex-col gap-4">
           {stepIndex === 2 ? (
@@ -319,7 +457,8 @@ export function HaulOnboardingCarousel({ onFinish, onSkip }: Props) {
             </>
           )}
         </div>
-      </footer>
+        </footer>
+      </div>
     </div>
   );
 }

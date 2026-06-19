@@ -6,12 +6,14 @@ import { getHaulAuthRedirectUrl } from '../../utils/haulAuthRedirect';
 import { HaulAuthAtmosphere } from './HaulAuthAtmosphere';
 import {
   haulAuthCard,
+  haulAuthOrRow,
   haulErrorBox,
   haulFieldLabel,
   haulInput,
   haulInputWrap,
   haulPrimaryBtn,
 } from './haulAuthUi';
+import { HaulerGoogleSignupButton } from './HaulerEmailSignupForm';
 
 export type CreateAccountResult =
   | { kind: 'phone'; phoneE164: string }
@@ -127,6 +129,23 @@ export function HaulCreateAccountScreen({ onSuccess, onLogin }: Props) {
 
         {error ? <div className={haulErrorBox}>{error}</div> : null}
 
+        <div className="flex flex-col gap-3">
+          <HaulerGoogleSignupButton onError={(msg) => setError(msg || null)} />
+          <p className="text-center text-xs leading-relaxed text-[#d8c3ad]">
+            <LegalPolicyAcceptanceLabel
+              beforePrivacy="By continuing with Google, you agree to RoamHaul's "
+              privacyClassName="font-medium text-[#ffc174] hover:text-[#ffddb8]"
+              termsClassName="font-medium text-[#ffc174] hover:text-[#ffddb8]"
+            />
+          </p>
+        </div>
+
+        <div className={haulAuthOrRow}>
+          <div className="h-px flex-1 bg-[#534434]" />
+          <span className="text-sm font-medium tracking-widest text-[#d8c3ad] uppercase">or</span>
+          <div className="h-px flex-1 bg-[#534434]" />
+        </div>
+
         <form className="flex flex-col gap-4" onSubmit={(e) => void handleSubmit(e)}>
           <div className="group flex flex-col gap-1">
             <label className={haulFieldLabel} htmlFor="haul-phone">
@@ -155,7 +174,7 @@ export function HaulCreateAccountScreen({ onSuccess, onLogin }: Props) {
             </div>
           </div>
 
-          <div className="flex items-center gap-4 py-1">
+          <div className={haulAuthOrRow}>
             <div className="h-px flex-1 bg-[#534434]" />
             <span className="text-sm font-medium tracking-widest text-[#d8c3ad] uppercase">or</span>
             <div className="h-px flex-1 bg-[#534434]" />

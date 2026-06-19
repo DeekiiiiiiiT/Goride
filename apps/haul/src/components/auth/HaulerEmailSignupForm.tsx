@@ -7,6 +7,7 @@ import {
   HAULER_OAUTH_INTENT_KEY,
   HAULER_OAUTH_INTENT_VALUE,
 } from '../../utils/haulAuthRedirect';
+import { haulGoogleBtn } from './haulAuthUi';
 
 interface HaulerEmailSignupFormProps {
   onBack: () => void;
@@ -241,7 +242,7 @@ export function HaulerGoogleSignupButton({
       type="button"
       disabled={disabled || loading}
       onClick={() => void onClick()}
-      className="flex w-full items-center justify-center gap-3 rounded-lg border border-slate-600 bg-slate-900 py-2.5 text-sm font-semibold text-slate-100 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+      className={haulGoogleBtn}
     >
       {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <GoogleMark className="h-5 w-5" />}
       {label}

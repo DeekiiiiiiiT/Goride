@@ -12,8 +12,13 @@ export const haulInput =
 export const haulPrimaryBtn =
   'flex min-h-12 w-full items-center justify-center gap-2 rounded bg-[#f59e0b] text-sm font-bold tracking-wide text-[#472a00] shadow-sm transition-all hover:bg-[#ffddb8] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60';
 
+export const haulGoogleBtn =
+  'flex min-h-12 w-full items-center justify-center gap-3 rounded-lg border border-[#534434] bg-[#0b1326] text-sm font-semibold text-[#dae2fd] transition-colors hover:bg-[#2d3449] disabled:cursor-not-allowed disabled:opacity-50';
+
 export const haulSecondaryBtn =
   'flex min-h-11 w-full items-center justify-center rounded border border-[#534434] text-sm font-medium text-[#dae2fd] transition-colors hover:bg-[#2d3449]';
+
+export const haulAuthOrRow = 'flex items-center gap-4 py-1';
 
 export const haulErrorBox =
   'rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300';

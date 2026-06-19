@@ -1,6 +1,7 @@
 import React from 'react';
 import { ArrowRight, ShieldCheck } from 'lucide-react';
 import { HaulAtmosphericBg } from './HaulAtmosphericBg';
+import { useOnboardingScrollLock } from '../../hooks/useOnboardingSwipe';
 
 const VAN_HERO = './images/haul-van-hero.png';
 
@@ -10,11 +11,13 @@ type Props = {
 };
 
 export function HaulWelcomeScreen({ onGetStarted, onSignIn }: Props) {
+  useOnboardingScrollLock(true);
+
   return (
-    <div className="haul-onboarding flex min-h-[100dvh] flex-col bg-[#0b1326] text-[#dae2fd]">
+    <div className="haul-onboarding haul-onboarding-screen bg-[#0b1326] text-[#dae2fd]">
       <HaulAtmosphericBg variant="default" />
 
-      <main className="relative z-10 mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center px-4 py-8 md:px-12">
+      <main className="relative z-10 mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col items-center justify-center px-4 py-6 md:px-12">
         <div className="relative mb-8 flex aspect-square w-full max-w-[400px] items-center justify-center">
           <div className="absolute inset-0 scale-90 rounded-full bg-[#171f33] opacity-20 blur-3xl" aria-hidden />
           <img
@@ -34,7 +37,7 @@ export function HaulWelcomeScreen({ onGetStarted, onSignIn }: Props) {
         </div>
       </main>
 
-      <footer className="relative z-10 w-full px-4 pt-6 pb-8 md:px-12">
+      <footer className="haul-onboarding-screen__footer relative z-10 w-full px-4 pt-4 pb-8 md:px-12">
         <div className="mx-auto max-w-md space-y-4">
           <button
             type="button"
