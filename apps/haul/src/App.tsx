@@ -1,26 +1,53 @@
-import React from 'react';
-import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { BrowserRouter } from 'react-router-dom';
 import { isHaulUiBlockedRole } from '@roam/auth-client';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { HaulerProvider } from './contexts/HaulerContext';
 import { HaulerLoginPage } from './components/auth/HaulerLoginPage';
 import { WrongHaulSurfaceGate } from './components/auth/WrongHaulSurfaceGate';
-import { HaulerShell } from './components/layout/HaulerShell';
+import { HaulerAppGate } from './components/layout/HaulerAppGate';
 import { HaulAdminPortal } from './admin/HaulAdminPortal';
-import { Loader2 } from 'lucide-react';
+import { HaulSplashScreen } from './components/onboarding/HaulSplashScreen';
+import { HaulToaster } from './components/ui/HaulToaster';
+import {
+  HaulOnboardingFlow,
+  type AuthIntent,
+} from './components/onboarding/HaulOnboardingFlow';
+import { hasCompletedOnboarding } from './lib/onboardingStorage';
+
+const SPLASH_MIN_MS = 2000;
 
 function HaulerApp() {
   const { user, loading, signOut } = useAuth();
+  const [splashMinElapsed, setSplashMinElapsed] = useState(false);
+  const [authIntent, setAuthIntent] = useState<AuthIntent | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(() => !hasCompletedOnboarding());
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-400">
-        <Loader2 className="w-8 h-8 animate-spin" />
-      </div>
-    );
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSplashMinElapsed(true), SPLASH_MIN_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  if (loading || !splashMinElapsed) {
+    return <HaulSplashScreen />;
   }
 
-  if (!user) return <HaulerLoginPage />;
+  if (!user) {
+    if (showOnboarding && authIntent === null) {
+      return (
+        <HaulOnboardingFlow
+          onComplete={(intent) => {
+            setAuthIntent(intent);
+            setShowOnboarding(false);
+          }}
+        />
+      );
+    }
+
+    return (
+      <HaulerLoginPage initialView={authIntent === 'signup' ? 'signup' : 'login'} />
+    );
+  }
 
   if (isHaulUiBlockedRole(user)) {
     return <WrongHaulSurfaceGate user={user} onSignOut={() => void signOut()} />;
@@ -28,7 +55,7 @@ function HaulerApp() {
 
   return (
     <HaulerProvider>
-      <HaulerShell />
+      <HaulerAppGate />
     </HaulerProvider>
   );
 }
@@ -44,6 +71,7 @@ export default function App() {
 
   return (
     <AuthProvider>
+      <HaulToaster />
       <HaulerApp />
     </AuthProvider>
   );

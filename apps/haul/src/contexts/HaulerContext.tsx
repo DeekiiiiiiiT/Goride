@@ -5,7 +5,12 @@ import { supabase } from '../utils/supabase/client';
 export type HaulerProfile = {
   userId: string;
   displayName?: string;
+  fullName?: string;
+  phone?: string;
+  profilePhotoUrl?: string;
   onboardingComplete: boolean;
+  onboardingStep?: string | null;
+  memberSince?: string;
 };
 
 type HaulerContextType = {
@@ -34,7 +39,7 @@ export function HaulerProvider({ children }: { children: React.ReactNode }) {
     try {
       const { data, error } = await supabase
         .from('driver_profiles')
-        .select('user_id, display_name, onboarding_complete')
+        .select('user_id, display_name, phone, profile_photo_url, onboarding_complete, onboarding_step, created_at')
         .eq('user_id', user.id)
         .maybeSingle();
 
@@ -43,10 +48,16 @@ export function HaulerProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data) {
+        const metaName = user.user_metadata?.name as string | undefined;
         setProfile({
           userId: data.user_id,
           displayName: data.display_name ?? undefined,
+          fullName: metaName ?? data.display_name ?? undefined,
+          phone: data.phone ?? undefined,
+          profilePhotoUrl: data.profile_photo_url ?? undefined,
           onboardingComplete: Boolean(data.onboarding_complete),
+          onboardingStep: data.onboarding_step ?? null,
+          memberSince: data.created_at ?? undefined,
         });
       } else {
         setProfile({

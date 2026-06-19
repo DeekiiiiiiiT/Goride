@@ -3,3 +3,72 @@
 @source '../../../packages/admin-core/src/**/*.{js,ts,jsx,tsx}';
 @source '../driver/src/**/*.{js,ts,jsx,tsx}';
 @import '../../../packages/admin-core/src/styles/admin-portal.css';
+@import './styles/haul-onboarding.css';
+@import './styles/haul-dispatch.css';
+
+:root {
+  --app-bottom-nav-total: calc(5rem + max(1rem, env(safe-area-inset-bottom, 0px)));
+  --app-top-bar-total: calc(5.5rem + max(0.75rem, env(safe-area-inset-top, 0px)));
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+html.app-immersive-mode {
+  --app-bottom-nav-total: max(0.75rem, env(safe-area-inset-bottom, 0px));
+}
+
+body,
+#root {
+  min-height: 100dvh;
+}
+
+body {
+  background-color: #0b1326;
+  color: #dae2fd;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button {
+  touch-action: manipulation;
+}
+
+.safe-x {
+  padding-left: max(1rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1rem, env(safe-area-inset-right, 0px));
+}
+
+.safe-t {
+  padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
+}
+
+.safe-b {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+}
+
+.pb-safe {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+}
+
+.input-touch {
+  font-size: 1rem;
+  line-height: 1.5;
+  min-height: 3rem;
+}
+
+.btn-touch {
+  min-height: 3rem;
+  touch-action: manipulation;
+}
+
+.app-fullscreen-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}

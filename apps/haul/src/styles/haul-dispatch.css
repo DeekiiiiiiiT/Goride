@@ -1,0 +1,70 @@
+@keyframes haul-spin {
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes haul-spin-reverse {
+  100% {
+    transform: rotate(-360deg);
+  }
+}
+
+@keyframes haul-pulse-opacity {
+  0% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes haul-pulse-ring {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(255, 193, 116, 0.7);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 20px rgba(255, 193, 116, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(255, 193, 116, 0);
+  }
+}
+
+@keyframes haul-sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.haul-spinner-outer {
+  animation: haul-spin 2s linear infinite;
+}
+
+.haul-spinner-inner {
+  animation: haul-spin-reverse 1.5s ease-in-out infinite;
+}
+
+.haul-fade-text {
+  animation: haul-pulse-opacity 2s infinite alternate;
+}
+
+.haul-pulse-ring {
+  animation: haul-pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+.haul-sheet-up {
+  animation: haul-sheet-up 0.3s ease-out forwards;
+}
+
+.haul-countdown-circle {
+  transition: stroke-dashoffset 1s linear;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+}
