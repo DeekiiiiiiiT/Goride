@@ -736,6 +736,8 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
       const hasManualPortalType = entry.metadata?.portal_type === 'Manual_Entry' || tx?.metadata?.portal_type === 'Manual_Entry';
       const hasManualSource = entry.metadata?.source?.toLowerCase().includes('manual') || 
                              entry.metadata?.source?.toLowerCase().includes('fuel log') ||
+                             (entry as any).source?.toLowerCase().includes('manual') ||
+                             (entry as any).source?.toLowerCase().includes('fuel log') ||
                              tx?.metadata?.source?.toLowerCase().includes('manual') ||
                              tx?.metadata?.source?.toLowerCase().includes('fuel log');
       return isManualType || hasManualPortalType || hasManualSource;

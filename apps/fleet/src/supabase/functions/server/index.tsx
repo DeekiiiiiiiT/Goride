@@ -93,6 +93,11 @@ import { CANONICAL_LEDGER_KEY_LIKE } from "../../../utils/ledgerKvSource.ts";
 import { computeIndriveWalletFeesFromLedgerEntries } from "../../../utils/indriveWalletMetrics.ts";
 import { parseCatalogMonthFromUnknown } from "../../../utils/catalogMonthParse.ts";
 import fuelApp from "./fuel_controller.tsx";
+import {
+  enrichRecordWithDriverVehicle,
+  syncDriverRecordFromVehicleAssignment,
+} from "./driver_vehicle_assignment.ts";
+import { syncLinkedExpenseTransaction } from "./fuel_transaction_sync.ts";
 import auditApp from "./audit_controller.tsx";
 import safetyApp from "./safety_controller.tsx";
 import syncApp from "./sync_controller.tsx";
@@ -255,7 +260,7 @@ app.use(
   "/*",
   cors({
     origin: "*",
-    allowHeaders: ["Content-Type", "Authorization", "apikey", "X-Roam-Product-Line"],
+    allowHeaders: ["Content-Type", "Authorization", "apikey", "X-Roam-Product-Line", "X-Roam-Settings-Segment"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     exposeHeaders: ["Content-Length", "X-Cache"],
     maxAge: 600,
@@ -2463,6 +2468,15 @@ app.post("/make-server-37f42386/vehicles", requireAuth(), requirePermission('veh
 
     await kv.set(`vehicle:${vehicle.id}`, vehicle);
 
+    try {
+      await syncDriverRecordFromVehicleAssignment(vehicle as Record<string, unknown>);
+    } catch (assignSyncErr: unknown) {
+      console.warn(
+        "[vehicles] driver assignment mirror/backfill failed (non-fatal):",
+        assignSyncErr instanceof Error ? assignSyncErr.message : assignSyncErr,
+      );
+    }
+
     if (orgId) {
       try {
         if (catalogId) {
@@ -2490,6 +2504,34 @@ app.post("/make-server-37f42386/vehicles", requireAuth(), requirePermission('veh
     return c.json({ error: e.message }, 500);
   }
 });
+
+/** One-time / maintenance: mirror vehicle.currentDriverId → driver record + backfill fuel rows. */
+app.post(
+  "/make-server-37f42386/admin/backfill-fuel-vehicle-assignments",
+  requireAuth(),
+  requirePermission("fuel.edit_entry"),
+  async (c) => {
+    try {
+      const vehicles = (await kv.getByPrefix("vehicle:")) || [];
+      let driversSynced = 0;
+
+      for (const vehicle of vehicles) {
+        if (!vehicle?.currentDriverId || !vehicle?.id) continue;
+        await syncDriverRecordFromVehicleAssignment(vehicle as Record<string, unknown>);
+        driversSynced++;
+      }
+
+      return c.json({
+        success: true,
+        driversSynced,
+        message:
+          "Driver assignment mirrors and fuel record backfills completed for all assigned vehicles.",
+      });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  },
+);
 
 app.delete("/make-server-37f42386/vehicles/:id", requireAuth(), requirePermission('vehicles.delete'), async (c) => {
   const id = c.req.param("id");
@@ -2916,6 +2958,14 @@ app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
         if (!transaction.paymentMethod) transaction.paymentMethod = "Digital Wallet";
     }
 
+    const txOrgId = getOrgId(c) || transaction.organizationId;
+    const isFuelCategoryTx =
+      transaction.category === "Fuel" || transaction.category === "Fuel Reimbursement";
+    if (isFuelCategoryTx && transaction.driverId) {
+      const withVehicle = await enrichRecordWithDriverVehicle(transaction, txOrgId);
+      Object.assign(transaction, withVehicle);
+    }
+
     // Auto-Approve Logic for AI Verified Fuel
     const isFuel = transaction.category === 'Fuel' || transaction.category === 'Fuel Reimbursement';
     const isAiVerified = transaction.metadata?.odometerMethod === 'ai_verified';
@@ -3309,6 +3359,11 @@ app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
         if (fuelEntry.vehicleId) {
              await kv.set(`fuel_entry:${fuelEntry.id}`, stampOrg(fuelEntry, c));
              await appendCanonicalFuelExpenseIfEligible(fuelEntry, c);
+             await syncLinkedExpenseTransaction(fuelEntry);
+        } else {
+             console.warn(
+               `[FuelEntry] Skipped fuel_entry for transaction ${transaction.id}: no vehicleId after fleet assignment resolution`,
+             );
         }
     }
 
@@ -6331,6 +6386,12 @@ app.post("/make-server-37f42386/expenses/approve", requireAuth(), requirePermiss
         }
     }
 
+    const withVehicle = await enrichRecordWithDriverVehicle(
+      tx,
+      getOrgId(c) || tx.organizationId,
+    );
+    Object.assign(tx, withVehicle);
+
     tx.status = 'Approved';
     tx.isReconciled = true; // Approval implies reconciliation usually
     tx.metadata = { 
@@ -6441,6 +6502,7 @@ app.post("/make-server-37f42386/expenses/approve", requireAuth(), requirePermiss
         // Only save if we have a vehicleId (Critical for fleet stats)
         if (fuelEntry.vehicleId) {
              await kv.set(`fuel_entry:${fuelEntry.id}`, stampOrg(fuelEntry, c));
+             await syncLinkedExpenseTransaction(fuelEntry);
              
              // Check if we need to link this to a transaction
              if (tx.id) {
@@ -6449,9 +6511,14 @@ app.post("/make-server-37f42386/expenses/approve", requireAuth(), requirePermiss
                 tx.metadata = {
                     ...tx.metadata,
                     receiptUrl: tx.receiptUrl,
-                    odometerProofUrl: tx.odometerProofUrl || tx.metadata?.odometerProofUrl
+                    odometerProofUrl: tx.odometerProofUrl || tx.metadata?.odometerProofUrl,
+                    fuelEntryId: fuelEntry.id,
                 };
              }
+        } else {
+            console.warn(
+              `[ApproveHandler] Skipped fuel_entry for transaction ${id}: no vehicleId after fleet assignment resolution`,
+            );
         }
     }
 

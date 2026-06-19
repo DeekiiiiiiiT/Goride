@@ -6,6 +6,9 @@ import {
   X,
   ChevronRight,
   Database,
+  Fuel,
+  Activity,
+  HardDrive,
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { AdminNavSection } from './AdminNavSection';
@@ -19,6 +22,9 @@ import {
   ROAM_RIDES_CHILDREN,
   ROAM_HAUL_CHILDREN,
   ROAM_DRIVER_CHILDREN,
+  FUEL_MANAGEMENT_CHILDREN,
+  TOLL_MANAGEMENT_CHILDREN,
+  VEHICLE_DATABASE_CHILDREN,
   GLOBAL_SETTINGS_CHILDREN,
   SETTINGS_CHILDREN,
   API_CENTER_CHILDREN,
@@ -53,6 +59,9 @@ function allNavChildren(): NavChild[] {
     ...ROAM_RIDES_CHILDREN,
     ...ROAM_HAUL_CHILDREN,
     ...ROAM_DRIVER_CHILDREN,
+    ...FUEL_MANAGEMENT_CHILDREN,
+    ...TOLL_MANAGEMENT_CHILDREN,
+    ...VEHICLE_DATABASE_CHILDREN,
     ...GLOBAL_SETTINGS_CHILDREN,
     ...SETTINGS_CHILDREN,
     ...API_CENTER_CHILDREN,
@@ -113,6 +122,9 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const visibleRides = filterChildren(ROAM_RIDES_CHILDREN);
   const visibleHaul = filterChildren(ROAM_HAUL_CHILDREN);
   const visibleDriver = filterChildren(ROAM_DRIVER_CHILDREN);
+  const visibleFuel = filterChildren(FUEL_MANAGEMENT_CHILDREN);
+  const visibleToll = filterChildren(TOLL_MANAGEMENT_CHILDREN);
+  const visibleVehicleDb = filterChildren(VEHICLE_DATABASE_CHILDREN);
   const visibleGlobalSettings = filterChildren(GLOBAL_SETTINGS_CHILDREN);
   const visibleLegacySettings = filterChildren(SETTINGS_CHILDREN);
   const visibleApiCenter = filterChildren(API_CENTER_CHILDREN);
@@ -125,6 +137,9 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const ridesIds = useMemo(() => visibleRides.filter((c) => !c.href).map((c) => c.id), [visibleRides]);
   const haulIds = useMemo(() => visibleHaul.filter((c) => !c.href).map((c) => c.id), [visibleHaul]);
   const driverIds = useMemo(() => visibleDriver.filter((c) => !c.href).map((c) => c.id), [visibleDriver]);
+  const fuelIds = useMemo(() => visibleFuel.map((c) => c.id), [visibleFuel]);
+  const tollIds = useMemo(() => visibleToll.map((c) => c.id), [visibleToll]);
+  const vehicleIds = useMemo(() => visibleVehicleDb.map((c) => c.id), [visibleVehicleDb]);
   const globalSettingsIds = useMemo(() => visibleGlobalSettings.map((c) => c.id), [visibleGlobalSettings]);
   const legacySettingsIds = useMemo(() => visibleLegacySettings.map((c) => c.id), [visibleLegacySettings]);
   const apiIds = useMemo(() => visibleApiCenter.map((c) => c.id), [visibleApiCenter]);
@@ -136,6 +151,9 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const [ridesOpen, setRidesOpen] = useSectionOpen(currentPage, ridesIds);
   const [haulOpen, setHaulOpen] = useSectionOpen(currentPage, haulIds);
   const [driverOpen, setDriverOpen] = useSectionOpen(currentPage, driverIds);
+  const [fuelOpen, setFuelOpen] = useSectionOpen(currentPage, fuelIds);
+  const [tollOpen, setTollOpen] = useSectionOpen(currentPage, tollIds);
+  const [vehicleDbOpen, setVehicleDbOpen] = useSectionOpen(currentPage, vehicleIds);
   const businessSegmentIds = useMemo(
     () => [...enterpriseIds, ...fleetIds, ...driverIds, ...ridesIds, ...haulIds, ...dashIds],
     [enterpriseIds, fleetIds, driverIds, ridesIds, haulIds, dashIds],
@@ -221,6 +239,36 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
     },
   ];
 
+  const infraSections = [
+    {
+      key: 'fuel',
+      label: 'Fuel Management',
+      icon: Fuel,
+      children: visibleFuel,
+      open: fuelOpen,
+      setOpen: setFuelOpen,
+      isActive: fuelIds.includes(currentPage),
+    },
+    {
+      key: 'toll',
+      label: 'Toll Management',
+      icon: Activity,
+      children: visibleToll,
+      open: tollOpen,
+      setOpen: setTollOpen,
+      isActive: tollIds.includes(currentPage),
+    },
+    {
+      key: 'vehicle',
+      label: 'Vehicle Database',
+      icon: HardDrive,
+      children: visibleVehicleDb,
+      open: vehicleDbOpen,
+      setOpen: setVehicleDbOpen,
+      isActive: vehicleIds.includes(currentPage),
+    },
+  ];
+
   return (
     <div className="flex h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       {mobileOpen && (
@@ -300,6 +348,20 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
             onNavigate={handleNav}
             isActive={businessSegmentIds.includes(currentPage)}
           />
+
+          {infraSections.map((section) => (
+            <AdminNavSection
+              key={section.key}
+              label={section.label}
+              icon={section.icon}
+              children={section.children}
+              currentPage={currentPage}
+              open={section.open}
+              onToggle={() => section.setOpen(!section.open)}
+              onNavigate={handleNav}
+              isActive={section.isActive}
+            />
+          ))}
 
           {visibleApiCenter.length > 0 && (
             <AdminNavSection

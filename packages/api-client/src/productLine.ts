@@ -1,3 +1,5 @@
+import { publicAnonKey } from './supabaseInfo';
+
 export type ProductLine = 'fleet' | 'enterprise';
 
 export type SettingsSegment =
@@ -60,6 +62,7 @@ export function withSettingsSegmentHeaders(
   const productLineSegment =
     segment === 'fleet' || segment === 'enterprise' ? segment : undefined;
   return {
+    apikey: publicAnonKey,
     ...headers,
     ...getSettingsSegmentHeaders(segment),
     ...(productLineSegment

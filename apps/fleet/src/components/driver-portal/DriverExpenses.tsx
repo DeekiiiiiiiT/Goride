@@ -35,6 +35,7 @@ import { toast } from "sonner@2.0.3";
 import { useAuth } from '../auth/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { api } from '../../services/api';
+import { resolveVehicleIdForDriver } from '../../utils/resolveDriverVehicleId';
 import { FinancialTransaction, TransactionCategory } from '../../types/data';
 import { StationProfile } from '../../types/station';
 import { DriverClaims } from './DriverClaims';
@@ -460,12 +461,15 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         odometerProofUrl = uploadRes.url;
       }
 
+      const vehicles = await api.getVehicles().catch(() => []);
+      const resolvedVehicleId = resolveVehicleIdForDriver(driverRecord, vehicles, user?.id);
+
       const baseTx: Partial<FinancialTransaction> = {
         id: crypto.randomUUID(),
         driverId: driverRecord?.id || user?.id,
         driverName: driverRecord?.driverName || driverRecord?.name || user?.email,
-        vehicleId: driverRecord?.assignedVehicleId,
-        vehiclePlate: driverRecord?.assignedVehiclePlate || driverRecord?.assignedVehicleName || (driverRecord?.assignedVehicleId ? 'Assigned Vehicle' : undefined),
+        vehicleId: resolvedVehicleId,
+        vehiclePlate: driverRecord?.assignedVehiclePlate || driverRecord?.assignedVehicleName || (resolvedVehicleId ? 'Assigned Vehicle' : undefined),
         date: isValid(date) ? format(date, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
         time: time ? `${time}:00` : undefined,
         type: 'Expense',

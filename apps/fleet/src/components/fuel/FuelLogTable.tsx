@@ -144,6 +144,8 @@ export function FuelLogTable({
         const hasManualPortalType = entry.metadata?.portal_type === 'Manual_Entry' || tx?.metadata?.portal_type === 'Manual_Entry';
         const hasManualSource = entry.metadata?.source?.toLowerCase().includes('manual') || 
                                entry.metadata?.source?.toLowerCase().includes('fuel log') ||
+                               (entry as FuelEntry & { source?: string }).source?.toLowerCase().includes('manual') ||
+                               (entry as FuelEntry & { source?: string }).source?.toLowerCase().includes('fuel log') ||
                                tx?.metadata?.source?.toLowerCase().includes('manual') ||
                                tx?.metadata?.source?.toLowerCase().includes('fuel log');
         return isManualType || hasManualPortalType || hasManualSource;

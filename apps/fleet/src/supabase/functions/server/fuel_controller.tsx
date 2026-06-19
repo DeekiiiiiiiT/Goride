@@ -10,6 +10,13 @@ import * as fuelLogic from "./fuel_logic.ts";
 import { auditLogic } from "./audit_logic.ts";
 import { findMatchingStation, findMatchingStationSmart, calculateDistance } from "./geo_matcher.ts";
 import { trackedProviderCall, ProviderBlockedError } from "./api_usage_logger.ts";
+import {
+  enrichRecordWithDriverVehicle,
+  resolveDriverVehicleAssignment,
+} from "./driver_vehicle_assignment.ts";
+import {
+  syncLinkedExpenseTransaction,
+} from "./fuel_transaction_sync.ts";
 
 const app = new Hono();
 
@@ -528,6 +535,14 @@ async function releaseHeldTransaction(learnt: any, resolvedStationId: string, st
     }
 
     // Release the hold and approve
+    const resolved = await resolveDriverVehicleAssignment(tx.driverId, {
+        organizationId: tx.organizationId,
+        hintVehicleId: tx.vehicleId,
+    });
+    if (resolved.vehicleId) {
+        tx.vehicleId = resolved.vehicleId;
+    }
+
     tx.status = 'Approved';
     tx.isReconciled = true;
     tx.metadata = {
@@ -610,6 +625,7 @@ async function releaseHeldTransaction(learnt: any, resolvedStationId: string, st
 
     await kv.set(`fuel_entry:${fuelEntry.id}`, fuelEntry);
     await kv.set(`transaction:${tx.id}`, tx);
+    await syncLinkedExpenseTransaction(fuelEntry);
     console.log(`[StationGate-Release] Transaction ${txId} released → fuel_entry ${fuelEntry.id} created, station ${stationName} (${resolvedStationId}).`);
     return 1;
 }
@@ -766,8 +782,16 @@ async function ensureFuelEntryLinkedToTransaction(tx: any, station: any): Promis
     const cat = tx.category;
     if (cat !== "Fuel" && cat !== "Fuel Reimbursement") return;
 
+    const resolved = await resolveDriverVehicleAssignment(tx.driverId, {
+        organizationId: tx.organizationId,
+        hintVehicleId: tx.vehicleId,
+    });
+    if (resolved.vehicleId) {
+        tx.vehicleId = resolved.vehicleId;
+    }
+
     if (!tx.vehicleId) {
-        console.log(`[BulkAssign-FuelEntry] Skip fuel_entry: no vehicleId on transaction ${tx.id}`);
+        console.log(`[BulkAssign-FuelEntry] Skip fuel_entry: no vehicleId on transaction ${tx.id} (assignment unresolved)`);
         return;
     }
 
@@ -829,6 +853,7 @@ async function ensureFuelEntryLinkedToTransaction(tx: any, station: any): Promis
 
         updated.signature = await signRecord(updated);
         await kv.set(`fuel_entry:${existing.id}`, updated);
+        await syncLinkedExpenseTransaction(updated);
 
         if (!tx.metadata?.fuelEntryId || tx.metadata.fuelEntryId !== existing.id) {
             tx.metadata = { ...tx.metadata, fuelEntryId: existing.id };
@@ -924,6 +949,7 @@ async function ensureFuelEntryLinkedToTransaction(tx: any, station: any): Promis
     tx.signature = await signRecord(tx);
     tx.signedAt = new Date().toISOString();
     await kv.set(`transaction:${tx.id}`, tx);
+    await syncLinkedExpenseTransaction(fuelEntry);
     console.log(`[BulkAssign-FuelEntry] Created fuel_entry ${fuelEntryId} for transaction ${tx.id}`);
 }
 
@@ -1667,6 +1693,14 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
     const entry = await c.req.json();
     if (!entry.id) entry.id = crypto.randomUUID();
 
+    if (entry.driverId) {
+        const enriched = await enrichRecordWithDriverVehicle(
+            entry,
+            entry.organizationId as string | undefined,
+        );
+        Object.assign(entry, enriched);
+    }
+
     // Phase 5: Integrity Guardrail - Prevent modifications to signed records
     const existingEntry = await kv.get(`fuel_entry:${entry.id}`);
     const isNewFuelEntry = !existingEntry;
@@ -2230,6 +2264,11 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
         await appendCanonicalFuelExpenseIfEligible(entry as Record<string, unknown>, c);
       } catch (fuelCanonErr) {
         console.error("[FuelEntry] Canonical ledger append failed (non-fatal):", fuelCanonErr);
+      }
+      try {
+        await syncLinkedExpenseTransaction(entry as Record<string, unknown>);
+      } catch (syncErr) {
+        console.error("[FuelEntry] Transaction sync failed (non-fatal):", syncErr);
       }
     }
     return c.json({ success: true, data: entry });
@@ -2805,6 +2844,8 @@ app.post(`${BASE_PATH}/admin/bulk-assign-station`, async (c) => {
             //     ensure one exists so Transaction Logs / FuelLogTable show the assignment.
             if (storageKey.startsWith("transaction:")) {
                 await ensureFuelEntryLinkedToTransaction(entry, station);
+            } else if (storageKey.startsWith("fuel_entry:")) {
+                await syncLinkedExpenseTransaction(entry);
             }
 
             // Track latest date for station stats (Phase 3)

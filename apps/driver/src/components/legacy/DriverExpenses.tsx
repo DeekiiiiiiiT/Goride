@@ -31,6 +31,7 @@ import {
 import { format, isValid, startOfWeek, endOfWeek, isWithinInterval, parseISO } from "date-fns";
 import { cn } from '@roam/ui';
 import { formatSafeDate, formatSafeTime } from '../../utils/timeUtils';
+import { resolveVehicleIdForDriver } from '../../utils/resolveDriverVehicleId';
 import { toast } from "sonner";
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
@@ -348,10 +349,11 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         const isMaintenance = t.category?.toLowerCase().includes('maintenance') || 
                              t.category?.toLowerCase().includes('service') ||
                              t.category?.toLowerCase().includes('repair');
+        const isFuelExpense = fuelExpenseMirror(t);
         
         combined.push({
           id: t.id,
-          type: isToll ? 'toll' : (isMaintenance ? 'maintenance' : 'other'),
+          type: isFuelExpense ? 'fuel' : (isToll ? 'toll' : (isMaintenance ? 'maintenance' : 'other')),
           date: txDate,
           amount: t.amount || 0,
           description: t.merchant || t.description || t.category || 'Expense',
@@ -653,12 +655,15 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         odometerProofUrl = uploadRes.url;
       }
 
+      const vehicles = await api.getVehicles().catch(() => []);
+      const resolvedVehicleId = resolveVehicleIdForDriver(driverRecord, vehicles, user?.id);
+
       const baseTx: Partial<FinancialTransaction> = {
         id: crypto.randomUUID(),
         driverId: driverRecord?.id || user?.id,
         driverName: driverRecord?.driverName || driverRecord?.name || user?.email,
-        vehicleId: driverRecord?.assignedVehicleId,
-        vehiclePlate: driverRecord?.assignedVehiclePlate || driverRecord?.assignedVehicleName || (driverRecord?.assignedVehicleId ? 'Assigned Vehicle' : undefined),
+        vehicleId: resolvedVehicleId,
+        vehiclePlate: driverRecord?.assignedVehiclePlate || driverRecord?.assignedVehicleName || (resolvedVehicleId ? 'Assigned Vehicle' : undefined),
         date: isValid(date) ? format(date, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
         time: time ? `${time}:00` : undefined,
         type: 'Expense',

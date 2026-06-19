@@ -109,9 +109,6 @@ export const ROAM_FLEET_CHILDREN: NavChild[] = [
   { id: 'fleet-overview', label: 'Overview', icon: BarChart3 },
   { id: 'fleet-customers', label: 'Customer Accounts', icon: Users },
   { id: 'fleet-team-members', label: 'Team Members', icon: UserCog },
-  ...FUEL_MANAGEMENT_CHILDREN,
-  ...TOLL_MANAGEMENT_CHILDREN,
-  ...VEHICLE_DATABASE_CHILDREN,
   ...FLEET_SETTINGS_CHILDREN,
   { id: 'fleet-admin-link', label: 'Open Fleet Admin →', icon: ExternalLink, href: 'https://roamfleet.co/admin' },
 ];

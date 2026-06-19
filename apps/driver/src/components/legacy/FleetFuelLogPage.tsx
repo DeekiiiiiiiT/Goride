@@ -10,6 +10,8 @@ import { FuelEntry } from '../../types/fuel';
 import { fuelService } from '../../services/fuelService';
 import { settlementService } from '../../services/settlementService';
 import { showCatalogGateToastIfApplicable } from '../../utils/catalogGateErrors';
+import { api } from '../../services/api';
+import { resolveVehicleIdForDriver } from '../../utils/resolveDriverVehicleId';
 
 interface FleetFuelLogPageProps {
   onBack: () => void;
@@ -29,11 +31,17 @@ export function FleetFuelLogPage({ onBack }: FleetFuelLogPageProps) {
       else if (method === 'card') paymentSource = 'Gas_Card';
       else if (method === 'personal') paymentSource = 'Personal';
 
+      const vehicles = await api.getVehicles().catch(() => []);
+      const vehicleId =
+        resolveVehicleIdForDriver(driverRecord, vehicles, user?.id) ||
+        driverRecord?.vehicleId ||
+        data.vehicleId;
+
       const fuelEntry: Partial<FuelEntry> = {
         id: crypto.randomUUID(),
         date: data.date || new Date().toISOString(),
         driverId: user?.id,
-        vehicleId: driverRecord?.assignedVehicleId || driverRecord?.vehicleId || driverRecord?.vehicle || data.vehicleId,
+        vehicleId,
         amount: data.totalCost || 0,
         liters: data.liters || 0,
         pricePerLiter: data.totalCost && data.liters ? data.totalCost / data.liters : 0,

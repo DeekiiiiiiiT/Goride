@@ -15,7 +15,7 @@ export function useFuelAnchors(entries: FuelEntry[], transactions: FinancialTran
     const trustedEntryIds = useMemo(() => {
         const trusted = new Set<string>();
         entries.forEach(entry => {
-            const isVerified = entry.metadata?.isVerified === true;
+            const isVerified = entry.metadata?.isVerified === true || entry.isVerified === true;
             const isModifiedAnchor = (entry.metadata?.isEdited === true || !!entry.metadata?.editReason || isVerified) && entry.type === 'Reimbursement';
             if (isModifiedAnchor || isVerified) {
                 trusted.add(entry.id);

@@ -28,6 +28,7 @@ import { fuelService } from '../../services/fuelService';
 import { settlementService } from '../../services/settlementService';
 import { FuelEntry } from '../../types/fuel';
 import { showCatalogGateToastIfApplicable } from '../../utils/catalogGateErrors';
+import { resolveVehicleIdForDriver } from '../../utils/resolveDriverVehicleId';
 import { PendingCatalogRequestsDrawer } from '../vehicles/PendingCatalogRequestsDrawer';
 import { tierService } from '../../services/tierService';
 import { TierCalculations } from '../../utils/tierCalculations';
@@ -374,12 +375,18 @@ export function DriverDashboard() {
               paymentSource = 'Personal';
           }
 
+          const vehicles = await api.getVehicles().catch(() => []);
+          const vehicleId =
+            resolveVehicleIdForDriver(driverRecord, vehicles, user?.id) ||
+            driverRecord?.vehicleId ||
+            data.vehicleId;
+
           // 1. Save Fuel Entry (Core Record)
           const fuelEntry: Partial<FuelEntry> = {
               id: crypto.randomUUID(),
               date: data.date || new Date().toISOString(),
               driverId: user?.id,
-              vehicleId: driverRecord?.assignedVehicleId || driverRecord?.vehicleId || data.vehicleId,
+              vehicleId,
               amount: data.totalCost || 0,
               liters: data.liters || 0,
               pricePerLiter: (data.totalCost && data.liters) ? (data.totalCost / data.liters) : 0,
