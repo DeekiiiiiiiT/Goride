@@ -1,0 +1,18 @@
+{
+  "name": "Roam Dash Courier",
+  "short_name": "Roam Dash",
+  "description": "Deliver food from local restaurants and earn on your schedule with Roam Dash Courier.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fafafa",
+  "theme_color": "#006c49",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
