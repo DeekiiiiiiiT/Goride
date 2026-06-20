@@ -105,6 +105,8 @@ export function hasPrivilegedJwtRole(user: JwtUser): boolean {
     'driver_ops',
     'haul_admin',
     'haul_ops',
+    'courier_admin',
+    'courier_ops',
   ]);
   return roles.some((r) => privileged.has(r));
 }

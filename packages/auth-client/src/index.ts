@@ -4,6 +4,8 @@ export {
   supabaseDriverAdmin,
   supabaseHaulApp,
   supabaseHaulAdmin,
+  supabaseCourierApp,
+  supabaseCourierAdmin,
 } from './supabase';
 export * from './permissions';
 export * from './oauthRoleGuard';

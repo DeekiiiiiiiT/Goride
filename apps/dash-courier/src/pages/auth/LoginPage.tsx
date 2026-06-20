@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
-import { GoogleIcon } from '@/components/icons/GoogleIcon';
+import { CourierGoogleAuthButton } from '@/components/auth/CourierGoogleAuthButton';
 
 type LoginPageProps = {
   onBack: () => void;
@@ -12,6 +12,7 @@ export function LoginPage({ onBack, onSignIn, onSignUp }: LoginPageProps) {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [googleError, setGoogleError] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,13 +113,16 @@ export function LoginPage({ onBack, onSignIn, onSignUp }: LoginPageProps) {
             <div className="h-px flex-grow bg-surface-dim" />
           </div>
 
-          <button
-            type="button"
-            className="h-14 w-full bg-surface border border-surface-dim text-on-surface text-xs font-semibold uppercase tracking-wide rounded-lg hover:bg-surface-container-low active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-          >
-            <GoogleIcon />
-            Continue with Google
-          </button>
+          <CourierGoogleAuthButton
+            variant="login"
+            className="text-xs uppercase tracking-wide"
+            onError={(msg) => setGoogleError(msg || null)}
+          />
+          {googleError && (
+            <p className="text-sm text-error text-center -mt-2" role="alert">
+              {googleError}
+            </p>
+          )}
 
           <p className="text-center text-sm">
             <span className="text-muted">Don&apos;t have an account?</span>{' '}

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ROAM_LEGAL } from '@roam/business-config/legalUrls';
 import { OnboardingHeader } from '@/components/layout/OnboardingHeader';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
+import { CourierGoogleAuthButton } from '@/components/auth/CourierGoogleAuthButton';
 import { saveSignupDraft } from '@/lib/signupDraft';
 
 type SignUpPageProps = {
@@ -22,6 +23,7 @@ export function SignUpPage({ onBack, onContinue }: SignUpPageProps) {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [googleError, setGoogleError] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,6 +45,42 @@ export function SignUpPage({ onBack, onContinue }: SignUpPageProps) {
         </div>
 
         <form className="flex-1 flex flex-col gap-6" onSubmit={handleSubmit}>
+          <div className="flex flex-col gap-3">
+            <CourierGoogleAuthButton variant="signup" onError={(msg) => setGoogleError(msg || null)} />
+            <p className="text-xs text-muted leading-relaxed text-center px-2">
+              By continuing with Google, you agree to Roam Dash Courier&apos;s{' '}
+              <a
+                href={ROAM_LEGAL.termsOfServiceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline font-medium"
+              >
+                Terms of Service
+              </a>{' '}
+              and{' '}
+              <a
+                href={ROAM_LEGAL.privacyPolicyUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline font-medium"
+              >
+                Privacy Policy
+              </a>
+              .
+            </p>
+            {googleError && (
+              <p className="text-sm text-error text-center" role="alert">
+                {googleError}
+              </p>
+            )}
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="flex-1 h-px bg-outline-variant/30" />
+            <span className="text-xs font-semibold text-muted uppercase tracking-wider">or</span>
+            <div className="flex-1 h-px bg-outline-variant/30" />
+          </div>
+
           <div className="flex flex-col gap-1">
             <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">
               Phone Number

@@ -24,7 +24,9 @@ export type ProductAdminRole =
   | 'driver_admin'    // Full Driver admin access
   | 'driver_ops'      // Driver operations (compliance, support)
   | 'haul_admin'      // Full Roam Haul admin access
-  | 'haul_ops';       // Roam Haul operations
+  | 'haul_ops'        // Roam Haul operations
+  | 'courier_admin'   // Full Dash Courier admin access
+  | 'courier_ops';    // Dash Courier operations
 
 /** All roles that can access product admin portals */
 export type AdminRole = typeof PLATFORM_ROLES[number] | ProductAdminRole;
@@ -38,6 +40,7 @@ export const PRODUCT_ADMIN_ACCESS = {
   rides: [...PLATFORM_ROLES, 'rides_admin', 'rides_ops'],
   driver: [...PLATFORM_ROLES, 'driver_admin', 'driver_ops'],
   haul: [...PLATFORM_ROLES, 'haul_admin', 'haul_ops'],
+  courier: [...PLATFORM_ROLES, 'courier_admin', 'courier_ops'],
 } as const;
 
 export type ProductKey = keyof typeof PRODUCT_ADMIN_ACCESS;
@@ -120,5 +123,21 @@ export const PRODUCT_ROLE_META: Record<ProductAdminRole, { label: string; descri
   driver_ops: {
     label: 'Driver Operations',
     description: 'Manage driver compliance and support tools',
+  },
+  haul_admin: {
+    label: 'Haul Admin',
+    description: 'Full access to Roam Haul admin - catalog, transport',
+  },
+  haul_ops: {
+    label: 'Haul Operations',
+    description: 'Manage haulage catalog and hauler operations',
+  },
+  courier_admin: {
+    label: 'Courier Admin',
+    description: 'Full access to Dash Courier admin - workforce, compliance, deliveries',
+  },
+  courier_ops: {
+    label: 'Courier Operations',
+    description: 'Manage courier compliance and delivery support tools',
   },
 };
