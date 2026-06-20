@@ -1,36 +1,54 @@
 # Auth RBAC (Enterprise)
 
+## Database-backed RBAC (authoritative)
+
+Admin permissions are stored in the `platform` schema:
+
+| Table | Purpose |
+|-------|---------|
+| `platform.roles` | Role definitions with hierarchy level |
+| `platform.permissions` | Fine-grained permission keys |
+| `platform.role_permissions` | Role → permission mapping |
+| `platform.user_roles` | User → role assignments |
+| `platform.permission_audit_log` | Permission checks and admin actions |
+
+Migrations:
+
+- `supabase/migrations/20260627100000_platform_rbac_schema.sql`
+- `supabase/migrations/20260627110000_migrate_jwt_roles_to_db.sql`
+
+Provisioning: see `docs/rbac/ADMIN_PROVISIONING.md` and `docs/rbac/PERMISSION_CATALOG.md`.
+
+**Identity separation:** Platform super admin and product admin must use **separate accounts** (enforced by DB trigger).
+
 ## Model
 
 | Field | Location | Purpose | Who writes |
 |-------|----------|---------|------------|
-| Permissions | `app_metadata.role` + `app_metadata.roles[]` | Admin/API access (`driver_admin`, `platform_owner`, …) | Service role / edge functions only |
+| Permissions (authoritative) | `platform.user_roles` + `platform.role_permissions` | Enterprise RBAC | Service role / provisioning scripts |
+| Permissions (legacy sync) | `app_metadata.role` + `app_metadata.roles[]` | JWT fallback during migration | Service role / edge functions only |
 | Driver eligibility | `driver_profiles` table | Driver app onboarding and shell | Signup + admin tools |
 | Surface hint | `user_metadata.surface` | `driver` \| `passenger` UX only | Client on OAuth intent only |
 | Legacy | `user_metadata.role` | Deprecated for gates; migration fallback | Do not write from driver/rides login |
 
 ## Resolution order (client + edge)
 
-1. `app_metadata.roles[]` (any match for product admin)
-2. `app_metadata.role` (primary)
-3. `user_metadata.role` (legacy)
+1. **Database** — `platform.user_roles` via RPC (`rbac_user_has_permission`, etc.)
+2. `app_metadata.roles[]` (JWT fallback)
+3. `app_metadata.role` (primary)
+4. `user_metadata.role` (legacy)
 
-Helpers: `@roam/auth-client` → `jwtPrimaryRole`, `getJwtRoles`, `hasProductAdminRole`.
+Helpers: `@roam/auth-client` → `usePermissions`, `jwtPrimaryRole`, `getJwtRoles`, `hasProductAdminRole`.
 
-Edge: `supabase/functions/_shared/authEdge.ts` (same order).
+Edge: `supabase/functions/_shared/rbacQuery.ts`, `requirePermission.ts`, `requireMinRoleLevel.ts`.
+
+API: `GET /identity/permissions` — resolved permissions for current user.
 
 ## Assigning admin roles
 
-Use `assignUserRoles` in `supabase/functions/_shared/assignUserRoles.ts` (service role), or Supabase Dashboard → Authentication → user → **App Metadata**:
+**Preferred:** `supabase/scripts/provision_platform_admin.sql` or `provision_product_admin.sql`.
 
-```json
-{
-  "role": "driver_admin",
-  "roles": ["driver_admin"]
-}
-```
-
-Platform staff invite (`POST .../admin/team/invite`) writes `app_metadata`, not `user_metadata.role`.
+Legacy: `assignUserRoles` in `supabase/functions/_shared/assignUserRoles.ts`, or SQL grant scripts.
 
 ## Migration
 
@@ -65,8 +83,11 @@ Courier consumer (`/`) and admin (`/admin`) use isolated Supabase sessions:
 
 - `supabaseCourierApp` → `sb-<project>-auth-courier` (path `/`)
 - `supabaseCourierAdmin` → `sb-<project>-auth-courier-admin` (path `/admin`)
+- `supabaseRidesAdmin` → `sb-<project>-auth-rides-admin` (rides `/admin`)
+- `supabaseDashAdmin` → `sb-<project>-auth-dash-admin` (dash `/admin`)
+- `supabaseFleetAdmin` → `sb-<project>-auth-fleet-admin` (fleet `/admin`)
 
-Grant courier admin with `supabase/scripts/grant_courier_admin_by_email.sql` (`courier_admin` / `courier_ops`).
+Grant courier admin with `supabase/scripts/provision_product_admin.sql` (`courier_admin`).
 
 ## Manual test matrix
 
@@ -86,6 +107,8 @@ Grant courier admin with `supabase/scripts/grant_courier_admin_by_email.sql` (`c
 
 ## Related files
 
+- `packages/auth-client/src/platformPermissions.ts`
+- `packages/auth-client/src/hooks/usePermissions.ts`
 - `packages/auth-client/src/jwtRole.ts`
 - `apps/driver/src/contexts/AuthContext.tsx` (OAuth surface only)
 - `apps/driver/src/admin/DriverAdminPortal.tsx`

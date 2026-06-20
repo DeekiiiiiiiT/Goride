@@ -463,3 +463,75 @@ html.app-immersive-mode {
 .courier-admin-login__submit:hover:not(:disabled) {
   background: #047857;
 }
+
+.courier-admin-login .rides-admin-login__google {
+  width: 100%;
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 0.625rem;
+  background: rgba(15, 23, 42, 0.55);
+  color: #e2e8f0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.courier-admin-login .rides-admin-login__google:hover:not(:disabled) {
+  background: rgba(30, 41, 59, 0.85);
+  border-color: rgba(148, 163, 184, 0.55);
+}
+
+.courier-admin-login .rides-admin-login__divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1rem 0;
+  color: #64748b;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.courier-admin-login .rides-admin-login__divider::before,
+.courier-admin-login .rides-admin-login__divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(148, 163, 184, 0.25);
+}
+
+.courier-admin-login .rides-admin-login__notice {
+  margin-bottom: 1rem;
+  padding: 0.75rem 0.875rem;
+  border-radius: 0.625rem;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  background: rgba(16, 185, 129, 0.12);
+  color: #a7f3d0;
+  font-size: 0.875rem;
+}
+
+.courier-admin-login .rides-admin-login__label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.courier-admin-login .rides-admin-login__forgot {
+  border: 0;
+  background: transparent;
+  color: #6ee7b7;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+}
+
+.courier-admin-login .rides-admin-login__forgot:hover:not(:disabled) {
+  color: #a7f3d0;
+  text-decoration: underline;
+}

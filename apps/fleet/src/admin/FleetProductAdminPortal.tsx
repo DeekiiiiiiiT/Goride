@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { supabase } from '../utils/supabase/client';
+import { supabaseFleetAdmin as supabase } from '@roam/auth-client';
 import { hasProductAdminRole, jwtPrimaryRole, isPlatformRole } from '@roam/auth-client';
 import type { Session } from '@supabase/supabase-js';
 import {

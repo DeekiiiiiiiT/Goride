@@ -4,6 +4,7 @@
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getJwtRoles, jwtPrimaryRole } from "./authEdge.ts";
+import { userHasProductAccessResolved } from "./rbacQuery.ts";
 
 /** Product identifiers */
 export type ProductKey = "fleet" | "enterprise" | "dash" | "rides" | "driver" | "haul" | "courier";
@@ -67,8 +68,9 @@ export async function requireProductAdmin(
   const roles = getJwtRoles(user);
   const allowedRoles = PRODUCT_ADMIN_ROLES[product];
   const matched = roles.find((r) => allowedRoles.has(r));
+  const dbAccess = await userHasProductAccessResolved(user.id, user, product);
 
-  if (!matched) {
+  if (!matched && !dbAccess) {
     return c.json(
       {
         error: "Forbidden",
@@ -80,12 +82,14 @@ export async function requireProductAdmin(
     );
   }
 
+  const effectiveRole = matched ?? (dbAccess ? `${product}_admin` : jwtPrimaryRole(user));
+
   return {
     id: user.id,
     email: user.email || "",
-    role: matched,
+    role: effectiveRole,
     roles,
-    isPlatformRole: PLATFORM_ROLES.has(matched),
+    isPlatformRole: PLATFORM_ROLES.has(effectiveRole),
   };
 }
 
@@ -116,7 +120,14 @@ export async function requireProductAdminAny(
   for (const product of products) {
     const allowed = PRODUCT_ADMIN_ROLES[product];
     matched = roles.find((r) => allowed.has(r));
-    if (matched) break;
+    if (matched) {
+      break;
+    }
+    const dbAccess = await userHasProductAccessResolved(user.id, user, product);
+    if (dbAccess) {
+      matched = `${product}_admin`;
+      break;
+    }
   }
 
   if (!matched) {

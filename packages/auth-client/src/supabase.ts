@@ -55,5 +55,20 @@ export const supabaseCourierApp = createRoamAuthClient(`sb-${projectId}-auth-cou
  */
 export const supabaseCourierAdmin = createRoamAuthClient(`sb-${projectId}-auth-courier-admin`);
 
+/**
+ * Roam Rides admin portal (`/admin`). Isolated from driver consumer session.
+ */
+export const supabaseRidesAdmin = createRoamAuthClient(`sb-${projectId}-auth-rides-admin`);
+
+/**
+ * Roam Dash admin portal (`/admin`). Isolated from consumer sessions.
+ */
+export const supabaseDashAdmin = createRoamAuthClient(`sb-${projectId}-auth-dash-admin`);
+
+/**
+ * Roam Fleet product admin portal (`/admin`).
+ */
+export const supabaseFleetAdmin = createRoamAuthClient(`sb-${projectId}-auth-fleet-admin`);
+
 /** Default export for packages that expect a single client (driver app surface). */
 export const supabase = supabaseDriverApp;

@@ -1,23 +1,72 @@
 import React, { useState } from 'react';
-import { supabaseCourierAdmin as supabase } from '@roam/auth-client';
+import { GOOGLE_OAUTH_EMAIL_ONLY_SCOPES, supabaseCourierAdmin as supabase } from '@roam/auth-client';
 import { Loader2, AlertCircle, KeyRound, Bike } from 'lucide-react';
+import { GoogleIcon } from '@/components/icons/GoogleIcon';
 import '../../../../../packages/admin-core/src/styles/rides-admin-login.css';
+
+function getAdminRedirectUrl(): string {
+  return `${window.location.origin}/admin`;
+}
 
 export function CourierAdminLoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setNotice(null);
     try {
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
       if (signInError) throw signInError;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign in failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: getAdminRedirectUrl(),
+          scopes: GOOGLE_OAUTH_EMAIL_ONLY_SCOPES,
+          queryParams: { prompt: 'select_account' },
+        },
+      });
+      if (oauthError) throw oauthError;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Google sign-in failed');
+      setGoogleLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      setError('Enter your admin email above, then click Forgot password.');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: getAdminRedirectUrl(),
+      });
+      if (resetError) throw resetError;
+      setNotice('Password reset email sent. Check your inbox, then sign in with the new password.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not send reset email');
     } finally {
       setLoading(false);
     }
@@ -72,6 +121,35 @@ export function CourierAdminLoginForm() {
               </div>
             )}
 
+            {notice && (
+              <div className="rides-admin-login__notice" role="status">
+                <span>{notice}</span>
+              </div>
+            )}
+
+            <button
+              type="button"
+              disabled={loading || googleLoading}
+              onClick={() => void handleGoogleSignIn()}
+              className="rides-admin-login__google courier-admin-login__google"
+            >
+              {googleLoading ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Redirecting to Google...
+                </>
+              ) : (
+                <>
+                  <GoogleIcon />
+                  Sign in with Google
+                </>
+              )}
+            </button>
+
+            <div className="rides-admin-login__divider">
+              <span>or use email</span>
+            </div>
+
             <form onSubmit={(e) => void handleSubmit(e)}>
               <div className="rides-admin-login__field">
                 <label htmlFor="courier-admin-email" className="rides-admin-login__label">
@@ -89,9 +167,19 @@ export function CourierAdminLoginForm() {
                 />
               </div>
               <div className="rides-admin-login__field">
-                <label htmlFor="courier-admin-password" className="rides-admin-login__label">
-                  Password
-                </label>
+                <div className="rides-admin-login__label-row">
+                  <label htmlFor="courier-admin-password" className="rides-admin-login__label">
+                    Password
+                  </label>
+                  <button
+                    type="button"
+                    className="rides-admin-login__forgot"
+                    disabled={loading || googleLoading}
+                    onClick={() => void handleForgotPassword()}
+                  >
+                    Forgot password?
+                  </button>
+                </div>
                 <input
                   id="courier-admin-password"
                   type="password"

@@ -1,16 +1,17 @@
 /**
- * Platform Super Admin guard for Edge Functions (delivery, rides, etc.).
+ * Platform Super Admin guard for Edge Functions.
+ * DB-backed with JWT fallback during migration.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { jwtPrimaryRole } from "./authEdge.ts";
+import { getJwtRoles, jwtPrimaryRole } from "./authEdge.ts";
+import { dbIsPlatformUser } from "./rbacQuery.ts";
+import { ROLE_LEVELS } from "./platformPermissions.ts";
 
 export const PLATFORM_ADMIN_ROLES = new Set([
   "platform_owner",
   "platform_support",
+  "platform_analyst",
   "superadmin",
-  "super_admin",
-  "admin",
-  "rides_admin",
 ]);
 
 export type PlatformAdminUser = { id: string; email: string; role: string };
@@ -34,17 +35,26 @@ export async function requirePlatformAdmin(
   if (error || !user) {
     return c.json({ error: "Unauthorized: invalid token" }, 401);
   }
+
+  const isPlatformDb = await dbIsPlatformUser(user.id);
   const rawRole = jwtPrimaryRole(user);
-  if (!PLATFORM_ADMIN_ROLES.has(rawRole)) {
+  const roles = getJwtRoles(user);
+  const isPlatformJwt = roles.some((r) => PLATFORM_ADMIN_ROLES.has(r))
+    && (rawRole === "platform_owner" || rawRole === "superadmin" || rawRole === "platform_support" || rawRole === "platform_analyst");
+
+  if (!isPlatformDb && !isPlatformJwt) {
     return c.json({
       error: "Forbidden",
       message: "Platform admin role required",
       currentRole: rawRole || "(none)",
     }, 403);
   }
+
   return { id: user.id, email: user.email || "", role: rawRole };
 }
 
 export function isPlatformAdminRole(role: string): boolean {
   return PLATFORM_ADMIN_ROLES.has(role);
 }
+
+export { ROLE_LEVELS };

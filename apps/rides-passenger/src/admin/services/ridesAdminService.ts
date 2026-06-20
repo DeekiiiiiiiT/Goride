@@ -3,7 +3,7 @@
  */
 
 import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
-import { supabase } from '@roam/auth-client';
+import { supabaseRidesAdmin as supabase } from '@roam/auth-client';
 import type {
   RiderDetailDto,
   RiderDirectoryRow,

@@ -13,7 +13,7 @@ import {
   type PlayStoreReleaseRow,
 } from '@roam/play-store-launch';
 import type { DataSafetyState, DataSafetyValidationIssue } from '@roam/play-store-launch';
-import { supabase } from '@roam/auth-client';
+import { supabaseRidesAdmin as supabase } from '@roam/auth-client';
 
 const RIDES_BASE = API_ENDPOINTS.rides;
 

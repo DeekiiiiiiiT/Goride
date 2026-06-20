@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase } from '@roam/auth-client';
+import { supabaseDashAdmin as supabase } from '@roam/auth-client';
 import { Loader2, AlertCircle, KeyRound, Utensils } from 'lucide-react';
 import '../../../../../packages/admin-core/src/styles/admin-login.css';
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { supabase, hasProductAdminRole, jwtPrimaryRole } from '@roam/auth-client';
+import { supabaseRidesAdmin as supabase, hasProductAdminRole, jwtPrimaryRole } from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
 import {
   LayoutDashboard,

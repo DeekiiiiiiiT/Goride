@@ -2,6 +2,7 @@
 export { AdminShell } from './components/AdminShell';
 export { AdminSidebar } from './components/AdminSidebar';
 export { AdminAuthGate } from './components/AdminAuthGate';
+export { PermissionGate } from './components/PermissionGate';
 export { AppPermissionsTable } from './components/AppPermissionsTable';
 export type { AppPermissionPolicyPatch } from './components/AppPermissionsTable';
 export {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase, hasProductAdminRole, jwtPrimaryRole } from '@roam/auth-client';
+import { supabaseDashAdmin as supabase, hasProductAdminRole, jwtPrimaryRole } from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
 import { LayoutDashboard, Store, ClipboardList, Loader2, ShieldAlert, Settings } from 'lucide-react';
 import { Toaster } from 'sonner';
