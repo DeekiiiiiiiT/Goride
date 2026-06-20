@@ -5,6 +5,7 @@ import { Label } from "../ui/label";
 import { Car, ArrowRight, Smartphone, AlertCircle, Loader2, DollarSign, MapPin, FileText } from 'lucide-react';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { supabase } from '../../utils/supabase/client';
+import { useForgotPassword } from '@roam/auth-client';
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { publicAnonKey } from '../../utils/supabase/info';
@@ -19,6 +20,14 @@ export function DriverLoginPage() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [lockoutSeconds, setLockoutSeconds] = useState<number | null>(null);
+  const {
+    forgotMode,
+    setForgotMode,
+    notice,
+    setNotice,
+    forgotLoading,
+    sendResetEmail,
+  } = useForgotPassword(supabase, 'fleet', { signInHref: '/' });
 
   // Registration settings
   const [registrationMode, setRegistrationMode] = useState<'open' | 'invite_only' | 'domain_restricted'>('open');
@@ -34,6 +43,13 @@ export function DriverLoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (forgotMode) {
+      setError(null);
+      setNotice(null);
+      const err = await sendResetEmail(email);
+      if (err) setError(err);
+      return;
+    }
     setIsLoading(true);
     setError(null);
 
@@ -248,6 +264,12 @@ export function DriverLoginPage() {
               </Alert>
             )}
 
+            {notice && (
+              <Alert className="mb-6 bg-emerald-50 text-emerald-800 border-emerald-200">
+                <AlertDescription>{notice}</AlertDescription>
+              </Alert>
+            )}
+
             {successMessage && (
               <Alert className="mb-6 bg-emerald-50 text-emerald-800 border-emerald-200">
                 <AlertCircle className="h-4 w-4" />
@@ -297,26 +319,57 @@ export function DriverLoginPage() {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="driver-password" className="text-sm font-medium text-slate-700 dark:text-slate-300">Password</Label>
-                  {!isRegistering && <a href="#" className="text-xs text-emerald-600 hover:text-emerald-500 font-medium">Forgot?</a>}
+                  {!isRegistering && (
+                    forgotMode ? (
+                      <button
+                        type="button"
+                        className="text-xs text-emerald-600 hover:text-emerald-500 font-medium"
+                        onClick={() => {
+                          setForgotMode(false);
+                          setError(null);
+                        }}
+                      >
+                        Back to sign in
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="text-xs text-emerald-600 hover:text-emerald-500 font-medium"
+                        onClick={() => {
+                          setForgotMode(true);
+                          setError(null);
+                          setNotice(null);
+                        }}
+                      >
+                        Forgot?
+                      </button>
+                    )
+                  )}
                 </div>
+                {!forgotMode && (
                 <Input
                   id="driver-password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  required
+                  required={!forgotMode}
                   className="h-10"
                 />
+                )}
               </div>
 
               <Button
                 className="w-full h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-sm"
                 type="submit"
-                disabled={isLoading}
+                disabled={isLoading || forgotLoading}
               >
-                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isLoading ? 'Processing...' : (isRegistering ? 'Create Driver Account' : 'Sign In')}
-                {!isLoading && !isRegistering && <ArrowRight className="ml-2 h-4 w-4" />}
+                {(isLoading || forgotLoading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isLoading || forgotLoading
+                  ? 'Processing...'
+                  : forgotMode
+                    ? 'Send reset email'
+                    : (isRegistering ? 'Create Driver Account' : 'Sign In')}
+                {!isLoading && !forgotLoading && !isRegistering && !forgotMode && <ArrowRight className="ml-2 h-4 w-4" />}
               </Button>
             </form>
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabaseHaulAdmin as supabase } from '@roam/auth-client';
+import { supabaseHaulAdmin as supabase, useForgotPassword } from '@roam/auth-client';
 import { Loader2, AlertCircle, KeyRound, Truck } from 'lucide-react';
 import '../../../../../packages/admin-core/src/styles/rides-admin-login.css';
 
@@ -8,9 +8,24 @@ export function HaulAdminLoginForm() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const {
+    forgotMode,
+    setForgotMode,
+    notice,
+    setNotice,
+    forgotLoading,
+    sendResetEmail,
+  } = useForgotPassword(supabase, 'haul', { signInHref: '/admin' });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (forgotMode) {
+      setError(null);
+      setNotice(null);
+      const err = await sendResetEmail(email);
+      if (err) setError(err);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -55,6 +70,11 @@ export function HaulAdminLoginForm() {
                 <span>{error}</span>
               </div>
             )}
+            {notice && (
+              <div className="rides-admin-login__error" role="status" style={{ color: '#059669', borderColor: 'rgba(16,185,129,0.3)' }}>
+                <span>{notice}</span>
+              </div>
+            )}
             <form onSubmit={(e) => void handleSubmit(e)}>
               <div className="rides-admin-login__field">
                 <label htmlFor="haul-admin-email" className="rides-admin-login__label">Email</label>
@@ -67,8 +87,14 @@ export function HaulAdminLoginForm() {
                   className="rides-admin-login__input"
                 />
               </div>
+              {!forgotMode && (
               <div className="rides-admin-login__field">
-                <label htmlFor="haul-admin-password" className="rides-admin-login__label">Password</label>
+                <div className="rides-admin-login__label-row">
+                  <label htmlFor="haul-admin-password" className="rides-admin-login__label">Password</label>
+                  <button type="button" className="rides-admin-login__forgot" onClick={() => { setForgotMode(true); setError(null); setNotice(null); }}>
+                    Forgot password?
+                  </button>
+                </div>
                 <input
                   id="haul-admin-password"
                   type="password"
@@ -78,8 +104,14 @@ export function HaulAdminLoginForm() {
                   className="rides-admin-login__input"
                 />
               </div>
-              <button type="submit" disabled={loading} className="rides-admin-login__submit">
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sign in'}
+              )}
+              {forgotMode && (
+                <button type="button" className="rides-admin-login__forgot" onClick={() => { setForgotMode(false); setError(null); }}>
+                  Back to sign in
+                </button>
+              )}
+              <button type="submit" disabled={loading || forgotLoading} className="rides-admin-login__submit">
+                {loading || forgotLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : forgotMode ? 'Send reset email' : 'Sign in'}
               </button>
             </form>
           </div>

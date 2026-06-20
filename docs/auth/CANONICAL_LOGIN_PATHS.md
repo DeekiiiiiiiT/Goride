@@ -11,4 +11,16 @@ Each app passes these targets to `signInWithOAuth({ options: { redirectTo } })` 
 | Roam Haul (`apps/haul`) | `{origin}/` |
 | Roam Haul admin | `{origin}/admin` |
 
-Rule: always use `window.location.origin` plus a **stable** path (never `pathname` for OAuth return), so the user returns to the app that started the flow.
+## Password recovery
+
+After a reset email, the user lands on `{origin}/reset-password` on the **same host** as the login page that sent the request. Post-reset sign-in paths:
+
+| App | Sign in after reset |
+|-----|---------------------|
+| Dominion | `{origin}/` |
+| Product admin portals | `{origin}/admin` |
+| Rides passenger | `{origin}/login` |
+| Driver, Dash, Haul, Fleet, Courier consumer | `{origin}/` |
+
+See [`PASSWORD_RECOVERY.md`](PASSWORD_RECOVERY.md).
+

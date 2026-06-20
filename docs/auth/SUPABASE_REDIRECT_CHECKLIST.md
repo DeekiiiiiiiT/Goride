@@ -15,7 +15,7 @@ Include **scheme + host + port + path** where your apps handle the post-auth lan
 | Fleet (rideshare) | `http://localhost:3000/` | `https://roamfleet.co/` |
 | Fleet owner signup | `http://localhost:3000/signup` | `https://roamfleet.co/signup` |
 | Enterprise fleet | `http://localhost:3003/` | `https://roamenterprise.co/` |
-| Enterprise Super Admin | `http://localhost:3001/` | `https://roamenterprise.co/admin` (deploy `@roam/admin` here) |
+| Enterprise Super Admin | `http://localhost:3001/` | `https://roamdominion.co/` (deploy `@roam/admin`) |
 | Driver | `http://localhost:3002/` | `https://roamdriver.co/` |
 | Driver (Android app) | — | `co.roamenterprise.driver://login` |
 | Driver admin tracker | — | Same URLs; see `docs/legal/PLAY_STORE_DRIVER_LAUNCH.md` |
@@ -34,6 +34,24 @@ Also add:
 - Any alternate `www.` hosts you deploy.
 
 **Rule:** The URL passed as `redirectTo` in `signInWithOAuth` and paths used in `emailRedirectTo` must appear in this list (Supabase compares allowed redirect prefixes).
+
+## Password recovery (`/reset-password`)
+
+Add every production and dev recovery landing URL. See [`PASSWORD_RECOVERY.md`](PASSWORD_RECOVERY.md).
+
+| App | Dev (typical) | Production |
+|-----|---------------|------------|
+| Dominion (Super Admin) | `http://localhost:3001/reset-password` | `https://roamdominion.co/reset-password` |
+| Fleet manager | `http://localhost:3000/reset-password` | `https://roamfleet.co/reset-password` |
+| Enterprise fleet | `http://localhost:3003/reset-password` | `https://roamenterprise.co/reset-password` |
+| Driver | `http://localhost:3002/reset-password` | `https://roamdriver.co/reset-password` |
+| Rides passenger | `http://localhost:5180/reset-password` | `https://roam-s.co/reset-password` |
+| Roam Haul | `http://localhost:3004/reset-password` | `https://roamhaul.co/reset-password` |
+| Dash customer / admin | `http://localhost:5174/reset-password` | `https://roamdash.co/reset-password` |
+| Dash merchant (partner) | `http://localhost:5175/reset-password` | `https://partner.roamdash.co/reset-password` |
+| Dash courier | `http://localhost:5176/reset-password` | `https://courier.roamdash.co/reset-password` |
+
+Also add admin recovery on same hosts: `https://courier.roamdash.co/reset-password`, etc. (same path as consumer — `AuthRecoveryGate` handles the token).
 
 ## Google OAuth — Authorized redirect URIs
 

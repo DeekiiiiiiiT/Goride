@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AlertCircle, Loader2, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { LegalPolicyLinks } from '@roam/ui';
+import { useForgotPassword } from '@roam/auth-client';
 import { supabase } from '../../utils/supabase/client';
 import { ENABLE_PHONE_AUTH } from '../../utils/driverAuthSignup';
 import { DriverPhoneAuthWizard } from './DriverPhoneAuthWizard';
@@ -20,6 +21,14 @@ export function DriverLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const {
+    forgotMode,
+    setForgotMode,
+    notice,
+    setNotice,
+    forgotLoading,
+    sendResetEmail,
+  } = useForgotPassword(supabase, 'driver', { signInHref: '/' });
 
   const resetToWelcome = () => {
     setView('welcome');
@@ -31,6 +40,13 @@ export function DriverLoginPage() {
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (forgotMode) {
+      setError(null);
+      setNotice(null);
+      const err = await sendResetEmail(email);
+      if (err) setError(err);
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
@@ -99,6 +115,12 @@ export function DriverLoginPage() {
             <div className="driver-splash__error">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
               <span>{error}</span>
+            </div>
+          )}
+
+          {notice && (
+            <div className="driver-splash__error" style={{ color: '#6ee7b7', borderColor: 'rgba(16,185,129,0.3)' }}>
+              <span>{notice}</span>
             </div>
           )}
 
@@ -198,7 +220,36 @@ export function DriverLoginPage() {
                 </div>
 
                 <div className="driver-splash__field">
-                  <label htmlFor="driver-password">Password</label>
+                  <div className="flex items-center justify-between gap-2">
+                    <label htmlFor="driver-password">Password</label>
+                    {!forgotMode ? (
+                      <button
+                        type="button"
+                        className="driver-splash__link-btn"
+                        style={{ fontSize: '0.75rem', margin: 0 }}
+                        onClick={() => {
+                          setForgotMode(true);
+                          setError(null);
+                          setNotice(null);
+                        }}
+                      >
+                        Forgot password?
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="driver-splash__link-btn"
+                        style={{ fontSize: '0.75rem', margin: 0 }}
+                        onClick={() => {
+                          setForgotMode(false);
+                          setError(null);
+                        }}
+                      >
+                        Back to sign in
+                      </button>
+                    )}
+                  </div>
+                  {!forgotMode && (
                   <div className="driver-splash__input-wrap">
                     <Lock className="driver-splash__input-icon" />
                     <input
@@ -219,14 +270,17 @@ export function DriverLoginPage() {
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
+                  )}
                 </div>
 
-                <button type="submit" disabled={isLoading} className="driver-splash__btn-primary">
-                  {isLoading ? (
+                <button type="submit" disabled={isLoading || forgotLoading} className="driver-splash__btn-primary">
+                  {isLoading || forgotLoading ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Signing in…
+                      {forgotMode ? 'Sending…' : 'Signing in…'}
                     </>
+                  ) : forgotMode ? (
+                    'Send reset email'
                   ) : (
                     'Sign In'
                   )}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { GOOGLE_OAUTH_EMAIL_ONLY_SCOPES, supabaseCourierAdmin as supabase } from '@roam/auth-client';
+import { GOOGLE_OAUTH_EMAIL_ONLY_SCOPES, supabaseCourierAdmin as supabase, useForgotPassword } from '@roam/auth-client';
 import { Loader2, AlertCircle, KeyRound, Bike } from 'lucide-react';
 import { GoogleIcon } from '@/components/icons/GoogleIcon';
 import '../../../../../packages/admin-core/src/styles/rides-admin-login.css';
@@ -14,10 +14,26 @@ export function CourierAdminLoginForm() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const {
+    forgotMode,
+    setForgotMode,
+    notice,
+    setNotice,
+    forgotLoading,
+    sendResetEmail,
+  } = useForgotPassword(supabase, 'courier', { signInHref: '/admin' });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (forgotMode) {
+      setLoading(true);
+      setError(null);
+      setNotice(null);
+      const err = await sendResetEmail(email);
+      if (err) setError(err);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     setNotice(null);
@@ -51,25 +67,10 @@ export function CourierAdminLoginForm() {
     }
   };
 
-  const handleForgotPassword = async () => {
-    if (!email.trim()) {
-      setError('Enter your admin email above, then click Forgot password.');
-      return;
-    }
-    setLoading(true);
+  const handleForgotPassword = () => {
+    setForgotMode(true);
     setError(null);
     setNotice(null);
-    try {
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: getAdminRedirectUrl(),
-      });
-      if (resetError) throw resetError;
-      setNotice('Password reset email sent. Check your inbox, then sign in with the new password.');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not send reset email');
-    } finally {
-      setLoading(false);
-    }
   };
 
   return (
@@ -167,6 +168,7 @@ export function CourierAdminLoginForm() {
                 />
               </div>
               <div className="rides-admin-login__field">
+                {!forgotMode ? (
                 <div className="rides-admin-login__label-row">
                   <label htmlFor="courier-admin-password" className="rides-admin-login__label">
                     Password
@@ -175,11 +177,21 @@ export function CourierAdminLoginForm() {
                     type="button"
                     className="rides-admin-login__forgot"
                     disabled={loading || googleLoading}
-                    onClick={() => void handleForgotPassword()}
+                    onClick={handleForgotPassword}
                   >
                     Forgot password?
                   </button>
                 </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="rides-admin-login__forgot"
+                    onClick={() => { setForgotMode(false); setError(null); }}
+                  >
+                    Back to sign in
+                  </button>
+                )}
+                {!forgotMode && (
                 <input
                   id="courier-admin-password"
                   type="password"
@@ -190,13 +202,16 @@ export function CourierAdminLoginForm() {
                   placeholder="Enter password"
                   className="rides-admin-login__input"
                 />
+                )}
               </div>
-              <button type="submit" disabled={loading} className="rides-admin-login__submit courier-admin-login__submit">
-                {loading ? (
+              <button type="submit" disabled={loading || forgotLoading} className="rides-admin-login__submit courier-admin-login__submit">
+                {loading || forgotLoading ? (
                   <>
                     <Loader2 size={16} className="animate-spin" />
-                    Signing in...
+                    {forgotMode ? 'Sending...' : 'Signing in...'}
                   </>
+                ) : forgotMode ? (
+                  'Send reset email'
                 ) : (
                   'Sign In'
                 )}

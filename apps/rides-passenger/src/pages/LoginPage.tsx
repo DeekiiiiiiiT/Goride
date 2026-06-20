@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
-import { supabase } from '@roam/auth-client';
+import { supabase, useForgotPassword } from '@roam/auth-client';
 import { toast } from 'sonner';
 import { AlertCircle, Car, Loader2, Mail, Eye, EyeOff } from 'lucide-react';
 import { LegalPolicyLinks } from '@roam/ui';
@@ -29,6 +29,14 @@ export default function LoginPage({ session }: { session: Session | null }) {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const {
+    forgotMode,
+    setForgotMode,
+    notice,
+    setNotice,
+    forgotLoading,
+    sendResetEmail,
+  } = useForgotPassword(supabase, 'rides', { signInHref: '/login' });
 
   if (session) return <Navigate to={safeReturn} replace />;
 
@@ -36,6 +44,13 @@ export default function LoginPage({ session }: { session: Session | null }) {
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (forgotMode) {
+      setError(null);
+      setNotice(null);
+      const err = await sendResetEmail(email);
+      if (err) setError(err);
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
@@ -90,6 +105,12 @@ export default function LoginPage({ session }: { session: Session | null }) {
               <div className="mb-4 flex items-start gap-2 rounded-xl border border-red-300/50 bg-red-500/15 px-3 py-2.5 text-sm font-medium text-white">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>{error}</span>
+              </div>
+            )}
+
+            {notice && (
+              <div className="mb-4 flex items-start gap-2 rounded-xl border border-emerald-300/50 bg-emerald-500/15 px-3 py-2.5 text-sm font-medium text-white">
+                <span>{notice}</span>
               </div>
             )}
 
@@ -203,6 +224,7 @@ export default function LoginPage({ session }: { session: Session | null }) {
                   />
 
                   <div className="relative">
+                    {!forgotMode ? (
                     <input
                       type={showPassword ? 'text' : 'password'}
                       value={password}
@@ -213,6 +235,8 @@ export default function LoginPage({ session }: { session: Session | null }) {
                       aria-label={t('login.passwordAria')}
                       className="input-touch w-full rounded-xl border border-white/50 bg-white px-4 pr-11 text-zinc-900 placeholder:text-zinc-400 outline-none focus:ring-[3px] focus:ring-white/50"
                     />
+                    ) : null}
+                    {!forgotMode && (
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
@@ -221,18 +245,48 @@ export default function LoginPage({ session }: { session: Session | null }) {
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end">
+                    {!forgotMode ? (
+                      <button
+                        type="button"
+                        className="text-sm font-semibold text-emerald-200 hover:underline"
+                        onClick={() => {
+                          setForgotMode(true);
+                          setError(null);
+                          setNotice(null);
+                        }}
+                      >
+                        Forgot password?
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="text-sm font-semibold text-emerald-200 hover:underline"
+                        onClick={() => {
+                          setForgotMode(false);
+                          setError(null);
+                        }}
+                      >
+                        Back to sign in
+                      </button>
+                    )}
                   </div>
 
                   <button
                     type="submit"
-                    disabled={isLoading}
+                    disabled={isLoading || forgotLoading}
                     className="btn-touch w-full rounded-xl bg-gradient-to-b from-emerald-400 to-emerald-600 text-[15px] font-semibold text-white shadow-[0_12px_28px_-8px_rgba(0,0,0,0.35)] disabled:opacity-50"
                   >
-                    {isLoading ? (
+                    {isLoading || forgotLoading ? (
                       <>
                         <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
-                        {t('login.signingIn')}
+                        {forgotMode ? 'Sending…' : t('login.signingIn')}
                       </>
+                    ) : forgotMode ? (
+                      'Send reset email'
                     ) : (
                       t('login.signIn')
                     )}

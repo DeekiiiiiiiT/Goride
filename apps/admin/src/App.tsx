@@ -1,5 +1,6 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { AuthRecoveryGate } from '@roam/auth-client';
 import { AuthProvider, useAuth } from './components/auth/AuthContext';
 import { AdminLoginPage } from './components/admin/AdminLoginPage';
 import { AdminPortal } from './components/admin/AdminPortal';
@@ -47,10 +48,16 @@ function AppContent() {
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    </QueryClientProvider>
+    <AuthRecoveryGate
+      title="Reset password"
+      subtitle="Roam Dominion Super Admin"
+      signInHref="/"
+    >
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
+      </QueryClientProvider>
+    </AuthRecoveryGate>
   );
 }

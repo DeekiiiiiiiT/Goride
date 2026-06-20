@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase } from '@roam/auth-client';
+import { supabase, useForgotPassword } from '@roam/auth-client';
 import { toast } from 'sonner';
 import { 
   Eye, EyeOff, ArrowRight, Store, TrendingUp, 
@@ -29,9 +29,23 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const {
+    forgotMode,
+    setForgotMode,
+    notice,
+    setNotice,
+    forgotLoading,
+    sendResetEmail,
+  } = useForgotPassword(supabase, 'partner', { signInHref: '/' });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (forgotMode) {
+      setNotice(null);
+      const err = await sendResetEmail(email);
+      if (err) toast.error(err);
+      return;
+    }
     setIsLoading(true);
 
     try {
@@ -163,6 +177,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
               />
             </div>
 
+            {!forgotMode && (
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
                 Password
@@ -175,7 +190,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password"
                   className="w-full px-4 pr-12 py-3.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all"
-                  required
+                  required={!forgotMode}
                   minLength={6}
                 />
                 <button
@@ -187,29 +202,51 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
                 </button>
               </div>
             </div>
+            )}
 
             {!isSignUp && (
               <div className="flex justify-end">
-                <button type="button" className="text-sm text-amber-600 hover:text-amber-700 font-medium">
-                  Forgot password?
-                </button>
+                {!forgotMode ? (
+                  <button
+                    type="button"
+                    className="text-sm text-amber-600 hover:text-amber-700 font-medium"
+                    onClick={() => {
+                      setForgotMode(true);
+                      setNotice(null);
+                    }}
+                  >
+                    Forgot password?
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="text-sm text-amber-600 hover:text-amber-700 font-medium"
+                    onClick={() => setForgotMode(false)}
+                  >
+                    Back to sign in
+                  </button>
+                )}
               </div>
+            )}
+
+            {notice && (
+              <p className="text-sm text-amber-700 text-center" role="status">{notice}</p>
             )}
 
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || forgotLoading}
               className="w-full py-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl font-semibold hover:from-amber-600 hover:to-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-amber-500/30 flex items-center justify-center gap-2 group"
             >
-              {isLoading ? (
+              {isLoading || forgotLoading ? (
                 <>
                   <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   Please wait...
                 </>
               ) : (
                 <>
-                  {isSignUp ? 'Create Account' : 'Sign In'}
-                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  {isSignUp ? 'Create Account' : forgotMode ? 'Send reset email' : 'Sign In'}
+                  {!forgotMode && <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />}
                 </>
               )}
             </button>

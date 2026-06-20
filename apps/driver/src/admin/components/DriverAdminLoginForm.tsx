@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabaseDriverAdmin as supabase } from '@roam/auth-client';
+import { supabaseDriverAdmin as supabase, useForgotPassword } from '@roam/auth-client';
 import { Loader2, AlertCircle, KeyRound, Car } from 'lucide-react';
 import '../../../../../packages/admin-core/src/styles/rides-admin-login.css';
 
@@ -8,9 +8,24 @@ export function DriverAdminLoginForm() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const {
+    forgotMode,
+    setForgotMode,
+    notice,
+    setNotice,
+    forgotLoading,
+    sendResetEmail,
+  } = useForgotPassword(supabase, 'driver', { signInHref: '/admin' });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (forgotMode) {
+      setError(null);
+      setNotice(null);
+      const err = await sendResetEmail(email);
+      if (err) setError(err);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -72,6 +87,12 @@ export function DriverAdminLoginForm() {
               </div>
             )}
 
+            {notice && (
+              <div className="rides-admin-login__error" role="status" style={{ color: '#059669', borderColor: 'rgba(16,185,129,0.3)' }}>
+                <span>{notice}</span>
+              </div>
+            )}
+
             <form onSubmit={(e) => void handleSubmit(e)}>
               <div className="rides-admin-login__field">
                 <label htmlFor="driver-admin-email" className="rides-admin-login__label">
@@ -89,9 +110,21 @@ export function DriverAdminLoginForm() {
                 />
               </div>
               <div className="rides-admin-login__field">
-                <label htmlFor="driver-admin-password" className="rides-admin-login__label">
-                  Password
-                </label>
+                {!forgotMode ? (
+                <div className="rides-admin-login__label-row">
+                  <label htmlFor="driver-admin-password" className="rides-admin-login__label">
+                    Password
+                  </label>
+                  <button type="button" className="rides-admin-login__forgot" onClick={() => { setForgotMode(true); setError(null); setNotice(null); }}>
+                    Forgot password?
+                  </button>
+                </div>
+                ) : (
+                  <button type="button" className="rides-admin-login__forgot" onClick={() => { setForgotMode(false); setError(null); }}>
+                    Back to sign in
+                  </button>
+                )}
+                {!forgotMode && (
                 <input
                   id="driver-admin-password"
                   type="password"
@@ -102,16 +135,10 @@ export function DriverAdminLoginForm() {
                   placeholder="Enter password"
                   className="rides-admin-login__input"
                 />
-              </div>
-              <button type="submit" disabled={loading} className="rides-admin-login__submit">
-                {loading ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" />
-                    Signing in...
-                  </>
-                ) : (
-                  'Sign In'
                 )}
+              </div>
+              <button type="submit" disabled={loading || forgotLoading} className="rides-admin-login__submit">
+                {loading || forgotLoading ? <Loader2 size={16} className="animate-spin" /> : forgotMode ? 'Send reset email' : 'Sign In'}
               </button>
             </form>
 

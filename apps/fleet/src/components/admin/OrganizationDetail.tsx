@@ -22,6 +22,7 @@ import {
 import { useAuth } from '../auth/AuthContext';
 import { resolveRole } from '../../utils/permissions';
 import { API_ENDPOINTS } from '../../services/apiConfig';
+import { recoveryRedirectForSurface } from '@roam/auth-client';
 import { toast } from 'sonner@2.0.3';
 import { ConfirmationModal } from './ConfirmationModal';
 
@@ -215,7 +216,10 @@ export function OrganizationDetail({ orgId, onBack }: Props) {
         try {
           const res = await fetch(`${API_ENDPOINTS.admin}/admin/reset-password`, {
             method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-            body: JSON.stringify({ email: owner.email }),
+            body: JSON.stringify({
+              email: owner.email,
+              redirectTo: recoveryRedirectForSurface('fleet'),
+            }),
           });
           const d = await res.json();
           if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);

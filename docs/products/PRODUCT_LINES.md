@@ -15,7 +15,7 @@ Fleet managers are tagged `productLine: fleet` and `businessType: rideshare`.
 
 | Domain | Audience | Admin |
 |--------|----------|-------|
-| [roamenterprise.co](https://roamenterprise.co) | Delivery, taxi, trucking, shipping fleets | [roamenterprise.co/admin](https://roamenterprise.co/admin) — platform Super Admin |
+| [roamenterprise.co](https://roamenterprise.co) | Delivery, taxi, trucking, shipping fleets | [roamdominion.co](https://roamdominion.co) — platform Super Admin (Dominion) |
 
 Enterprise fleet managers are tagged `productLine: enterprise` with their chosen `businessType`.
 
@@ -34,7 +34,7 @@ One Supabase project. Platform settings are stored per segment:
 |---------|--------|-------------|
 | Global | `platform:settings:global` | [roamdominion.co](https://roamdominion.co) → Global Settings |
 | Fleet | `platform:settings:fleet` | Dominion → Roam Fleet; roamfleet.co/admin |
-| Enterprise | `platform:settings:enterprise` | Dominion → Roam Enterprise; roamenterprise.co/admin |
+| Enterprise | `platform:settings:enterprise` | Dominion → Roam Enterprise; roamdominion.co |
 | Rides | `platform:settings:rides` | roam-s.co/admin |
 | Driver | `platform:settings:driver` | roamdriver.co/admin |
 | Haul | `platform:settings:haul` | roamhaul.co/admin |

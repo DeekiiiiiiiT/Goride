@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
-import { isHaulUiBlockedRole } from '@roam/auth-client';
+import { AuthRecoveryGate, isHaulUiBlockedRole } from '@roam/auth-client';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { HaulerProvider } from './contexts/HaulerContext';
 import { HaulerLoginPage } from './components/auth/HaulerLoginPage';
@@ -61,18 +61,24 @@ function HaulerApp() {
 }
 
 export default function App() {
-  if (window.location.pathname.startsWith('/admin')) {
-    return (
-      <BrowserRouter basename="/admin">
-        <HaulAdminPortal />
-      </BrowserRouter>
-    );
-  }
+  const isAdmin = window.location.pathname.startsWith('/admin');
 
   return (
-    <AuthProvider>
-      <HaulToaster />
-      <HaulerApp />
-    </AuthProvider>
+    <AuthRecoveryGate
+      title="Reset password"
+      subtitle={isAdmin ? 'Roam Haul Admin' : 'Roam Haul'}
+      signInHref={isAdmin ? '/admin' : '/'}
+    >
+      {isAdmin ? (
+        <BrowserRouter basename="/admin">
+          <HaulAdminPortal />
+        </BrowserRouter>
+      ) : (
+        <AuthProvider>
+          <HaulToaster />
+          <HaulerApp />
+        </AuthProvider>
+      )}
+    </AuthRecoveryGate>
   );
 }

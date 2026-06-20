@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { supabaseDashAdmin as supabase } from '@roam/auth-client';
+import type { AuthRecoverySurface } from '@roam/auth-client';
+import { useForgotPassword } from '@roam/auth-client';
 import { Loader2, AlertCircle, KeyRound, Utensils } from 'lucide-react';
 import '../../../../../packages/admin-core/src/styles/admin-login.css';
 
@@ -8,6 +10,7 @@ interface AdminLoginFormProps {
   productSubtitle?: string;
   backHref?: string;
   backLabel?: string;
+  recoverySurface?: AuthRecoverySurface;
 }
 
 export function AdminLoginForm({
@@ -15,14 +18,30 @@ export function AdminLoginForm({
   productSubtitle = 'Admin Portal',
   backHref = '/',
   backLabel = 'Back to Roam Dash',
+  recoverySurface = 'dash',
 }: AdminLoginFormProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const {
+    forgotMode,
+    setForgotMode,
+    notice,
+    setNotice,
+    forgotLoading,
+    sendResetEmail,
+  } = useForgotPassword(supabase, recoverySurface, { signInHref: '/admin' });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (forgotMode) {
+      setError(null);
+      setNotice(null);
+      const err = await sendResetEmail(email);
+      if (err) setError(err);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -72,8 +91,12 @@ export function AdminLoginForm({
                 <KeyRound size={20} />
               </div>
               <div>
-                <h2 className="dash-admin-login__card-title">Admin Login</h2>
-                <p className="dash-admin-login__card-desc">Sign in to manage Roam Dash</p>
+                <h2 className="dash-admin-login__card-title">
+                  {forgotMode ? 'Reset Password' : 'Admin Login'}
+                </h2>
+                <p className="dash-admin-login__card-desc">
+                  {forgotMode ? 'We will email a link on this domain' : 'Sign in to manage Roam Dash'}
+                </p>
               </div>
             </div>
 
@@ -81,6 +104,12 @@ export function AdminLoginForm({
               <div className="dash-admin-login__error" role="alert">
                 <AlertCircle size={16} style={{ flexShrink: 0, marginTop: 2 }} />
                 <span>{error}</span>
+              </div>
+            )}
+
+            {notice && (
+              <div className="dash-admin-login__error" role="status" style={{ borderColor: 'rgba(16,185,129,0.3)', color: '#059669' }}>
+                <span>{notice}</span>
               </div>
             )}
 
@@ -100,10 +129,20 @@ export function AdminLoginForm({
                   className="dash-admin-login__input"
                 />
               </div>
+              {!forgotMode && (
               <div className="dash-admin-login__field">
-                <label htmlFor="admin-password" className="dash-admin-login__label">
-                  Password
-                </label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label htmlFor="admin-password" className="dash-admin-login__label">
+                    Password
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => { setForgotMode(true); setError(null); setNotice(null); }}
+                    className="text-sm text-amber-600 hover:text-amber-500"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
                 <input
                   id="admin-password"
                   type="password"
@@ -115,12 +154,24 @@ export function AdminLoginForm({
                   className="dash-admin-login__input"
                 />
               </div>
-              <button type="submit" disabled={loading} className="dash-admin-login__submit">
-                {loading ? (
+              )}
+              {forgotMode && (
+                <button
+                  type="button"
+                  onClick={() => { setForgotMode(false); setError(null); }}
+                  className="text-sm text-slate-500 hover:text-slate-700 mb-2"
+                >
+                  Back to sign in
+                </button>
+              )}
+              <button type="submit" disabled={loading || forgotLoading} className="dash-admin-login__submit">
+                {loading || forgotLoading ? (
                   <>
                     <Loader2 size={16} className="animate-spin" />
-                    Signing in...
+                    Please wait...
                   </>
+                ) : forgotMode ? (
+                  'Send reset email'
                 ) : (
                   'Sign In'
                 )}

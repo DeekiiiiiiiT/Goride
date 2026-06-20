@@ -5,6 +5,7 @@ import {
   supabase,
   shouldSkipOauthSurfaceWrite,
   isRidesPassengerUiBlockedRole,
+  AuthRecoveryGate,
 } from '@roam/auth-client';
 import { PASSENGER_OAUTH_INTENT_KEY, PASSENGER_OAUTH_INTENT_VALUE } from './utils/passengerAuthSignup';
 import { AuthenticatedPassengerRoute } from './components/auth/AuthenticatedPassengerRoute';
@@ -115,18 +116,28 @@ export default function App() {
     })();
   }, [session?.user?.id, isAdminPath]);
 
+  const recoveryGate = (content: React.ReactNode) => (
+    <AuthRecoveryGate
+      title="Reset password"
+      subtitle={isAdminPath ? 'Roam Rides Admin' : 'Roam Rides'}
+      signInHref={isAdminPath ? '/admin' : '/login'}
+    >
+      {content}
+    </AuthRecoveryGate>
+  );
+
   if (!isAdminPath && (loading || !splashMinElapsed)) {
-    return <SplashScreen />;
+    return recoveryGate(<SplashScreen />);
   }
 
   if (session?.user && !isAdminPath && isRidesPassengerUiBlockedRole(session.user)) {
-    return (
+    return recoveryGate(
       <WrongRidesSurfaceGate
         onSignOut={async () => {
           await supabase.auth.signOut();
           setSession(null);
         }}
-      />
+      />,
     );
   }
 
@@ -227,8 +238,8 @@ export default function App() {
   );
 
   if (session && !isAdminPath) {
-    return <BookerTrackingProvider>{routes}</BookerTrackingProvider>;
+    return recoveryGate(<BookerTrackingProvider>{routes}</BookerTrackingProvider>);
   }
 
-  return routes;
+  return recoveryGate(routes);
 }

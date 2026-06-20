@@ -3,6 +3,7 @@ import { Shield, Loader2, AlertCircle, KeyRound, UserPlus } from 'lucide-react';
 import { supabase } from '../../utils/supabase/client';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { publicAnonKey } from '@roam/api-client';
+import { requestPasswordReset, rememberRecoverySignInHref } from '@roam/auth-client';
 import { LockoutCountdown } from '../auth/LockoutCountdown';
 
 /**
@@ -22,6 +23,7 @@ export function AdminLoginPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [adminExists, setAdminExists] = useState(false);
   const [lockoutSeconds, setLockoutSeconds] = useState<number | null>(null);
+  const [forgotMode, setForgotMode] = useState(false);
 
   // Check if superadmin already exists
   useEffect(() => {
@@ -97,6 +99,28 @@ export function AdminLoginPage() {
     } catch (err: any) {
       console.error('Admin setup error:', err);
       setError(err.message || 'Setup failed');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) {
+      setError('Enter your email first.');
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const { error: resetError } = await requestPasswordReset(supabase, email.trim(), 'dominion');
+      if (resetError) throw resetError;
+      rememberRecoverySignInHref('/');
+      setSuccess('Password reset email sent. Check your inbox — the link returns you to roamdominion.co.');
+      setForgotMode(false);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not send reset email');
     } finally {
       setIsLoading(false);
     }
@@ -198,10 +222,12 @@ export function AdminLoginPage() {
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-                  {isSetup ? 'Initial Setup' : 'Admin Login'}
+                  {forgotMode ? 'Reset Password' : isSetup ? 'Initial Setup' : 'Admin Login'}
                 </h2>
                 <p className="text-slate-400 text-sm">
-                  {isSetup
+                  {forgotMode
+                    ? 'We will email a link that opens on roamdominion.co'
+                    : isSetup
                     ? 'Create the platform super admin account'
                     : 'Sign in to the admin portal'
                   }
@@ -237,7 +263,7 @@ export function AdminLoginPage() {
             )}
 
             {/* Form */}
-            <form onSubmit={isSetup ? handleSetup : handleLogin} className="space-y-4">
+            <form onSubmit={forgotMode ? handleForgotPassword : isSetup ? handleSetup : handleLogin} className="space-y-4">
               {isSetup && (
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Full Name</label>
@@ -263,6 +289,7 @@ export function AdminLoginPage() {
                 />
               </div>
 
+              {!forgotMode && (
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Password</label>
                 <input
@@ -274,6 +301,27 @@ export function AdminLoginPage() {
                   className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-white dark:placeholder:text-slate-500"
                 />
               </div>
+              )}
+
+              {!isSetup && !forgotMode && (
+                <button
+                  type="button"
+                  onClick={() => { setForgotMode(true); setError(null); setSuccess(null); }}
+                  className="text-sm text-amber-600 hover:text-amber-500 dark:text-amber-400"
+                >
+                  Forgot password?
+                </button>
+              )}
+
+              {forgotMode && (
+                <button
+                  type="button"
+                  onClick={() => { setForgotMode(false); setError(null); }}
+                  className="text-sm text-slate-500 hover:text-slate-300"
+                >
+                  Back to sign in
+                </button>
+              )}
 
               <button
                 type="submit"
@@ -285,6 +333,8 @@ export function AdminLoginPage() {
                     <Loader2 className="w-4 h-4 animate-spin" />
                     {isSetup ? 'Creating Account...' : 'Signing In...'}
                   </>
+                ) : forgotMode ? (
+                  'Send reset email'
                 ) : (
                   isSetup ? 'Create Super Admin Account' : 'Sign In'
                 )}

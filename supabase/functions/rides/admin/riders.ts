@@ -12,6 +12,10 @@ import { getJwtRoles, jwtPrimaryRole } from "../../_shared/authEdge.ts";
 import { getRiderAdminDb, type RidesAdminTables } from "../../_shared/ridesAdminDb.ts";
 import { getWalletBalance } from "../../_shared/paymentAccounts.ts";
 import { isCashSettlementV2Enabled } from "../cashSettlement/flags.ts";
+import {
+  generateRecoveryLink,
+  recoveryRedirectForProduct,
+} from "../../_shared/authRecoveryRedirects.ts";
 
 type RiderAdminDb = Awaited<ReturnType<typeof getRiderAdminDb>>;
 
@@ -610,10 +614,11 @@ export function registerRiderAdminRoutes(admin: Hono) {
     const { data: userData, error } = await auth.auth.admin.getUserById(userId);
     if (error || !userData.user?.email) return c.json({ error: "not_found" }, 404);
 
-    const { data: linkData, error: linkErr } = await auth.auth.admin.generateLink({
-      type: "recovery",
-      email: userData.user.email,
-    });
+    const { data: linkData, error: linkErr } = await generateRecoveryLink(
+      auth,
+      userData.user.email,
+      recoveryRedirectForProduct("rides"),
+    );
 
     if (linkErr) return c.json({ error: "reset_failed", message: linkErr.message }, 500);
 

@@ -5,6 +5,10 @@ const supabaseUrl = `https://${projectId}.supabase.co`;
 const supabaseKey = publicAnonKey;
 
 export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    detectSessionInUrl: true,
+    flowType: 'pkce',
+  },
   global: {
     fetch: (url, options) => {
       const controller = new AbortController();

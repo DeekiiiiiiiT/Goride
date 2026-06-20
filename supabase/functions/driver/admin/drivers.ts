@@ -21,6 +21,10 @@ import {
 } from "../../_shared/platformLedgerQueries.ts";
 import { driverAudit } from "./audit.ts";
 import {
+  generateRecoveryLink,
+  recoveryRedirectForProduct,
+} from "../../_shared/authRecoveryRedirects.ts";
+import {
   canForceApprove,
   canStrictApprove,
   computeComplianceBlockers,
@@ -804,10 +808,11 @@ export function registerDriverUserAdminRoutes(admin: Hono) {
       return c.json({ error: "user_not_found", message: "Could not find user email" }, 404);
     }
 
-    const { data: linkData, error: linkErr } = await auth.auth.admin.generateLink({
-      type: "recovery",
-      email: userData.user.email,
-    });
+    const { data: linkData, error: linkErr } = await generateRecoveryLink(
+      auth,
+      userData.user.email,
+      recoveryRedirectForProduct("driver"),
+    );
     if (linkErr) {
       return c.json({ error: "reset_failed", message: linkErr.message }, 500);
     }

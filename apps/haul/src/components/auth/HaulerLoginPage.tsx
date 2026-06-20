@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 
 import { ArrowRight, Eye, EyeOff, Loader2, User } from 'lucide-react';
 
-import { supabase } from '../../utils/supabase/client';
+import { supabase, useForgotPassword } from '@roam/auth-client';
 
 import { HaulAuthAtmosphere } from './HaulAuthAtmosphere';
 
@@ -39,6 +39,15 @@ export function HaulerLoginPage({ initialView = 'login' }: HaulerLoginPageProps)
 
   const [error, setError] = useState<string | null>(null);
 
+  const {
+    forgotMode,
+    setForgotMode,
+    notice,
+    setNotice,
+    forgotLoading,
+    sendResetEmail,
+  } = useForgotPassword(supabase, 'haul', { signInHref: '/' });
+
 
 
   if (view === 'signup') {
@@ -53,13 +62,21 @@ export function HaulerLoginPage({ initialView = 'login' }: HaulerLoginPageProps)
 
     e.preventDefault();
 
+    const trimmed = identifier.trim();
+
+    if (forgotMode) {
+      setError(null);
+      setNotice(null);
+      const err = await sendResetEmail(trimmed);
+      if (err) setError(err);
+      return;
+    }
+
     setLoading(true);
 
     setError(null);
 
     try {
-
-      const trimmed = identifier.trim();
 
       if (!trimmed.includes('@')) {
 
@@ -139,6 +156,8 @@ export function HaulerLoginPage({ initialView = 'login' }: HaulerLoginPageProps)
 
           {error ? <div className={`${haulErrorBox} mb-6`}>{error}</div> : null}
 
+          {notice ? <div className={`${haulErrorBox} mb-6 text-emerald-300`} role="status">{notice}</div> : null}
+
           <div className="mb-6 flex flex-col gap-4">
             <HaulerGoogleSignupButton variant="login" onError={(msg) => setError(msg || null)} />
             <div className={haulAuthOrRow}>
@@ -202,22 +221,40 @@ export function HaulerLoginPage({ initialView = 'login' }: HaulerLoginPageProps)
 
                 </label>
 
+                {!forgotMode ? (
                 <button
 
                   type="button"
 
                   className="text-sm text-[#ffc174] transition-colors hover:text-[#ffddb8]"
 
-                  onClick={() => setError('Password reset is coming soon.')}
+                  onClick={() => {
+                    setForgotMode(true);
+                    setError(null);
+                    setNotice(null);
+                  }}
 
                 >
 
                   Forgot password?
 
                 </button>
+                ) : (
+                <button
+                  type="button"
+                  className="text-sm text-[#ffc174] transition-colors hover:text-[#ffddb8]"
+                  onClick={() => {
+                    setForgotMode(false);
+                    setError(null);
+                  }}
+                >
+                  Back to sign in
+                </button>
+                )}
 
               </div>
 
+              {!forgotMode && (
               <div className="relative">
 
                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
@@ -263,16 +300,17 @@ export function HaulerLoginPage({ initialView = 'login' }: HaulerLoginPageProps)
                 </button>
 
               </div>
+              )}
 
             </div>
 
 
 
-            <button type="submit" disabled={loading} className={`${haulPrimaryBtn} bg-[#ffc174] text-[#472a00] hover:bg-[#ffb95f]`}>
+            <button type="submit" disabled={loading || forgotLoading} className={`${haulPrimaryBtn} bg-[#ffc174] text-[#472a00] hover:bg-[#ffb95f]`}>
 
-              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
+              {loading || forgotLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
 
-              Sign In
+              {forgotMode ? 'Send reset email' : 'Sign In'}
 
               <ArrowRight className="h-5 w-5" />
 

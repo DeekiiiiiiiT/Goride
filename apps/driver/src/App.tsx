@@ -13,6 +13,7 @@ import { AppErrorBoundary } from './components/layout/AppErrorBoundary';
 import { ActiveRideRecoveryProvider, useActiveRideRecovery } from './contexts/ActiveRideRecoveryContext';
 import { needsGoogleExtendedSignup } from './utils/googleDriverSignup';
 import { BrowserRouter } from 'react-router-dom';
+import { AuthRecoveryGate } from '@roam/auth-client';
 import { DriverAdminPortal } from './admin/DriverAdminPortal';
 import { DriverSplashScreen } from './components/layout/DriverSplashScreen';
 
@@ -90,27 +91,33 @@ function AppContent() {
 }
 
 export default function App() {
-  if (window.location.pathname.startsWith('/admin')) {
-    return (
-      <BrowserRouter basename="/admin">
-        <DriverAdminPortal />
-      </BrowserRouter>
-    );
-  }
+  const isAdmin = window.location.pathname.startsWith('/admin');
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <NavigationPreferenceProvider>
-          <AuthProvider>
-            <OfflineProvider>
-              <AppErrorBoundary>
-                <AppContent />
-              </AppErrorBoundary>
-            </OfflineProvider>
-          </AuthProvider>
-        </NavigationPreferenceProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+    <AuthRecoveryGate
+      title="Reset password"
+      subtitle={isAdmin ? 'Roam Driver Admin' : 'Roam Driver'}
+      signInHref={isAdmin ? '/admin' : '/'}
+    >
+      {isAdmin ? (
+        <BrowserRouter basename="/admin">
+          <DriverAdminPortal />
+        </BrowserRouter>
+      ) : (
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider>
+            <NavigationPreferenceProvider>
+              <AuthProvider>
+                <OfflineProvider>
+                  <AppErrorBoundary>
+                    <AppContent />
+                  </AppErrorBoundary>
+                </OfflineProvider>
+              </AuthProvider>
+            </NavigationPreferenceProvider>
+          </ThemeProvider>
+        </QueryClientProvider>
+      )}
+    </AuthRecoveryGate>
   );
 }

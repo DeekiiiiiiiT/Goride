@@ -26,6 +26,10 @@ import {
   requireDelete,
   requireWrite,
 } from "./permissions.ts";
+import {
+  generateRecoveryLink,
+  recoveryRedirectForProduct,
+} from "../../_shared/authRecoveryRedirects.ts";
 
 const ONLINE_STALE_MS = 5 * 60 * 1000;
 
@@ -879,10 +883,11 @@ export function registerCourierAdminRoutes(app: Hono) {
     if (userErr || !userData.user?.email) {
       return c.json({ error: "user_not_found", message: "Could not find user email" }, 404);
     }
-    const { data: linkData, error: linkErr } = await auth.auth.admin.generateLink({
-      type: "recovery",
-      email: userData.user.email,
-    });
+    const { data: linkData, error: linkErr } = await generateRecoveryLink(
+      auth,
+      userData.user.email,
+      recoveryRedirectForProduct("courier"),
+    );
     if (linkErr) return c.json({ error: linkErr.message }, 500);
     await courierAudit(adminUser.id, "admin_courier_reset_password", { courier_user_id: userId }, userId);
     const payload: Record<string, unknown> = {

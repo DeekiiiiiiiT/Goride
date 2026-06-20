@@ -15196,12 +15196,21 @@ app.post("/make-server-37f42386/admin/reset-password", async (c) => {
       return c.json({ error: "Forbidden — platform role required" }, 403);
     }
 
-    const { email } = await c.req.json();
+    const { email, redirectTo } = await c.req.json();
     if (!email) {
       return c.json({ error: "Email is required" }, 400);
     }
 
-    const { data, error } = await supabase.auth.admin.generateLink({ type: "recovery", email });
+    const recoveryRedirect =
+      typeof redirectTo === "string" && redirectTo.length > 0
+        ? redirectTo
+        : "https://roamdominion.co/reset-password";
+
+    const { data, error } = await supabase.auth.admin.generateLink({
+      type: "recovery",
+      email,
+      options: { redirectTo: recoveryRedirect },
+    });
     if (error) throw error;
 
     console.log(`Password reset link generated for ${email}`);

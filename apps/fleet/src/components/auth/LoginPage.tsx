@@ -16,6 +16,7 @@ import {
   withProductLineHeaders,
 } from '../../config/productLine';
 import { supabaseAnonFunctionHeaders } from '@roam/api-client';
+import { useForgotPassword } from '@roam/auth-client';
 
 // Map icon string names from BUSINESS_TYPES to actual lucide components
 const ICON_MAP: Record<string, React.ComponentType<any>> = {
@@ -50,6 +51,15 @@ export function LoginPage() {
   const [platformDisplayName, setPlatformDisplayName] = useState(
     IS_ENTERPRISE_PRODUCT ? 'Roam Enterprise' : 'Roam Fleet',
   );
+  const recoverySurface = IS_ENTERPRISE_PRODUCT ? 'enterprise' : 'fleet';
+  const {
+    forgotMode,
+    setForgotMode,
+    notice,
+    setNotice,
+    forgotLoading,
+    sendResetEmail,
+  } = useForgotPassword(supabase, recoverySurface, { signInHref: '/' });
 
   const signupBusinessTypes = BUSINESS_TYPES.filter(
     (bt) => !IS_ENTERPRISE_PRODUCT || enabledBusinessTypes[bt.key] !== false,
@@ -72,6 +82,13 @@ export function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (forgotMode) {
+      setError(null);
+      setNotice(null);
+      const err = await sendResetEmail(email);
+      if (err) setError(err);
+      return;
+    }
     setIsLoading(true);
     setError(null);
 
@@ -418,6 +435,12 @@ export function LoginPage() {
               </Alert>
             )}
 
+            {notice && (
+              <Alert className="mb-6 bg-emerald-50 text-emerald-800 border-emerald-200">
+                <AlertDescription>{notice}</AlertDescription>
+              </Alert>
+            )}
+
             {/* Tabs — hide tab switcher when on step 2 to keep focus */}
             {isRegistering && adminSignupStep === 2 ? (
               renderBusinessTypePicker()
@@ -476,16 +499,43 @@ export function LoginPage() {
                     <div className="space-y-1.5">
                          <div className="flex items-center justify-between">
                             <Label htmlFor="admin-password" className="text-sm font-medium text-slate-700 dark:text-slate-300">Password</Label>
-                            {!isRegistering && <a href="#" className="text-xs text-indigo-600 hover:text-indigo-500 font-medium">Forgot?</a>}
+                            {!isRegistering && (
+                              forgotMode ? (
+                                <button
+                                  type="button"
+                                  className="text-xs text-indigo-600 hover:text-indigo-500 font-medium"
+                                  onClick={() => {
+                                    setForgotMode(false);
+                                    setError(null);
+                                  }}
+                                >
+                                  Back to sign in
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="text-xs text-indigo-600 hover:text-indigo-500 font-medium"
+                                  onClick={() => {
+                                    setForgotMode(true);
+                                    setError(null);
+                                    setNotice(null);
+                                  }}
+                                >
+                                  Forgot?
+                                </button>
+                              )
+                            )}
                          </div>
+                        {!forgotMode && (
                         <Input 
                             id="admin-password" 
                             type="password" 
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            required
+                            required={!forgotMode}
                             className="h-10"
                         />
+                        )}
                         {isRegistering && passwordPolicy && (
                           <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
                             Password must be at least {passwordPolicy.minLength} characters
@@ -497,10 +547,14 @@ export function LoginPage() {
                         )}
                     </div>
                     
-                    <Button className="w-full h-10 bg-indigo-600 hover:bg-indigo-700 text-white font-medium shadow-sm" type="submit" disabled={isLoading}>
-                        {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        {isLoading ? 'Processing...' : (isRegistering ? 'Next: Choose Your Industry' : 'Sign In as Manager')}
-                        <ArrowRight className="ml-2 h-4 w-4" />
+                    <Button className="w-full h-10 bg-indigo-600 hover:bg-indigo-700 text-white font-medium shadow-sm" type="submit" disabled={isLoading || forgotLoading}>
+                        {(isLoading || forgotLoading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        {isLoading || forgotLoading
+                          ? 'Processing...'
+                          : forgotMode
+                            ? 'Send reset email'
+                            : (isRegistering ? 'Next: Choose Your Industry' : 'Sign In as Manager')}
+                        {!forgotMode && <ArrowRight className="ml-2 h-4 w-4" />}
                     </Button>
                 </form>
               </>

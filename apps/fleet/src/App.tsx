@@ -47,7 +47,8 @@ import { MaintenancePage } from './components/MaintenancePage';
 import { FeatureFlagProvider } from './components/auth/FeatureFlagContext';
 import { WrongProductLineGate } from './components/auth/WrongProductLineGate';
 import { FleetProductAdminPortal } from './admin/FleetProductAdminPortal';
-import { PRODUCT_LINE } from './config/productLine';
+import { PRODUCT_LINE, IS_ENTERPRISE_PRODUCT } from './config/productLine';
+import { AuthRecoveryGate } from '@roam/auth-client';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -405,27 +406,34 @@ function AppContent() {
 }
 
 export default function App() {
-  if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
-    return (
-      <QueryClientProvider client={queryClient}>
-        <FleetProductAdminPortal />
-      </QueryClientProvider>
-    );
-  }
+  const isAdmin =
+    typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <OfflineProvider>
-          <BusinessConfigProvider>
-            <PlatformConfigProvider>
-              <FeatureFlagProvider>
-                <AppContent />
-              </FeatureFlagProvider>
-            </PlatformConfigProvider>
-          </BusinessConfigProvider>
-        </OfflineProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+    <AuthRecoveryGate
+      title="Reset password"
+      subtitle={isAdmin ? 'Roam Fleet Admin' : IS_ENTERPRISE_PRODUCT ? 'Roam Enterprise' : 'Roam Fleet'}
+      signInHref={isAdmin ? '/admin' : '/'}
+    >
+      {isAdmin ? (
+        <QueryClientProvider client={queryClient}>
+          <FleetProductAdminPortal />
+        </QueryClientProvider>
+      ) : (
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <OfflineProvider>
+              <BusinessConfigProvider>
+                <PlatformConfigProvider>
+                  <FeatureFlagProvider>
+                    <AppContent />
+                  </FeatureFlagProvider>
+                </PlatformConfigProvider>
+              </BusinessConfigProvider>
+            </OfflineProvider>
+          </AuthProvider>
+        </QueryClientProvider>
+      )}
+    </AuthRecoveryGate>
   );
 }

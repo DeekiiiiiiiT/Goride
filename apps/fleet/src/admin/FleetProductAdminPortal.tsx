@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { supabaseFleetAdmin as supabase } from '@roam/auth-client';
-import { hasProductAdminRole, jwtPrimaryRole, isPlatformRole } from '@roam/auth-client';
+import { hasProductAdminRole, jwtPrimaryRole, isPlatformRole, useForgotPassword } from '@roam/auth-client';
 import type { Session } from '@supabase/supabase-js';
 import {
   LayoutDashboard,
@@ -33,9 +33,23 @@ function FleetAdminLogin({ onSession }: { onSession: (s: Session) => void }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const {
+    forgotMode,
+    setForgotMode,
+    notice,
+    setNotice,
+    forgotLoading,
+    sendResetEmail,
+  } = useForgotPassword(supabase, 'fleet', { signInHref: '/admin' });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (forgotMode) {
+      setError(null);
+      const err = await sendResetEmail(email);
+      if (err) setError(err);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -63,6 +77,7 @@ function FleetAdminLogin({ onSession }: { onSession: (s: Session) => void }) {
       >
         <h1 className="text-lg font-semibold text-white">Roam Fleet Admin</h1>
         <p className="text-sm text-slate-400">Manage rideshare fleet manager accounts.</p>
+        {notice && <p className="text-sm text-emerald-400">{notice}</p>}
         {error && <p className="text-sm text-red-400">{error}</p>}
         <input
           type="email"
@@ -72,6 +87,7 @@ function FleetAdminLogin({ onSession }: { onSession: (s: Session) => void }) {
           className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white"
           required
         />
+        {!forgotMode && (
         <input
           type="password"
           placeholder="Password"
@@ -80,8 +96,27 @@ function FleetAdminLogin({ onSession }: { onSession: (s: Session) => void }) {
           className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white"
           required
         />
-        <Button type="submit" className="w-full" disabled={loading}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sign in'}
+        )}
+        {!forgotMode && (
+          <button
+            type="button"
+            onClick={() => { setForgotMode(true); setError(null); setNotice(null); }}
+            className="text-sm text-amber-400 hover:text-amber-300 text-left"
+          >
+            Forgot password?
+          </button>
+        )}
+        {forgotMode && (
+          <button
+            type="button"
+            onClick={() => { setForgotMode(false); setError(null); }}
+            className="text-sm text-slate-400 hover:text-slate-300 text-left"
+          >
+            Back to sign in
+          </button>
+        )}
+        <Button type="submit" className="w-full" disabled={loading || forgotLoading}>
+          {loading || forgotLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : forgotMode ? 'Send reset email' : 'Sign in'}
         </Button>
       </form>
     </div>

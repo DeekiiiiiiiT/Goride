@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { API_ENDPOINTS } from '../../services/apiConfig';
+import { recoveryRedirectForSurface } from '@roam/auth-client';
 import { toast } from 'sonner';
 import { ConfirmationModal } from './ConfirmationModal';
 import { SetPasswordModal } from './SetPasswordModal';
@@ -270,7 +271,10 @@ export function PlatformTeam() {
           const res = await fetch(`${API_ENDPOINTS.admin}/admin/reset-password`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-            body: JSON.stringify({ email: m.email }),
+            body: JSON.stringify({
+              email: m.email,
+              redirectTo: recoveryRedirectForSurface('dominion'),
+            }),
           });
           const data = await res.json();
           if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);

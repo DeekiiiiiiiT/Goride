@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '@roam/auth-client';
+import { supabase, AuthRecoveryGate } from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
 import { LogOut } from 'lucide-react';
 import { DashAdminPortal } from '@dash-admin/DashAdminPortal';
@@ -16,11 +16,17 @@ type Page = 'home' | 'restaurant' | 'cart' | 'orders' | 'tracking' | 'login' | '
 
 /** Customer ordering app (roamdash.co). Admin lives at /admin on the same domain. */
 export default function App() {
-  if (window.location.pathname.startsWith('/admin')) {
-    return <DashAdminPortal />;
-  }
+  const isAdmin = window.location.pathname.startsWith('/admin');
 
-  return <DashCustomerApp />;
+  return (
+    <AuthRecoveryGate
+      title="Reset password"
+      subtitle={isAdmin ? 'Roam Dash Admin' : 'Roam Dash'}
+      signInHref={isAdmin ? '/admin' : '/'}
+    >
+      {isAdmin ? <DashAdminPortal /> : <DashCustomerApp />}
+    </AuthRecoveryGate>
+  );
 }
 
 function DashCustomerApp() {

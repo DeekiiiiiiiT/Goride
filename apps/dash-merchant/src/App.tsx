@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '@roam/auth-client';
+import { supabase, AuthRecoveryGate } from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
 import DashboardPage from './pages/DashboardPage';
 import OrdersPage from './pages/OrdersPage';
@@ -15,11 +15,17 @@ import { DashAdminPortal } from './admin/DashAdminPortal';
 type Page = 'dashboard' | 'orders' | 'menu' | 'settings' | 'login' | 'onboarding';
 
 export default function App() {
-  if (window.location.pathname.startsWith('/admin')) {
-    return <DashAdminPortal />;
-  }
+  const isAdmin = window.location.pathname.startsWith('/admin');
 
-  return <DashMerchantApp />;
+  return (
+    <AuthRecoveryGate
+      title="Reset password"
+      subtitle={isAdmin ? 'Roam Dash Admin' : 'Roam Dash Partner'}
+      signInHref={isAdmin ? '/admin' : '/'}
+    >
+      {isAdmin ? <DashAdminPortal /> : <DashMerchantApp />}
+    </AuthRecoveryGate>
+  );
 }
 
 function DashMerchantApp() {

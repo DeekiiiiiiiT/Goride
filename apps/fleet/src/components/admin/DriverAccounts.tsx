@@ -26,6 +26,7 @@ import {
 import { useAuth } from '../auth/AuthContext';
 import { resolveRole } from '../../utils/permissions';
 import { API_ENDPOINTS } from '../../services/apiConfig';
+import { recoveryRedirectForSurface } from '@roam/auth-client';
 import { toast } from 'sonner@2.0.3';
 import { ConfirmationModal } from './ConfirmationModal';
 import { SetPasswordModal } from './SetPasswordModal';
@@ -333,7 +334,10 @@ export function DriverAccounts() {
           const res = await fetch(`${API_ENDPOINTS.admin}/admin/reset-password`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-            body: JSON.stringify({ email: driver.email }),
+            body: JSON.stringify({
+              email: driver.email,
+              redirectTo: recoveryRedirectForSurface('driver'),
+            }),
           });
           const data = await res.json();
           if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);

@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
+import { useForgotPassword } from '@roam/auth-client';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { CourierGoogleAuthButton } from '@/components/auth/CourierGoogleAuthButton';
+import { supabase } from '@/lib/supabase';
+import { ensureCourierProfile } from '@/lib/ensureCourierProfile';
 
 type LoginPageProps = {
   onBack: () => void;
@@ -13,11 +16,49 @@ export function LoginPage({ onBack, onSignIn, onSignUp }: LoginPageProps) {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [googleError, setGoogleError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const {
+    forgotMode,
+    setForgotMode,
+    notice,
+    setNotice,
+    forgotLoading,
+    sendResetEmail,
+  } = useForgotPassword(supabase, 'courier', { signInHref: '/' });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSignIn();
+    setAuthError(null);
+    setGoogleError(null);
+
+    const email = identifier.trim();
+    if (!email.includes('@')) {
+      setAuthError('Sign in with your email address.');
+      return;
+    }
+
+    if (forgotMode) {
+      setNotice(null);
+      const err = await sendResetEmail(email);
+      if (err) setAuthError(err);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      await ensureCourierProfile();
+      onSignIn();
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : 'Sign in failed');
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const displayError = authError || googleError;
 
   return (
     <div className="bg-background text-on-background min-h-full flex flex-col antialiased">
@@ -44,10 +85,22 @@ export function LoginPage({ onBack, onSignIn, onSignUp }: LoginPageProps) {
             <p className="text-sm text-muted">Enter your details to access your route.</p>
           </header>
 
-          <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+          {displayError && (
+            <p className="text-sm text-error" role="alert">
+              {displayError}
+            </p>
+          )}
+
+          {notice && (
+            <p className="text-sm text-primary" role="status">
+              {notice}
+            </p>
+          )}
+
+          <form className="flex flex-col gap-4" onSubmit={(e) => void handleSubmit(e)}>
             <div className="flex flex-col gap-1">
               <label htmlFor="identifier" className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">
-                Email or Phone
+                Email
               </label>
               <div className="relative group">
                 <MaterialIcon
@@ -56,21 +109,32 @@ export function LoginPage({ onBack, onSignIn, onSignUp }: LoginPageProps) {
                 />
                 <input
                   id="identifier"
-                  type="text"
+                  type="email"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   placeholder="you@example.com"
+                  required
+                  autoComplete="email"
                   className="w-full h-14 pl-12 pr-4 bg-surface-container-low border border-surface-dim rounded-lg text-base text-on-surface focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow placeholder:text-muted/60"
                 />
               </div>
             </div>
 
+            {!forgotMode && (
             <div className="flex flex-col gap-1">
               <div className="flex justify-between items-center">
                 <label htmlFor="login-password" className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">
                   Password
                 </label>
-                <button type="button" className="text-xs font-semibold text-primary hover:text-on-primary-container transition-colors">
+                <button
+                  type="button"
+                  className="text-xs font-semibold text-primary hover:text-on-primary-container transition-colors"
+                  onClick={() => {
+                    setForgotMode(true);
+                    setAuthError(null);
+                    setNotice(null);
+                  }}
+                >
                   Forgot password?
                 </button>
               </div>
@@ -85,6 +149,8 @@ export function LoginPage({ onBack, onSignIn, onSignUp }: LoginPageProps) {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
+                  required
+                  autoComplete="current-password"
                   className="w-full h-14 pl-12 pr-12 bg-surface-container-low border border-surface-dim rounded-lg text-base text-on-surface focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow placeholder:text-muted/60"
                 />
                 <button
@@ -97,13 +163,28 @@ export function LoginPage({ onBack, onSignIn, onSignUp }: LoginPageProps) {
                 </button>
               </div>
             </div>
+            )}
+
+            {forgotMode && (
+              <button
+                type="button"
+                className="text-xs font-semibold text-primary hover:text-on-primary-container self-start"
+                onClick={() => {
+                  setForgotMode(false);
+                  setAuthError(null);
+                }}
+              >
+                Back to sign in
+              </button>
+            )}
 
             <button
               type="submit"
-              className="h-14 w-full bg-primary-container text-on-primary-container text-xs font-semibold uppercase tracking-wide rounded-lg shadow-[0_6px_12px_rgba(16,185,129,0.1)] hover:bg-primary hover:text-on-primary active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-2"
+              disabled={loading || forgotLoading}
+              className="h-14 w-full bg-primary-container text-on-primary-container text-xs font-semibold uppercase tracking-wide rounded-lg shadow-[0_6px_12px_rgba(16,185,129,0.1)] hover:bg-primary hover:text-on-primary active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-2 disabled:opacity-60"
             >
-              Sign In
-              <MaterialIcon name="arrow_forward" className="text-[20px]" />
+              {loading || forgotLoading ? 'Please wait…' : forgotMode ? 'Send reset email' : 'Sign In'}
+              {!forgotMode && !loading && <MaterialIcon name="arrow_forward" className="text-[20px]" />}
             </button>
           </form>
 
@@ -118,11 +199,6 @@ export function LoginPage({ onBack, onSignIn, onSignUp }: LoginPageProps) {
             className="text-xs uppercase tracking-wide"
             onError={(msg) => setGoogleError(msg || null)}
           />
-          {googleError && (
-            <p className="text-sm text-error text-center -mt-2" role="alert">
-              {googleError}
-            </p>
-          )}
 
           <p className="text-center text-sm">
             <span className="text-muted">Don&apos;t have an account?</span>{' '}
