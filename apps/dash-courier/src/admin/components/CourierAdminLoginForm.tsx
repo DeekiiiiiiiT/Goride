@@ -21,7 +21,7 @@ export function CourierAdminLoginForm() {
     setNotice,
     forgotLoading,
     sendResetEmail,
-  } = useForgotPassword(supabase, 'courier', { signInHref: '/admin' });
+  } = useForgotPassword('courier', { signInHref: '/admin' });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -15,7 +15,7 @@ export function RidesAdminLoginForm() {
     setNotice,
     forgotLoading,
     sendResetEmail,
-  } = useForgotPassword(supabase, 'rides', { signInHref: '/admin' });
+  } = useForgotPassword('rides', { signInHref: '/admin' });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -27,7 +27,7 @@ export function DriverLoginPage() {
     setNotice,
     forgotLoading,
     sendResetEmail,
-  } = useForgotPassword(supabase, 'fleet', { signInHref: '/' });
+  } = useForgotPassword('fleet', { signInHref: '/' });
 
   // Registration settings
   const [registrationMode, setRegistrationMode] = useState<'open' | 'invite_only' | 'domain_restricted'>('open');

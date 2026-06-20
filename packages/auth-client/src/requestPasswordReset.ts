@@ -1,12 +1,12 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   type AuthRecoverySurface,
   recoveryRedirectForCurrentOrigin,
   recoveryRedirectForSurface,
 } from './authRecoveryRedirects';
+import { supabaseRecovery } from './supabaseRecovery';
 
+/** Always uses `supabaseRecovery` so send + complete share one isolated auth client. */
 export async function requestPasswordReset(
-  client: SupabaseClient,
   email: string,
   surface: AuthRecoverySurface,
 ): Promise<{ error: Error | null }> {
@@ -15,6 +15,6 @@ export async function requestPasswordReset(
       ? recoveryRedirectForCurrentOrigin()
       : recoveryRedirectForSurface(surface);
 
-  const { error } = await client.auth.resetPasswordForEmail(email, { redirectTo });
+  const { error } = await supabaseRecovery.auth.resetPasswordForEmail(email, { redirectTo });
   return { error: error ? new Error(error.message) : null };
 }

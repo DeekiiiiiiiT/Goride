@@ -1,5 +1,4 @@
 import { useCallback, useState } from 'react';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   type AuthRecoverySurface,
   requestPasswordReset,
@@ -12,7 +11,6 @@ export type UseForgotPasswordOptions = {
 };
 
 export function useForgotPassword(
-  client: SupabaseClient,
   surface: AuthRecoverySurface,
   options?: UseForgotPasswordOptions,
 ) {
@@ -29,7 +27,7 @@ export function useForgotPassword(
       setForgotLoading(true);
       setNotice(null);
       try {
-        const { error } = await requestPasswordReset(client, trimmed, surface);
+        const { error } = await requestPasswordReset(trimmed, surface);
         if (error) throw error;
         if (options?.signInHref) {
           rememberRecoverySignInHref(options.signInHref);
@@ -45,7 +43,7 @@ export function useForgotPassword(
         setForgotLoading(false);
       }
     },
-    [client, surface, options?.signInHref],
+    [surface, options?.signInHref],
   );
 
   return {

@@ -59,7 +59,7 @@ export function LoginPage() {
     setNotice,
     forgotLoading,
     sendResetEmail,
-  } = useForgotPassword(supabase, recoverySurface, { signInHref: '/' });
+  } = useForgotPassword(recoverySurface, { signInHref: '/' });
 
   const signupBusinessTypes = BUSINESS_TYPES.filter(
     (bt) => !IS_ENTERPRISE_PRODUCT || enabledBusinessTypes[bt.key] !== false,

@@ -40,7 +40,7 @@ function FleetAdminLogin({ onSession }: { onSession: (s: Session) => void }) {
     setNotice,
     forgotLoading,
     sendResetEmail,
-  } = useForgotPassword(supabase, 'fleet', { signInHref: '/admin' });
+  } = useForgotPassword('fleet', { signInHref: '/admin' });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

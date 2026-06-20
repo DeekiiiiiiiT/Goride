@@ -15,7 +15,7 @@ export function DriverAdminLoginForm() {
     setNotice,
     forgotLoading,
     sendResetEmail,
-  } = useForgotPassword(supabase, 'driver', { signInHref: '/admin' });
+  } = useForgotPassword('driver', { signInHref: '/admin' });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -31,7 +31,7 @@ export function AdminLoginForm({
     setNotice,
     forgotLoading,
     sendResetEmail,
-  } = useForgotPassword(supabase, recoverySurface, { signInHref: '/admin' });
+  } = useForgotPassword(recoverySurface, { signInHref: '/admin' });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

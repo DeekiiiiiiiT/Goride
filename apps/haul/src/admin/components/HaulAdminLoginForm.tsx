@@ -15,7 +15,7 @@ export function HaulAdminLoginForm() {
     setNotice,
     forgotLoading,
     sendResetEmail,
-  } = useForgotPassword(supabase, 'haul', { signInHref: '/admin' });
+  } = useForgotPassword('haul', { signInHref: '/admin' });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

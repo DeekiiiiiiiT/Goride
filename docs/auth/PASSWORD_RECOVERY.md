@@ -19,10 +19,11 @@ Password reset links must return the user to the **same product domain** where t
 ## How it works
 
 1. User clicks **Forgot password?** on a product login page.
-2. App calls `requestPasswordReset(client, email, surface)` from `@roam/auth-client`.
-3. Client uses `${window.location.origin}/reset-password` as `redirectTo`.
-4. User sets a new password on `PasswordRecoveryPage` (via `AuthRecoveryGate` in each app).
-5. User signs in on the same product.
+2. App calls `requestPasswordReset(email, surface)` (or `useForgotPassword(surface)`) from `@roam/auth-client` — always via isolated `supabaseRecovery`.
+3. `requestPasswordReset` / `useForgotPassword` always send via **`supabaseRecovery`** (isolated from app login sessions).
+4. Client uses `${window.location.origin}/reset-password` as `redirectTo`.
+5. User sets a new password on `PasswordRecoveryPage` (via `AuthRecoveryGate` in each app).
+6. User signs in on the same product.
 
 Server-side admin resets (`generateLink`) pass an explicit `redirectTo` per product — see `supabase/functions/_shared/authRecoveryRedirects.ts`.
 

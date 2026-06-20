@@ -32,7 +32,7 @@ export default function LoginPage({ onNavigate }: LoginPageProps) {
     setNotice,
     forgotLoading,
     sendResetEmail,
-  } = useForgotPassword(supabase, 'dash', { signInHref: '/' });
+  } = useForgotPassword('dash', { signInHref: '/' });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

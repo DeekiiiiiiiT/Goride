@@ -28,7 +28,7 @@ export function DriverLoginPage() {
     setNotice,
     forgotLoading,
     sendResetEmail,
-  } = useForgotPassword(supabase, 'driver', { signInHref: '/' });
+  } = useForgotPassword('driver', { signInHref: '/' });
 
   const resetToWelcome = () => {
     setView('welcome');

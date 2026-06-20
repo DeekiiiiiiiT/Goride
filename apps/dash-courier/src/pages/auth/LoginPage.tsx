@@ -25,7 +25,7 @@ export function LoginPage({ onBack, onSignIn, onSignUp }: LoginPageProps) {
     setNotice,
     forgotLoading,
     sendResetEmail,
-  } = useForgotPassword(supabase, 'courier', { signInHref: '/' });
+  } = useForgotPassword('courier', { signInHref: '/' });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -36,7 +36,7 @@ export default function LoginPage({ session }: { session: Session | null }) {
     setNotice,
     forgotLoading,
     sendResetEmail,
-  } = useForgotPassword(supabase, 'rides', { signInHref: '/login' });
+  } = useForgotPassword('rides', { signInHref: '/login' });
 
   if (session) return <Navigate to={safeReturn} replace />;
 

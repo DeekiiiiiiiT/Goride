@@ -46,7 +46,7 @@ export function HaulerLoginPage({ initialView = 'login' }: HaulerLoginPageProps)
     setNotice,
     forgotLoading,
     sendResetEmail,
-  } = useForgotPassword(supabase, 'haul', { signInHref: '/' });
+  } = useForgotPassword('haul', { signInHref: '/' });
 
 
 
