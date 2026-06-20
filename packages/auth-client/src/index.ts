@@ -29,6 +29,7 @@ export {
   rememberRecoverySignInHref,
   consumeRecoverySignInHref,
 } from './recoverySignInStorage';
+export { shouldMainClientDetectSessionInUrl } from './detectSessionInUrl';
 export * from './permissions';
 export * from './platformPermissions';
 export * from './roleHierarchy';

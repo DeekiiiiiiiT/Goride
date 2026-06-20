@@ -1,12 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 import { projectId, publicAnonKey } from './info';
+import { shouldMainClientDetectSessionInUrl } from '@roam/auth-client';
 
 const supabaseUrl = `https://${projectId}.supabase.co`;
 const supabaseKey = publicAnonKey;
 
 export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
-    detectSessionInUrl: true,
+    detectSessionInUrl: shouldMainClientDetectSessionInUrl(),
     flowType: 'pkce',
   },
   global: {

@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { projectId, publicAnonKey } from '@roam/api-client';
+import { shouldMainClientDetectSessionInUrl } from './detectSessionInUrl';
 
 const supabaseUrl = `https://${projectId}.supabase.co`;
 
@@ -18,7 +19,7 @@ function createRoamAuthClient(storageKey: string): SupabaseClient {
       storageKey,
       autoRefreshToken: true,
       persistSession: true,
-      detectSessionInUrl: true,
+      detectSessionInUrl: shouldMainClientDetectSessionInUrl(),
     },
     global: { fetch: roamFetch },
   });

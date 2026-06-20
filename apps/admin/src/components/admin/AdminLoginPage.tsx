@@ -3,7 +3,7 @@ import { Shield, Loader2, AlertCircle, KeyRound, UserPlus } from 'lucide-react';
 import { supabase } from '../../utils/supabase/client';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { publicAnonKey } from '@roam/api-client';
-import { requestPasswordReset, rememberRecoverySignInHref } from '@roam/auth-client';
+import { requestPasswordReset, rememberRecoverySignInHref, supabaseRecovery } from '@roam/auth-client';
 import { LockoutCountdown } from '../auth/LockoutCountdown';
 
 /**
@@ -114,7 +114,7 @@ export function AdminLoginPage() {
     setError(null);
     setSuccess(null);
     try {
-      const { error: resetError } = await requestPasswordReset(supabase, email.trim(), 'dominion');
+      const { error: resetError } = await requestPasswordReset(supabaseRecovery, email.trim(), 'dominion');
       if (resetError) throw resetError;
       rememberRecoverySignInHref('/');
       setSuccess('Password reset email sent. Check your inbox — the link returns you to roamdominion.co.');

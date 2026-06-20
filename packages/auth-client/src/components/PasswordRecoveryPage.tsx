@@ -4,6 +4,22 @@ import { isPasswordRecoveryUrl, supabaseRecovery } from '../supabaseRecovery';
 
 type Phase = 'loading' | 'form' | 'done' | 'invalid';
 
+function recoveryRedirectError(): string | null {
+  if (typeof window === 'undefined') return null;
+  const query = new URLSearchParams(window.location.search);
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const code = query.get('error_code') ?? hash.get('error_code');
+  const description = query.get('error_description') ?? hash.get('error_description');
+  if (description) return decodeURIComponent(description.replace(/\+/g, ' '));
+  if (code === 'otp_expired') {
+    return 'This reset link is invalid or has expired. Request a new recovery email.';
+  }
+  if (query.get('error') === 'access_denied' || hash.get('error') === 'access_denied') {
+    return 'This reset link is invalid or has expired. Request a new recovery email.';
+  }
+  return null;
+}
+
 export type PasswordRecoveryPageProps = {
   title?: string;
   subtitle?: string;
@@ -24,6 +40,13 @@ export function PasswordRecoveryPage({
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    const redirectError = recoveryRedirectError();
+    if (redirectError) {
+      setError(redirectError);
+      setPhase('invalid');
+      return;
+    }
+
     if (!isPasswordRecoveryUrl()) {
       setError('This reset link is invalid or has expired.');
       setPhase('invalid');

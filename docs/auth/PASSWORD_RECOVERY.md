@@ -26,6 +26,17 @@ Password reset links must return the user to the **same product domain** where t
 
 Server-side admin resets (`generateLink`) pass an explicit `redirectTo` per product — see `supabase/functions/_shared/authRecoveryRedirects.ts`.
 
+## Troubleshooting
+
+### “Link expired” immediately after sending
+
+1. **Email link scanners (common on Outlook/Hotmail)** — Microsoft Safe Links may open the reset URL once before you do, which burns the one-time token. Request a new email and click the link right away, or paste the link into the browser manually from “View original message.”
+2. **Two Supabase clients on the same page** — the main app client must not use `detectSessionInUrl` on `/reset-password` (only `supabaseRecovery` should read the URL). Otherwise the token is consumed before the reset form loads and you may appear logged in without changing your password.
+
+### Logged in without setting a new password
+
+Usually an **existing browser session** (you were already signed in) or the main client consumed a recovery session from the URL. Sign out, request a fresh reset email, and open the link in a private window to test cleanly.
+
 ## Do not use
 
 **Supabase Dashboard → Users → Send password recovery** for product users. It uses the global Site URL and does not know which app the user belongs to. Use in-app **Forgot password?** instead.
