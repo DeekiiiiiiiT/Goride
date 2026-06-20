@@ -19,6 +19,7 @@ import {
   COURIER_OAUTH_INTENT_SIGNUP,
 } from '@/lib/courierAuth';
 import { supabase } from '@/lib/supabase';
+import { ensureCourierProfile } from '@/lib/ensureCourierProfile';
 
 type AppPhase =
   | 'splash'
@@ -38,9 +39,11 @@ export function CourierConsumerApp() {
   const [phase, setPhase] = useState<AppPhase>('splash');
 
   const finishOnboarding = useCallback(() => {
-    markOnboardingComplete();
-    clearSignupDraft();
-    setPhase('app');
+    void ensureCourierProfile().finally(() => {
+      markOnboardingComplete();
+      clearSignupDraft();
+      setPhase('app');
+    });
   }, []);
 
   const handleSplashComplete = useCallback(() => {
@@ -73,6 +76,7 @@ export function CourierConsumerApp() {
       }
 
       if (intent === COURIER_OAUTH_INTENT_SIGNUP) {
+        void ensureCourierProfile();
         setPhase('profile-setup');
       }
     };

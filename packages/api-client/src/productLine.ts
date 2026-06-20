@@ -9,7 +9,8 @@ export type SettingsSegment =
   | 'rides'
   | 'driver'
   | 'haul'
-  | 'dash';
+  | 'dash'
+  | 'courier';
 
 export type ProductLineSegment = 'fleet' | 'enterprise';
 
@@ -23,6 +24,7 @@ const VALID_SEGMENTS: SettingsSegment[] = [
   'driver',
   'haul',
   'dash',
+  'courier',
 ];
 
 function readEnvProductLine(): ProductLine | undefined {

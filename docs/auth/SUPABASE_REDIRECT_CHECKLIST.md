@@ -20,6 +20,8 @@ Include **scheme + host + port + path** where your apps handle the post-auth lan
 | Driver (Android app) | — | `co.roamenterprise.driver://login` |
 | Driver admin tracker | — | Same URLs; see `docs/legal/PLAY_STORE_DRIVER_LAUNCH.md` |
 | Dash customer | `http://localhost:5174/` | `https://roamdash.co/` (or customer subdomain) |
+| Dash courier | `http://localhost:5176/` | `https://courier.roamdash.co/` |
+| Dash courier admin | `http://localhost:5176/admin` | `https://courier.roamdash.co/admin` |
 | Dash merchant | `http://localhost:5175/` | `https://partner.roamdash.co/` (if used) |
 | Rides passenger | `http://localhost:5180/login` | `https://roam-s.co/login` |
 | Rides passenger (Android app) | — | `co.roamenterprise.rides://login` |

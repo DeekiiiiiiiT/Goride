@@ -81,7 +81,8 @@ export type SettingsSegment =
   | 'rides'
   | 'driver'
   | 'haul'
-  | 'dash';
+  | 'dash'
+  | 'courier';
 
 export type ProductLineSegment = 'fleet' | 'enterprise';
 
@@ -96,7 +97,7 @@ export function isProductLineSegment(segment: SettingsSegment): segment is Produ
 }
 
 export function isConsumerSegment(segment: SettingsSegment): boolean {
-  return segment === 'rides' || segment === 'driver' || segment === 'haul' || segment === 'dash';
+  return segment === 'rides' || segment === 'driver' || segment === 'haul' || segment === 'dash' || segment === 'courier';
 }
 
 /** Map legacy product-line header to settings segment. */

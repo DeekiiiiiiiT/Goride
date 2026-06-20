@@ -96,10 +96,11 @@ const CONSUMER_SEGMENT_NAMES: Record<'rides' | 'driver' | 'haul' | 'dash', strin
   driver: 'Roam Driver',
   haul: 'Roam Haul',
   dash: 'Roam Dash',
+  courier: 'Roam Dash Courier',
 };
 
 export function defaultConsumerSegmentSettings(
-  segment: 'rides' | 'driver' | 'haul' | 'dash',
+  segment: 'rides' | 'driver' | 'haul' | 'dash' | 'courier',
 ): ConsumerSegmentSettings {
   return {
     platformName: CONSUMER_SEGMENT_NAMES[segment],
@@ -128,6 +129,7 @@ export function defaultSettingsForSegment(segment: SettingsSegment): FleetProduc
     case 'driver':
     case 'haul':
     case 'dash':
+    case 'courier':
       return defaultConsumerSegmentSettings(segment);
     default:
       return { ...DEFAULT_FLEET_SETTINGS };

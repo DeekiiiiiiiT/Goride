@@ -7,7 +7,8 @@
       "@roam/types": ["../../packages/types/src"],
       "@roam/ui": ["../../packages/ui/src"],
       "@roam/api-client": ["../../packages/api-client/src"],
-      "@roam/auth-client": ["../../packages/auth-client/src"]
+      "@roam/auth-client": ["../../packages/auth-client/src"],
+      "@roam/admin-core": ["../../packages/admin-core/src"]
     }
   },
   "include": ["src"],

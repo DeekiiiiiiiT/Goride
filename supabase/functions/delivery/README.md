@@ -38,6 +38,34 @@ Every status change:
 2. Inserts a row in `delivery.merchant_audit_log`
 3. Inserts a row in `delivery.merchant_notifications` (in-app feed)
 4. Sends an email via SMTP if configured (otherwise logs `[email] SMTP not configured` and continues)
+
+---
+
+## Admin: Courier workforce (`courier.roamdash.co/admin`)
+
+Routes under `/delivery/admin/couriers/*` require `requireProductAdmin(courier)` — roles: `courier_admin`, `courier_ops`, or platform admin.
+
+Endpoints:
+
+- `GET /admin/couriers/stats`
+- `GET /admin/couriers?q=...&status=...&live_status=...&page=1&limit=50`
+- `GET /admin/couriers/:userId`
+- `GET /admin/couriers/:userId/deliveries`
+- `POST /admin/couriers/:userId/approve` body: `{ force?: boolean, reason?: string }`
+- `POST /admin/couriers/:userId/suspend|unsuspend|deactivate|reactivate|sign-out|reset-password`
+- `DELETE /admin/couriers/:userId` (platform_owner / superadmin only)
+- `GET /admin/couriers/compliance`
+- `PATCH /admin/couriers/compliance/:userId` body: `{ background_check?: 'pending'|'approved'|'rejected' }`
+- `GET /admin/couriers/presence`
+- `GET /admin/couriers/ledger/deliveries`
+- `GET /admin/orders/:orderId`
+- `POST /admin/orders/:orderId/cancel|complete`
+
+Ops playbook: `docs/dash-courier/COURIER_ADMIN.md`
+
+---
+
+## Merchant email notifications
 5. Writes a row to the `kv_store_37f42386` audit log so the Super Admin Portal's Activity Log shows the action
 
 ---

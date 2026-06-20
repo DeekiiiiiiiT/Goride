@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+@source './**/*.{js,ts,jsx,tsx}';
+@source '../../../packages/admin-core/src/**/*.{js,ts,jsx,tsx}';
+
+@import '../../../packages/admin-core/src/styles/admin-portal.css';
+@import '../../../packages/admin-core/src/styles/rides-admin-login.css';
+
 @theme {
   --color-background: #fafafa;
   --color-on-background: #1e1b19;
@@ -443,4 +449,17 @@ html.app-immersive-mode {
     repeating-linear-gradient(45deg, #000 25%, #fafafa 25%, #fafafa 75%, #000 75%, #000);
   background-position: 0 0, 10px 10px;
   background-size: 20px 20px;
+}
+
+/* Courier admin login — emerald branding */
+.courier-admin-login__logo {
+  background: linear-gradient(135deg, #10b981, #059669);
+}
+
+.courier-admin-login__submit {
+  background: #059669;
+}
+
+.courier-admin-login__submit:hover:not(:disabled) {
+  background: #047857;
 }

@@ -8,6 +8,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@roam/admin-core': path.resolve(__dirname, '../../packages/admin-core/src'),
     },
   },
   server: {

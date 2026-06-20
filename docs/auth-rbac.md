@@ -59,6 +59,15 @@ Different driver vs admin emails are fine — each account needs its own roles. 
 
 You can stay signed in as admin and driver at the same time in two tabs.
 
+## Same host (`localhost:5176` / `courier.roamdash.co`)
+
+Courier consumer (`/`) and admin (`/admin`) use isolated Supabase sessions:
+
+- `supabaseCourierApp` → `sb-<project>-auth-courier` (path `/`)
+- `supabaseCourierAdmin` → `sb-<project>-auth-courier-admin` (path `/admin`)
+
+Grant courier admin with `supabase/scripts/grant_courier_admin_by_email.sql` (`courier_admin` / `courier_ops`).
+
 ## Manual test matrix
 
 | Account | Action | Expected |
@@ -67,6 +76,8 @@ You can stay signed in as admin and driver at the same time in two tabs.
 | `user_metadata.role = driver` only | Open `/admin` | Access denied |
 | `platform_owner` | Login driver app | No `user_metadata.role` overwrite; admin unchanged |
 | Pure driver | Open `/admin` | Access denied |
+| `app_metadata.role = courier_admin` | Login on courier.roamdash.co/admin | Dashboard loads; consumer app session unchanged |
+| `courier_ops` | Write actions (suspend, approve) | API 403 |
 
 ## Supabase hardening (recommended)
 
@@ -78,3 +89,4 @@ You can stay signed in as admin and driver at the same time in two tabs.
 - `packages/auth-client/src/jwtRole.ts`
 - `apps/driver/src/contexts/AuthContext.tsx` (OAuth surface only)
 - `apps/driver/src/admin/DriverAdminPortal.tsx`
+- `apps/dash-courier/src/admin/CourierAdminPortal.tsx`

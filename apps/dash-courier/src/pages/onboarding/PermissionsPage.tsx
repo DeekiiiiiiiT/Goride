@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { OnboardingHeader } from '@/components/layout/OnboardingHeader';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
+import { ensureCourierProfile } from '@/lib/ensureCourierProfile';
 
 type PermissionId = 'location' | 'notifications' | 'camera';
 
@@ -108,7 +109,9 @@ export function PermissionsPage({ onBack, onContinue }: PermissionsPageProps) {
         <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[400px] bg-surface p-[var(--spacing-edge)] pb-safe shadow-[0_-8px_24px_rgba(0,0,0,0.06)] border-t border-surface-variant z-40">
           <button
             type="button"
-            onClick={onContinue}
+            onClick={() => {
+              void ensureCourierProfile().finally(onContinue);
+            }}
             className="w-full bg-primary-container text-on-primary-container font-semibold text-xl py-4 rounded-xl shadow-[0_6px_12px_rgba(16,185,129,0.1)] hover:bg-primary-container/90 transition-all active:scale-[0.98] flex items-center justify-center gap-2 min-h-[56px]"
           >
             Continue

@@ -24,6 +24,7 @@ Enterprise fleet managers are tagged `productLine: enterprise` with their chosen
 | Domain | Audience | Admin |
 |--------|----------|-------|
 | [roamdash.co](https://roamdash.co) | Merchants & ops | `/admin` — dash product ops |
+| [courier.roamdash.co](https://courier.roamdash.co) | Couriers | `/admin` — courier product ops |
 
 ## Shared backend
 
@@ -38,6 +39,7 @@ One Supabase project. Platform settings are stored per segment:
 | Driver | `platform:settings:driver` | roamdriver.co/admin |
 | Haul | `platform:settings:haul` | roamhaul.co/admin |
 | Dash | `platform:settings:dash` | roamdash.co/admin |
+| Courier | `platform:settings:courier` | courier.roamdash.co/admin |
 
 Legacy key `platform:settings` is read-only (dual-read fallback for fleet/enterprise migration).
 

@@ -1324,4 +1324,7 @@ app.post("/merchant/notifications/:id/read", async (c) => {
   return c.json({ ok: true });
 });
 
+import { registerCourierAdminRoutes } from "./admin/courierRoutes.ts";
+registerCourierAdminRoutes(app);
+
 Deno.serve(app.fetch);

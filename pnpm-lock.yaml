@@ -216,6 +216,9 @@ importers:
 
   apps/dash-courier:
     dependencies:
+      '@roam/admin-core':
+        specifier: workspace:*
+        version: link:../../packages/admin-core
       '@roam/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
@@ -237,15 +240,27 @@ importers:
       '@tanstack/react-query':
         specifier: '*'
         version: 5.100.9(react@18.3.1)
+      '@types/leaflet':
+        specifier: ^1.9.21
+        version: 1.9.21
       clsx:
         specifier: '*'
         version: 2.1.1
+      leaflet:
+        specifier: ^1.9.4
+        version: 1.9.4
+      lucide-react:
+        specifier: ^0.487.0
+        version: 0.487.0(react@18.3.1)
       react:
         specifier: ^18.3.1
         version: 18.3.1
       react-dom:
         specifier: ^18.3.1
         version: 18.3.1(react@18.3.1)
+      react-router-dom:
+        specifier: ^7.6.0
+        version: 7.15.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       sonner:
         specifier: ^2.0.3
         version: 2.0.7(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

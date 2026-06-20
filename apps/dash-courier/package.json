@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@roam/admin-core": "workspace:*",
     "@roam/api-client": "workspace:*",
     "@roam/auth-client": "workspace:*",
     "@roam/business-config": "workspace:*",
@@ -16,9 +17,13 @@
     "@roam/ui": "workspace:*",
     "@supabase/supabase-js": "^2",
     "@tanstack/react-query": "*",
+    "@types/leaflet": "^1.9.21",
     "clsx": "*",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.487.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-router-dom": "^7.6.0",
     "sonner": "^2.0.3",
     "tailwind-merge": "*"
   },
