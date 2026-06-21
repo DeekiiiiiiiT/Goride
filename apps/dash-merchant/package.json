@@ -9,20 +9,25 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@roam/types": "workspace:*",
-    "@roam/ui": "workspace:*",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@roam/admin-core": "workspace:*",
     "@roam/api-client": "workspace:*",
     "@roam/auth-client": "workspace:*",
-    "@roam/admin-core": "workspace:*",
+    "@roam/types": "workspace:*",
+    "@roam/ui": "workspace:*",
     "@supabase/supabase-js": "^2",
     "@tanstack/react-query": "*",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "*",
     "lucide-react": "^0.487.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-easy-crop": "^6.0.2",
+    "recharts": "^3.8.1",
     "sonner": "^2.0.3",
-    "clsx": "*",
-    "tailwind-merge": "*",
-    "class-variance-authority": "^0.7.1"
+    "tailwind-merge": "*"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.1.12",

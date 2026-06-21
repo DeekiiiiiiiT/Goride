@@ -1,17 +1,39 @@
-import React, { useMemo } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '@roam/api-client';
 import { supabase } from '@roam/auth-client';
+import { toast } from 'sonner';
 import { Merchant } from '../hooks/useMerchant';
-import { 
-  DollarSign, ShoppingBag, Clock, TrendingUp, AlertCircle, 
-  Star, CheckCircle, XCircle, ArrowUp, ArrowDown
-} from 'lucide-react';
-import { VerificationStatusBanner } from '../components/VerificationStatusBanner';
+import { useMerchantMenu } from '../hooks/useMerchantMenu';
+import PartnerHeader from '../components/PartnerHeader';
+import DashboardSimpleHeader from '../components/dashboard/DashboardSimpleHeader';
+import StoreClosedView, { PendingAction } from '../components/dashboard/StoreClosedView';
+import PoorPerformanceWarningSheet from '../components/PoorPerformanceWarningSheet';
+import {
+  acknowledgePerformanceWarning,
+  computePerformanceMetrics,
+  shouldShowPerformanceWarning,
+} from '../lib/performance-metrics';
+import {
+  getStoreClosedSubtitle,
+  MerchantHour,
+  shouldShowStoreClosedView,
+} from '../lib/business-hours-utils';
+import PauseOrdersSheet, {
+  PauseDuration,
+  PauseOrdersPayload,
+} from '../components/PauseOrdersSheet';
+import { MaterialIcon } from '../signup/components/MaterialIcon';
+import { formatElapsedTimer, formatJmd, formatTimeAgo, PartnerTab } from '../lib/partner-utils';
 
 interface DashboardPageProps {
   merchant: Merchant;
-  onNavigate: (page: string) => void;
+  onNavigate: (page: PartnerTab) => void;
+}
+
+interface OrderItem {
+  name: string;
+  quantity: number;
 }
 
 interface Order {
@@ -19,345 +41,637 @@ interface Order {
   order_number: string;
   status: string;
   total: number;
-  subtotal: number;
-  created_at: string;
   placed_at: string;
+  created_at: string;
+  accepted_at: string | null;
+  preparing_at: string | null;
+  ready_at: string | null;
   delivered_at: string | null;
   cancelled_at: string | null;
+  cancellation_reason?: string | null;
+  cancelled_by?: string | null;
+  items: OrderItem[];
+  delivery_address?: string;
   customer: {
     name: string;
-    phone: string;
   };
 }
 
+interface ActivityItem {
+  id: string;
+  title: string;
+  subtitle: string;
+  time: string;
+  icon: string;
+  iconClass: string;
+  filled?: boolean;
+}
+
+const SNAPSHOT_ICONS = [
+  { key: 'orders', icon: 'receipt_long', label: 'Orders today' },
+  { key: 'revenue', icon: 'payments', label: 'Revenue' },
+  { key: 'prep', icon: 'timer', label: 'Avg prep time' },
+  { key: 'rating', icon: 'star', label: 'Rating' },
+] as const;
+
+const PAUSE_DURATION_MS: Record<PauseDuration, number | null> = {
+  '15m': 15 * 60 * 1000,
+  '30m': 30 * 60 * 1000,
+  '1h': 60 * 60 * 1000,
+  '2h': 2 * 60 * 60 * 1000,
+  manual: null,
+};
+
+const PAUSE_DURATION_LABELS: Record<PauseDuration, string> = {
+  '15m': '15 minutes',
+  '30m': '30 minutes',
+  '1h': '1 hour',
+  '2h': '2 hours',
+  manual: 'until you turn orders back on',
+};
+
+function pauseStorageKey(merchantId: string) {
+  return `roam_partner_pause_until_${merchantId}`;
+}
+
 export default function DashboardPage({ merchant, onNavigate }: DashboardPageProps) {
+  const [, setTick] = useState(0);
+  const [pauseSheetOpen, setPauseSheetOpen] = useState(false);
+  const [performanceWarningOpen, setPerformanceWarningOpen] = useState(false);
   const queryClient = useQueryClient();
+  const resumeTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setTick((value) => value + 1), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const setAcceptingOrders = async (isAccepting: boolean) => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session) throw new Error('Not authenticated');
+
+    const res = await fetch(`${API_ENDPOINTS.delivery}/merchants/${merchant.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        name: merchant.name,
+        description: merchant.description,
+        address: merchant.address,
+        phone: merchant.phone,
+        email: merchant.email,
+        cuisine_type: merchant.cuisine_type,
+        avg_prep_time_mins: merchant.avg_prep_time_mins,
+        min_order_amount: merchant.min_order_amount,
+        delivery_fee: merchant.delivery_fee,
+        delivery_radius_km: merchant.delivery_radius_km,
+        is_accepting_orders: isAccepting,
+        logo_url: merchant.logo_url,
+        cover_image_url: merchant.cover_image_url,
+      }),
+    });
+
+    if (!res.ok) throw new Error('Failed to update store status');
+    return res.json();
+  };
+
+  const pauseMutation = useMutation({
+    mutationFn: async (payload: PauseOrdersPayload) => {
+      await setAcceptingOrders(false);
+
+      const durationMs = PAUSE_DURATION_MS[payload.duration];
+      if (durationMs) {
+        localStorage.setItem(pauseStorageKey(merchant.id), String(Date.now() + durationMs));
+      } else {
+        localStorage.removeItem(pauseStorageKey(merchant.id));
+      }
+    },
+    onSuccess: (_data, payload) => {
+      queryClient.invalidateQueries({ queryKey: ['my-merchant'] });
+      setPauseSheetOpen(false);
+      toast.success(
+        payload.duration === 'manual'
+          ? 'Orders paused until you turn them back on'
+          : `Orders paused for ${PAUSE_DURATION_LABELS[payload.duration]}`,
+      );
+    },
+    onError: () => toast.error('Failed to pause orders'),
+  });
+
+  const resumeMutation = useMutation({
+    mutationFn: async () => {
+      await setAcceptingOrders(true);
+      localStorage.removeItem(pauseStorageKey(merchant.id));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-merchant'] });
+      toast.success('Orders resumed — you are now accepting orders');
+    },
+    onError: () => toast.error('Failed to resume orders'),
+  });
+
+  useEffect(() => {
+    if (resumeTimerRef.current) {
+      window.clearTimeout(resumeTimerRef.current);
+      resumeTimerRef.current = null;
+    }
+
+    const stored = localStorage.getItem(pauseStorageKey(merchant.id));
+    if (!stored || merchant.is_accepting_orders) return;
+
+    const resumeAt = Number(stored);
+    if (Number.isNaN(resumeAt)) return;
+
+    const scheduleResume = (delay: number) => {
+      resumeTimerRef.current = window.setTimeout(() => {
+        resumeMutation.mutate();
+      }, delay);
+    };
+
+    if (resumeAt <= Date.now()) {
+      resumeMutation.mutate();
+      return;
+    }
+
+    scheduleResume(resumeAt - Date.now());
+
+    return () => {
+      if (resumeTimerRef.current) {
+        window.clearTimeout(resumeTimerRef.current);
+      }
+    };
+  }, [merchant.id, merchant.is_accepting_orders]);
+
   const { data: ordersData } = useQuery({
     queryKey: ['merchant-orders-all'],
     queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
       const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/orders`, {
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${session.access_token}`,
         },
       });
       if (!res.ok) throw new Error('Failed to fetch orders');
       return res.json();
     },
-    refetchInterval: 30000,
+    refetchInterval: 10000,
   });
 
-  const { data: completedData } = useQuery({
-    queryKey: ['merchant-orders-completed'],
+  const { data: deliveredHistoryData } = useQuery({
+    queryKey: ['merchant-orders', 'history', 'delivered'],
     queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
       const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/orders?status=delivered`, {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-        },
+        headers: { Authorization: `Bearer ${session.access_token}` },
       });
       if (!res.ok) throw new Error('Failed to fetch orders');
       return res.json();
     },
-    refetchInterval: 60000,
   });
 
+  const { data: cancelledHistoryData } = useQuery({
+    queryKey: ['merchant-orders', 'history', 'cancelled'],
+    queryFn: async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+
+      const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/orders?status=cancelled`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) throw new Error('Failed to fetch orders');
+      return res.json();
+    },
+  });
+
+  const { data: hoursData } = useQuery({
+    queryKey: ['merchant-hours', merchant.id],
+    queryFn: async () => {
+      const res = await fetch(`${API_ENDPOINTS.delivery}/merchants/${merchant.id}/hours`);
+      if (!res.ok) throw new Error('Failed to fetch hours');
+      return res.json();
+    },
+  });
+
+  const { data: menuData } = useMerchantMenu(merchant.id);
+
+  const merchantHours: MerchantHour[] = hoursData?.hours || [];
+
+  const handleStatusClick = () => {
+    if (merchant.is_accepting_orders) {
+      setPauseSheetOpen(true);
+      return;
+    }
+    resumeMutation.mutate();
+  };
+
   const activeOrders: Order[] = ordersData?.orders || [];
-  const completedOrders: Order[] = completedData?.orders || [];
-  const allOrders = [...activeOrders, ...completedOrders];
+  const completedOrders: Order[] = deliveredHistoryData?.orders || [];
+  const cancelledOrders: Order[] = cancelledHistoryData?.orders || [];
+
+  const performanceMetrics = useMemo(() => {
+    const merged = new Map<string, Order>();
+    for (const order of [...activeOrders, ...completedOrders, ...cancelledOrders]) {
+      merged.set(order.id, order);
+    }
+    return computePerformanceMetrics(
+      completedOrders,
+      cancelledOrders,
+      [...merged.values()],
+    );
+  }, [activeOrders, completedOrders, cancelledOrders]);
+
+  useEffect(() => {
+    if (
+      !performanceWarningOpen &&
+      shouldShowPerformanceWarning(merchant.id, performanceMetrics)
+    ) {
+      setPerformanceWarningOpen(true);
+    }
+  }, [merchant.id, performanceMetrics, performanceWarningOpen]);
+
+  const handleAcknowledgePerformance = () => {
+    acknowledgePerformanceWarning(merchant.id);
+    setPerformanceWarningOpen(false);
+  };
 
   const stats = useMemo(() => {
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
-    const weekStart = new Date(todayStart.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
 
-    const todayOrders = allOrders.filter(o => {
-      const orderDate = new Date(o.placed_at || o.created_at);
-      return orderDate >= todayStart && !['cancelled'].includes(o.status);
+    const todayOrders = activeOrders.filter((order) => {
+      const orderDate = new Date(order.placed_at || order.created_at);
+      return orderDate >= todayStart && order.status !== 'cancelled';
     });
 
-    const yesterdayOrders = allOrders.filter(o => {
-      const orderDate = new Date(o.placed_at || o.created_at);
-      return orderDate >= yesterdayStart && orderDate < todayStart && !['cancelled'].includes(o.status);
-    });
-
-    const weekOrders = allOrders.filter(o => {
-      const orderDate = new Date(o.placed_at || o.created_at);
-      return orderDate >= weekStart && !['cancelled'].includes(o.status);
-    });
-
-    const todaySales = todayOrders.reduce((sum, o) => sum + o.total, 0);
-    const yesterdaySales = yesterdayOrders.reduce((sum, o) => sum + o.total, 0);
-    const weekSales = weekOrders.reduce((sum, o) => sum + o.total, 0);
-    
-    const salesChange = yesterdaySales > 0 
-      ? ((todaySales - yesterdaySales) / yesterdaySales * 100).toFixed(0)
-      : todaySales > 0 ? '100' : '0';
-
-    const completedCount = allOrders.filter(o => o.status === 'delivered').length;
-    const cancelledCount = allOrders.filter(o => o.status === 'cancelled').length;
-    const completionRate = completedCount + cancelledCount > 0
-      ? (completedCount / (completedCount + cancelledCount) * 100).toFixed(0)
-      : '100';
-
-    const avgOrderValue = todayOrders.length > 0 
-      ? todaySales / todayOrders.length 
-      : 0;
+    const todayRevenue = todayOrders.reduce((sum, order) => sum + order.total, 0);
 
     return {
-      todaySales,
-      todayOrders: todayOrders.length,
-      weekSales,
-      weekOrders: weekOrders.length,
-      salesChange: parseInt(salesChange),
-      completionRate: parseInt(completionRate),
-      avgOrderValue,
+      ordersToday: todayOrders.length,
+      revenue: todayRevenue,
+      avgPrep: merchant.avg_prep_time_mins || 18,
+      rating: merchant.rating?.toFixed(1) || '—',
     };
-  }, [allOrders]);
+  }, [activeOrders, merchant.avg_prep_time_mins, merchant.rating]);
 
-  const newOrders = activeOrders.filter(o => o.status === 'placed');
-  const preparingOrders = activeOrders.filter(o => ['accepted', 'preparing'].includes(o.status));
-  const readyOrders = activeOrders.filter(o => o.status === 'ready');
+  const newOrders = activeOrders.filter((order) => order.status === 'placed');
+  const preparingOrders = activeOrders.filter((order) =>
+    ['accepted', 'preparing'].includes(order.status),
+  );
 
-  const getTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
-    const mins = Math.round((Date.now() - date.getTime()) / 60000);
-    if (mins < 1) return 'Just now';
-    if (mins < 60) return `${mins}m ago`;
-    return `${Math.floor(mins / 60)}h ago`;
+  const previewOrders = useMemo(() => {
+    const prioritized = [...newOrders, ...preparingOrders].slice(0, 2);
+    return prioritized.map((order) => {
+      const itemCount = order.items?.reduce((sum, item) => sum + item.quantity, 0) || 0;
+      const isNew = order.status === 'placed';
+      const timerFrom =
+        order.preparing_at || order.accepted_at || order.placed_at || order.created_at;
+
+      return {
+        id: order.id,
+        number: order.order_number,
+        itemCount,
+        type: order.delivery_address ? 'Delivery' : 'Pickup',
+        isNew,
+        timer: formatElapsedTimer(timerFrom),
+        timerUrgent: isNew,
+      };
+    });
+  }, [newOrders, preparingOrders]);
+
+  const recentActivity: ActivityItem[] = useMemo(() => {
+    const delivered = activeOrders
+      .filter((order) => order.status === 'delivered' && order.delivered_at)
+      .slice(0, 2)
+      .map((order) => ({
+        id: order.id,
+        title: `Order ${order.order_number} picked up`,
+        subtitle: 'Courier arrived and collected order',
+        time: formatTimeAgo(order.delivered_at!),
+        icon: 'local_mall',
+        iconClass: 'bg-surface-variant text-on-surface-variant',
+      }));
+
+    const fallback: ActivityItem[] = [
+      {
+        id: 'review',
+        title: 'New 5-star review',
+        subtitle: '"Food was hot and amazing!"',
+        time: '1h ago',
+        icon: 'star',
+        iconClass: 'bg-secondary-container/20 text-secondary',
+        filled: true,
+      },
+      {
+        id: 'sold-out',
+        title: 'Item marked Sold Out',
+        subtitle: 'Spicy Chicken Sandwich',
+        time: '2h ago',
+        icon: 'inventory_2',
+        iconClass: 'bg-surface-variant text-on-surface-variant',
+      },
+    ];
+
+    return [...delivered, ...fallback].slice(0, 3);
+  }, [activeOrders]);
+
+  const snapshotValues = {
+    orders: String(stats.ordersToday),
+    revenue: formatJmd(stats.revenue),
+    prep: (
+      <>
+        {stats.avgPrep} <span className="text-body-sm font-normal text-on-surface-variant">min</span>
+      </>
+    ),
+    rating: stats.rating,
+  };
+
+  const showClosedView = shouldShowStoreClosedView(
+    merchant.is_accepting_orders,
+    merchantHours,
+  );
+
+  const pendingActions = useMemo((): PendingAction[] => {
+    const actions: PendingAction[] = [];
+
+    activeOrders
+      .filter((order) => order.status === 'cancelled')
+      .slice(0, 2)
+      .forEach((order) => {
+        actions.push({
+          id: `order-${order.id}`,
+          type: 'order',
+          title: `Resolve Order #${order.order_number}`,
+          description:
+            order.cancellation_reason?.trim() || 'Customer reported an issue with this order.',
+        });
+      });
+
+    const unavailableItems = (menuData?.items || []).filter(
+      (item: { is_available: boolean }) => !item.is_available,
+    );
+
+    unavailableItems.slice(0, 2).forEach((item: { id: string; name: string }) => {
+      actions.push({
+        id: `inventory-${item.id}`,
+        type: 'inventory',
+        title: 'Inventory Alert',
+        description: `${item.name} is currently marked sold out.`,
+      });
+    });
+
+    return actions.slice(0, 4);
+  }, [activeOrders, menuData?.items]);
+
+  const handlePendingActionClick = (action: PendingAction) => {
+    if (action.type === 'order') {
+      onNavigate('orders');
+      return;
+    }
+    onNavigate('menu');
   };
 
   return (
-    <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-500">Welcome back, {merchant.name}</p>
-      </div>
-
-      <VerificationStatusBanner
-        merchant={merchant}
-        onEdit={() => onNavigate('settings')}
-        onRefresh={() => queryClient.invalidateQueries({ queryKey: ['my-merchant'] })}
-        onResubmit={() => queryClient.invalidateQueries({ queryKey: ['my-merchant'] })}
-      />
-
-      {!merchant.is_accepting_orders && merchant.is_active && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 flex items-start gap-3">
-          <XCircle className="w-5 h-5 text-red-600 mt-0.5" />
-          <div>
-            <p className="font-medium text-red-800">Orders Paused</p>
-            <p className="text-sm text-red-700 mt-1">
-              You're currently not accepting orders. Go to Settings to resume.
-            </p>
-          </div>
-        </div>
+    <div className="min-h-dvh bg-background pb-24 font-body-lg text-on-background">
+      {showClosedView ? (
+        <DashboardSimpleHeader
+          notificationCount={newOrders.length}
+          onNotificationsClick={() => onNavigate('orders')}
+        />
+      ) : (
+        <PartnerHeader
+          merchant={merchant}
+          notificationCount={newOrders.length}
+          onNotificationsClick={() => onNavigate('orders')}
+          onSettingsClick={() => onNavigate('account')}
+          onStatusClick={handleStatusClick}
+        />
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <div className="bg-white rounded-xl p-5 shadow-sm">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm text-gray-500 mb-1">Today's Sales</p>
-              <p className="text-2xl font-bold text-gray-900">${stats.todaySales.toFixed(2)}</p>
-              <p className="text-xs text-gray-500 mt-1">{stats.todayOrders} orders</p>
+      {showClosedView ? (
+        <StoreClosedView
+          opensLabel={getStoreClosedSubtitle(merchant.is_accepting_orders, merchantHours)}
+          onOpenEarly={() => resumeMutation.mutate()}
+          isOpening={resumeMutation.isPending}
+          pendingActions={pendingActions}
+          onActionClick={handlePendingActionClick}
+        />
+      ) : (
+      <main className="mx-auto flex max-w-screen-xl flex-col gap-md px-margin-mobile pt-sm md:px-margin-tablet">
+        {newOrders.length > 0 && (
+          <button
+            type="button"
+            onClick={() => onNavigate('orders')}
+            className="partner-pulse-banner flex cursor-pointer items-center justify-between rounded-lg border border-primary-container p-sm transition-transform active:scale-95"
+          >
+            <div className="flex items-center gap-xs text-label-md font-semibold text-primary-container">
+              <MaterialIcon name="notifications_active" filled />
+              <span>
+                {newOrders.length} new order{newOrders.length === 1 ? '' : 's'} waiting
+              </span>
             </div>
-            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-              <DollarSign className="w-5 h-5 text-green-600" />
-            </div>
-          </div>
-          {stats.salesChange !== 0 && (
-            <div className={`flex items-center gap-1 mt-3 text-sm ${stats.salesChange > 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {stats.salesChange > 0 ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
-              {Math.abs(stats.salesChange)}% vs yesterday
-            </div>
-          )}
-        </div>
+            <MaterialIcon name="chevron_right" className="text-primary-container" />
+          </button>
+        )}
 
-        <div className="bg-white rounded-xl p-5 shadow-sm">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm text-gray-500 mb-1">This Week</p>
-              <p className="text-2xl font-bold text-gray-900">${stats.weekSales.toFixed(2)}</p>
-              <p className="text-xs text-gray-500 mt-1">{stats.weekOrders} orders</p>
-            </div>
-            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-blue-600" />
-            </div>
-          </div>
-        </div>
+        <section>
+          <h2 className="mb-sm text-headline-md font-semibold text-on-surface">Today&apos;s Snapshot</h2>
+          <div className="no-scrollbar flex gap-sm overflow-x-auto pb-xs">
+            {SNAPSHOT_ICONS.map((card) => {
+              const isRevenue = card.key === 'revenue';
+              const content = (
+                <>
+                  <MaterialIcon name={card.icon} className="text-outline" />
+                  <span className="text-label-md font-semibold text-on-surface-variant">{card.label}</span>
+                  <span className="text-headline-lg-mobile font-bold text-on-surface">
+                    {snapshotValues[card.key]}
+                  </span>
+                </>
+              );
 
-        <div className="bg-white rounded-xl p-5 shadow-sm">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm text-gray-500 mb-1">Completion Rate</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.completionRate}%</p>
-              <p className="text-xs text-gray-500 mt-1">Orders completed</p>
-            </div>
-            <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-              <CheckCircle className="w-5 h-5 text-purple-600" />
-            </div>
-          </div>
-        </div>
+              if (isRevenue) {
+                return (
+                  <button
+                    key={card.key}
+                    type="button"
+                    onClick={() => onNavigate('earnings')}
+                    className="flex min-w-[160px] shrink-0 flex-col gap-xs rounded-lg border border-outline-variant bg-surface-container-lowest p-sm text-left shadow-sm transition-transform active:scale-95 hover:bg-surface-container-low"
+                  >
+                    {content}
+                  </button>
+                );
+              }
 
-        <div className="bg-white rounded-xl p-5 shadow-sm">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm text-gray-500 mb-1">Rating</p>
-              <p className="text-2xl font-bold text-gray-900 flex items-center gap-1">
-                {merchant.rating?.toFixed(1) || 'New'}
-                <Star className="w-5 h-5 text-amber-500 fill-amber-500" />
-              </p>
-              <p className="text-xs text-gray-500 mt-1">{merchant.total_ratings || 0} reviews</p>
-            </div>
-            <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
-              <Star className="w-5 h-5 text-amber-600" />
-            </div>
+              return (
+                <div
+                  key={card.key}
+                  className="flex min-w-[160px] shrink-0 flex-col gap-xs rounded-lg border border-outline-variant bg-surface-container-lowest p-sm shadow-sm"
+                >
+                  {content}
+                </div>
+              );
+            })}
           </div>
-        </div>
-      </div>
+        </section>
 
-      {newOrders.length > 0 && (
-        <div className="bg-gradient-to-r from-red-500 to-orange-500 rounded-xl p-5 mb-6 text-white">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center animate-pulse">
-                <ShoppingBag className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="font-bold text-xl">
-                  {newOrders.length} New Order{newOrders.length > 1 ? 's' : ''}!
-                </p>
-                <p className="text-white/80 text-sm">Waiting for your confirmation</p>
-              </div>
-            </div>
+        <section className="grid grid-cols-3 gap-xs">
+          <button
+            type="button"
+            onClick={() => setPauseSheetOpen(true)}
+            disabled={!merchant.is_accepting_orders}
+            className="flex min-h-[80px] flex-col items-center justify-center gap-xs rounded-lg border border-warning bg-warning/10 py-sm text-label-md font-semibold text-[#d97706] transition-transform active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <MaterialIcon name="pause_circle" />
+            <span className="text-center">Pause Orders</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate('menu')}
+            className="flex min-h-[80px] flex-col items-center justify-center gap-xs rounded-lg border border-outline-variant bg-surface-container-lowest py-sm text-label-md font-semibold text-on-surface shadow-sm transition-transform active:scale-95"
+          >
+            <MaterialIcon name="restaurant_menu" />
+            <span className="text-center">View Menu</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate('menu')}
+            className="flex min-h-[80px] flex-col items-center justify-center gap-xs rounded-lg border border-outline-variant bg-surface-container-lowest py-sm text-label-md font-semibold text-on-surface shadow-sm transition-transform active:scale-95"
+          >
+            <MaterialIcon name="inventory_2" />
+            <span className="text-center">Sold Out</span>
+          </button>
+        </section>
+
+        <section>
+          <div className="mb-sm flex items-end justify-between">
+            <h2 className="text-headline-md font-semibold text-on-surface">Active Orders</h2>
             <button
+              type="button"
               onClick={() => onNavigate('orders')}
-              className="px-5 py-2.5 bg-white text-red-600 rounded-lg font-semibold hover:bg-white/90"
+              className="text-label-md font-semibold text-primary hover:underline"
             >
-              View Orders
+              View All
             </button>
           </div>
-        </div>
+
+          <div className="flex flex-col gap-sm">
+            {previewOrders.length === 0 ? (
+              <div className="rounded-lg border border-outline-variant bg-surface-container-lowest p-md text-center text-body-sm text-on-surface-variant shadow-sm">
+                No active orders right now.
+              </div>
+            ) : (
+              previewOrders.map((order) => (
+                <div
+                  key={order.id}
+                  className={`flex flex-col gap-sm rounded-lg border bg-surface-container-lowest p-sm shadow-sm ${
+                    order.isNew ? 'border-primary-container' : 'border-outline-variant'
+                  }`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex flex-col">
+                      <span className="text-headline-md font-semibold text-on-surface">
+                        {order.number}
+                      </span>
+                      <span className="text-body-sm text-on-surface-variant">
+                        {order.itemCount} item{order.itemCount === 1 ? '' : 's'} • {order.type}
+                      </span>
+                    </div>
+                    <div
+                      className={`flex items-center gap-1 rounded px-2 py-1 text-label-md font-semibold ${
+                        order.timerUrgent
+                          ? 'bg-error-container text-on-error-container'
+                          : 'bg-surface-variant text-on-surface-variant'
+                      }`}
+                    >
+                      <MaterialIcon name="timer" size={16} />
+                      {order.timer}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-outline-variant pt-sm">
+                    <span
+                      className={`text-label-md font-semibold ${
+                        order.isNew ? 'text-primary-container' : 'text-on-surface-variant'
+                      }`}
+                    >
+                      {order.isNew ? 'NEW ORDER' : 'Preparing'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onNavigate('orders')}
+                      className={`min-h-[48px] rounded-lg px-4 py-2 text-label-md font-semibold transition-transform active:scale-95 ${
+                        order.isNew
+                          ? 'bg-primary-container text-on-primary-container'
+                          : 'border border-primary text-primary'
+                      }`}
+                    >
+                      {order.isNew ? 'Accept Order' : 'Mark Ready'}
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+
+        <section>
+          <h2 className="mb-sm text-headline-md font-semibold text-on-surface">Recent Activity</h2>
+          <div className="flex flex-col gap-sm rounded-lg border border-outline-variant bg-surface-container-lowest p-sm shadow-sm">
+            {recentActivity.map((activity, index) => (
+              <div
+                key={activity.id}
+                className={`flex items-start gap-sm ${
+                  index < recentActivity.length - 1
+                    ? 'border-b border-outline-variant pb-sm'
+                    : ''
+                }`}
+              >
+                <div
+                  className={`mt-1 flex items-center justify-center rounded-full p-2 ${activity.iconClass}`}
+                >
+                  <MaterialIcon name={activity.icon} filled={activity.filled} size={20} />
+                </div>
+                <div className="flex flex-1 flex-col">
+                  <span className="text-body-lg text-on-surface">{activity.title}</span>
+                  <span className="text-body-sm text-on-surface-variant">{activity.subtitle}</span>
+                </div>
+                <span className="text-label-sm text-on-surface-variant">{activity.time}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      </main>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <div className="p-4 border-b flex items-center justify-between">
-            <h2 className="font-semibold text-gray-900 flex items-center gap-2">
-              <span className="w-2.5 h-2.5 bg-yellow-500 rounded-full" />
-              New Orders
-            </h2>
-            <span className="text-sm text-gray-500">{newOrders.length}</span>
-          </div>
-          <div className="p-4">
-            {newOrders.length === 0 ? (
-              <p className="text-gray-400 text-sm text-center py-4">No new orders</p>
-            ) : (
-              <div className="space-y-3">
-                {newOrders.slice(0, 5).map(order => (
-                  <div key={order.id} className="p-3 bg-yellow-50 rounded-lg border border-yellow-100">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-semibold text-gray-900">{order.order_number}</p>
-                        <p className="text-sm text-gray-500">{order.customer.name}</p>
-                        <p className="text-xs text-yellow-700 mt-1">{getTimeAgo(order.placed_at)}</p>
-                      </div>
-                      <p className="font-bold text-gray-900">${order.total.toFixed(2)}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+      <PauseOrdersSheet
+        open={pauseSheetOpen}
+        onClose={() => setPauseSheetOpen(false)}
+        onConfirm={(payload) => pauseMutation.mutate(payload)}
+        isSubmitting={pauseMutation.isPending}
+      />
 
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <div className="p-4 border-b flex items-center justify-between">
-            <h2 className="font-semibold text-gray-900 flex items-center gap-2">
-              <span className="w-2.5 h-2.5 bg-blue-500 rounded-full" />
-              In Preparation
-            </h2>
-            <span className="text-sm text-gray-500">{preparingOrders.length}</span>
-          </div>
-          <div className="p-4">
-            {preparingOrders.length === 0 ? (
-              <p className="text-gray-400 text-sm text-center py-4">No orders being prepared</p>
-            ) : (
-              <div className="space-y-3">
-                {preparingOrders.slice(0, 5).map(order => (
-                  <div key={order.id} className="p-3 bg-blue-50 rounded-lg border border-blue-100">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-semibold text-gray-900">{order.order_number}</p>
-                        <p className="text-sm text-gray-500">{order.customer.name}</p>
-                        <p className="text-xs text-blue-700 mt-1">{getTimeAgo(order.placed_at)}</p>
-                      </div>
-                      <p className="font-bold text-gray-900">${order.total.toFixed(2)}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <div className="p-4 border-b flex items-center justify-between">
-            <h2 className="font-semibold text-gray-900 flex items-center gap-2">
-              <span className="w-2.5 h-2.5 bg-green-500 rounded-full" />
-              Ready for Pickup
-            </h2>
-            <span className="text-sm text-gray-500">{readyOrders.length}</span>
-          </div>
-          <div className="p-4">
-            {readyOrders.length === 0 ? (
-              <p className="text-gray-400 text-sm text-center py-4">No orders ready</p>
-            ) : (
-              <div className="space-y-3">
-                {readyOrders.slice(0, 5).map(order => (
-                  <div key={order.id} className="p-3 bg-green-50 rounded-lg border border-green-100">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-semibold text-gray-900">{order.order_number}</p>
-                        <p className="text-sm text-gray-500">{order.customer.name}</p>
-                        <p className="text-xs text-green-700 mt-1">{getTimeAgo(order.placed_at)}</p>
-                      </div>
-                      <p className="font-bold text-gray-900">${order.total.toFixed(2)}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-6 bg-white rounded-xl shadow-sm p-6">
-        <h2 className="font-semibold text-gray-900 mb-4">Quick Stats</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-          <div>
-            <p className="text-3xl font-bold text-gray-900">{merchant.avg_prep_time_mins}</p>
-            <p className="text-sm text-gray-500">Avg Prep (min)</p>
-          </div>
-          <div>
-            <p className="text-3xl font-bold text-gray-900">${stats.avgOrderValue.toFixed(0)}</p>
-            <p className="text-sm text-gray-500">Avg Order Value</p>
-          </div>
-          <div>
-            <p className="text-3xl font-bold text-gray-900">{merchant.delivery_radius_km}</p>
-            <p className="text-sm text-gray-500">Delivery Radius (km)</p>
-          </div>
-          <div>
-            <p className="text-3xl font-bold text-gray-900">${merchant.delivery_fee}</p>
-            <p className="text-sm text-gray-500">Delivery Fee</p>
-          </div>
-        </div>
-      </div>
+      <PoorPerformanceWarningSheet
+        open={performanceWarningOpen}
+        metrics={performanceMetrics}
+        onAcknowledge={handleAcknowledgePerformance}
+        onGetHelp={() => {
+          acknowledgePerformanceWarning(merchant.id);
+          setPerformanceWarningOpen(false);
+          onNavigate('account');
+        }}
+      />
     </div>
   );
 }

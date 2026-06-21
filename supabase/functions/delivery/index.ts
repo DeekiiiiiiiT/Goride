@@ -317,7 +317,8 @@ app.get("/merchants/:id", async (c) => {
     .from("menu_items")
     .select("*")
     .eq("merchant_id", id)
-    .eq("is_available", true);
+    .eq("is_available", true)
+    .order("sort_order");
   
   return c.json({
     merchant,
@@ -459,6 +460,20 @@ app.post("/merchant/resubmit", async (c) => {
 
   return c.json({ merchant: updated });
 });
+
+// Resolve merchant owned by authenticated user
+async function getMerchantForUser(
+  supabase: ReturnType<typeof getSupabase>,
+  userId: string,
+) {
+  const { data: merchant, error } = await supabase
+    .from("merchants")
+    .select("*")
+    .eq("owner_id", userId)
+    .single();
+  if (error || !merchant) return null;
+  return merchant as Record<string, unknown>;
+}
 
 // ============================================================================
 // Operating Hours
@@ -663,6 +678,93 @@ app.delete("/merchants/:merchantId/items/:itemId", async (c) => {
   return c.json({ success: true });
 });
 
+// Authenticated merchant menu (includes unavailable items)
+app.get("/merchant/menu", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const merchant = await getMerchantForUser(supabase, user.id);
+  if (!merchant) return c.json({ error: "Not a merchant" }, 403);
+
+  const merchantId = merchant.id as string;
+
+  const { data: categories, error: catError } = await supabase
+    .from("menu_categories")
+    .select("*")
+    .eq("merchant_id", merchantId)
+    .eq("is_active", true)
+    .order("sort_order");
+
+  if (catError) return c.json({ error: catError.message }, 500);
+
+  const { data: items, error: itemError } = await supabase
+    .from("menu_items")
+    .select("*")
+    .eq("merchant_id", merchantId)
+    .order("sort_order");
+
+  if (itemError) return c.json({ error: itemError.message }, 500);
+
+  return c.json({
+    merchant,
+    categories: categories || [],
+    items: items || [],
+  });
+});
+
+// Bulk reorder categories and/or items
+app.put("/merchant/menu/reorder", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const merchant = await getMerchantForUser(supabase, user.id);
+  if (!merchant) return c.json({ error: "Not a merchant" }, 403);
+
+  const merchantId = merchant.id as string;
+  const body = await c.req.json();
+  const categories = Array.isArray(body.categories) ? body.categories : [];
+  const items = Array.isArray(body.items) ? body.items : [];
+
+  let categoriesUpdated = 0;
+  let itemsUpdated = 0;
+
+  for (const entry of categories) {
+    if (!entry?.id || entry.sortOrder == null) continue;
+    const { error } = await supabase
+      .from("menu_categories")
+      .update({ sort_order: entry.sortOrder })
+      .eq("id", entry.id)
+      .eq("merchant_id", merchantId);
+    if (error) return c.json({ error: error.message }, 500);
+    categoriesUpdated += 1;
+  }
+
+  for (const entry of items) {
+    if (!entry?.id || entry.sortOrder == null) continue;
+    const update: Record<string, unknown> = { sort_order: entry.sortOrder };
+    if (entry.categoryId !== undefined) {
+      update.category_id = entry.categoryId;
+    }
+    const { error } = await supabase
+      .from("menu_items")
+      .update(update)
+      .eq("id", entry.id)
+      .eq("merchant_id", merchantId);
+    if (error) return c.json({ error: error.message }, 500);
+    itemsUpdated += 1;
+  }
+
+  return c.json({ ok: true, categoriesUpdated, itemsUpdated });
+});
+
 // ============================================================================
 // Orders
 // ============================================================================
@@ -781,7 +883,7 @@ app.put("/orders/:id/status", async (c) => {
   
   const { id } = c.req.param();
   const body = await c.req.json();
-  const { status, notes, actorType } = body;
+  const { status, notes, actorType, estimatedPrepTimeMins } = body;
   
   // Valid status transitions
   const validTransitions: Record<string, string[]> = {
@@ -820,6 +922,9 @@ app.put("/orders/:id/status", async (c) => {
     updateData.cancelled_at = new Date().toISOString();
     updateData.cancelled_by = actorType;
     updateData.cancellation_reason = notes;
+  }
+  if (estimatedPrepTimeMins != null) {
+    updateData.estimated_prep_time_mins = estimatedPrepTimeMins;
   }
   
   const { data: updatedOrder, error: updateError } = await supabase
@@ -891,7 +996,7 @@ app.get("/merchant/orders", async (c) => {
   
   if (!merchant) return c.json({ error: "Not a merchant" }, 403);
   
-  const { status } = c.req.query();
+  const { status, from, to, limit } = c.req.query();
   
   let query = supabase
     .from("orders")
@@ -906,6 +1011,21 @@ app.get("/merchant/orders", async (c) => {
   } else {
     // Default: show active orders
     query = query.in("status", ["placed", "accepted", "preparing", "ready"]);
+  }
+
+  if (from) {
+    query = query.gte("placed_at", from);
+  }
+  if (to) {
+    const toDate = new Date(to);
+    toDate.setHours(23, 59, 59, 999);
+    query = query.lte("placed_at", toDate.toISOString());
+  }
+  if (limit) {
+    const parsedLimit = parseInt(limit, 10);
+    if (!Number.isNaN(parsedLimit) && parsedLimit > 0) {
+      query = query.limit(parsedLimit);
+    }
   }
   
   const { data: orders, error } = await query.order("created_at", { ascending: true });
@@ -1280,6 +1400,284 @@ app.post("/admin/merchants/:id/status", async (c) => {
   }
 
   return c.json({ merchant: updated });
+});
+
+// ============================================================================
+// Merchant analytics
+// ============================================================================
+
+type OrderRow = Record<string, unknown>;
+
+function parseOrderItems(items: unknown): { name: string; quantity: number; price?: number }[] {
+  if (!Array.isArray(items)) return [];
+  return items.map((item) => {
+    const row = item as Record<string, unknown>;
+    return {
+      name: String(row.name || "Unknown"),
+      quantity: Number(row.quantity || 1),
+      price: row.price != null ? Number(row.price) : undefined,
+    };
+  });
+}
+
+function bucketKey(date: Date, granularity: string) {
+  if (granularity === "day") {
+    return date.toISOString().slice(0, 10);
+  }
+  return `${date.toISOString().slice(0, 13)}:00`;
+}
+
+function formatBucketLabel(key: string, granularity: string) {
+  if (granularity === "day") {
+    const d = new Date(key);
+    return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  }
+  const hour = parseInt(key.slice(11, 13), 10);
+  const suffix = hour >= 12 ? "pm" : "am";
+  const h12 = hour % 12 || 12;
+  return `${h12}${suffix}`;
+}
+
+app.get("/merchant/analytics", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const merchant = await getMerchantForUser(supabase, user.id);
+  if (!merchant) return c.json({ error: "Not a merchant" }, 403);
+
+  const merchantId = merchant.id as string;
+  const { from, to, granularity: rawGranularity } = c.req.query();
+  const granularity = rawGranularity === "day" ? "day" : "hour";
+
+  const now = new Date();
+  const fromDate = from ? new Date(from) : new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const toDate = to ? new Date(to) : now;
+  toDate.setHours(23, 59, 59, 999);
+
+  const { data: orders, error } = await supabase
+    .from("orders")
+    .select("*")
+    .eq("merchant_id", merchantId)
+    .gte("placed_at", fromDate.toISOString())
+    .lte("placed_at", toDate.toISOString());
+
+  if (error) return c.json({ error: error.message }, 500);
+
+  const allOrders = (orders || []) as OrderRow[];
+  const delivered = allOrders.filter((o) => o.status === "delivered");
+  const cancelled = allOrders.filter((o) => o.status === "cancelled");
+  const active = allOrders.filter((o) =>
+    ["placed", "accepted", "preparing", "ready"].includes(String(o.status))
+  );
+
+  const totalRevenue = delivered.reduce((sum, o) => sum + Number(o.subtotal || 0), 0);
+  const totalOrders = delivered.length;
+  const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+  const prepTimes: number[] = [];
+  for (const o of delivered) {
+    const accepted = o.accepted_at ? new Date(String(o.accepted_at)).getTime() : null;
+    const ready = o.ready_at ? new Date(String(o.ready_at)).getTime() : null;
+    if (accepted && ready && ready > accepted) {
+      prepTimes.push((ready - accepted) / 60000);
+    }
+  }
+  const avgPrepTime = prepTimes.length > 0
+    ? Math.round(prepTimes.reduce((a, b) => a + b, 0) / prepTimes.length)
+    : 0;
+
+  const revenueBuckets: Record<string, number> = {};
+  const volumeBuckets: Record<string, number> = {};
+  for (const o of delivered) {
+    const placed = new Date(String(o.placed_at || o.created_at));
+    const key = bucketKey(placed, granularity);
+    revenueBuckets[key] = (revenueBuckets[key] || 0) + Number(o.subtotal || 0);
+    volumeBuckets[key] = (volumeBuckets[key] || 0) + 1;
+  }
+
+  const bucketKeys = Object.keys(revenueBuckets).sort();
+  const revenueByBucket = bucketKeys.map((key) => ({
+    key,
+    label: formatBucketLabel(key, granularity),
+    revenue: revenueBuckets[key] || 0,
+  }));
+  const orderVolumeByBucket = bucketKeys.map((key) => ({
+    key,
+    label: formatBucketLabel(key, granularity),
+    count: volumeBuckets[key] || 0,
+  }));
+
+  const itemMap: Record<string, { name: string; orders: number; revenue: number }> = {};
+  for (const o of delivered) {
+    for (const item of parseOrderItems(o.items)) {
+      if (!itemMap[item.name]) {
+        itemMap[item.name] = { name: item.name, orders: 0, revenue: 0 };
+      }
+      itemMap[item.name].orders += item.quantity;
+      itemMap[item.name].revenue += (item.price || 0) * item.quantity;
+    }
+  }
+  const topItems = Object.values(itemMap)
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 10)
+    .map((item, index) => ({
+      rank: index + 1,
+      name: item.name,
+      revenue: item.revenue,
+      orders: item.orders,
+      progress: totalRevenue > 0 ? Math.round((item.revenue / totalRevenue) * 100) : 0,
+    }));
+
+  const accepted = active.filter((o) =>
+    ["accepted", "preparing", "ready", "delivered"].includes(String(o.status))
+  ).length + delivered.length;
+  const rejected = cancelled.filter((o) => o.cancelled_by === "merchant").length;
+  const pending = active.filter((o) => o.status === "placed").length;
+  const acceptanceSample = accepted + rejected + pending;
+  const acceptanceRate = acceptanceSample > 0
+    ? Math.round((accepted / acceptanceSample) * 100)
+    : 100;
+  const cancellationRate = (delivered.length + cancelled.length) > 0
+    ? Math.round((cancelled.length / (delivered.length + cancelled.length)) * 100)
+    : 0;
+
+  const reviews = allOrders
+    .filter((o) => o.customer_rating != null)
+    .map((o) => ({
+      id: String(o.id),
+      author: "Customer",
+      authorInitial: "C",
+      avatarClass: "bg-primary-container text-on-primary-container",
+      rating: Number(o.customer_rating),
+      daysAgo: Math.max(
+        0,
+        Math.floor((Date.now() - new Date(String(o.delivered_at || o.created_at)).getTime()) / 86400000),
+      ),
+      text: String(o.customer_review || ""),
+      items: parseOrderItems(o.items).map((i) => i.name),
+      needsResponse: !o.customer_review,
+    }));
+
+  const ratingSum = reviews.reduce((sum, r) => sum + r.rating, 0);
+  const avgRating = reviews.length > 0 ? ratingSum / reviews.length : 0;
+  const ratingDistribution = [5, 4, 3, 2, 1].map((star) => ({
+    star,
+    count: reviews.filter((r) => r.rating === star).length,
+    percent: reviews.length > 0
+      ? Math.round((reviews.filter((r) => r.rating === star).length / reviews.length) * 100)
+      : 0,
+  }));
+
+  return c.json({
+    from: fromDate.toISOString(),
+    to: toDate.toISOString(),
+    granularity,
+    totalOrders,
+    totalRevenue,
+    avgOrderValue,
+    avgPrepTime,
+    revenueByBucket,
+    orderVolumeByBucket,
+    topItems,
+    categoryBreakdown: [],
+    operational: {
+      acceptanceRate,
+      cancellationRate,
+      avgPrepTime,
+    },
+    reviews,
+    avgRating,
+    ratingDistribution,
+  });
+});
+
+// ============================================================================
+// Merchant web push subscriptions
+// ============================================================================
+
+app.post("/merchant/push/subscribe", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const merchant = await getMerchantForUser(supabase, user.id);
+  if (!merchant) return c.json({ error: "Not a merchant" }, 403);
+
+  const body = await c.req.json();
+  const endpoint = body.endpoint as string;
+  const keys = body.keys as { p256dh?: string; auth?: string };
+  if (!endpoint || !keys?.p256dh || !keys?.auth) {
+    return c.json({ error: "Invalid subscription payload" }, 400);
+  }
+
+  const { error } = await supabase
+    .from("merchant_push_subscriptions")
+    .upsert({
+      merchant_id: merchant.id,
+      user_id: user.id,
+      endpoint,
+      p256dh: keys.p256dh,
+      auth: keys.auth,
+      user_agent: c.req.header("User-Agent") || null,
+      last_used_at: new Date().toISOString(),
+    }, { onConflict: "endpoint" });
+
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ ok: true });
+});
+
+app.delete("/merchant/push/unsubscribe", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const merchant = await getMerchantForUser(supabase, user.id);
+  if (!merchant) return c.json({ error: "Not a merchant" }, 403);
+
+  const body = await c.req.json().catch(() => ({}));
+  const endpoint = body.endpoint as string | undefined;
+
+  let query = supabase
+    .from("merchant_push_subscriptions")
+    .delete()
+    .eq("merchant_id", merchant.id);
+
+  if (endpoint) {
+    query = query.eq("endpoint", endpoint);
+  }
+
+  const { error } = await query;
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ ok: true });
+});
+
+app.post("/merchant/push/test", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const merchant = await getMerchantForUser(supabase, user.id);
+  if (!merchant) return c.json({ error: "Not a merchant" }, 403);
+
+  // Actual send is handled by merchant-push edge function in production
+  return c.json({
+    ok: true,
+    message: "Test notification queued",
+    merchantId: merchant.id,
+  });
 });
 
 // ============================================================================

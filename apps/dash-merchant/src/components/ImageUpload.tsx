@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { Upload, X, Loader2 } from 'lucide-react';
 import { supabase } from '@roam/auth-client';
 import { toast } from 'sonner';
+import ImageCropModal from './ImageCropModal';
 
 interface ImageUploadProps {
   value?: string;
@@ -11,7 +12,14 @@ interface ImageUploadProps {
   aspectRatio?: 'square' | 'cover' | 'logo';
   label?: string;
   placeholder?: string;
+  enableCrop?: boolean;
 }
+
+const ASPECT_VALUES = {
+  square: 1,
+  cover: 16 / 9,
+  logo: 1,
+};
 
 export default function ImageUpload({
   value,
@@ -21,10 +29,12 @@ export default function ImageUpload({
   aspectRatio = 'square',
   label,
   placeholder = 'Click or drag to upload',
+  enableCrop = true,
 }: ImageUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [cropFile, setCropFile] = useState<File | null>(null);
 
   const aspectClasses = {
     square: 'aspect-square',
@@ -32,21 +42,11 @@ export default function ImageUpload({
     logo: 'aspect-square max-w-[150px]',
   };
 
-  const handleFile = async (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      toast.error('Please select an image file');
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Image must be less than 5MB');
-      return;
-    }
-
+  const uploadBlob = async (file: File | Blob, originalName: string) => {
     setIsUploading(true);
 
     try {
-      const fileExt = file.name.split('.').pop();
+      const fileExt = originalName.split('.').pop() || 'jpg';
       const fileName = `${folder}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
@@ -77,6 +77,25 @@ export default function ImageUpload({
     } finally {
       setIsUploading(false);
     }
+  };
+
+  const handleFile = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be less than 5MB');
+      return;
+    }
+
+    if (enableCrop) {
+      setCropFile(file);
+      return;
+    }
+
+    await uploadBlob(file, file.name);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -111,6 +130,18 @@ export default function ImageUpload({
 
   return (
     <div>
+      {cropFile && (
+        <ImageCropModal
+          file={cropFile}
+          aspect={ASPECT_VALUES[aspectRatio]}
+          onCancel={() => setCropFile(null)}
+          onConfirm={async (blob) => {
+            const name = cropFile.name;
+            setCropFile(null);
+            await uploadBlob(blob, name);
+          }}
+        />
+      )}
       {label && (
         <label className="block text-sm font-medium text-gray-700 mb-2">
           {label}

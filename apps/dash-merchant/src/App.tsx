@@ -4,15 +4,23 @@ import { Session } from '@supabase/supabase-js';
 import DashboardPage from './pages/DashboardPage';
 import OrdersPage from './pages/OrdersPage';
 import MenuPage from './pages/MenuPage';
+import EarningsPage from './pages/EarningsPage';
 import SettingsPage from './pages/SettingsPage';
-import LoginPage from './pages/LoginPage';
+import AnalyticsPage from './pages/AnalyticsPage';
 import OnboardingPage from './pages/OnboardingPage';
+import SplashPage from './pages/SplashPage';
+import PartnerAuthFlow from './components/PartnerAuthFlow';
+import PartnerBottomNav from './components/PartnerBottomNav';
+import AccountPendingPage from './pages/AccountPendingPage';
+import OnboardingCompletePage from './pages/OnboardingCompletePage';
+import { SignUpFormData } from './signup/types';
 import { useMerchant } from './hooks/useMerchant';
-import { LayoutDashboard, ClipboardList, UtensilsCrossed, Settings, LogOut } from 'lucide-react';
-import { NotificationFeed } from './components/NotificationFeed';
+import { PartnerTab } from './lib/partner-utils';
+import { shouldShowGoLiveScreen } from './lib/go-live';
 import { DashAdminPortal } from './admin/DashAdminPortal';
 
-type Page = 'dashboard' | 'orders' | 'menu' | 'settings' | 'login' | 'onboarding';
+const SPLASH_MIN_MS = 1800;
+const PENDING_STATUSES = new Set(['pending', 'in_review', 'docs_requested']);
 
 export default function App() {
   const isAdmin = window.location.pathname.startsWith('/admin');
@@ -30,158 +38,139 @@ export default function App() {
 
 function DashMerchantApp() {
   const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState<Page>('dashboard');
+  const [authReady, setAuthReady] = useState(false);
+  const [splashComplete, setSplashComplete] = useState(false);
+  const [currentPage, setCurrentPage] = useState<PartnerTab>('dashboard');
+  const [pendingSignUp, setPendingSignUp] = useState<SignUpFormData | null>(null);
+  const [goLiveDismissed, setGoLiveDismissed] = useState(false);
 
   useEffect(() => {
+    const splashStartedAt = Date.now();
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      setLoading(false);
+      setAuthReady(true);
+
+      const elapsed = Date.now() - splashStartedAt;
+      const remaining = Math.max(0, SPLASH_MIN_MS - elapsed);
+      window.setTimeout(() => setSplashComplete(true), remaining);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const { merchant, isLoading: merchantLoading } = useMerchant(session);
+  const { merchant, isLoading: merchantLoading, refetch } = useMerchant(session);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    setCurrentPage('login');
+    setPendingSignUp(null);
+    setCurrentPage('dashboard');
   };
 
-  if (loading || merchantLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-500" />
-      </div>
-    );
+  const showSplash = !splashComplete || !authReady || (!!session && merchantLoading && !pendingSignUp);
+
+  if (showSplash) {
+    return <SplashPage />;
   }
 
   if (!session) {
-    return <LoginPage onSuccess={() => setCurrentPage('dashboard')} />;
+    return (
+      <PartnerAuthFlow
+        onLoginSuccess={async () => {
+          const {
+            data: { session: nextSession },
+          } = await supabase.auth.getSession();
+          setSession(nextSession);
+          setCurrentPage('dashboard');
+        }}
+        onSignUpComplete={async (data) => {
+          setPendingSignUp(data);
+          const {
+            data: { session: nextSession },
+          } = await supabase.auth.getSession();
+          setSession(nextSession);
+        }}
+      />
+    );
+  }
+
+  if (pendingSignUp || (merchant && PENDING_STATUSES.has(merchant.verification_status))) {
+    return (
+      <AccountPendingPage
+        onSignOut={handleSignOut}
+        bankDetailsComplete={pendingSignUp ? !!pendingSignUp.bankName : true}
+      />
+    );
   }
 
   if (!merchant) {
     return <OnboardingPage session={session} onComplete={() => window.location.reload()} />;
   }
 
-  const navItems = [
-    { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { key: 'orders', label: 'Orders', icon: ClipboardList },
-    { key: 'menu', label: 'Menu', icon: UtensilsCrossed },
-    { key: 'settings', label: 'Settings', icon: Settings },
-  ];
+  if (
+    !goLiveDismissed &&
+    shouldShowGoLiveScreen(merchant.verification_status, merchant.id)
+  ) {
+    return (
+      <OnboardingCompletePage
+        merchant={merchant}
+        onGoLive={() => {
+          setGoLiveDismissed(true);
+          void refetch();
+        }}
+      />
+    );
+  }
 
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
         return <DashboardPage merchant={merchant} onNavigate={setCurrentPage} />;
       case 'orders':
-        return <OrdersPage merchant={merchant} />;
+        return <OrdersPage merchant={merchant} onNavigate={setCurrentPage} />;
       case 'menu':
-        return <MenuPage merchant={merchant} />;
-      case 'settings':
-        return <SettingsPage merchant={merchant} />;
+        return <MenuPage merchant={merchant} onNavigate={setCurrentPage} />;
+      case 'analytics':
+        return <AnalyticsPage merchant={merchant} onNavigate={setCurrentPage} />;
+      case 'earnings':
+        return <EarningsPage onNavigate={setCurrentPage} />;
+      case 'account':
+        return (
+          <SettingsPage
+            merchant={merchant}
+            onNavigate={setCurrentPage}
+            onSignOut={handleSignOut}
+          />
+        );
       default:
         return <DashboardPage merchant={merchant} onNavigate={setCurrentPage} />;
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      <aside className="w-64 bg-white border-r hidden md:flex md:flex-col">
-        <div className="p-6 border-b">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-amber-500 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-lg">R</span>
-            </div>
-            <div>
-              <h1 className="font-bold text-gray-900">Roam Dash</h1>
-              <p className="text-xs text-gray-500">Partner Portal</p>
-            </div>
-          </div>
-        </div>
-
-        <nav className="flex-1 p-4">
-          <ul className="space-y-1">
-            {navItems.map(item => {
-              const Icon = item.icon;
-              const isActive = currentPage === item.key;
-
-              return (
-                <li key={item.key}>
-                  <button
-                    onClick={() => setCurrentPage(item.key as Page)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                      isActive
-                        ? 'bg-amber-50 text-amber-700'
-                        : 'text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    <Icon className="w-5 h-5" />
-                    {item.label}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
-
-        <div className="p-4 border-t">
-          <div className="mb-4 px-4">
-            <p className="text-sm font-medium text-gray-900 truncate">{merchant.name}</p>
-            <p className="text-xs text-gray-500 truncate">{session.user.email}</p>
-          </div>
-          <button
-            onClick={handleSignOut}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50"
-          >
-            <LogOut className="w-5 h-5" />
-            Sign out
-          </button>
-        </div>
-      </aside>
-
-      <main className="flex-1 flex flex-col min-h-0">
-        {/* Single top bar: one NotificationFeed (one Realtime subscription) for all breakpoints */}
-        <header className="sticky top-0 z-30 flex shrink-0 items-center justify-between border-b bg-white px-4 py-3 md:justify-end md:px-8">
-          <div className="flex items-center gap-3 md:hidden">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500">
-              <span className="text-sm font-bold text-white">R</span>
-            </div>
-            <span className="truncate font-bold text-gray-900">{merchant.name}</span>
-          </div>
-          <NotificationFeed merchantId={merchant.id} />
-        </header>
-
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around py-2">
-          {navItems.map(item => {
-            const Icon = item.icon;
-            const isActive = currentPage === item.key;
-
-            return (
-              <button
-                key={item.key}
-                onClick={() => setCurrentPage(item.key as Page)}
-                className={`flex flex-col items-center gap-1 px-4 py-2 ${
-                  isActive ? 'text-amber-600' : 'text-gray-500'
-                }`}
-              >
-                <Icon className="w-5 h-5" />
-                <span className="text-xs">{item.label}</span>
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="p-4 md:p-8 pb-24 md:pb-8">
-          {renderPage()}
-        </div>
-      </main>
+    <div className="min-h-dvh bg-background">
+      <div
+        className={
+          currentPage === 'dashboard' ||
+          currentPage === 'earnings' ||
+          currentPage === 'account' ||
+          currentPage === 'orders' ||
+          currentPage === 'menu'
+            ? ''
+            : 'pb-24'
+        }
+      >
+        {renderPage()}
+      </div>
+      {currentPage !== 'earnings' && (
+        <PartnerBottomNav active={currentPage} onNavigate={setCurrentPage} />
+      )}
     </div>
   );
 }

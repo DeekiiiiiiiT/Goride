@@ -1,33 +1,31 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { supabase, useForgotPassword } from '@roam/auth-client';
 import { toast } from 'sonner';
-import { 
-  Eye, EyeOff, ArrowRight, Store, TrendingUp, 
-  CreditCard, ChefHat, Smartphone, CheckCircle2
-} from 'lucide-react';
+import { MaterialIcon } from '../signup/components/MaterialIcon';
 
 interface LoginPageProps {
   onSuccess: () => void;
+  initialSignUp?: boolean;
+  initialEmail?: string;
+  onBack?: () => void;
+  onApply?: () => void;
 }
 
-const FEATURES = [
-  { icon: Store, title: 'Easy Menu Management', description: 'Update your menu in real-time' },
-  { icon: Smartphone, title: 'Real-time Orders', description: 'Get instant order notifications' },
-  { icon: TrendingUp, title: 'Analytics Dashboard', description: 'Track sales and growth metrics' },
-  { icon: CreditCard, title: 'Multiple Payments', description: 'Cash, cards, and digital payments' },
-];
+const inputClass =
+  'h-12 w-full rounded-md border border-outline-variant bg-transparent px-sm text-body-lg text-on-surface placeholder:text-on-surface-variant outline-none transition-colors partner-field focus:border-primary-container focus:ring-1 focus:ring-primary-container';
 
-const STATS = [
-  { value: '500+', label: 'Partner Restaurants' },
-  { value: '50K+', label: 'Orders Delivered' },
-  { value: '4.8', label: 'Average Rating' },
-];
-
-export default function LoginPage({ onSuccess }: LoginPageProps) {
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [email, setEmail] = useState('');
+export default function LoginPage({
+  onSuccess,
+  initialSignUp = false,
+  initialEmail = '',
+  onBack,
+  onApply,
+}: LoginPageProps) {
+  const [isSignUp, setIsSignUp] = useState(initialSignUp);
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const {
     forgotMode,
@@ -40,18 +38,20 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (forgotMode) {
       setNotice(null);
       const err = await sendResetEmail(email);
       if (err) toast.error(err);
       return;
     }
+
     setIsLoading(true);
 
     try {
       if (isSignUp) {
-        const { error } = await supabase.auth.signUp({ 
-          email, 
+        const { error } = await supabase.auth.signUp({
+          email,
           password,
           options: {
             emailRedirectTo: `${window.location.origin}/`,
@@ -59,249 +59,208 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
         });
         if (error) throw error;
         toast.success('Account created! Check your email to verify.');
+        onSuccess();
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         toast.success('Welcome back!');
         onSuccess();
       }
-    } catch (error: any) {
-      toast.error(error.message || 'Authentication failed');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Authentication failed';
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const title = forgotMode
+    ? 'Reset your password'
+    : isSignUp
+      ? 'Create your account'
+      : 'Welcome back';
+
+  const subtitle = forgotMode
+    ? "We'll email you a link to reset your password."
+    : isSignUp
+      ? 'Complete registration to submit your application.'
+      : 'Sign in to manage your Roam Dash store.';
+
+  const submitLabel = isLoading || forgotLoading
+    ? 'Please wait...'
+    : forgotMode
+      ? 'Send reset email'
+      : isSignUp
+        ? 'Create Account'
+        : 'Sign In';
+
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-gray-50">
-      {/* Left Panel - Branding & Features */}
-      <div className="hidden lg:flex lg:w-1/2 xl:w-[55%] bg-gradient-to-br from-amber-500 via-orange-500 to-red-500 relative">
-        {/* Background Pattern */}
-        <div className="absolute inset-0 opacity-10 pointer-events-none overflow-hidden">
-          <div className="absolute top-10 left-10 w-64 h-64 bg-white rounded-full blur-3xl" />
-          <div className="absolute bottom-10 right-10 w-80 h-80 bg-white rounded-full blur-3xl" />
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-[#fafafa] p-margin-mobile antialiased text-on-background md:p-margin-tablet">
+      {onBack && (
+        <button
+          type="button"
+          onClick={onBack}
+          className="absolute left-margin-mobile top-6 flex items-center gap-1 text-sm font-medium text-on-surface-variant transition-colors hover:text-on-surface md:left-margin-tablet"
+        >
+          <MaterialIcon name="arrow_back" size={20} />
+          Back
+        </button>
+      )}
+
+      <main className="flex w-full max-w-[440px] flex-col items-center">
+        <div className="mb-lg flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border border-outline-variant bg-surface shadow-sm">
+          <img
+            alt="Roam Dash Partner Logo"
+            className="h-full w-full object-cover"
+            src="/assets/logo.png"
+          />
         </div>
 
-        {/* Content */}
-        <div className="relative z-10 flex flex-col px-12 xl:px-16 py-10 xl:py-12 text-white w-full min-h-screen">
-          {/* Logo */}
-          <div className="flex items-center gap-3 flex-shrink-0">
-            <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-              <span className="text-2xl font-bold">R</span>
-            </div>
-            <div>
-              <h1 className="text-xl font-bold">Roam Dash</h1>
-              <p className="text-white/70 text-xs">Partner Portal</p>
-            </div>
-          </div>
-
-          {/* Main Content - takes available space and centers */}
-          <div className="flex-1 flex flex-col justify-center py-8 space-y-8 min-h-0">
-            <div>
-              <h2 className="text-3xl xl:text-4xl 2xl:text-5xl font-bold leading-tight">
-                Grow your restaurant<br />
-                <span className="text-white/90">with Roam Dash</span>
-              </h2>
-              <p className="mt-4 text-base xl:text-lg text-white/80 max-w-md">
-                Join hundreds of restaurants reaching more customers and increasing revenue with our delivery platform.
-              </p>
-            </div>
-
-            {/* Features Grid */}
-            <div className="grid grid-cols-2 gap-3 max-w-2xl">
-              {FEATURES.map((feature, index) => {
-                const Icon = feature.icon;
-                return (
-                  <div 
-                    key={index}
-                    className="bg-white/10 backdrop-blur-sm rounded-xl p-4 hover:bg-white/20 transition-colors"
-                  >
-                    <Icon className="w-7 h-7 mb-2" />
-                    <h3 className="font-semibold text-sm xl:text-base mb-1">{feature.title}</h3>
-                    <p className="text-xs xl:text-sm text-white/70 leading-snug">{feature.description}</p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Stats - always at bottom */}
-          <div className="flex gap-8 xl:gap-12 flex-shrink-0 pt-6 border-t border-white/20">
-            {STATS.map((stat, index) => (
-              <div key={index}>
-                <p className="text-2xl xl:text-3xl font-bold">{stat.value}</p>
-                <p className="text-white/70 text-xs xl:text-sm">{stat.label}</p>
-              </div>
-            ))}
-          </div>
+        <div className="mb-lg w-full text-center">
+          <h1 className="mb-xs text-headline-lg-mobile font-bold text-on-surface md:text-headline-lg">
+            {title}
+          </h1>
+          <p className="text-body-sm text-on-surface-variant">{subtitle}</p>
         </div>
-      </div>
 
-      {/* Right Panel - Auth Form */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-8 lg:p-12 min-h-screen lg:min-h-0">
-        <div className="w-full max-w-md py-8">
-          {/* Mobile Logo */}
-          <div className="lg:hidden text-center mb-8">
-            <div className="w-16 h-16 bg-gradient-to-br from-amber-500 to-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-amber-500/30">
-              <span className="text-white text-3xl font-bold">R</span>
-            </div>
-            <h1 className="text-2xl font-bold text-gray-900">Roam Dash Partner</h1>
-          </div>
-
-          {/* Form Header */}
-          <div className="mb-8">
-            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              {isSignUp ? 'Create your account' : 'Welcome back'}
-            </h2>
-            <p className="text-gray-500 mt-2">
-              {isSignUp 
-                ? 'Start receiving orders in minutes' 
-                : 'Sign in to manage your restaurant'}
-            </p>
-          </div>
-
-          {/* Auth Form */}
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                Email address
+        <div className="w-full rounded-lg border border-outline-variant bg-surface-container-lowest p-md shadow-sm transition-shadow duration-300 hover:shadow-md">
+          <form className="flex flex-col gap-sm" onSubmit={handleSubmit}>
+            <div className="flex flex-col gap-base">
+              <label className="text-label-md font-semibold text-on-surface" htmlFor="email">
+                Email or phone number
               </label>
               <input
                 id="email"
-                type="email"
+                name="email"
+                type="text"
+                autoComplete="username"
+                className={inputClass}
+                placeholder="Enter your email or phone"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@restaurant.com"
-                className="w-full px-4 py-3.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all"
                 required
               />
             </div>
 
             {!forgotMode && (
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  className="w-full px-4 pr-12 py-3.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all"
-                  required={!forgotMode}
-                  minLength={6}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
+              <div className="mt-xs flex flex-col gap-base">
+                <div className="flex w-full items-center justify-between">
+                  <label className="text-label-md font-semibold text-on-surface" htmlFor="password">
+                    Password
+                  </label>
+                  {!isSignUp && (
+                    <button
+                      type="button"
+                      className="text-label-md font-semibold text-primary transition-colors hover:text-primary-fixed-dim"
+                      onClick={() => {
+                        setForgotMode(true);
+                        setNotice(null);
+                      }}
+                    >
+                      Forgot password?
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <input
+                    id="password"
+                    name="password"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete={isSignUp ? 'new-password' : 'current-password'}
+                    className={`${inputClass} pr-12`}
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={6}
+                  />
+                  <button
+                    type="button"
+                    aria-label="Toggle password visibility"
+                    onClick={() => setShowPassword((current) => !current)}
+                    className="absolute right-0 top-0 flex h-12 w-12 items-center justify-center text-on-surface-variant transition-colors hover:text-on-surface focus:outline-none"
+                  >
+                    <MaterialIcon name={showPassword ? 'visibility_off' : 'visibility'} />
+                  </button>
+                </div>
               </div>
-            </div>
             )}
 
-            {!isSignUp && (
-              <div className="flex justify-end">
-                {!forgotMode ? (
-                  <button
-                    type="button"
-                    className="text-sm text-amber-600 hover:text-amber-700 font-medium"
-                    onClick={() => {
-                      setForgotMode(true);
-                      setNotice(null);
-                    }}
-                  >
-                    Forgot password?
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="text-sm text-amber-600 hover:text-amber-700 font-medium"
-                    onClick={() => setForgotMode(false)}
-                  >
-                    Back to sign in
-                  </button>
-                )}
+            {forgotMode && (
+              <button
+                type="button"
+                className="self-start text-label-md font-semibold text-primary transition-colors hover:text-primary-fixed-dim"
+                onClick={() => setForgotMode(false)}
+              >
+                Back to sign in
+              </button>
+            )}
+
+            {!forgotMode && !isSignUp && (
+              <div className="mt-xs flex items-center gap-xs">
+                <input
+                  id="remember"
+                  name="remember"
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="h-4 w-4 cursor-pointer rounded border-outline-variant bg-transparent text-primary-container focus:ring-primary-container"
+                />
+                <label
+                  className="cursor-pointer text-body-sm text-on-surface-variant"
+                  htmlFor="remember"
+                >
+                  Keep me signed in
+                </label>
               </div>
             )}
 
             {notice && (
-              <p className="text-sm text-amber-700 text-center" role="status">{notice}</p>
+              <p className="text-center text-body-sm text-primary" role="status">
+                {notice}
+              </p>
             )}
 
             <button
               type="submit"
               disabled={isLoading || forgotLoading}
-              className="w-full py-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl font-semibold hover:from-amber-600 hover:to-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-amber-500/30 flex items-center justify-center gap-2 group"
+              className="mt-md flex h-12 w-full items-center justify-center rounded-md bg-primary-container text-label-md font-semibold text-on-primary shadow-sm transition-colors hover:bg-primary focus:outline-none focus:ring-2 focus:ring-primary-container focus:ring-offset-2 focus:ring-offset-background active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isLoading || forgotLoading ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Please wait...
-                </>
+                <span className="partner-spinner h-5 w-5 border-2" />
               ) : (
-                <>
-                  {isSignUp ? 'Create Account' : forgotMode ? 'Send reset email' : 'Sign In'}
-                  {!forgotMode && <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />}
-                </>
+                submitLabel
               )}
             </button>
           </form>
-
-          {/* Divider */}
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-200" />
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-gray-50 text-gray-500">or</span>
-            </div>
-          </div>
-
-          {/* Toggle Sign In / Sign Up */}
-          <p className="text-center text-gray-600">
-            {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
-            <button
-              onClick={() => setIsSignUp(!isSignUp)}
-              className="text-amber-600 font-semibold hover:text-amber-700"
-            >
-              {isSignUp ? 'Sign in' : 'Sign up for free'}
-            </button>
-          </p>
-
-          {/* Benefits for Sign Up */}
-          {isSignUp && (
-            <div className="mt-6 p-4 bg-amber-50 rounded-xl border border-amber-100">
-              <p className="font-medium text-amber-800 mb-3">Why partner with us?</p>
-              <ul className="space-y-2">
-                {[
-                  'No monthly fees - only pay per order',
-                  'Keep 85% of every order',
-                  'Free marketing & promotions',
-                  '24/7 customer support'
-                ].map((benefit, index) => (
-                  <li key={index} className="flex items-center gap-2 text-sm text-amber-700">
-                    <CheckCircle2 className="w-4 h-4 text-amber-500 flex-shrink-0" />
-                    {benefit}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Footer */}
-          <p className="text-center text-xs text-gray-400 mt-6">
-            By continuing, you agree to our{' '}
-            <a href="#" className="text-gray-600 hover:underline">Terms of Service</a>
-            {' '}and{' '}
-            <a href="#" className="text-gray-600 hover:underline">Privacy Policy</a>
-          </p>
         </div>
-      </div>
+
+        <div className="mt-lg text-center">
+          {isSignUp ? (
+            <p className="text-body-sm text-on-surface-variant">
+              Already have an account?{' '}
+              <button
+                type="button"
+                onClick={() => setIsSignUp(false)}
+                className="ml-xs text-label-md font-semibold text-primary transition-colors hover:text-primary-fixed-dim"
+              >
+                Sign in
+              </button>
+            </p>
+          ) : (
+            <p className="text-body-sm text-on-surface-variant">
+              New to Roam Dash?{' '}
+              <button
+                type="button"
+                onClick={onApply ?? onBack}
+                className="ml-xs text-label-md font-semibold text-primary transition-colors hover:text-primary-fixed-dim"
+              >
+                Apply to become a partner
+              </button>
+            </p>
+          )}
+        </div>
+      </main>
     </div>
   );
 }
