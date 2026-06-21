@@ -445,7 +445,7 @@ export default function DashboardPage({ merchant, onNavigate }: DashboardPagePro
   };
 
   return (
-    <div className="min-h-dvh bg-background pb-24 font-body-lg text-on-background">
+    <div className="min-h-dvh bg-background font-body-lg text-on-background">
       {showClosedView ? (
         <DashboardSimpleHeader
           notificationCount={newOrders.length}

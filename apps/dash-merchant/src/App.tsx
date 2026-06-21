@@ -155,16 +155,12 @@ function DashMerchantApp() {
   };
 
   return (
-    <div className="min-h-dvh bg-background">
+    <div className="partner-app-shell min-h-dvh bg-background sm:mx-auto sm:max-w-xl md:mx-0 md:max-w-none">
       <div
         className={
-          currentPage === 'dashboard' ||
-          currentPage === 'earnings' ||
-          currentPage === 'account' ||
-          currentPage === 'orders' ||
-          currentPage === 'menu'
-            ? ''
-            : 'pb-24'
+          currentPage === 'earnings'
+            ? 'flex-1'
+            : 'partner-main-with-nav flex-1 md:pb-0'
         }
       >
         {renderPage()}

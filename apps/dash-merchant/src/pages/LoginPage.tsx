@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { supabase, useForgotPassword } from '@roam/auth-client';
 import { toast } from 'sonner';
 import { MaterialIcon } from '../signup/components/MaterialIcon';
+import { useVisualViewport } from '../hooks/useVisualViewport';
 
 interface LoginPageProps {
   onSuccess: () => void;
@@ -12,7 +13,7 @@ interface LoginPageProps {
 }
 
 const inputClass =
-  'h-12 w-full rounded-md border border-outline-variant bg-transparent px-sm text-body-lg text-on-surface placeholder:text-on-surface-variant outline-none transition-colors partner-field focus:border-primary-container focus:ring-1 focus:ring-primary-container';
+  'input-touch h-12 w-full rounded-md border border-outline-variant bg-transparent px-sm text-body-lg text-on-surface placeholder:text-on-surface-variant outline-none transition-colors partner-field focus:border-primary-container focus:ring-1 focus:ring-primary-container';
 
 export default function LoginPage({
   onSuccess,
@@ -27,6 +28,7 @@ export default function LoginPage({
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const keyboardInset = useVisualViewport();
   const {
     forgotMode,
     setForgotMode,
@@ -95,19 +97,22 @@ export default function LoginPage({
         : 'Sign In';
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center bg-[#fafafa] p-margin-mobile antialiased text-on-background md:p-margin-tablet">
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-[#fafafa] p-margin-mobile antialiased text-on-background safe-t md:p-margin-tablet">
       {onBack && (
         <button
           type="button"
           onClick={onBack}
-          className="absolute left-margin-mobile top-6 flex items-center gap-1 text-sm font-medium text-on-surface-variant transition-colors hover:text-on-surface md:left-margin-tablet"
+          className="absolute left-margin-mobile top-6 flex items-center gap-1 text-sm font-medium text-on-surface-variant transition-colors hover:text-on-surface safe-t md:left-margin-tablet"
         >
           <MaterialIcon name="arrow_back" size={20} />
           Back
         </button>
       )}
 
-      <main className="flex w-full max-w-[440px] flex-col items-center">
+      <main
+        className="flex w-full max-w-[440px] flex-col items-center"
+        style={{ paddingBottom: keyboardInset > 0 ? keyboardInset : undefined }}
+      >
         <div className="mb-lg flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border border-outline-variant bg-surface shadow-sm">
           <img
             alt="Roam Dash Partner Logo"

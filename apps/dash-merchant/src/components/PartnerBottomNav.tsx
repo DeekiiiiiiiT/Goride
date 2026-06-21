@@ -16,7 +16,7 @@ const NAV_ITEMS: { key: PartnerTab; label: string; icon: string }[] = [
 
 export default function PartnerBottomNav({ active, onNavigate }: PartnerBottomNavProps) {
   return (
-    <nav className="fixed bottom-0 left-0 z-50 flex h-20 w-full items-center justify-around border-t border-outline-variant bg-surface px-4 pb-2 shadow-lg md:hidden">
+    <nav className="fixed bottom-0 left-0 z-50 flex h-[var(--app-bottom-nav-total)] w-full items-center justify-around border-t border-outline-variant bg-surface safe-x safe-b shadow-lg md:hidden">
       {NAV_ITEMS.map((item) => {
         const isActive = active === item.key;
 
@@ -25,7 +25,7 @@ export default function PartnerBottomNav({ active, onNavigate }: PartnerBottomNa
             key={item.key}
             type="button"
             onClick={() => onNavigate(item.key)}
-            className={`flex min-h-[48px] min-w-[48px] flex-col items-center justify-center rounded-xl px-3 py-1 text-label-md font-semibold transition-all duration-200 active:scale-90 ${
+            className={`btn-touch flex min-h-[48px] min-w-[48px] flex-col items-center justify-center rounded-xl px-3 py-1 text-label-md font-semibold transition-all duration-200 active:scale-90 ${
               isActive
                 ? 'bg-primary-container text-on-primary-container'
                 : 'rounded-full p-2 text-on-surface-variant hover:bg-surface-container-high'

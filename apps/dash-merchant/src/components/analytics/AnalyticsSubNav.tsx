@@ -14,7 +14,7 @@ export default function AnalyticsSubNav({
   onNavigate,
 }: AnalyticsSubNavProps) {
   return (
-    <nav className="fixed bottom-0 left-0 z-50 flex h-16 w-full items-center justify-around border-t border-outline-variant bg-surface px-xs pb-safe md:hidden">
+    <nav className="fixed bottom-0 left-0 z-50 flex h-[var(--app-bottom-nav-total)] w-full items-center justify-around border-t border-outline-variant bg-surface px-xs safe-x safe-b md:hidden">
       <button
         type="button"
         onClick={() => onNavigate('dashboard')}

@@ -550,7 +550,7 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
       </PartnerDesktopShell>
     </div>
 
-    <div className="flex min-h-dvh flex-col bg-background pb-24 text-on-background antialiased md:hidden">
+    <div className="flex min-h-dvh flex-col bg-background text-on-background antialiased md:hidden">
       <header className="sticky top-0 z-50 mx-auto flex h-16 w-full max-w-full items-center justify-between border-b border-outline-variant bg-surface px-margin-mobile shadow-sm">
         <div className="flex items-center gap-xs">
           <h1 className="text-headline-md font-bold text-primary">Orders</h1>

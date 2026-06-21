@@ -10,7 +10,7 @@ export const ONBOARDING_STEPS = [
 ] as const;
 
 const inputClass =
-  'h-12 w-full rounded-lg border border-outline-variant bg-transparent px-4 text-body-sm text-on-surface outline-none transition-colors placeholder:text-on-surface-variant partner-field focus:border-primary-container focus:ring-1 focus:ring-primary-container';
+  'input-touch h-12 w-full rounded-lg border border-outline-variant bg-transparent px-4 text-body-sm text-on-surface outline-none transition-colors placeholder:text-on-surface-variant partner-field focus:border-primary-container focus:ring-1 focus:ring-primary-container';
 
 export { inputClass };
 
@@ -25,7 +25,7 @@ interface OnboardingHeaderFullProps extends OnboardingHeaderProps {
 export function OnboardingHeader({ showSetupTitle, currentStep }: OnboardingHeaderFullProps) {
   if (currentStep === 5) {
     return (
-      <header className="fixed top-0 z-50 flex w-full flex-col border-b border-outline-variant bg-surface px-margin-mobile pb-sm pt-xs">
+      <header className="fixed top-0 z-50 flex w-full flex-col border-b border-outline-variant bg-surface px-margin-mobile pb-sm safe-t safe-x">
         <div className="flex h-16 w-full items-center justify-between">
           <MaterialIcon name="restaurant" className="text-2xl text-primary" filled />
           <h1 className="text-headline-md font-semibold tracking-tight text-primary">Roam Dash Partner</h1>
@@ -38,14 +38,14 @@ export function OnboardingHeader({ showSetupTitle, currentStep }: OnboardingHead
 
   if (showSetupTitle) {
     return (
-      <header className="fixed top-0 z-50 flex h-16 w-full items-center justify-center border-b border-outline-variant bg-surface px-margin-mobile shadow-sm">
+      <header className="fixed top-0 z-50 flex h-16 w-full items-center justify-center border-b border-outline-variant bg-surface px-margin-mobile shadow-sm safe-t safe-x">
         <h1 className="text-headline-md font-semibold tracking-tight text-primary">Setup</h1>
       </header>
     );
   }
 
   return (
-    <header className="fixed top-0 z-50 flex h-16 w-full items-center justify-center border-b border-outline-variant bg-surface/90 px-margin-mobile shadow-[0_4px_12px_rgba(0,0,0,0.02)] backdrop-blur-md">
+    <header className="fixed top-0 z-50 flex h-16 w-full items-center justify-center border-b border-outline-variant bg-surface/90 px-margin-mobile shadow-[0_4px_12px_rgba(0,0,0,0.02)] backdrop-blur-md safe-t safe-x">
       <div className="absolute left-margin-mobile flex items-center text-primary">
         <MaterialIcon name="restaurant" filled size={22} />
       </div>

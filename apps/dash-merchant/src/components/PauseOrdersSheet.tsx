@@ -66,7 +66,7 @@ export default function PauseOrdersSheet({
       role="presentation"
     >
       <div
-        className="partner-modal-slide flex max-h-[795px] w-full max-w-[560px] flex-col rounded-t-2xl border-t border-outline-variant bg-surface shadow-xl sm:rounded-2xl sm:border"
+        className="partner-modal-slide flex max-h-[795px] w-full max-w-[560px] flex-col rounded-t-2xl border-t border-outline-variant bg-surface shadow-xl safe-x pb-[max(1rem,env(safe-area-inset-bottom,0px))] sm:rounded-2xl sm:border"
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"

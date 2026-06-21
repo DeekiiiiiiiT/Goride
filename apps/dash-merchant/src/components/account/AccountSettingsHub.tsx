@@ -43,7 +43,7 @@ export default function AccountSettingsHub({
   };
 
   return (
-    <div className="flex min-h-dvh flex-col bg-surface pt-16 pb-[100px] text-on-surface antialiased">
+    <div className="flex min-h-dvh flex-col bg-surface pt-16 text-on-surface antialiased">
       <header className="fixed top-0 z-50 flex h-16 w-full items-center justify-between border-b border-outline-variant bg-surface px-margin-mobile md:px-margin-tablet">
         <button
           type="button"

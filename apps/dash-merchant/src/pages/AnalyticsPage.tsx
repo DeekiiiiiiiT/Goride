@@ -90,7 +90,7 @@ export default function AnalyticsPage({ merchant, onNavigate }: AnalyticsPagePro
   };
 
   return (
-    <div className="min-h-dvh bg-surface pb-24">
+    <div className="min-h-dvh bg-surface">
       <AnalyticsMerchantHeader
         merchant={merchant}
         isAcceptingOrders={isAcceptingOrders}
