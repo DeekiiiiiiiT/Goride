@@ -25,7 +25,7 @@ interface CartContextType {
   items: CartItem[];
   merchantId: string | null;
   merchantName: string | null;
-  addItem: (item: Omit<CartItem, 'id'>, merchantName: string) => void;
+  addItem: (item: Omit<CartItem, 'id'>, merchantName: string, options?: { replace?: boolean }) => 'added' | 'conflict';
   removeItem: (cartItemId: string) => void;
   updateQuantity: (cartItemId: string, quantity: number) => void;
   clearCart: () => void;
@@ -70,15 +70,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(CART_STORAGE_KEY, JSON.stringify({ items, merchantId, merchantName }));
   }, [items, merchantId, merchantName]);
 
-  const addItem = (item: Omit<CartItem, 'id'>, mName: string) => {
-    if (merchantId && merchantId !== item.merchantId) {
-      if (!confirm(`You have items from ${merchantName} in your cart. Clear cart and add items from this restaurant?`)) {
-        return;
-      }
+  const addItem = (item: Omit<CartItem, 'id'>, mName: string, options?: { replace?: boolean }): 'added' | 'conflict' => {
+    if (merchantId && merchantId !== item.merchantId && !options?.replace) {
+      return 'conflict';
+    }
+
+    if (merchantId && merchantId !== item.merchantId && options?.replace) {
       setItems([{ ...item, id: generateCartItemId() }]);
       setMerchantId(item.merchantId);
       setMerchantName(mName);
-      return;
+      return 'added';
     }
 
     setItems(prev => {
@@ -98,6 +99,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     });
     setMerchantId(item.merchantId);
     setMerchantName(mName);
+    return 'added';
   };
 
   const removeItem = (cartItemId: string) => {

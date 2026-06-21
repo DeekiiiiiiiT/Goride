@@ -1,18 +1,96 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase, AuthRecoveryGate } from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
-import { LogOut } from 'lucide-react';
 import { DashAdminPortal } from '@dash-admin/DashAdminPortal';
 import HomePage from './pages/HomePage';
+import SearchPage from './pages/SearchPage';
+import SearchResultsPage from './pages/SearchResultsPage';
+import AccountPage from './pages/AccountPage';
 import RestaurantPage from './pages/RestaurantPage';
 import CartPage from './pages/CartPage';
 import OrdersPage from './pages/OrdersPage';
 import OrderTrackingPage from './pages/OrderTrackingPage';
+import OrderDeliveredPage from './pages/OrderDeliveredPage';
+import OrderConfirmationPage from './pages/OrderConfirmationPage';
+import RateOrderPage from './pages/RateOrderPage';
+import OrderDetailsPage from './pages/OrderDetailsPage';
+import EditProfilePage from './pages/EditProfilePage';
+import SavedAddressesPage from './pages/SavedAddressesPage';
+import AddAddressPage from './pages/AddAddressPage';
+import PromotionsPage from './pages/PromotionsPage';
+import FavoritesPage from './pages/FavoritesPage';
+import NotificationSettingsPage from './pages/NotificationSettingsPage';
+import HelpPage from './pages/HelpPage';
+import ReportIssuePage from './pages/ReportIssuePage';
+import DealsPage from './pages/DealsPage';
+import CategoryPage from './pages/CategoryPage';
+import RestaurantReviewsPage from './pages/RestaurantReviewsPage';
+import OutOfDeliveryPage from './pages/OutOfDeliveryPage';
+import ConnectionErrorPage from './pages/ConnectionErrorPage';
+import type { TrackingPhase } from './lib/trackingContent';
+import CheckoutPage from './pages/CheckoutPage';
+import PaymentMethodsPage from './pages/PaymentMethodsPage';
+import AddCardPage from './pages/AddCardPage';
 import LoginPage from './pages/LoginPage';
 import PaymentCallbackPage from './pages/PaymentCallbackPage';
-import { CartProvider } from './hooks/useCart';
+import { CartProvider, useCart } from './hooks/useCart';
+import { useImmersiveMode } from './hooks/useImmersiveMode';
+import { FloatingCartBar } from './components/ui/FloatingCartBar';
+import { SplashPage } from './pages/onboarding/SplashPage';
+import { WelcomePage } from './pages/onboarding/WelcomePage';
+import { HowItWorksPage } from './pages/onboarding/HowItWorksPage';
+import { VerifyPhonePage } from './pages/onboarding/VerifyPhonePage';
+import { DeliveryAddressPage, type AddressSelection } from './pages/onboarding/DeliveryAddressPage';
+import { DeliveryDetailsPage } from './pages/onboarding/DeliveryDetailsPage';
+import { DashAppHeader } from './components/layout/DashAppHeader';
+import { DashBottomNav, type DashTab } from './components/layout/DashBottomNav';
+import { isOnboardingComplete, markOnboardingComplete } from './lib/onboardingStorage';
+import { hasDeliveryAddress, saveDeliveryAddress } from './lib/addressStorage';
 
-type Page = 'home' | 'restaurant' | 'cart' | 'orders' | 'tracking' | 'login' | 'payment-callback-wipay' | 'payment-callback-paypal';
+type StackPage =
+  | 'restaurant'
+  | 'cart'
+  | 'checkout'
+  | 'payment-methods'
+  | 'add-card'
+  | 'order-confirmation'
+  | 'order-delivered'
+  | 'rate-order'
+  | 'order-details'
+  | 'edit-profile'
+  | 'saved-addresses'
+  | 'add-address'
+  | 'promotions'
+  | 'favorites'
+  | 'notification-settings'
+  | 'help'
+  | 'report-issue'
+  | 'restaurant-reviews'
+  | 'out-of-delivery'
+  | 'connection-error'
+  | 'tracking'
+  | 'login'
+  | 'payment-callback-wipay'
+  | 'payment-callback-paypal';
+
+type AppPhase =
+  | 'splash'
+  | 'welcome'
+  | 'how-it-works'
+  | 'login'
+  | 'verify-phone'
+  | 'delivery-address'
+  | 'delivery-details'
+  | 'app';
+
+const IMMERSIVE_STACK_PAGES: StackPage[] = [
+  'tracking',
+  'checkout',
+  'cart',
+  'restaurant',
+  'order-confirmation',
+  'order-delivered',
+];
 
 /** Customer ordering app (roamdash.co). Admin lives at /admin on the same domain. */
 export default function App() {
@@ -30,10 +108,30 @@ export default function App() {
 }
 
 function DashCustomerApp() {
+  return (
+    <CartProvider>
+      <DashCustomerShell />
+    </CartProvider>
+  );
+}
+
+function DashCustomerShell() {
+  const { itemCount, subtotal } = useCart();
+  const [phase, setPhase] = useState<AppPhase>('splash');
+  const [loginSignUp, setLoginSignUp] = useState(true);
+  const [pendingAddress, setPendingAddress] = useState<AddressSelection | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState<Page>('home');
-  const [pageData, setPageData] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<DashTab>('home');
+  const [stackPage, setStackPage] = useState<StackPage | null>(null);
+  const [pageData, setPageData] = useState<Record<string, unknown> | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchMode, setSearchMode] = useState<'browse' | 'results' | 'deals' | 'category'>('browse');
+  const [categoryId, setCategoryId] = useState('pizza');
+
+  useEffect(() => {
+    document.title = 'Roam Dash';
+  }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -41,7 +139,9 @@ function DashCustomerApp() {
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
     });
 
@@ -51,128 +151,401 @@ function DashCustomerApp() {
   useEffect(() => {
     const path = window.location.pathname;
     if (path.includes('/payment/callback/wipay')) {
-      setCurrentPage('payment-callback-wipay');
+      setStackPage('payment-callback-wipay');
     } else if (path.includes('/payment/callback/paypal')) {
-      setCurrentPage('payment-callback-paypal');
+      setStackPage('payment-callback-paypal');
     }
   }, []);
 
-  const navigate = (page: Page, data?: any) => {
-    setCurrentPage(page);
-    setPageData(data);
+  const navigate = useCallback((page: string, data?: Record<string, unknown>) => {
+    if (page === 'home' || page === 'search' || page === 'orders' || page === 'account') {
+      setStackPage(null);
+      setActiveTab(page as DashTab);
+      if (page === 'search') {
+        setSearchMode('browse');
+        setSearchQuery('');
+      }
+      window.scrollTo(0, 0);
+      return;
+    }
+
+    setStackPage(page as StackPage);
+    setPageData(data ?? null);
     window.scrollTo(0, 0);
-  };
+  }, []);
+
+  const enterApp = useCallback(() => {
+    markOnboardingComplete();
+    setPhase('app');
+  }, []);
+
+  const goToAddressSetup = useCallback(() => {
+    if (hasDeliveryAddress()) {
+      enterApp();
+      return;
+    }
+    setPhase('delivery-address');
+  }, [enterApp]);
+
+  const handleSplashComplete = useCallback(() => {
+    setPhase(isOnboardingComplete() ? 'app' : 'welcome');
+  }, []);
+
+  const handleWelcomeSignIn = useCallback(() => {
+    setLoginSignUp(false);
+    setPhase('login');
+  }, []);
+
+  const handleHowItWorksComplete = useCallback(() => {
+    setLoginSignUp(true);
+    setPhase('login');
+  }, []);
+
+  const handleSignUpSuccess = useCallback(() => {
+    setPhase('verify-phone');
+  }, []);
+
+  const handleSignInSuccess = useCallback(() => {
+    goToAddressSetup();
+  }, [goToAddressSetup]);
+
+  const handleSearch = useCallback((query: string) => {
+    setSearchQuery(query);
+    setSearchMode('results');
+    setActiveTab('search');
+    setStackPage(null);
+  }, []);
+
+  const handleOpenDeals = useCallback(() => {
+    setStackPage(null);
+    setActiveTab('search');
+    setSearchMode('deals');
+    window.scrollTo(0, 0);
+  }, []);
+
+  const handleOpenCategory = useCallback((id: string) => {
+    setStackPage(null);
+    setActiveTab('search');
+    setCategoryId(id);
+    setSearchMode('category');
+    window.scrollTo(0, 0);
+  }, []);
+
+  const handleSearchBrowse = useCallback(() => {
+    setSearchMode('browse');
+    setSearchQuery('');
+    window.scrollTo(0, 0);
+  }, []);
+
+  const handleTabChange = useCallback((tab: DashTab) => {
+    setActiveTab(tab);
+    setStackPage(null);
+    if (tab === 'search') {
+      setSearchMode('browse');
+    }
+    if (tab === 'orders' && !session) {
+      setStackPage('login');
+    }
+    window.scrollTo(0, 0);
+  }, [session]);
+
+  useImmersiveMode(
+    phase !== 'app' || (!!stackPage && IMMERSIVE_STACK_PAGES.includes(stackPage))
+  );
+
+  if (phase === 'splash') {
+    return <SplashPage onComplete={handleSplashComplete} />;
+  }
+
+  if (phase === 'welcome') {
+    return (
+      <WelcomePage
+        onGetStarted={() => setPhase('how-it-works')}
+        onSignIn={handleWelcomeSignIn}
+      />
+    );
+  }
+
+  if (phase === 'how-it-works') {
+    return (
+      <HowItWorksPage
+        onComplete={handleHowItWorksComplete}
+        onSkip={handleHowItWorksComplete}
+      />
+    );
+  }
+
+  if (phase === 'login') {
+    return (
+      <LoginPage
+        fullScreen
+        initialSignUp={loginSignUp}
+        onNavigate={navigate}
+        onBack={() => setPhase('welcome')}
+        onSignInSuccess={handleSignInSuccess}
+        onSignUpSuccess={handleSignUpSuccess}
+      />
+    );
+  }
+
+  if (phase === 'verify-phone') {
+    return (
+      <VerifyPhonePage
+        onBack={() => setPhase('login')}
+        onVerify={() => setPhase('delivery-address')}
+      />
+    );
+  }
+
+  if (phase === 'delivery-address') {
+    return (
+      <DeliveryAddressPage
+        onBack={() => setPhase(session ? 'app' : 'verify-phone')}
+        onConfirm={(address) => {
+          setPendingAddress(address);
+          setPhase('delivery-details');
+        }}
+      />
+    );
+  }
+
+  if (phase === 'delivery-details' && pendingAddress) {
+    return (
+      <DeliveryDetailsPage
+        address={pendingAddress}
+        onBack={() => setPhase('delivery-address')}
+        onSave={(details) => {
+          saveDeliveryAddress(details);
+          enterApp();
+        }}
+      />
+    );
+  }
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500" />
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-container" />
       </div>
     );
   }
 
-  const renderPage = () => {
-    switch (currentPage) {
+  const showShell = !stackPage || stackPage === 'login';
+  const showBottomNav = !stackPage;
+  const showHeader =
+    showShell &&
+    stackPage !== 'login' &&
+    activeTab !== 'account' &&
+    !(activeTab === 'search' && searchMode === 'category');
+
+  const renderTabContent = () => {
+    switch (activeTab) {
       case 'home':
-        return <HomePage onNavigate={navigate} />;
+        return (
+          <HomePage
+            onNavigate={navigate}
+            onSearchFocus={() => handleTabChange('search')}
+            showActiveOrder={!!session}
+          />
+        );
+      case 'search':
+        if (searchMode === 'deals') {
+          return <DealsPage onNavigate={navigate} />;
+        }
+        if (searchMode === 'category') {
+          return (
+            <CategoryPage
+              categoryId={categoryId}
+              onNavigate={navigate}
+              onBack={handleSearchBrowse}
+            />
+          );
+        }
+        if (searchMode === 'results' && searchQuery) {
+          return (
+            <SearchResultsPage
+              query={searchQuery}
+              onNavigate={navigate}
+              onClear={() => {
+                setSearchMode('browse');
+                setSearchQuery('');
+              }}
+              onQueryChange={(q) => {
+                setSearchQuery(q);
+                if (!q.trim()) setSearchMode('browse');
+              }}
+            />
+          );
+        }
+        return (
+          <SearchPage
+            onSearch={handleSearch}
+            onOpenDeals={handleOpenDeals}
+            onOpenCategory={handleOpenCategory}
+            initialQuery={searchQuery}
+          />
+        );
+      case 'orders':
+        if (!session) return <LoginPage onNavigate={navigate} onSignInSuccess={() => navigate('orders')} />;
+        return <OrdersPage onNavigate={navigate} />;
+      case 'account':
+        return <AccountPage session={session} onNavigate={navigate} />;
+      default:
+        return <HomePage onNavigate={navigate} onSearchFocus={() => handleTabChange('search')} />;
+    }
+  };
+
+  const renderStackPage = () => {
+    switch (stackPage) {
       case 'restaurant':
-        return <RestaurantPage merchantId={pageData?.merchantId} onNavigate={navigate} />;
+        return <RestaurantPage merchantId={pageData?.merchantId as string | undefined} onNavigate={navigate} />;
       case 'cart':
         return <CartPage onNavigate={navigate} session={session} />;
-      case 'orders':
-        if (!session) return <LoginPage onNavigate={navigate} />;
-        return <OrdersPage onNavigate={navigate} />;
+      case 'checkout':
+        return <CheckoutPage onNavigate={navigate} session={session} />;
+      case 'payment-methods':
+        return (
+          <PaymentMethodsPage
+            onNavigate={navigate}
+            returnTo={(pageData?.returnTo as string | undefined) ?? 'account'}
+            mode={(pageData?.mode as 'manage' | 'select' | undefined) ?? 'manage'}
+          />
+        );
+      case 'add-card':
+        return (
+          <AddCardPage
+            onNavigate={navigate}
+            returnTo={pageData?.returnTo as string | undefined}
+          />
+        );
+      case 'order-confirmation':
+        return (
+          <OrderConfirmationPage
+            onNavigate={navigate}
+            orderId={pageData?.orderId as string | undefined}
+            orderNumber={pageData?.orderNumber as string | undefined}
+            total={pageData?.total as number | undefined}
+            eta={pageData?.eta as string | undefined}
+            items={pageData?.items as Array<{ name: string; quantity: number; note?: string }> | undefined}
+          />
+        );
       case 'tracking':
-        return <OrderTrackingPage orderId={pageData?.orderId} onNavigate={navigate} />;
+        return (
+          <OrderTrackingPage
+            orderId={pageData?.orderId as string | undefined}
+            demoPhase={pageData?.demoPhase as TrackingPhase | undefined}
+            onNavigate={navigate}
+          />
+        );
+      case 'order-delivered':
+        return (
+          <OrderDeliveredPage
+            onNavigate={navigate}
+            orderNumber={pageData?.orderNumber as string | undefined}
+            tip={pageData?.tip as number | undefined}
+            merchantId={pageData?.merchantId as string | undefined}
+          />
+        );
+      case 'rate-order':
+        return (
+          <RateOrderPage
+            onNavigate={navigate}
+            orderId={pageData?.orderId as string | undefined}
+            merchantName={pageData?.merchantName as string | undefined}
+            deliveredAt={pageData?.deliveredAt as string | undefined}
+          />
+        );
+      case 'order-details':
+        return (
+          <OrderDetailsPage
+            onNavigate={navigate}
+            orderId={pageData?.orderId as string | undefined}
+          />
+        );
+      case 'edit-profile':
+        return <EditProfilePage onNavigate={navigate} />;
+      case 'saved-addresses':
+        return <SavedAddressesPage onNavigate={navigate} />;
+      case 'add-address':
+        return (
+          <AddAddressPage
+            onNavigate={navigate}
+            addressId={pageData?.addressId as string | undefined}
+          />
+        );
+      case 'promotions':
+        return <PromotionsPage onNavigate={navigate} />;
+      case 'favorites':
+        return <FavoritesPage onNavigate={navigate} />;
+      case 'notification-settings':
+        return <NotificationSettingsPage onNavigate={navigate} />;
+      case 'help':
+        return <HelpPage onNavigate={navigate} />;
+      case 'report-issue':
+        return <ReportIssuePage onNavigate={navigate} />;
+      case 'restaurant-reviews':
+        return (
+          <RestaurantReviewsPage
+            onNavigate={navigate}
+            merchantId={pageData?.merchantId as string | undefined}
+          />
+        );
+      case 'out-of-delivery':
+        return <OutOfDeliveryPage onNavigate={navigate} />;
+      case 'connection-error':
+        return <ConnectionErrorPage onNavigate={navigate} />;
       case 'login':
-        return <LoginPage onNavigate={navigate} />;
+        return <LoginPage onNavigate={navigate} onSignInSuccess={() => navigate('home')} fullScreen />;
       case 'payment-callback-wipay':
         return <PaymentCallbackPage onNavigate={navigate} session={session} provider="wipay" />;
       case 'payment-callback-paypal':
         return <PaymentCallbackPage onNavigate={navigate} session={session} provider="paypal" />;
       default:
-        return <HomePage onNavigate={navigate} />;
+        return null;
     }
   };
 
-  const cartItemCount = (() => {
-    try {
-      const saved = localStorage.getItem('roam-dash-cart');
-      if (saved) {
-        const { items } = JSON.parse(saved);
-        return items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 0;
-      }
-    } catch {}
-    return 0;
-  })();
+  const showCartBar =
+    itemCount > 0 &&
+    stackPage !== 'cart' &&
+    stackPage !== 'checkout' &&
+    (!stackPage || stackPage === 'restaurant');
+
+  const isImmersiveStack = !!stackPage && IMMERSIVE_STACK_PAGES.includes(stackPage);
 
   return (
-    <CartProvider>
-      <div className="min-h-screen bg-gray-50">
-        <header className="bg-white shadow-sm sticky top-0 z-50">
-          <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-            <button
-              onClick={() => navigate('home')}
-              className="flex items-center gap-2 group"
-            >
-              <div className="w-10 h-10 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-xl flex items-center justify-center shadow-md group-hover:shadow-lg transition-shadow">
-                <span className="text-white font-bold text-xl">R</span>
-              </div>
-              <div className="hidden sm:block">
-                <span className="text-xl font-bold text-gray-900">Roam</span>
-                <span className="text-xl font-bold text-emerald-500">Dash</span>
-              </div>
-            </button>
-            <nav className="flex items-center gap-2 sm:gap-4">
-              <button
-                onClick={() => navigate('cart')}
-                className="p-2 hover:bg-gray-100 rounded-full relative"
-              >
-                <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-                {cartItemCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-emerald-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
-                    {cartItemCount > 9 ? '9+' : cartItemCount}
-                  </span>
-                )}
-              </button>
-              {session ? (
-                <>
-                  <button
-                    onClick={() => navigate('orders')}
-                    className="text-sm font-medium text-gray-700 hover:text-emerald-600 px-3 py-2 rounded-lg hover:bg-gray-100"
-                  >
-                    My Orders
-                  </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      await supabase.auth.signOut();
-                      navigate('home');
-                    }}
-                    className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 border border-gray-200"
-                    title="Sign out"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    <span className="hidden sm:inline">Sign out</span>
-                  </button>
-                </>
-              ) : (
-                <button
-                  onClick={() => navigate('login')}
-                  className="px-4 py-2 bg-emerald-500 text-white rounded-lg text-sm font-semibold hover:bg-emerald-600 shadow-sm"
-                >
-                  Sign In
-                </button>
-              )}
-            </nav>
-          </div>
-        </header>
-        <main>
-          {renderPage()}
+    <div className="app-shell bg-surface text-on-surface">
+      <div className="app-shell-frame">
+        {showHeader && (
+          <DashAppHeader
+            onProfileClick={() => handleTabChange('account')}
+            showProfileImage={!!session}
+          />
+        )}
+
+        <main
+          className={`flex-1 min-h-0 ${isImmersiveStack ? 'overflow-y-auto overscroll-contain' : ''} ${showBottomNav ? 'pb-nav' : ''}`}
+        >
+          {stackPage ? renderStackPage() : renderTabContent()}
         </main>
       </div>
-    </CartProvider>
+
+      {showCartBar && (
+        <FloatingCartBar
+          itemCount={itemCount}
+          total={subtotal}
+          onClick={() => navigate('cart')}
+          hasBottomNav={showBottomNav}
+        />
+      )}
+
+      {showBottomNav && (
+        <DashBottomNav
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+          ordersBadge={!!session}
+        />
+      )}
+    </div>
   );
 }

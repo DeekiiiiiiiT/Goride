@@ -1,30 +1,56 @@
 import React, { useState } from 'react';
-import { supabase, useForgotPassword } from '@roam/auth-client';
+import { supabase, useForgotPassword, GOOGLE_OAUTH_EMAIL_ONLY_SCOPES } from '@roam/auth-client';
 import { toast } from 'sonner';
-import { 
-  Eye, EyeOff, ArrowRight, 
-  Utensils, Clock, Star, MapPin, Sparkles
-} from 'lucide-react';
+import { MaterialIcon } from '@/components/icons/MaterialIcon';
 
-interface LoginPageProps {
-  onNavigate: (page: string, data?: any) => void;
+type LoginPageProps = {
+  onNavigate: (page: string, data?: Record<string, unknown>) => void;
+  onBack?: () => void;
+  onSignInSuccess?: () => void;
+  onSignUpSuccess?: () => void;
+  initialSignUp?: boolean;
+  fullScreen?: boolean;
+};
+
+function GoogleIcon() {
+  return (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" aria-hidden>
+      <path
+        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+        fill="#4285F4"
+      />
+      <path
+        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+        fill="#34A853"
+      />
+      <path
+        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+        fill="#FBBC05"
+      />
+      <path
+        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+        fill="#EA4335"
+      />
+    </svg>
+  );
 }
 
-const FEATURES = [
-  { icon: Utensils, title: 'Hundreds of Restaurants', description: 'From local favorites to popular chains' },
-  { icon: Clock, title: 'Fast Delivery', description: 'Hot meals delivered in 30 minutes or less' },
-  { icon: Sparkles, title: 'Exclusive Deals', description: 'Daily discounts and first-order promos' },
-  { icon: MapPin, title: 'Live Tracking', description: 'Track your order in real-time' },
-];
-
-export default function LoginPage({ onNavigate }: LoginPageProps) {
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [email, setEmail] = useState('');
+export default function LoginPage({
+  onNavigate,
+  onBack,
+  onSignInSuccess,
+  onSignUpSuccess,
+  initialSignUp = false,
+  fullScreen = false,
+}: LoginPageProps) {
+  const [isSignUp, setIsSignUp] = useState(initialSignUp);
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState(false);
   const {
     forgotMode,
     setForgotMode,
@@ -34,16 +60,45 @@ export default function LoginPage({ onNavigate }: LoginPageProps) {
     sendResetEmail,
   } = useForgotPassword('dash', { signInHref: '/' });
 
+  const handleGoogleAuth = async () => {
+    setOauthLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin,
+          scopes: GOOGLE_OAUTH_EMAIL_ONLY_SCOPES,
+          queryParams: { prompt: 'select_account' },
+        },
+      });
+      if (error) throw error;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Google sign-in failed');
+      setOauthLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const email = identifier.trim();
+
     if (forgotMode) {
+      if (!email.includes('@')) {
+        toast.error('Enter a valid email address.');
+        return;
+      }
       setNotice(null);
       const err = await sendResetEmail(email);
       if (err) toast.error(err);
       return;
     }
-    setIsLoading(true);
 
+    if (!email.includes('@')) {
+      toast.error('Sign in with your email address.');
+      return;
+    }
+
+    setIsLoading(true);
     try {
       if (isSignUp) {
         const { error } = await supabase.auth.signUp({
@@ -56,212 +111,116 @@ export default function LoginPage({ onNavigate }: LoginPageProps) {
         });
         if (error) throw error;
         toast.success('Account created! Check your email to verify.');
+        onSignUpSuccess?.();
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         toast.success('Welcome back!');
-        onNavigate('home');
+        if (onSignInSuccess) {
+          onSignInSuccess();
+        } else {
+          onNavigate('home');
+        }
       }
-    } catch (error: any) {
-      toast.error(error.message || 'Authentication failed');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Authentication failed');
     } finally {
       setIsLoading(false);
     }
   };
 
+  const shellClass = fullScreen
+    ? 'app-fullscreen-screen bg-surface text-on-surface antialiased selection:bg-primary-container selection:text-on-primary-container'
+    : 'min-h-[calc(100dvh-65px)] bg-surface text-on-surface antialiased';
+
   return (
-    <div className="min-h-[calc(100vh-65px)] flex flex-col lg:flex-row bg-gray-50">
-      {/* Left Panel - Branding & Visual */}
-      <div className="hidden lg:flex lg:w-1/2 xl:w-[55%] bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-600 relative overflow-hidden lg:sticky lg:top-[65px] lg:h-[calc(100vh-65px)]">
-        {/* Background Blur Orbs */}
-        <div className="absolute inset-0 opacity-10 pointer-events-none">
-          <div className="absolute top-10 left-10 w-72 h-72 bg-white rounded-full blur-3xl" />
-          <div className="absolute bottom-10 right-10 w-96 h-96 bg-white rounded-full blur-3xl" />
-          <div className="absolute top-1/2 left-1/3 w-64 h-64 bg-yellow-200 rounded-full blur-3xl" />
-        </div>
-
-        {/* Floating Food Emojis */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <div className="absolute top-[15%] left-[10%] text-7xl opacity-20 rotate-12">🍕</div>
-          <div className="absolute top-[30%] right-[15%] text-6xl opacity-20 -rotate-12">🍔</div>
-          <div className="absolute bottom-[25%] left-[20%] text-7xl opacity-20 rotate-6">🌮</div>
-          <div className="absolute bottom-[40%] right-[20%] text-6xl opacity-20 -rotate-6">🍜</div>
-          <div className="absolute top-[60%] left-[5%] text-5xl opacity-15">🥗</div>
-          <div className="absolute top-[10%] right-[35%] text-5xl opacity-15 rotate-12">🍦</div>
-        </div>
-
-        {/* Content */}
-        <div className="relative z-10 flex flex-col px-12 xl:px-16 py-10 xl:py-12 text-white w-full">
-          {/* Logo */}
-          <div className="flex items-center gap-3 flex-shrink-0">
-            <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-              <span className="text-2xl font-bold">R</span>
-            </div>
-            <div>
-              <h1 className="text-xl font-bold">Roam Dash</h1>
-              <p className="text-white/70 text-xs">Food. Delivered.</p>
-            </div>
-          </div>
-
-          {/* Main Content */}
-          <div className="flex-1 flex flex-col justify-center py-8 space-y-8 min-h-0">
-            <div>
-              <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm px-3 py-1 rounded-full mb-4">
-                <Sparkles className="w-4 h-4 text-yellow-300" />
-                <span className="text-sm font-medium">Hungry? We got you!</span>
-              </div>
-              <h2 className="text-3xl xl:text-4xl 2xl:text-5xl font-bold leading-tight">
-                Delicious food,<br />
-                <span className="text-white/95">delivered fast.</span>
-              </h2>
-              <p className="mt-4 text-base xl:text-lg text-white/80 max-w-md">
-                Order from your favorite local restaurants and get it delivered hot to your door.
-              </p>
-            </div>
-
-            {/* Features Grid */}
-            <div className="grid grid-cols-2 gap-3 max-w-2xl">
-              {FEATURES.map((feature, index) => {
-                const Icon = feature.icon;
-                return (
-                  <div 
-                    key={index}
-                    className="bg-white/10 backdrop-blur-sm rounded-xl p-4 hover:bg-white/20 transition-colors border border-white/10"
-                  >
-                    <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center mb-2">
-                      <Icon className="w-5 h-5" />
-                    </div>
-                    <h3 className="font-semibold text-sm xl:text-base mb-1">{feature.title}</h3>
-                    <p className="text-xs xl:text-sm text-white/70 leading-snug">{feature.description}</p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Trust Indicators */}
-          <div className="flex items-center gap-4 flex-shrink-0 pt-6 border-t border-white/20">
-            <div className="flex -space-x-2">
-              {['🧑‍🍳', '👨‍🍳', '👩‍🍳'].map((emoji, i) => (
-                <div key={i} className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-sm border-2 border-white/30">
-                  {emoji}
-                </div>
-              ))}
-            </div>
-            <div>
-              <div className="flex items-center gap-1">
-                {[1, 2, 3, 4, 5].map(i => (
-                  <Star key={i} className="w-4 h-4 fill-yellow-300 text-yellow-300" />
-                ))}
-              </div>
-              <p className="text-xs text-white/80 mt-0.5">Trusted by 50,000+ food lovers in Jamaica</p>
-            </div>
-          </div>
-        </div>
+    <div className={shellClass}>
+      <div className="h-48 w-full absolute top-0 left-0 -z-10 bg-gradient-to-b from-surface-container-high to-surface opacity-50 overflow-hidden pointer-events-none">
+        <div
+          className="w-full h-full bg-cover bg-center opacity-30 mix-blend-multiply"
+          style={{ backgroundImage: "url('/images/login-hero.png')" }}
+        />
       </div>
 
-      {/* Right Panel - Auth Form */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-8 lg:p-12">
-        <div className="w-full max-w-md py-8">
-          {/* Mobile Logo */}
-          <div className="lg:hidden text-center mb-8">
-            <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-500/30">
-              <span className="text-white text-3xl font-bold">R</span>
-            </div>
-            <h1 className="text-2xl font-bold text-gray-900">Roam Dash</h1>
-            <p className="text-gray-500 text-sm">Food. Delivered.</p>
-          </div>
+      <main className="flex-1 flex flex-col px-4 pt-20 pb-8 max-w-md w-full mx-auto relative z-10 min-h-0 overflow-y-auto scrollbar-hide">
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            className="absolute top-4 left-2 w-10 h-10 rounded-full flex items-center justify-center text-on-surface hover:bg-surface-variant transition-colors"
+            aria-label="Go back"
+          >
+            <MaterialIcon name="arrow_back" />
+          </button>
+        )}
 
-          {/* Form Header */}
-          <div className="mb-8">
-            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              {isSignUp ? 'Create your account' : 'Welcome back'}
-            </h2>
-            <p className="text-gray-500 mt-2">
-              {isSignUp 
-                ? 'Sign up in seconds to start ordering' 
-                : 'Sign in to continue your foodie journey'}
-            </p>
-          </div>
+        <header className="mb-8">
+          <h1 className="text-[28px] leading-[34px] font-bold text-on-surface mb-2">
+            {forgotMode ? 'Reset password' : isSignUp ? 'Create your account' : 'Welcome back'}
+          </h1>
+          <p className="text-base text-on-surface-variant">
+            {forgotMode
+              ? 'We will email you a link to reset your password.'
+              : isSignUp
+                ? 'Sign up to start ordering from your favorite restaurants.'
+                : 'Sign in to continue your culinary journey.'}
+          </p>
+        </header>
 
-          {/* Auth Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {isSignUp && (
+        <form className="flex flex-col gap-6 flex-1" onSubmit={handleSubmit}>
+          <div className="flex flex-col gap-4">
+            {isSignUp && !forgotMode && (
               <>
-                <div>
-                  <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                    Full Name
-                  </label>
-                  <input
-                    id="name"
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Your name"
-                    className="w-full px-4 py-3.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
-                    required
-                  />
-                </div>
-                <div>
-                  <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">
-                    Phone Number
-                  </label>
-                  <input
-                    id="phone"
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="876-123-4567"
-                    className="w-full px-4 py-3.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
-                    required
-                  />
-                </div>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Full name"
+                  required
+                  className="w-full bg-surface-container-high text-on-surface text-base rounded-lg px-4 py-4 border-2 border-transparent focus:bg-surface-container-lowest focus:border-primary focus:outline-none transition-all placeholder:text-on-surface-variant/60"
+                />
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="Phone number"
+                  required
+                  className="w-full bg-surface-container-high text-on-surface text-base rounded-lg px-4 py-4 border-2 border-transparent focus:bg-surface-container-lowest focus:border-primary focus:outline-none transition-all placeholder:text-on-surface-variant/60"
+                />
               </>
             )}
 
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                Email address
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="w-full px-4 py-3.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
-                required
-              />
-            </div>
+            <input
+              id="identifier"
+              type="text"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              placeholder="Email or phone number"
+              required
+              className="w-full bg-surface-container-high text-on-surface text-base rounded-lg px-4 py-4 border-2 border-transparent focus:bg-surface-container-lowest focus:border-primary focus:outline-none transition-all placeholder:text-on-surface-variant/60"
+            />
 
             {!forgotMode && (
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                Password
-              </label>
               <div className="relative">
                 <input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  className="w-full px-4 pr-12 py-3.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
-                  required={!forgotMode}
+                  placeholder="Password"
+                  required
                   minLength={6}
+                  className="w-full bg-surface-container-high text-on-surface text-base rounded-lg pl-4 pr-12 py-4 border-2 border-transparent focus:bg-surface-container-lowest focus:border-primary focus:outline-none transition-all placeholder:text-on-surface-variant/60"
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  aria-label="Toggle password visibility"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface transition-colors"
                 >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  <MaterialIcon name={showPassword ? 'visibility' : 'visibility_off'} className="text-[20px]" />
                 </button>
               </div>
-            </div>
             )}
 
             {!isSignUp && (
@@ -269,87 +228,104 @@ export default function LoginPage({ onNavigate }: LoginPageProps) {
                 {!forgotMode ? (
                   <button
                     type="button"
-                    className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
                     onClick={() => {
                       setForgotMode(true);
                       setNotice(null);
                     }}
+                    className="text-sm text-primary hover:text-primary-container transition-colors"
                   >
                     Forgot password?
                   </button>
                 ) : (
                   <button
                     type="button"
-                    className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
                     onClick={() => setForgotMode(false)}
+                    className="text-sm text-primary hover:text-primary-container transition-colors"
                   >
                     Back to sign in
                   </button>
                 )}
               </div>
             )}
-
-            {notice && (
-              <p className="text-sm text-emerald-600 text-center" role="status">{notice}</p>
-            )}
-
-            <button
-              type="submit"
-              disabled={isLoading || forgotLoading}
-              className="w-full py-4 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl font-semibold hover:from-emerald-600 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2 group"
-            >
-              {isLoading || forgotLoading ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Please wait...
-                </>
-              ) : (
-                <>
-                  {isSignUp ? 'Create Account' : forgotMode ? 'Send reset email' : 'Sign In'}
-                  {!forgotMode && <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />}
-                </>
-              )}
-            </button>
-          </form>
-
-          {/* Divider */}
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-200" />
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-gray-50 text-gray-500">or</span>
-            </div>
           </div>
 
-          {/* Toggle Sign In / Sign Up */}
-          <p className="text-center text-gray-600">
-            {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
-            <button
-              onClick={() => setIsSignUp(!isSignUp)}
-              className="text-emerald-600 font-semibold hover:text-emerald-700"
-            >
-              {isSignUp ? 'Sign in' : 'Sign up for free'}
-            </button>
-          </p>
+          {notice && (
+            <p className="text-sm text-primary text-center" role="status">
+              {notice}
+            </p>
+          )}
 
-          {/* Continue as Guest */}
           <button
-            onClick={() => onNavigate('home')}
-            className="block mx-auto mt-6 text-gray-500 hover:text-gray-700 text-sm font-medium px-4 py-2 hover:bg-gray-100 rounded-lg transition-colors"
+            type="submit"
+            disabled={isLoading || forgotLoading}
+            className="w-full bg-primary-container text-on-primary text-sm font-semibold tracking-wide py-4 rounded-lg shadow-sm hover:opacity-90 active:scale-[0.98] transition-all duration-200 flex items-center justify-center disabled:opacity-50"
           >
-            Continue browsing as guest
+            {isLoading || forgotLoading
+              ? 'Please wait…'
+              : forgotMode
+                ? 'Send reset email'
+                : isSignUp
+                  ? 'Create account'
+                  : 'Sign In'}
           </button>
 
-          {/* Footer */}
-          <p className="text-center text-xs text-gray-400 mt-8">
-            By continuing, you agree to our{' '}
-            <a href="#" className="text-gray-600 hover:underline">Terms of Service</a>
-            {' '}and{' '}
-            <a href="#" className="text-gray-600 hover:underline">Privacy Policy</a>
-          </p>
-        </div>
-      </div>
+          {!forgotMode && (
+            <>
+              <div className="flex items-center gap-4">
+                <div className="flex-1 h-px bg-surface-container-highest" />
+                <span className="text-sm text-on-surface-variant">or</span>
+                <div className="flex-1 h-px bg-surface-container-highest" />
+              </div>
+
+              <div className="flex flex-col gap-4">
+                <button
+                  type="button"
+                  onClick={() => void handleGoogleAuth()}
+                  disabled={oauthLoading}
+                  className="w-full bg-surface-container-lowest border border-surface-container-highest text-on-surface text-sm font-semibold tracking-wide py-3.5 rounded-lg hover:bg-surface-container-low active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-3 disabled:opacity-50"
+                >
+                  <GoogleIcon />
+                  Continue with Google
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toast.info('Apple sign-in coming soon')}
+                  className="w-full bg-surface-container-lowest border border-surface-container-highest text-on-surface text-sm font-semibold tracking-wide py-3.5 rounded-lg hover:bg-surface-container-low active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-3"
+                >
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.15 2.95.93 3.78 2.04-3.18 1.9-2.65 6.33.6 7.61-.75 1.49-1.57 2.72-2.98 3.36zM12.03 7.25C11.75 4.09 14.39 1.45 17.51 1c.36 3.43-2.92 6.13-5.48 6.25z" />
+                  </svg>
+                  Continue with Apple
+                </button>
+              </div>
+            </>
+          )}
+        </form>
+
+        {!forgotMode && (
+          <div className="mt-auto pt-6 text-center pb-safe">
+            <p className="text-sm text-on-surface-variant">
+              {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
+              <button
+                type="button"
+                onClick={() => setIsSignUp((v) => !v)}
+                className="text-primary text-sm font-semibold tracking-wide hover:text-primary-container transition-colors"
+              >
+                {isSignUp ? 'Sign in' : 'Sign up'}
+              </button>
+            </p>
+            {!fullScreen && (
+              <button
+                type="button"
+                onClick={() => onNavigate('home')}
+                className="mt-4 text-sm text-on-surface-variant hover:text-on-surface"
+              >
+                Continue browsing as guest
+              </button>
+            )}
+          </div>
+        )}
+      </main>
     </div>
   );
 }
