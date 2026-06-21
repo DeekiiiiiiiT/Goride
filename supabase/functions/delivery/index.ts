@@ -58,6 +58,14 @@ function getServiceSupabase() {
   );
 }
 
+function getPaymentsSupabase() {
+  return createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    { db: { schema: "payments" } },
+  );
+}
+
 // Auth-only client (uses default public schema so supabase.auth.getUser works)
 function getAuthClient(authHeader: string) {
   return createClient(
@@ -360,6 +368,18 @@ app.post("/merchants", async (c) => {
     .single();
   
   if (error) return c.json({ error: error.message }, 500);
+
+  const merchantId = (data as Record<string, unknown>).id as string;
+  await supabase.from("merchant_team_members").insert({
+    merchant_id: merchantId,
+    user_id: user.id,
+    email: body.email || user.email,
+    name: body.ownerName || user.email?.split("@")[0] || "Owner",
+    role: "admin",
+    permissions: ["orders", "menu", "analytics", "payouts"],
+    is_owner: true,
+  });
+
   return c.json({ merchant: data }, 201);
 });
 
@@ -1438,6 +1458,126 @@ function formatBucketLabel(key: string, granularity: string) {
   return `${h12}${suffix}`;
 }
 
+const CATEGORY_COLORS = [
+  "#10b981",
+  "#006c49",
+  "#4edea3",
+  "#8b4ef7",
+  "#712edd",
+  "#f59e0b",
+  "#3b82f6",
+];
+
+const DAY_OF_WEEK_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+async function buildItemCategoryMap(
+  supabase: ReturnType<typeof getSupabase>,
+  merchantId: string,
+): Promise<Record<string, string>> {
+  const { data: categories } = await supabase
+    .from("menu_categories")
+    .select("id, name")
+    .eq("merchant_id", merchantId);
+
+  const { data: items } = await supabase
+    .from("menu_items")
+    .select("name, category_id")
+    .eq("merchant_id", merchantId);
+
+  const categoryNameById: Record<string, string> = {};
+  for (const cat of categories || []) {
+    categoryNameById[String(cat.id)] = String(cat.name);
+  }
+
+  const map: Record<string, string> = {};
+  for (const item of items || []) {
+    const key = String(item.name).toLowerCase().trim();
+    const categoryId = item.category_id ? String(item.category_id) : "";
+    map[key] = categoryId ? (categoryNameById[categoryId] || "Uncategorized") : "Uncategorized";
+  }
+  return map;
+}
+
+function buildCategoryBreakdown(
+  delivered: OrderRow[],
+  itemCategoryMap: Record<string, string>,
+  totalRevenue: number,
+) {
+  const revenueByCategory: Record<string, number> = {};
+
+  for (const order of delivered) {
+    const items = parseOrderItems(order.items);
+    let itemRevenue = 0;
+
+    for (const item of items) {
+      const lineRevenue = (item.price || 0) * item.quantity;
+      itemRevenue += lineRevenue;
+      const category =
+        itemCategoryMap[item.name.toLowerCase().trim()] || "Uncategorized";
+      revenueByCategory[category] = (revenueByCategory[category] || 0) + lineRevenue;
+    }
+
+    if (itemRevenue === 0 && items.length > 0) {
+      const subtotal = Number(order.subtotal || 0);
+      const perItem = subtotal / items.length;
+      for (const item of items) {
+        const category =
+          itemCategoryMap[item.name.toLowerCase().trim()] || "Uncategorized";
+        revenueByCategory[category] = (revenueByCategory[category] || 0) + perItem;
+      }
+    } else if (items.length === 0) {
+      revenueByCategory["Uncategorized"] =
+        (revenueByCategory["Uncategorized"] || 0) + Number(order.subtotal || 0);
+    }
+  }
+
+  const entries = Object.entries(revenueByCategory).sort((a, b) => b[1] - a[1]);
+  const revenueTotal = entries.reduce((sum, [, value]) => sum + value, 0) || totalRevenue;
+
+  return entries.map(([name, revenue], index) => ({
+    name,
+    percent: revenueTotal > 0 ? Math.round((revenue / revenueTotal) * 100) : 0,
+    color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
+    revenue,
+  }));
+}
+
+function buildRevenueByDayOfWeek(delivered: OrderRow[]) {
+  const buckets = Array.from({ length: 7 }, (_, day) => ({
+    day,
+    label: DAY_OF_WEEK_LABELS[day],
+    revenue: 0,
+    orders: 0,
+  }));
+
+  for (const order of delivered) {
+    const placed = new Date(String(order.placed_at || order.created_at));
+    const day = placed.getDay();
+    buckets[day].revenue += Number(order.subtotal || 0);
+    buckets[day].orders += 1;
+  }
+
+  return buckets;
+}
+
+function buildRevenueByHour(delivered: OrderRow[]) {
+  const buckets = Array.from({ length: 24 }, (_, hour) => ({
+    hour,
+    label: hour === 0 ? "12am" : hour < 12 ? `${hour}am` : hour === 12 ? "12pm" : `${hour - 12}pm`,
+    revenue: 0,
+    orders: 0,
+  }));
+
+  for (const order of delivered) {
+    const placed = new Date(String(order.placed_at || order.created_at));
+    const hour = placed.getHours();
+    buckets[hour].revenue += Number(order.subtotal || 0);
+    buckets[hour].orders += 1;
+  }
+
+  return buckets;
+}
+
 app.get("/merchant/analytics", async (c) => {
   const authHeader = c.req.header("Authorization");
   if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
@@ -1572,6 +1712,11 @@ app.get("/merchant/analytics", async (c) => {
       : 0,
   }));
 
+  const itemCategoryMap = await buildItemCategoryMap(supabase, merchantId);
+  const categoryBreakdown = buildCategoryBreakdown(delivered, itemCategoryMap, totalRevenue);
+  const revenueByDayOfWeek = buildRevenueByDayOfWeek(delivered);
+  const revenueByHour = buildRevenueByHour(delivered);
+
   return c.json({
     from: fromDate.toISOString(),
     to: toDate.toISOString(),
@@ -1583,7 +1728,9 @@ app.get("/merchant/analytics", async (c) => {
     revenueByBucket,
     orderVolumeByBucket,
     topItems,
-    categoryBreakdown: [],
+    categoryBreakdown,
+    revenueByDayOfWeek,
+    revenueByHour,
     operational: {
       acceptanceRate,
       cancellationRate,
@@ -1593,6 +1740,621 @@ app.get("/merchant/analytics", async (c) => {
     avgRating,
     ratingDistribution,
   });
+});
+
+// ============================================================================
+// Merchant earnings
+// ============================================================================
+
+const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function orderMerchantNet(order: OrderRow): number {
+  const subtotal = Number(order.subtotal || 0);
+  const platformFee = Number(order.platform_fee || 0);
+  const tip = Number(order.tip || 0);
+  const discount = Number(order.discount || 0);
+  return subtotal - platformFee + tip - discount;
+}
+
+function formatEarningsDate(value: string | Date): string {
+  const date = value instanceof Date ? value : new Date(value);
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function formatEarningsShortDate(value: string | Date): string {
+  const date = value instanceof Date ? value : new Date(value);
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function startOfWeek(date: Date): Date {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function nextPayoutLabel(pendingPayouts: Record<string, unknown>[]): string {
+  const pending = pendingPayouts
+    .filter((p) => p.status === "pending")
+    .sort((a, b) => String(a.period_end || "").localeCompare(String(b.period_end || "")));
+  if (pending[0]?.period_end) {
+    return formatEarningsShortDate(String(pending[0].period_end));
+  }
+  const next = new Date();
+  const day = next.getDay();
+  const daysUntilMonday = day === 0 ? 1 : 8 - day;
+  next.setDate(next.getDate() + daysUntilMonday);
+  return formatEarningsShortDate(next);
+}
+
+app.get("/merchant/earnings", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const merchant = await getMerchantForUser(supabase, user.id);
+  if (!merchant) return c.json({ error: "Not a merchant" }, 403);
+
+  const merchantId = merchant.id as string;
+  const commissionRate = Number(merchant.commission_rate ?? 0.15);
+  const platformFeePercent = Math.round(commissionRate * 100);
+
+  const sb = getServiceSupabase();
+  const { data: orders, error: ordersError } = await sb
+    .from("orders")
+    .select("*")
+    .eq("merchant_id", merchantId)
+    .eq("status", "delivered");
+
+  if (ordersError) return c.json({ error: ordersError.message }, 500);
+
+  const delivered = (orders || []) as OrderRow[];
+  const paymentsSb = getPaymentsSupabase();
+  const { data: payouts, error: payoutsError } = await paymentsSb
+    .from("merchant_payouts")
+    .select("*")
+    .eq("merchant_id", merchantId)
+    .order("created_at", { ascending: false });
+
+  if (payoutsError) return c.json({ error: payoutsError.message }, 500);
+
+  const payoutRows = (payouts || []) as Record<string, unknown>[];
+  const completedPayoutTotal = payoutRows
+    .filter((p) => p.status === "completed")
+    .reduce((sum, p) => sum + Number(p.net_amount || 0), 0);
+  const pendingPayoutTotal = payoutRows
+    .filter((p) => p.status === "pending")
+    .reduce((sum, p) => sum + Number(p.net_amount || 0), 0);
+
+  const lifetimeNet = delivered.reduce((sum, o) => sum + orderMerchantNet(o), 0);
+  const currentBalance = Math.max(0, lifetimeNet - completedPayoutTotal - pendingPayoutTotal);
+
+  const now = new Date();
+  const weekStart = startOfWeek(now);
+  const weekOrders = delivered.filter((o) => {
+    const placed = new Date(String(o.placed_at || o.created_at));
+    return placed >= weekStart && placed <= now;
+  });
+
+  const grossSales = weekOrders.reduce((sum, o) => sum + Number(o.subtotal || 0), 0);
+  const platformFee = weekOrders.reduce((sum, o) => sum + Number(o.platform_fee || 0), 0);
+  const netEarnings = weekOrders.reduce((sum, o) => sum + orderMerchantNet(o), 0);
+
+  const weeklyBars = Array.from({ length: 7 }, (_, index) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() - (6 - index));
+    d.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(d);
+    dayEnd.setHours(23, 59, 59, 999);
+    const dayNet = delivered
+      .filter((o) => {
+        const placed = new Date(String(o.placed_at || o.created_at));
+        return placed >= d && placed <= dayEnd;
+      })
+      .reduce((sum, o) => sum + orderMerchantNet(o), 0);
+    const isToday =
+      d.getFullYear() === now.getFullYear() &&
+      d.getMonth() === now.getMonth() &&
+      d.getDate() === now.getDate();
+    return { day: WEEKDAY_SHORT[d.getDay()], net: dayNet, isToday };
+  });
+  const maxBarNet = Math.max(...weeklyBars.map((b) => b.net), 1);
+
+  const transactions = payoutRows.map((p) => ({
+    id: String(p.id),
+    title: p.period_end
+      ? `${formatEarningsShortDate(String(p.period_end))} Payout`
+      : "Payout",
+    date: formatEarningsDate(String(p.processed_at || p.created_at)),
+    amount: Number(p.net_amount || 0),
+    type: "payout" as const,
+    payoutId: String(p.id),
+  }));
+
+  const cancelledWithRefund = await sb
+    .from("orders")
+    .select("id, order_number, subtotal, cancelled_at")
+    .eq("merchant_id", merchantId)
+    .eq("status", "cancelled")
+    .not("cancelled_at", "is", null)
+    .order("cancelled_at", { ascending: false })
+    .limit(10);
+
+  for (const order of cancelledWithRefund.data || []) {
+    const row = order as Record<string, unknown>;
+    transactions.push({
+      id: `refund-${row.id}`,
+      title: `Refund - #${row.order_number}`,
+      date: formatEarningsDate(String(row.cancelled_at)),
+      amount: -Number(row.subtotal || 0),
+      type: "refund" as const,
+      payoutId: undefined,
+    });
+  }
+
+  transactions.sort(
+    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+  );
+
+  return c.json({
+    currentBalance,
+    nextPayoutDate: nextPayoutLabel(payoutRows),
+    weeklySummary: {
+      grossSales,
+      platformFeePercent,
+      platformFee,
+      netEarnings,
+    },
+    weeklyBars: weeklyBars.map((bar) => ({
+      day: bar.day,
+      heightPercent: Math.round((bar.net / maxBarNet) * 100),
+      isToday: bar.isToday,
+    })),
+    transactions,
+  });
+});
+
+app.get("/merchant/earnings/payouts/:id", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const merchant = await getMerchantForUser(supabase, user.id);
+  if (!merchant) return c.json({ error: "Not a merchant" }, 403);
+
+  const merchantId = merchant.id as string;
+  const payoutId = c.req.param("id");
+  const commissionRate = Number(merchant.commission_rate ?? 0.15);
+  const platformFeePercent = Math.round(commissionRate * 100);
+
+  const paymentsSb = getPaymentsSupabase();
+  const { data: payout, error } = await paymentsSb
+    .from("merchant_payouts")
+    .select("*")
+    .eq("id", payoutId)
+    .eq("merchant_id", merchantId)
+    .single();
+
+  if (error || !payout) return c.json({ error: "Payout not found" }, 404);
+
+  const row = payout as Record<string, unknown>;
+  const sb = getServiceSupabase();
+  let periodOrders: OrderRow[] = [];
+
+  if (row.period_start && row.period_end) {
+    const { data: orders } = await sb
+      .from("orders")
+      .select("*")
+      .eq("merchant_id", merchantId)
+      .eq("status", "delivered")
+      .gte("placed_at", `${row.period_start}T00:00:00.000Z`)
+      .lte("placed_at", `${row.period_end}T23:59:59.999Z`);
+    periodOrders = (orders || []) as OrderRow[];
+  }
+
+  const orderEarnings = periodOrders.length > 0
+    ? periodOrders.reduce((sum, o) => sum + Number(o.subtotal || 0), 0)
+    : Number(row.amount || row.net_amount || 0);
+  const tips = periodOrders.reduce((sum, o) => sum + Number(o.tip || 0), 0);
+  const platformFee = periodOrders.length > 0
+    ? periodOrders.reduce((sum, o) => sum + Number(o.platform_fee || 0), 0)
+    : Number(row.fee || 0);
+  const netAmount = Number(row.net_amount || 0);
+  const adjustments = orderEarnings + tips - platformFee - netAmount;
+
+  const status = String(row.status || "pending");
+  const payoutStatus = status === "completed"
+    ? "completed"
+    : status === "failed"
+    ? "failed"
+    : "pending";
+
+  return c.json({
+    id: String(row.id),
+    totalAmount: netAmount,
+    status: payoutStatus,
+    payoutDate: formatEarningsDate(String(row.processed_at || row.created_at)),
+    bankAccountMasked: row.bank_account_last4
+      ? `****${row.bank_account_last4}`
+      : "****",
+    orderEarnings,
+    tips,
+    adjustments,
+    platformFeePercent,
+    platformFee,
+    netAmount,
+  });
+});
+
+// ============================================================================
+// Merchant team
+// ============================================================================
+
+const VALID_TEAM_ROLES = new Set(["staff", "manager", "admin"]);
+const VALID_TEAM_PERMISSIONS = new Set(["orders", "menu", "analytics", "payouts"]);
+
+function mapTeamMember(row: Record<string, unknown>) {
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    email: row.email ? String(row.email) : undefined,
+    role: String(row.role),
+    permissions: (row.permissions as string[]) || [],
+    isOwner: Boolean(row.is_owner),
+  };
+}
+
+function mapTeamInvite(row: Record<string, unknown>) {
+  return {
+    id: String(row.id),
+    email: String(row.email),
+    role: String(row.role),
+    permissions: (row.permissions as string[]) || [],
+  };
+}
+
+app.get("/merchant/team", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const merchant = await getMerchantForUser(supabase, user.id);
+  if (!merchant) return c.json({ error: "Not a merchant" }, 403);
+
+  const merchantId = merchant.id as string;
+  const [membersRes, invitesRes] = await Promise.all([
+    supabase
+      .from("merchant_team_members")
+      .select("*")
+      .eq("merchant_id", merchantId)
+      .order("is_owner", { ascending: false })
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("merchant_team_invites")
+      .select("*")
+      .eq("merchant_id", merchantId)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false }),
+  ]);
+
+  if (membersRes.error) return c.json({ error: membersRes.error.message }, 500);
+  if (invitesRes.error) return c.json({ error: invitesRes.error.message }, 500);
+
+  return c.json({
+    members: (membersRes.data || []).map((row) =>
+      mapTeamMember(row as Record<string, unknown>)
+    ),
+    pendingInvites: (invitesRes.data || []).map((row) =>
+      mapTeamInvite(row as Record<string, unknown>)
+    ),
+  });
+});
+
+app.post("/merchant/team/invites", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const merchant = await getMerchantForUser(supabase, user.id);
+  if (!merchant) return c.json({ error: "Not a merchant" }, 403);
+
+  const body = await c.req.json();
+  const email = String(body.email || "").trim().toLowerCase();
+  const role = String(body.role || "staff");
+  const permissions = Array.isArray(body.permissions) ? body.permissions : [];
+
+  if (!email) return c.json({ error: "Email is required" }, 400);
+  if (!VALID_TEAM_ROLES.has(role)) return c.json({ error: "Invalid role" }, 400);
+  if (!permissions.every((p: string) => VALID_TEAM_PERMISSIONS.has(p))) {
+    return c.json({ error: "Invalid permissions" }, 400);
+  }
+
+  const merchantId = merchant.id as string;
+  const { data: existingMember } = await supabase
+    .from("merchant_team_members")
+    .select("id")
+    .eq("merchant_id", merchantId)
+    .ilike("email", email)
+    .maybeSingle();
+
+  if (existingMember) {
+    return c.json({ error: "This email already has access" }, 409);
+  }
+
+  const { data: existingInvite } = await supabase
+    .from("merchant_team_invites")
+    .select("id")
+    .eq("merchant_id", merchantId)
+    .eq("status", "pending")
+    .ilike("email", email)
+    .maybeSingle();
+
+  if (existingInvite) {
+    return c.json({ error: "A pending invite already exists for this email" }, 409);
+  }
+
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 14);
+
+  const { data, error } = await supabase
+    .from("merchant_team_invites")
+    .insert({
+      merchant_id: merchantId,
+      email,
+      role,
+      permissions,
+      status: "pending",
+      invited_by: user.id,
+      expires_at: expiresAt.toISOString(),
+    })
+    .select()
+    .single();
+
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ invite: mapTeamInvite(data as Record<string, unknown>) }, 201);
+});
+
+app.delete("/merchant/team/invites/:id", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const merchant = await getMerchantForUser(supabase, user.id);
+  if (!merchant) return c.json({ error: "Not a merchant" }, 403);
+
+  const inviteId = c.req.param("id");
+  const { error } = await supabase
+    .from("merchant_team_invites")
+    .update({ status: "cancelled" })
+    .eq("id", inviteId)
+    .eq("merchant_id", merchant.id as string)
+    .eq("status", "pending");
+
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ ok: true });
+});
+
+app.patch("/merchant/team/members/:id", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const merchant = await getMerchantForUser(supabase, user.id);
+  if (!merchant) return c.json({ error: "Not a merchant" }, 403);
+
+  const memberId = c.req.param("id");
+  const body = await c.req.json();
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+
+  if (body.role != null) {
+    if (!VALID_TEAM_ROLES.has(String(body.role))) {
+      return c.json({ error: "Invalid role" }, 400);
+    }
+    updates.role = body.role;
+  }
+  if (body.permissions != null) {
+    if (!Array.isArray(body.permissions) ||
+      !body.permissions.every((p: string) => VALID_TEAM_PERMISSIONS.has(p))) {
+      return c.json({ error: "Invalid permissions" }, 400);
+    }
+    updates.permissions = body.permissions;
+  }
+
+  const { data: member } = await supabase
+    .from("merchant_team_members")
+    .select("is_owner")
+    .eq("id", memberId)
+    .eq("merchant_id", merchant.id as string)
+    .single();
+
+  if (!member) return c.json({ error: "Member not found" }, 404);
+  if ((member as Record<string, unknown>).is_owner) {
+    return c.json({ error: "Cannot modify owner" }, 400);
+  }
+
+  const { data, error } = await supabase
+    .from("merchant_team_members")
+    .update(updates)
+    .eq("id", memberId)
+    .eq("merchant_id", merchant.id as string)
+    .select()
+    .single();
+
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ member: mapTeamMember(data as Record<string, unknown>) });
+});
+
+// ============================================================================
+// Merchant promotions
+// ============================================================================
+
+function mapPromotion(row: Record<string, unknown>) {
+  return {
+    id: String(row.id),
+    type: String(row.type),
+    title: String(row.title),
+    discountPercent: row.discount_percent != null
+      ? Number(row.discount_percent)
+      : undefined,
+    discountAmount: row.discount_amount != null
+      ? Number(row.discount_amount)
+      : undefined,
+    minOrder: row.min_order != null ? Number(row.min_order) : undefined,
+    appliesTo: row.applies_to ? String(row.applies_to) : undefined,
+    promoCode: row.promo_code ? String(row.promo_code) : undefined,
+    customerEligibility: row.customer_eligibility
+      ? String(row.customer_eligibility)
+      : undefined,
+    dateStart: String(row.date_start).slice(0, 10),
+    dateEnd: row.date_end ? String(row.date_end).slice(0, 10) : undefined,
+    usageLimitPerCustomer: row.usage_limit_per_customer != null
+      ? Number(row.usage_limit_per_customer)
+      : undefined,
+    redemptions: Number(row.redemptions || 0),
+    status: String(row.status),
+  };
+}
+
+function buildWeeklyRedemptions(promotions: Record<string, unknown>[]) {
+  const today = new Date();
+  return Array.from({ length: 7 }, (_, index) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() - (6 - index));
+    const label = WEEKDAY_SHORT[d.getDay()];
+    // Orders do not store promo_code yet; chart reflects stored redemption counters only.
+    const redemptions = promotions.reduce(
+      (sum, p) => sum + Number(p.redemptions || 0),
+      0,
+    );
+    return {
+      day: label,
+      redemptions: index === 6 ? redemptions : 0,
+      sales: 0,
+    };
+  });
+}
+
+app.get("/merchant/promotions", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const merchant = await getMerchantForUser(supabase, user.id);
+  if (!merchant) return c.json({ error: "Not a merchant" }, 403);
+
+  const { data, error } = await supabase
+    .from("merchant_promotions")
+    .select("*")
+    .eq("merchant_id", merchant.id as string)
+    .order("created_at", { ascending: false });
+
+  if (error) return c.json({ error: error.message }, 500);
+
+  const rows = (data || []) as Record<string, unknown>[];
+  return c.json({
+    promotions: rows.map(mapPromotion),
+    weeklyRedemptions: buildWeeklyRedemptions(rows),
+  });
+});
+
+app.post("/merchant/promotions", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const merchant = await getMerchantForUser(supabase, user.id);
+  if (!merchant) return c.json({ error: "Not a merchant" }, 403);
+
+  const body = await c.req.json();
+  const promoCode = String(body.promoCode || "").trim().toUpperCase();
+  if (!promoCode) return c.json({ error: "Promo code is required" }, 400);
+  if (!body.title) return c.json({ error: "Title is required" }, 400);
+  if (!body.type) return c.json({ error: "Type is required" }, 400);
+  if (!body.dateStart) return c.json({ error: "Start date is required" }, 400);
+
+  const { data, error } = await supabase
+    .from("merchant_promotions")
+    .insert({
+      merchant_id: merchant.id as string,
+      type: body.type,
+      title: body.title,
+      discount_percent: body.discountPercent ?? null,
+      discount_amount: body.discountAmount ?? null,
+      min_order: body.minOrder ?? null,
+      applies_to: body.appliesTo || "entire_order",
+      promo_code: promoCode,
+      customer_eligibility: body.customerEligibility || "all",
+      date_start: body.dateStart,
+      date_end: body.dateEnd || null,
+      usage_limit_per_customer: body.usageLimitPerCustomer ?? null,
+      status: body.status || "active",
+    })
+    .select()
+    .single();
+
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ promotion: mapPromotion(data as Record<string, unknown>) }, 201);
+});
+
+app.patch("/merchant/promotions/:id", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const merchant = await getMerchantForUser(supabase, user.id);
+  if (!merchant) return c.json({ error: "Not a merchant" }, 403);
+
+  const promotionId = c.req.param("id");
+  const body = await c.req.json();
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+
+  if (body.status != null) updates.status = body.status;
+  if (body.title != null) updates.title = body.title;
+  if (body.dateEnd != null) updates.date_end = body.dateEnd;
+
+  const { data, error } = await supabase
+    .from("merchant_promotions")
+    .update(updates)
+    .eq("id", promotionId)
+    .eq("merchant_id", merchant.id as string)
+    .select()
+    .single();
+
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ promotion: mapPromotion(data as Record<string, unknown>) });
 });
 
 // ============================================================================

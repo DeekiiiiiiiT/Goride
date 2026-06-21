@@ -110,6 +110,7 @@ function DashMerchantApp() {
   }
 
   if (!merchant) {
+    // Post-login merchant creation (OnboardingPage) is separate from pre-login PartnerSignUpFlow.
     return <OnboardingPage session={session} onComplete={() => window.location.reload()} />;
   }
 

@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { DEFAULT_PROMOTIONS } from '../lib/promotions-mock-data';
+import { deliveryFetch } from '../lib/partner-api';
 import {
   buildPromotionTitle,
+  DailyRedemption,
   generatePromoCode,
   parseAmount,
   Promotion,
@@ -10,22 +12,9 @@ import {
   PromotionType,
 } from '../types/promotions';
 
-function promotionsKey(merchantId: string) {
-  return `roam_promotions_${merchantId}`;
-}
-
-function loadPromotions(merchantId: string): Promotion[] {
-  try {
-    const raw = localStorage.getItem(promotionsKey(merchantId));
-    if (!raw) return DEFAULT_PROMOTIONS;
-    return JSON.parse(raw) as Promotion[];
-  } catch {
-    return DEFAULT_PROMOTIONS;
-  }
-}
-
-function savePromotions(merchantId: string, promotions: Promotion[]) {
-  localStorage.setItem(promotionsKey(merchantId), JSON.stringify(promotions));
+interface PromotionsResponse {
+  promotions: Promotion[];
+  weeklyRedemptions: DailyRedemption[];
 }
 
 const emptyForm = (): PromotionFormData => ({
@@ -42,13 +31,28 @@ const emptyForm = (): PromotionFormData => ({
   usageLimit: '',
 });
 
-export function usePromotions(merchantId: string) {
-  const [promotions, setPromotions] = useState<Promotion[]>(() => loadPromotions(merchantId));
+export function usePromotions(_merchantId: string) {
+  const queryClient = useQueryClient();
   const [form, setForm] = useState<PromotionFormData>(emptyForm);
 
-  useEffect(() => {
-    setPromotions(loadPromotions(merchantId));
-  }, [merchantId]);
+  const query = useQuery({
+    queryKey: ['merchant-promotions'],
+    queryFn: () => deliveryFetch('/merchant/promotions') as Promise<PromotionsResponse>,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (payload: Record<string, unknown>) =>
+      deliveryFetch('/merchant/promotions', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['merchant-promotions'] });
+      setForm(emptyForm());
+      toast.success('Promotion created');
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
 
   const updateForm = useCallback((updates: Partial<PromotionFormData>) => {
     setForm((current) => ({ ...current, ...updates }));
@@ -92,8 +96,7 @@ export function usePromotions(merchantId: string) {
           ? Number(form.usageLimit)
           : undefined;
 
-    const promotion: Promotion = {
-      id: crypto.randomUUID(),
+    createMutation.mutate({
       type: form.type,
       title,
       discountPercent: form.type === 'percent_off' ? Number(form.discountValue) : undefined,
@@ -105,25 +108,22 @@ export function usePromotions(merchantId: string) {
       dateStart: form.dateStart,
       dateEnd: form.dateEnd || undefined,
       usageLimitPerCustomer,
-      redemptions: 0,
       status: 'active',
-    };
-
-    setPromotions((current) => {
-      const next = [promotion, ...current];
-      savePromotions(merchantId, next);
-      return next;
     });
-    setForm(emptyForm());
-    toast.success('Promotion created');
     return true;
-  }, [form, merchantId]);
+  }, [createMutation, form]);
 
+  const promotions = query.data?.promotions ?? [];
   const activePromotions = promotions.filter((promotion) => promotion.status === 'active');
 
   return {
     promotions,
     activePromotions,
+    weeklyRedemptions: query.data?.weeklyRedemptions ?? [],
+    isLoading: query.isLoading,
+    isError: query.isError,
+    refetch: query.refetch,
+    isCreating: createMutation.isPending,
     form,
     updateForm,
     setPromotionType,

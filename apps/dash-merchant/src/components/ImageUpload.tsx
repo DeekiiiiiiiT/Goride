@@ -1,7 +1,7 @@
-import React, { useRef, useState } from 'react';
-import { Upload, X, Loader2 } from 'lucide-react';
+import { useRef, useState } from 'react';
 import { supabase } from '@roam/auth-client';
 import { toast } from 'sonner';
+import { MaterialIcon } from '../signup/components/MaterialIcon';
 import ImageCropModal from './ImageCropModal';
 
 interface ImageUploadProps {
@@ -13,13 +13,41 @@ interface ImageUploadProps {
   label?: string;
   placeholder?: string;
   enableCrop?: boolean;
+  className?: string;
 }
 
 const ASPECT_VALUES = {
   square: 1,
   cover: 16 / 9,
   logo: 1,
-};
+} as const;
+
+const VARIANT_CONFIG = {
+  logo: {
+    boxClass: 'h-[120px] w-[120px]',
+    emptyIcon: 'cloud_upload',
+    emptyIconClass: 'text-3xl text-primary-container',
+    primaryTextClass: 'text-label-sm font-medium text-primary-container',
+    showFileHint: true,
+    defaultPlaceholder: 'Upload your logo',
+  },
+  cover: {
+    boxClass: 'aspect-video w-full',
+    emptyIcon: 'add_photo_alternate',
+    emptyIconClass: 'text-3xl text-on-surface-variant',
+    primaryTextClass: 'text-body-sm text-on-surface-variant',
+    showFileHint: false,
+    defaultPlaceholder: 'Upload a cover photo',
+  },
+  square: {
+    boxClass: 'h-[150px] w-[150px]',
+    emptyIcon: 'add_a_photo',
+    emptyIconClass: 'text-2xl text-on-surface-variant',
+    primaryTextClass: 'text-label-sm text-on-surface-variant',
+    showFileHint: false,
+    defaultPlaceholder: 'Tap to add photo',
+  },
+} as const;
 
 export default function ImageUpload({
   value,
@@ -28,33 +56,31 @@ export default function ImageUpload({
   folder = 'images',
   aspectRatio = 'square',
   label,
-  placeholder = 'Click or drag to upload',
+  placeholder,
   enableCrop = true,
+  className = '',
 }: ImageUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [cropFile, setCropFile] = useState<File | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const aspectClasses = {
-    square: 'aspect-square',
-    cover: 'aspect-[16/9]',
-    logo: 'aspect-square max-w-[150px]',
-  };
+  const variant = VARIANT_CONFIG[aspectRatio];
+  const displayText = placeholder || variant.defaultPlaceholder;
 
   const uploadBlob = async (file: File | Blob, originalName: string) => {
     setIsUploading(true);
+    setErrorMessage(null);
 
     try {
       const fileExt = originalName.split('.').pop() || 'jpg';
       const fileName = `${folder}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from(bucket)
-        .upload(fileName, file, {
-          cacheControl: '3600',
-          upsert: false,
-        });
+      const { error: uploadError } = await supabase.storage.from(bucket).upload(fileName, file, {
+        cacheControl: '3600',
+        upsert: false,
+      });
 
       if (uploadError) {
         if (uploadError.message?.toLowerCase().includes('bucket not found')) {
@@ -65,28 +91,35 @@ export default function ImageUpload({
         throw uploadError;
       }
 
-      const { data: { publicUrl } } = supabase.storage
-        .from(bucket)
-        .getPublicUrl(fileName);
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from(bucket).getPublicUrl(fileName);
 
       onChange(publicUrl);
       toast.success('Image uploaded');
-    } catch (error: any) {
-      console.error('Upload error:', error);
-      toast.error(error.message || 'Failed to upload image');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to upload image';
+      setErrorMessage(message);
+      toast.error(message);
     } finally {
       setIsUploading(false);
     }
   };
 
-  const handleFile = async (file: File) => {
+  const validateAndProcess = async (file: File) => {
+    setErrorMessage(null);
+
     if (!file.type.startsWith('image/')) {
-      toast.error('Please select an image file');
+      const message = 'Please select an image file';
+      setErrorMessage(message);
+      toast.error(message);
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      toast.error('Image must be less than 5MB');
+      const message = 'Image must be less than 5MB';
+      setErrorMessage(message);
+      toast.error(message);
       return;
     }
 
@@ -102,7 +135,7 @@ export default function ImageUpload({
     e.preventDefault();
     setDragActive(false);
     const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
+    if (file) void validateAndProcess(file);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -115,21 +148,41 @@ export default function ImageUpload({
   };
 
   const handleClick = () => {
-    fileInputRef.current?.click();
+    if (!isUploading) {
+      fileInputRef.current?.click();
+    }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) handleFile(file);
+    if (file) void validateAndProcess(file);
+    e.target.value = '';
   };
 
   const handleRemove = (e: React.MouseEvent) => {
     e.stopPropagation();
     onChange('');
+    setErrorMessage(null);
   };
 
+  const boxStateClass = (() => {
+    if (errorMessage && !value) {
+      return 'border-dashed border-error bg-error-container/30';
+    }
+    if (value) {
+      return 'border-2 border-outline bg-surface';
+    }
+    if (dragActive) {
+      return 'border-dashed border-primary-container bg-primary-container/10';
+    }
+    if (isUploading) {
+      return 'border-2 border-outline-variant bg-surface';
+    }
+    return 'border-dashed border-outline-variant bg-surface hover:bg-surface-container-low';
+  })();
+
   return (
-    <div>
+    <div className={className}>
       {cropFile && (
         <ImageCropModal
           file={cropFile}
@@ -142,22 +195,25 @@ export default function ImageUpload({
           }}
         />
       )}
+
       {label && (
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          {label}
-        </label>
+        <label className="mb-xs block text-label-md font-semibold text-on-surface">{label}</label>
       )}
+
       <div
+        role="button"
+        tabIndex={0}
         onClick={handleClick}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleClick();
+          }
+        }}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
-        className={`
-          relative cursor-pointer rounded-xl border-2 border-dashed transition-colors overflow-hidden
-          ${aspectClasses[aspectRatio]}
-          ${dragActive ? 'border-amber-500 bg-amber-50' : 'border-gray-300 hover:border-amber-400'}
-          ${value ? 'border-solid border-gray-200' : ''}
-        `}
+        className={`group relative flex cursor-pointer flex-col items-center justify-center overflow-hidden rounded-xl border-2 transition-colors ${variant.boxClass} ${boxStateClass}`}
       >
         <input
           ref={fileInputRef}
@@ -167,33 +223,63 @@ export default function ImageUpload({
           className="hidden"
         />
 
-        {isUploading ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80">
-            <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
-            <span className="text-sm text-gray-500 mt-2">Uploading...</span>
-          </div>
-        ) : value ? (
-          <>
-            <img
-              src={value}
-              alt="Uploaded"
-              className="w-full h-full object-cover"
-            />
-            <button
-              onClick={handleRemove}
-              className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-lg"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </>
-        ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
-            <Upload className="w-8 h-8 mb-2" />
-            <span className="text-sm">{placeholder}</span>
-            <span className="text-xs mt-1">PNG, JPG up to 5MB</span>
+        {isUploading && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/80">
+            <div className="partner-spinner mb-xs" role="status" aria-label="Uploading" />
+            <span className="text-body-sm text-on-surface">Uploading...</span>
           </div>
         )}
+
+        {value && !isUploading ? (
+          <>
+            <img src={value} alt={label || 'Uploaded'} className="h-full w-full object-cover" />
+            <button
+              type="button"
+              onClick={handleRemove}
+              className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-error text-on-error opacity-100 shadow-sm transition-opacity hover:bg-error/90 md:opacity-0 md:group-hover:opacity-100"
+              aria-label="Remove image"
+            >
+              <MaterialIcon name="close" size={20} />
+            </button>
+          </>
+        ) : !isUploading ? (
+          <div className="flex flex-col items-center justify-center px-xs text-center">
+            {errorMessage ? (
+              <>
+                <MaterialIcon name="error_outline" className="mb-xs text-3xl text-error" />
+                <span className="text-body-sm text-error">Upload failed</span>
+              </>
+            ) : dragActive ? (
+              <>
+                <MaterialIcon
+                  name="cloud_upload"
+                  className="mb-xs text-3xl text-primary-container"
+                />
+                <span className="text-body-sm font-medium text-primary-container">
+                  Drop photo here
+                </span>
+              </>
+            ) : (
+              <>
+                <MaterialIcon
+                  name={variant.emptyIcon}
+                  className={`mb-xs ${variant.emptyIconClass}`}
+                />
+                <span className={`text-center ${variant.primaryTextClass}`}>{displayText}</span>
+                {variant.showFileHint && (
+                  <span className="mt-1 text-center text-[11px] text-on-surface-variant">
+                    PNG, JPG up to 5MB
+                  </span>
+                )}
+              </>
+            )}
+          </div>
+        ) : null}
       </div>
+
+      {errorMessage && !value && (
+        <p className="mt-1 text-label-sm text-error">{errorMessage}</p>
+      )}
     </div>
   );
 }

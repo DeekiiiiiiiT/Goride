@@ -13,7 +13,9 @@ export interface MerchantAnalyticsData {
   revenueByBucket: { key: string; label: string; revenue: number }[];
   orderVolumeByBucket: { key: string; label: string; count: number }[];
   topItems: TopSellingItem[];
-  categoryBreakdown: { name: string; percent: number; color: string }[];
+  categoryBreakdown: { name: string; percent: number; color: string; revenue?: number }[];
+  revenueByDayOfWeek: { day: number; label: string; revenue: number; orders: number }[];
+  revenueByHour: { hour: number; label: string; revenue: number; orders: number }[];
   operational: {
     acceptanceRate: number;
     cancellationRate: number;
@@ -37,7 +39,15 @@ export function useMerchantAnalytics(
         to,
         granularity,
       });
-      return deliveryFetch(`/merchant/analytics?${params}`) as Promise<MerchantAnalyticsData>;
+      const result = (await deliveryFetch(
+        `/merchant/analytics?${params}`,
+      )) as MerchantAnalyticsData;
+      return {
+        ...result,
+        revenueByDayOfWeek: result.revenueByDayOfWeek ?? [],
+        revenueByHour: result.revenueByHour ?? [],
+        categoryBreakdown: result.categoryBreakdown ?? [],
+      };
     },
     enabled: Boolean(from && to),
   });

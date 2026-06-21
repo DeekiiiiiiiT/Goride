@@ -38,52 +38,69 @@ export default function ImageCropModal({ file, aspect, onConfirm, onCancel }: Im
     onCancel();
   };
 
+  const aspectLabel = aspect === 1 ? '1:1' : '16:9';
+
   return (
-    <div className="fixed inset-0 z-[80] flex flex-col bg-on-background/90">
-      <header className="flex h-14 shrink-0 items-center justify-between px-margin-mobile">
-        <button
-          type="button"
-          onClick={handleCancel}
-          className="text-label-md font-semibold text-on-primary-container"
-        >
-          Cancel
-        </button>
-        <span className="text-label-md font-semibold text-on-primary-container">Crop Image</span>
-        <button
-          type="button"
-          onClick={handleConfirm}
-          disabled={isSaving || !croppedArea}
-          className="text-label-md font-semibold text-primary-container disabled:opacity-50"
-        >
-          {isSaving ? 'Saving...' : 'Done'}
-        </button>
-      </header>
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-margin-mobile">
+      <div className="flex max-h-[90dvh] w-full max-w-md flex-col overflow-hidden rounded-xl bg-surface shadow-xl">
+        <header className="flex items-center justify-between border-b border-outline-variant p-md">
+          <h3 className="text-headline-md font-semibold text-on-surface">Crop Image</h3>
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="rounded-full p-1 text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface"
+            aria-label="Close"
+          >
+            <MaterialIcon name="close" />
+          </button>
+        </header>
 
-      <div className="relative flex-1">
-        <Cropper
-          image={imageUrl}
-          crop={crop}
-          zoom={zoom}
-          aspect={aspect}
-          onCropChange={setCrop}
-          onZoomChange={setZoom}
-          onCropComplete={onCropComplete}
-        />
-      </div>
+        <div className="relative flex h-[min(350px,50dvh)] flex-col bg-surface-container-low">
+          <div className="relative flex-1">
+            <Cropper
+              image={imageUrl}
+              crop={crop}
+              zoom={zoom}
+              aspect={aspect}
+              onCropChange={setCrop}
+              onZoomChange={setZoom}
+              onCropComplete={onCropComplete}
+            />
+          </div>
+          <div className="flex shrink-0 items-center gap-sm border-t border-outline-variant/50 px-md py-sm">
+            <MaterialIcon name="zoom_out" className="text-on-surface-variant" size={20} />
+            <input
+              type="range"
+              min={1}
+              max={3}
+              step={0.05}
+              value={zoom}
+              onChange={(event) => setZoom(Number(event.target.value))}
+              className="flex-1 accent-primary-container"
+              aria-label="Zoom"
+            />
+            <MaterialIcon name="zoom_in" className="text-on-surface-variant" size={20} />
+            <span className="text-label-sm text-on-surface-variant">{aspectLabel}</span>
+          </div>
+        </div>
 
-      <div className="flex shrink-0 items-center gap-sm bg-surface px-margin-mobile py-md">
-        <MaterialIcon name="zoom_out" className="text-on-surface-variant" />
-        <input
-          type="range"
-          min={1}
-          max={3}
-          step={0.05}
-          value={zoom}
-          onChange={(event) => setZoom(Number(event.target.value))}
-          className="flex-1 accent-primary-container"
-          aria-label="Zoom"
-        />
-        <MaterialIcon name="zoom_in" className="text-on-surface-variant" />
+        <footer className="flex justify-end gap-sm border-t border-outline-variant bg-surface p-md">
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="rounded-lg px-sm py-2 text-label-md font-semibold text-on-surface-variant transition-colors hover:bg-surface-container"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleConfirm()}
+            disabled={isSaving || !croppedArea}
+            className="rounded-lg bg-primary-container px-sm py-2 text-label-md font-semibold text-on-primary shadow-sm transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isSaving ? 'Saving...' : 'Use Photo'}
+          </button>
+        </footer>
       </div>
     </div>
   );

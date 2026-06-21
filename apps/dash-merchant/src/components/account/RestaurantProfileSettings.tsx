@@ -24,7 +24,6 @@ export default function RestaurantProfileSettings({
             folder="logos"
             aspectRatio="logo"
             label="Restaurant Logo"
-            placeholder="Upload logo"
           />
           <div className="md:col-span-2">
             <ImageUpload
@@ -33,7 +32,6 @@ export default function RestaurantProfileSettings({
               folder="covers"
               aspectRatio="cover"
               label="Cover Image"
-              placeholder="Upload cover photo"
             />
           </div>
         </div>

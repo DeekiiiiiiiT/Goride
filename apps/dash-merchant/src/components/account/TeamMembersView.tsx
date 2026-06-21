@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import QueryErrorState from '../QueryErrorState';
+import PartnerSkeleton from '../PartnerSkeleton';
 import { toast } from 'sonner';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
 import { useTeamMembers } from '../../hooks/useTeamMembers';
@@ -56,8 +58,16 @@ function RoleBadge({ role, filled = false }: { role: TeamRole; filled?: boolean 
 }
 
 export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewProps) {
-  const { members, pendingInvites, sendInvite, cancelInvite, roleDefaultPermissions } =
-    useTeamMembers(merchantId);
+  const {
+    members,
+    pendingInvites,
+    sendInvite,
+    cancelInvite,
+    roleDefaultPermissions,
+    isLoading,
+    isError,
+    refetch,
+  } = useTeamMembers(merchantId);
 
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<TeamRole>('staff');
@@ -89,6 +99,22 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
   const handleEditMember = (name: string) => {
     toast.info(`Editing ${name} is coming soon`);
   };
+
+  if (isLoading) {
+    return (
+      <div className="fixed inset-0 z-[60] flex min-h-dvh flex-col bg-background p-margin-mobile pt-20">
+        <PartnerSkeleton variant="list" count={4} />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="fixed inset-0 z-[60] flex min-h-dvh flex-col bg-background p-margin-mobile pt-20">
+        <QueryErrorState message="Could not load team" onRetry={() => refetch()} />
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-[60] flex min-h-dvh flex-col bg-background pb-[100px] text-on-background md:pb-0">

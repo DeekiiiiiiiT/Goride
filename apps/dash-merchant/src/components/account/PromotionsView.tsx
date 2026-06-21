@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
 import { usePromotions } from '../../hooks/usePromotions';
-import { WEEKLY_REDEMPTIONS } from '../../lib/promotions-mock-data';
+import QueryErrorState from '../QueryErrorState';
+import PartnerSkeleton from '../PartnerSkeleton';
 import { formatEndsLabel, promotionIcon } from '../../types/promotions';
 import CreatePromotionView from './CreatePromotionView';
 
@@ -15,17 +16,21 @@ export default function PromotionsView({ merchantId, onBack }: PromotionsViewPro
   const [showCreate, setShowCreate] = useState(false);
   const {
     activePromotions,
+    weeklyRedemptions,
     form,
     updateForm,
     setPromotionType,
     setAutoGenerateCode,
     createPromotion,
     resetForm,
+    isLoading,
+    isError,
+    refetch,
   } = usePromotions(merchantId);
 
   const maxRedemptions = useMemo(
-    () => Math.max(...WEEKLY_REDEMPTIONS.map((entry) => entry.redemptions), 1),
-    []
+    () => Math.max(...weeklyRedemptions.map((entry) => entry.redemptions), 1),
+    [weeklyRedemptions],
   );
 
   if (showCreate) {
@@ -41,6 +46,22 @@ export default function PromotionsView({ merchantId, onBack }: PromotionsViewPro
         }}
         onCreate={createPromotion}
       />
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="fixed inset-0 z-[60] min-h-dvh bg-surface p-margin-mobile pt-24">
+        <PartnerSkeleton variant="card" count={3} />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="fixed inset-0 z-[60] min-h-dvh bg-surface p-margin-mobile pt-24">
+        <QueryErrorState message="Could not load promotions" onRetry={() => refetch()} />
+      </div>
     );
   }
 
@@ -128,7 +149,7 @@ export default function PromotionsView({ merchantId, onBack }: PromotionsViewPro
           <div className="relative mb-4 mt-6 flex h-48 w-full items-end justify-between gap-1 border-b border-surface-variant pb-2">
             <div className="absolute top-0 w-full border-b border-dashed border-surface-variant" />
             <div className="absolute top-1/2 w-full border-b border-dashed border-surface-variant" />
-            {WEEKLY_REDEMPTIONS.map((entry, index) => {
+            {weeklyRedemptions.map((entry, index) => {
               const height = (entry.redemptions / maxRedemptions) * 100;
               const isPeak = entry.redemptions === maxRedemptions;
               return (
@@ -152,7 +173,7 @@ export default function PromotionsView({ merchantId, onBack }: PromotionsViewPro
           </div>
 
           <div className="mb-6 flex w-full justify-between px-1 text-label-sm text-outline">
-            {WEEKLY_REDEMPTIONS.map((entry) => (
+            {weeklyRedemptions.map((entry) => (
               <span key={entry.day}>{entry.day}</span>
             ))}
           </div>

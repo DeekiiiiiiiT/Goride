@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { DEFAULT_TEAM_DATA } from '../lib/team-mock-data';
+import { deliveryFetch } from '../lib/partner-api';
 import {
   ROLE_DEFAULT_PERMISSIONS,
   TeamData,
@@ -9,35 +9,68 @@ import {
   TeamRole,
 } from '../types/team';
 
-function teamDataKey(merchantId: string) {
-  return `roam_team_data_${merchantId}`;
+async function fetchTeam(): Promise<TeamData> {
+  return deliveryFetch('/merchant/team') as Promise<TeamData>;
 }
 
-function loadTeamData(merchantId: string): TeamData {
-  try {
-    const raw = localStorage.getItem(teamDataKey(merchantId));
-    if (!raw) return DEFAULT_TEAM_DATA;
-    return JSON.parse(raw) as TeamData;
-  } catch {
-    return DEFAULT_TEAM_DATA;
-  }
-}
+export function useTeamMembers(_merchantId: string) {
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: ['merchant-team'],
+    queryFn: fetchTeam,
+  });
 
-function saveTeamData(merchantId: string, data: TeamData) {
-  localStorage.setItem(teamDataKey(merchantId), JSON.stringify(data));
-}
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['merchant-team'] });
 
-export function useTeamMembers(merchantId: string) {
-  const [teamData, setTeamData] = useState<TeamData>(() => loadTeamData(merchantId));
+  const inviteMutation = useMutation({
+    mutationFn: async ({
+      email,
+      role,
+      permissions,
+    }: {
+      email: string;
+      role: TeamRole;
+      permissions: TeamPermission[];
+    }) =>
+      deliveryFetch('/merchant/team/invites', {
+        method: 'POST',
+        body: JSON.stringify({ email, role, permissions }),
+      }),
+    onSuccess: () => {
+      invalidate();
+      toast.success('Invite sent');
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
 
-  useEffect(() => {
-    setTeamData(loadTeamData(merchantId));
-  }, [merchantId]);
+  const cancelInviteMutation = useMutation({
+    mutationFn: async (inviteId: string) =>
+      deliveryFetch(`/merchant/team/invites/${inviteId}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      invalidate();
+      toast.success('Invite cancelled');
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
 
-  const persist = (data: TeamData) => {
-    setTeamData(data);
-    saveTeamData(merchantId, data);
-  };
+  const updateMemberMutation = useMutation({
+    mutationFn: async ({
+      memberId,
+      updates,
+    }: {
+      memberId: string;
+      updates: Partial<Pick<TeamMember, 'permissions' | 'role'>>;
+    }) =>
+      deliveryFetch(`/merchant/team/members/${memberId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(updates),
+      }),
+    onSuccess: () => {
+      invalidate();
+      toast.success('Team member updated');
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
 
   const sendInvite = (email: string, role: TeamRole, permissions: TeamPermission[]) => {
     const normalizedEmail = email.trim().toLowerCase();
@@ -45,56 +78,27 @@ export function useTeamMembers(merchantId: string) {
       toast.error('Enter an email address');
       return false;
     }
-
-    const alreadyMember = teamData.members.some(
-      (member) => member.email?.toLowerCase() === normalizedEmail
-    );
-    const alreadyPending = teamData.pendingInvites.some(
-      (invite) => invite.email.toLowerCase() === normalizedEmail
-    );
-
-    if (alreadyMember || alreadyPending) {
-      toast.error('This email already has access or a pending invite');
-      return false;
-    }
-
-    persist({
-      ...teamData,
-      pendingInvites: [
-        ...teamData.pendingInvites,
-        {
-          id: crypto.randomUUID(),
-          email: normalizedEmail,
-          role,
-          permissions,
-        },
-      ],
-    });
-    toast.success(`Invite sent to ${normalizedEmail}`);
+    inviteMutation.mutate({ email: normalizedEmail, role, permissions });
     return true;
   };
 
   const cancelInvite = (inviteId: string) => {
-    persist({
-      ...teamData,
-      pendingInvites: teamData.pendingInvites.filter((invite) => invite.id !== inviteId),
-    });
-    toast.success('Invite cancelled');
+    cancelInviteMutation.mutate(inviteId);
   };
 
-  const updateMember = (memberId: string, updates: Partial<Pick<TeamMember, 'permissions' | 'role'>>) => {
-    persist({
-      ...teamData,
-      members: teamData.members.map((member) =>
-        member.id === memberId && !member.isOwner ? { ...member, ...updates } : member
-      ),
-    });
-    toast.success('Team member updated');
+  const updateMember = (
+    memberId: string,
+    updates: Partial<Pick<TeamMember, 'permissions' | 'role'>>,
+  ) => {
+    updateMemberMutation.mutate({ memberId, updates });
   };
 
   return {
-    members: teamData.members,
-    pendingInvites: teamData.pendingInvites,
+    members: query.data?.members ?? [],
+    pendingInvites: query.data?.pendingInvites ?? [],
+    isLoading: query.isLoading,
+    isError: query.isError,
+    refetch: query.refetch,
     sendInvite,
     cancelInvite,
     updateMember,
