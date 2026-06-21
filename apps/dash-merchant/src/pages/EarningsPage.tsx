@@ -35,7 +35,7 @@ export default function EarningsPage({ onNavigate }: EarningsPageProps) {
           <button
             type="button"
             onClick={() => setSelectedPayoutId(null)}
-            className="mt-md text-body-sm text-primary"
+            className="mt-inset-md text-body-sm text-primary"
           >
             Back to earnings
           </button>
@@ -53,7 +53,7 @@ export default function EarningsPage({ onNavigate }: EarningsPageProps) {
         <header className="fixed top-0 z-50 flex h-16 w-full items-center justify-center border-b border-outline-variant bg-surface/80 px-margin-mobile backdrop-blur-md">
           <h1 className="text-headline-md font-bold text-primary">Earnings</h1>
         </header>
-        <main className="mx-auto flex w-full max-w-3xl flex-grow flex-col gap-lg px-margin-mobile pb-[100px] pt-20">
+        <main className="mx-auto flex w-full max-w-3xl flex-grow flex-col gap-inset-lg px-margin-mobile pb-[100px] pt-20">
           <PartnerSkeleton variant="card" count={3} />
           <PartnerSkeleton variant="chart" />
         </main>
@@ -99,15 +99,15 @@ export default function EarningsPage({ onNavigate }: EarningsPageProps) {
         </button>
       </header>
 
-      <main className="mx-auto flex w-full max-w-3xl flex-grow flex-col gap-lg px-margin-mobile pb-[100px] pt-20 md:px-margin-tablet md:pb-lg">
-        <section className="mt-md flex flex-col items-center gap-sm text-center">
+      <main className="mx-auto flex w-full max-w-3xl flex-grow flex-col gap-inset-lg px-margin-mobile pb-[100px] pt-20 md:px-margin-tablet md:pb-inset-lg">
+        <section className="mt-inset-md flex flex-col items-center gap-inset-sm text-center">
           <h2 className="text-label-sm uppercase tracking-widest text-on-surface-variant">
             Current Balance
           </h2>
           <div className="text-headline-lg-mobile text-on-surface md:text-headline-lg">
             {formatJmd(data.currentBalance)}
           </div>
-          <p className="mb-md text-body-sm text-on-surface-variant">
+          <p className="mb-inset-md text-body-sm text-on-surface-variant">
             Next payout: {data.nextPayoutDate}
           </p>
           <button
@@ -119,15 +119,15 @@ export default function EarningsPage({ onNavigate }: EarningsPageProps) {
           </button>
         </section>
 
-        <section className="flex flex-col gap-sm rounded-xl border border-outline-variant bg-surface-container-lowest p-md shadow-sm">
-          <h3 className="mb-xs text-headline-md text-on-surface">This Week&apos;s Earnings</h3>
-          <div className="flex items-center justify-between py-xs">
+        <section className="flex flex-col gap-inset-sm rounded-xl border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm">
+          <h3 className="mb-inset-xs text-headline-md text-on-surface">This Week&apos;s Earnings</h3>
+          <div className="flex items-center justify-between py-inset-xs">
             <span className="text-body-sm text-on-surface-variant">Gross sales</span>
             <span className="text-body-lg text-on-surface">
               {formatJmd(data.weeklySummary.grossSales)}
             </span>
           </div>
-          <div className="flex items-center justify-between py-xs">
+          <div className="flex items-center justify-between py-inset-xs">
             <span className="text-body-sm text-on-surface-variant">
               Platform fee ({data.weeklySummary.platformFeePercent}%)
             </span>
@@ -135,8 +135,8 @@ export default function EarningsPage({ onNavigate }: EarningsPageProps) {
               {formatSignedJmd(-data.weeklySummary.platformFee)}
             </span>
           </div>
-          <hr className="my-xs border-outline-variant" />
-          <div className="flex items-center justify-between py-xs">
+          <hr className="my-inset-xs border-outline-variant" />
+          <div className="flex items-center justify-between py-inset-xs">
             <span className="text-headline-md text-on-surface">Net earnings</span>
             <span className="text-headline-md text-primary">
               {formatJmd(data.weeklySummary.netEarnings)}
@@ -144,8 +144,8 @@ export default function EarningsPage({ onNavigate }: EarningsPageProps) {
           </div>
         </section>
 
-        <section className="rounded-xl border border-outline-variant bg-surface-container-lowest p-md shadow-sm">
-          <div className="mt-sm flex h-40 items-end justify-between gap-2 md:gap-4">
+        <section className="rounded-xl border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm">
+          <div className="mt-inset-sm flex h-40 items-end justify-between gap-2 md:gap-4">
             {data.weeklyBars.map((bar) => (
               <div key={bar.day} className="flex flex-1 flex-col items-center gap-2">
                 <div
@@ -164,10 +164,10 @@ export default function EarningsPage({ onNavigate }: EarningsPageProps) {
           </div>
         </section>
 
-        <section className="flex flex-col gap-sm">
-          <h3 className="px-xs text-headline-md text-on-surface">Transaction History</h3>
+        <section className="flex flex-col gap-inset-sm">
+          <h3 className="px-inset-xs text-headline-md text-on-surface">Transaction History</h3>
           {data.transactions.length === 0 ? (
-            <div className="rounded-xl border border-outline-variant bg-surface-container-lowest p-md text-center text-body-sm text-on-surface-variant">
+            <div className="rounded-xl border border-outline-variant bg-surface-container-lowest p-inset-md text-center text-body-sm text-on-surface-variant">
               No transactions yet
             </div>
           ) : (
@@ -176,7 +176,7 @@ export default function EarningsPage({ onNavigate }: EarningsPageProps) {
                 const isPayout = transaction.type === 'payout' && transaction.payoutId;
                 const row = (
                   <>
-                    <div className="flex flex-col gap-base text-left">
+                    <div className="flex flex-col gap-inset-base text-left">
                       <span className="text-body-lg text-on-surface">{transaction.title}</span>
                       <span className="text-label-sm text-on-surface-variant">{transaction.date}</span>
                     </div>
@@ -196,7 +196,7 @@ export default function EarningsPage({ onNavigate }: EarningsPageProps) {
                       key={transaction.id}
                       type="button"
                       onClick={() => setSelectedPayoutId(transaction.payoutId!)}
-                      className={`flex w-full items-center justify-between p-md text-left transition-colors hover:bg-surface-container-low ${
+                      className={`flex w-full items-center justify-between p-inset-md text-left transition-colors hover:bg-surface-container-low ${
                         index < data.transactions.length - 1
                           ? 'border-b border-outline-variant'
                           : ''
@@ -210,7 +210,7 @@ export default function EarningsPage({ onNavigate }: EarningsPageProps) {
                 return (
                   <div
                     key={transaction.id}
-                    className={`flex items-center justify-between p-md ${
+                    className={`flex items-center justify-between p-inset-md ${
                       index < data.transactions.length - 1
                         ? 'border-b border-outline-variant'
                         : ''
@@ -224,11 +224,11 @@ export default function EarningsPage({ onNavigate }: EarningsPageProps) {
           )}
         </section>
 
-        <section className="flex flex-col gap-md py-sm">
+        <section className="flex flex-col gap-inset-md py-inset-sm">
           <button
             type="button"
             onClick={openLatestPayout}
-            className="flex min-h-[48px] items-center gap-xs text-body-sm text-primary transition-colors hover:text-primary-fixed-dim"
+            className="flex min-h-[48px] items-center gap-inset-xs text-body-sm text-primary transition-colors hover:text-primary-fixed-dim"
           >
             <MaterialIcon name="arrow_forward" className="text-[20px]" />
             View Payout Details
@@ -236,7 +236,7 @@ export default function EarningsPage({ onNavigate }: EarningsPageProps) {
           <button
             type="button"
             onClick={() => onNavigate('account')}
-            className="flex min-h-[48px] items-center gap-xs text-body-sm text-primary transition-colors hover:text-primary-fixed-dim"
+            className="flex min-h-[48px] items-center gap-inset-xs text-body-sm text-primary transition-colors hover:text-primary-fixed-dim"
           >
             <MaterialIcon name="settings" className="text-[20px]" />
             Update Bank Details

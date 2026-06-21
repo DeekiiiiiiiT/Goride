@@ -63,6 +63,7 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
     pendingInvites,
     sendInvite,
     cancelInvite,
+    updateMember,
     roleDefaultPermissions,
     isLoading,
     isError,
@@ -96,8 +97,13 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
     setInvitePermissions(roleDefaultPermissions.staff);
   };
 
-  const handleEditMember = (name: string) => {
-    toast.info(`Editing ${name} is coming soon`);
+  const handleEditMember = (memberId: string, name: string, currentRole: TeamRole) => {
+    const nextRole = window.prompt(
+      `Change role for ${name} (admin, manager, staff)`,
+      currentRole,
+    ) as TeamRole | null;
+    if (!nextRole || !['admin', 'manager', 'staff'].includes(nextRole)) return;
+    updateMember(memberId, { role: nextRole, permissions: roleDefaultPermissions[nextRole] });
   };
 
   if (isLoading) {
@@ -118,7 +124,7 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
 
   return (
     <div className="fixed inset-0 z-[60] flex min-h-dvh flex-col bg-background pb-[100px] text-on-background md:pb-0">
-      <header className="sticky top-0 z-50 flex h-16 w-full items-center gap-sm border-b border-outline-variant bg-surface/80 px-margin-mobile backdrop-blur-md">
+      <header className="sticky top-0 z-50 flex h-16 w-full items-center gap-inset-sm border-b border-outline-variant bg-surface/80 px-margin-mobile backdrop-blur-md">
         <button
           type="button"
           onClick={onBack}
@@ -130,17 +136,17 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
         <h1 className="text-headline-md font-bold text-primary">Team Members</h1>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl space-y-lg p-margin-mobile md:p-margin-tablet">
-        <section className="space-y-md">
+      <main className="mx-auto w-full max-w-5xl space-y-inset-lg p-margin-mobile md:p-margin-tablet">
+        <section className="space-y-inset-md">
           <h2 className="text-headline-md text-on-background">Current Team</h2>
-          <div className="grid grid-cols-1 gap-md md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-inset-md md:grid-cols-2 lg:grid-cols-3">
             {members.map((member) => (
               <div
                 key={member.id}
-                className="relative overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest p-md shadow-sm transition-shadow hover:shadow-md"
+                className="relative overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm transition-shadow hover:shadow-md"
               >
-                <div className="mb-sm flex items-start justify-between">
-                  <div className="flex items-center gap-sm">
+                <div className="mb-inset-sm flex items-start justify-between">
+                  <div className="flex items-center gap-inset-sm">
                     <MemberAvatar name={member.name} isOwner={member.isOwner} />
                     <div>
                       <h3 className="text-headline-md text-on-background">{member.name}</h3>
@@ -149,12 +155,12 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
                       </p>
                     </div>
                   </div>
-                  <div className="flex flex-col items-end gap-xs">
+                  <div className="flex flex-col items-end gap-inset-xs">
                     <RoleBadge role={member.role} filled={member.isOwner} />
                     {!member.isOwner && (
                       <button
                         type="button"
-                        onClick={() => handleEditMember(member.name)}
+                        onClick={() => handleEditMember(member.id, member.name, member.role)}
                         className="rounded-full p-1 text-on-surface-variant transition-colors hover:bg-surface-variant hover:text-error"
                         title="Edit member"
                       >
@@ -168,11 +174,11 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
           </div>
         </section>
 
-        <div className="grid grid-cols-1 gap-lg lg:grid-cols-12">
-          <section className="space-y-md lg:col-span-8">
+        <div className="grid grid-cols-1 gap-inset-lg lg:grid-cols-12">
+          <section className="space-y-inset-md lg:col-span-8">
             <h2 className="text-headline-md text-on-background">Invite Team Member</h2>
-            <div className="space-y-md rounded-lg border border-outline-variant bg-surface-container-lowest p-md shadow-sm">
-              <div className="space-y-xs">
+            <div className="space-y-inset-md rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm">
+              <div className="space-y-inset-xs">
                 <label className="block text-label-md text-on-surface-variant" htmlFor="invite-email">
                   Email Address
                 </label>
@@ -186,7 +192,7 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
                 />
               </div>
 
-              <div className="space-y-xs">
+              <div className="space-y-inset-xs">
                 <label className="block text-label-md text-on-surface-variant" htmlFor="invite-role">
                   Role
                 </label>
@@ -209,13 +215,13 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
                 </div>
               </div>
 
-              <div className="space-y-sm pt-sm">
+              <div className="space-y-inset-sm pt-inset-sm">
                 <h4 className="text-label-md text-on-surface-variant">Permissions</h4>
-                <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-inset-sm sm:grid-cols-2">
                   {TEAM_PERMISSIONS.map((permission) => (
                     <label
                       key={permission.id}
-                      className="flex min-h-[48px] cursor-pointer items-center gap-sm rounded-lg border border-outline-variant p-3 transition-colors hover:bg-surface-variant"
+                      className="flex min-h-[48px] cursor-pointer items-center gap-inset-sm rounded-lg border border-outline-variant p-3 transition-colors hover:bg-surface-variant"
                     >
                       <input
                         type="checkbox"
@@ -229,11 +235,11 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
                 </div>
               </div>
 
-              <div className="pt-md">
+              <div className="pt-inset-md">
                 <button
                   type="button"
                   onClick={handleSendInvite}
-                  className="min-h-[48px] w-full rounded-lg bg-primary-container px-lg py-3 text-headline-md font-bold text-on-primary shadow-sm transition-all hover:bg-primary/90 active:scale-95 sm:w-auto"
+                  className="min-h-[48px] w-full rounded-lg bg-primary-container px-inset-lg py-3 text-headline-md font-bold text-on-primary shadow-sm transition-all hover:bg-primary/90 active:scale-95 sm:w-auto"
                 >
                   Send Invite
                 </button>
@@ -241,20 +247,20 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
             </div>
           </section>
 
-          <section className="space-y-md lg:col-span-4">
+          <section className="space-y-inset-md lg:col-span-4">
             <h2 className="text-headline-md text-on-background">Pending Invites</h2>
-            <div className="space-y-md rounded-lg border border-outline-variant bg-surface-container-lowest p-md shadow-sm">
+            <div className="space-y-inset-md rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm">
               {pendingInvites.length === 0 ? (
                 <p className="text-body-sm text-on-surface-variant">No pending invites</p>
               ) : (
                 pendingInvites.map((invite) => (
                   <div
                     key={invite.id}
-                    className="flex items-center justify-between border-b border-outline-variant pb-md last:border-0 last:pb-0"
+                    className="flex items-center justify-between border-b border-outline-variant pb-inset-md last:border-0 last:pb-0"
                   >
                     <div>
                       <p className="text-sm text-on-background">{invite.email}</p>
-                      <div className="mt-1 flex items-center gap-xs">
+                      <div className="mt-1 flex items-center gap-inset-xs">
                         <RoleBadge role={invite.role} filled />
                         <span className="text-xs text-tertiary">Pending</span>
                       </div>

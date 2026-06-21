@@ -17,9 +17,9 @@ export default function PickedUpOrderDetail({ order, onBack, onClose }: PickedUp
       : order.estimated_prep_time_mins ?? null;
 
   return (
-    <div className="min-h-dvh bg-background pb-xl text-on-background antialiased">
+    <div className="min-h-dvh bg-background pb-inset-xl text-on-background antialiased">
       <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b border-outline-variant bg-surface px-margin-mobile shadow-sm">
-        <div className="flex items-center gap-sm">
+        <div className="flex items-center gap-inset-sm">
           <button
             type="button"
             onClick={onBack}
@@ -40,8 +40,8 @@ export default function PickedUpOrderDetail({ order, onBack, onClose }: PickedUp
         </button>
       </header>
 
-      <main className="mx-auto flex max-w-lg flex-col gap-sm px-margin-mobile py-margin-mobile">
-        <div className="flex items-center justify-between rounded-lg border border-outline-variant bg-surface-container-lowest p-sm shadow-sm">
+      <main className="mx-auto flex max-w-lg flex-col gap-inset-sm px-margin-mobile py-margin-mobile">
+        <div className="flex items-center justify-between rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm shadow-sm">
           <div className="flex flex-col">
             <span className="mb-1 text-label-sm uppercase tracking-wider text-on-surface-variant">
               Order Details
@@ -58,7 +58,7 @@ export default function PickedUpOrderDetail({ order, onBack, onClose }: PickedUp
           </div>
         </div>
 
-        <div className="relative flex flex-col gap-sm overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest p-sm shadow-sm">
+        <div className="relative flex flex-col gap-inset-sm overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm shadow-sm">
           <div className="absolute right-0 top-0 -z-10 h-32 w-32 rounded-bl-full bg-primary/5" />
           <div className="flex items-center justify-between border-b border-surface-container pb-3">
             <div className="flex items-center gap-2">
@@ -73,7 +73,7 @@ export default function PickedUpOrderDetail({ order, onBack, onClose }: PickedUp
               </span>
             )}
           </div>
-          <div className="flex items-center gap-md pt-1">
+          <div className="flex items-center gap-inset-md pt-1">
             <div className="flex h-12 w-12 items-center justify-center rounded-full border border-outline-variant bg-surface-container-high">
               <MaterialIcon name="person" className="text-on-surface-variant" />
             </div>
@@ -93,7 +93,7 @@ export default function PickedUpOrderDetail({ order, onBack, onClose }: PickedUp
           </div>
         </div>
 
-        <div className="flex flex-col rounded-lg border border-outline-variant bg-surface-container-lowest p-sm shadow-sm">
+        <div className="flex flex-col rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm shadow-sm">
           <div className="mb-3 flex items-center gap-2 border-b border-surface-container pb-3">
             <MaterialIcon name="receipt_long" className="text-outline" />
             <span className="text-label-md font-semibold uppercase text-on-surface-variant">
@@ -144,7 +144,7 @@ export default function PickedUpOrderDetail({ order, onBack, onClose }: PickedUp
           </div>
         </div>
 
-        <div className="mb-lg mt-md">
+        <div className="mb-inset-lg mt-inset-md">
           <p className="mb-3 text-center text-body-sm text-on-surface-variant">
             This order will be moved to your completed history.
           </p>

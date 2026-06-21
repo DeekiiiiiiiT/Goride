@@ -29,8 +29,8 @@ export default function SalesBreakdownView({ onBack, data }: SalesBreakdownViewP
   const hasHourData = data.revenueByHour.some((entry) => entry.revenue > 0);
 
   return (
-    <div className="flex flex-col gap-md">
-      <div className="mb-sm">
+    <div className="flex flex-col gap-inset-md">
+      <div className="mb-inset-sm">
         <button
           type="button"
           onClick={onBack}
@@ -42,20 +42,20 @@ export default function SalesBreakdownView({ onBack, data }: SalesBreakdownViewP
         <h2 className="text-headline-lg-mobile text-on-surface">Sales Breakdown</h2>
       </div>
 
-      <div className="grid grid-cols-2 gap-sm">
-        <div className="rounded-lg border border-outline-variant bg-surface-container-lowest p-sm">
+      <div className="grid grid-cols-2 gap-inset-sm">
+        <div className="rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm">
           <p className="mb-1 text-label-md text-on-surface-variant">Total Revenue</p>
           <span className="text-headline-lg-mobile text-on-surface">
             {formatCompactJmd(data.totalRevenue)}
           </span>
         </div>
-        <div className="rounded-lg border border-outline-variant bg-surface-container-lowest p-sm">
+        <div className="rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm">
           <p className="mb-1 text-label-md text-on-surface-variant">Total Orders</p>
           <span className="text-headline-lg-mobile text-on-surface">{data.totalOrders}</span>
         </div>
       </div>
 
-      <PinchZoomChart className="h-48 rounded-lg border border-outline-variant bg-surface-container-lowest p-sm">
+      <PinchZoomChart className="h-48 rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={chartData}>
             <XAxis dataKey="label" tick={{ fontSize: 10 }} />
@@ -65,10 +65,10 @@ export default function SalesBreakdownView({ onBack, data }: SalesBreakdownViewP
         </ResponsiveContainer>
       </PinchZoomChart>
 
-      <section className="rounded-lg border border-outline-variant bg-surface-container-lowest p-sm">
-        <h3 className="mb-sm text-headline-md text-on-surface">Revenue by Category</h3>
+      <section className="rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm">
+        <h3 className="mb-inset-sm text-headline-md text-on-surface">Revenue by Category</h3>
         {hasCategoryData ? (
-          <div className="flex flex-col gap-sm md:flex-row md:items-center">
+          <div className="flex flex-col gap-inset-sm md:flex-row md:items-center">
             <div className="h-48 w-full md:w-1/2">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -90,7 +90,7 @@ export default function SalesBreakdownView({ onBack, data }: SalesBreakdownViewP
                 </PieChart>
               </ResponsiveContainer>
             </div>
-            <ul className="flex flex-1 flex-col gap-xs">
+            <ul className="flex flex-1 flex-col gap-inset-xs">
               {data.categoryBreakdown.map((entry) => (
                 <li key={entry.name} className="flex items-center justify-between text-body-sm">
                   <span className="flex items-center gap-2">
@@ -110,8 +110,8 @@ export default function SalesBreakdownView({ onBack, data }: SalesBreakdownViewP
         )}
       </section>
 
-      <section className="rounded-lg border border-outline-variant bg-surface-container-lowest p-sm">
-        <h3 className="mb-sm text-headline-md text-on-surface">Revenue by Day of Week</h3>
+      <section className="rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm">
+        <h3 className="mb-inset-sm text-headline-md text-on-surface">Revenue by Day of Week</h3>
         {hasDayData ? (
           <div className="h-44">
             <ResponsiveContainer width="100%" height="100%">
@@ -127,8 +127,8 @@ export default function SalesBreakdownView({ onBack, data }: SalesBreakdownViewP
         )}
       </section>
 
-      <section className="rounded-lg border border-outline-variant bg-surface-container-lowest p-sm">
-        <h3 className="mb-sm text-headline-md text-on-surface">Revenue by Hour</h3>
+      <section className="rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm">
+        <h3 className="mb-inset-sm text-headline-md text-on-surface">Revenue by Hour</h3>
         {hasHourData ? (
           <div className="h-44">
             <ResponsiveContainer width="100%" height="100%">

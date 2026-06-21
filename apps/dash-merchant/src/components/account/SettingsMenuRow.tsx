@@ -11,9 +11,9 @@ export default function SettingsMenuRow({ icon, label, onClick }: SettingsMenuRo
     <button
       type="button"
       onClick={onClick}
-      className="flex min-h-[64px] w-full items-center justify-between p-md text-left transition-colors hover:bg-surface-container-low active:bg-surface-container-high"
+      className="flex min-h-[64px] w-full items-center justify-between p-inset-md text-left transition-colors hover:bg-surface-container-low active:bg-surface-container-high"
     >
-      <div className="flex items-center gap-md">
+      <div className="flex items-center gap-inset-md">
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-surface-container text-primary">
           <MaterialIcon name={icon} />
         </div>

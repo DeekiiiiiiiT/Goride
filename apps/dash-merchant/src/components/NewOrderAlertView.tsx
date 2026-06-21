@@ -47,12 +47,12 @@ export default function NewOrderAlertView({
         New Order Alert
       </header>
 
-      <main className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center space-y-lg overflow-y-auto p-margin-mobile">
+      <main className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center space-y-inset-lg overflow-y-auto p-margin-mobile">
         <h1 className="text-center text-headline-lg font-black tracking-tighter text-on-primary drop-shadow-md">
           NEW ORDER!
         </h1>
 
-        <div className="flex w-full max-w-md flex-col items-center space-y-sm rounded-xl border border-on-primary/20 bg-surface-container-lowest/15 p-md shadow-[0_8px_32px_rgba(0,0,0,0.1)] backdrop-blur-md">
+        <div className="flex w-full max-w-md flex-col items-center space-y-inset-sm rounded-xl border border-on-primary/20 bg-surface-container-lowest/15 p-inset-md shadow-[0_8px_32px_rgba(0,0,0,0.1)] backdrop-blur-md">
           <div className="w-full text-center">
             <div className="mb-1 text-label-md uppercase tracking-widest text-on-primary/80">
               Order #{order.order_number}
@@ -70,7 +70,7 @@ export default function NewOrderAlertView({
           </ul>
         </div>
 
-        <div className="relative mt-sm flex h-48 w-48 items-center justify-center">
+        <div className="relative mt-inset-sm flex h-48 w-48 items-center justify-center">
           <svg
             className="absolute inset-0 h-full w-full -rotate-90 drop-shadow-md"
             viewBox="0 0 100 100"
@@ -109,7 +109,7 @@ export default function NewOrderAlertView({
       </main>
 
       <div className="relative z-50 shrink-0 bg-gradient-to-t from-primary-container via-primary-container to-transparent p-margin-mobile pt-4">
-        <div className="flex flex-col gap-sm">
+        <div className="flex flex-col gap-inset-sm">
           <button
             type="button"
             disabled={isSubmitting}
@@ -128,7 +128,7 @@ export default function NewOrderAlertView({
         </div>
       </div>
 
-      <footer className="flex shrink-0 items-center justify-between border-t border-outline-variant bg-surface px-margin-mobile py-sm text-label-md text-primary safe-b">
+      <footer className="flex shrink-0 items-center justify-between border-t border-outline-variant bg-surface px-margin-mobile py-inset-sm text-label-md text-primary safe-b">
         <span className="text-on-surface-variant">Urgent Action Required</span>
         <button
           type="button"

@@ -14,8 +14,8 @@ export default function TopSellingItemsCard({
   compact = false,
 }: TopSellingItemsCardProps) {
   return (
-    <section className="flex flex-col gap-sm rounded-xl border border-outline-variant bg-surface-container-lowest p-sm shadow-sm">
-      <header className="mb-xs flex items-center justify-between">
+    <section className="flex flex-col gap-inset-sm rounded-xl border border-outline-variant bg-surface-container-lowest p-inset-sm shadow-sm">
+      <header className="mb-inset-xs flex items-center justify-between">
         <h2 className="text-headline-md text-on-surface">Top Selling Items</h2>
         <button
           type="button"
@@ -26,16 +26,16 @@ export default function TopSellingItemsCard({
         </button>
       </header>
 
-      <div className="flex flex-col gap-md">
+      <div className="flex flex-col gap-inset-md">
         {items.length === 0 ? (
           <p className="py-4 text-center text-body-sm text-on-surface-variant">
             No item sales in this period.
           </p>
         ) : (
           items.map((item) => (
-          <div key={item.rank} className="flex flex-col gap-base">
+          <div key={item.rank} className="flex flex-col gap-inset-base">
             <div className="flex items-baseline justify-between">
-              <div className="flex items-center gap-xs">
+              <div className="flex items-center gap-inset-xs">
                 <span className="w-4 text-right text-label-md text-on-surface-variant">
                   {item.rank}.
                 </span>
@@ -43,7 +43,7 @@ export default function TopSellingItemsCard({
               </div>
               <span className="text-label-md text-primary">{formatJmd(item.revenue)}</span>
             </div>
-            <div className="flex w-full items-center gap-xs">
+            <div className="flex w-full items-center gap-inset-xs">
               <div className="h-2 flex-grow overflow-hidden rounded-full bg-surface-container">
                 <div
                   className="h-full rounded-full bg-primary-container"
@@ -66,20 +66,20 @@ export default function TopSellingItemsCard({
         <button
           type="button"
           onClick={onViewAll}
-          className="mt-sm flex h-12 w-full items-center justify-center rounded-lg text-label-md text-primary transition-colors hover:bg-surface-container"
+          className="mt-inset-sm flex h-12 w-full items-center justify-center rounded-lg text-label-md text-primary transition-colors hover:bg-surface-container"
         >
           View All Items
-          <MaterialIcon name="chevron_right" className="ml-base text-[16px]" />
+          <MaterialIcon name="chevron_right" className="ml-inset-base text-[16px]" />
         </button>
       )}
 
       {!onViewAll && !compact && (
         <button
           type="button"
-          className="mt-sm flex h-12 w-full items-center justify-center rounded-lg text-label-md text-primary transition-colors hover:bg-surface-container"
+          className="mt-inset-sm flex h-12 w-full items-center justify-center rounded-lg text-label-md text-primary transition-colors hover:bg-surface-container"
         >
           View All Items
-          <MaterialIcon name="chevron_right" className="ml-base text-[16px]" />
+          <MaterialIcon name="chevron_right" className="ml-inset-base text-[16px]" />
         </button>
       )}
     </section>

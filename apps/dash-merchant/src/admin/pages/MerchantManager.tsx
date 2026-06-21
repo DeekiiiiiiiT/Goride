@@ -8,6 +8,8 @@ import {
   getMerchantDetail,
   type DashMerchant,
   type MerchantAuditEntry,
+  type MerchantBankAccountDetail,
+  type MerchantDocumentDetail,
   type MerchantHours,
   type MerchantStatusCounts,
   type MerchantVerificationStatus,
@@ -54,6 +56,8 @@ export function MerchantManager({ accessToken }: MerchantManagerProps) {
   const [detailHours, setDetailHours] = useState<MerchantHours[]>([]);
   const [detailAuditLog, setDetailAuditLog] = useState<MerchantAuditEntry[]>([]);
   const [detailOwnerEmail, setDetailOwnerEmail] = useState('');
+  const [detailDocuments, setDetailDocuments] = useState<MerchantDocumentDetail[]>([]);
+  const [detailBankAccount, setDetailBankAccount] = useState<MerchantBankAccountDetail | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchInput.trim()), 300);
@@ -98,12 +102,16 @@ export function MerchantManager({ accessToken }: MerchantManagerProps) {
     setDetailHours([]);
     setDetailAuditLog([]);
     setDetailOwnerEmail('');
+    setDetailDocuments([]);
+    setDetailBankAccount(null);
     try {
       const res = await getMerchantDetail(accessToken, merchant.id);
       setDetailMerchant(res.merchant);
       setDetailHours(res.hours);
       setDetailAuditLog(res.auditLog);
       setDetailOwnerEmail(res.ownerEmail);
+      setDetailDocuments(res.documents || []);
+      setDetailBankAccount(res.bankAccount || null);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load details');
     } finally {
@@ -120,6 +128,8 @@ export function MerchantManager({ accessToken }: MerchantManagerProps) {
         setDetailHours(res.hours);
         setDetailAuditLog(res.auditLog);
         setDetailOwnerEmail(res.ownerEmail);
+        setDetailDocuments(res.documents || []);
+        setDetailBankAccount(res.bankAccount || null);
       } catch {
         // Non-fatal
       }
@@ -319,6 +329,8 @@ export function MerchantManager({ accessToken }: MerchantManagerProps) {
         hours={detailHours}
         auditLog={detailAuditLog}
         ownerEmail={detailOwnerEmail}
+        documents={detailDocuments}
+        bankAccount={detailBankAccount}
         loading={detailLoading}
         onUpdated={handleUpdated}
       />

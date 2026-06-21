@@ -25,8 +25,8 @@ export default function PartnerTopBar({
   onSettings,
 }: PartnerTopBarProps) {
   return (
-    <header className="relative z-20 flex h-16 w-full shrink-0 items-center justify-between border-b border-outline-variant bg-surface px-margin-tablet py-xs shadow-sm">
-      <div className="flex items-center gap-sm">
+    <header className="relative z-20 flex h-16 w-full shrink-0 items-center justify-between border-b border-outline-variant bg-surface px-margin-tablet py-inset-xs shadow-sm">
+      <div className="flex items-center gap-inset-sm">
         {variant === 'merchant' ? (
           <>
             {merchant.logo_url ? (
@@ -47,8 +47,8 @@ export default function PartnerTopBar({
         )}
       </div>
 
-      <div className="flex items-center gap-md">
-        <div className="flex items-center gap-xs rounded-full border border-outline-variant bg-surface-container-low px-xs py-[4px]">
+      <div className="flex items-center gap-inset-md">
+        <div className="flex items-center gap-inset-xs rounded-full border border-outline-variant bg-surface-container-low px-inset-xs py-[4px]">
           <span className="hidden text-label-md font-semibold text-on-surface md:inline">{toggleLabel}</span>
           <label className="relative inline-flex cursor-pointer items-center">
             <input
@@ -65,7 +65,7 @@ export default function PartnerTopBar({
           </span>
         </div>
 
-        <div className="flex items-center gap-sm text-on-surface-variant">
+        <div className="flex items-center gap-inset-sm text-on-surface-variant">
           <button
             type="button"
             className="relative flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-surface-container-low active:scale-95"
@@ -86,7 +86,7 @@ export default function PartnerTopBar({
           </button>
           <button
             type="button"
-            className="ml-xs flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-outline-variant active:scale-95"
+            className="ml-inset-xs flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-outline-variant active:scale-95"
             aria-label="Account"
           >
             {merchant.logo_url ? (

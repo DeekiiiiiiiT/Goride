@@ -54,12 +54,12 @@ export default function OrderAcceptedSheet({
         aria-modal="true"
         aria-labelledby="order-accepted-title"
       >
-        <div className="flex flex-1 flex-col items-center space-y-md overflow-y-auto p-md pb-8 pt-12 text-center">
+        <div className="flex flex-1 flex-col items-center space-y-inset-md overflow-y-auto p-inset-md pb-8 pt-12 text-center">
           <div className="mb-4 flex h-24 w-24 items-center justify-center rounded-full bg-primary-container/10">
             <MaterialIcon name="check_circle" filled className="text-primary-container" size={64} />
           </div>
 
-          <div className="w-full space-y-xs">
+          <div className="w-full space-y-inset-xs">
             <h1
               id="order-accepted-title"
               className="text-headline-lg-mobile font-bold text-on-surface md:text-headline-lg"
@@ -69,16 +69,16 @@ export default function OrderAcceptedSheet({
             <p className="text-body-lg text-on-surface-variant">Order #{orderNumber}</p>
           </div>
 
-          <div className="my-xs w-full border-t border-outline-variant" />
+          <div className="my-inset-xs w-full border-t border-outline-variant" />
 
-          <div className="w-full space-y-sm">
+          <div className="w-full space-y-inset-sm">
             <p className="text-body-sm text-on-surface-variant">
               Estimated ready in:{' '}
               <span className="text-headline-md font-semibold text-primary-container">
                 {prepTimeMins} min
               </span>
             </p>
-            <div className="grid w-full grid-cols-3 gap-xs">
+            <div className="grid w-full grid-cols-3 gap-inset-xs">
               {PREP_TIME_OPTIONS.map((option) => {
                 const selected = prepTimeMins === option;
 
@@ -103,7 +103,7 @@ export default function OrderAcceptedSheet({
           <div className="flex-1" />
         </div>
 
-        <div className="space-y-sm border-t border-outline-variant bg-surface-container-low p-md">
+        <div className="space-y-inset-sm border-t border-outline-variant bg-surface-container-low p-inset-md">
           <button
             type="button"
             disabled={isSubmitting}

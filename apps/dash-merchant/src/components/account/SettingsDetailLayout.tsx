@@ -37,7 +37,7 @@ export default function SettingsDetailLayout({
         </button>
       </header>
 
-      <main className="mx-auto w-full max-w-3xl flex-1 overflow-y-auto px-margin-mobile py-md md:px-margin-tablet">
+      <main className="mx-auto w-full max-w-3xl flex-1 overflow-y-auto px-margin-mobile py-inset-md md:px-margin-tablet">
         {children}
       </main>
     </div>

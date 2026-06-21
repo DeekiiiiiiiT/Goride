@@ -14,11 +14,11 @@ export default function AnalyticsSubNav({
   onNavigate,
 }: AnalyticsSubNavProps) {
   return (
-    <nav className="fixed bottom-0 left-0 z-50 flex h-[var(--app-bottom-nav-total)] w-full items-center justify-around border-t border-outline-variant bg-surface px-xs safe-x safe-b md:hidden">
+    <nav className="fixed bottom-0 left-0 z-50 flex h-[var(--app-bottom-nav-total)] w-full items-center justify-around border-t border-outline-variant bg-surface px-inset-xs safe-x safe-b md:hidden">
       <button
         type="button"
         onClick={() => onNavigate('dashboard')}
-        className="flex min-h-[48px] min-w-[48px] flex-col items-center justify-center p-xs text-on-surface-variant transition-colors hover:text-primary"
+        className="flex min-h-[48px] min-w-[48px] flex-col items-center justify-center p-inset-xs text-on-surface-variant transition-colors hover:text-primary"
       >
         <MaterialIcon name="dashboard" className="mb-1" />
         <span className="text-label-sm">Overview</span>
@@ -26,7 +26,7 @@ export default function AnalyticsSubNav({
       <button
         type="button"
         onClick={() => onNavigate('menu')}
-        className="flex min-h-[48px] min-w-[48px] flex-col items-center justify-center p-xs text-on-surface-variant transition-colors hover:text-primary"
+        className="flex min-h-[48px] min-w-[48px] flex-col items-center justify-center p-inset-xs text-on-surface-variant transition-colors hover:text-primary"
       >
         <MaterialIcon name="restaurant_menu" className="mb-1" />
         <span className="text-label-sm">Menu</span>
@@ -34,7 +34,7 @@ export default function AnalyticsSubNav({
       <button
         type="button"
         onClick={() => onSelectTab('reviews')}
-        className={`flex min-h-[48px] min-w-[64px] flex-col items-center justify-center rounded-xl p-xs transition-transform duration-150 ${
+        className={`flex min-h-[48px] min-w-[64px] flex-col items-center justify-center rounded-xl p-inset-xs transition-transform duration-150 ${
           activeTab === 'reviews'
             ? 'scale-95 bg-primary-container text-on-primary-container'
             : 'text-on-surface-variant hover:text-primary'
@@ -46,7 +46,7 @@ export default function AnalyticsSubNav({
       <button
         type="button"
         onClick={() => onSelectTab('health')}
-        className={`flex min-h-[48px] min-w-[64px] flex-col items-center justify-center rounded-xl p-xs transition-transform duration-150 ${
+        className={`flex min-h-[48px] min-w-[64px] flex-col items-center justify-center rounded-xl p-inset-xs transition-transform duration-150 ${
           activeTab === 'health'
             ? 'scale-95 bg-primary-container text-on-primary-container'
             : 'text-on-surface-variant hover:text-primary'

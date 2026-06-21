@@ -90,6 +90,24 @@ export interface MerchantDetailResponse {
   hours: MerchantHours[];
   auditLog: MerchantAuditEntry[];
   ownerEmail: string;
+  documents?: MerchantDocumentDetail[];
+  bankAccount?: MerchantBankAccountDetail | null;
+}
+
+export interface MerchantDocumentDetail {
+  id: string;
+  doc_type: string;
+  status: string;
+  file_path: string;
+  signedUrl?: string | null;
+  uploaded_at: string;
+}
+
+export interface MerchantBankAccountDetail {
+  bank_name: string;
+  account_holder_name: string;
+  account_last4: string;
+  account_type: string;
 }
 
 function headers(accessToken: string, contentType?: string): HeadersInit {

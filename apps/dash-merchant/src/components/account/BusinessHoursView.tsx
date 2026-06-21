@@ -70,7 +70,7 @@ function TimeField({
   showLabel?: boolean;
 }) {
   return (
-    <div className="flex min-w-[120px] flex-1 flex-col gap-base">
+    <div className="flex min-w-[120px] flex-1 flex-col gap-inset-base">
       {showLabel && (
         <span className="text-label-sm text-on-surface-variant">{label}</span>
       )}
@@ -125,7 +125,7 @@ export default function BusinessHoursView({
   return (
     <div className="fixed inset-0 z-[60] flex min-h-dvh flex-col bg-background pb-[120px] text-on-background">
       <header className="sticky top-0 z-50 flex h-16 w-full items-center justify-between border-b border-outline-variant bg-surface/90 px-margin-mobile backdrop-blur-md md:border-none md:px-margin-tablet">
-        <div className="flex items-center gap-xs">
+        <div className="flex items-center gap-inset-xs">
           <button
             type="button"
             onClick={onBack}
@@ -140,9 +140,9 @@ export default function BusinessHoursView({
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-lg px-margin-mobile py-md md:px-margin-tablet">
-        <div className="hidden flex-col gap-xs md:flex">
-          <div className="flex items-center gap-sm">
+      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-inset-lg px-margin-mobile py-inset-md md:px-margin-tablet">
+        <div className="hidden flex-col gap-inset-xs md:flex">
+          <div className="flex items-center gap-inset-sm">
             <button
               type="button"
               onClick={onBack}
@@ -157,13 +157,13 @@ export default function BusinessHoursView({
           </p>
         </div>
 
-        <section className="flex flex-col gap-sm">
-          <div className="mb-xs flex items-center justify-between">
+        <section className="flex flex-col gap-inset-sm">
+          <div className="mb-inset-xs flex items-center justify-between">
             <h2 className="text-headline-md text-on-background">Regular Schedule</h2>
             <button
               type="button"
               onClick={() => onCopyToAll(1)}
-              className="flex items-center gap-base text-label-md text-primary-container transition-colors hover:text-primary active:scale-95"
+              className="flex items-center gap-inset-base text-label-md text-primary-container transition-colors hover:text-primary active:scale-95"
             >
               <MaterialIcon name="content_copy" size={16} />
               Copy to all
@@ -177,14 +177,14 @@ export default function BusinessHoursView({
             return (
               <div
                 key={label}
-                className={`flex flex-col gap-sm rounded-lg border border-outline-variant p-sm shadow-sm transition-shadow md:p-md ${
+                className={`flex flex-col gap-inset-sm rounded-lg border border-outline-variant p-inset-sm shadow-sm transition-shadow md:p-inset-md ${
                   isOpen
                     ? 'bg-surface-container-lowest hover:shadow-md'
                     : 'bg-surface-container opacity-75 grayscale-[0.5]'
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-sm">
+                  <div className="flex items-center gap-inset-sm">
                     <span
                       className={`w-24 text-body-lg font-semibold ${
                         isOpen ? 'text-on-surface' : 'text-on-surface-variant'
@@ -214,11 +214,11 @@ export default function BusinessHoursView({
                 </div>
 
                 {isOpen ? (
-                  <div className="mt-xs flex flex-col gap-sm">
+                  <div className="mt-inset-xs flex flex-col gap-inset-sm">
                     {day.shifts.map((shift, shiftIndex) => (
                       <div key={`${label}-${shiftIndex}`}>
                         {shiftIndex > 0 && <div className="my-1 h-px w-full bg-surface-variant" />}
-                        <div className="flex flex-wrap items-center gap-sm">
+                        <div className="flex flex-wrap items-center gap-inset-sm">
                           <TimeField
                             label="Opening Time"
                             value={shift.open}
@@ -249,7 +249,7 @@ export default function BusinessHoursView({
                       <button
                         type="button"
                         onClick={() => onAddShift(index)}
-                        className="mt-2 flex w-full items-center justify-center gap-base rounded-md border border-dashed border-primary-container py-2 text-label-md text-primary-container transition-colors hover:text-primary"
+                        className="mt-2 flex w-full items-center justify-center gap-inset-base rounded-md border border-dashed border-primary-container py-2 text-label-md text-primary-container transition-colors hover:text-primary"
                       >
                         <MaterialIcon name="add" size={18} />
                         Add Break/Shift
@@ -257,7 +257,7 @@ export default function BusinessHoursView({
                     )}
                   </div>
                 ) : (
-                  <div className="mt-xs py-sm text-center">
+                  <div className="mt-inset-xs py-inset-sm text-center">
                     <p className="text-body-sm italic text-on-surface-variant">
                       Store is closed on this day.
                     </p>
@@ -268,9 +268,9 @@ export default function BusinessHoursView({
           })}
         </section>
 
-        <section className="mt-md flex flex-col gap-sm">
-          <div className="mb-xs flex items-center justify-between">
-            <h2 className="flex items-center gap-xs text-headline-md text-on-background">
+        <section className="mt-inset-md flex flex-col gap-inset-sm">
+          <div className="mb-inset-xs flex items-center justify-between">
+            <h2 className="flex items-center gap-inset-xs text-headline-md text-on-background">
               <MaterialIcon name="event_seat" className="text-secondary" />
               Holiday &amp; Special Hours
             </h2>
@@ -280,7 +280,7 @@ export default function BusinessHoursView({
             {specialDates.map((entry) => (
               <div
                 key={entry.id}
-                className="flex flex-col gap-sm border-b border-surface-variant p-sm md:p-md"
+                className="flex flex-col gap-inset-sm border-b border-surface-variant p-inset-sm md:p-inset-md"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex flex-col">
@@ -291,7 +291,7 @@ export default function BusinessHoursView({
                       {formatDisplayDate(entry.date)}
                     </span>
                   </div>
-                  <div className="flex items-center gap-sm">
+                  <div className="flex items-center gap-inset-sm">
                     <span className="rounded bg-surface-container-highest px-2 py-1 text-label-sm text-on-surface-variant">
                       {entry.isClosed ? 'Closed' : 'Special Hours'}
                     </span>
@@ -308,7 +308,7 @@ export default function BusinessHoursView({
             ))}
 
             {showAddSpecial && (
-              <div className="space-y-sm border-b border-surface-variant p-sm md:p-md">
+              <div className="space-y-inset-sm border-b border-surface-variant p-inset-sm md:p-inset-md">
                 <input
                   type="text"
                   value={newSpecialName}
@@ -322,7 +322,7 @@ export default function BusinessHoursView({
                   onChange={(event) => setNewSpecialDate(event.target.value)}
                   className={timeInputClass}
                 />
-                <div className="flex gap-sm">
+                <div className="flex gap-inset-sm">
                   <button
                     type="button"
                     onClick={() => setShowAddSpecial(false)}
@@ -344,7 +344,7 @@ export default function BusinessHoursView({
             <button
               type="button"
               onClick={() => setShowAddSpecial(true)}
-              className="flex w-full cursor-pointer items-center justify-center gap-xs bg-surface p-sm text-secondary-container transition-colors hover:bg-surface-container"
+              className="flex w-full cursor-pointer items-center justify-center gap-inset-xs bg-surface p-inset-sm text-secondary-container transition-colors hover:bg-surface-container"
             >
               <MaterialIcon name="add_circle" />
               <span className="text-label-md font-bold">Add Special Date</span>
@@ -354,7 +354,7 @@ export default function BusinessHoursView({
       </main>
 
       <div className="fixed bottom-0 z-40 w-full border-t border-outline-variant bg-surface/95 p-margin-mobile shadow-[0_-4px_12px_rgba(0,0,0,0.05)] backdrop-blur-sm md:bottom-16 md:px-margin-tablet">
-        <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-sm md:justify-end">
+        <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-inset-sm md:justify-end">
           <button
             type="button"
             onClick={onDiscard}
@@ -366,7 +366,7 @@ export default function BusinessHoursView({
             type="button"
             disabled={isSaving}
             onClick={onSave}
-            className="flex h-12 flex-1 items-center justify-center gap-xs rounded-md bg-primary-container px-6 text-label-md font-bold text-on-primary shadow-sm transition-colors hover:bg-primary active:scale-95 disabled:opacity-50 md:flex-none"
+            className="flex h-12 flex-1 items-center justify-center gap-inset-xs rounded-md bg-primary-container px-6 text-label-md font-bold text-on-primary shadow-sm transition-colors hover:bg-primary active:scale-95 disabled:opacity-50 md:flex-none"
           >
             <MaterialIcon name="save" />
             {isSaving ? 'Saving...' : 'Save Hours'}

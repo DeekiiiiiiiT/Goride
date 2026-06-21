@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useOnboardingScrollLock, useOnboardingSwipe } from '../hooks/useOnboardingSwipe';
 
 interface OnboardingCarouselPageProps {
   onComplete: () => void;
@@ -93,9 +94,30 @@ export default function OnboardingCarouselPage({ onComplete }: OnboardingCarouse
   const [isCompleting, setIsCompleting] = useState(false);
   const isLastSlide = currentIndex === SLIDES.length - 1;
 
+  useOnboardingScrollLock(true);
+
+  const goToSlide = useCallback((index: number) => {
+    setCurrentIndex(Math.max(0, Math.min(SLIDES.length - 1, index)));
+  }, []);
+
+  const advanceStep = useCallback(() => {
+    setCurrentIndex((index) => Math.min(SLIDES.length - 1, index + 1));
+  }, []);
+
+  const handlePrev = useCallback(() => {
+    goToSlide(currentIndex - 1);
+  }, [currentIndex, goToSlide]);
+
+  const { containerRef, dragOffset } = useOnboardingSwipe({
+    stepIndex: currentIndex,
+    stepCount: SLIDES.length,
+    onNext: advanceStep,
+    onPrev: handlePrev,
+  });
+
   const handleNext = () => {
     if (currentIndex < SLIDES.length - 1) {
-      setCurrentIndex((index) => index + 1);
+      goToSlide(currentIndex + 1);
       return;
     }
 
@@ -106,11 +128,16 @@ export default function OnboardingCarouselPage({ onComplete }: OnboardingCarouse
   };
 
   const handleSkip = () => {
-    setCurrentIndex(SLIDES.length - 1);
+    goToSlide(SLIDES.length - 1);
   };
 
+  const slideTransition = dragOffset !== 0 ? '' : 'transition-transform duration-300 ease-out';
+
   return (
-    <div className="flex min-h-dvh flex-col overflow-hidden bg-background font-body-sm text-on-background selection:bg-primary-container selection:text-on-primary-container">
+    <div
+      ref={containerRef}
+      className="flex min-h-dvh touch-pan-y flex-col overflow-hidden bg-background font-body-sm text-on-background selection:bg-primary-container selection:text-on-primary-container"
+    >
       <header className="relative z-10 mx-auto flex h-16 w-full max-w-full items-center justify-between px-margin-mobile">
         <div className="text-headline-md font-semibold text-primary">Roam Dash Partner</div>
         <button
@@ -124,16 +151,20 @@ export default function OnboardingCarouselPage({ onComplete }: OnboardingCarouse
         </button>
       </header>
 
-      <main className="relative mx-auto flex w-full max-w-md flex-grow flex-col px-margin-mobile pb-xl pt-lg">
-        <div className="relative mb-lg flex w-full flex-grow items-center justify-center">
+      <main className="relative mx-auto flex w-full max-w-md flex-grow flex-col px-margin-mobile pb-inset-xl pt-inset-lg">
+        <div
+          key={currentIndex}
+          className={`relative mb-inset-lg flex w-full flex-grow items-center justify-center ${slideTransition}`}
+          style={dragOffset !== 0 ? { transform: `translateX(${dragOffset}px)` } : undefined}
+        >
           {SLIDES.map((slide, index) => (
             <div
               key={slide.title}
-              className={`partner-carousel-slide flex flex-col items-center px-md text-center ${
+              className={`partner-carousel-slide flex flex-col items-center px-inset-md text-center ${
                 index === currentIndex ? 'active' : ''
               }`}
             >
-              <div className="relative mb-xl flex h-48 w-48 items-center justify-center rounded-full border border-outline-variant bg-surface-container-lowest shadow-sm">
+              <div className="relative mb-inset-xl flex h-48 w-48 items-center justify-center rounded-full border border-outline-variant bg-surface-container-lowest shadow-sm">
                 <div
                   className={`flex items-center justify-center rounded-full border-2 border-surface-container-lowest shadow-sm ${slide.badge.className}`}
                 >
@@ -147,7 +178,7 @@ export default function OnboardingCarouselPage({ onComplete }: OnboardingCarouse
                 <MaterialIcon name={slide.mainIcon} className={slide.mainIconClass} />
               </div>
 
-              <h2 className="mb-xs text-headline-lg-mobile font-bold text-on-surface">
+              <h2 className="mb-inset-xs text-headline-lg-mobile font-bold text-on-surface">
                 {slide.title}
               </h2>
               <p className="max-w-[280px] text-body-lg text-on-surface-variant">
@@ -157,12 +188,15 @@ export default function OnboardingCarouselPage({ onComplete }: OnboardingCarouse
           ))}
         </div>
 
-        <div className="mt-auto flex w-full flex-col items-center gap-md">
-          <div className="mb-sm flex items-center gap-2">
+        <div className="mt-auto flex w-full flex-col items-center gap-inset-md">
+          <div className="mb-inset-sm flex items-center gap-2">
             {SLIDES.map((_, index) => (
-              <div
+              <button
                 key={index}
-                className={`partner-carousel-indicator h-2 rounded-full ${
+                type="button"
+                aria-label={`Go to slide ${index + 1}`}
+                onClick={() => goToSlide(index)}
+                className={`partner-carousel-indicator h-2 rounded-full transition-all duration-300 ${
                   index === currentIndex
                     ? 'active bg-primary-container'
                     : 'w-2 bg-outline-variant'

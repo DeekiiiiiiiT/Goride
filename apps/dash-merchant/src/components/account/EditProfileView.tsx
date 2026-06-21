@@ -8,6 +8,8 @@ import {
 } from '../../hooks/useMerchantSettings';
 import { VerificationStatusBanner } from '../VerificationStatusBanner';
 import { Merchant } from '../../hooks/useMerchant';
+import PartnerLocationPicker from '../PartnerLocationPicker';
+import type { LocationValue } from '@roam/location';
 
 interface EditProfileViewProps {
   merchant: Merchant;
@@ -22,7 +24,7 @@ interface EditProfileViewProps {
 const inputClass =
   'w-full rounded-lg border border-outline-variant bg-white px-4 py-3 text-body-lg text-on-surface outline-none transition-colors focus:border-2 focus:border-primary-container focus:ring-0';
 
-const labelClass = 'mb-xs block text-label-md text-on-surface-variant';
+const labelClass = 'mb-inset-xs block text-label-md text-on-surface-variant';
 
 export default function EditProfileView({
   merchant,
@@ -127,14 +129,14 @@ export default function EditProfileView({
         <div className="h-px w-full bg-gradient-to-r from-transparent via-outline-variant/30 to-transparent" />
       </header>
 
-      <main className="flex w-full flex-1 flex-col gap-sm px-margin-mobile pb-xl pt-sm md:max-w-2xl">
+      <main className="flex w-full flex-1 flex-col gap-inset-sm px-margin-mobile pb-inset-xl pt-inset-sm md:max-w-2xl">
         <VerificationStatusBanner
           merchant={merchant}
           onRefresh={onRefreshMerchant}
           onResubmit={onRefreshMerchant}
         />
 
-        <section className="relative mb-xs overflow-hidden rounded-lg border border-outline-variant bg-white shadow-sm">
+        <section className="relative mb-inset-xs overflow-hidden rounded-lg border border-outline-variant bg-white shadow-sm">
           <div className="group relative h-48 w-full bg-surface-container">
             {formData.coverImageUrl ? (
               <img src={formData.coverImageUrl} alt="" className="h-full w-full object-cover" />
@@ -194,8 +196,8 @@ export default function EditProfileView({
           <div className="h-12 w-full bg-white" />
         </section>
 
-        <section className="flex flex-col gap-sm rounded-lg border border-outline-variant bg-white p-sm shadow-sm">
-          <h2 className="mb-xs text-headline-md text-on-surface">Basic Information</h2>
+        <section className="flex flex-col gap-inset-sm rounded-lg border border-outline-variant bg-white p-inset-sm shadow-sm">
+          <h2 className="mb-inset-xs text-headline-md text-on-surface">Basic Information</h2>
           <div>
             <label className={labelClass} htmlFor="restaurantName">
               Restaurant Name
@@ -251,9 +253,35 @@ export default function EditProfileView({
           </div>
         </section>
 
-        <section className="flex flex-col gap-sm rounded-lg border border-outline-variant bg-white p-sm shadow-sm">
-          <h2 className="mb-xs text-headline-md text-on-surface">Contact &amp; Social</h2>
-          <div className="grid grid-cols-1 gap-sm md:grid-cols-2">
+        <section className="flex flex-col gap-inset-sm rounded-lg border border-outline-variant bg-white p-inset-sm shadow-sm">
+          <h2 className="mb-inset-xs text-headline-md text-on-surface">Location</h2>
+          <PartnerLocationPicker
+            value={{
+              lat: formData.lat ?? undefined,
+              lng: formData.lng ?? undefined,
+              streetAddress: formData.streetAddress,
+              city: formData.city,
+              postalCode: formData.postalCode,
+              formattedAddress: formData.address,
+            }}
+            onChange={(loc: LocationValue) =>
+              onChange({
+                ...formData,
+                lat: loc.lat,
+                lng: loc.lng,
+                streetAddress: loc.streetAddress,
+                city: loc.city,
+                postalCode: loc.postalCode,
+                address: loc.formattedAddress,
+              })
+            }
+            mapHeightClass="h-[240px]"
+          />
+        </section>
+
+        <section className="flex flex-col gap-inset-sm rounded-lg border border-outline-variant bg-white p-inset-sm shadow-sm">
+          <h2 className="mb-inset-xs text-headline-md text-on-surface">Contact &amp; Social</h2>
+          <div className="grid grid-cols-1 gap-inset-sm md:grid-cols-2">
             <div>
               <label className={labelClass} htmlFor="phone">
                 Phone Number
@@ -292,9 +320,9 @@ export default function EditProfileView({
               placeholder="https://yourrestaurant.com"
             />
           </div>
-          <div className="mt-xs border-t border-outline-variant/30 pt-2">
-            <h3 className="mb-xs text-label-md text-on-surface-variant">Social Media Handles</h3>
-            <div className="space-y-sm">
+          <div className="mt-inset-xs border-t border-outline-variant/30 pt-2">
+            <h3 className="mb-inset-xs text-label-md text-on-surface-variant">Social Media Handles</h3>
+            <div className="space-y-inset-sm">
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-body-lg text-on-surface-variant">
                   @
@@ -323,7 +351,7 @@ export default function EditProfileView({
           </div>
         </section>
 
-        <section className="sticky bottom-0 z-30 mt-xs flex justify-end gap-sm bg-surface/90 pb-margin-mobile pt-xs md:static md:bg-transparent md:pb-0">
+        <section className="sticky bottom-0 z-30 mt-inset-xs flex justify-end gap-inset-sm bg-surface/90 pb-margin-mobile pt-inset-xs md:static md:bg-transparent md:pb-0">
           <button
             type="button"
             onClick={onBack}

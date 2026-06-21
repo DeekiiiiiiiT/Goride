@@ -310,7 +310,7 @@ export default function MenuPage({ merchant, onNavigate }: MenuPageProps) {
           onSettings={() => onNavigate?.('account')}
         >
           {isLoading ? (
-            <main className="flex flex-1 flex-col gap-sm bg-background p-gutter">
+            <main className="flex flex-1 flex-col gap-inset-sm bg-background p-gutter">
               <PartnerSkeleton variant="list" count={5} />
             </main>
           ) : isError ? (
@@ -318,7 +318,7 @@ export default function MenuPage({ merchant, onNavigate }: MenuPageProps) {
               <QueryErrorState message="Could not load menu" onRetry={() => refetch()} />
             </main>
           ) : categories.length === 0 && items.length === 0 ? (
-            <main className="flex flex-1 flex-col items-center justify-center bg-background p-xl text-center">
+            <main className="flex flex-1 flex-col items-center justify-center bg-background p-inset-xl text-center">
               <MaterialIcon name="restaurant_menu" className="mb-4 text-5xl text-on-surface-variant" />
               <h2 className="mb-2 text-headline-md text-on-background">Start building your menu</h2>
               <p className="mb-6 text-body-sm text-on-surface-variant">
@@ -327,7 +327,7 @@ export default function MenuPage({ merchant, onNavigate }: MenuPageProps) {
               <button
                 type="button"
                 onClick={openAddCategory}
-                className="inline-flex h-12 items-center justify-center rounded-lg bg-primary-container px-lg text-label-md text-white"
+                className="inline-flex h-12 items-center justify-center rounded-lg bg-primary-container px-inset-lg text-label-md text-white"
               >
                 Add Category
               </button>
@@ -357,15 +357,15 @@ export default function MenuPage({ merchant, onNavigate }: MenuPageProps) {
       <MenuPageHeader merchant={merchant} />
 
       {isLoading ? (
-        <div className="mx-auto max-w-3xl px-margin-mobile py-md md:px-margin-tablet">
+        <div className="mx-auto max-w-3xl px-margin-mobile py-inset-md md:px-margin-tablet">
           <PartnerSkeleton variant="list" count={4} />
         </div>
       ) : isError ? (
-        <div className="mx-auto max-w-3xl px-margin-mobile py-md md:px-margin-tablet">
+        <div className="mx-auto max-w-3xl px-margin-mobile py-inset-md md:px-margin-tablet">
           <QueryErrorState message="Could not load menu" onRetry={() => refetch()} />
         </div>
       ) : categories.length === 0 && items.length === 0 ? (
-        <div className="mx-auto max-w-3xl px-margin-mobile py-xl text-center md:px-margin-tablet">
+        <div className="mx-auto max-w-3xl px-margin-mobile py-inset-xl text-center md:px-margin-tablet">
           <MaterialIcon name="restaurant_menu" className="mx-auto mb-4 text-5xl text-on-surface-variant" />
           <h2 className="mb-2 text-headline-md text-on-background">Start building your menu</h2>
           <p className="mb-6 text-body-sm text-on-surface-variant">
@@ -374,7 +374,7 @@ export default function MenuPage({ merchant, onNavigate }: MenuPageProps) {
           <button
             type="button"
             onClick={openAddCategory}
-            className="inline-flex h-12 items-center justify-center rounded-lg bg-primary-container px-lg text-label-md text-white"
+            className="inline-flex h-12 items-center justify-center rounded-lg bg-primary-container px-inset-lg text-label-md text-white"
           >
             Add Category
           </button>

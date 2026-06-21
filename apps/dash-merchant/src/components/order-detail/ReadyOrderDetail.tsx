@@ -34,7 +34,7 @@ export default function ReadyOrderDetail({ order, onBack }: ReadyOrderDetailProp
   return (
     <div className="flex min-h-dvh flex-col bg-background text-on-background">
       <header className="sticky top-0 z-50 mx-auto flex h-16 w-full items-center justify-between border-b border-outline-variant bg-surface px-margin-mobile shadow-sm">
-        <div className="flex items-center gap-xs">
+        <div className="flex items-center gap-inset-xs">
           <button
             type="button"
             onClick={onBack}
@@ -55,10 +55,10 @@ export default function ReadyOrderDetail({ order, onBack }: ReadyOrderDetailProp
         </button>
       </header>
 
-      <main className="mx-auto flex w-full max-w-[600px] flex-1 flex-col gap-sm px-margin-mobile pb-[100px] pt-sm">
-        <div className="flex items-center justify-between rounded-lg border border-outline-variant bg-surface-container-lowest p-sm">
-          <div className="flex flex-col gap-base">
-            <div className="flex items-center gap-xs">
+      <main className="mx-auto flex w-full max-w-[600px] flex-1 flex-col gap-inset-sm px-margin-mobile pb-[100px] pt-inset-sm">
+        <div className="flex items-center justify-between rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm">
+          <div className="flex flex-col gap-inset-base">
+            <div className="flex items-center gap-inset-xs">
               <span className="rounded-sm bg-primary-container px-2 py-1 text-label-md font-semibold uppercase tracking-wider text-on-primary-container">
                 READY
               </span>
@@ -75,9 +75,9 @@ export default function ReadyOrderDetail({ order, onBack }: ReadyOrderDetailProp
           </div>
         </div>
 
-        <div className="flex flex-col gap-sm rounded-lg border border-outline-variant bg-surface-container-lowest p-sm">
+        <div className="flex flex-col gap-inset-sm rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm">
           <div className="flex items-start justify-between">
-            <div className="flex items-center gap-xs">
+            <div className="flex items-center gap-inset-xs">
               <img
                 src={COURIER_PLACEHOLDER.avatar}
                 alt={`Courier ${COURIER_PLACEHOLDER.name}`}
@@ -111,14 +111,14 @@ export default function ReadyOrderDetail({ order, onBack }: ReadyOrderDetailProp
           </div>
         </div>
 
-        <div className="rounded-lg border border-outline-variant bg-surface-container-lowest p-sm">
-          <div className="mb-xs flex items-center gap-xs">
+        <div className="rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm">
+          <div className="mb-inset-xs flex items-center gap-inset-xs">
             <MaterialIcon name="person" size={20} className="text-on-surface-variant" />
             <h2 className="text-headline-md font-semibold text-on-surface">{order.customer.name}</h2>
           </div>
         </div>
 
-        <div className="flex flex-col gap-xs rounded-lg border border-outline-variant bg-surface-container-lowest p-sm">
+        <div className="flex flex-col gap-inset-xs rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm">
           <h3 className="mb-2 text-label-md font-semibold uppercase tracking-wider text-on-surface-variant">
             Order Items ({order.items.length})
           </h3>
@@ -129,7 +129,7 @@ export default function ReadyOrderDetail({ order, onBack }: ReadyOrderDetailProp
                 key={index}
                 className="flex items-start justify-between border-b border-outline-variant/30 py-2 last:border-0"
               >
-                <div className="flex items-start gap-xs">
+                <div className="flex items-start gap-inset-xs">
                   <span className="w-6 text-center text-body-lg font-semibold">{item.quantity}x</span>
                   <div className="flex flex-col">
                     <span className="text-body-lg text-on-surface">{item.name}</span>
@@ -143,14 +143,14 @@ export default function ReadyOrderDetail({ order, onBack }: ReadyOrderDetailProp
           })}
         </div>
 
-        <div className="flex flex-col gap-xs rounded-lg border border-outline-variant bg-surface-container-lowest p-sm">
+        <div className="flex flex-col gap-inset-xs rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm">
           <h3 className="mb-2 text-label-md font-semibold uppercase tracking-wider text-on-surface-variant">
             Handoff Checklist
           </h3>
           {HANDOFF_CHECKLIST_ITEMS.map((label, index) => (
             <label
               key={label}
-              className="flex cursor-pointer items-center gap-xs py-2 transition-colors group"
+              className="flex cursor-pointer items-center gap-inset-xs py-2 transition-colors group"
             >
               <input
                 type="checkbox"

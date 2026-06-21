@@ -8,7 +8,7 @@ interface MenuPageHeaderProps {
 export default function MenuPageHeader({ merchant }: MenuPageHeaderProps) {
   return (
     <header className="sticky top-0 z-50 flex h-16 w-full items-center justify-between border-b border-outline-variant bg-surface/80 px-margin-mobile backdrop-blur-md md:px-margin-tablet">
-      <div className="flex items-center gap-sm">
+      <div className="flex items-center gap-inset-sm">
         <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-outline-variant bg-surface-container">
           {merchant.logo_url ? (
             <img src={merchant.logo_url} alt="" className="h-full w-full object-cover" />

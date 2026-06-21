@@ -13,7 +13,7 @@ interface LoginPageProps {
 }
 
 const inputClass =
-  'input-touch h-12 w-full rounded-md border border-outline-variant bg-transparent px-sm text-body-lg text-on-surface placeholder:text-on-surface-variant outline-none transition-colors partner-field focus:border-primary-container focus:ring-1 focus:ring-primary-container';
+  'input-touch h-12 w-full rounded-md border border-outline-variant bg-transparent px-inset-sm text-body-lg text-on-surface placeholder:text-on-surface-variant outline-none transition-colors partner-field focus:border-primary-container focus:ring-1 focus:ring-primary-container';
 
 export default function LoginPage({
   onSuccess,
@@ -113,7 +113,7 @@ export default function LoginPage({
         className="flex w-full max-w-[440px] flex-col items-center"
         style={{ paddingBottom: keyboardInset > 0 ? keyboardInset : undefined }}
       >
-        <div className="mb-lg flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border border-outline-variant bg-surface shadow-sm">
+        <div className="mb-inset-lg flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border border-outline-variant bg-surface shadow-sm">
           <img
             alt="Roam Dash Partner Logo"
             className="h-full w-full object-cover"
@@ -121,16 +121,16 @@ export default function LoginPage({
           />
         </div>
 
-        <div className="mb-lg w-full text-center">
-          <h1 className="mb-xs text-headline-lg-mobile font-bold text-on-surface md:text-headline-lg">
+        <div className="mb-inset-lg w-full text-center">
+          <h1 className="mb-inset-xs text-headline-lg-mobile font-bold text-on-surface md:text-headline-lg">
             {title}
           </h1>
           <p className="text-body-sm text-on-surface-variant">{subtitle}</p>
         </div>
 
-        <div className="w-full rounded-lg border border-outline-variant bg-surface-container-lowest p-md shadow-sm transition-shadow duration-300 hover:shadow-md">
-          <form className="flex flex-col gap-sm" onSubmit={handleSubmit}>
-            <div className="flex flex-col gap-base">
+        <div className="w-full rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm transition-shadow duration-300 hover:shadow-md">
+          <form className="flex flex-col gap-inset-sm" onSubmit={handleSubmit}>
+            <div className="flex flex-col gap-inset-base">
               <label className="text-label-md font-semibold text-on-surface" htmlFor="email">
                 Email or phone number
               </label>
@@ -148,7 +148,7 @@ export default function LoginPage({
             </div>
 
             {!forgotMode && (
-              <div className="mt-xs flex flex-col gap-base">
+              <div className="mt-inset-xs flex flex-col gap-inset-base">
                 <div className="flex w-full items-center justify-between">
                   <label className="text-label-md font-semibold text-on-surface" htmlFor="password">
                     Password
@@ -202,7 +202,7 @@ export default function LoginPage({
             )}
 
             {!forgotMode && !isSignUp && (
-              <div className="mt-xs flex items-center gap-xs">
+              <div className="mt-inset-xs flex items-center gap-inset-xs">
                 <input
                   id="remember"
                   name="remember"
@@ -229,7 +229,7 @@ export default function LoginPage({
             <button
               type="submit"
               disabled={isLoading || forgotLoading}
-              className="mt-md flex h-12 w-full items-center justify-center rounded-md bg-primary-container text-label-md font-semibold text-on-primary shadow-sm transition-colors hover:bg-primary focus:outline-none focus:ring-2 focus:ring-primary-container focus:ring-offset-2 focus:ring-offset-background active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+              className="mt-inset-md flex h-12 w-full items-center justify-center rounded-md bg-primary-container text-label-md font-semibold text-on-primary shadow-sm transition-colors hover:bg-primary focus:outline-none focus:ring-2 focus:ring-primary-container focus:ring-offset-2 focus:ring-offset-background active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isLoading || forgotLoading ? (
                 <span className="partner-spinner h-5 w-5 border-2" />
@@ -240,14 +240,14 @@ export default function LoginPage({
           </form>
         </div>
 
-        <div className="mt-lg text-center">
+        <div className="mt-inset-lg text-center">
           {isSignUp ? (
             <p className="text-body-sm text-on-surface-variant">
               Already have an account?{' '}
               <button
                 type="button"
                 onClick={() => setIsSignUp(false)}
-                className="ml-xs text-label-md font-semibold text-primary transition-colors hover:text-primary-fixed-dim"
+                className="ml-inset-xs text-label-md font-semibold text-primary transition-colors hover:text-primary-fixed-dim"
               >
                 Sign in
               </button>
@@ -258,7 +258,7 @@ export default function LoginPage({
               <button
                 type="button"
                 onClick={onApply ?? onBack}
-                className="ml-xs text-label-md font-semibold text-primary transition-colors hover:text-primary-fixed-dim"
+                className="ml-inset-xs text-label-md font-semibold text-primary transition-colors hover:text-primary-fixed-dim"
               >
                 Apply to become a partner
               </button>

@@ -82,21 +82,21 @@ export default function NewOrderDetailSheet({
         aria-modal="true"
         aria-labelledby="new-order-detail-title"
       >
-        <header className="z-10 flex shrink-0 items-center justify-between border-b border-outline-variant bg-surface-container-lowest px-margin-mobile py-sm">
-          <div className="flex animate-pulse items-center gap-xs text-error">
+        <header className="z-10 flex shrink-0 items-center justify-between border-b border-outline-variant bg-surface-container-lowest px-margin-mobile py-inset-sm">
+          <div className="flex animate-pulse items-center gap-inset-xs text-error">
             <MaterialIcon name="notifications_active" filled />
             <span className="text-label-md font-semibold uppercase">New Order</span>
           </div>
           {autoRejectRemaining > 0 && (
-            <div className="flex items-center gap-base rounded-full bg-error-container px-3 py-1.5 text-label-sm text-on-error-container">
+            <div className="flex items-center gap-inset-base rounded-full bg-error-container px-3 py-1.5 text-label-sm text-on-error-container">
               <MaterialIcon name="timer" size={14} />
               <span>Auto-rejects in {formatCountdown(autoRejectRemaining)}</span>
             </div>
           )}
         </header>
 
-        <div className="flex flex-1 flex-col gap-lg overflow-y-auto bg-background px-margin-mobile py-md">
-          <section className="flex flex-col gap-base">
+        <div className="flex flex-1 flex-col gap-inset-lg overflow-y-auto bg-background px-margin-mobile py-inset-md">
+          <section className="flex flex-col gap-inset-base">
             <div className="flex items-start justify-between">
               <h1
                 id="new-order-detail-title"
@@ -104,7 +104,7 @@ export default function NewOrderDetailSheet({
               >
                 #{order.order_number}
               </h1>
-              <div className="flex items-center gap-base rounded-full bg-surface-container-high px-3 py-1.5 text-label-sm text-on-surface">
+              <div className="flex items-center gap-inset-base rounded-full bg-surface-container-high px-3 py-1.5 text-label-sm text-on-surface">
                 <MaterialIcon name={isDelivery ? 'moped' : 'storefront'} size={16} />
                 {isDelivery ? 'Delivery' : 'Pickup'}
               </div>
@@ -114,7 +114,7 @@ export default function NewOrderDetailSheet({
             </h2>
           </section>
 
-          <section className="flex flex-col gap-0 border-y border-outline-variant py-xs">
+          <section className="flex flex-col gap-0 border-y border-outline-variant py-inset-xs">
             {order.items.map((item, index) => {
               const optionLines = getItemOptionLines(item);
               const lineTotal = item.price * item.quantity;
@@ -122,18 +122,18 @@ export default function NewOrderDetailSheet({
               return (
                 <article
                   key={index}
-                  className="flex min-h-[64px] items-start gap-sm border-b border-outline-variant/40 py-sm last:border-0"
+                  className="flex min-h-[64px] items-start gap-inset-sm border-b border-outline-variant/40 py-inset-sm last:border-0"
                 >
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-surface-container-high text-label-md font-semibold text-on-surface">
                     {item.quantity}x
                   </div>
-                  <div className="flex flex-1 flex-col gap-base">
+                  <div className="flex flex-1 flex-col gap-inset-base">
                     <div className="flex items-start justify-between">
                       <span className="text-body-lg font-medium text-on-surface">{item.name}</span>
                       <span className="text-body-lg text-on-surface">{formatJmd(lineTotal)}</span>
                     </div>
                     {optionLines.length > 0 && (
-                      <div className="flex flex-col gap-base text-body-sm text-on-surface-variant">
+                      <div className="flex flex-col gap-inset-base text-body-sm text-on-surface-variant">
                         {optionLines.map((line) => (
                           <span key={line}>• {line}</span>
                         ))}
@@ -146,14 +146,14 @@ export default function NewOrderDetailSheet({
           </section>
 
           {instructions && (
-            <section className="flex items-start gap-sm rounded-lg border border-outline-variant bg-surface-container p-sm">
+            <section className="flex items-start gap-inset-sm rounded-lg border border-outline-variant bg-surface-container p-inset-sm">
               <MaterialIcon
                 name="info"
                 filled
                 className="shrink-0 text-on-surface-variant"
                 size={20}
               />
-              <div className="flex flex-col gap-base">
+              <div className="flex flex-col gap-inset-base">
                 <h3 className="text-label-md font-semibold uppercase tracking-wider text-on-surface">
                   Special Instructions
                 </h3>
@@ -164,7 +164,7 @@ export default function NewOrderDetailSheet({
             </section>
           )}
 
-          <section className="flex flex-col gap-xs pb-md pt-xs">
+          <section className="flex flex-col gap-inset-xs pb-inset-md pt-inset-xs">
             <div className="flex items-center justify-between text-body-sm text-on-surface-variant">
               <span>Subtotal</span>
               <span>{formatJmd(order.subtotal)}</span>
@@ -187,15 +187,15 @@ export default function NewOrderDetailSheet({
                 <span>{formatJmd(order.tip)}</span>
               </div>
             )}
-            <div className="mt-base flex items-center justify-between text-headline-md font-semibold text-on-surface">
+            <div className="mt-inset-base flex items-center justify-between text-headline-md font-semibold text-on-surface">
               <span>Total</span>
               <span>{formatJmd(order.total)}</span>
             </div>
           </section>
         </div>
 
-        <footer className="z-10 flex shrink-0 flex-col gap-sm border-t border-outline-variant bg-surface-container-lowest p-margin-mobile">
-          <div className="mb-xs flex items-center justify-center gap-base text-center text-label-sm text-on-surface-variant">
+        <footer className="z-10 flex shrink-0 flex-col gap-inset-sm border-t border-outline-variant bg-surface-container-lowest p-margin-mobile">
+          <div className="mb-inset-xs flex items-center justify-center gap-inset-base text-center text-label-sm text-on-surface-variant">
             <MaterialIcon name="schedule" size={14} />
             ~{avgPrepTimeMins} min based on your average prep time
           </div>
@@ -203,7 +203,7 @@ export default function NewOrderDetailSheet({
             type="button"
             disabled={isSubmitting}
             onClick={() => onAccept(order.id)}
-            className="flex h-xl w-full items-center justify-center gap-xs rounded-lg bg-primary-container text-label-md font-semibold text-on-primary shadow-sm transition-transform active:scale-[0.98] disabled:opacity-50"
+            className="flex h-inset-xl w-full items-center justify-center gap-inset-xs rounded-lg bg-primary-container text-label-md font-semibold text-on-primary shadow-sm transition-transform active:scale-[0.98] disabled:opacity-50"
           >
             <MaterialIcon name="check_circle" filled />
             ACCEPT ORDER
@@ -212,7 +212,7 @@ export default function NewOrderDetailSheet({
             type="button"
             disabled={isSubmitting}
             onClick={() => onReject(order.id)}
-            className="flex h-xl w-full items-center justify-center gap-xs rounded-lg bg-surface-container-high text-label-md font-semibold text-on-surface transition-transform active:scale-[0.98] disabled:opacity-50"
+            className="flex h-inset-xl w-full items-center justify-center gap-inset-xs rounded-lg bg-surface-container-high text-label-md font-semibold text-on-surface transition-transform active:scale-[0.98] disabled:opacity-50"
           >
             REJECT ORDER
           </button>

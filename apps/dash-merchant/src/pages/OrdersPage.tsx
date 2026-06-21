@@ -552,13 +552,13 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
 
     <div className="flex min-h-dvh flex-col bg-background text-on-background antialiased md:hidden">
       <header className="sticky top-0 z-50 mx-auto flex h-16 w-full max-w-full items-center justify-between border-b border-outline-variant bg-surface px-margin-mobile shadow-sm">
-        <div className="flex items-center gap-xs">
+        <div className="flex items-center gap-inset-xs">
           <h1 className="text-headline-md font-bold text-primary">Orders</h1>
           <button
             type="button"
             disabled={togglePending}
             onClick={() => toggleAcceptingOrders(!isAcceptingOrders)}
-            className={`ml-xs flex items-center gap-1 rounded-full px-2 py-1 text-label-sm font-semibold ${
+            className={`ml-inset-xs flex items-center gap-1 rounded-full px-2 py-1 text-label-sm font-semibold ${
               storeStatus === 'open'
                 ? 'bg-primary-container text-on-primary-container'
                 : storeStatus === 'paused'
@@ -599,7 +599,7 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
       </header>
 
       <main
-        className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-sm overflow-y-auto px-margin-mobile py-sm md:max-w-[1200px] md:px-lg"
+        className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-inset-sm overflow-y-auto px-margin-mobile py-inset-sm md:max-w-[1200px] md:px-inset-lg"
         {...pullToRefreshProps}
       >
         {(pullDistance > 0 || isRefreshing || isFetching) && (
@@ -613,8 +613,8 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
           </div>
         )}
         {!isHistoryView && (
-        <div className="-mx-margin-mobile sticky top-16 z-40 flex flex-col justify-between gap-sm bg-background/95 px-margin-mobile py-xs backdrop-blur-md md:top-0 md:mx-0 md:px-0">
-          <div className="hide-scroll flex gap-xs overflow-x-auto pb-1">
+        <div className="-mx-margin-mobile sticky top-16 z-40 flex flex-col justify-between gap-inset-sm bg-background/95 px-margin-mobile py-inset-xs backdrop-blur-md md:top-0 md:mx-0 md:px-0">
+          <div className="hide-scroll flex gap-inset-xs overflow-x-auto pb-1">
             {FILTER_TABS.map((tab) => {
               const active = filter === tab.key;
               const count = getTabCount(tab.key);
@@ -624,7 +624,7 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
                   key={tab.key}
                   type="button"
                   onClick={() => setFilter(tab.key)}
-                  className={`flex items-center gap-base whitespace-nowrap rounded-full px-sm py-2 text-label-md font-semibold transition-colors duration-150 active:scale-95 ${
+                  className={`flex items-center gap-inset-base whitespace-nowrap rounded-full px-inset-sm py-2 text-label-md font-semibold transition-colors duration-150 active:scale-95 ${
                     active
                       ? 'bg-primary-container text-on-primary-container'
                       : 'border border-outline-variant bg-surface-container text-on-surface-variant hover:bg-surface-container-high'
@@ -647,12 +647,12 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
             })}
           </div>
 
-          <div className="flex shrink-0 items-center gap-xs self-end md:self-auto">
+          <div className="flex shrink-0 items-center gap-inset-xs self-end md:self-auto">
             <span className="text-body-sm text-tertiary">Sort:</span>
             <button
               type="button"
               onClick={() => setSortOrder((current) => (current === 'oldest' ? 'newest' : 'oldest'))}
-              className="flex items-center gap-base rounded-lg border border-outline-variant bg-surface px-3 py-1.5 text-label-md font-semibold text-on-surface transition-colors hover:bg-surface-container-low"
+              className="flex items-center gap-inset-base rounded-lg border border-outline-variant bg-surface px-3 py-1.5 text-label-md font-semibold text-on-surface transition-colors hover:bg-surface-container-low"
             >
               {sortOrder === 'oldest' ? 'Oldest first' : 'Newest first'}
               <MaterialIcon name="arrow_drop_down" size={16} />
@@ -663,7 +663,7 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
 
         {isHistoryView ? (
           <>
-            <div className="hide-scroll flex gap-xs overflow-x-auto pb-1">
+            <div className="hide-scroll flex gap-inset-xs overflow-x-auto pb-1">
               {FILTER_TABS.map((tab) => {
                 const active = filter === tab.key;
                 return (
@@ -671,7 +671,7 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
                     key={tab.key}
                     type="button"
                     onClick={() => setFilter(tab.key)}
-                    className={`flex items-center gap-base whitespace-nowrap rounded-full px-sm py-2 text-label-md font-semibold transition-colors duration-150 active:scale-95 ${
+                    className={`flex items-center gap-inset-base whitespace-nowrap rounded-full px-inset-sm py-2 text-label-md font-semibold transition-colors duration-150 active:scale-95 ${
                       active
                         ? 'bg-primary-container text-on-primary-container'
                         : 'border border-outline-variant bg-surface-container text-on-surface-variant hover:bg-surface-container-high'
@@ -694,7 +694,7 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
             />
           </>
         ) : (
-        <div className="mt-xs flex flex-col gap-sm">
+        <div className="mt-inset-xs flex flex-col gap-inset-sm">
           {isError ? (
             <QueryErrorState
               title="Could not load orders"
@@ -750,7 +750,7 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
                       });
                     }
                   }}
-                  className={`relative flex cursor-pointer flex-col gap-sm overflow-hidden rounded-lg border bg-surface p-sm shadow-sm transition-colors hover:bg-surface-container-lowest ${
+                  className={`relative flex cursor-pointer flex-col gap-inset-sm overflow-hidden rounded-lg border bg-surface p-inset-sm shadow-sm transition-colors hover:bg-surface-container-lowest ${
                     isNew ? 'partner-order-pulse border-2' : 'border-outline-variant opacity-90'
                   }`}
                 >
@@ -766,9 +766,9 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
                     }`}
                   />
 
-                  <div className="flex items-start justify-between pl-xs">
-                    <div className="flex flex-col gap-base">
-                      <div className="flex items-center gap-xs">
+                  <div className="flex items-start justify-between pl-inset-xs">
+                    <div className="flex flex-col gap-inset-base">
+                      <div className="flex items-center gap-inset-xs">
                         {isNew && (
                           <span className="rounded bg-primary-container px-2 py-1 text-label-sm font-bold tracking-wider text-on-primary-container">
                             NEW ORDER
@@ -780,7 +780,7 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
                           </span>
                         )}
                         {isReady && (
-                          <span className="flex items-center gap-base rounded border border-[#6EE7B7] bg-[#D1FAE5] px-2 py-1 text-label-sm font-bold tracking-wider text-[#065F46]">
+                          <span className="flex items-center gap-inset-base rounded border border-[#6EE7B7] bg-[#D1FAE5] px-2 py-1 text-label-sm font-bold tracking-wider text-[#065F46]">
                             <MaterialIcon name="check_circle" size={14} />
                             READY FOR PICKUP
                           </span>
@@ -798,12 +798,12 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
                     </div>
 
                     {!isPreparing && (
-                      <div className="flex flex-col items-end gap-base text-right">
+                      <div className="flex flex-col items-end gap-inset-base text-right">
                         <span className="text-headline-md font-bold text-on-surface">
                           {formatJmd(order.total)}
                         </span>
                         {order.delivery_address && (
-                          <span className="flex items-center gap-base rounded-full bg-surface-variant px-2 py-1 text-label-sm text-on-surface-variant">
+                          <span className="flex items-center gap-inset-base rounded-full bg-surface-variant px-2 py-1 text-label-sm text-on-surface-variant">
                             <MaterialIcon name="local_shipping" size={14} />
                             Delivery
                           </span>
@@ -812,7 +812,7 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
                     )}
 
                     {isPreparing && prepStart && (
-                      <div className="flex flex-col items-end gap-base rounded-lg border border-outline-variant bg-surface-variant px-3 py-1.5">
+                      <div className="flex flex-col items-end gap-inset-base rounded-lg border border-outline-variant bg-surface-variant px-3 py-1.5">
                         <span className="text-label-sm uppercase text-tertiary">Prep Time</span>
                         <span className="font-mono text-headline-md font-semibold text-on-surface">
                           {formatElapsedTimer(prepStart)}
@@ -823,7 +823,7 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
 
                   {isNew && (
                     <>
-                      <div className="mt-xs flex items-center gap-xs border-y border-surface-variant py-xs pl-xs">
+                      <div className="mt-inset-xs flex items-center gap-inset-xs border-y border-surface-variant py-inset-xs pl-inset-xs">
                         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary-container/20 text-label-md font-semibold text-secondary">
                           {getInitials(order.customer.name)}
                         </div>
@@ -832,7 +832,7 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
                         </span>
                       </div>
 
-                      <div className="flex flex-col gap-base pl-xs">
+                      <div className="flex flex-col gap-inset-base pl-inset-xs">
                         {order.items.map((item, index) => {
                           const modifiers = getItemOptionLines(item);
                           return (
@@ -843,7 +843,7 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
                               {modifiers.map((modifier) => (
                                 <p
                                   key={modifier}
-                                  className="ml-xs flex items-center gap-xs text-body-sm text-on-surface-variant"
+                                  className="ml-inset-xs flex items-center gap-inset-xs text-body-sm text-on-surface-variant"
                                 >
                                   <span className="h-1 w-1 rounded-full bg-tertiary" />
                                   {modifier}
@@ -854,12 +854,12 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
                         })}
                       </div>
 
-                      <div className="mt-xs flex gap-sm pl-xs" onClick={(e) => e.stopPropagation()}>
+                      <div className="mt-inset-xs flex gap-inset-sm pl-inset-xs" onClick={(e) => e.stopPropagation()}>
                         <button
                           type="button"
                           disabled={updateStatusMutation.isPending}
                           onClick={() => handleAcceptOrder(order.id)}
-                          className="flex h-xl flex-1 items-center justify-center rounded-lg bg-primary-container text-label-md font-semibold text-on-primary shadow-sm transition-all hover:brightness-110 active:scale-95 disabled:opacity-50"
+                          className="flex h-inset-xl flex-1 items-center justify-center rounded-lg bg-primary-container text-label-md font-semibold text-on-primary shadow-sm transition-all hover:brightness-110 active:scale-95 disabled:opacity-50"
                         >
                           ACCEPT ORDER
                         </button>
@@ -867,7 +867,7 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
                           type="button"
                           disabled={updateStatusMutation.isPending}
                           onClick={() => handleOpenReject(order.id)}
-                          className="flex h-xl items-center justify-center rounded-lg border border-outline-variant px-lg text-label-md font-semibold text-tertiary transition-all hover:bg-surface-variant active:scale-95 disabled:opacity-50"
+                          className="flex h-inset-xl items-center justify-center rounded-lg border border-outline-variant px-inset-lg text-label-md font-semibold text-tertiary transition-all hover:bg-surface-variant active:scale-95 disabled:opacity-50"
                         >
                           REJECT
                         </button>
@@ -877,20 +877,20 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
 
                   {isPreparing && (
                     <>
-                      <div className="mt-xs flex flex-col gap-base border-t border-surface-variant pt-xs pl-xs">
+                      <div className="mt-inset-xs flex flex-col gap-inset-base border-t border-surface-variant pt-inset-xs pl-inset-xs">
                         {order.items.map((item, index) => (
                           <p key={index} className="text-body-lg text-on-surface">
                             {item.quantity}x {item.name}
                           </p>
                         ))}
                       </div>
-                      <div className="mt-xs flex gap-sm pl-xs" onClick={(e) => e.stopPropagation()}>
+                      <div className="mt-inset-xs flex gap-inset-sm pl-inset-xs" onClick={(e) => e.stopPropagation()}>
                         {order.status === 'accepted' ? (
                           <button
                             type="button"
                             disabled={updateStatusMutation.isPending}
                             onClick={() => setAcceptedOrderId(order.id)}
-                            className="flex h-xl flex-1 items-center justify-center rounded-lg border-2 border-primary-container text-label-md font-semibold text-primary-container transition-all hover:bg-primary-container/10 active:scale-95 disabled:opacity-50"
+                            className="flex h-inset-xl flex-1 items-center justify-center rounded-lg border-2 border-primary-container text-label-md font-semibold text-primary-container transition-all hover:bg-primary-container/10 active:scale-95 disabled:opacity-50"
                           >
                             START PREPARING
                           </button>
@@ -901,7 +901,7 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
                             onClick={() =>
                               updateStatusMutation.mutate({ orderId: order.id, status: 'ready' })
                             }
-                            className="flex h-xl flex-1 items-center justify-center rounded-lg border-2 border-primary-container text-label-md font-semibold text-primary-container transition-all hover:bg-primary-container/10 active:scale-95 disabled:opacity-50"
+                            className="flex h-inset-xl flex-1 items-center justify-center rounded-lg border-2 border-primary-container text-label-md font-semibold text-primary-container transition-all hover:bg-primary-container/10 active:scale-95 disabled:opacity-50"
                           >
                             MARK READY FOR PICKUP
                           </button>
@@ -911,8 +911,8 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
                   )}
 
                   {isReady && (
-                    <div className="mt-xs flex items-center justify-between rounded-lg border border-surface-variant bg-surface-container-low p-xs pl-xs">
-                      <div className="flex items-center gap-xs">
+                    <div className="mt-inset-xs flex items-center justify-between rounded-lg border border-surface-variant bg-surface-container-low p-inset-xs pl-inset-xs">
+                      <div className="flex items-center gap-inset-xs">
                         <div className="flex h-8 w-8 items-center justify-center rounded-full border border-outline-variant bg-surface text-primary">
                           <MaterialIcon name="two_wheeler" size={18} />
                         </div>

@@ -25,7 +25,7 @@ interface OnboardingHeaderFullProps extends OnboardingHeaderProps {
 export function OnboardingHeader({ showSetupTitle, currentStep }: OnboardingHeaderFullProps) {
   if (currentStep === 5) {
     return (
-      <header className="fixed top-0 z-50 flex w-full flex-col border-b border-outline-variant bg-surface px-margin-mobile pb-sm safe-t safe-x">
+      <header className="fixed top-0 z-50 flex w-full flex-col border-b border-outline-variant bg-surface px-margin-mobile pb-inset-sm safe-t safe-x">
         <div className="flex h-16 w-full items-center justify-between">
           <MaterialIcon name="restaurant" className="text-2xl text-primary" filled />
           <h1 className="text-headline-md font-semibold tracking-tight text-primary">Roam Dash Partner</h1>
@@ -63,7 +63,7 @@ export function OnboardingStepper({ currentStep, variant = 'compact' }: Onboardi
   if (variant === 'labeled') {
     const progress = ((currentStep - 1) / (ONBOARDING_STEPS.length - 1)) * 100;
     return (
-      <div className="relative mt-xs flex w-full items-center justify-between px-sm">
+      <div className="relative mt-inset-xs flex w-full items-center justify-between px-inset-sm">
         <div className="absolute left-8 right-8 top-1/2 z-0 h-0.5 -translate-y-1/2 bg-surface-variant" />
         <div
           className="absolute left-8 top-1/2 z-0 h-0.5 -translate-y-1/2 bg-primary-container transition-all duration-300"
@@ -102,7 +102,7 @@ export function OnboardingStepper({ currentStep, variant = 'compact' }: Onboardi
   }
 
   return (
-    <div className="flex w-full items-center px-sm py-xs">
+    <div className="flex w-full items-center px-inset-sm py-inset-xs">
       {ONBOARDING_STEPS.map((step, index) => {
         const completed = currentStep > step.id;
         const active = currentStep === step.id;
@@ -110,7 +110,7 @@ export function OnboardingStepper({ currentStep, variant = 'compact' }: Onboardi
 
         return (
           <div key={step.id} className={`flex items-center ${isLast ? '' : 'flex-1'}`}>
-            <div className="flex flex-col items-center gap-base">
+            <div className="flex flex-col items-center gap-inset-base">
               <div
                 className={`flex h-8 w-8 items-center justify-center rounded-full shadow-sm ${
                   completed
@@ -163,7 +163,7 @@ export function OnboardingBottomNav({
   const stacked = layout === 'stacked';
 
   return (
-    <nav className="fixed bottom-0 z-50 flex w-full items-center justify-between gap-sm border-t border-outline-variant bg-surface px-margin-mobile py-sm pb-[max(16px,env(safe-area-inset-bottom))] shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
+    <nav className="fixed bottom-0 z-50 flex w-full items-center justify-between gap-inset-sm border-t border-outline-variant bg-surface px-margin-mobile py-inset-sm pb-[max(16px,env(safe-area-inset-bottom))] shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
       {showBack && onBack ? (
         <button
           type="button"
@@ -214,7 +214,7 @@ interface SectionCardProps {
 export function SectionCard({ children, className = '' }: SectionCardProps) {
   return (
     <div
-      className={`flex flex-col gap-md rounded-xl border border-outline-variant bg-surface-container-lowest p-md shadow-sm ${className}`}
+      className={`flex flex-col gap-inset-md rounded-xl border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm ${className}`}
     >
       {children}
     </div>
@@ -231,8 +231,8 @@ interface SectionHeaderProps {
 export function SectionHeader({ icon, title, subtitle, centered = false }: SectionHeaderProps) {
   if (centered) {
     return (
-      <div className="flex flex-col items-center gap-xs text-center">
-        <div className="mb-xs flex h-12 w-12 items-center justify-center rounded-full bg-primary-container/20 text-primary-container">
+      <div className="flex flex-col items-center gap-inset-xs text-center">
+        <div className="mb-inset-xs flex h-12 w-12 items-center justify-center rounded-full bg-primary-container/20 text-primary-container">
           <MaterialIcon name={icon} size={24} />
         </div>
         <h2 className="text-headline-md font-semibold text-on-background">{title}</h2>
@@ -242,7 +242,7 @@ export function SectionHeader({ icon, title, subtitle, centered = false }: Secti
   }
 
   return (
-    <div className="flex items-center gap-xs">
+    <div className="flex items-center gap-inset-xs">
       <div className="rounded-lg bg-surface-container-low p-2 text-primary-container">
         <MaterialIcon name={icon} />
       </div>
@@ -256,7 +256,7 @@ export function SectionHeader({ icon, title, subtitle, centered = false }: Secti
 
 export function TipCard({ children, icon = 'info' }: { children: ReactNode; icon?: string }) {
   return (
-    <div className="flex items-start gap-sm rounded-lg border border-primary-container/20 bg-primary-container/10 p-sm">
+    <div className="flex items-start gap-inset-sm rounded-lg border border-primary-container/20 bg-primary-container/10 p-inset-sm">
       <MaterialIcon name={icon} className="shrink-0 text-primary-container" />
       <p className="text-body-sm text-on-surface-variant">{children}</p>
     </div>

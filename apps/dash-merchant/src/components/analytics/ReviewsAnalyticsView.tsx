@@ -25,11 +25,11 @@ export default function ReviewsAnalyticsView({ data }: ReviewsAnalyticsViewProps
   }, [data.reviews, starFilter]);
 
   return (
-    <div className="flex flex-col gap-sm">
-      <h1 className="py-xs text-headline-lg-mobile text-on-surface">Reviews Analytics</h1>
+    <div className="flex flex-col gap-inset-sm">
+      <h1 className="py-inset-xs text-headline-lg-mobile text-on-surface">Reviews Analytics</h1>
 
-      <div className="grid grid-cols-2 gap-sm">
-        <div className="flex flex-col items-center justify-center rounded-lg border border-outline-variant bg-surface-container-lowest p-sm shadow-sm">
+      <div className="grid grid-cols-2 gap-inset-sm">
+        <div className="flex flex-col items-center justify-center rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm shadow-sm">
           <span className="text-headline-lg-mobile text-on-surface">
             {data.reviews.length > 0 ? data.avgRating.toFixed(1) : '—'}
           </span>
@@ -42,10 +42,10 @@ export default function ReviewsAnalyticsView({ data }: ReviewsAnalyticsViewProps
         </div>
       </div>
 
-      <div className="mt-2 flex flex-col gap-xs rounded-lg border border-outline-variant bg-surface-container-lowest p-sm shadow-sm">
+      <div className="mt-2 flex flex-col gap-inset-xs rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm shadow-sm">
         <h2 className="mb-1 text-label-md text-on-surface">Rating Distribution</h2>
         {data.ratingDistribution.map((row) => (
-          <div key={row.star} className="flex items-center gap-xs">
+          <div key={row.star} className="flex items-center gap-inset-xs">
             <span className="w-4 text-label-sm">{row.star}</span>
             <MaterialIcon name="star" filled className="text-[14px] text-primary-container" />
             <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface-variant">
@@ -56,7 +56,7 @@ export default function ReviewsAnalyticsView({ data }: ReviewsAnalyticsViewProps
         ))}
       </div>
 
-      <div className="hide-scrollbar mt-4 flex gap-xs overflow-x-auto pb-1">
+      <div className="hide-scrollbar mt-4 flex gap-inset-xs overflow-x-auto pb-1">
         {STAR_FILTERS.map((filter) => {
           const isActive = starFilter === filter.value;
           return (
@@ -76,7 +76,7 @@ export default function ReviewsAnalyticsView({ data }: ReviewsAnalyticsViewProps
         })}
       </div>
 
-      <div className="mt-2 flex flex-col gap-sm">
+      <div className="mt-2 flex flex-col gap-inset-sm">
         {filteredReviews.map((review) => (
           <ReviewCard key={review.id} review={review} />
         ))}
@@ -109,9 +109,9 @@ function StarRow({ rating }: { rating: number }) {
 
 function ReviewCard({ review }: { review: MerchantReview }) {
   return (
-    <div className="relative flex flex-col gap-xs overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest p-sm shadow-sm">
+    <div className="relative flex flex-col gap-inset-xs overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm shadow-sm">
       <div className="flex items-start justify-between pt-2">
-        <div className="flex items-center gap-xs">
+        <div className="flex items-center gap-inset-xs">
           <div
             className={`flex h-10 w-10 items-center justify-center rounded-full font-headline-md ${review.avatarClass}`}
           >

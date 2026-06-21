@@ -19,7 +19,7 @@ export default function AnalyticsMerchantHeader({
 
   return (
     <header className="fixed top-0 z-50 flex h-12 w-full items-center justify-between border-b border-outline-variant bg-surface px-margin-mobile">
-      <div className="flex min-w-0 items-center gap-xs">
+      <div className="flex min-w-0 items-center gap-inset-xs">
         <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-outline-variant bg-surface-container-high">
           {merchant.logo_url ? (
             <img src={merchant.logo_url} alt="" className="h-full w-full object-cover" />

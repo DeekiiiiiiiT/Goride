@@ -113,6 +113,26 @@ export function usePromotions(_merchantId: string) {
     return true;
   }, [createMutation, form]);
 
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, payload }: { id: string; payload: Record<string, unknown> }) =>
+      deliveryFetch(`/merchant/promotions/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['merchant-promotions'] });
+      toast.success('Promotion updated');
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const updatePromotion = useCallback(
+    (id: string, payload: Record<string, unknown>) => {
+      updateMutation.mutate({ id, payload });
+    },
+    [updateMutation],
+  );
+
   const promotions = query.data?.promotions ?? [];
   const activePromotions = promotions.filter((promotion) => promotion.status === 'active');
 
@@ -129,6 +149,7 @@ export function usePromotions(_merchantId: string) {
     setPromotionType,
     setAutoGenerateCode,
     createPromotion,
+    updatePromotion,
     resetForm: () => setForm(emptyForm()),
   };
 }

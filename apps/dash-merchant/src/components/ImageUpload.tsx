@@ -197,7 +197,7 @@ export default function ImageUpload({
       )}
 
       {label && (
-        <label className="mb-xs block text-label-md font-semibold text-on-surface">{label}</label>
+        <label className="mb-inset-xs block text-label-md font-semibold text-on-surface">{label}</label>
       )}
 
       <div
@@ -225,7 +225,7 @@ export default function ImageUpload({
 
         {isUploading && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/80">
-            <div className="partner-spinner mb-xs" role="status" aria-label="Uploading" />
+            <div className="partner-spinner mb-inset-xs" role="status" aria-label="Uploading" />
             <span className="text-body-sm text-on-surface">Uploading...</span>
           </div>
         )}
@@ -243,17 +243,17 @@ export default function ImageUpload({
             </button>
           </>
         ) : !isUploading ? (
-          <div className="flex flex-col items-center justify-center px-xs text-center">
+          <div className="flex flex-col items-center justify-center px-inset-xs text-center">
             {errorMessage ? (
               <>
-                <MaterialIcon name="error_outline" className="mb-xs text-3xl text-error" />
+                <MaterialIcon name="error_outline" className="mb-inset-xs text-3xl text-error" />
                 <span className="text-body-sm text-error">Upload failed</span>
               </>
             ) : dragActive ? (
               <>
                 <MaterialIcon
                   name="cloud_upload"
-                  className="mb-xs text-3xl text-primary-container"
+                  className="mb-inset-xs text-3xl text-primary-container"
                 />
                 <span className="text-body-sm font-medium text-primary-container">
                   Drop photo here
@@ -263,7 +263,7 @@ export default function ImageUpload({
               <>
                 <MaterialIcon
                   name={variant.emptyIcon}
-                  className={`mb-xs ${variant.emptyIconClass}`}
+                  className={`mb-inset-xs ${variant.emptyIconClass}`}
                 />
                 <span className={`text-center ${variant.primaryTextClass}`}>{displayText}</span>
                 {variant.showFileHint && (

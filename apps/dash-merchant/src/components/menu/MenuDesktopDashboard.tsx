@@ -61,7 +61,7 @@ export default function MenuDesktopDashboard({
   return (
     <main className="flex flex-1 overflow-hidden bg-background">
       <aside className="flex h-full w-80 shrink-0 flex-col border-r border-outline-variant bg-surface-container-lowest">
-        <div className="flex shrink-0 items-center justify-between border-b border-outline-variant bg-surface p-md">
+        <div className="flex shrink-0 items-center justify-between border-b border-outline-variant bg-surface p-inset-md">
           <h2 className="text-headline-md font-bold text-on-surface">Categories</h2>
           <button
             type="button"
@@ -73,12 +73,12 @@ export default function MenuDesktopDashboard({
           </button>
         </div>
 
-        <div className="flex flex-1 flex-col gap-base overflow-y-auto p-sm">
+        <div className="flex flex-1 flex-col gap-inset-base overflow-y-auto p-inset-sm">
           <SortableList
             items={categories}
             disabled={!dragEnabled || !onReorderCategories}
             onReorder={(ordered) => onReorderCategories?.(ordered)}
-            className="flex flex-col gap-base"
+            className="flex flex-col gap-inset-base"
             renderItem={(category, dragHandle) => {
               const count = itemsByCategory.get(category.id)?.length ?? 0;
               const isActive = category.id === activeCategoryId;
@@ -87,13 +87,13 @@ export default function MenuDesktopDashboard({
                 <button
                   type="button"
                   onClick={() => onSelectCategory(category.id)}
-                  className={`group flex w-full cursor-pointer items-center justify-between rounded-lg border p-sm transition-colors ${
+                  className={`group flex w-full cursor-pointer items-center justify-between rounded-lg border p-inset-sm transition-colors ${
                     isActive
                       ? 'border-outline-variant bg-surface-variant'
                       : 'border-transparent bg-surface-container-lowest hover:border-outline-variant hover:bg-surface-container-low'
                   }`}
                 >
-                  <div className="flex items-center gap-sm">
+                  <div className="flex items-center gap-inset-sm">
                     {dragHandle || (
                       <MaterialIcon
                         name="drag_indicator"
@@ -123,11 +123,11 @@ export default function MenuDesktopDashboard({
           />
         </div>
 
-        <div className="shrink-0 border-t border-outline-variant bg-surface p-md">
+        <div className="shrink-0 border-t border-outline-variant bg-surface p-inset-md">
           <button
             type="button"
             onClick={onAddCategory}
-            className="flex w-full items-center justify-center gap-sm rounded-lg border-2 border-dashed border-outline-variant bg-surface-container-lowest px-md py-sm text-label-md font-semibold text-primary transition-all hover:border-primary hover:bg-surface-variant"
+            className="flex w-full items-center justify-center gap-inset-sm rounded-lg border-2 border-dashed border-outline-variant bg-surface-container-lowest px-inset-md py-inset-sm text-label-md font-semibold text-primary transition-all hover:border-primary hover:bg-surface-variant"
           >
             <MaterialIcon name="add_circle" />
             Add Category
@@ -136,7 +136,7 @@ export default function MenuDesktopDashboard({
       </aside>
 
       <section className="relative flex h-full flex-1 flex-col overflow-hidden bg-background">
-        <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-outline-variant bg-surface/90 p-md backdrop-blur-md">
+        <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-outline-variant bg-surface/90 p-inset-md backdrop-blur-md">
           <div>
             <h2 className="text-headline-lg font-bold text-on-surface">
               {activeCategory?.name || 'Menu'}
@@ -148,14 +148,14 @@ export default function MenuDesktopDashboard({
           <button
             type="button"
             onClick={onAddItem}
-            className="flex h-12 items-center gap-sm rounded-lg bg-primary-container px-md py-sm text-label-md font-semibold text-on-primary shadow-sm transition-colors hover:bg-primary"
+            className="flex h-12 items-center gap-inset-sm rounded-lg bg-primary-container px-inset-md py-inset-sm text-label-md font-semibold text-on-primary shadow-sm transition-colors hover:bg-primary"
           >
             <MaterialIcon name="add" />
             Add Item
           </button>
         </div>
 
-        <div className="flex shrink-0 items-center justify-between border-b border-outline-variant bg-surface-container-lowest px-md py-sm">
+        <div className="flex shrink-0 items-center justify-between border-b border-outline-variant bg-surface-container-lowest px-inset-md py-inset-sm">
           <div className="relative w-64">
             <MaterialIcon
               name="search"
@@ -170,10 +170,10 @@ export default function MenuDesktopDashboard({
               className="w-full rounded-lg border border-outline-variant bg-surface py-2 pl-10 pr-4 text-body-sm transition-all focus:border-primary-container focus:outline-none focus:ring-1 focus:ring-primary-container"
             />
           </div>
-          <div className="flex items-center gap-sm">
+          <div className="flex items-center gap-inset-sm">
             <button
               type="button"
-              className="flex items-center gap-xs rounded-lg border border-outline-variant px-3 py-1.5 text-label-md font-semibold text-on-surface-variant transition-colors hover:bg-surface-variant"
+              className="flex items-center gap-inset-xs rounded-lg border border-outline-variant px-3 py-1.5 text-label-md font-semibold text-on-surface-variant transition-colors hover:bg-surface-variant"
             >
               <MaterialIcon name="filter_list" size={18} />
               Filter
@@ -197,7 +197,7 @@ export default function MenuDesktopDashboard({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-md">
+        <div className="flex-1 overflow-y-auto p-inset-md">
           {categoryItems.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center py-16 text-center">
               <MaterialIcon name="restaurant_menu" className="mb-4 text-outline" size={48} />
@@ -208,7 +208,7 @@ export default function MenuDesktopDashboard({
                 <button
                   type="button"
                   onClick={onAddItem}
-                  className="mt-4 rounded-lg bg-primary-container px-md py-sm text-label-md font-semibold text-on-primary-container"
+                  className="mt-4 rounded-lg bg-primary-container px-inset-md py-inset-sm text-label-md font-semibold text-on-primary-container"
                 >
                   Add Item
                 </button>
@@ -221,7 +221,7 @@ export default function MenuDesktopDashboard({
               onReorder={(ordered) => {
                 if (activeCategoryId) onReorderItems?.(activeCategoryId, ordered);
               }}
-              className="grid grid-cols-1 gap-md pb-xl md:grid-cols-2 xl:grid-cols-3"
+              className="grid grid-cols-1 gap-inset-md pb-inset-xl md:grid-cols-2 xl:grid-cols-3"
               renderItem={(item, dragHandle) => (
                 <div className="relative">
                   {dragHandle && (
@@ -271,25 +271,25 @@ function MenuItemCard({
             <MaterialIcon name="set_meal" className="text-outline-variant" size={48} />
           </div>
         )}
-        <div className="absolute right-2 top-2 flex cursor-pointer items-center gap-xs rounded border border-outline-variant/50 bg-surface/90 px-2 py-1 backdrop-blur-sm">
+        <div className="absolute right-2 top-2 flex cursor-pointer items-center gap-inset-xs rounded border border-outline-variant/50 bg-surface/90 px-2 py-1 backdrop-blur-sm">
           <span
             className={`h-2 w-2 rounded-full ${isLive ? 'bg-primary-container' : 'bg-error'}`}
           />
           <span className="text-label-sm text-on-surface">{isLive ? 'Live' : 'Hidden'}</span>
         </div>
-        <div className="absolute inset-0 flex items-center justify-center gap-sm bg-black/40 opacity-0 backdrop-blur-[2px] transition-opacity group-hover:opacity-100">
+        <div className="absolute inset-0 flex items-center justify-center gap-inset-sm bg-black/40 opacity-0 backdrop-blur-[2px] transition-opacity group-hover:opacity-100">
           <button
             type="button"
             onClick={onEdit}
-            className="flex items-center gap-xs rounded-lg bg-surface px-4 py-2 text-label-md font-semibold text-on-surface shadow-sm transition-colors hover:bg-surface-variant"
+            className="flex items-center gap-inset-xs rounded-lg bg-surface px-4 py-2 text-label-md font-semibold text-on-surface shadow-sm transition-colors hover:bg-surface-variant"
           >
             <MaterialIcon name="edit" size={18} />
             Edit
           </button>
         </div>
       </div>
-      <div className="flex flex-1 flex-col p-sm">
-        <div className="mb-xs flex items-start justify-between">
+      <div className="flex flex-1 flex-col p-inset-sm">
+        <div className="mb-inset-xs flex items-start justify-between">
           <h3
             className={`text-headline-md font-semibold leading-tight ${
               isLive ? 'text-on-surface' : 'text-outline'
@@ -302,10 +302,10 @@ function MenuItemCard({
             className="cursor-grab text-outline hover:text-on-surface-variant active:cursor-grabbing"
           />
         </div>
-        <p className="mb-sm line-clamp-2 flex-1 text-body-sm text-on-surface-variant">
+        <p className="mb-inset-sm line-clamp-2 flex-1 text-body-sm text-on-surface-variant">
           {item.description || 'No description'}
         </p>
-        <div className="flex items-center justify-between border-t border-outline-variant/50 pt-sm">
+        <div className="flex items-center justify-between border-t border-outline-variant/50 pt-inset-sm">
           <span
             className={`text-headline-md font-bold ${isLive ? 'text-on-surface' : 'text-outline'}`}
           >

@@ -76,7 +76,7 @@ export default function PauseOrdersSheet({
           <div className="h-1.5 w-12 rounded-full bg-tertiary-fixed" />
         </div>
 
-        <div className="flex items-center justify-between border-b border-outline-variant px-margin-mobile py-sm sm:px-md">
+        <div className="flex items-center justify-between border-b border-outline-variant px-margin-mobile py-inset-sm sm:px-inset-md">
           <h2
             id="pause-orders-title"
             className="text-headline-lg-mobile font-bold text-on-surface"
@@ -93,8 +93,8 @@ export default function PauseOrdersSheet({
           </button>
         </div>
 
-        <div className="flex-1 space-y-md overflow-y-auto px-margin-mobile py-sm sm:px-md">
-          <div className="space-y-sm">
+        <div className="flex-1 space-y-inset-md overflow-y-auto px-margin-mobile py-inset-sm sm:px-inset-md">
+          <div className="space-y-inset-sm">
             <h3 className="text-label-md font-semibold uppercase tracking-wider text-on-surface-variant">
               Duration
             </h3>
@@ -105,7 +105,7 @@ export default function PauseOrdersSheet({
                 return (
                   <label
                     key={option.value}
-                    className={`group flex h-14 cursor-pointer items-center rounded-lg p-sm transition-colors ${
+                    className={`group flex h-14 cursor-pointer items-center rounded-lg p-inset-sm transition-colors ${
                       selected
                         ? 'border-2 border-primary-container bg-surface-container-low'
                         : 'border border-outline-variant bg-surface-container-lowest hover:bg-surface-container-low'
@@ -132,7 +132,7 @@ export default function PauseOrdersSheet({
             </div>
           </div>
 
-          <div className="space-y-sm">
+          <div className="space-y-inset-sm">
             <h3 className="text-label-md font-semibold uppercase tracking-wider text-on-surface-variant">
               Reason{' '}
               <span className="normal-case tracking-normal text-on-surface-variant/70">
@@ -162,7 +162,7 @@ export default function PauseOrdersSheet({
           </div>
         </div>
 
-        <div className="space-y-4 rounded-b-2xl border-t border-outline-variant bg-surface p-margin-mobile sm:p-md">
+        <div className="space-y-4 rounded-b-2xl border-t border-outline-variant bg-surface p-margin-mobile sm:p-inset-md">
           <div className="flex items-start rounded-lg border border-error-container/50 bg-error-container/30 p-3">
             <MaterialIcon
               name="info"

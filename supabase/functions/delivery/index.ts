@@ -335,74 +335,6 @@ app.get("/merchants/:id", async (c) => {
   });
 });
 
-// Register new merchant (authenticated)
-app.post("/merchants", async (c) => {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
-  
-  const supabase = getSupabase(authHeader);
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-  
-  const body = await c.req.json();
-  const slug = body.name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
-  
-  const { data, error } = await supabase
-    .from("merchants")
-    .insert({
-      owner_id: user.id,
-      name: body.name,
-      slug: slug + "-" + Date.now().toString(36),
-      description: body.description,
-      address: body.address,
-      lat: body.lat,
-      lng: body.lng,
-      phone: body.phone,
-      email: body.email,
-      cuisine_type: body.cuisineType,
-      logo_url: body.logoUrl,
-      cover_image_url: body.coverImageUrl,
-      delivery_radius_km: body.deliveryRadiusKm || 10,
-    })
-    .select()
-    .single();
-  
-  if (error) return c.json({ error: error.message }, 500);
-
-  const merchantId = (data as Record<string, unknown>).id as string;
-  await supabase.from("merchant_team_members").insert({
-    merchant_id: merchantId,
-    user_id: user.id,
-    email: body.email || user.email,
-    name: body.ownerName || user.email?.split("@")[0] || "Owner",
-    role: "admin",
-    permissions: ["orders", "menu", "analytics", "payouts"],
-    is_owner: true,
-  });
-
-  return c.json({ merchant: data }, 201);
-});
-
-// Update merchant (owner only)
-app.put("/merchants/:id", async (c) => {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
-  
-  const supabase = getSupabase(authHeader);
-  const { id } = c.req.param();
-  const body = await c.req.json();
-  
-  const { data, error } = await supabase
-    .from("merchants")
-    .update(body)
-    .eq("id", id)
-    .select()
-    .single();
-  
-  if (error) return c.json({ error: error.message }, 500);
-  return c.json({ merchant: data });
-});
-
 // Get current user's merchant profile
 app.get("/merchant/profile", async (c) => {
   const authHeader = c.req.header("Authorization");
@@ -1243,11 +1175,16 @@ app.get("/admin/merchants/:id", async (c) => {
     console.error("[admin] Failed to fetch owner email:", e);
   }
 
+  const { extendAdminMerchantDetail } = await import("./merchant_application_routes.ts");
+  const { documents, bankAccount } = await extendAdminMerchantDetail(id);
+
   return c.json({
     merchant,
     hours: hours || [],
     auditLog: auditLog || [],
     ownerEmail,
+    documents,
+    bankAccount,
   });
 });
 
@@ -2484,7 +2421,9 @@ app.post("/merchant/notifications/:id/read", async (c) => {
   return c.json({ ok: true });
 });
 
+import { registerMerchantApplicationRoutes } from "./merchant_application_routes.ts";
 import { registerCourierAdminRoutes } from "./admin/courierRoutes.ts";
+registerMerchantApplicationRoutes(app);
 registerCourierAdminRoutes(app);
 
 Deno.serve(app.fetch);

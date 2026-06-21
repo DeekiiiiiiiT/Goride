@@ -69,8 +69,8 @@ export default function MenuManagementView({
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-md px-margin-mobile py-md md:px-margin-tablet">
-      <section className="flex flex-col gap-sm">
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-inset-md px-margin-mobile py-inset-md md:px-margin-tablet">
+      <section className="flex flex-col gap-inset-sm">
         <div className="flex items-end justify-between">
           <div>
             <button
@@ -94,14 +94,14 @@ export default function MenuManagementView({
             type="button"
             onClick={onMarkAllAvailable}
             disabled={soldOutCount === 0 || isMarkingAll}
-            className="flex h-12 items-center gap-xs rounded-lg border border-outline-variant bg-surface-container px-sm text-label-md text-primary transition-colors hover:bg-surface-container-high active:scale-95 disabled:opacity-50"
+            className="flex h-12 items-center gap-inset-xs rounded-lg border border-outline-variant bg-surface-container px-inset-sm text-label-md text-primary transition-colors hover:bg-surface-container-high active:scale-95 disabled:opacity-50"
           >
             <MaterialIcon name="done_all" className="text-[18px]" />
             Mark All Available
           </button>
         </div>
 
-        <div className="relative mt-xs w-full">
+        <div className="relative mt-inset-xs w-full">
           <MaterialIcon
             name="search"
             className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant"
@@ -117,8 +117,8 @@ export default function MenuManagementView({
       </section>
 
       {groupedSections.map((section) => (
-        <section key={section.id} className="mt-sm flex flex-col gap-base">
-          <h3 className="mb-xs pl-xs text-label-md uppercase tracking-wider text-on-surface-variant">
+        <section key={section.id} className="mt-inset-sm flex flex-col gap-inset-base">
+          <h3 className="mb-inset-xs pl-inset-xs text-label-md uppercase tracking-wider text-on-surface-variant">
             {section.name}
           </h3>
           {section.items.map((item) => {
@@ -126,14 +126,14 @@ export default function MenuManagementView({
             return (
               <div
                 key={item.id}
-                className={`relative flex items-center justify-between rounded-lg border p-sm transition-shadow hover:shadow-[0px_4px_12px_rgba(0,0,0,0.05)] ${
+                className={`relative flex items-center justify-between rounded-lg border p-inset-sm transition-shadow hover:shadow-[0px_4px_12px_rgba(0,0,0,0.05)] ${
                   soldOut
                     ? 'border-error/20 bg-surface-container-low'
                     : 'border-outline-variant bg-surface-container-lowest'
                 }`}
               >
                 {soldOut && <div className="absolute bottom-0 left-0 top-0 w-1 bg-error" />}
-                <div className={`flex items-center gap-sm ${soldOut ? 'opacity-60' : ''}`}>
+                <div className={`flex items-center gap-inset-sm ${soldOut ? 'opacity-60' : ''}`}>
                   {item.image_url ? (
                     <img
                       src={item.image_url}

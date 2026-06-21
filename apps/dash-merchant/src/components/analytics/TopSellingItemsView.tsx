@@ -9,7 +9,7 @@ interface TopSellingItemsViewProps {
 
 export default function TopSellingItemsView({ onBack, data }: TopSellingItemsViewProps) {
   return (
-    <div className="flex flex-col gap-sm">
+    <div className="flex flex-col gap-inset-sm">
       <button
         type="button"
         onClick={onBack}

@@ -52,7 +52,7 @@ export default function PreparingOrderDetail({
         <button
           type="button"
           onClick={onBack}
-          className="-ml-2 flex h-xl w-xl items-center justify-center rounded-full text-on-surface transition-all hover:bg-surface-container-low active:scale-95"
+          className="-ml-2 flex h-inset-xl w-inset-xl items-center justify-center rounded-full text-on-surface transition-all hover:bg-surface-container-low active:scale-95"
           aria-label="Go back"
         >
           <MaterialIcon name="arrow_back" />
@@ -63,7 +63,7 @@ export default function PreparingOrderDetail({
         <button
           type="button"
           onClick={() => window.print()}
-          className="-mr-2 flex h-xl w-xl items-center justify-center rounded-full text-primary transition-all hover:bg-surface-container-low active:scale-95"
+          className="-mr-2 flex h-inset-xl w-inset-xl items-center justify-center rounded-full text-primary transition-all hover:bg-surface-container-low active:scale-95"
           aria-label="Print order"
         >
           <MaterialIcon name="print" />
@@ -71,7 +71,7 @@ export default function PreparingOrderDetail({
       </header>
 
       <main className="partner-print-ticket mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-margin-mobile py-6 pb-[140px]">
-        <section className="group relative flex flex-col gap-md overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest p-md shadow-sm">
+        <section className="group relative flex flex-col gap-inset-md overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm">
           <div className="absolute left-0 top-0 h-1 w-full bg-surface-variant transition-colors duration-500 group-hover:bg-primary" />
           <div className="flex items-start justify-between">
             <div className="inline-flex w-fit items-center gap-1.5 rounded-full border border-outline-variant bg-surface-variant px-3 py-1.5 text-label-md font-semibold text-on-surface-variant shadow-sm">
@@ -98,9 +98,9 @@ export default function PreparingOrderDetail({
         </section>
 
         <section className="flex flex-col gap-4">
-          <div className="flex flex-col gap-sm rounded-xl border border-outline-variant bg-surface-container-lowest p-md shadow-sm">
-            <div className="flex items-center gap-sm">
-              <div className="flex h-xl w-xl shrink-0 items-center justify-center rounded-full bg-secondary-container text-headline-md font-semibold text-on-secondary-container shadow-inner">
+          <div className="flex flex-col gap-inset-sm rounded-xl border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm">
+            <div className="flex items-center gap-inset-sm">
+              <div className="flex h-inset-xl w-inset-xl shrink-0 items-center justify-center rounded-full bg-secondary-container text-headline-md font-semibold text-on-secondary-container shadow-inner">
                 {getInitials(order.customer.name)}
               </div>
               <div className="min-w-0 flex-1">
@@ -122,8 +122,8 @@ export default function PreparingOrderDetail({
               )}
             </div>
             <div className="my-1 h-px w-full bg-outline-variant opacity-50" />
-            <div className="flex items-center gap-sm">
-              <div className="flex h-xl w-xl shrink-0 items-center justify-center rounded-full border border-outline-variant bg-surface-container text-on-surface-variant">
+            <div className="flex items-center gap-inset-sm">
+              <div className="flex h-inset-xl w-inset-xl shrink-0 items-center justify-center rounded-full border border-outline-variant bg-surface-container text-on-surface-variant">
                 <MaterialIcon name="two_wheeler" />
               </div>
               <div className="min-w-0 flex-1">
@@ -139,7 +139,7 @@ export default function PreparingOrderDetail({
         </section>
 
         {instructions.length > 0 && (
-          <section className="relative flex items-start gap-sm overflow-hidden rounded-r-xl border-l-[6px] border-primary bg-surface-container p-md shadow-sm">
+          <section className="relative flex items-start gap-inset-sm overflow-hidden rounded-r-xl border-l-[6px] border-primary bg-surface-container p-inset-md shadow-sm">
             <div className="pointer-events-none absolute inset-0 bg-primary opacity-5" />
             <MaterialIcon name="notification_important" className="mt-0.5 text-primary" />
             <div className="relative z-10 w-full flex flex-col gap-2">
@@ -157,7 +157,7 @@ export default function PreparingOrderDetail({
           </section>
         )}
 
-        <section className="mt-2 flex flex-col gap-sm">
+        <section className="mt-2 flex flex-col gap-inset-sm">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-headline-md font-semibold text-on-surface">Kitchen Checklist</h2>
             <span className="rounded-md bg-surface-container px-2 py-1 text-label-sm text-on-surface-variant">
@@ -173,7 +173,7 @@ export default function PreparingOrderDetail({
                 key={index}
                 type="button"
                 onClick={() => toggleItem(index)}
-                className={`kitchen-checklist-item flex w-full items-start gap-sm rounded-xl border border-outline-variant bg-surface-container-lowest p-md text-left shadow-sm transition-transform active:scale-[0.99] ${
+                className={`kitchen-checklist-item flex w-full items-start gap-inset-sm rounded-xl border border-outline-variant bg-surface-container-lowest p-inset-md text-left shadow-sm transition-transform active:scale-[0.99] ${
                   checked ? 'kitchen-checklist-item--checked' : ''
                 }`}
               >

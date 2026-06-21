@@ -13,10 +13,11 @@ import PartnerAuthFlow from './components/PartnerAuthFlow';
 import PartnerBottomNav from './components/PartnerBottomNav';
 import AccountPendingPage from './pages/AccountPendingPage';
 import OnboardingCompletePage from './pages/OnboardingCompletePage';
-import { SignUpFormData } from './signup/types';
+import UnifiedOnboardingWizard from './components/onboarding/UnifiedOnboardingWizard';
 import { useMerchant } from './hooks/useMerchant';
 import { PartnerTab } from './lib/partner-utils';
 import { shouldShowGoLiveScreen } from './lib/go-live';
+import { isUnifiedOnboardingEnabled } from './lib/partner-rollout';
 import { DashAdminPortal } from './admin/DashAdminPortal';
 
 const SPLASH_MIN_MS = 1800;
@@ -41,8 +42,8 @@ function DashMerchantApp() {
   const [authReady, setAuthReady] = useState(false);
   const [splashComplete, setSplashComplete] = useState(false);
   const [currentPage, setCurrentPage] = useState<PartnerTab>('dashboard');
-  const [pendingSignUp, setPendingSignUp] = useState<SignUpFormData | null>(null);
   const [goLiveDismissed, setGoLiveDismissed] = useState(false);
+  const unifiedOnboarding = isUnifiedOnboardingEnabled();
 
   useEffect(() => {
     const splashStartedAt = Date.now();
@@ -69,11 +70,10 @@ function DashMerchantApp() {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    setPendingSignUp(null);
     setCurrentPage('dashboard');
   };
 
-  const showSplash = !splashComplete || !authReady || (!!session && merchantLoading && !pendingSignUp);
+  const showSplash = !splashComplete || !authReady || (!!session && merchantLoading);
 
   if (showSplash) {
     return <SplashPage />;
@@ -89,29 +89,24 @@ function DashMerchantApp() {
           setSession(nextSession);
           setCurrentPage('dashboard');
         }}
-        onSignUpComplete={async (data) => {
-          setPendingSignUp(data);
-          const {
-            data: { session: nextSession },
-          } = await supabase.auth.getSession();
-          setSession(nextSession);
-        }}
       />
     );
   }
 
-  if (pendingSignUp || (merchant && PENDING_STATUSES.has(merchant.verification_status))) {
-    return (
-      <AccountPendingPage
-        onSignOut={handleSignOut}
-        bankDetailsComplete={pendingSignUp ? !!pendingSignUp.bankName : true}
-      />
-    );
+  if (merchant && PENDING_STATUSES.has(merchant.verification_status)) {
+    return <AccountPendingPage onSignOut={handleSignOut} />;
   }
 
   if (!merchant) {
-    // Post-login merchant creation (OnboardingPage) is separate from pre-login PartnerSignUpFlow.
-    return <OnboardingPage session={session} onComplete={() => window.location.reload()} />;
+    if (unifiedOnboarding) {
+      return (
+        <UnifiedOnboardingWizard
+          session={session}
+          onComplete={() => void refetch()}
+        />
+      );
+    }
+    return <OnboardingPage session={session} onComplete={() => void refetch()} />;
   }
 
   if (

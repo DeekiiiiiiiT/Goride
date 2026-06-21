@@ -1,26 +1,59 @@
+import { useEffect, useState } from 'react';
 import { MaterialIcon } from '../signup/components/MaterialIcon';
+import { fetchApplicationStatus, type ApplicationStatusResponse } from '../lib/partner-api';
 
 interface AccountPendingPageProps {
   onSignOut: () => void;
-  bankDetailsComplete?: boolean;
 }
+
+type ItemStatus = 'complete' | 'review' | 'missing';
 
 interface StatusItem {
   label: string;
-  status: 'complete' | 'review';
+  status: ItemStatus;
 }
 
-export default function AccountPendingPage({
-  onSignOut,
-  bankDetailsComplete = true,
-}: AccountPendingPageProps) {
-  const items: StatusItem[] = [
-    { label: 'Restaurant info', status: 'complete' },
-    { label: 'Location', status: 'complete' },
-    { label: 'Business details', status: 'complete' },
-    { label: 'Identity verification', status: 'review' },
-    { label: 'Bank details', status: bankDetailsComplete ? 'complete' : 'review' },
+function mapChecklist(data: ApplicationStatusResponse): StatusItem[] {
+  const c = data.checklist;
+  return [
+    { label: 'Restaurant info', status: c.profileComplete ? 'complete' : 'missing' },
+    { label: 'Location', status: c.profileComplete ? 'complete' : 'missing' },
+    { label: 'Business details', status: c.profileComplete ? 'complete' : 'missing' },
+    { label: 'Identity verification', status: c.documentsComplete ? 'complete' : 'review' },
+    { label: 'Bank details', status: c.bankComplete ? 'complete' : 'missing' },
+    { label: 'Operating hours', status: c.hoursComplete ? 'complete' : 'missing' },
+    { label: 'Menu (5+ items)', status: c.menuComplete ? 'complete' : 'missing' },
   ];
+}
+
+function statusLabel(status: MerchantVerificationStatus | undefined): string {
+  switch (status) {
+    case 'in_review':
+      return 'Under review';
+    case 'docs_requested':
+      return 'Additional info needed';
+    case 'rejected':
+      return 'Not approved';
+    default:
+      return 'Pending review';
+  }
+}
+
+type MerchantVerificationStatus = 'pending' | 'in_review' | 'docs_requested' | 'rejected' | 'approved';
+
+export default function AccountPendingPage({ onSignOut }: AccountPendingPageProps) {
+  const [data, setData] = useState<ApplicationStatusResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    void fetchApplicationStatus()
+      .then(setData)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const items = data ? mapChecklist(data) : [];
+  const verificationStatus = data?.merchant?.verification_status as MerchantVerificationStatus | undefined;
+  const adminNote = data?.merchant?.verification_notes || data?.merchant?.rejection_reason;
 
   return (
     <div className="flex min-h-dvh flex-col items-center bg-background font-body-sm text-on-background">
@@ -40,8 +73,8 @@ export default function AccountPendingPage({
           </button>
         </header>
 
-        <main className="flex flex-1 flex-col items-center px-margin-mobile pb-xl pt-lg text-center">
-          <div className="relative mb-md flex h-48 w-48 items-center justify-center">
+        <main className="flex flex-1 flex-col items-center px-margin-mobile pb-inset-xl pt-inset-lg text-center">
+          <div className="relative mb-inset-md flex h-48 w-48 items-center justify-center">
             <img
               alt="Documents under review"
               className="h-full w-full object-contain"
@@ -49,43 +82,53 @@ export default function AccountPendingPage({
             />
           </div>
 
-          <h1 className="mb-xs text-headline-lg-mobile font-bold text-on-background">
-            Your application is under review
+          <h1 className="mb-inset-xs text-headline-lg-mobile font-bold text-on-background">
+            {verificationStatus === 'rejected' ? 'Application needs updates' : 'Your application is under review'}
           </h1>
-          <p className="mb-lg text-body-lg text-on-surface-variant">
-            We&apos;ll notify you within 1-2 business days.
+          <p className="mb-inset-sm text-body-lg text-on-surface-variant">
+            Status: {statusLabel(verificationStatus)}
           </p>
+          {adminNote && (
+            <p className="mb-inset-lg max-w-md rounded-lg border border-outline-variant bg-surface-container-low px-4 py-3 text-left text-body-sm text-on-surface">
+              {adminNote}
+            </p>
+          )}
+          {!adminNote && (
+            <p className="mb-inset-lg text-body-lg text-on-surface-variant">
+              We&apos;ll notify you within 1-2 business days.
+            </p>
+          )}
 
-          <div className="mb-lg w-full rounded-xl border border-outline-variant bg-surface-container-lowest p-md text-left shadow-sm">
-            <h2 className="mb-sm text-headline-md font-semibold text-on-surface">Application Status</h2>
-            <ul>
-              {items.map((item, index) => (
-                <li
-                  key={item.label}
-                  className={`flex min-h-[48px] items-center justify-between ${
-                    index < items.length - 1
-                      ? 'border-b border-surface-container-high pb-sm'
-                      : 'pt-sm'
-                  }`}
-                >
-                  <span
-                    className={`text-body-lg text-on-surface ${
-                      item.status === 'review' ? 'font-medium' : ''
+          <div className="mb-inset-lg w-full rounded-xl border border-outline-variant bg-surface-container-lowest p-inset-md text-left shadow-sm">
+            <h2 className="mb-inset-sm text-headline-md font-semibold text-on-surface">Application Status</h2>
+            {loading ? (
+              <p className="text-body-sm text-on-surface-variant">Loading checklist…</p>
+            ) : (
+              <ul>
+                {items.map((item, index) => (
+                  <li
+                    key={item.label}
+                    className={`flex min-h-[48px] items-center justify-between ${
+                      index < items.length - 1
+                        ? 'border-b border-surface-container-high pb-inset-sm'
+                        : 'pt-inset-sm'
                     }`}
                   >
-                    {item.label}
-                  </span>
-                  {item.status === 'complete' ? (
-                    <MaterialIcon name="check_circle" filled className="text-primary-container" />
-                  ) : (
-                    <span className="flex items-center gap-1 rounded-full bg-secondary-container px-3 py-1 text-label-sm font-medium text-on-secondary-container">
-                      <MaterialIcon name="hourglass_empty" size={14} />
-                      Under review
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
+                    <span className="text-body-lg text-on-surface">{item.label}</span>
+                    {item.status === 'complete' ? (
+                      <MaterialIcon name="check_circle" filled className="text-primary-container" />
+                    ) : item.status === 'review' ? (
+                      <span className="flex items-center gap-1 rounded-full bg-secondary-container px-3 py-1 text-label-sm font-medium text-on-secondary-container">
+                        <MaterialIcon name="hourglass_empty" size={14} />
+                        Under review
+                      </span>
+                    ) : (
+                      <span className="text-label-sm text-on-surface-variant">Incomplete</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           <div className="mt-auto flex w-full flex-col gap-4">

@@ -31,28 +31,28 @@ export default function PayoutDetailView({ payout, onBack }: PayoutDetailViewPro
         <div className="h-12 w-12" />
       </header>
 
-      <main className="mx-auto w-full max-w-[600px] flex-grow px-margin-mobile py-md pb-28 md:px-margin-tablet md:pb-md">
-        <section className="mb-md rounded-lg border border-outline-variant bg-surface-container-lowest p-md shadow-sm">
-          <div className="mb-md flex flex-col items-center justify-center text-center">
-            <span className="mb-xs text-label-md uppercase tracking-wider text-on-surface-variant">
+      <main className="mx-auto w-full max-w-[600px] flex-grow px-margin-mobile py-inset-md pb-28 md:px-margin-tablet md:pb-inset-md">
+        <section className="mb-inset-md rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm">
+          <div className="mb-inset-md flex flex-col items-center justify-center text-center">
+            <span className="mb-inset-xs text-label-md uppercase tracking-wider text-on-surface-variant">
               Total Payout
             </span>
-            <h2 className="mb-xs text-headline-lg-mobile text-primary md:text-headline-lg">
+            <h2 className="mb-inset-xs text-headline-lg-mobile text-primary md:text-headline-lg">
               {formatJmd(payout.totalAmount)}
             </h2>
-            <div className="mt-sm inline-flex items-center gap-xs rounded-full bg-primary-container px-sm py-xs text-on-primary-container">
+            <div className="mt-inset-sm inline-flex items-center gap-inset-xs rounded-full bg-primary-container px-inset-sm py-inset-xs text-on-primary-container">
               <MaterialIcon name="check_circle" filled className="text-[16px]" />
               <span className="text-label-md">{statusLabel}</span>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-sm border-t border-outline-variant pt-sm">
+          <div className="grid grid-cols-2 gap-inset-sm border-t border-outline-variant pt-inset-sm">
             <div>
-              <span className="mb-base block text-label-sm text-on-surface-variant">Payout Date</span>
+              <span className="mb-inset-base block text-label-sm text-on-surface-variant">Payout Date</span>
               <span className="block text-body-sm text-on-surface">{payout.payoutDate}</span>
             </div>
             <div>
-              <span className="mb-base block text-label-sm text-on-surface-variant">Bank Account</span>
-              <div className="flex items-center gap-xs">
+              <span className="mb-inset-base block text-label-sm text-on-surface-variant">Bank Account</span>
+              <div className="flex items-center gap-inset-xs">
                 <MaterialIcon name="account_balance" className="text-[16px] text-on-surface-variant" />
                 <span className="block text-body-sm text-on-surface">{payout.bankAccountMasked}</span>
               </div>
@@ -60,24 +60,24 @@ export default function PayoutDetailView({ payout, onBack }: PayoutDetailViewPro
           </div>
         </section>
 
-        <section className="mb-xl rounded-lg border border-outline-variant bg-surface-container-lowest p-md shadow-sm">
-          <h3 className="mb-md text-headline-md text-on-surface">Breakdown</h3>
-          <div className="space-y-sm">
-            <div className="flex items-center justify-between py-xs">
+        <section className="mb-inset-xl rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm">
+          <h3 className="mb-inset-md text-headline-md text-on-surface">Breakdown</h3>
+          <div className="space-y-inset-sm">
+            <div className="flex items-center justify-between py-inset-xs">
               <span className="text-body-sm text-on-surface">Order earnings</span>
               <span className="text-body-sm text-on-surface">{formatJmd(payout.orderEarnings)}</span>
             </div>
-            <div className="flex items-center justify-between py-xs">
+            <div className="flex items-center justify-between py-inset-xs">
               <span className="text-body-sm text-on-surface">Tips</span>
               <span className="text-body-sm text-on-surface">{formatJmd(payout.tips)}</span>
             </div>
-            <div className="flex items-center justify-between py-xs">
+            <div className="flex items-center justify-between py-inset-xs">
               <span className="text-body-sm text-on-surface">Adjustments (Refunds)</span>
               <span className="text-body-sm text-error">
                 {formatSignedJmd(payout.adjustments)}
               </span>
             </div>
-            <div className="flex items-center justify-between py-xs">
+            <div className="flex items-center justify-between py-inset-xs">
               <span className="text-body-sm text-on-surface">
                 Platform fees ({payout.platformFeePercent}%)
               </span>
@@ -85,7 +85,7 @@ export default function PayoutDetailView({ payout, onBack }: PayoutDetailViewPro
                 {formatSignedJmd(-payout.platformFee)}
               </span>
             </div>
-            <div className="mt-sm flex items-center justify-between border-t border-outline-variant pt-sm">
+            <div className="mt-inset-sm flex items-center justify-between border-t border-outline-variant pt-inset-sm">
               <span className="text-label-md uppercase tracking-wider text-on-surface">
                 Net Amount
               </span>
@@ -99,7 +99,7 @@ export default function PayoutDetailView({ payout, onBack }: PayoutDetailViewPro
         <button
           type="button"
           onClick={() => toast.info('Statement download is coming soon')}
-          className="flex h-xl w-full items-center justify-center gap-sm rounded-lg bg-primary-container text-label-md text-on-primary-container shadow-sm transition-all hover:opacity-90 active:scale-95"
+          className="flex h-inset-xl w-full items-center justify-center gap-inset-sm rounded-lg bg-primary-container text-label-md text-on-primary-container shadow-sm transition-all hover:opacity-90 active:scale-95"
         >
           <MaterialIcon name="download" />
           Download Statement

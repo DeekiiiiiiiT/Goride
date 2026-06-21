@@ -12,7 +12,7 @@ export default function PartnerSkeleton({ variant = 'list', count = 3 }: Partner
 
   if (variant === 'card') {
     return (
-      <div className="grid grid-cols-2 gap-xs">
+      <div className="grid grid-cols-2 gap-inset-xs">
         {Array.from({ length: count }).map((_, index) => (
           <div
             key={index}
@@ -24,7 +24,7 @@ export default function PartnerSkeleton({ variant = 'list', count = 3 }: Partner
   }
 
   return (
-    <div className="flex flex-col gap-xs">
+    <div className="flex flex-col gap-inset-xs">
       {Array.from({ length: count }).map((_, index) => (
         <div
           key={index}

@@ -109,13 +109,13 @@ export default function HelpSupportView({
         </button>
       </header>
 
-      <main className="mx-auto max-w-screen-md px-margin-mobile py-md md:px-margin-tablet">
-        <div className="mb-lg hidden items-center justify-between md:flex">
+      <main className="mx-auto max-w-screen-md px-margin-mobile py-inset-md md:px-margin-tablet">
+        <div className="mb-inset-lg hidden items-center justify-between md:flex">
           <h1 className="text-headline-lg font-bold text-primary">Help &amp; Support</h1>
           <MaterialIcon name="contact_support" size={32} className="text-primary" />
         </div>
 
-        <div className="relative mb-lg">
+        <div className="relative mb-inset-lg">
           <MaterialIcon
             name="search"
             className="absolute left-4 top-1/2 -translate-y-1/2 text-outline"
@@ -130,8 +130,8 @@ export default function HelpSupportView({
           />
         </div>
 
-        <div className="mb-lg flex flex-col items-start justify-between gap-4 rounded-lg border border-error bg-error-container/20 p-md sm:flex-row sm:items-center">
-          <div className="flex items-center gap-sm">
+        <div className="mb-inset-lg flex flex-col items-start justify-between gap-4 rounded-lg border border-error bg-error-container/20 p-inset-md sm:flex-row sm:items-center">
+          <div className="flex items-center gap-inset-sm">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-error/10">
               <MaterialIcon name="error" filled className="text-error" />
             </div>
@@ -151,14 +151,14 @@ export default function HelpSupportView({
           </a>
         </div>
 
-        <h2 className="mb-sm text-headline-md text-on-surface">Quick Topics</h2>
-        <div className="mb-lg grid grid-cols-2 gap-gutter sm:grid-cols-3">
+        <h2 className="mb-inset-sm text-headline-md text-on-surface">Quick Topics</h2>
+        <div className="mb-inset-lg grid grid-cols-2 gap-gutter sm:grid-cols-3">
           {filteredTopics.map((topic) => (
             <button
               key={topic.id}
               type="button"
               onClick={() => handleTopicClick(topic)}
-              className="flex flex-col items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-lowest p-sm text-center shadow-sm transition-all hover:shadow-md active:-translate-y-px"
+              className="flex flex-col items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm text-center shadow-sm transition-all hover:shadow-md active:-translate-y-px"
             >
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-surface-container text-primary">
                 <MaterialIcon name={topic.icon} />
@@ -169,33 +169,33 @@ export default function HelpSupportView({
         </div>
 
         {filteredTopics.length === 0 && searchQuery && (
-          <p className="mb-lg text-body-sm text-on-surface-variant">No quick topics match your search.</p>
+          <p className="mb-inset-lg text-body-sm text-on-surface-variant">No quick topics match your search.</p>
         )}
 
-        <h2 className="mb-sm text-headline-md text-on-surface">Common Questions</h2>
-        <div className="mb-lg divide-y divide-outline-variant overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest">
+        <h2 className="mb-inset-sm text-headline-md text-on-surface">Common Questions</h2>
+        <div className="mb-inset-lg divide-y divide-outline-variant overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest">
           {filteredQuestions.map((article) => (
             <button
               key={article.id}
               type="button"
               onClick={() => handleArticleClick(article)}
-              className="flex min-h-[64px] w-full items-center justify-between p-md text-left transition-colors hover:bg-surface-container-lowest active:bg-surface-container-low"
+              className="flex min-h-[64px] w-full items-center justify-between p-inset-md text-left transition-colors hover:bg-surface-container-lowest active:bg-surface-container-low"
             >
               <span className="pr-4 text-body-lg text-on-surface">{article.title}</span>
               <MaterialIcon name="chevron_right" className="text-outline" />
             </button>
           ))}
           {filteredQuestions.length === 0 && (
-            <p className="p-md text-body-sm text-on-surface-variant">No articles match your search.</p>
+            <p className="p-inset-md text-body-sm text-on-surface-variant">No articles match your search.</p>
           )}
         </div>
 
-        <h2 className="mb-sm text-headline-md text-on-surface">Still need help?</h2>
-        <div className="grid grid-cols-1 gap-sm">
+        <h2 className="mb-inset-sm text-headline-md text-on-surface">Still need help?</h2>
+        <div className="grid grid-cols-1 gap-inset-sm">
           <button
             type="button"
             onClick={handleLiveChat}
-            className="flex items-center gap-4 rounded-lg border border-outline-variant bg-surface-container-lowest p-md shadow-sm transition-all hover:shadow-md active:-translate-y-px"
+            className="flex items-center gap-4 rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm transition-all hover:shadow-md active:-translate-y-px"
           >
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary-container/20 text-primary-container">
               <MaterialIcon name="chat" />
@@ -205,7 +205,7 @@ export default function HelpSupportView({
 
           <a
             href={`mailto:${SUPPORT_EMAIL}`}
-            className="flex items-center gap-4 rounded-lg border border-outline-variant bg-surface-container-lowest p-md shadow-sm transition-all hover:shadow-md active:-translate-y-px"
+            className="flex items-center gap-4 rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm transition-all hover:shadow-md active:-translate-y-px"
           >
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-surface-container text-on-surface-variant">
               <MaterialIcon name="email" />
@@ -215,7 +215,7 @@ export default function HelpSupportView({
 
           <a
             href={`tel:${SUPPORT_PHONE}`}
-            className="flex items-center gap-4 rounded-lg border border-outline-variant bg-surface-container-lowest p-md shadow-sm transition-all hover:shadow-md active:-translate-y-px"
+            className="flex items-center gap-4 rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm transition-all hover:shadow-md active:-translate-y-px"
           >
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-surface-container text-on-surface-variant">
               <MaterialIcon name="phone" />

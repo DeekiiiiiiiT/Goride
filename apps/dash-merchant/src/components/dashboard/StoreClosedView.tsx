@@ -25,9 +25,9 @@ export default function StoreClosedView({
   onActionClick,
 }: StoreClosedViewProps) {
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-col items-center px-margin-mobile py-md pt-20 md:px-margin-tablet">
-      <div className="mb-xl mt-lg flex w-full flex-col items-center justify-center text-center">
-        <div className="relative mb-md flex h-32 w-32 items-center justify-center overflow-hidden rounded-full bg-surface-container">
+    <main className="mx-auto flex w-full max-w-3xl flex-col items-center px-margin-mobile py-inset-md pt-20 md:px-margin-tablet">
+      <div className="mb-inset-xl mt-inset-lg flex w-full flex-col items-center justify-center text-center">
+        <div className="relative mb-inset-md flex h-32 w-32 items-center justify-center overflow-hidden rounded-full bg-surface-container">
           <MaterialIcon name="storefront" className="text-6xl text-tertiary-container" size={64} />
           <div className="absolute right-6 top-4 flex animate-pulse flex-col items-end gap-1 opacity-50">
             <span className="text-xs text-tertiary-container">z</span>
@@ -36,10 +36,10 @@ export default function StoreClosedView({
           </div>
         </div>
 
-        <h2 className="mb-xs text-headline-lg-mobile font-bold text-on-background">
+        <h2 className="mb-inset-xs text-headline-lg-mobile font-bold text-on-background">
           Your store is currently closed
         </h2>
-        <p className="mb-lg text-body-lg text-on-surface-variant">{opensLabel}</p>
+        <p className="mb-inset-lg text-body-lg text-on-surface-variant">{opensLabel}</p>
 
         <button
           type="button"
@@ -52,8 +52,8 @@ export default function StoreClosedView({
       </div>
 
       {pendingActions.length > 0 && (
-        <section className="flex w-full flex-col gap-sm">
-          <div className="mb-xs flex items-center justify-between">
+        <section className="flex w-full flex-col gap-inset-sm">
+          <div className="mb-inset-xs flex items-center justify-between">
             <h3 className="text-headline-md font-semibold text-on-surface">Pending Actions</h3>
             <span className="rounded-md bg-surface-container-high px-2 py-1 text-label-sm text-on-surface-variant">
               {pendingActions.length} task{pendingActions.length === 1 ? '' : 's'}
@@ -65,7 +65,7 @@ export default function StoreClosedView({
               key={action.id}
               type="button"
               onClick={() => onActionClick(action)}
-              className="flex min-h-[64px] cursor-pointer items-center gap-sm rounded-lg border border-outline-variant bg-surface p-sm text-left transition-shadow hover:shadow-md"
+              className="flex min-h-[64px] cursor-pointer items-center gap-inset-sm rounded-lg border border-outline-variant bg-surface p-inset-sm text-left transition-shadow hover:shadow-md"
             >
               <div
                 className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full ${

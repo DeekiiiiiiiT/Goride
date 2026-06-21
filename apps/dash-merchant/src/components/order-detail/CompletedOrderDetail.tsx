@@ -29,7 +29,7 @@ export default function CompletedOrderDetail({ order, onBack }: CompletedOrderDe
   return (
     <div className="min-h-dvh bg-background pb-20 text-on-background">
       <header className="sticky top-0 z-50 mx-auto flex h-16 w-full items-center justify-between border-b border-outline-variant bg-surface px-margin-mobile shadow-sm">
-        <div className="flex items-center gap-xs">
+        <div className="flex items-center gap-inset-xs">
           <button
             type="button"
             onClick={onBack}
@@ -42,15 +42,15 @@ export default function CompletedOrderDetail({ order, onBack }: CompletedOrderDe
         </div>
       </header>
 
-      <main className="mx-auto flex max-w-md flex-col gap-sm p-margin-mobile">
-        <div className="relative flex flex-col gap-xs overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest p-sm">
+      <main className="mx-auto flex max-w-md flex-col gap-inset-sm p-margin-mobile">
+        <div className="relative flex flex-col gap-inset-xs overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm">
           <div className="absolute left-0 right-0 top-0 h-1 bg-primary" />
-          <div className="flex items-start justify-between pt-base">
+          <div className="flex items-start justify-between pt-inset-base">
             <div>
               <span className="text-label-md font-semibold uppercase text-on-surface-variant">
                 Order ID
               </span>
-              <h2 className="mt-base text-headline-lg-mobile font-bold text-on-background">
+              <h2 className="mt-inset-base text-headline-lg-mobile font-bold text-on-background">
                 #{order.order_number}
               </h2>
             </div>
@@ -64,15 +64,15 @@ export default function CompletedOrderDetail({ order, onBack }: CompletedOrderDe
             </div>
           </div>
           {completedAt && (
-            <p className="mt-xs text-body-sm text-on-surface-variant">
+            <p className="mt-inset-xs text-body-sm text-on-surface-variant">
               {formatCompletedAt(completedAt)}
             </p>
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-sm">
-          <div className="flex flex-col gap-xs rounded-lg border border-outline-variant bg-surface-container-lowest p-sm">
-            <div className="mb-base flex h-8 w-8 items-center justify-center rounded-full bg-surface-container text-primary">
+        <div className="grid grid-cols-2 gap-inset-sm">
+          <div className="flex flex-col gap-inset-xs rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm">
+            <div className="mb-inset-base flex h-8 w-8 items-center justify-center rounded-full bg-surface-container text-primary">
               <MaterialIcon name="restaurant" size={18} />
             </div>
             <span className="text-label-sm uppercase text-on-surface-variant">Prep Time</span>
@@ -80,8 +80,8 @@ export default function CompletedOrderDetail({ order, onBack }: CompletedOrderDe
               {prepMins != null ? `${prepMins} min` : '—'}
             </span>
           </div>
-          <div className="flex flex-col gap-xs rounded-lg border border-outline-variant bg-surface-container-lowest p-sm">
-            <div className="mb-base flex h-8 w-8 items-center justify-center rounded-full bg-surface-container text-primary">
+          <div className="flex flex-col gap-inset-xs rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm">
+            <div className="mb-inset-base flex h-8 w-8 items-center justify-center rounded-full bg-surface-container text-primary">
               <MaterialIcon name="two_wheeler" size={18} />
             </div>
             <span className="text-label-sm uppercase text-on-surface-variant">Delivery Time</span>
@@ -91,8 +91,8 @@ export default function CompletedOrderDetail({ order, onBack }: CompletedOrderDe
           </div>
         </div>
 
-        <div className="flex flex-col gap-sm rounded-lg border border-outline-variant bg-surface-container-lowest p-sm">
-          <h3 className="border-b border-outline-variant pb-xs text-label-md font-semibold uppercase text-on-surface-variant">
+        <div className="flex flex-col gap-inset-sm rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm">
+          <h3 className="border-b border-outline-variant pb-inset-xs text-label-md font-semibold uppercase text-on-surface-variant">
             Earnings Breakdown
           </h3>
           <div className="flex items-center justify-between">
@@ -103,19 +103,19 @@ export default function CompletedOrderDetail({ order, onBack }: CompletedOrderDe
             <span className="text-body-sm">Platform Fee</span>
             <span className="text-body-sm">- {formatJmd(platformFee)}</span>
           </div>
-          <div className="flex items-center justify-between border-t border-dashed border-outline-variant pt-xs">
+          <div className="flex items-center justify-between border-t border-dashed border-outline-variant pt-inset-xs">
             <span className="text-body-lg font-medium text-on-background">Your Earnings</span>
             <span className="text-headline-md font-semibold text-primary">{formatJmd(earnings)}</span>
           </div>
         </div>
 
         {(rating > 0 || order.customer_review) && (
-          <div className="flex flex-col gap-xs rounded-lg border border-outline-variant bg-surface-container-lowest p-sm">
-            <h3 className="mb-xs border-b border-outline-variant pb-xs text-label-md font-semibold uppercase text-on-surface-variant">
+          <div className="flex flex-col gap-inset-xs rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm">
+            <h3 className="mb-inset-xs border-b border-outline-variant pb-inset-xs text-label-md font-semibold uppercase text-on-surface-variant">
               Customer Feedback
             </h3>
             {rating > 0 && (
-              <div className="mb-xs flex items-center gap-1">
+              <div className="mb-inset-xs flex items-center gap-1">
                 {Array.from({ length: 5 }).map((_, index) => (
                   <MaterialIcon
                     key={index}
@@ -135,11 +135,11 @@ export default function CompletedOrderDetail({ order, onBack }: CompletedOrderDe
           </div>
         )}
 
-        <div className="flex flex-col gap-sm rounded-lg border border-outline-variant bg-surface-container-lowest p-sm">
-          <h3 className="mb-xs text-label-md font-semibold uppercase text-on-surface-variant">
+        <div className="flex flex-col gap-inset-sm rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm">
+          <h3 className="mb-inset-xs text-label-md font-semibold uppercase text-on-surface-variant">
             Order Timeline
           </h3>
-          <div className="relative space-y-md pl-6">
+          <div className="relative space-y-inset-md pl-6">
             <div className="absolute bottom-2 left-3 top-2 w-0.5 bg-primary" />
             {TIMELINE_STEPS.map((step) => {
               const timestamp = order[step.field];

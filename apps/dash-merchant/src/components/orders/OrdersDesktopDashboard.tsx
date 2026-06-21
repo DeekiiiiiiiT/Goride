@@ -87,8 +87,8 @@ export default function OrdersDesktopDashboard({
 
   return (
     <main className="flex flex-1 flex-col overflow-hidden bg-background">
-      <div className="flex shrink-0 gap-md overflow-x-auto border-b border-outline-variant bg-surface px-margin-tablet py-sm">
-        <div className="group relative min-w-[200px] flex-1 overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest px-md py-sm transition-shadow hover:shadow-sm">
+      <div className="flex shrink-0 gap-inset-md overflow-x-auto border-b border-outline-variant bg-surface px-margin-tablet py-inset-sm">
+        <div className="group relative min-w-[200px] flex-1 overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest px-inset-md py-inset-sm transition-shadow hover:shadow-sm">
           <span className="text-label-md font-semibold uppercase text-on-surface-variant">
             Today&apos;s Orders
           </span>
@@ -99,7 +99,7 @@ export default function OrdersDesktopDashboard({
             <MaterialIcon name="receipt_long" size={64} />
           </div>
         </div>
-        <div className="group relative min-w-[200px] flex-1 overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest px-md py-sm transition-shadow hover:shadow-sm">
+        <div className="group relative min-w-[200px] flex-1 overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest px-inset-md py-inset-sm transition-shadow hover:shadow-sm">
           <span className="text-label-md font-semibold uppercase text-on-surface-variant">
             Revenue
           </span>
@@ -110,7 +110,7 @@ export default function OrdersDesktopDashboard({
             <MaterialIcon name="payments" size={64} />
           </div>
         </div>
-        <div className="group relative min-w-[200px] flex-1 overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest px-md py-sm transition-shadow hover:shadow-sm">
+        <div className="group relative min-w-[200px] flex-1 overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest px-inset-md py-inset-sm transition-shadow hover:shadow-sm">
           <span className="text-label-md font-semibold uppercase text-on-surface-variant">
             Avg. Prep Time
           </span>
@@ -126,7 +126,7 @@ export default function OrdersDesktopDashboard({
 
       <div className="flex flex-1 gap-gutter overflow-hidden bg-surface-container-low p-gutter">
         <div className="flex w-[35%] min-w-[320px] flex-col overflow-hidden rounded-lg border border-outline-variant bg-surface shadow-sm">
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-outline-variant bg-surface-container-lowest px-md py-sm">
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-outline-variant bg-surface-container-lowest px-inset-md py-inset-sm">
             <h2 className="text-headline-md font-semibold text-on-surface">Queue</h2>
             <div className="flex gap-2">
               <span className="rounded-full bg-primary-container px-2 py-1 text-label-sm text-on-primary-container">
@@ -138,7 +138,7 @@ export default function OrdersDesktopDashboard({
             </div>
           </div>
 
-          <div className="flex flex-1 flex-col gap-xs overflow-y-auto p-sm">
+          <div className="flex flex-1 flex-col gap-inset-xs overflow-y-auto p-inset-sm">
             {isLoading ? (
               [1, 2, 3].map((item) => (
                 <div
@@ -162,7 +162,7 @@ export default function OrdersDesktopDashboard({
                     key={order.id}
                     type="button"
                     onClick={() => onSelectOrder(order.id)}
-                    className={`cursor-pointer rounded-lg p-sm text-left transition-all ${
+                    className={`cursor-pointer rounded-lg p-inset-sm text-left transition-all ${
                       isSelected
                         ? 'border border-secondary-fixed-dim bg-secondary-fixed shadow-sm ring-1 ring-secondary-fixed-dim'
                         : 'border border-outline-variant bg-surface-container-lowest hover:border-outline hover:shadow-sm'
@@ -211,13 +211,13 @@ export default function OrdersDesktopDashboard({
             </div>
           ) : (
             <>
-              <div className="flex shrink-0 items-start justify-between border-b border-outline-variant bg-surface-container-lowest px-xl py-md">
+              <div className="flex shrink-0 items-start justify-between border-b border-outline-variant bg-surface-container-lowest px-inset-xl py-inset-md">
                 <div>
-                  <div className="mb-1 flex items-center gap-xs">
+                  <div className="mb-1 flex items-center gap-inset-xs">
                     <span className="text-headline-lg font-bold text-on-surface">
                       Order #{selectedOrder.order_number}
                     </span>
-                    <span className="ml-sm rounded-full bg-primary-container px-3 py-1 text-label-md font-semibold uppercase text-on-primary-container">
+                    <span className="ml-inset-sm rounded-full bg-primary-container px-3 py-1 text-label-md font-semibold uppercase text-on-primary-container">
                       {getStatusBadge(selectedOrder).label}
                     </span>
                   </div>
@@ -236,9 +236,9 @@ export default function OrdersDesktopDashboard({
                 </div>
               </div>
 
-              <div className="flex flex-1 flex-col gap-lg overflow-y-auto bg-surface px-xl py-md">
-                <div className="grid grid-cols-2 gap-md rounded-lg border border-outline-variant bg-surface-container-low p-md">
-                  <div className="flex items-center gap-md border-r border-outline-variant pr-md">
+              <div className="flex flex-1 flex-col gap-inset-lg overflow-y-auto bg-surface px-inset-xl py-inset-md">
+                <div className="grid grid-cols-2 gap-inset-md rounded-lg border border-outline-variant bg-surface-container-low p-inset-md">
+                  <div className="flex items-center gap-inset-md border-r border-outline-variant pr-inset-md">
                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-secondary-fixed text-on-secondary-fixed">
                       <MaterialIcon name="person" size={24} />
                     </div>
@@ -260,7 +260,7 @@ export default function OrdersDesktopDashboard({
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-md pl-sm">
+                  <div className="flex items-center gap-inset-md pl-inset-sm">
                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-variant text-on-surface-variant">
                       <MaterialIcon name="two_wheeler" size={24} />
                     </div>
@@ -279,7 +279,7 @@ export default function OrdersDesktopDashboard({
                 </div>
 
                 <div>
-                  <h3 className="mb-sm border-b border-outline-variant pb-2 text-label-md font-semibold uppercase text-on-surface-variant">
+                  <h3 className="mb-inset-sm border-b border-outline-variant pb-2 text-label-md font-semibold uppercase text-on-surface-variant">
                     Order Items ({itemCount(selectedOrder)})
                   </h3>
                   <ul className="flex flex-col divide-y divide-outline-variant">
@@ -291,7 +291,7 @@ export default function OrdersDesktopDashboard({
                       return (
                         <li
                           key={`${item.name}-${index}`}
-                          className="-mx-2 flex items-start gap-md rounded px-2 py-md transition-colors hover:bg-surface-container-low"
+                          className="-mx-2 flex items-start gap-inset-md rounded px-2 py-inset-md transition-colors hover:bg-surface-container-low"
                         >
                           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded border border-outline-variant bg-surface-variant text-headline-md font-semibold text-on-surface-variant">
                             {item.quantity}x
@@ -313,7 +313,7 @@ export default function OrdersDesktopDashboard({
                               </div>
                             )}
                             {index === 0 && instruction && (
-                              <div className="mt-2 flex items-start gap-2 rounded border border-error/20 bg-error-container p-sm text-on-error-container">
+                              <div className="mt-2 flex items-start gap-2 rounded border border-error/20 bg-error-container p-inset-sm text-on-error-container">
                                 <MaterialIcon name="warning" size={18} className="mt-[2px]" />
                                 <span className="text-body-sm font-medium">
                                   Special Instruction: &quot;{instruction}&quot;
@@ -330,7 +330,7 @@ export default function OrdersDesktopDashboard({
                   </ul>
                 </div>
 
-                <div className="ml-auto w-full max-w-md border-t border-outline-variant pt-md">
+                <div className="ml-auto w-full max-w-md border-t border-outline-variant pt-inset-md">
                   <div className="flex justify-between py-1 text-body-sm text-on-surface-variant">
                     <span>Subtotal</span>
                     <span>{formatJmd(selectedOrder.subtotal)}</span>
@@ -348,23 +348,23 @@ export default function OrdersDesktopDashboard({
                 </div>
               </div>
 
-              <div className="flex shrink-0 items-center justify-between border-t border-outline-variant bg-surface-container-lowest px-xl py-md">
+              <div className="flex shrink-0 items-center justify-between border-t border-outline-variant bg-surface-container-lowest px-inset-xl py-inset-md">
                 <button
                   type="button"
                   onClick={onContactSupport}
-                  className="flex h-12 items-center gap-2 rounded-lg border border-outline px-md py-3 text-label-md font-semibold text-on-surface transition-colors hover:bg-surface-container-low active:scale-95"
+                  className="flex h-12 items-center gap-2 rounded-lg border border-outline px-inset-md py-3 text-label-md font-semibold text-on-surface transition-colors hover:bg-surface-container-low active:scale-95"
                 >
                   <MaterialIcon name="help" size={18} />
                   Contact Support
                 </button>
-                <div className="flex gap-sm">
+                <div className="flex gap-inset-sm">
                   {selectedOrder.status === 'placed' && (
                     <>
                       <button
                         type="button"
                         disabled={isSubmitting}
                         onClick={() => onReject(selectedOrder.id)}
-                        className="h-12 rounded-lg border border-error px-md py-3 text-label-md font-semibold text-error transition-colors hover:bg-error-container active:scale-95 disabled:opacity-50"
+                        className="h-12 rounded-lg border border-error px-inset-md py-3 text-label-md font-semibold text-error transition-colors hover:bg-error-container active:scale-95 disabled:opacity-50"
                       >
                         Reject Order
                       </button>
@@ -372,7 +372,7 @@ export default function OrdersDesktopDashboard({
                         type="button"
                         disabled={isSubmitting}
                         onClick={() => onStartPreparing(selectedOrder.id)}
-                        className="flex h-12 items-center gap-2 rounded-lg bg-primary-container px-xl py-3 text-label-md font-semibold text-on-primary-container shadow-sm transition-colors hover:bg-primary-fixed active:scale-95 disabled:opacity-50"
+                        className="flex h-12 items-center gap-2 rounded-lg bg-primary-container px-inset-xl py-3 text-label-md font-semibold text-on-primary-container shadow-sm transition-colors hover:bg-primary-fixed active:scale-95 disabled:opacity-50"
                       >
                         <MaterialIcon name="skillet" size={18} />
                         Start Preparing
@@ -384,7 +384,7 @@ export default function OrdersDesktopDashboard({
                       type="button"
                       disabled={isSubmitting}
                       onClick={() => onStartPreparing(selectedOrder.id)}
-                      className="flex h-12 items-center gap-2 rounded-lg bg-primary-container px-xl py-3 text-label-md font-semibold text-on-primary-container shadow-sm transition-colors hover:bg-primary-fixed active:scale-95 disabled:opacity-50"
+                      className="flex h-12 items-center gap-2 rounded-lg bg-primary-container px-inset-xl py-3 text-label-md font-semibold text-on-primary-container shadow-sm transition-colors hover:bg-primary-fixed active:scale-95 disabled:opacity-50"
                     >
                       <MaterialIcon name="skillet" size={18} />
                       Start Preparing
@@ -395,14 +395,14 @@ export default function OrdersDesktopDashboard({
                       type="button"
                       disabled={isSubmitting}
                       onClick={() => onMarkReady(selectedOrder.id)}
-                      className="flex h-12 items-center gap-2 rounded-lg bg-primary-container px-xl py-3 text-label-md font-semibold text-on-primary-container shadow-sm transition-colors hover:bg-primary-fixed active:scale-95 disabled:opacity-50"
+                      className="flex h-12 items-center gap-2 rounded-lg bg-primary-container px-inset-xl py-3 text-label-md font-semibold text-on-primary-container shadow-sm transition-colors hover:bg-primary-fixed active:scale-95 disabled:opacity-50"
                     >
                       <MaterialIcon name="check_circle" size={18} />
                       Mark Ready for Pickup
                     </button>
                   )}
                   {selectedOrder.status === 'ready' && (
-                    <span className="flex h-12 items-center gap-2 rounded-lg border border-primary-container px-xl py-3 text-label-md font-semibold text-primary">
+                    <span className="flex h-12 items-center gap-2 rounded-lg border border-primary-container px-inset-xl py-3 text-label-md font-semibold text-primary">
                       <MaterialIcon name="check_circle" size={18} />
                       Waiting for Pickup
                     </span>

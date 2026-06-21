@@ -17,6 +17,8 @@ export interface Merchant {
   logo_url: string;
   cover_image_url: string;
   address: string;
+  lat?: number | null;
+  lng?: number | null;
   phone: string;
   email: string;
   cuisine_type: string;

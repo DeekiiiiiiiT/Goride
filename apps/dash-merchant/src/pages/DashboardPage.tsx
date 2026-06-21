@@ -470,14 +470,14 @@ export default function DashboardPage({ merchant, onNavigate }: DashboardPagePro
           onActionClick={handlePendingActionClick}
         />
       ) : (
-      <main className="mx-auto flex max-w-screen-xl flex-col gap-md px-margin-mobile pt-sm md:px-margin-tablet">
+      <main className="mx-auto flex max-w-screen-xl flex-col gap-inset-md px-margin-mobile pt-inset-sm md:px-margin-tablet">
         {newOrders.length > 0 && (
           <button
             type="button"
             onClick={() => onNavigate('orders')}
-            className="partner-pulse-banner flex cursor-pointer items-center justify-between rounded-lg border border-primary-container p-sm transition-transform active:scale-95"
+            className="partner-pulse-banner flex cursor-pointer items-center justify-between rounded-lg border border-primary-container p-inset-sm transition-transform active:scale-95"
           >
-            <div className="flex items-center gap-xs text-label-md font-semibold text-primary-container">
+            <div className="flex items-center gap-inset-xs text-label-md font-semibold text-primary-container">
               <MaterialIcon name="notifications_active" filled />
               <span>
                 {newOrders.length} new order{newOrders.length === 1 ? '' : 's'} waiting
@@ -488,8 +488,8 @@ export default function DashboardPage({ merchant, onNavigate }: DashboardPagePro
         )}
 
         <section>
-          <h2 className="mb-sm text-headline-md font-semibold text-on-surface">Today&apos;s Snapshot</h2>
-          <div className="no-scrollbar flex gap-sm overflow-x-auto pb-xs">
+          <h2 className="mb-inset-sm text-headline-md font-semibold text-on-surface">Today&apos;s Snapshot</h2>
+          <div className="no-scrollbar flex gap-inset-sm overflow-x-auto pb-inset-xs">
             {SNAPSHOT_ICONS.map((card) => {
               const isRevenue = card.key === 'revenue';
               const content = (
@@ -508,7 +508,7 @@ export default function DashboardPage({ merchant, onNavigate }: DashboardPagePro
                     key={card.key}
                     type="button"
                     onClick={() => onNavigate('earnings')}
-                    className="flex min-w-[160px] shrink-0 flex-col gap-xs rounded-lg border border-outline-variant bg-surface-container-lowest p-sm text-left shadow-sm transition-transform active:scale-95 hover:bg-surface-container-low"
+                    className="flex min-w-[160px] shrink-0 flex-col gap-inset-xs rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm text-left shadow-sm transition-transform active:scale-95 hover:bg-surface-container-low"
                   >
                     {content}
                   </button>
@@ -518,7 +518,7 @@ export default function DashboardPage({ merchant, onNavigate }: DashboardPagePro
               return (
                 <div
                   key={card.key}
-                  className="flex min-w-[160px] shrink-0 flex-col gap-xs rounded-lg border border-outline-variant bg-surface-container-lowest p-sm shadow-sm"
+                  className="flex min-w-[160px] shrink-0 flex-col gap-inset-xs rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm shadow-sm"
                 >
                   {content}
                 </div>
@@ -527,12 +527,12 @@ export default function DashboardPage({ merchant, onNavigate }: DashboardPagePro
           </div>
         </section>
 
-        <section className="grid grid-cols-3 gap-xs">
+        <section className="grid grid-cols-3 gap-inset-xs">
           <button
             type="button"
             onClick={() => setPauseSheetOpen(true)}
             disabled={!merchant.is_accepting_orders}
-            className="flex min-h-[80px] flex-col items-center justify-center gap-xs rounded-lg border border-warning bg-warning/10 py-sm text-label-md font-semibold text-[#d97706] transition-transform active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex min-h-[80px] flex-col items-center justify-center gap-inset-xs rounded-lg border border-warning bg-warning/10 py-inset-sm text-label-md font-semibold text-[#d97706] transition-transform active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <MaterialIcon name="pause_circle" />
             <span className="text-center">Pause Orders</span>
@@ -540,7 +540,7 @@ export default function DashboardPage({ merchant, onNavigate }: DashboardPagePro
           <button
             type="button"
             onClick={() => onNavigate('menu')}
-            className="flex min-h-[80px] flex-col items-center justify-center gap-xs rounded-lg border border-outline-variant bg-surface-container-lowest py-sm text-label-md font-semibold text-on-surface shadow-sm transition-transform active:scale-95"
+            className="flex min-h-[80px] flex-col items-center justify-center gap-inset-xs rounded-lg border border-outline-variant bg-surface-container-lowest py-inset-sm text-label-md font-semibold text-on-surface shadow-sm transition-transform active:scale-95"
           >
             <MaterialIcon name="restaurant_menu" />
             <span className="text-center">View Menu</span>
@@ -548,7 +548,7 @@ export default function DashboardPage({ merchant, onNavigate }: DashboardPagePro
           <button
             type="button"
             onClick={() => onNavigate('menu')}
-            className="flex min-h-[80px] flex-col items-center justify-center gap-xs rounded-lg border border-outline-variant bg-surface-container-lowest py-sm text-label-md font-semibold text-on-surface shadow-sm transition-transform active:scale-95"
+            className="flex min-h-[80px] flex-col items-center justify-center gap-inset-xs rounded-lg border border-outline-variant bg-surface-container-lowest py-inset-sm text-label-md font-semibold text-on-surface shadow-sm transition-transform active:scale-95"
           >
             <MaterialIcon name="inventory_2" />
             <span className="text-center">Sold Out</span>
@@ -556,7 +556,7 @@ export default function DashboardPage({ merchant, onNavigate }: DashboardPagePro
         </section>
 
         <section>
-          <div className="mb-sm flex items-end justify-between">
+          <div className="mb-inset-sm flex items-end justify-between">
             <h2 className="text-headline-md font-semibold text-on-surface">Active Orders</h2>
             <button
               type="button"
@@ -567,16 +567,16 @@ export default function DashboardPage({ merchant, onNavigate }: DashboardPagePro
             </button>
           </div>
 
-          <div className="flex flex-col gap-sm">
+          <div className="flex flex-col gap-inset-sm">
             {previewOrders.length === 0 ? (
-              <div className="rounded-lg border border-outline-variant bg-surface-container-lowest p-md text-center text-body-sm text-on-surface-variant shadow-sm">
+              <div className="rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-md text-center text-body-sm text-on-surface-variant shadow-sm">
                 No active orders right now.
               </div>
             ) : (
               previewOrders.map((order) => (
                 <div
                   key={order.id}
-                  className={`flex flex-col gap-sm rounded-lg border bg-surface-container-lowest p-sm shadow-sm ${
+                  className={`flex flex-col gap-inset-sm rounded-lg border bg-surface-container-lowest p-inset-sm shadow-sm ${
                     order.isNew ? 'border-primary-container' : 'border-outline-variant'
                   }`}
                 >
@@ -600,7 +600,7 @@ export default function DashboardPage({ merchant, onNavigate }: DashboardPagePro
                       {order.timer}
                     </div>
                   </div>
-                  <div className="flex items-center justify-between border-t border-outline-variant pt-sm">
+                  <div className="flex items-center justify-between border-t border-outline-variant pt-inset-sm">
                     <span
                       className={`text-label-md font-semibold ${
                         order.isNew ? 'text-primary-container' : 'text-on-surface-variant'
@@ -627,14 +627,14 @@ export default function DashboardPage({ merchant, onNavigate }: DashboardPagePro
         </section>
 
         <section>
-          <h2 className="mb-sm text-headline-md font-semibold text-on-surface">Recent Activity</h2>
-          <div className="flex flex-col gap-sm rounded-lg border border-outline-variant bg-surface-container-lowest p-sm shadow-sm">
+          <h2 className="mb-inset-sm text-headline-md font-semibold text-on-surface">Recent Activity</h2>
+          <div className="flex flex-col gap-inset-sm rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm shadow-sm">
             {recentActivity.map((activity, index) => (
               <div
                 key={activity.id}
-                className={`flex items-start gap-sm ${
+                className={`flex items-start gap-inset-sm ${
                   index < recentActivity.length - 1
-                    ? 'border-b border-outline-variant pb-sm'
+                    ? 'border-b border-outline-variant pb-inset-sm'
                     : ''
                 }`}
               >

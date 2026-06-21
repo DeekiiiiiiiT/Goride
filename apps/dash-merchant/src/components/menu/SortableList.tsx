@@ -29,7 +29,7 @@ function DragHandle({ listeners, attributes }: { listeners?: Record<string, unkn
   return (
     <button
       type="button"
-      className="cursor-grab rounded-full p-xs text-on-surface-variant hover:bg-surface-container active:cursor-grabbing"
+      className="cursor-grab rounded-full p-inset-xs text-on-surface-variant hover:bg-surface-container active:cursor-grabbing"
       aria-label="Drag to reorder"
       {...listeners}
       {...attributes}

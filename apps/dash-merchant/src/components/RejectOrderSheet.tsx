@@ -164,7 +164,7 @@ export default function RejectOrderSheet({
             type="button"
             disabled={!reason || isSubmitting}
             onClick={handleConfirm}
-            className="flex h-xl w-full items-center justify-center rounded-full bg-error text-label-md font-semibold text-on-error transition-all hover:bg-[#a61717] active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-error focus:ring-offset-2 focus:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-inset-xl w-full items-center justify-center rounded-full bg-error text-label-md font-semibold text-on-error transition-all hover:bg-[#a61717] active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-error focus:ring-offset-2 focus:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isSubmitting ? 'Rejecting...' : 'Confirm Rejection'}
           </button>

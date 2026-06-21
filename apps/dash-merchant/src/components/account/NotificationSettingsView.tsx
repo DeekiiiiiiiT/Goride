@@ -54,8 +54,8 @@ interface ToggleRowProps {
 
 function ToggleRow({ id, label, description, checked, disabled, onChange }: ToggleRowProps) {
   return (
-    <div className="flex min-h-[64px] items-center justify-between py-sm">
-      <div className="pr-sm">
+    <div className="flex min-h-[64px] items-center justify-between py-inset-sm">
+      <div className="pr-inset-sm">
         <p className="text-body-lg text-on-background">{label}</p>
         {description && <p className="text-body-sm text-tertiary">{description}</p>}
       </div>
@@ -121,7 +121,7 @@ export default function NotificationSettingsView({
   return (
     <div className="fixed inset-0 z-[60] flex min-h-dvh flex-col bg-background pb-24 pt-16 text-on-background">
       <header className="fixed top-0 z-50 flex h-16 w-full items-center justify-between border-b border-outline-variant bg-surface px-margin-mobile">
-        <div className="flex items-center gap-sm">
+        <div className="flex items-center gap-inset-sm">
           <button
             type="button"
             onClick={onBack}
@@ -134,9 +134,9 @@ export default function NotificationSettingsView({
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-3xl flex-grow flex-col gap-md p-margin-mobile md:p-margin-tablet">
-        <section className="rounded-lg border border-outline-variant bg-surface-container-lowest p-sm shadow-sm md:p-md">
-          <h2 className="mb-md text-headline-md text-on-background">Alert Preferences</h2>
+      <main className="mx-auto flex w-full max-w-3xl flex-grow flex-col gap-inset-md p-margin-mobile md:p-margin-tablet">
+        <section className="rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm shadow-sm md:p-inset-md">
+          <h2 className="mb-inset-md text-headline-md text-on-background">Alert Preferences</h2>
           <div className="flex flex-col divide-y divide-surface-dim">
             <ToggleRow
               id="toggle_new_orders"
@@ -198,10 +198,10 @@ export default function NotificationSettingsView({
           </div>
         </section>
 
-        <section className="rounded-lg border border-outline-variant bg-surface-container-lowest p-sm shadow-sm md:p-md">
-          <h2 className="mb-md text-headline-md text-on-background">Kitchen Sound Settings</h2>
-          <div className="flex flex-col gap-md">
-            <div className="flex flex-col gap-xs">
+        <section className="rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm shadow-sm md:p-inset-md">
+          <h2 className="mb-inset-md text-headline-md text-on-background">Kitchen Sound Settings</h2>
+          <div className="flex flex-col gap-inset-md">
+            <div className="flex flex-col gap-inset-xs">
               <label className="text-label-md text-on-background" htmlFor="sound_select">
                 Order alert sound
               </label>
@@ -226,14 +226,14 @@ export default function NotificationSettingsView({
               </div>
             </div>
 
-            <div className="flex flex-col gap-sm py-2">
+            <div className="flex flex-col gap-inset-sm py-2">
               <div className="flex items-center justify-between">
                 <label className="text-label-md text-on-background" htmlFor="volume_slider">
                   Sound volume
                 </label>
                 <span className="text-body-sm text-tertiary">{settings.soundVolume}%</span>
               </div>
-              <div className="flex items-center gap-sm">
+              <div className="flex items-center gap-inset-sm">
                 <MaterialIcon name="volume_down" className="text-tertiary" />
                 <input
                   id="volume_slider"
@@ -250,8 +250,8 @@ export default function NotificationSettingsView({
               </div>
             </div>
 
-            <div className="border-t border-surface-dim pb-xs pt-md">
-              <div className="mb-md flex min-h-[48px] items-center justify-between">
+            <div className="border-t border-surface-dim pb-inset-xs pt-inset-md">
+              <div className="mb-inset-md flex min-h-[48px] items-center justify-between">
                 <p className="text-body-lg text-on-background">Vibration</p>
                 <SettingsToggle
                   id="toggle_vibration"
@@ -262,7 +262,7 @@ export default function NotificationSettingsView({
               <button
                 type="button"
                 onClick={handleTestSound}
-                className="flex min-h-[48px] w-full items-center justify-center gap-xs rounded-lg border border-primary-container bg-surface-container-lowest text-label-md text-primary-container transition-colors hover:bg-surface-container-low"
+                className="flex min-h-[48px] w-full items-center justify-center gap-inset-xs rounded-lg border border-primary-container bg-surface-container-lowest text-label-md text-primary-container transition-colors hover:bg-surface-container-low"
               >
                 <MaterialIcon name="play_arrow" />
                 Test Sound

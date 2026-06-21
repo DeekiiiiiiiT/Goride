@@ -25,11 +25,11 @@ function CategoryMenuItemRow({
 
   return (
     <div
-      className={`flex min-h-[64px] items-center gap-sm rounded-lg border border-outline-variant p-sm transition-shadow ${
+      className={`flex min-h-[64px] items-center gap-inset-sm rounded-lg border border-outline-variant p-inset-sm transition-shadow ${
         soldOut ? 'opacity-75 grayscale-[20%]' : ''
       } bg-surface-container-lowest`}
     >
-      <div className="flex min-w-0 flex-1 items-center gap-sm" {...longPress}>
+      <div className="flex min-w-0 flex-1 items-center gap-inset-sm" {...longPress}>
         <div className="flex items-center">
           {dragHandle || (
             <span className="p-1 text-on-surface-variant">
@@ -41,7 +41,7 @@ function CategoryMenuItemRow({
         <button
           type="button"
           onClick={() => onEditItem(item)}
-          className="flex min-w-0 flex-1 items-center gap-sm text-left"
+          className="flex min-w-0 flex-1 items-center gap-inset-sm text-left"
         >
           <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-md bg-surface-container">
             {item.image_url ? (
@@ -76,7 +76,7 @@ function CategoryMenuItemRow({
         </button>
       </div>
 
-      <div className="flex items-center gap-md">
+      <div className="flex items-center gap-inset-md">
         <AvailabilityToggle
           checked={item.is_available}
           onChange={(isAvailable) => onToggleAvailability(item.id, isAvailable)}
@@ -117,7 +117,7 @@ export default function CategoryItemsView({
   return (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-50 flex h-16 w-full items-center justify-between border-b border-outline-variant bg-surface/80 px-margin-mobile backdrop-blur-md">
-        <div className="flex items-center gap-xs">
+        <div className="flex items-center gap-inset-xs">
           <button
             type="button"
             onClick={onBack}
@@ -136,7 +136,7 @@ export default function CategoryItemsView({
             items={items}
             disabled={!dragEnabled || !onReorderItems}
             onReorder={(ordered) => onReorderItems?.(ordered)}
-            className="space-y-sm"
+            className="space-y-inset-sm"
             renderItem={(item, dragHandle) => (
               <CategoryMenuItemRow
                 item={item}

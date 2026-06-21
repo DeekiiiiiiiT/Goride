@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { API_ENDPOINTS } from '@roam/api-client';
 import { toast } from 'sonner';
+import { isLocationComplete, type LocationValue } from '@roam/location';
+import PartnerLocationPicker from '../components/PartnerLocationPicker';
 import { MaterialIcon } from '../signup/components/MaterialIcon';
 import PartnerImageUploadField from '../components/onboarding/PartnerImageUploadField';
 import {
@@ -65,6 +67,11 @@ export default function OnboardingPage({ session, onComplete }: OnboardingPagePr
     description: '',
     cuisineType: '',
     address: '',
+    lat: null as number | null,
+    lng: null as number | null,
+    streetAddress: '',
+    city: '',
+    postalCode: '',
     deliveryRadius: 10,
     phone: '',
     email: session.user.email || '',
@@ -98,7 +105,16 @@ export default function OnboardingPage({ session, onComplete }: OnboardingPagePr
       case 1:
         return formData.name.trim().length >= 2;
       case 2:
-        return formData.address.trim().length >= 5;
+        return (
+          isLocationComplete({
+            lat: formData.lat ?? undefined,
+            lng: formData.lng ?? undefined,
+            streetAddress: formData.streetAddress,
+            city: formData.city,
+            postalCode: formData.postalCode,
+            formattedAddress: formData.address,
+          })
+        );
       case 3:
         return true;
       case 4:
@@ -142,6 +158,11 @@ export default function OnboardingPage({ session, onComplete }: OnboardingPagePr
           description: formData.description,
           cuisineType: formData.cuisineType,
           address: formData.address,
+          streetAddress: formData.streetAddress,
+          city: formData.city,
+          postalCode: formData.postalCode,
+          lat: formData.lat,
+          lng: formData.lng,
           deliveryRadiusKm: formData.deliveryRadius,
           phone: formData.phone,
           email: formData.email,
@@ -191,7 +212,7 @@ export default function OnboardingPage({ session, onComplete }: OnboardingPagePr
       <OnboardingHeader showSetupTitle={headerSetup} currentStep={currentStep} />
 
       <main
-        className={`mx-auto flex w-full max-w-lg flex-1 flex-col gap-md px-margin-mobile ${
+        className={`mx-auto flex w-full max-w-lg flex-1 flex-col gap-inset-md px-margin-mobile ${
           currentStep === 5 ? 'pt-40' : 'pt-24'
         }`}
       >
@@ -205,8 +226,8 @@ export default function OnboardingPage({ session, onComplete }: OnboardingPagePr
               subtitle="Tell us about your restaurant so customers can find you."
             />
             <hr className="border-outline-variant/50" />
-            <div className="flex flex-col gap-sm">
-              <div className="flex flex-col gap-base">
+            <div className="flex flex-col gap-inset-sm">
+              <div className="flex flex-col gap-inset-base">
                 <label className="text-label-md font-semibold text-on-surface" htmlFor="restaurant-name">
                   Restaurant Name <span className="text-error">*</span>
                 </label>
@@ -219,7 +240,7 @@ export default function OnboardingPage({ session, onComplete }: OnboardingPagePr
                   className={inputClass}
                 />
               </div>
-              <div className="flex flex-col gap-base">
+              <div className="flex flex-col gap-inset-base">
                 <div className="flex items-center justify-between">
                   <label className="text-label-md font-semibold text-on-surface" htmlFor="description">
                     Description
@@ -237,7 +258,7 @@ export default function OnboardingPage({ session, onComplete }: OnboardingPagePr
                   className={`${inputClass} min-h-[120px] resize-none py-3`}
                 />
               </div>
-              <div className="flex flex-col gap-base">
+              <div className="flex flex-col gap-inset-base">
                 <label className="text-label-md font-semibold text-on-surface" htmlFor="cuisine">
                   Primary Cuisine Type
                 </label>
@@ -274,33 +295,30 @@ export default function OnboardingPage({ session, onComplete }: OnboardingPagePr
               subtitle="Where is your restaurant located?"
               centered
             />
-            <div className="flex flex-col gap-sm">
-              <div className="flex flex-col gap-base">
-                <label className="text-label-md font-semibold text-on-surface-variant" htmlFor="address">
-                  Full Address <span className="text-error">*</span>
-                </label>
-                <div className="relative">
-                  <MaterialIcon
-                    name="search"
-                    className="absolute left-3 top-1/2 z-10 -translate-y-1/2 text-on-surface-variant"
-                    size={20}
-                  />
-                  <input
-                    id="address"
-                    type="text"
-                    value={formData.address}
-                    onChange={(e) => updateField('address', e.target.value)}
-                    placeholder="e.g. 123 Main St, City, Zip"
-                    className={`${inputClass} pl-10`}
-                  />
-                </div>
-              </div>
-              <div className="relative h-32 overflow-hidden rounded-lg border border-outline-variant bg-surface-container">
-                <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary-container/10 via-surface-container-low to-surface-container">
-                  <MaterialIcon name="location_on" filled className="text-4xl text-primary-container" />
-                </div>
-              </div>
-              <div className="mt-sm flex flex-col gap-base">
+            <div className="flex flex-col gap-inset-sm">
+              <PartnerLocationPicker
+                value={{
+                  lat: formData.lat ?? undefined,
+                  lng: formData.lng ?? undefined,
+                  streetAddress: formData.streetAddress,
+                  city: formData.city,
+                  postalCode: formData.postalCode,
+                  formattedAddress: formData.address,
+                }}
+                onChange={(loc: LocationValue) => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    lat: loc.lat,
+                    lng: loc.lng,
+                    streetAddress: loc.streetAddress,
+                    city: loc.city,
+                    postalCode: loc.postalCode,
+                    address: loc.formattedAddress,
+                  }));
+                }}
+                mapHeightClass="h-[280px]"
+              />
+              <div className="mt-inset-sm flex flex-col gap-inset-base">
                 <div className="flex items-center justify-between">
                   <label className="text-label-md font-semibold text-on-surface-variant" htmlFor="radius">
                     Delivery Radius
@@ -336,8 +354,8 @@ export default function OnboardingPage({ session, onComplete }: OnboardingPagePr
               subtitle="How can customers reach you?"
             />
             <hr className="border-outline-variant/50" />
-            <div className="flex flex-col gap-sm">
-              <div className="flex flex-col gap-base">
+            <div className="flex flex-col gap-inset-sm">
+              <div className="flex flex-col gap-inset-base">
                 <label className="text-label-md font-semibold text-on-surface" htmlFor="phone">
                   Phone Number
                 </label>
@@ -357,7 +375,7 @@ export default function OnboardingPage({ session, onComplete }: OnboardingPagePr
                   />
                 </div>
               </div>
-              <div className="flex flex-col gap-base">
+              <div className="flex flex-col gap-inset-base">
                 <label className="text-label-md font-semibold text-on-surface" htmlFor="email">
                   Email Address
                 </label>
@@ -377,7 +395,7 @@ export default function OnboardingPage({ session, onComplete }: OnboardingPagePr
                 </div>
                 <p className="ml-1 text-label-sm text-on-surface-variant">Used for official communications.</p>
               </div>
-              <div className="flex flex-col gap-base">
+              <div className="flex flex-col gap-inset-base">
                 <label className="text-label-md font-semibold text-on-surface" htmlFor="website">
                   Website <span className="font-normal text-on-surface-variant">(Optional)</span>
                 </label>
@@ -403,7 +421,7 @@ export default function OnboardingPage({ session, onComplete }: OnboardingPagePr
 
         {currentStep === 4 && (
           <SectionCard className="p-6">
-            <div className="mb-6 flex flex-col gap-xs">
+            <div className="mb-6 flex flex-col gap-inset-xs">
               <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
                 <MaterialIcon name="schedule" className="text-primary" size={28} />
               </div>
@@ -483,7 +501,7 @@ export default function OnboardingPage({ session, onComplete }: OnboardingPagePr
               title="Branding"
               subtitle="Add images to make your restaurant stand out"
             />
-            <div className="mt-sm flex flex-col gap-sm">
+            <div className="mt-inset-sm flex flex-col gap-inset-sm">
               <PartnerImageUploadField
                 label="Restaurant Logo"
                 hint="Upload Square"

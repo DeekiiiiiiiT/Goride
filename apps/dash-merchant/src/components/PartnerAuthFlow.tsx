@@ -2,20 +2,16 @@ import { useState } from 'react';
 import WelcomePage from '../pages/WelcomePage';
 import OnboardingCarouselPage from '../pages/OnboardingCarouselPage';
 import LoginPage from '../pages/LoginPage';
-import PartnerSignUpFlow from '../signup/PartnerSignUpFlow';
-import { INITIAL_SIGN_UP_DATA, SignUpFormData } from '../signup/types';
 
-type AuthStep = 'welcome' | 'onboarding' | 'signup' | 'login';
+type AuthStep = 'welcome' | 'onboarding' | 'login';
 
 interface PartnerAuthFlowProps {
   onLoginSuccess: () => void;
-  onSignUpComplete: (data: SignUpFormData) => void;
 }
 
-export default function PartnerAuthFlow({ onLoginSuccess, onSignUpComplete }: PartnerAuthFlowProps) {
+export default function PartnerAuthFlow({ onLoginSuccess }: PartnerAuthFlowProps) {
   const [step, setStep] = useState<AuthStep>('welcome');
   const [signUpMode, setSignUpMode] = useState(false);
-  const [signUpData, setSignUpData] = useState<SignUpFormData>(INITIAL_SIGN_UP_DATA);
 
   if (step === 'welcome') {
     return (
@@ -34,19 +30,6 @@ export default function PartnerAuthFlow({ onLoginSuccess, onSignUpComplete }: Pa
       <OnboardingCarouselPage
         onComplete={() => {
           setSignUpMode(true);
-          setStep('signup');
-        }}
-      />
-    );
-  }
-
-  if (step === 'signup') {
-    return (
-      <PartnerSignUpFlow
-        onBack={() => setStep('onboarding')}
-        onComplete={(data) => {
-          setSignUpData(data);
-          setSignUpMode(true);
           setStep('login');
         }}
       />
@@ -56,16 +39,9 @@ export default function PartnerAuthFlow({ onLoginSuccess, onSignUpComplete }: Pa
   return (
     <LoginPage
       initialSignUp={signUpMode}
-      initialEmail={signUpData.email}
-      onBack={() => setStep(signUpMode ? 'signup' : 'welcome')}
+      onBack={() => setStep(signUpMode ? 'onboarding' : 'welcome')}
       onApply={() => setStep('onboarding')}
-      onSuccess={() => {
-        if (signUpMode) {
-          onSignUpComplete(signUpData);
-        } else {
-          onLoginSuccess();
-        }
-      }}
+      onSuccess={onLoginSuccess}
     />
   );
 }

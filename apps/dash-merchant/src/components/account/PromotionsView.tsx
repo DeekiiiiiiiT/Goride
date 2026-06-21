@@ -22,6 +22,7 @@ export default function PromotionsView({ merchantId, onBack }: PromotionsViewPro
     setPromotionType,
     setAutoGenerateCode,
     createPromotion,
+    updatePromotion,
     resetForm,
     isLoading,
     isError,
@@ -87,16 +88,16 @@ export default function PromotionsView({ merchantId, onBack }: PromotionsViewPro
         </button>
       </header>
 
-      <main className="mx-auto flex max-w-7xl flex-col gap-lg px-margin-mobile pb-md pt-[88px] md:px-margin-tablet">
-        <section className="flex flex-col gap-sm">
+      <main className="mx-auto flex max-w-7xl flex-col gap-inset-lg px-margin-mobile pb-inset-md pt-[88px] md:px-margin-tablet">
+        <section className="flex flex-col gap-inset-sm">
           <h2 className="text-label-md uppercase tracking-wider text-on-surface-variant">
             Active Campaigns
           </h2>
-          <div className="hide-scrollbar -mx-margin-mobile flex gap-sm overflow-x-auto px-margin-mobile pb-4 md:mx-0 md:grid md:grid-cols-2 md:px-0 lg:grid-cols-3">
+          <div className="hide-scrollbar -mx-margin-mobile flex gap-inset-sm overflow-x-auto px-margin-mobile pb-4 md:mx-0 md:grid md:grid-cols-2 md:px-0 lg:grid-cols-3">
             {activePromotions.map((promotion) => (
               <article
                 key={promotion.id}
-                className="group relative flex min-w-[280px] flex-shrink-0 cursor-pointer flex-col gap-sm rounded-lg border border-outline-variant bg-surface-container-lowest p-md transition-shadow hover:shadow-md"
+                className="group relative flex min-w-[280px] flex-shrink-0 cursor-pointer flex-col gap-inset-sm rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-md transition-shadow hover:shadow-md"
               >
                 <div className="flex items-start justify-between">
                   <div className="flex w-fit items-center gap-1 rounded-full bg-primary-container px-3 py-1 text-label-sm text-on-primary">
@@ -105,7 +106,12 @@ export default function PromotionsView({ merchantId, onBack }: PromotionsViewPro
                   </div>
                   <button
                     type="button"
-                    onClick={() => toast.info('Edit promotion coming soon')}
+                    onClick={() => {
+                      const nextTitle = window.prompt('Promotion title', promotion.title);
+                      if (nextTitle?.trim()) {
+                        updatePromotion(promotion.id, { title: nextTitle.trim() });
+                      }
+                    }}
                     className="text-outline opacity-0 transition-colors hover:text-primary focus:opacity-100 group-hover:opacity-100"
                   >
                     <MaterialIcon name="edit" size={20} />
@@ -128,7 +134,9 @@ export default function PromotionsView({ merchantId, onBack }: PromotionsViewPro
                   <button
                     type="button"
                     onClick={() =>
-                      toast.message(promotion.title, { description: 'Stats view coming soon.' })
+                      toast.message(promotion.title, {
+                        description: `${promotion.redemptions} redemptions to date.`,
+                      })
                     }
                     className="text-label-md text-primary"
                   >
@@ -140,7 +148,7 @@ export default function PromotionsView({ merchantId, onBack }: PromotionsViewPro
           </div>
         </section>
 
-        <section className="flex flex-col justify-between rounded-lg border border-outline-variant bg-surface-container-lowest p-md shadow-sm">
+        <section className="flex flex-col justify-between rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm">
           <div>
             <h2 className="mb-1 text-headline-md font-bold text-on-surface">Performance Overview</h2>
             <p className="text-body-sm text-on-surface-variant">Redemptions over the last 7 days</p>

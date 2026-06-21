@@ -104,7 +104,7 @@ export default function AddOptionGroupSheet({
         role="dialog"
         aria-modal="true"
       >
-        <header className="flex items-center justify-between border-b border-outline-variant px-md py-sm">
+        <header className="flex items-center justify-between border-b border-outline-variant px-inset-md py-inset-sm">
           <h1 className="text-headline-md text-on-surface">
             {initialGroup ? 'Edit Option Group' : 'Add Option Group'}
           </h1>
@@ -117,9 +117,9 @@ export default function AddOptionGroupSheet({
           </button>
         </header>
 
-        <main className="flex-1 space-y-xl overflow-y-auto p-md">
-          <section className="space-y-md">
-            <div className="space-y-xs">
+        <main className="flex-1 space-y-inset-xl overflow-y-auto p-inset-md">
+          <section className="space-y-inset-md">
+            <div className="space-y-inset-xs">
               <label className="block text-label-md text-on-surface-variant" htmlFor="group-name">
                 Group Name
               </label>
@@ -129,18 +129,18 @@ export default function AddOptionGroupSheet({
                 value={group.name}
                 onChange={(event) => setGroup((prev) => ({ ...prev, name: event.target.value }))}
                 placeholder="e.g. Choose your sides"
-                className="w-full rounded border border-outline-variant bg-transparent p-sm text-body-lg text-on-surface outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
+                className="w-full rounded border border-outline-variant bg-transparent p-inset-sm text-body-lg text-on-surface outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
               />
             </div>
 
-            <div className="grid grid-cols-1 gap-md md:grid-cols-2">
-              <div className="space-y-xs">
+            <div className="grid grid-cols-1 gap-inset-md md:grid-cols-2">
+              <div className="space-y-inset-xs">
                 <span className="block text-label-md text-on-surface-variant">Selection Type</span>
-                <div className="flex rounded bg-surface-container p-base">
+                <div className="flex rounded bg-surface-container p-inset-base">
                   <button
                     type="button"
                     onClick={() => updateSelectionType('single')}
-                    className={`flex flex-1 items-center justify-center gap-xs rounded px-sm py-xs text-label-md ${
+                    className={`flex flex-1 items-center justify-center gap-inset-xs rounded px-inset-sm py-inset-xs text-label-md ${
                       selectionType === 'single'
                         ? 'border border-outline-variant bg-surface-container-lowest text-on-surface shadow-sm'
                         : 'text-on-surface-variant hover:bg-surface-container-highest'
@@ -152,7 +152,7 @@ export default function AddOptionGroupSheet({
                   <button
                     type="button"
                     onClick={() => updateSelectionType('multi')}
-                    className={`flex flex-1 items-center justify-center gap-xs rounded px-sm py-xs text-label-md ${
+                    className={`flex flex-1 items-center justify-center gap-inset-xs rounded px-inset-sm py-inset-xs text-label-md ${
                       selectionType === 'multi'
                         ? 'border border-outline-variant bg-surface-container-lowest text-on-surface shadow-sm'
                         : 'text-on-surface-variant hover:bg-surface-container-highest'
@@ -165,7 +165,7 @@ export default function AddOptionGroupSheet({
               </div>
 
               <div className="flex h-full items-center justify-between pt-6">
-                <label className="flex cursor-pointer items-center gap-xs text-body-lg text-on-surface">
+                <label className="flex cursor-pointer items-center gap-inset-xs text-body-lg text-on-surface">
                   Required Field
                   <MaterialIcon
                     name="info"
@@ -193,24 +193,24 @@ export default function AddOptionGroupSheet({
 
           <hr className="border-outline-variant" />
 
-          <section className="space-y-sm">
+          <section className="space-y-inset-sm">
             <h2 className="text-headline-md text-on-surface">Options</h2>
-            <div className="space-y-base">
+            <div className="space-y-inset-base">
               {group.options.map((option) => (
                 <div
                   key={option.id}
-                  className="group flex items-center gap-sm rounded border border-outline-variant bg-surface-container-lowest p-sm transition-colors hover:border-primary-container"
+                  className="group flex items-center gap-inset-sm rounded border border-outline-variant bg-surface-container-lowest p-inset-sm transition-colors hover:border-primary-container"
                 >
                   <div className="cursor-grab text-on-surface-variant opacity-50 transition-opacity group-hover:opacity-100">
                     <MaterialIcon name="drag_indicator" />
                   </div>
-                  <div className="grid flex-1 grid-cols-3 gap-sm">
+                  <div className="grid flex-1 grid-cols-3 gap-inset-sm">
                     <input
                       type="text"
                       value={option.name}
                       onChange={(event) => updateOption(option.id, 'name', event.target.value)}
                       placeholder="Option Name"
-                      className="col-span-2 border-b border-outline-variant bg-transparent py-xs text-body-lg text-on-surface outline-none placeholder:text-on-surface-variant focus:border-primary"
+                      className="col-span-2 border-b border-outline-variant bg-transparent py-inset-xs text-body-lg text-on-surface outline-none placeholder:text-on-surface-variant focus:border-primary"
                     />
                     <div className="relative flex items-center">
                       <span className="absolute left-0 text-body-lg text-on-surface-variant">+J$</span>
@@ -221,14 +221,14 @@ export default function AddOptionGroupSheet({
                           updateOption(option.id, 'priceAdjustment', parseFloat(event.target.value) || 0)
                         }
                         placeholder="Price"
-                        className="w-full border-b border-outline-variant bg-transparent py-xs pl-8 text-body-lg text-on-surface outline-none focus:border-primary"
+                        className="w-full border-b border-outline-variant bg-transparent py-inset-xs pl-8 text-body-lg text-on-surface outline-none focus:border-primary"
                       />
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => removeOption(option.id)}
-                    className="rounded-full p-xs text-on-surface-variant transition-colors hover:bg-error-container hover:text-error"
+                    className="rounded-full p-inset-xs text-on-surface-variant transition-colors hover:bg-error-container hover:text-error"
                   >
                     <MaterialIcon name="delete" className="text-[20px]" />
                   </button>
@@ -240,7 +240,7 @@ export default function AddOptionGroupSheet({
               onClick={() =>
                 setGroup((prev) => ({ ...prev, options: [...prev.options, createEmptyOption()] }))
               }
-              className="flex w-full items-center justify-center gap-xs rounded border-2 border-dashed border-outline-variant py-sm text-label-md text-on-surface-variant transition-colors hover:border-primary hover:bg-surface-container-low hover:text-primary"
+              className="flex w-full items-center justify-center gap-inset-xs rounded border-2 border-dashed border-outline-variant py-inset-sm text-label-md text-on-surface-variant transition-colors hover:border-primary hover:bg-surface-container-low hover:text-primary"
             >
               <MaterialIcon name="add" />
               Add Option
@@ -248,11 +248,11 @@ export default function AddOptionGroupSheet({
           </section>
         </main>
 
-        <footer className="flex justify-end gap-sm border-t border-outline-variant bg-surface-container-lowest p-md">
+        <footer className="flex justify-end gap-inset-sm border-t border-outline-variant bg-surface-container-lowest p-inset-md">
           <button
             type="button"
             onClick={onClose}
-            className="flex min-h-[48px] items-center justify-center rounded border border-outline px-lg text-label-md text-on-surface hover:bg-surface-container"
+            className="flex min-h-[48px] items-center justify-center rounded border border-outline px-inset-lg text-label-md text-on-surface hover:bg-surface-container"
           >
             Cancel
           </button>
@@ -260,7 +260,7 @@ export default function AddOptionGroupSheet({
             type="button"
             onClick={handleSave}
             disabled={!group.name.trim()}
-            className="flex min-h-[48px] items-center justify-center rounded bg-primary-container px-lg text-label-md text-surface-container-lowest shadow-sm hover:opacity-90 disabled:opacity-50"
+            className="flex min-h-[48px] items-center justify-center rounded bg-primary-container px-inset-lg text-label-md text-surface-container-lowest shadow-sm hover:opacity-90 disabled:opacity-50"
           >
             Save Option Group
           </button>

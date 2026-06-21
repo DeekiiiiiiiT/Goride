@@ -19,12 +19,12 @@ interface CreatePromotionViewProps {
 }
 
 const fieldClass =
-  'block h-12 w-full rounded-lg border border-outline-variant bg-surface px-sm text-body-lg text-on-surface outline-none transition-shadow placeholder:text-on-surface-variant/50 focus:border-primary focus:ring-2 focus:ring-primary';
+  'block h-12 w-full rounded-lg border border-outline-variant bg-surface px-inset-sm text-body-lg text-on-surface outline-none transition-shadow placeholder:text-on-surface-variant/50 focus:border-primary focus:ring-2 focus:ring-primary';
 
 function SectionCard({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="rounded-lg border border-outline-variant bg-surface-container-lowest p-sm shadow-sm">
-      <h2 className="mb-xs text-label-md uppercase tracking-wider text-on-surface-variant">
+    <section className="rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm shadow-sm">
+      <h2 className="mb-inset-xs text-label-md uppercase tracking-wider text-on-surface-variant">
         {title}
       </h2>
       {children}
@@ -85,11 +85,11 @@ export default function CreatePromotionView({
         <h1 className="flex-1 pr-12 text-center text-headline-md text-on-surface">New Promotion</h1>
       </header>
 
-      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-sm px-margin-mobile py-sm pb-32">
+      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-inset-sm px-margin-mobile py-inset-sm pb-32">
         <SectionCard title="Promotion Details">
-          <div className="mb-sm">
-            <span className="mb-xs block text-label-md text-on-surface">Promotion Type</span>
-            <div className="grid grid-cols-2 gap-xs">
+          <div className="mb-inset-sm">
+            <span className="mb-inset-xs block text-label-md text-on-surface">Promotion Type</span>
+            <div className="grid grid-cols-2 gap-inset-xs">
               {PROMOTION_TYPE_OPTIONS.map((option) => {
                 const isActive = form.type === option.value;
                 return (
@@ -112,12 +112,12 @@ export default function CreatePromotionView({
 
           {showDiscountValue && (
             <div>
-              <label className="mb-xs block text-label-md text-on-surface" htmlFor="discount-value">
+              <label className="mb-inset-xs block text-label-md text-on-surface" htmlFor="discount-value">
                 Discount Value
               </label>
               <div className="relative">
                 {discountSuffixPosition === 'left' && (
-                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-sm">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-inset-sm">
                     <span className="text-body-lg text-on-surface-variant">{discountSuffix}</span>
                   </div>
                 )}
@@ -130,7 +130,7 @@ export default function CreatePromotionView({
                   className={`${fieldClass} ${discountSuffixPosition === 'left' ? 'pl-12' : 'pr-10'}`}
                 />
                 {discountSuffixPosition === 'right' && (
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-sm">
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-inset-sm">
                     <span className="text-body-lg text-on-surface-variant">{discountSuffix}</span>
                   </div>
                 )}
@@ -140,8 +140,8 @@ export default function CreatePromotionView({
         </SectionCard>
 
         <SectionCard title="Conditions">
-          <div className="mb-sm">
-            <label className="mb-xs block text-label-md text-on-surface" htmlFor="applies-to">
+          <div className="mb-inset-sm">
+            <label className="mb-inset-xs block text-label-md text-on-surface" htmlFor="applies-to">
               Applies To
             </label>
             <div className="relative">
@@ -159,18 +159,18 @@ export default function CreatePromotionView({
                   </option>
                 ))}
               </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-sm">
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-inset-sm">
                 <MaterialIcon name="expand_more" className="text-on-surface-variant" />
               </div>
             </div>
           </div>
 
           <div>
-            <label className="mb-xs block text-label-md text-on-surface" htmlFor="min-order">
+            <label className="mb-inset-xs block text-label-md text-on-surface" htmlFor="min-order">
               Minimum Order (Optional)
             </label>
             <div className="relative">
-              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-sm">
+              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-inset-sm">
                 <span className="text-body-lg text-on-surface-variant">J$</span>
               </div>
               <input
@@ -187,8 +187,8 @@ export default function CreatePromotionView({
         </SectionCard>
 
         <SectionCard title="Schedule & Code">
-          <div className="mb-sm">
-            <div className="mb-xs flex items-center justify-between">
+          <div className="mb-inset-sm">
+            <div className="mb-inset-xs flex items-center justify-between">
               <span className="text-label-md text-on-surface">Promo Code</span>
               <div className="flex items-center gap-2">
                 <span className="text-label-sm text-on-surface-variant">Auto-generate</span>
@@ -212,9 +212,9 @@ export default function CreatePromotionView({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-sm">
+          <div className="grid grid-cols-2 gap-inset-sm">
             <div>
-              <label className="mb-xs block text-label-md text-on-surface" htmlFor="valid-from">
+              <label className="mb-inset-xs block text-label-md text-on-surface" htmlFor="valid-from">
                 Valid From
               </label>
               <div className="relative">
@@ -231,7 +231,7 @@ export default function CreatePromotionView({
               </div>
             </div>
             <div>
-              <label className="mb-xs block text-label-md text-on-surface" htmlFor="valid-until">
+              <label className="mb-inset-xs block text-label-md text-on-surface" htmlFor="valid-until">
                 Valid Until
               </label>
               <div className="relative">
@@ -251,8 +251,8 @@ export default function CreatePromotionView({
         </SectionCard>
 
         <SectionCard title="Eligibility & Limits">
-          <div className="mb-sm">
-            <span className="mb-xs block text-label-md text-on-surface">Customer Eligibility</span>
+          <div className="mb-inset-sm">
+            <span className="mb-inset-xs block text-label-md text-on-surface">Customer Eligibility</span>
             <div className="space-y-2">
               {ELIGIBILITY_OPTIONS.map((option) => {
                 const isSelected = form.customerEligibility === option.value;
@@ -281,7 +281,7 @@ export default function CreatePromotionView({
           </div>
 
           <div>
-            <span className="mb-xs block text-label-md text-on-surface">Usage Limits</span>
+            <span className="mb-inset-xs block text-label-md text-on-surface">Usage Limits</span>
             <div className="relative">
               <select
                 value={form.usageLimitType}
@@ -298,7 +298,7 @@ export default function CreatePromotionView({
                   </option>
                 ))}
               </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-sm">
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-inset-sm">
                 <MaterialIcon name="expand_more" className="text-on-surface-variant" />
               </div>
             </div>

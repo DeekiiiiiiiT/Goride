@@ -33,8 +33,8 @@ export default function BusinessDetailsStep({
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-md flex-1 flex-col px-margin-mobile pb-xl pt-8 md:px-margin-tablet">
-        <div className="mb-lg">
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col px-margin-mobile pb-inset-xl pt-8 md:px-margin-tablet">
+        <div className="mb-inset-lg">
           <h1 className="mb-2 text-headline-lg-mobile font-bold text-on-surface md:text-headline-lg">
             Business details
           </h1>
@@ -43,8 +43,8 @@ export default function BusinessDetailsStep({
           </p>
         </div>
 
-        <form className="flex flex-1 flex-col gap-md" onSubmit={(e) => e.preventDefault()}>
-          <div className="flex flex-col gap-xs">
+        <form className="flex flex-1 flex-col gap-inset-md" onSubmit={(e) => e.preventDefault()}>
+          <div className="flex flex-col gap-inset-xs">
             <label className="flex justify-between text-label-md font-semibold text-on-surface" htmlFor="biz_reg">
               Business registration number
               <span className="font-normal normal-case tracking-normal text-on-surface-variant">
@@ -61,7 +61,7 @@ export default function BusinessDetailsStep({
             />
           </div>
 
-          <div className="flex flex-col gap-xs">
+          <div className="flex flex-col gap-inset-xs">
             <label className="flex justify-between text-label-md font-semibold text-on-surface" htmlFor="tax_id">
               Tax ID / TRN
               <span className="font-normal normal-case tracking-normal text-on-surface-variant">
@@ -78,7 +78,7 @@ export default function BusinessDetailsStep({
             />
           </div>
 
-          <div className="mt-4 flex flex-col gap-xs">
+          <div className="mt-4 flex flex-col gap-inset-xs">
             <label className="text-label-md font-semibold text-on-surface">Average prep time</label>
             <p className="mb-2 text-body-sm text-on-surface-variant">
               Helps us calculate accurate pickup times for couriers.
@@ -102,7 +102,7 @@ export default function BusinessDetailsStep({
             </div>
           </div>
 
-          <div className="mb-xl mt-4 flex flex-col gap-xs">
+          <div className="mb-inset-xl mt-4 flex flex-col gap-inset-xs">
             <label className="text-label-md font-semibold text-on-surface" htmlFor="delivery_radius">
               Delivery radius preference
             </label>

@@ -1,3 +1,6 @@
+import type { LocationValue } from '@roam/location';
+import type { MerchantDocumentType } from '@roam/types';
+
 export type BusinessType =
   | 'restaurant'
   | 'cafe'
@@ -7,12 +10,20 @@ export type BusinessType =
 
 export type AccountType = 'checking' | 'savings';
 
+export interface UploadedDocumentRef {
+  id: string;
+  docType: MerchantDocumentType;
+  status: 'pending' | 'approved' | 'rejected';
+  fileName?: string;
+}
+
 export interface SignUpFormData {
   restaurantName: string;
   phone: string;
   email: string;
   businessType: BusinessType | '';
   cuisineTypes: string[];
+  location: Partial<LocationValue> | null;
   streetAddress: string;
   city: string;
   postalCode: string;
@@ -25,6 +36,13 @@ export interface SignUpFormData {
   idFrontFile: File | null;
   idBackFile: File | null;
   proofOfBusinessFile: File | null;
+  idFrontDoc: UploadedDocumentRef | null;
+  idBackDoc: UploadedDocumentRef | null;
+  proofOfBusinessDoc: UploadedDocumentRef | null;
+  description: string;
+  website: string;
+  logoUrl: string;
+  coverImageUrl: string;
   bankName: string;
   accountHolderName: string;
   accountNumber: string;
@@ -38,6 +56,7 @@ export const INITIAL_SIGN_UP_DATA: SignUpFormData = {
   email: '',
   businessType: '',
   cuisineTypes: [],
+  location: null,
   streetAddress: '',
   city: '',
   postalCode: '',
@@ -50,6 +69,13 @@ export const INITIAL_SIGN_UP_DATA: SignUpFormData = {
   idFrontFile: null,
   idBackFile: null,
   proofOfBusinessFile: null,
+  idFrontDoc: null,
+  idBackDoc: null,
+  proofOfBusinessDoc: null,
+  description: '',
+  website: '',
+  logoUrl: '',
+  coverImageUrl: '',
   bankName: '',
   accountHolderName: '',
   accountNumber: '',

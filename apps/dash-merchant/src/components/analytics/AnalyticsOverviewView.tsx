@@ -52,12 +52,12 @@ export default function AnalyticsOverviewView({
   }));
 
   return (
-    <div className="flex flex-col gap-md">
-      <div className="flex flex-col gap-sm">
+    <div className="flex flex-col gap-inset-md">
+      <div className="flex flex-col gap-inset-sm">
         <h1 className="text-headline-lg-mobile text-on-surface">Analytics</h1>
         <TimeRangeFilter value={timeRange} onChange={onTimeRangeChange} />
         {timeRange === 'custom' && (
-          <div className="flex flex-wrap items-center gap-sm">
+          <div className="flex flex-wrap items-center gap-inset-sm">
             <input
               type="date"
               value={customStart}
@@ -75,7 +75,7 @@ export default function AnalyticsOverviewView({
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-xs">
+      <div className="grid grid-cols-2 gap-inset-xs">
         <MetricCard label="Total Orders" value={String(data.totalOrders)} icon="receipt_long" />
         <MetricCard
           label="Total Revenue"
@@ -94,7 +94,7 @@ export default function AnalyticsOverviewView({
         />
       </div>
 
-      <section className="flex flex-col gap-sm rounded-lg border border-outline-variant bg-surface-container-lowest p-sm">
+      <section className="flex flex-col gap-inset-sm rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm">
         <div className="flex items-center justify-between">
           <h2 className="text-label-md text-on-surface-variant">Revenue by Time</h2>
           <button
@@ -117,7 +117,7 @@ export default function AnalyticsOverviewView({
         </PinchZoomChart>
       </section>
 
-      <section className="flex flex-col gap-sm rounded-lg border border-outline-variant bg-surface-container-lowest p-sm">
+      <section className="flex flex-col gap-inset-sm rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm">
         <h2 className="text-label-md text-on-surface-variant">Order Volume</h2>
         <PinchZoomChart className="h-32">
           <ResponsiveContainer width="100%" height="100%">
@@ -141,7 +141,7 @@ export default function AnalyticsOverviewView({
       <button
         type="button"
         onClick={onOpenOperational}
-        className="flex items-center justify-between rounded-lg border border-outline-variant bg-surface-container-lowest p-sm text-left transition-colors hover:bg-surface-container-low"
+        className="flex items-center justify-between rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm text-left transition-colors hover:bg-surface-container-low"
       >
         <div>
           <p className="text-headline-md text-on-surface">Operational Metrics</p>
@@ -155,7 +155,7 @@ export default function AnalyticsOverviewView({
 
 function MetricCard({ label, value, icon }: { label: string; value: string; icon: string }) {
   return (
-    <div className="relative flex flex-col gap-xs overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest p-sm">
+    <div className="relative flex flex-col gap-inset-xs overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm">
       <div className="flex items-start justify-between">
         <span className="text-label-md text-on-surface-variant">{label}</span>
         <MaterialIcon name={icon} className="text-[18px] text-outline" />

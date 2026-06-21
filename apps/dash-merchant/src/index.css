@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+/* Spacing: use gap-inset-*, p-inset-*, etc. for design tokens — not max-w-sm/md (Tailwind layout). */
+
 @source './**/*.{js,ts,jsx,tsx}';
 
 @theme {
@@ -57,11 +59,13 @@
   --spacing-margin-mobile: 16px;
   --spacing-margin-tablet: 32px;
   --spacing-gutter: 16px;
-  --spacing-xs: 8px;
-  --spacing-sm: 16px;
-  --spacing-md: 24px;
-  --spacing-lg: 32px;
-  --spacing-xl: 48px;
+  /* inset-* tokens avoid colliding with Tailwind's sm/md/lg/xl width & size scale */
+  --spacing-inset-xs: 8px;
+  --spacing-inset-sm: 16px;
+  --spacing-inset-md: 24px;
+  --spacing-inset-lg: 32px;
+  --spacing-inset-xl: 48px;
+  --spacing-inset-base: 12px;
 
   --text-headline-lg-mobile: 1.5rem;
   --text-headline-lg-mobile--line-height: 2rem;

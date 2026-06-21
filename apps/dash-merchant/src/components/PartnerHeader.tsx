@@ -44,7 +44,7 @@ export default function PartnerHeader({
   return (
     <header className="sticky top-0 z-50 w-full border-b border-outline-variant bg-surface font-headline-md text-primary shadow-sm">
       <div className="mx-auto flex h-16 w-full max-w-screen-xl items-center justify-between px-margin-mobile md:px-margin-tablet">
-        <div className="flex min-w-0 items-center gap-xs">
+        <div className="flex min-w-0 items-center gap-inset-xs">
           {merchant.logo_url ? (
             <img
               alt=""
@@ -61,7 +61,7 @@ export default function PartnerHeader({
           </span>
         </div>
 
-        <div className="flex items-center gap-sm">
+        <div className="flex items-center gap-inset-sm">
           <button
             type="button"
             onClick={onStatusClick}

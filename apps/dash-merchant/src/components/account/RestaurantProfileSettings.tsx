@@ -14,10 +14,10 @@ export default function RestaurantProfileSettings({
   onChange,
 }: RestaurantProfileSettingsProps) {
   return (
-    <div className="flex flex-col gap-md">
-      <section className="rounded-xl border border-outline-variant bg-surface-container-lowest p-md shadow-sm">
-        <h2 className="mb-md text-headline-md text-on-surface">Branding</h2>
-        <div className="grid gap-md md:grid-cols-2">
+    <div className="flex flex-col gap-inset-md">
+      <section className="rounded-xl border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm">
+        <h2 className="mb-inset-md text-headline-md text-on-surface">Branding</h2>
+        <div className="grid gap-inset-md md:grid-cols-2">
           <ImageUpload
             value={formData.logoUrl}
             onChange={(url) => onChange({ ...formData, logoUrl: url })}
@@ -37,9 +37,9 @@ export default function RestaurantProfileSettings({
         </div>
       </section>
 
-      <section className="rounded-xl border border-outline-variant bg-surface-container-lowest p-md shadow-sm">
-        <h2 className="mb-md text-headline-md text-on-surface">Basic Information</h2>
-        <div className="flex flex-col gap-md">
+      <section className="rounded-xl border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm">
+        <h2 className="mb-inset-md text-headline-md text-on-surface">Basic Information</h2>
+        <div className="flex flex-col gap-inset-md">
           <div>
             <label className="mb-1 block text-label-md text-on-surface-variant">Restaurant Name</label>
             <input
@@ -76,9 +76,9 @@ export default function RestaurantProfileSettings({
         </div>
       </section>
 
-      <section className="rounded-xl border border-outline-variant bg-surface-container-lowest p-md shadow-sm">
-        <h2 className="mb-md text-headline-md text-on-surface">Contact & Location</h2>
-        <div className="flex flex-col gap-md">
+      <section className="rounded-xl border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm">
+        <h2 className="mb-inset-md text-headline-md text-on-surface">Contact & Location</h2>
+        <div className="flex flex-col gap-inset-md">
           <div>
             <label className="mb-1 block text-label-md text-on-surface-variant">Address</label>
             <input
@@ -88,7 +88,7 @@ export default function RestaurantProfileSettings({
               className={inputClass}
             />
           </div>
-          <div className="grid grid-cols-1 gap-md sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-inset-md sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-label-md text-on-surface-variant">Phone</label>
               <input

@@ -32,17 +32,17 @@ export default function MenuOverviewView({
 
   return (
     <div className="max-w-3xl mx-auto px-margin-mobile md:px-margin-tablet">
-      <div className="mb-lg mt-sm flex items-center justify-between md:mt-lg">
+      <div className="mb-inset-lg mt-inset-sm flex items-center justify-between md:mt-inset-lg">
         <div>
-          <h1 className="mb-base text-headline-lg-mobile text-on-background md:text-headline-lg">
+          <h1 className="mb-inset-base text-headline-lg-mobile text-on-background md:text-headline-lg">
             Menu Overview
           </h1>
-          <div className="flex items-center gap-xs">
+          <div className="flex items-center gap-inset-xs">
             <span className="h-2 w-2 rounded-full bg-primary-container" />
             <span className="text-label-md text-on-surface-variant">Live</span>
           </div>
         </div>
-        <div className="flex items-center gap-sm">
+        <div className="flex items-center gap-inset-sm">
           <label className="relative flex cursor-pointer items-center">
             <input
               type="checkbox"
@@ -51,16 +51,16 @@ export default function MenuOverviewView({
               onChange={onToggleManagement}
             />
             <div className="h-6 w-11 rounded-full border border-outline-variant bg-surface-container-high after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-outline-variant after:bg-white after:transition-all peer-checked:border-primary-container peer-checked:bg-primary-container peer-checked:after:translate-x-5" />
-            <span className="ml-xs hidden text-label-md text-on-surface-variant md:block">
+            <span className="ml-inset-xs hidden text-label-md text-on-surface-variant md:block">
               Edit Menu
             </span>
           </label>
           <button
             type="button"
             onClick={onAddCategory}
-            className="hidden h-12 items-center justify-center rounded-lg bg-primary-container px-sm text-label-md text-white shadow-sm transition-colors hover:bg-primary active:scale-95 md:flex"
+            className="hidden h-12 items-center justify-center rounded-lg bg-primary-container px-inset-sm text-label-md text-white shadow-sm transition-colors hover:bg-primary active:scale-95 md:flex"
           >
-            <MaterialIcon name="add" className="mr-xs text-[18px]" />
+            <MaterialIcon name="add" className="mr-inset-xs text-[18px]" />
             Add Category
           </button>
         </div>
@@ -70,17 +70,17 @@ export default function MenuOverviewView({
         items={categories}
         disabled={!canDrag}
         onReorder={(ordered) => onReorderCategories?.(ordered)}
-        className="space-y-xs"
+        className="space-y-inset-xs"
         renderItem={(category, dragHandle) => {
           const categoryItems = itemsByCategory[category.id] || [];
           const soldOutCount = getSoldOutCount(categoryItems);
 
           return (
             <div className="rounded-lg border border-outline-variant bg-surface-container-lowest transition-shadow hover:shadow-sm">
-              <div className="flex min-h-[64px] items-center p-sm">
-                <div className="mr-xs flex items-center">
+              <div className="flex min-h-[64px] items-center p-inset-sm">
+                <div className="mr-inset-xs flex items-center">
                   {dragHandle || (
-                    <span className="p-xs text-on-surface-variant">
+                    <span className="p-inset-xs text-on-surface-variant">
                       <MaterialIcon name="drag_indicator" />
                     </span>
                   )}
@@ -93,7 +93,7 @@ export default function MenuOverviewView({
                   >
                     <h3 className="text-headline-md text-on-background">{category.name}</h3>
                   </button>
-                  <div className="flex items-center gap-sm">
+                  <div className="flex items-center gap-inset-sm">
                     <span className="rounded bg-surface-container px-2 py-1 text-label-md text-on-surface-variant">
                       {categoryItems.length} Items
                     </span>
@@ -120,9 +120,9 @@ export default function MenuOverviewView({
       <button
         type="button"
         onClick={onAddCategory}
-        className="mb-lg mt-sm flex h-12 w-full items-center justify-center rounded-lg bg-primary-container text-label-md text-white shadow-sm transition-colors hover:bg-primary active:scale-95 md:hidden"
+        className="mb-inset-lg mt-inset-sm flex h-12 w-full items-center justify-center rounded-lg bg-primary-container text-label-md text-white shadow-sm transition-colors hover:bg-primary active:scale-95 md:hidden"
       >
-        <MaterialIcon name="add" className="mr-xs text-[18px]" />
+        <MaterialIcon name="add" className="mr-inset-xs text-[18px]" />
         Add Category
       </button>
     </div>

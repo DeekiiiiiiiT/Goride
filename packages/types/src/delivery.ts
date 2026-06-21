@@ -3,6 +3,24 @@
  * Types for the food delivery platform
  */
 
+export type MerchantVerificationStatus =
+  | 'pending'
+  | 'in_review'
+  | 'docs_requested'
+  | 'approved'
+  | 'rejected';
+
+export type MerchantDocumentType = 'id_front' | 'id_back' | 'proof_of_business';
+
+export type MerchantDocumentStatus = 'pending' | 'approved' | 'rejected';
+
+export type MerchantBusinessType =
+  | 'restaurant'
+  | 'cafe'
+  | 'bakery'
+  | 'fast_food'
+  | 'other';
+
 export interface Merchant {
   id: string;
   ownerId: string;
@@ -17,6 +35,17 @@ export interface Merchant {
   phone?: string;
   email?: string;
   cuisineType?: string;
+  cuisineTypes?: string[];
+  city?: string;
+  postalCode?: string;
+  businessType?: MerchantBusinessType;
+  businessRegistrationNumber?: string;
+  taxId?: string;
+  ownerFullName?: string;
+  verificationStatus?: MerchantVerificationStatus;
+  verificationNotes?: string | null;
+  rejectionReason?: string | null;
+  submittedAt?: string;
   businessHours: BusinessHours;
   isActive: boolean;
   isVerified: boolean;
@@ -30,6 +59,62 @@ export interface Merchant {
   totalRatings: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface MerchantDocument {
+  id: string;
+  merchantId: string;
+  docType: MerchantDocumentType;
+  status: MerchantDocumentStatus;
+  filePath: string;
+  rejectionReason?: string | null;
+  uploadedAt: string;
+  verifiedAt?: string | null;
+}
+
+export interface MerchantBankAccountMasked {
+  id: string;
+  merchantId: string;
+  bankName: string;
+  accountHolderName: string;
+  accountLast4: string;
+  routingNumberLast4?: string | null;
+  accountType: 'checking' | 'savings';
+  isDefault: boolean;
+  isVerified: boolean;
+}
+
+export interface MerchantApplicationPayload {
+  name: string;
+  description?: string;
+  phone: string;
+  email: string;
+  address: string;
+  streetAddress?: string;
+  city?: string;
+  postalCode?: string;
+  lat: number;
+  lng: number;
+  businessType?: MerchantBusinessType;
+  cuisineTypes?: string[];
+  cuisineType?: string;
+  avgPrepTimeMins?: number;
+  deliveryRadiusKm?: number;
+  businessRegistrationNumber?: string;
+  taxId?: string;
+  ownerFullName?: string;
+  ownerName?: string;
+  logoUrl?: string;
+  coverImageUrl?: string;
+  website?: string;
+}
+
+export interface MerchantBankAccountInput {
+  bankName: string;
+  accountHolderName: string;
+  accountNumber: string;
+  routingNumber?: string;
+  accountType: 'checking' | 'savings';
 }
 
 export interface BusinessHours {

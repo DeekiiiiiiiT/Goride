@@ -24,7 +24,7 @@ export default function StickyBottomButton({
           type="button"
           onClick={onClick}
           disabled={disabled}
-          className={`flex h-xl w-full items-center justify-center rounded-lg text-label-md font-semibold shadow-sm transition-all duration-150 active:scale-[0.98] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 ${colorClass}`}
+          className={`flex h-inset-xl w-full items-center justify-center rounded-lg text-label-md font-semibold shadow-sm transition-all duration-150 active:scale-[0.98] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 ${colorClass}`}
         >
           {label}
         </button>

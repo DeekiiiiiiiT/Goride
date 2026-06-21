@@ -22,6 +22,8 @@ import {
   changeMerchantStatus,
   type DashMerchant,
   type MerchantAuditEntry,
+  type MerchantBankAccountDetail,
+  type MerchantDocumentDetail,
   type MerchantHours,
   type MerchantVerificationStatus,
 } from '../services/dashAdminService';
@@ -35,6 +37,8 @@ interface MerchantDetailModalProps {
   hours: MerchantHours[];
   auditLog: MerchantAuditEntry[];
   ownerEmail: string;
+  documents?: MerchantDocumentDetail[];
+  bankAccount?: MerchantBankAccountDetail | null;
   loading: boolean;
   onUpdated: () => void;
 }
@@ -84,7 +88,7 @@ function fmtRelative(iso: string): string {
   return fmtDate(iso);
 }
 
-type TabId = 'business' | 'hours' | 'branding' | 'notes' | 'history';
+type TabId = 'business' | 'verification' | 'hours' | 'branding' | 'notes' | 'history';
 
 export function MerchantDetailModal({
   open,
@@ -94,6 +98,8 @@ export function MerchantDetailModal({
   hours,
   auditLog,
   ownerEmail,
+  documents = [],
+  bankAccount = null,
   loading,
   onUpdated,
 }: MerchantDetailModalProps) {
@@ -130,6 +136,7 @@ export function MerchantDetailModal({
 
   const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
     { id: 'business', label: 'Business', icon: <Building2 className="w-3.5 h-3.5" /> },
+    { id: 'verification', label: 'KYC', icon: <FileQuestion className="w-3.5 h-3.5" /> },
     { id: 'hours', label: 'Hours', icon: <Clock className="w-3.5 h-3.5" /> },
     { id: 'branding', label: 'Branding', icon: <ImageIcon className="w-3.5 h-3.5" /> },
     { id: 'notes', label: 'Notes', icon: <StickyNote className="w-3.5 h-3.5" /> },
@@ -239,6 +246,50 @@ export function MerchantDetailModal({
                       label="Submitted"
                       value={`${fmtDate(merchant.submitted_at)} (${fmtRelative(merchant.submitted_at)})`}
                     />
+                  </div>
+                )}
+
+                {activeTab === 'verification' && (
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className="mb-3 text-sm font-semibold text-slate-300">KYC Documents</h3>
+                      {documents.length === 0 ? (
+                        <p className="text-sm text-slate-500">No documents uploaded.</p>
+                      ) : (
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          {documents.map((doc) => (
+                            <div key={doc.id} className="rounded-md border border-slate-700 p-3">
+                              <p className="text-sm font-medium text-white capitalize">
+                                {doc.doc_type.replace(/_/g, ' ')}
+                              </p>
+                              <p className="text-xs text-slate-400 capitalize">Status: {doc.status}</p>
+                              {doc.signedUrl && (
+                                <a
+                                  href={doc.signedUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="mt-2 inline-flex items-center gap-1 text-xs text-blue-400 hover:underline"
+                                >
+                                  View file <ExternalLink className="h-3 w-3" />
+                                </a>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <h3 className="mb-3 text-sm font-semibold text-slate-300">Bank Account</h3>
+                      {bankAccount ? (
+                        <div className="rounded-md border border-slate-700 p-3 text-sm text-slate-300">
+                          <p>{bankAccount.bank_name}</p>
+                          <p>{bankAccount.account_holder_name}</p>
+                          <p>•••• {bankAccount.account_last4} ({bankAccount.account_type})</p>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-slate-500">No bank account on file.</p>
+                      )}
+                    </div>
                   </div>
                 )}
 

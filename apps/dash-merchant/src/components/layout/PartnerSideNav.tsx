@@ -40,12 +40,12 @@ export default function PartnerSideNav({
 
   return (
     <nav
-      className={`flex h-full shrink-0 flex-col border-r border-outline-variant bg-surface-container-low py-md px-sm ${
+      className={`flex h-full shrink-0 flex-col border-r border-outline-variant bg-surface-container-low py-inset-md px-inset-sm ${
         compact ? 'w-20' : 'w-64'
       }`}
     >
       {showRestaurantInfo && !compact && (
-        <div className="mb-lg flex items-center gap-xs px-2">
+        <div className="mb-inset-lg flex items-center gap-inset-xs px-2">
           {merchant.logo_url ? (
             <img
               src={merchant.logo_url}
@@ -64,7 +64,7 @@ export default function PartnerSideNav({
         </div>
       )}
 
-      <ul className="flex flex-1 flex-col gap-xs">
+      <ul className="flex flex-1 flex-col gap-inset-xs">
         {PARTNER_SIDE_NAV.map((item) => {
           const isActive = activeKey === item.key;
 
@@ -73,7 +73,7 @@ export default function PartnerSideNav({
               <button
                 type="button"
                 onClick={() => handleNav(item.key, item.tab)}
-                className={`flex w-full items-center gap-sm rounded-lg px-sm py-sm text-label-md font-semibold transition-all duration-200 ${
+                className={`flex w-full items-center gap-inset-sm rounded-lg px-inset-sm py-inset-sm text-label-md font-semibold transition-all duration-200 ${
                   isActive
                     ? 'bg-secondary-container text-on-secondary-container'
                     : 'text-on-surface-variant hover:bg-surface-variant'
@@ -91,7 +91,7 @@ export default function PartnerSideNav({
         <button
           type="button"
           onClick={onGoOffline}
-          className="mt-auto flex w-full items-center justify-center gap-sm rounded-lg border border-outline-variant px-md py-sm text-label-md text-on-surface-variant transition-colors hover:bg-surface-variant"
+          className="mt-auto flex w-full items-center justify-center gap-inset-sm rounded-lg border border-outline-variant px-inset-md py-inset-sm text-label-md text-on-surface-variant transition-colors hover:bg-surface-variant"
         >
           <MaterialIcon name="power_settings_new" size={20} />
           Go Offline

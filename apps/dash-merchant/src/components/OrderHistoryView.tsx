@@ -90,25 +90,25 @@ export default function OrderHistoryView({
   };
 
   return (
-    <div className="flex flex-col gap-md">
-      <section className="flex flex-col gap-sm md:flex-row md:items-center md:justify-between">
+    <div className="flex flex-col gap-inset-md">
+      <section className="flex flex-col gap-inset-sm md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="mb-xs text-headline-lg-mobile font-bold text-on-background md:text-headline-lg">
+          <h2 className="mb-inset-xs text-headline-lg-mobile font-bold text-on-background md:text-headline-lg">
             Order History
           </h2>
           {tab === 'completed' ? (
-            <div className="flex gap-md border-b border-outline-variant pb-xs">
+            <div className="flex gap-inset-md border-b border-outline-variant pb-inset-xs">
               <button
                 type="button"
                 onClick={() => onTabChange('completed')}
-                className="border-b-2 border-primary pb-xs text-label-md font-semibold text-primary"
+                className="border-b-2 border-primary pb-inset-xs text-label-md font-semibold text-primary"
               >
                 Completed
               </button>
               <button
                 type="button"
                 onClick={() => onTabChange('cancelled')}
-                className="pb-xs text-label-md font-semibold text-on-surface-variant transition-colors hover:text-on-surface"
+                className="pb-inset-xs text-label-md font-semibold text-on-surface-variant transition-colors hover:text-on-surface"
               >
                 Cancelled
               </button>
@@ -137,7 +137,7 @@ export default function OrderHistoryView({
           <button
             type="button"
             onClick={handleExport}
-            className="flex h-12 items-center justify-center gap-xs self-start rounded-lg border border-outline-variant bg-surface-container-lowest px-sm py-2 text-label-md font-semibold text-on-surface shadow-sm transition-colors hover:bg-surface-container-highest md:self-auto"
+            className="flex h-12 items-center justify-center gap-inset-xs self-start rounded-lg border border-outline-variant bg-surface-container-lowest px-inset-sm py-2 text-label-md font-semibold text-on-surface shadow-sm transition-colors hover:bg-surface-container-highest md:self-auto"
           >
             <MaterialIcon name="download" size={20} />
             Export
@@ -145,7 +145,7 @@ export default function OrderHistoryView({
         )}
       </section>
 
-      <section className="hide-scroll -mx-margin-mobile flex gap-xs overflow-x-auto px-margin-mobile py-1 md:mx-0 md:px-0">
+      <section className="hide-scroll -mx-margin-mobile flex gap-inset-xs overflow-x-auto px-margin-mobile py-1 md:mx-0 md:px-0">
         {DATE_FILTERS.map((option) => {
           const active = dateRange === option.key;
           return (
@@ -153,7 +153,7 @@ export default function OrderHistoryView({
               key={option.key}
               type="button"
               onClick={() => setDateRange(option.key)}
-              className={`flex h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full px-sm text-label-md font-semibold transition-colors ${
+              className={`flex h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full px-inset-sm text-label-md font-semibold transition-colors ${
                 active
                   ? 'bg-primary-container text-on-primary-container shadow-sm'
                   : 'border border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-highest'
@@ -167,7 +167,7 @@ export default function OrderHistoryView({
       </section>
 
       {dateRange === 'custom' && (
-        <section className="flex flex-col gap-sm rounded-lg border border-outline-variant bg-surface-container-lowest p-sm sm:flex-row sm:items-end">
+        <section className="flex flex-col gap-inset-sm rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm sm:flex-row sm:items-end">
           <label className="flex flex-1 flex-col gap-1 text-label-sm text-on-surface-variant">
             From
             <input
@@ -190,23 +190,23 @@ export default function OrderHistoryView({
       )}
 
       {tab === 'completed' && (
-        <section className="grid grid-cols-2 gap-xs md:grid-cols-3 md:gap-sm">
-          <div className="flex flex-col justify-center rounded-lg border border-outline-variant bg-surface-container-lowest p-sm">
-            <span className="mb-base text-label-sm uppercase tracking-wider text-on-surface-variant">
+        <section className="grid grid-cols-2 gap-inset-xs md:grid-cols-3 md:gap-inset-sm">
+          <div className="flex flex-col justify-center rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm">
+            <span className="mb-inset-base text-label-sm uppercase tracking-wider text-on-surface-variant">
               Total Orders
             </span>
             <span className="text-headline-md font-semibold text-on-surface">{stats.totalOrders}</span>
           </div>
-          <div className="flex flex-col justify-center rounded-lg border border-outline-variant bg-surface-container-lowest p-sm">
-            <span className="mb-base text-label-sm uppercase tracking-wider text-on-surface-variant">
+          <div className="flex flex-col justify-center rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm">
+            <span className="mb-inset-base text-label-sm uppercase tracking-wider text-on-surface-variant">
               Total Revenue
             </span>
             <span className="text-headline-md font-semibold text-primary">
               {formatJmd(stats.totalRevenue)}
             </span>
           </div>
-          <div className="col-span-2 flex flex-col justify-center rounded-lg border border-outline-variant bg-surface-container-lowest p-sm md:col-span-1">
-            <span className="mb-base text-label-sm uppercase tracking-wider text-on-surface-variant">
+          <div className="col-span-2 flex flex-col justify-center rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm md:col-span-1">
+            <span className="mb-inset-base text-label-sm uppercase tracking-wider text-on-surface-variant">
               Avg Prep Time
             </span>
             <span className="text-headline-md font-semibold text-on-surface">{stats.avgPrep} min</span>
@@ -228,7 +228,7 @@ export default function OrderHistoryView({
         </div>
       )}
 
-      <section className="flex flex-col gap-xs">
+      <section className="flex flex-col gap-inset-xs">
         {isLoading ? (
           [1, 2, 3].map((item) => (
             <div
@@ -261,11 +261,11 @@ export default function OrderHistoryView({
                     onOrderClick(order.id);
                   }
                 }}
-                className="group flex cursor-pointer flex-col gap-sm rounded-lg border border-outline-variant bg-surface-container-lowest p-sm transition-shadow duration-200 hover:shadow-[0px_4px_12px_rgba(0,0,0,0.05)]"
+                className="group flex cursor-pointer flex-col gap-inset-sm rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm transition-shadow duration-200 hover:shadow-[0px_4px_12px_rgba(0,0,0,0.05)]"
               >
                 <div className="flex items-start justify-between">
                   <div>
-                    <div className="mb-base flex items-center gap-xs">
+                    <div className="mb-inset-base flex items-center gap-inset-xs">
                       <span className="text-headline-md font-bold text-on-surface">
                         #{order.order_number}
                       </span>
@@ -308,7 +308,7 @@ export default function OrderHistoryView({
                     onOrderClick(order.id);
                   }
                 }}
-                className="cursor-pointer rounded-lg border border-outline-variant bg-surface p-md shadow-sm transition-shadow hover:shadow-md"
+                className="cursor-pointer rounded-lg border border-outline-variant bg-surface p-inset-md shadow-sm transition-shadow hover:shadow-md"
               >
                 <div className="mb-3 flex items-start justify-between border-b border-outline-variant pb-3">
                   <div>

@@ -26,7 +26,7 @@ export default function EmptyState({
         <button
           type="button"
           onClick={onAction}
-          className="rounded-lg bg-primary-container px-md py-sm text-label-md font-semibold text-on-primary-container"
+          className="rounded-lg bg-primary-container px-inset-md py-inset-sm text-label-md font-semibold text-on-primary-container"
         >
           {actionLabel}
         </button>

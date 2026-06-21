@@ -69,7 +69,7 @@ export default function AddCategorySheet({
           className="mb-4 w-full rounded-lg border border-outline-variant bg-surface px-4 py-3 text-body-lg text-on-surface outline-none focus:border-primary focus:ring-1 focus:ring-primary"
           autoFocus
         />
-        <div className="flex gap-sm">
+        <div className="flex gap-inset-sm">
           <button
             type="button"
             onClick={onClose}

@@ -53,7 +53,7 @@ export default function AnalyticsPage({ merchant, onNavigate }: AnalyticsPagePro
   const renderHealthContent = () => {
     if (isLoading) {
       return (
-        <div className="flex flex-col gap-sm">
+        <div className="flex flex-col gap-inset-sm">
           <PartnerSkeleton variant="card" count={4} />
           <PartnerSkeleton variant="chart" />
         </div>

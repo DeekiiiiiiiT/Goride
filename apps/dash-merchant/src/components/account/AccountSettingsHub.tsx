@@ -82,9 +82,9 @@ export default function AccountSettingsHub({
         </button>
       </header>
 
-      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-lg px-margin-mobile py-md md:px-margin-tablet">
-        <section className="flex flex-col items-center justify-center gap-xs text-center">
-          <div className="relative mb-xs h-[120px] w-[120px] rounded-full border border-outline-variant bg-surface p-1 shadow-sm">
+      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-inset-lg px-margin-mobile py-inset-md md:px-margin-tablet">
+        <section className="flex flex-col items-center justify-center gap-inset-xs text-center">
+          <div className="relative mb-inset-xs h-[120px] w-[120px] rounded-full border border-outline-variant bg-surface p-1 shadow-sm">
             {merchant.logo_url ? (
               <img
                 src={merchant.logo_url}
@@ -171,7 +171,7 @@ export default function AccountSettingsHub({
         <button
           type="button"
           onClick={onSignOut}
-          className="mb-lg flex min-h-[64px] w-full items-center justify-center gap-sm rounded-xl border border-error-container bg-surface-container-lowest p-4 text-error shadow-sm transition-all hover:bg-error-container active:scale-[0.98]"
+          className="mb-inset-lg flex min-h-[64px] w-full items-center justify-center gap-inset-sm rounded-xl border border-error-container bg-surface-container-lowest p-4 text-error shadow-sm transition-all hover:bg-error-container active:scale-[0.98]"
         >
           <MaterialIcon name="logout" />
           <span className="text-body-lg font-semibold">Sign Out</span>

@@ -172,6 +172,11 @@ export interface MerchantSettingsFormData {
   name: string;
   description: string;
   address: string;
+  lat: number | null;
+  lng: number | null;
+  streetAddress: string;
+  city: string;
+  postalCode: string;
   phone: string;
   email: string;
   cuisineTypes: string[];
@@ -245,6 +250,11 @@ function buildFormData(merchant: Merchant): MerchantSettingsFormData {
     name: merchant.name,
     description: merchant.description || '',
     address: merchant.address,
+    lat: merchant.lat ?? null,
+    lng: merchant.lng ?? null,
+    streetAddress: merchant.address?.split(',')[0]?.trim() || '',
+    city: '',
+    postalCode: '',
     phone: merchant.phone || '',
     email: merchant.email || '',
     cuisineTypes: cuisineTypes.length > 0 ? cuisineTypes : merchant.cuisine_type ? [merchant.cuisine_type] : [],
@@ -400,6 +410,8 @@ export function useMerchantSettings(merchant: Merchant) {
           name: data.name,
           description: data.description,
           address: data.address,
+          lat: data.lat,
+          lng: data.lng,
           phone: data.phone,
           email: data.email,
           cuisine_type: data.cuisineTypes.join(', '),

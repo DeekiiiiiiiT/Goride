@@ -10,7 +10,7 @@ export default function OperationalMetricsView({ onBack, data }: OperationalMetr
   const { operational } = data;
 
   return (
-    <div className="flex flex-col gap-lg">
+    <div className="flex flex-col gap-inset-lg">
       <section>
         <button
           type="button"
@@ -68,7 +68,7 @@ function MetricTile({
   valueClass: string;
 }) {
   return (
-    <div className="flex min-h-[110px] flex-col justify-between rounded-lg border border-outline-variant bg-surface-container-lowest p-sm shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
+    <div className="flex min-h-[110px] flex-col justify-between rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
       <div className="flex items-center justify-between text-on-surface-variant">
         <span className="text-label-md uppercase">{label}</span>
         <MaterialIcon name={icon} className="text-[20px]" />

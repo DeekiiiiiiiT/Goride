@@ -80,10 +80,10 @@ export default function DeliverySettingsView({
         </button>
       </header>
 
-      <main className="mx-auto w-full max-w-3xl space-y-md px-margin-mobile pb-20 pt-20 md:px-margin-tablet">
-        <section className="rounded-lg border border-outline-variant bg-surface-container-lowest p-sm shadow-sm">
-          <h2 className="mb-xs text-headline-md text-on-surface">Delivery Radius</h2>
-          <div className="mb-sm flex items-center justify-between">
+      <main className="mx-auto w-full max-w-3xl space-y-inset-md px-margin-mobile pb-20 pt-20 md:px-margin-tablet">
+        <section className="rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm shadow-sm">
+          <h2 className="mb-inset-xs text-headline-md text-on-surface">Delivery Radius</h2>
+          <div className="mb-inset-sm flex items-center justify-between">
             <span className="text-body-lg text-on-surface-variant">Radius</span>
             <span className="text-headline-md text-primary">{radiusDisplay} km</span>
           </div>
@@ -97,9 +97,9 @@ export default function DeliverySettingsView({
             onChange={(event) =>
               onChange({ ...formData, deliveryRadiusKm: Number(event.target.value) })
             }
-            className="mb-sm h-2 w-full cursor-pointer appearance-none rounded-full bg-surface-variant accent-primary-container [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary-container [&::-webkit-slider-thumb]:shadow-sm"
+            className="mb-inset-sm h-2 w-full cursor-pointer appearance-none rounded-full bg-surface-variant accent-primary-container [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary-container [&::-webkit-slider-thumb]:shadow-sm"
           />
-          <div className="relative mb-xs h-48 w-full overflow-hidden rounded-lg border border-outline-variant bg-surface-container">
+          <div className="relative mb-inset-xs h-48 w-full overflow-hidden rounded-lg border border-outline-variant bg-surface-container">
             <div
               className="absolute inset-0 bg-cover bg-center opacity-50"
               style={{ backgroundImage: `url('${MAP_IMAGE_URL}')` }}
@@ -119,15 +119,15 @@ export default function DeliverySettingsView({
               className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-full text-primary-container"
             />
           </div>
-          <p className="mt-xs text-body-sm text-on-surface-variant">
+          <p className="mt-inset-xs text-body-sm text-on-surface-variant">
             Your store will be visible to customers within this radius.
           </p>
         </section>
 
-        <section className="space-y-sm rounded-lg border border-outline-variant bg-surface-container-lowest p-sm shadow-sm">
-          <h2 className="mb-xs text-headline-md text-on-surface">Order Requirements</h2>
+        <section className="space-y-inset-sm rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm shadow-sm">
+          <h2 className="mb-inset-xs text-headline-md text-on-surface">Order Requirements</h2>
 
-          <div className="space-y-base">
+          <div className="space-y-inset-base">
             <label className="block text-label-md text-on-surface-variant" htmlFor="min-order">
               Minimum Order Amount
             </label>
@@ -152,7 +152,7 @@ export default function DeliverySettingsView({
             </div>
           </div>
 
-          <div className="space-y-base">
+          <div className="space-y-inset-base">
             <label className="block text-label-md text-on-surface-variant" htmlFor="delivery-fee">
               Delivery Fee{' '}
               <span className="font-body-sm font-normal text-on-surface-variant">
@@ -180,7 +180,7 @@ export default function DeliverySettingsView({
             </div>
           </div>
 
-          <div className="space-y-base">
+          <div className="space-y-inset-base">
             <label className="block text-label-md text-on-surface-variant" htmlFor="prep-time">
               Estimated Prep Time
             </label>
@@ -209,11 +209,11 @@ export default function DeliverySettingsView({
           </div>
         </section>
 
-        <section className="space-y-sm rounded-lg border border-outline-variant bg-surface-container-lowest p-sm shadow-sm">
-          <h2 className="mb-xs text-headline-md text-on-surface">Operational Toggles</h2>
+        <section className="space-y-inset-sm rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm shadow-sm">
+          <h2 className="mb-inset-xs text-headline-md text-on-surface">Operational Toggles</h2>
 
           <div className="flex items-center justify-between py-2">
-            <div className="flex flex-col pr-sm">
+            <div className="flex flex-col pr-inset-sm">
               <span className="text-body-lg text-on-surface">Accepts pickup orders</span>
               <span className="text-body-sm text-on-surface-variant">
                 Allow customers to collect in-store
@@ -229,7 +229,7 @@ export default function DeliverySettingsView({
           <hr className="border-outline-variant" />
 
           <div className="flex items-center justify-between py-2">
-            <div className="flex flex-col pr-sm">
+            <div className="flex flex-col pr-inset-sm">
               <span className="text-body-lg text-on-surface">Accepts scheduled orders</span>
               <span className="text-body-sm text-on-surface-variant">
                 Allow orders placed in advance
@@ -244,7 +244,7 @@ export default function DeliverySettingsView({
 
           <hr className="border-outline-variant" />
 
-          <div className="space-y-base py-2">
+          <div className="space-y-inset-base py-2">
             <label className="block text-body-lg text-on-surface" htmlFor="max-capacity">
               Max daily order capacity
             </label>

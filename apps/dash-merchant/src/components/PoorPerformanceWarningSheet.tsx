@@ -53,7 +53,7 @@ export default function PoorPerformanceWarningSheet({
 
   return (
     <div
-      className="partner-modal-fade fixed inset-0 z-[70] flex items-end justify-center bg-inverse-surface/40 p-0 backdrop-blur-sm sm:items-center sm:p-md"
+      className="partner-modal-fade fixed inset-0 z-[70] flex items-end justify-center bg-inverse-surface/40 p-0 backdrop-blur-sm sm:items-center sm:p-inset-md"
       role="presentation"
     >
       <div
@@ -63,13 +63,13 @@ export default function PoorPerformanceWarningSheet({
         aria-modal="true"
         aria-labelledby="poor-performance-title"
       >
-        <div className="flex w-full items-center justify-center bg-surface-container-lowest pb-xs pt-sm sm:hidden">
+        <div className="flex w-full items-center justify-center bg-surface-container-lowest pb-inset-xs pt-inset-sm sm:hidden">
           <div className="h-1 w-12 rounded-full bg-surface-variant" />
         </div>
 
-        <div className="flex flex-1 flex-col gap-md overflow-y-auto p-md sm:p-lg">
-          <div className="mt-sm flex flex-col items-center gap-xs text-center">
-            <div className="mb-xs flex h-16 w-16 items-center justify-center rounded-full bg-error-container">
+        <div className="flex flex-1 flex-col gap-inset-md overflow-y-auto p-inset-md sm:p-inset-lg">
+          <div className="mt-inset-sm flex flex-col items-center gap-inset-xs text-center">
+            <div className="mb-inset-xs flex h-16 w-16 items-center justify-center rounded-full bg-error-container">
               <MaterialIcon name="warning" filled className="text-4xl text-error" />
             </div>
             <h2
@@ -83,7 +83,7 @@ export default function PoorPerformanceWarningSheet({
             </p>
           </div>
 
-          <div className="flex flex-col gap-sm rounded-lg border border-surface-variant bg-surface-container-low p-sm">
+          <div className="flex flex-col gap-inset-sm rounded-lg border border-surface-variant bg-surface-container-low p-inset-sm">
             <MetricRow
               label="Acceptance rate"
               value={`${metrics.acceptanceRate}%`}
@@ -91,7 +91,7 @@ export default function PoorPerformanceWarningSheet({
               targetLabel={`Target: ${ACCEPTANCE_RATE_TARGET}%+`}
             />
 
-            <div className="my-xs h-px w-full bg-surface-variant" />
+            <div className="my-inset-xs h-px w-full bg-surface-variant" />
 
             <MetricRow
               label="Cancellation rate"
@@ -102,13 +102,13 @@ export default function PoorPerformanceWarningSheet({
             />
           </div>
 
-          <div className="mt-xs flex flex-col gap-xs">
+          <div className="mt-inset-xs flex flex-col gap-inset-xs">
             <h3 className="text-label-md font-semibold uppercase tracking-wider text-on-surface-variant">
               Tips to improve
             </h3>
-            <ul className="flex flex-col gap-xs">
+            <ul className="flex flex-col gap-inset-xs">
               {IMPROVEMENT_TIPS.map((tip) => (
-                <li key={tip.icon} className="flex items-start gap-xs text-body-sm text-on-surface">
+                <li key={tip.icon} className="flex items-start gap-inset-xs text-body-sm text-on-surface">
                   <MaterialIcon
                     name={tip.icon}
                     className="mt-0.5 shrink-0 text-xl text-primary-container"
@@ -121,7 +121,7 @@ export default function PoorPerformanceWarningSheet({
           </div>
         </div>
 
-        <div className="flex flex-col gap-sm p-md pt-0 sm:p-lg">
+        <div className="flex flex-col gap-inset-sm p-inset-md pt-0 sm:p-inset-lg">
           <button
             type="button"
             onClick={onAcknowledge}
@@ -156,7 +156,7 @@ function MetricRow({
   targetMarkerPercent?: number;
 }) {
   return (
-    <div className="flex flex-col gap-base">
+    <div className="flex flex-col gap-inset-base">
       <div className="flex items-end justify-between">
         <span className="text-body-sm font-medium text-on-surface">{label}</span>
         <span className="rounded-sm bg-error-container px-2 py-1 text-label-md text-error">
