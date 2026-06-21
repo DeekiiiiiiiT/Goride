@@ -11,6 +11,7 @@ type OfferDetailsPageProps = {
   offer: SingleOffer;
   initialSeconds?: number;
   onBack: () => void;
+  onTimerExpire: () => void;
   onDecline: () => void;
   onAccept: () => void;
 };
@@ -19,10 +20,11 @@ export function OfferDetailsPage({
   offer,
   initialSeconds = 24,
   onBack,
+  onTimerExpire,
   onDecline,
   onAccept,
 }: OfferDetailsPageProps) {
-  const { seconds } = useCountdown(initialSeconds, onDecline);
+  const { seconds } = useCountdown(initialSeconds, onTimerExpire);
   const touchStartY = useRef(0);
   const dragging = useRef(false);
 
@@ -176,6 +178,12 @@ export function OfferDetailsPage({
               <span className="text-sm text-on-surface-variant">Included Tip</span>
               <span className="text-sm text-success">J${offer.tip}</span>
             </div>
+            {offer.peakPay != null && offer.peakPay > 0 && (
+              <div className="flex justify-between">
+                <span className="text-sm text-on-surface-variant">Peak Pay</span>
+                <span className="text-sm text-warning">+J${offer.peakPay}</span>
+              </div>
+            )}
             <div className="h-px bg-surface-container-high w-full my-2" />
             <div className="flex justify-between">
               <span className="text-xl font-semibold text-on-surface">Total</span>

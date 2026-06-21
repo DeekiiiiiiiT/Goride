@@ -9,6 +9,7 @@ const PROOF_IMAGE =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuDyDRqqWD8MPfY296GqYgp-oP24VGqV2LyPlVqigIniIn17J_lW92s2Oy6m5klop5GjVj2shQN0inW9Y9Ikv4YbciHzOXkHDQHTgjGreUIsCs7SvAdGvDcjOGhGvs-HON1Xfj0o6PQbcH9jNYq08MJNTjQqMpR9o0XbrvWzQ7l3Ti3EnnPW8pZKjc2npOhm3ijwCWITbj9CiMsgKx4H7FcsBTf9xKDtliz5RZkOqDD3ZchCHeFortDDI0OyIptMlFNSRD8OxzZVP_4';
 
 const TIMELINE = [
+  { label: 'Offer Received', time: '2:10 PM', complete: false },
   { label: 'Offer Accepted', time: '2:14 PM', complete: false },
   { label: 'Arrived at Island Grill', time: '2:22 PM', complete: false },
   { label: 'Order Picked Up', time: '2:26 PM', complete: false },

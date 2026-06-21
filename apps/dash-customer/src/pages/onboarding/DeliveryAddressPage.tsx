@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
+import { checkDeliveryZone } from '@/lib/deliveryZones';
 
 export type AddressSelection = {
   line1: string;
@@ -15,8 +16,8 @@ type SavedAddressItem = {
 };
 
 const SAVED_ADDRESSES: SavedAddressItem[] = [
-  { id: 'home', label: 'Home', line1: '123 Market St, San Francisco, CA', line2: '', icon: 'home' },
-  { id: 'work', label: 'Work', line1: '456 Tech Blvd, San Francisco, CA', line2: '', icon: 'work' },
+  { id: 'home', label: 'Home', line1: '45 Constant Spring Rd, Kingston', line2: '', icon: 'home' },
+  { id: 'work', label: 'Work', line1: '123 Business Park, Kingston', line2: '', icon: 'work' },
   {
     id: 'recent',
     label: '789 Valencia St',
@@ -29,9 +30,10 @@ const SAVED_ADDRESSES: SavedAddressItem[] = [
 type DeliveryAddressPageProps = {
   onBack: () => void;
   onConfirm: (address: AddressSelection) => void;
+  onOutOfZone?: (address: AddressSelection) => void;
 };
 
-export function DeliveryAddressPage({ onBack, onConfirm }: DeliveryAddressPageProps) {
+export function DeliveryAddressPage({ onBack, onConfirm, onOutOfZone }: DeliveryAddressPageProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selected, setSelected] = useState<AddressSelection | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -39,14 +41,24 @@ export function DeliveryAddressPage({ onBack, onConfirm }: DeliveryAddressPagePr
   const selectAddress = (item: SavedAddressItem) => {
     setSelectedId(item.id);
     if (item.id === 'home') {
-      setSelected({ line1: '123 Market Street' });
+      setSelected({ line1: '45 Constant Spring Rd' });
       return;
     }
     if (item.id === 'work') {
-      setSelected({ line1: '456 Tech Blvd' });
+      setSelected({ line1: '123 Business Park, Kingston' });
       return;
     }
     setSelected({ line1: '789 Valencia St', line2: 'Apt 4B' });
+  };
+
+  const handleConfirm = () => {
+    if (!selected) return;
+    const zone = checkDeliveryZone(selected);
+    if (!zone.inZone) {
+      onOutOfZone?.(selected);
+      return;
+    }
+    onConfirm(selected);
   };
 
   return (
@@ -84,7 +96,7 @@ export function DeliveryAddressPage({ onBack, onConfirm }: DeliveryAddressPagePr
               type="button"
               onClick={() => {
                 setSelectedId('current');
-                setSelected({ line1: '123 Market Street' });
+                setSelected({ line1: '45 Constant Spring Rd, Kingston' });
               }}
               className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-surface-container-lowest text-primary px-5 py-3 rounded-full shadow-[0px_10px_30px_rgba(0,0,0,0.08)] flex items-center gap-2 active:scale-95 transition-transform duration-200"
             >
@@ -151,7 +163,7 @@ export function DeliveryAddressPage({ onBack, onConfirm }: DeliveryAddressPagePr
         <div className="absolute bottom-0 left-0 w-full bg-surface-container-lowest/90 backdrop-blur-md px-4 py-4 pb-safe shadow-[0px_-10px_30px_rgba(0,0,0,0.03)] z-50">
           <button
             type="button"
-            onClick={() => selected && onConfirm(selected)}
+            onClick={handleConfirm}
             disabled={!selected}
             className="w-full bg-primary text-on-primary text-sm font-semibold tracking-wide py-4 rounded-xl shadow-md active:scale-[0.98] transition-transform duration-200 flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed"
           >

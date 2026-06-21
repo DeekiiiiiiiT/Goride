@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useForgotPassword } from '@roam/auth-client';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { CourierGoogleAuthButton } from '@/components/auth/CourierGoogleAuthButton';
+import { PhoneInput, toE164JamaicaPhone } from '@/components/forms/PhoneInput';
 import { supabase } from '@/lib/supabase';
 import { ensureCourierProfile } from '@/lib/ensureCourierProfile';
 
@@ -17,40 +18,64 @@ export function LoginPage({ onBack, onSignIn, onSignUp }: LoginPageProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [googleError, setGoogleError] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const {
     forgotMode,
     setForgotMode,
-    notice,
-    setNotice,
     forgotLoading,
     sendResetEmail,
   } = useForgotPassword('courier', { signInHref: '/' });
+
+  const isEmail = identifier.includes('@');
+  const isPhone = !isEmail && identifier.replace(/\D/g, '').length >= 7;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
     setGoogleError(null);
-
-    const email = identifier.trim();
-    if (!email.includes('@')) {
-      setAuthError('Sign in with your email address.');
-      return;
-    }
+    setNotice(null);
 
     if (forgotMode) {
-      setNotice(null);
-      const err = await sendResetEmail(email);
+      if (!isEmail) {
+        setAuthError('Password reset is available for email accounts only.');
+        return;
+      }
+      const err = await sendResetEmail(identifier.trim());
       if (err) setAuthError(err);
       return;
     }
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      await ensureCourierProfile();
-      onSignIn();
+      if (isEmail) {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: identifier.trim(),
+          password,
+        });
+        if (error) throw error;
+        await ensureCourierProfile();
+        onSignIn();
+        return;
+      }
+
+      if (isPhone) {
+        const { error } = await supabase.auth.signInWithOtp({
+          phone: toE164JamaicaPhone(identifier),
+        });
+        if (error) {
+          setAuthError(
+            error.message.includes('SMS')
+              ? 'SMS login is not configured. Please sign in with your email address.'
+              : error.message,
+          );
+          return;
+        }
+        setNotice('Check your phone for a one-time login code.');
+        return;
+      }
+
+      setAuthError('Enter a valid email address or phone number.');
     } catch (err) {
       setAuthError(err instanceof Error ? err.message : 'Sign in failed');
     } finally {
@@ -82,7 +107,7 @@ export function LoginPage({ onBack, onSignIn, onSignUp }: LoginPageProps) {
             <h1 className="text-[28px] leading-9 font-bold tracking-tight text-on-surface">
               Welcome back
             </h1>
-            <p className="text-sm text-muted">Enter your details to access your route.</p>
+            <p className="text-sm text-muted">Sign in with email or phone.</p>
           </header>
 
           {displayError && (
@@ -100,27 +125,31 @@ export function LoginPage({ onBack, onSignIn, onSignUp }: LoginPageProps) {
           <form className="flex flex-col gap-4" onSubmit={(e) => void handleSubmit(e)}>
             <div className="flex flex-col gap-1">
               <label htmlFor="identifier" className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">
-                Email
+                Email or Phone
               </label>
-              <div className="relative group">
-                <MaterialIcon
-                  name="person"
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-muted group-focus-within:text-primary transition-colors"
-                />
-                <input
-                  id="identifier"
-                  type="email"
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="you@example.com"
-                  required
-                  autoComplete="email"
-                  className="w-full h-14 pl-12 pr-4 bg-surface-container-low border border-surface-dim rounded-lg text-base text-on-surface focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow placeholder:text-muted/60"
-                />
-              </div>
+              {isPhone && !isEmail ? (
+                <PhoneInput value={identifier} onChange={setIdentifier} required />
+              ) : (
+                <div className="relative group">
+                  <MaterialIcon
+                    name="person"
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-muted group-focus-within:text-primary transition-colors"
+                  />
+                  <input
+                    id="identifier"
+                    type="text"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    placeholder="you@example.com or 876-555-1234"
+                    required
+                    autoComplete="username"
+                    className="w-full h-14 pl-12 pr-4 bg-surface-container-low border border-surface-dim rounded-lg text-base text-on-surface focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow placeholder:text-muted/60"
+                  />
+                </div>
+              )}
             </div>
 
-            {!forgotMode && (
+            {!forgotMode && isEmail && (
             <div className="flex flex-col gap-1">
               <div className="flex justify-between items-center">
                 <label htmlFor="login-password" className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">
@@ -149,7 +178,7 @@ export function LoginPage({ onBack, onSignIn, onSignUp }: LoginPageProps) {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  required
+                  required={isEmail}
                   autoComplete="current-password"
                   className="w-full h-14 pl-12 pr-12 bg-surface-container-low border border-surface-dim rounded-lg text-base text-on-surface focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow placeholder:text-muted/60"
                 />
@@ -183,8 +212,14 @@ export function LoginPage({ onBack, onSignIn, onSignUp }: LoginPageProps) {
               disabled={loading || forgotLoading}
               className="h-14 w-full bg-primary-container text-on-primary-container text-xs font-semibold uppercase tracking-wide rounded-lg shadow-[0_6px_12px_rgba(16,185,129,0.1)] hover:bg-primary hover:text-on-primary active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-2 disabled:opacity-60"
             >
-              {loading || forgotLoading ? 'Please wait…' : forgotMode ? 'Send reset email' : 'Sign In'}
-              {!forgotMode && !loading && <MaterialIcon name="arrow_forward" className="text-[20px]" />}
+              {loading || forgotLoading
+                ? 'Please wait…'
+                : forgotMode
+                  ? 'Send reset email'
+                  : isPhone && !isEmail
+                    ? 'Send login code'
+                    : 'Sign In'}
+              {!forgotMode && !loading && isEmail && <MaterialIcon name="arrow_forward" className="text-[20px]" />}
             </button>
           </form>
 

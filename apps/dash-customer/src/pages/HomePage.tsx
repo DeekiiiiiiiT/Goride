@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { ActiveOrderBanner } from '@/components/home/ActiveOrderBanner';
+import { QuickReorderSection } from '@/components/home/QuickReorderSection';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { FavoriteButton } from '@/components/ui/FavoriteButton';
 import { PromoCarousel } from '@/components/ui/PromoCarousel';
@@ -20,6 +21,20 @@ type HomePageProps = {
   onNavigate: (page: string, data?: Record<string, unknown>) => void;
   onSearchFocus?: () => void;
   showActiveOrder?: boolean;
+  showQuickReorder?: boolean;
+};
+
+const CUISINE_MATCH: Record<string, string> = {
+  all: '',
+  jamaican: 'jamaican',
+  pizza: 'pizza',
+  'fast-food': 'fast food',
+  chinese: 'chinese',
+  indian: 'indian',
+  healthy: 'healthy',
+  cafe: 'cafe',
+  desserts: 'dessert',
+  breakfast: 'breakfast',
 };
 
 function RatingBadge({ rating }: { rating: number }) {
@@ -31,7 +46,7 @@ function RatingBadge({ rating }: { rating: number }) {
   );
 }
 
-export default function HomePage({ onNavigate, onSearchFocus, showActiveOrder }: HomePageProps) {
+export default function HomePage({ onNavigate, onSearchFocus, showActiveOrder, showQuickReorder }: HomePageProps) {
   const [selectedCuisine, setSelectedCuisine] = useState('all');
   const [loading, setLoading] = useState(false);
   const savedAddress = getSavedAddress();
@@ -49,7 +64,9 @@ export default function HomePage({ onNavigate, onSearchFocus, showActiveOrder }:
   const filteredPopular =
     selectedCuisine === 'all'
       ? POPULAR_RESTAURANTS
-      : POPULAR_RESTAURANTS.filter((r) => r.cuisines.toLowerCase().includes(selectedCuisine));
+      : POPULAR_RESTAURANTS.filter((r) =>
+          r.cuisines.toLowerCase().includes(CUISINE_MATCH[selectedCuisine] ?? selectedCuisine),
+        );
 
   return (
     <PullToRefresh onRefresh={handleRefresh} className="bg-surface min-h-full">
@@ -121,6 +138,12 @@ export default function HomePage({ onNavigate, onSearchFocus, showActiveOrder }:
           </div>
 
           <PromoCarousel onPromoClick={() => onNavigate('promotions')} />
+
+          {showQuickReorder && (
+            <div className="mt-4">
+              <QuickReorderSection onNavigate={onNavigate} />
+            </div>
+          )}
 
           <div className="flex overflow-x-auto px-4 gap-2 py-2 no-scrollbar items-center max-w-[1200px] mx-auto">
             {CUISINE_CHIPS.map((chip) => (

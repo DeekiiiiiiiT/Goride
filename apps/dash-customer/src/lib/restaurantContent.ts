@@ -37,6 +37,9 @@ export type RestaurantProfile = {
   promoCode: string;
   heroImage: string;
   logoImage: string;
+  hours: { day: string; open: string; close: string }[];
+  address: string;
+  phone: string;
   categories: { id: string; label: string; emoji?: string }[];
   items: MenuItem[];
 };
@@ -56,6 +59,13 @@ export const ISLAND_GRILL: RestaurantProfile = {
     'https://lh3.googleusercontent.com/aida-public/AB6AXuDlTlUgMXnB4jRJiV0LNeUXF5Kst247CW9jbuucrzRVIwF7vlZqkVHiHi2r86-d946QqdmR3CjggkjRmsFPSFLMduZS0M4bDGcnE4CSzs9BGfS3dOfS-7ImxYYTunPYFD1m0bf7CEH0Ge98p044EpJnYDqgUPWJgRZ9tRRXfXK_RzeuZJXs8m6KdT0VJnnrqAiTVGSzwUU7JF58SUIpFKbIUZ5NJm4Q5GF8A6h_IUwoURT4povIft2MYBJIEvVcZhGITyj8Jnpxes3l',
   logoImage:
     'https://lh3.googleusercontent.com/aida-public/AB6AXuC8vbwuBhPKxLfz9GANPENcNIdDM74K05_dZ8uaphp89SuYCAQ0hQFkJy4dwsDNPzbeEQQmVCoTYP5ZpI7kV16CONqlYIzZ8MHJFMRVuiNeb5o3EWfr05XfZ4PY_46CklsFBUlUu6nFV5fQCBuRE847ZAddSwc-klhoTpYl0kLIFIWpU1EtP2qvqaPX4AhqNJ5b-gNxuKLNRQcXco3IEUE-3Ko8IZz4LukbUgTRB_HYshbxSWfVyW23FpkYbbDAQUDurDnqZ-vzv1o8',
+  hours: [
+    { day: 'Mon – Thu', open: '10:00 AM', close: '10:00 PM' },
+    { day: 'Fri – Sat', open: '10:00 AM', close: '11:00 PM' },
+    { day: 'Sunday', open: '11:00 AM', close: '9:00 PM' },
+  ],
+  address: '12 Half Way Tree Rd, Kingston, Jamaica',
+  phone: '+1 876-555-0199',
   categories: [
     { id: 'popular', label: 'Popular', emoji: '🔥' },
     { id: 'chicken', label: 'Chicken' },

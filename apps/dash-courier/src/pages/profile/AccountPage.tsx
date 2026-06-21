@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { MOCK_COURIER_PROFILE } from '@/lib/mockProfile';
+import { loadCourierProfile } from '@/lib/courierProfileService';
 
 export type ProfileDestination =
   | 'edit-profile'
@@ -66,7 +67,24 @@ function MenuGroup({ items, onNavigate }: { items: MenuItem[]; onNavigate: Accou
 }
 
 export function AccountPage({ onNavigate, onSignOut, onRatingTap }: AccountPageProps) {
-  const profile = MOCK_COURIER_PROFILE;
+  const [profile, setProfile] = useState(MOCK_COURIER_PROFILE);
+
+  useEffect(() => {
+    void loadCourierProfile().then((row) => {
+      if (!row) return;
+      setProfile((prev) => ({
+        ...prev,
+        displayName: row.display_name ?? prev.displayName,
+        fullName: row.display_name ?? prev.fullName,
+        phone: row.phone ?? prev.phone,
+        email: row.email ?? prev.email,
+        rating: row.rating ?? prev.rating,
+        acceptanceRate: row.acceptance_rate_pct ?? prev.acceptanceRate,
+        completionRate: row.completion_rate_pct ?? prev.completionRate,
+        totalDeliveries: row.total_deliveries ?? prev.totalDeliveries,
+      }));
+    });
+  }, []);
 
   const stats = [
     { value: profile.rating.toFixed(2), label: 'Courier Rating', star: true },

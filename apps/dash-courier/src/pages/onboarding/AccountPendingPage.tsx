@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { ACCOUNT_REVIEW_ITEMS } from '@/lib/mockAccountReview';
+import { pollApprovalStatus } from '@/lib/courierProfileService';
 
 const ILLUSTRATION =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuBYf-fdDm1Bab--RSRWIJPR_V0M4sCI6hf0x8mZUsLnisvhbLH2egFAbkDMzu56Q5pKCsUqwx5kjtqyTk41NTUOwRT80cYvsCqcuCsSSEWFbTLxBLlUoeTWW1A8zrmvL_Mh5ngFeBeickxlWlTgl82B2JzP8sIeuN5sfEZQX_1jt-XUdu3zs2QRNTD9tR5sdCAP-qmfjjcIYHdxMPEbJ9oDla4BLGlLH1PrkvzJLZOFXi_IUSs_psijqQ12_t97ks6Fi-Q77SuHr5k';
@@ -17,20 +18,42 @@ const STATUS_ICON: Record<string, { icon: string; className: string; pulse?: boo
   processing: { icon: 'pending_actions', className: 'text-warning', pulse: true },
 };
 
+const POLL_INTERVAL_MS = 30_000;
+
 export function AccountPendingPage({
   onLogOut,
   onContactSupport,
   onApproved,
 }: AccountPendingPageProps) {
   const [checking, setChecking] = useState(false);
+  const [bgCheckStatus, setBgCheckStatus] = useState<string | null>(null);
 
-  const handleCheckStatus = () => {
+  const checkStatus = async () => {
     setChecking(true);
-    window.setTimeout(() => {
+    try {
+      const status = await pollApprovalStatus();
+      if (status === 'active') {
+        onApproved();
+      }
+    } finally {
       setChecking(false);
-      onApproved();
-    }, 1500);
+    }
   };
+
+  useEffect(() => {
+    void checkStatus();
+    const interval = window.setInterval(() => void checkStatus(), POLL_INTERVAL_MS);
+    return () => window.clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    void import('@/lib/courierProfileService').then(({ loadCourierProfile }) =>
+      loadCourierProfile().then((p) => {
+        if (p?.background_check_status) setBgCheckStatus(p.background_check_status);
+      }),
+    );
+  }, []);
 
   return (
     <div className="bg-background min-h-full flex flex-col items-center">
@@ -60,6 +83,9 @@ export function AccountPendingPage({
           <p className="text-base text-on-surface-variant px-2">
             This usually takes 1-2 business days
           </p>
+          {bgCheckStatus && (
+            <p className="text-sm text-muted">Background check: {bgCheckStatus}</p>
+          )}
         </div>
 
         <div className="bg-surface rounded-xl shadow-soft border border-surface-container-low p-4 space-y-4 w-full">
@@ -114,7 +140,7 @@ export function AccountPendingPage({
 
           <button
             type="button"
-            onClick={handleCheckStatus}
+            onClick={() => void checkStatus()}
             disabled={checking}
             className="text-sm font-medium text-primary underline underline-offset-2 disabled:opacity-50"
           >

@@ -6,7 +6,7 @@ type CustomerUnavailablePageProps = {
   onLeaveAtSafeLocation: () => void;
 };
 
-const INITIAL_SECONDS = 299;
+const INITIAL_SECONDS = 300;
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -88,7 +88,12 @@ export function CustomerUnavailablePage({
           <button
             type="button"
             onClick={onLeaveAtSafeLocation}
-            className="flex items-center justify-between w-full bg-surface p-4 rounded-xl shadow-soft active:scale-95 text-left border border-transparent hover:border-outline-variant"
+            disabled={!timerExpired}
+            className={`flex items-center justify-between w-full bg-surface p-4 rounded-xl shadow-soft text-left border border-transparent ${
+              timerExpired
+                ? 'hover:border-outline-variant active:scale-95'
+                : 'opacity-50 cursor-not-allowed'
+            }`}
           >
             <div className="flex items-center gap-4">
               <div className="bg-surface-container-low p-2 rounded-full text-primary">

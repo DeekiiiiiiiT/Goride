@@ -28,6 +28,8 @@ interface CartContextType {
   addItem: (item: Omit<CartItem, 'id'>, merchantName: string, options?: { replace?: boolean }) => 'added' | 'conflict';
   removeItem: (cartItemId: string) => void;
   updateQuantity: (cartItemId: string, quantity: number) => void;
+  replaceItem: (cartItemId: string, item: Omit<CartItem, 'id'>) => void;
+  getCartItem: (cartItemId: string) => CartItem | undefined;
   clearCart: () => void;
   subtotal: number;
   itemCount: number;
@@ -123,6 +125,21 @@ export function CartProvider({ children }: { children: ReactNode }) {
     );
   };
 
+  const getCartItem = (cartItemId: string): CartItem | undefined => {
+    return items.find(i => i.id === cartItemId);
+  };
+
+  const replaceItem = (cartItemId: string, item: Omit<CartItem, 'id'>) => {
+    setItems(prev => {
+      const index = prev.findIndex(i => i.id === cartItemId);
+      if (index < 0) return prev;
+      const next = [...prev];
+      next[index] = { ...item, id: cartItemId };
+      return next;
+    });
+    setMerchantId(item.merchantId);
+  };
+
   const clearCart = () => {
     setItems([]);
     setMerchantId(null);
@@ -144,6 +161,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
         addItem,
         removeItem,
         updateQuantity,
+        replaceItem,
+        getCartItem,
         clearCart,
         subtotal,
         itemCount,

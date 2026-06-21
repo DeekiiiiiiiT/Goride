@@ -1,18 +1,39 @@
 import { useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 
+const WAITLIST_KEY = 'roam-dash-waitlist-email';
+
 type Props = {
   onNavigate: (page: string, data?: Record<string, unknown>) => void;
+  returnTo?: string;
+  onReturn?: () => void;
 };
 
-export default function OutOfDeliveryPage({ onNavigate }: Props) {
+export default function OutOfDeliveryPage({ onNavigate, returnTo = 'saved-addresses', onReturn }: Props) {
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim()) return;
+    try {
+      localStorage.setItem(WAITLIST_KEY, email.trim());
+    } catch {
+      // ignore
+    }
     setSubmitted(true);
+  };
+
+  const handleTryDifferent = () => {
+    if (onReturn) {
+      onReturn();
+      return;
+    }
+    if (returnTo === 'delivery-address') {
+      onNavigate('home');
+      return;
+    }
+    onNavigate(returnTo);
   };
 
   return (
@@ -63,7 +84,7 @@ export default function OutOfDeliveryPage({ onNavigate }: Props) {
         <div className="mt-6">
           <button
             type="button"
-            onClick={() => onNavigate('saved-addresses')}
+            onClick={handleTryDifferent}
             className="text-label-md font-semibold tracking-wide text-primary-container hover:opacity-80 transition-opacity"
           >
             Try a different address

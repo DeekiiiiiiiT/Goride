@@ -11,6 +11,10 @@ type Props = {
   item: MenuItem | null;
   open: boolean;
   onClose: () => void;
+  mode?: 'add' | 'edit';
+  initialQuantity?: number;
+  initialInstructions?: string;
+  submitLabel?: string;
   onAdd: (payload: {
     quantity: number;
     selections: Selections;
@@ -80,7 +84,16 @@ function validateRequired(item: MenuItem, selections: Selections): string | null
   return null;
 }
 
-export function ItemDetailSheet({ item, open, onClose, onAdd }: Props) {
+export function ItemDetailSheet({
+  item,
+  open,
+  onClose,
+  mode = 'add',
+  initialQuantity = 1,
+  initialInstructions = '',
+  submitLabel,
+  onAdd,
+}: Props) {
   const [quantity, setQuantity] = useState(1);
   const [selections, setSelections] = useState<Selections>({});
   const [instructions, setInstructions] = useState('');
@@ -89,12 +102,14 @@ export function ItemDetailSheet({ item, open, onClose, onAdd }: Props) {
 
   useEffect(() => {
     if (item && open) {
-      setQuantity(1);
+      setQuantity(initialQuantity);
       setSelections(getDefaultSelections(item));
-      setInstructions('');
+      setInstructions(initialInstructions);
       setErrorGroupId(null);
     }
-  }, [item, open]);
+  }, [item, open, initialQuantity, initialInstructions]);
+
+  const actionLabel = submitLabel ?? (mode === 'edit' ? 'Update Item' : 'Add to Cart');
 
   const unitPrice = useMemo(
     () => (item ? calcUnitPrice(item, selections) : 0),
@@ -150,7 +165,7 @@ export function ItemDetailSheet({ item, open, onClose, onAdd }: Props) {
             <img src={item.image} alt={item.name} className="w-full h-full object-cover rounded-t-3xl" />
           </div>
 
-          <div className="px-margin-mobile pt-lg pb-md">
+          <div className="px-margin-mobile pt-inset-lg pb-inset-md">
             <div className="flex justify-between items-start mb-2">
               <h1 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface pr-8">{item.name}</h1>
               <span className="font-headline-md text-headline-md text-primary shrink-0">{formatJmd(item.price)}</span>
@@ -171,7 +186,7 @@ export function ItemDetailSheet({ item, open, onClose, onAdd }: Props) {
             />
           ))}
 
-          <div className="px-margin-mobile py-md mb-8">
+          <div className="px-margin-mobile py-inset-md mb-8">
             <h2 className="font-headline-sm text-headline-sm text-on-surface mb-4">Special Instructions</h2>
             <textarea
               value={instructions}
@@ -182,7 +197,7 @@ export function ItemDetailSheet({ item, open, onClose, onAdd }: Props) {
           </div>
         </div>
 
-        <div className="border-t border-surface-variant px-margin-mobile py-md bg-surface pb-safe shrink-0">
+        <div className="border-t border-surface-variant px-margin-mobile py-inset-md bg-surface pb-safe shrink-0">
           <div className="flex items-center gap-4">
             <QuantityStepper value={quantity} onChange={setQuantity} />
             <button
@@ -194,7 +209,7 @@ export function ItemDetailSheet({ item, open, onClose, onAdd }: Props) {
                   : 'bg-primary text-on-primary hover:shadow-md'
               }`}
             >
-              <span>{errorGroupId ? `Add ${quantity} to Cart` : 'Add to Cart'}</span>
+              <span>{errorGroupId ? actionLabel : actionLabel}</span>
               <span>{formatJmd(unitPrice * quantity)}</span>
             </button>
           </div>
@@ -224,7 +239,7 @@ function ModifierSection({
   const value = selections[group.id];
 
   const content = (
-    <div className="px-margin-mobile py-md">
+    <div className="px-margin-mobile py-inset-md">
       <div className="flex justify-between items-center mb-4">
         <h2 className="font-headline-sm text-headline-sm text-on-surface">{group.title}</h2>
         <span
@@ -239,7 +254,7 @@ function ModifierSection({
       </div>
 
       {hasError && (
-        <div className="flex items-center gap-xs text-error mb-md">
+        <div className="flex items-center gap-inset-xs text-error mb-inset-md">
           <MaterialIcon name="error" className="text-[18px]" />
           <span className="font-body-sm text-body-sm font-medium">Please select your {group.title.toLowerCase()}</span>
         </div>
@@ -283,7 +298,7 @@ function ModifierSection({
               <label
                 key={opt.id}
                 className={`flex items-center justify-between cursor-pointer group ${
-                  hasError && isRadio ? 'p-md rounded-lg bg-surface border border-outline-variant' : ''
+                  hasError && isRadio ? 'p-inset-md rounded-lg bg-surface border border-outline-variant' : ''
                 }`}
               >
                 <div className="flex flex-col">

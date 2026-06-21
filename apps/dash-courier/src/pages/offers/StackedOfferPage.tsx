@@ -8,6 +8,7 @@ const STACKED_MAP =
 type StackedOfferPageProps = {
   offer: StackedOffer;
   initialSeconds?: number;
+  onTimerExpire: () => void;
   onDecline: () => void;
   onAccept: () => void;
 };
@@ -15,6 +16,7 @@ type StackedOfferPageProps = {
 export function StackedOfferPage({
   offer,
   initialSeconds = 45,
+  onTimerExpire,
   onDecline,
   onAccept,
 }: StackedOfferPageProps) {
@@ -22,12 +24,12 @@ export function StackedOfferPage({
 
   useEffect(() => {
     if (seconds <= 0) {
-      onDecline();
+      onTimerExpire();
       return;
     }
     const timer = window.setTimeout(() => setSeconds((s) => s - 1), 1000);
     return () => window.clearTimeout(timer);
-  }, [seconds, onDecline]);
+  }, [seconds, onTimerExpire]);
 
   return (
     <div className="flex flex-col flex-1 min-h-0 h-full w-full overflow-hidden bg-background">

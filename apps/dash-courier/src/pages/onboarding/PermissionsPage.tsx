@@ -1,12 +1,16 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { OnboardingHeader } from '@/components/layout/OnboardingHeader';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
+import {
+  checkCourierPermission,
+  requestCourierPermission,
+  type CourierPermissionId,
+  type PermissionGrantState,
+} from '@/lib/courierPermissions';
 import { ensureCourierProfile } from '@/lib/ensureCourierProfile';
 
-type PermissionId = 'location' | 'notifications' | 'camera';
-
 type PermissionCard = {
-  id: PermissionId;
+  id: CourierPermissionId;
   icon: string;
   title: string;
   description: React.ReactNode;
@@ -44,15 +48,36 @@ type PermissionsPageProps = {
 };
 
 export function PermissionsPage({ onBack, onContinue }: PermissionsPageProps) {
-  const [granted, setGranted] = useState<Record<PermissionId, boolean>>({
-    location: false,
-    notifications: false,
-    camera: false,
+  const [granted, setGranted] = useState<Record<CourierPermissionId, PermissionGrantState>>({
+    location: 'prompt',
+    notifications: 'prompt',
+    camera: 'prompt',
   });
 
-  const togglePermission = (id: PermissionId) => {
-    setGranted((prev) => ({ ...prev, [id]: !prev[id] }));
+  useEffect(() => {
+    void Promise.all(
+      PERMISSIONS.map(async (perm) => {
+        const state = await checkCourierPermission(perm.id);
+        return [perm.id, state] as const;
+      }),
+    ).then((results) => {
+      setGranted((prev) => {
+        const next = { ...prev };
+        results.forEach(([id, state]) => {
+          next[id] = state;
+        });
+        return next;
+      });
+    });
+  }, []);
+
+  const requestPermission = async (id: CourierPermissionId) => {
+    const result = await requestCourierPermission(id);
+    setGranted((prev) => ({ ...prev, [id]: result }));
   };
+
+  const canContinue =
+    granted.location === 'granted' && granted.notifications === 'granted';
 
   return (
     <div className="bg-background text-on-background min-h-full flex flex-col items-center">
@@ -69,7 +94,8 @@ export function PermissionsPage({ onBack, onContinue }: PermissionsPageProps) {
 
           <div className="flex flex-col gap-4">
             {PERMISSIONS.map((perm) => {
-              const isGranted = granted[perm.id];
+              const state = granted[perm.id];
+              const isGranted = state === 'granted';
               return (
                 <div
                   key={perm.id}
@@ -89,14 +115,15 @@ export function PermissionsPage({ onBack, onContinue }: PermissionsPageProps) {
                       <p className="text-sm text-muted mb-3">{perm.description}</p>
                       <button
                         type="button"
-                        onClick={() => togglePermission(perm.id)}
-                        className={`text-xs font-semibold uppercase tracking-wide px-4 py-2 rounded-full transition-colors active:scale-95 ${
+                        onClick={() => void requestPermission(perm.id)}
+                        disabled={isGranted || state === 'unsupported'}
+                        className={`text-xs font-semibold uppercase tracking-wide px-4 py-2 rounded-full transition-colors active:scale-95 disabled:opacity-60 ${
                           isGranted
                             ? 'bg-primary-container text-on-primary-container'
                             : 'text-primary-container bg-surface-container-high hover:bg-primary-container hover:text-on-primary-container'
                         }`}
                       >
-                        {isGranted ? 'Granted' : 'Allow Access'}
+                        {isGranted ? 'Granted' : state === 'unsupported' ? 'Unsupported' : 'Allow Access'}
                       </button>
                     </div>
                   </div>
@@ -109,10 +136,11 @@ export function PermissionsPage({ onBack, onContinue }: PermissionsPageProps) {
         <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[400px] bg-surface p-[var(--spacing-edge)] pb-safe shadow-[0_-8px_24px_rgba(0,0,0,0.06)] border-t border-surface-variant z-40">
           <button
             type="button"
+            disabled={!canContinue}
             onClick={() => {
               void ensureCourierProfile().finally(onContinue);
             }}
-            className="w-full bg-primary-container text-on-primary-container font-semibold text-xl py-4 rounded-xl shadow-[0_6px_12px_rgba(16,185,129,0.1)] hover:bg-primary-container/90 transition-all active:scale-[0.98] flex items-center justify-center gap-2 min-h-[56px]"
+            className="w-full bg-primary-container text-on-primary-container font-semibold text-xl py-4 rounded-xl shadow-[0_6px_12px_rgba(16,185,129,0.1)] hover:bg-primary-container/90 transition-all active:scale-[0.98] flex items-center justify-center gap-2 min-h-[56px] disabled:opacity-50"
           >
             Continue
             <MaterialIcon name="arrow_forward" className="text-[20px]" />

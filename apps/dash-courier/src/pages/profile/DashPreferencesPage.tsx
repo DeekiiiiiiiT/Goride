@@ -3,13 +3,15 @@ import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { ToggleSwitch } from '@/components/forms/ToggleSwitch';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
 import { DEFAULT_DASH_PREFERENCES, PREFERRED_AREAS } from '@/lib/mockSettings';
+import { loadDashPreferences, saveDashPreferences } from '@/lib/courierStorage';
+import { toast } from '@/lib/toast';
 
 type DashPreferencesPageProps = {
   onBack: () => void;
 };
 
 export function DashPreferencesPage({ onBack }: DashPreferencesPageProps) {
-  const [prefs, setPrefs] = useState(DEFAULT_DASH_PREFERENCES);
+  const [prefs, setPrefs] = useState(() => loadDashPreferences());
 
   const toggleArea = (area: string) => {
     setPrefs((prev) => ({
@@ -159,7 +161,11 @@ export function DashPreferencesPage({ onBack }: DashPreferencesPageProps) {
 
         <button
           type="button"
-          onClick={onBack}
+          onClick={() => {
+            saveDashPreferences(prefs);
+            toast.success('Preferences saved');
+            onBack();
+          }}
           className="w-full h-14 bg-primary text-on-primary rounded-xl shadow-primary hover:opacity-95 active:scale-95 flex items-center justify-center gap-2 text-xl font-semibold"
         >
           <span>Save Preferences</span>

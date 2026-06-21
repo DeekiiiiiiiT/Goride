@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { SlideToArrive } from '@/components/delivery/SlideToArrive';
 import type { ActiveDelivery } from '@/lib/mockActiveDelivery';
@@ -7,16 +7,9 @@ import { EN_ROUTE_MAP } from '@/lib/mockActiveDelivery';
 type EnRoutePageProps = {
   delivery: ActiveDelivery;
   onArrived: () => void;
-  onConnectionLost?: () => void;
 };
 
-export function EnRoutePage({ delivery, onArrived, onConnectionLost }: EnRoutePageProps) {
-  useEffect(() => {
-    if (!onConnectionLost) return undefined;
-    const timer = window.setTimeout(onConnectionLost, 6000);
-    return () => window.clearTimeout(timer);
-  }, [onConnectionLost]);
-
+export function EnRoutePage({ delivery, onArrived }: EnRoutePageProps) {
   return (
     <div className="fixed inset-0 z-[60] bg-background flex flex-col overflow-hidden">
       <div className="absolute inset-0 z-0 bg-surface-variant pointer-events-none">

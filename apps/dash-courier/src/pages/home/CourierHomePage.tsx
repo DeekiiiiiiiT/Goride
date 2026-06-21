@@ -21,7 +21,7 @@ import { CustomerUnavailablePage } from '@/pages/delivery/CustomerUnavailablePag
 import { DeliveryCompletePage } from '@/pages/delivery/DeliveryCompletePage';
 import { ReportIssuePage } from '@/pages/delivery/ReportIssuePage';
 import { OrderCancelledPage } from '@/pages/delivery/OrderCancelledPage';
-import { StackedDeliveryPage } from '@/pages/delivery/StackedDeliveryPage';
+import { StackedDeliveryFlow } from '@/pages/delivery/stacked/StackedDeliveryFlow';
 import { UnassignConfirmModal } from '@/components/delivery/UnassignConfirmModal';
 import { OfferPushBanner } from '@/components/ui/OfferPushBanner';
 import { EarningsPage } from '@/pages/earnings/EarningsPage';
@@ -32,17 +32,23 @@ import { ActivityPage } from '@/pages/activity/ActivityPage';
 import { AccountPage, type ProfileDestination } from '@/pages/profile/AccountPage';
 import { EditProfilePage } from '@/pages/profile/EditProfilePage';
 import { VehicleDetailsPage } from '@/pages/profile/VehicleDetailsPage';
+import { EditVehiclePage } from '@/pages/profile/EditVehiclePage';
 import { CourierDocumentsPage } from '@/pages/profile/CourierDocumentsPage';
 import { HelpSupportPage } from '@/pages/profile/HelpSupportPage';
+import { HelpTopicPage } from '@/pages/profile/HelpTopicPage';
 import { NotificationSettingsPage } from '@/pages/profile/NotificationSettingsPage';
 import { DashPreferencesPage } from '@/pages/profile/DashPreferencesPage';
 import { RatingsStatsPage } from '@/pages/profile/RatingsStatsPage';
 import { SettingsPage } from '@/pages/profile/SettingsPage';
+import { AboutPage } from '@/pages/profile/AboutPage';
 import { PayoutSettingsPage } from '@/pages/profile/PayoutSettingsPage';
+import { PayoutHistoryPage } from '@/pages/profile/PayoutHistoryPage';
+import { DeclineReasonSheet } from '@/components/offers/DeclineReasonSheet';
+import type { DeclineReasonId } from '@/lib/declineReasons';
+import { persistDeclineReason } from '@/lib/declineReasonStorage';
 import type { DropoffMethod } from '@/lib/mockActiveDelivery';
 import { MOCK_ACTIVE_DELIVERY } from '@/lib/mockActiveDelivery';
 import { MOCK_CACHED_DELIVERY } from '@/lib/mockCachedDelivery';
-import { MOCK_STACKED_DELIVERY } from '@/lib/mockStackedDelivery';
 import {
   MOCK_DETAILED_OFFER,
   MOCK_SINGLE_OFFER,
@@ -50,32 +56,26 @@ import {
 } from '@/lib/mockOffers';
 import { useCourierFeedback } from '@/hooks/useCourierFeedback';
 import { useBackgroundLocation } from '@/hooks/useBackgroundLocation';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { useCourierDispatch } from '@/hooks/useCourierDispatch';
+import { OfflineError, assertOnline } from '@/lib/networkGuard';
+import { loadCourierProfile } from '@/lib/courierProfileService';
 import { toast } from '@/lib/toast';
-
-type HomeMode = 'offline' | 'going-online' | 'online' | 'on-delivery';
-type OfferPhase = null | 'stacked' | 'single' | 'details';
-type DeliveryPhase =
-  | null
-  | 'stacked-active'
-  | 'pickup-nav'
-  | 'at-restaurant'
-  | 'en-route'
-  | 'at-customer'
-  | 'confirm-handoff'
-  | 'customer-unavailable'
-  | 'complete'
-  | 'order-cancelled';
 
 type ProfileScreen =
   | 'edit-profile'
   | 'vehicle'
+  | 'edit-vehicle'
   | 'documents'
   | 'notifications'
   | 'preferences'
   | 'help'
+  | 'help-topic'
   | 'settings'
+  | 'about'
   | 'ratings'
   | 'payout-settings'
+  | 'payout-history'
   | null;
 
 type CourierHomePageProps = {
@@ -83,22 +83,24 @@ type CourierHomePageProps = {
 };
 
 export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
-  const [mode, setMode] = useState<HomeMode>('offline');
-  const [offerPhase, setOfferPhase] = useState<OfferPhase>(null);
-  const [deliveryPhase, setDeliveryPhase] = useState<DeliveryPhase>(null);
+  const dispatch = useCourierDispatch();
+  const { mode, offerPhase, deliveryPhase, acceptedStacked } = dispatch;
   const [activeTab, setActiveTab] = useState<CourierTab>('home');
   const [selectedDeliveryId, setSelectedDeliveryId] = useState<string | null>(null);
-  const [acceptedStacked, setAcceptedStacked] = useState(false);
   const [profileScreen, setProfileScreen] = useState<ProfileScreen>(null);
+  const [helpTopicId, setHelpTopicId] = useState<string | null>(null);
   const [showUnassignModal, setShowUnassignModal] = useState(false);
   const [reportIssueOpen, setReportIssueOpen] = useState(false);
   const [dashSummaryOpen, setDashSummaryOpen] = useState(false);
   const [promotionsOpen, setPromotionsOpen] = useState(false);
   const [locationIssueOpen, setLocationIssueOpen] = useState(false);
-  const [networkOffline, setNetworkOffline] = useState(false);
+  const [declineReasonOpen, setDeclineReasonOpen] = useState(false);
   const [pushBannerOpen, setPushBannerOpen] = useState(false);
+  const [courierName, setCourierName] = useState<string | undefined>();
   const hasResolvedLocation = useRef(false);
   const feedback = useCourierFeedback();
+  const { isOnline: networkOnline } = useNetworkStatus();
+  const networkOffline = !networkOnline;
   const isOnline = mode === 'online' || mode === 'on-delivery';
   const { coords } = useBackgroundLocation(isOnline);
   const mapOffset = coords
@@ -108,15 +110,21 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
       }
     : { x: 50, y: 50 };
 
+  useEffect(() => {
+    void loadCourierProfile().then((profile) => {
+      if (profile?.display_name) setCourierName(profile.display_name);
+    });
+  }, []);
+
   const hasActiveOffer = offerPhase !== null;
   const isOnDelivery = mode === 'on-delivery' && deliveryPhase !== null;
   const hasOverlay =
     selectedDeliveryId !== null ||
     profileScreen !== null ||
     dashSummaryOpen ||
-    promotionsOpen ||
-    networkOffline;
-  const showBottomNav = !hasActiveOffer && !isOnDelivery && !hasOverlay && !networkOffline;
+    promotionsOpen;
+  const showBottomNav =
+    !hasActiveOffer && !isOnDelivery && !hasOverlay && !networkOffline && !declineReasonOpen;
 
   const isImmersive =
     hasActiveOffer ||
@@ -126,18 +134,35 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
     dashSummaryOpen ||
     promotionsOpen ||
     reportIssueOpen ||
-    showUnassignModal;
+    showUnassignModal ||
+    declineReasonOpen;
 
   useImmersiveMode(isImmersive);
+
+  const guardAction = useCallback((action: () => void) => {
+    try {
+      assertOnline();
+      action();
+    } catch (err) {
+      if (err instanceof OfflineError) {
+        toast.error('You are offline', err.message);
+      }
+    }
+  }, []);
+
+  const finishStackedDelivery = useCallback(() => {
+    feedback.onComplete();
+    toast.success('Stacked route complete!', 'J$1,120 added to your balance.');
+    dispatch.finishDelivery();
+    setActiveTab('home');
+  }, [feedback, dispatch]);
 
   const finishDelivery = useCallback(() => {
     feedback.onComplete();
     toast.success('Delivery complete!', 'Earnings added to your balance.');
-    setDeliveryPhase(null);
-    setAcceptedStacked(false);
-    setMode('online');
+    dispatch.finishDelivery();
     setActiveTab('home');
-  }, [feedback]);
+  }, [feedback, dispatch]);
 
   const handleOfferReceived = useCallback(() => {
     if (mode === 'online' && offerPhase === null) {
@@ -146,57 +171,75 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
       if (document.hidden) {
         setPushBannerOpen(true);
       } else {
-        setOfferPhase('stacked');
+        dispatch.receiveOffer('stacked');
       }
     }
-  }, [mode, offerPhase, feedback]);
+  }, [mode, offerPhase, feedback, dispatch]);
 
-  const handleDeclineOffer = useCallback(() => {
-    if (offerPhase === 'stacked') {
-      setOfferPhase('single');
-      return;
-    }
-    setOfferPhase(null);
-  }, [offerPhase]);
+  const handleOfferTimerExpire = useCallback(() => {
+    setDeclineReasonOpen(false);
+    dispatch.expireOffer();
+  }, [dispatch]);
+
+  const requestDeclineOffer = useCallback(() => {
+    setDeclineReasonOpen(true);
+  }, []);
+
+  const finishDeclineOffer = useCallback(
+    (reasonId?: DeclineReasonId) => {
+      setDeclineReasonOpen(false);
+      const offerId =
+        offerPhase === 'stacked'
+          ? MOCK_STACKED_OFFER.id
+          : offerPhase === 'details'
+            ? MOCK_DETAILED_OFFER.id
+            : MOCK_SINGLE_OFFER.id;
+      if (reasonId) {
+        persistDeclineReason({ reasonId, offerId });
+        toast.success('Feedback recorded', 'Thanks for letting us know.');
+      }
+      dispatch.declineOffer(offerId, reasonId ? { reasonId, offerId } : undefined);
+    },
+    [dispatch, offerPhase],
+  );
 
   const handleAcceptStackedOffer = useCallback(() => {
-    feedback.onAccept();
-    toast.success('Offer accepted', 'Head to the restaurant to pick up.');
-    setOfferPhase(null);
-    setAcceptedStacked(true);
-    setMode('on-delivery');
-    setDeliveryPhase('stacked-active');
-    setActiveTab('home');
-  }, [feedback]);
+    guardAction(() => {
+      feedback.onAccept();
+      toast.success('Offer accepted', 'Head to the restaurant to pick up.');
+      dispatch.acceptOffer(MOCK_STACKED_OFFER.id);
+      setActiveTab('home');
+    });
+  }, [feedback, dispatch, guardAction]);
 
   const handleAcceptSingleOffer = useCallback(() => {
-    feedback.onAccept();
-    toast.success('Offer accepted', 'Navigation started to pickup.');
-    setOfferPhase(null);
-    setAcceptedStacked(false);
-    setMode('on-delivery');
-    setDeliveryPhase('pickup-nav');
-    setActiveTab('home');
-  }, [feedback]);
+    guardAction(() => {
+      feedback.onAccept();
+      toast.success('Offer accepted', 'Navigation started to pickup.');
+      dispatch.acceptOffer(MOCK_SINGLE_OFFER.id);
+      setActiveTab('home');
+    });
+  }, [feedback, dispatch, guardAction]);
 
   const handleUnassign = useCallback(() => {
     setShowUnassignModal(false);
     setReportIssueOpen(false);
-    setDeliveryPhase(null);
-    setAcceptedStacked(false);
-    setMode('online');
-  }, []);
+    dispatch.cancelDelivery();
+  }, [dispatch]);
 
   const handleRequestUnassign = useCallback(() => {
     setShowUnassignModal(true);
   }, []);
 
-  const handleReportIssueSubmit = useCallback((issueId: string) => {
-    setReportIssueOpen(false);
-    if (issueId === 'restaurant_closed' || issueId === 'customer_unavailable') {
-      setDeliveryPhase('order-cancelled');
-    }
-  }, []);
+  const handleReportIssueSubmit = useCallback(
+    (issueId: string) => {
+      setReportIssueOpen(false);
+      if (issueId === 'restaurant_closed' || issueId === 'customer_unavailable') {
+        dispatch.setDeliveryPhase('order-cancelled');
+      }
+    },
+    [dispatch],
+  );
 
   useEffect(() => {
     if (mode !== 'going-online') return undefined;
@@ -206,37 +249,37 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         setLocationIssueOpen(true);
         return;
       }
-      setMode('online');
+      dispatch.setMode('online');
     }, 2000);
 
     return () => window.clearTimeout(timer);
-  }, [mode]);
+  }, [mode, dispatch]);
 
   const handleLocationRetry = useCallback(() => {
     hasResolvedLocation.current = true;
     setLocationIssueOpen(false);
-    setMode('online');
+    dispatch.setMode('online');
     toast.success('Location found', 'You are now online and receiving offers.');
-  }, []);
-
-  const handleConnectionLost = useCallback(() => {
-    setNetworkOffline(true);
-    feedback.onError();
-    toast.error('Connection lost', 'Showing cached delivery data.');
-  }, [feedback]);
+  }, [dispatch]);
 
   const handleRetryConnection = useCallback(() => {
-    setNetworkOffline(false);
-    toast.success('Back online', 'Connection restored.');
-  }, []);
-
-  const handleAtCustomerComplete = useCallback((method: DropoffMethod) => {
-    if (method === 'hand-to-customer') {
-      setDeliveryPhase('confirm-handoff');
+    if (navigator.onLine) {
+      toast.success('Back online', 'Connection restored.');
     } else {
-      setDeliveryPhase('complete');
+      toast.error('Still offline', 'Please check your connection.');
     }
   }, []);
+
+  const handleAtCustomerComplete = useCallback(
+    (method: DropoffMethod) => {
+      if (method === 'hand-to-customer') {
+        dispatch.setDeliveryPhase('confirm-handoff');
+      } else {
+        dispatch.setDeliveryPhase('complete');
+      }
+    },
+    [dispatch],
+  );
 
   const handleProfileNavigate = useCallback((destination: ProfileDestination) => {
     const screenMap: Partial<Record<ProfileDestination, ProfileScreen>> = {
@@ -246,23 +289,24 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
       notifications: 'notifications',
       preferences: 'preferences',
       help: 'help',
-      about: 'settings',
+      about: 'about',
       earnings: 'payout-settings',
     };
     const screen = screenMap[destination];
-    if (screen) {
-      setProfileScreen(screen);
-      return;
-    }
+    if (screen) setProfileScreen(screen);
   }, []);
 
   const resumeActiveDelivery = useCallback(() => {
     setActiveTab('home');
     if (!isOnDelivery) {
-      setMode('on-delivery');
-      setDeliveryPhase('en-route');
+      dispatch.setMode('on-delivery');
+      dispatch.setDeliveryPhase('en-route');
     }
-  }, [isOnDelivery]);
+  }, [isOnDelivery, dispatch]);
+
+  const handleGoOnline = useCallback(() => {
+    guardAction(() => dispatch.goOnline());
+  }, [dispatch, guardAction]);
 
   const headerStatus =
     mode === 'going-online'
@@ -328,7 +372,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
       );
     }
 
-    return <HomeOfflinePage onGoOnline={() => setMode('going-online')} />;
+    return <HomeOfflinePage onGoOnline={handleGoOnline} courierName={courierName} />;
   };
 
   return (
@@ -349,7 +393,8 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         <ImmersiveScreen>
           <StackedOfferPage
             offer={MOCK_STACKED_OFFER}
-            onDecline={handleDeclineOffer}
+            onTimerExpire={handleOfferTimerExpire}
+            onDecline={requestDeclineOffer}
             onAccept={handleAcceptStackedOffer}
           />
         </ImmersiveScreen>
@@ -359,10 +404,11 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         <ImmersiveScreen>
           <DeliveryOfferPage
             offer={MOCK_SINGLE_OFFER}
-            onClose={handleDeclineOffer}
-            onDecline={handleDeclineOffer}
+            onClose={requestDeclineOffer}
+            onTimerExpire={handleOfferTimerExpire}
+            onDecline={requestDeclineOffer}
             onAccept={handleAcceptSingleOffer}
-            onViewDetails={() => setOfferPhase('details')}
+            onViewDetails={() => dispatch.showOfferDetails()}
             onOfferShown={feedback.onOfferReceived}
           />
         </ImmersiveScreen>
@@ -372,19 +418,26 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         <ImmersiveScreen className="z-[70]">
           <OfferDetailsPage
             offer={MOCK_DETAILED_OFFER}
-            onBack={() => setOfferPhase('single')}
-            onDecline={handleDeclineOffer}
+            onBack={() => dispatch.dismissOfferDetails()}
+            onTimerExpire={handleOfferTimerExpire}
+            onDecline={requestDeclineOffer}
             onAccept={handleAcceptSingleOffer}
           />
         </ImmersiveScreen>
       )}
 
+      <DeclineReasonSheet
+        open={declineReasonOpen}
+        onSkip={() => finishDeclineOffer()}
+        onSubmit={(reasonId) => finishDeclineOffer(reasonId)}
+      />
+
       {deliveryPhase === 'stacked-active' && (
         <ImmersiveScreen>
-          <StackedDeliveryPage
-            delivery={MOCK_STACKED_DELIVERY}
-            onBack={handleRequestUnassign}
-            onArrived={() => setDeliveryPhase('at-restaurant')}
+          <StackedDeliveryFlow
+            onComplete={finishStackedDelivery}
+            onRequestUnassign={handleRequestUnassign}
+            onReportIssue={() => setReportIssueOpen(true)}
           />
         </ImmersiveScreen>
       )}
@@ -393,54 +446,55 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         <ImmersiveScreen>
           <ActiveDeliveryNavPage
             delivery={MOCK_ACTIVE_DELIVERY}
-            onArrived={() => setDeliveryPhase('at-restaurant')}
+            onArrived={() => dispatch.setDeliveryPhase('at-restaurant')}
           />
         </ImmersiveScreen>
       )}
 
-      {deliveryPhase === 'at-restaurant' && (
+      {deliveryPhase === 'at-restaurant' && !acceptedStacked && (
         <AtRestaurantPage
           delivery={MOCK_ACTIVE_DELIVERY}
           onClose={handleRequestUnassign}
-          onConfirmPickup={() => setDeliveryPhase('en-route')}
+          onConfirmPickup={() =>
+            guardAction(() => dispatch.setDeliveryPhase('en-route'))
+          }
           onRequestUnassign={handleRequestUnassign}
           onReportIssue={() => setReportIssueOpen(true)}
         />
       )}
 
-      {deliveryPhase === 'en-route' && !networkOffline && (
+      {deliveryPhase === 'en-route' && !networkOffline && !acceptedStacked && (
         <EnRoutePage
           delivery={MOCK_ACTIVE_DELIVERY}
-          onArrived={() => setDeliveryPhase('at-customer')}
-          onConnectionLost={handleConnectionLost}
+          onArrived={() => dispatch.setDeliveryPhase('at-customer')}
         />
       )}
 
-      {deliveryPhase === 'at-customer' && (
+      {deliveryPhase === 'at-customer' && !acceptedStacked && (
         <AtCustomerPage
           delivery={MOCK_ACTIVE_DELIVERY}
-          onBack={() => setDeliveryPhase('en-route')}
+          onBack={() => dispatch.setDeliveryPhase('en-route')}
           onComplete={handleAtCustomerComplete}
-          onCustomerUnavailable={() => setDeliveryPhase('customer-unavailable')}
+          onCustomerUnavailable={() => dispatch.setDeliveryPhase('customer-unavailable')}
         />
       )}
 
-      {deliveryPhase === 'confirm-handoff' && (
+      {deliveryPhase === 'confirm-handoff' && !acceptedStacked && (
         <ConfirmHandoffPage
-          onBack={() => setDeliveryPhase('at-customer')}
-          onComplete={() => setDeliveryPhase('complete')}
-          onCustomerUnavailable={() => setDeliveryPhase('customer-unavailable')}
+          onBack={() => dispatch.setDeliveryPhase('at-customer')}
+          onComplete={() => dispatch.setDeliveryPhase('complete')}
+          onCustomerUnavailable={() => dispatch.setDeliveryPhase('customer-unavailable')}
         />
       )}
 
-      {deliveryPhase === 'customer-unavailable' && (
+      {deliveryPhase === 'customer-unavailable' && !acceptedStacked && (
         <CustomerUnavailablePage
-          onClose={() => setDeliveryPhase('at-customer')}
-          onLeaveAtSafeLocation={() => setDeliveryPhase('complete')}
+          onClose={() => dispatch.setDeliveryPhase('at-customer')}
+          onLeaveAtSafeLocation={() => dispatch.setDeliveryPhase('complete')}
         />
       )}
 
-      {deliveryPhase === 'complete' && (
+      {deliveryPhase === 'complete' && !acceptedStacked && (
         <DeliveryCompletePage delivery={MOCK_ACTIVE_DELIVERY} onBackToDash={finishDelivery} />
       )}
 
@@ -467,16 +521,14 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         <DashSummaryPage
           onEndDash={() => {
             setDashSummaryOpen(false);
-            setOfferPhase(null);
-            setMode('offline');
+            dispatch.expireOffer();
+            dispatch.goOffline();
           }}
           onStayOnline={() => setDashSummaryOpen(false)}
         />
       )}
 
-      {promotionsOpen && (
-        <PromotionsPage onBack={() => setPromotionsOpen(false)} />
-      )}
+      {promotionsOpen && <PromotionsPage onBack={() => setPromotionsOpen(false)} />}
 
       {selectedDeliveryId && (
         <DeliveryDetailPage onBack={() => setSelectedDeliveryId(null)} />
@@ -489,7 +541,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
           secondsLeft={90}
           onTap={() => {
             setPushBannerOpen(false);
-            setOfferPhase('single');
+            dispatch.receiveOffer('single');
           }}
           onDismiss={() => setPushBannerOpen(false)}
         />
@@ -503,7 +555,17 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
       )}
 
       {profileScreen === 'vehicle' && (
-        <VehicleDetailsPage onBack={() => setProfileScreen(null)} />
+        <VehicleDetailsPage
+          onBack={() => setProfileScreen(null)}
+          onEditVehicle={() => setProfileScreen('edit-vehicle')}
+        />
+      )}
+
+      {profileScreen === 'edit-vehicle' && (
+        <EditVehiclePage
+          onBack={() => setProfileScreen('vehicle')}
+          onSave={() => setProfileScreen('vehicle')}
+        />
       )}
 
       {profileScreen === 'documents' && (
@@ -519,11 +581,31 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
       )}
 
       {profileScreen === 'help' && (
-        <HelpSupportPage onBack={() => setProfileScreen(null)} />
+        <HelpSupportPage
+          onBack={() => setProfileScreen(null)}
+          onTopicSelect={(topicId) => {
+            setHelpTopicId(topicId);
+            setProfileScreen('help-topic');
+          }}
+        />
+      )}
+
+      {profileScreen === 'help-topic' && helpTopicId && (
+        <HelpTopicPage
+          topicId={helpTopicId}
+          onBack={() => setProfileScreen('help')}
+        />
       )}
 
       {profileScreen === 'settings' && (
         <SettingsPage onBack={() => setProfileScreen(null)} />
+      )}
+
+      {profileScreen === 'about' && (
+        <AboutPage
+          onBack={() => setProfileScreen(null)}
+          onOpenSettings={() => setProfileScreen('settings')}
+        />
       )}
 
       {profileScreen === 'ratings' && (
@@ -531,7 +613,14 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
       )}
 
       {profileScreen === 'payout-settings' && (
-        <PayoutSettingsPage onBack={() => setProfileScreen(null)} />
+        <PayoutSettingsPage
+          onBack={() => setProfileScreen(null)}
+          onViewHistory={() => setProfileScreen('payout-history')}
+        />
+      )}
+
+      {profileScreen === 'payout-history' && (
+        <PayoutHistoryPage onBack={() => setProfileScreen('payout-settings')} />
       )}
 
       {locationIssueOpen && (
@@ -545,10 +634,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         <OfflineModePage
           delivery={MOCK_CACHED_DELIVERY}
           onRetry={handleRetryConnection}
-          onProfileClick={() => {
-            setNetworkOffline(false);
-            setActiveTab('account');
-          }}
+          onProfileClick={() => setActiveTab('account')}
         />
       )}
     </AppShell>

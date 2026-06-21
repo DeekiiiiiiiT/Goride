@@ -3,7 +3,9 @@ export const ONBOARDING_SLIDES = [
     icon: 'search',
     title: 'Discover',
     description: 'Browse hundreds of local restaurants and cuisines',
-    image: '/images/onboarding/discover.png',
+    // Photo only — discover.png was a full UI mockup and duplicated the slide content.
+    image:
+      'https://images.unsplash.com/photo-1579584425555-c3ce17fd4351?auto=format&fit=crop&w=1200&q=80',
     alt: 'Sushi and salad from local restaurants',
   },
   {

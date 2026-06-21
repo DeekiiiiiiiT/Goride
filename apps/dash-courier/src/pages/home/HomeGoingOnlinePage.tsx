@@ -27,7 +27,7 @@ export function HomeGoingOnlinePage() {
 
         <h2 className="text-xl font-semibold text-on-surface mb-2 text-center">Going online...</h2>
         <p className="text-sm text-muted text-center">
-          Checking your location and securing connection.
+          Checking your location...
         </p>
       </div>
     </main>

@@ -8,10 +8,11 @@ import {
   type AddressLabel,
   type SavedAddress,
 } from '@/lib/addressStorage';
+import { checkDeliveryZone } from '@/lib/deliveryZones';
 
 type Props = {
   addressId?: string;
-  onNavigate: (page: string) => void;
+  onNavigate: (page: string, data?: Record<string, unknown>) => void;
 };
 
 const LABEL_OPTIONS: { id: AddressLabel; icon: string; label: string }[] = [
@@ -30,13 +31,19 @@ export default function AddAddressPage({ addressId, onNavigate }: Props) {
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
+    const city = existing?.city ?? 'Kingston, Jamaica';
+    const zone = checkDeliveryZone({ line1, line2, city });
+    if (!zone.inZone) {
+      onNavigate('out-of-delivery', { returnTo: 'add-address', attemptedAddress: line1 });
+      return;
+    }
     const address: SavedAddress = {
       id: existing?.id ?? `addr-${Date.now()}`,
       label,
       line1,
       line2: line2 || undefined,
       instructions: instructions || undefined,
-      city: existing?.city ?? 'Kingston, Jamaica',
+      city,
       isDefault: existing?.isDefault ?? !addressId,
     };
     upsertSavedAddress(address);

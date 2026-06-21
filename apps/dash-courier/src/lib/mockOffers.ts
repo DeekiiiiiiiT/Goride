@@ -16,6 +16,7 @@ export type SingleOffer = {
   tip: number;
   baseFare: number;
   distanceFare: number;
+  peakPay?: number;
   cuisine?: string;
   itemCount: number;
   items: OfferItem[];
@@ -68,6 +69,7 @@ export const MOCK_DETAILED_OFFER: SingleOffer = {
   pickupAddress: '78 Knutsford Blvd, Kingston',
   totalDistanceKm: 4.2,
   itemCount: 8,
+  peakPay: 75,
 };
 
 export const MOCK_STACKED_OFFER: StackedOffer = {

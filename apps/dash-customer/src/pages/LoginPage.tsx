@@ -1,7 +1,18 @@
 import React, { useState } from 'react';
-import { supabase, useForgotPassword, GOOGLE_OAUTH_EMAIL_ONLY_SCOPES } from '@roam/auth-client';
+import { useForgotPassword, GOOGLE_OAUTH_EMAIL_ONLY_SCOPES } from '@roam/auth-client';
 import { toast } from 'sonner';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
+import { PhoneInput, toE164JamaicaPhone } from '@/components/forms/PhoneInput';
+import { ABOUT_LINKS } from '@/lib/aboutContent';
+import { saveProfile } from '@/lib/accountContent';
+import { supabase } from '@/lib/supabase';
+import {
+  clearDashCustomerOAuthIntent,
+  DASH_CUSTOMER_OAUTH_INTENT_KEY,
+  DASH_CUSTOMER_OAUTH_INTENT_LOGIN,
+  DASH_CUSTOMER_OAUTH_INTENT_SIGNUP,
+  getDashCustomerAuthRedirectUrl,
+} from '@/lib/dashCustomerAuth';
 
 type LoginPageProps = {
   onNavigate: (page: string, data?: Record<string, unknown>) => void;
@@ -48,6 +59,8 @@ export default function LoginPage({
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [signupEmail, setSignupEmail] = useState('');
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState(false);
@@ -63,16 +76,21 @@ export default function LoginPage({
   const handleGoogleAuth = async () => {
     setOauthLoading(true);
     try {
+      sessionStorage.setItem(
+        DASH_CUSTOMER_OAUTH_INTENT_KEY,
+        isSignUp ? DASH_CUSTOMER_OAUTH_INTENT_SIGNUP : DASH_CUSTOMER_OAUTH_INTENT_LOGIN,
+      );
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: window.location.origin,
+          redirectTo: getDashCustomerAuthRedirectUrl(),
           scopes: GOOGLE_OAUTH_EMAIL_ONLY_SCOPES,
           queryParams: { prompt: 'select_account' },
         },
       });
       if (error) throw error;
     } catch (error) {
+      clearDashCustomerOAuthIntent();
       toast.error(error instanceof Error ? error.message : 'Google sign-in failed');
       setOauthLoading(false);
     }
@@ -80,7 +98,7 @@ export default function LoginPage({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const email = identifier.trim();
+    const email = (isSignUp ? signupEmail : identifier).trim();
 
     if (forgotMode) {
       if (!email.includes('@')) {
@@ -98,18 +116,36 @@ export default function LoginPage({
       return;
     }
 
+    if (isSignUp && !termsAccepted) {
+      toast.error('Please accept the Terms of Service and Privacy Policy.');
+      return;
+    }
+
+    if (isSignUp && !phone.trim()) {
+      toast.error('Please enter your phone number.');
+      return;
+    }
+
     setIsLoading(true);
     try {
       if (isSignUp) {
+        const e164Phone = toE164JamaicaPhone(phone);
         const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
-            data: { name, phone },
+            data: { name, phone: e164Phone },
             emailRedirectTo: `${window.location.origin}/`,
           },
         });
         if (error) throw error;
+        const [firstName, ...rest] = name.trim().split(' ');
+        saveProfile({
+          firstName: firstName || name,
+          lastName: rest.join(' ') || '',
+          email,
+          phone: e164Phone,
+        });
         toast.success('Account created! Check your email to verify.');
         onSignUpSuccess?.();
       } else {
@@ -179,17 +215,24 @@ export default function LoginPage({
                   required
                   className="w-full bg-surface-container-high text-on-surface text-base rounded-lg px-4 py-4 border-2 border-transparent focus:bg-surface-container-lowest focus:border-primary focus:outline-none transition-all placeholder:text-on-surface-variant/60"
                 />
+                <PhoneInput value={phone} onChange={setPhone} required />
+                <div className="flex items-center gap-4">
+                  <div className="flex-1 h-px bg-surface-container-highest" />
+                  <span className="text-sm text-on-surface-variant">or</span>
+                  <div className="flex-1 h-px bg-surface-container-highest" />
+                </div>
                 <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="Phone number"
+                  type="email"
+                  value={signupEmail}
+                  onChange={(e) => setSignupEmail(e.target.value)}
+                  placeholder="Email address"
                   required
                   className="w-full bg-surface-container-high text-on-surface text-base rounded-lg px-4 py-4 border-2 border-transparent focus:bg-surface-container-lowest focus:border-primary focus:outline-none transition-all placeholder:text-on-surface-variant/60"
                 />
               </>
             )}
 
+            {!isSignUp && (
             <input
               id="identifier"
               type="text"
@@ -199,6 +242,7 @@ export default function LoginPage({
               required
               className="w-full bg-surface-container-high text-on-surface text-base rounded-lg px-4 py-4 border-2 border-transparent focus:bg-surface-container-lowest focus:border-primary focus:outline-none transition-all placeholder:text-on-surface-variant/60"
             />
+            )}
 
             {!forgotMode && (
               <div className="relative">
@@ -221,6 +265,28 @@ export default function LoginPage({
                   <MaterialIcon name={showPassword ? 'visibility' : 'visibility_off'} className="text-[20px]" />
                 </button>
               </div>
+            )}
+
+            {isSignUp && !forgotMode && (
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={termsAccepted}
+                  onChange={(e) => setTermsAccepted(e.target.checked)}
+                  className="mt-1 w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary"
+                  required
+                />
+                <span className="text-body-sm text-on-surface-variant">
+                  I agree to the{' '}
+                  <a href={ABOUT_LINKS[0].href} target="_blank" rel="noopener noreferrer" className="text-primary font-semibold">
+                    Terms of Service
+                  </a>{' '}
+                  and{' '}
+                  <a href={ABOUT_LINKS[1].href} target="_blank" rel="noopener noreferrer" className="text-primary font-semibold">
+                    Privacy Policy
+                  </a>
+                </span>
+              </label>
             )}
 
             {!isSignUp && (
@@ -265,7 +331,7 @@ export default function LoginPage({
               : forgotMode
                 ? 'Send reset email'
                 : isSignUp
-                  ? 'Create account'
+                  ? 'Continue'
                   : 'Sign In'}
           </button>
 
@@ -289,8 +355,9 @@ export default function LoginPage({
                 </button>
                 <button
                   type="button"
-                  onClick={() => toast.info('Apple sign-in coming soon')}
-                  className="w-full bg-surface-container-lowest border border-surface-container-highest text-on-surface text-sm font-semibold tracking-wide py-3.5 rounded-lg hover:bg-surface-container-low active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-3"
+                  disabled
+                  title="Coming soon"
+                  className="w-full bg-surface-container-lowest border border-surface-container-highest text-on-surface-variant text-sm font-semibold tracking-wide py-3.5 rounded-lg flex items-center justify-center gap-3 opacity-60 cursor-not-allowed"
                 >
                   <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden>
                     <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.15 2.95.93 3.78 2.04-3.18 1.9-2.65 6.33.6 7.61-.75 1.49-1.57 2.72-2.98 3.36zM12.03 7.25C11.75 4.09 14.39 1.45 17.51 1c.36 3.43-2.92 6.13-5.48 6.25z" />

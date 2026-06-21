@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import type { AddressLabel } from '@/lib/addressStorage';
+import { checkDeliveryZone } from '@/lib/deliveryZones';
 import type { AddressSelection } from './DeliveryAddressPage';
 
 type DeliveryDetailsPageProps = {
@@ -12,6 +13,7 @@ type DeliveryDetailsPageProps = {
     instructions?: string;
     label: AddressLabel;
   }) => void;
+  onOutOfZone?: (address: AddressSelection) => void;
 };
 
 const LABEL_OPTIONS: { value: AddressLabel; icon: string; label: string }[] = [
@@ -20,11 +22,25 @@ const LABEL_OPTIONS: { value: AddressLabel; icon: string; label: string }[] = [
   { value: 'other', icon: 'location_on', label: 'Other' },
 ];
 
-export function DeliveryDetailsPage({ address, onBack, onSave }: DeliveryDetailsPageProps) {
+export function DeliveryDetailsPage({ address, onBack, onSave, onOutOfZone }: DeliveryDetailsPageProps) {
   const [line1, setLine1] = useState(address.line1);
   const [line2, setLine2] = useState(address.line2 ?? '');
   const [instructions, setInstructions] = useState('');
   const [label, setLabel] = useState<AddressLabel>('home');
+
+  const handleSave = () => {
+    const zone = checkDeliveryZone({ line1, line2 });
+    if (!zone.inZone) {
+      onOutOfZone?.({ line1, line2 });
+      return;
+    }
+    onSave({
+      line1,
+      line2: line2 || undefined,
+      instructions: instructions || undefined,
+      label,
+    });
+  };
 
   return (
     <div className="app-fullscreen-screen bg-surface text-on-surface antialiased">
@@ -142,14 +158,7 @@ export function DeliveryDetailsPage({ address, onBack, onSave }: DeliveryDetails
         <div className="max-w-[1200px] mx-auto">
           <button
             type="button"
-            onClick={() =>
-              onSave({
-                line1,
-                line2: line2 || undefined,
-                instructions: instructions || undefined,
-                label,
-              })
-            }
+            onClick={handleSave}
             disabled={!line1.trim()}
             className="w-full bg-primary text-on-primary rounded-lg py-4 text-sm font-semibold tracking-wide flex justify-center items-center shadow-sm active:scale-[0.98] transition-transform duration-200 disabled:opacity-50"
           >

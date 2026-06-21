@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { ToggleSwitch } from '@/components/forms/ToggleSwitch';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
-import { DEFAULT_NOTIFICATION_SETTINGS } from '@/lib/mockSettings';
+import { loadNotificationSettings, saveNotificationSettings } from '@/lib/courierStorage';
+import { toast } from '@/lib/toast';
 
 type NotificationSettingsPageProps = {
   onBack: () => void;
@@ -49,7 +50,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export function NotificationSettingsPage({ onBack }: NotificationSettingsPageProps) {
-  const [settings, setSettings] = useState(DEFAULT_NOTIFICATION_SETTINGS);
+  const [settings, setSettings] = useState(() => loadNotificationSettings());
 
   const set = (key: keyof typeof settings) => (value: boolean) =>
     setSettings((prev) => ({ ...prev, [key]: value }));
@@ -108,6 +109,20 @@ export function NotificationSettingsPage({ onBack }: NotificationSettingsPagePro
           />
         </Section>
       </main>
+
+      <div className="px-[var(--spacing-edge)] py-4 pb-safe border-t border-surface-variant bg-surface">
+        <button
+          type="button"
+          onClick={() => {
+            saveNotificationSettings(settings);
+            toast.success('Notification settings saved');
+            onBack();
+          }}
+          className="w-full h-14 bg-primary text-on-primary rounded-xl font-semibold text-xl"
+        >
+          Save
+        </button>
+      </div>
     </div>
   );
 }

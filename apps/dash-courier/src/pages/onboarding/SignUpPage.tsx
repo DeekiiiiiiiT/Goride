@@ -3,33 +3,81 @@ import { ROAM_LEGAL } from '@roam/business-config/legalUrls';
 import { OnboardingHeader } from '@/components/layout/OnboardingHeader';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { CourierGoogleAuthButton } from '@/components/auth/CourierGoogleAuthButton';
+import { PhoneInput, toE164JamaicaPhone } from '@/components/forms/PhoneInput';
 import { saveSignupDraft } from '@/lib/signupDraft';
+import { supabase } from '@/lib/supabase';
 
 type SignUpPageProps = {
   onBack: () => void;
   onContinue: () => void;
 };
 
-const COUNTRY_OPTIONS = [
-  { value: '+1', label: '🇯🇲 +1' },
-  { value: '+1US', label: '🇺🇸 +1' },
-  { value: '+44', label: '🇬🇧 +44' },
-];
-
 export function SignUpPage({ onBack, onContinue }: SignUpPageProps) {
-  const [countryCode, setCountryCode] = useState('+1');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [googleError, setGoogleError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!termsAccepted) return;
-    saveSignupDraft({ countryCode, phone, email });
-    onContinue();
+
+    const trimmedEmail = email.trim();
+    const trimmedPhone = phone.trim();
+    const hasEmail = trimmedEmail.includes('@');
+    const hasPhone = trimmedPhone.replace(/\D/g, '').length >= 7;
+
+    if (!hasEmail && !hasPhone) {
+      setAuthError('Enter an email address or phone number.');
+      return;
+    }
+    if (password.length < 8) {
+      setAuthError('Password must be at least 8 characters.');
+      return;
+    }
+
+    setAuthError(null);
+    setLoading(true);
+
+    try {
+      if (hasEmail) {
+        saveSignupDraft({ countryCode: '+1', phone: trimmedPhone, email: trimmedEmail });
+        const { error } = await supabase.auth.signUp({
+          email: trimmedEmail,
+          password,
+          options: {
+            data: {
+              phone: hasPhone ? toE164JamaicaPhone(trimmedPhone) : null,
+              countryCode: '+1',
+            },
+          },
+        });
+        if (error) throw error;
+        onContinue();
+        return;
+      }
+
+      const e164 = toE164JamaicaPhone(trimmedPhone);
+      saveSignupDraft({ countryCode: '+1', phone: trimmedPhone, email: '' });
+      const { error } = await supabase.auth.signUp({ phone: e164, password });
+      if (error) {
+        setAuthError(
+          error.message.includes('SMS')
+            ? 'Phone signup requires SMS verification. Please use email signup instead.'
+            : error.message,
+        );
+        return;
+      }
+      onContinue();
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : 'Sign up failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -44,33 +92,23 @@ export function SignUpPage({ onBack, onContinue }: SignUpPageProps) {
           <p className="text-sm text-muted mt-2">Join the fleet and start earning on your schedule.</p>
         </div>
 
-        <form className="flex-1 flex flex-col gap-6" onSubmit={handleSubmit}>
+        <form className="flex-1 flex flex-col gap-6" onSubmit={(e) => void handleSubmit(e)}>
           <div className="flex flex-col gap-3">
             <CourierGoogleAuthButton variant="signup" onError={(msg) => setGoogleError(msg || null)} />
             <p className="text-xs text-muted leading-relaxed text-center px-2">
               By continuing with Google, you agree to Roam Dash Courier&apos;s{' '}
-              <a
-                href={ROAM_LEGAL.termsOfServiceUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline font-medium"
-              >
+              <a href={ROAM_LEGAL.termsOfServiceUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">
                 Terms of Service
               </a>{' '}
               and{' '}
-              <a
-                href={ROAM_LEGAL.privacyPolicyUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline font-medium"
-              >
+              <a href={ROAM_LEGAL.privacyPolicyUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">
                 Privacy Policy
               </a>
               .
             </p>
-            {googleError && (
+            {(googleError || authError) && (
               <p className="text-sm text-error text-center" role="alert">
-                {googleError}
+                {authError || googleError}
               </p>
             )}
           </div>
@@ -85,32 +123,7 @@ export function SignUpPage({ onBack, onContinue }: SignUpPageProps) {
             <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">
               Phone Number
             </label>
-            <div className="flex gap-2 h-14">
-              <div className="relative shrink-0 w-24">
-                <select
-                  value={countryCode}
-                  onChange={(e) => setCountryCode(e.target.value)}
-                  className="appearance-none w-full h-full bg-surface border border-outline-variant rounded-lg pl-3 pr-8 text-base text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors cursor-pointer"
-                >
-                  {COUNTRY_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-                <MaterialIcon
-                  name="expand_more"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-muted text-xl"
-                />
-              </div>
-              <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="876-555-0199"
-                className="flex-1 h-full bg-surface border border-outline-variant rounded-lg px-4 text-base text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors placeholder:text-muted/50"
-              />
-            </div>
+            <PhoneInput value={phone} onChange={setPhone} />
           </div>
 
           <div className="flex items-center gap-4">
@@ -144,6 +157,7 @@ export function SignUpPage({ onBack, onContinue }: SignUpPageProps) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Min. 8 characters"
+                required
                 className="w-full h-full bg-surface border border-outline-variant rounded-lg pl-4 pr-12 text-base text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors placeholder:text-muted/50"
               />
               <button
@@ -176,21 +190,11 @@ export function SignUpPage({ onBack, onContinue }: SignUpPageProps) {
               </div>
               <span className="text-sm text-on-surface-variant leading-tight">
                 I agree to Roam Dash Courier&apos;s{' '}
-                <a
-                  href={ROAM_LEGAL.termsOfServiceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline font-medium"
-                >
+                <a href={ROAM_LEGAL.termsOfServiceUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">
                   Terms of Service
                 </a>{' '}
                 and{' '}
-                <a
-                  href={ROAM_LEGAL.privacyPolicyUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline font-medium"
-                >
+                <a href={ROAM_LEGAL.privacyPolicyUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">
                   Privacy Policy
                 </a>
                 .
@@ -199,10 +203,10 @@ export function SignUpPage({ onBack, onContinue }: SignUpPageProps) {
 
             <button
               type="submit"
-              disabled={!termsAccepted}
+              disabled={!termsAccepted || loading}
               className="w-full min-h-[56px] bg-primary-container text-on-primary-container rounded-lg font-semibold text-xl flex items-center justify-center shadow-[0_6px_12px_rgba(16,185,129,0.1)] hover:bg-primary-container/90 active:scale-[0.98] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Continue
+              {loading ? 'Please wait…' : 'Continue'}
             </button>
           </div>
         </form>

@@ -5,6 +5,7 @@ import type { PayoutSchedule } from '@/lib/mockSettings';
 
 type PayoutSettingsPageProps = {
   onBack: () => void;
+  onViewHistory?: () => void;
 };
 
 const SCHEDULE_OPTIONS: {
@@ -37,7 +38,7 @@ const SCHEDULE_OPTIONS: {
   },
 ];
 
-export function PayoutSettingsPage({ onBack }: PayoutSettingsPageProps) {
+export function PayoutSettingsPage({ onBack, onViewHistory }: PayoutSettingsPageProps) {
   const [schedule, setSchedule] = useState<PayoutSchedule>('weekly');
 
   return (
@@ -137,6 +138,7 @@ export function PayoutSettingsPage({ onBack }: PayoutSettingsPageProps) {
         <section className="space-y-4">
           <button
             type="button"
+            onClick={onViewHistory}
             className="w-full flex items-center justify-between p-4 bg-surface rounded-xl shadow-soft border border-surface-variant active:scale-[0.98] transition-transform group"
           >
             <div className="flex items-center gap-4">

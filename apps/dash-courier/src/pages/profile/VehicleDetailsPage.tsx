@@ -1,14 +1,28 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
 import { MOCK_COURIER_VEHICLE } from '@/lib/mockProfile';
+import { loadSignupDraft, saveSignupDraft } from '@/lib/signupDraft';
 
 type VehicleDetailsPageProps = {
   onBack: () => void;
+  onEditVehicle: () => void;
 };
 
-export function VehicleDetailsPage({ onBack }: VehicleDetailsPageProps) {
+const VEHICLE_TYPES = [
+  { type: 'bicycle' as const, icon: 'pedal_bike', label: 'Bicycle' },
+  { type: 'motorcycle' as const, icon: 'two_wheeler', label: 'Motorcycle' },
+  { type: 'car' as const, icon: 'directions_car', label: 'Car' },
+];
+
+export function VehicleDetailsPage({ onBack, onEditVehicle }: VehicleDetailsPageProps) {
   const vehicle = MOCK_COURIER_VEHICLE;
+  const [switchOpen, setSwitchOpen] = useState(false);
+
+  const handleSwitchType = (type: 'bicycle' | 'motorcycle' | 'car') => {
+    saveSignupDraft({ vehicleType: type });
+    setSwitchOpen(false);
+  };
 
   return (
     <div className="fixed inset-0 z-[70] bg-background flex flex-col overflow-hidden">
@@ -66,6 +80,7 @@ export function VehicleDetailsPage({ onBack }: VehicleDetailsPageProps) {
         <section className="flex flex-col gap-4 pb-8">
           <button
             type="button"
+            onClick={onEditVehicle}
             className="w-full h-14 rounded-lg border-2 border-outline-variant text-on-surface text-xs font-semibold uppercase tracking-wide flex items-center justify-center gap-2 hover:bg-surface-container-low active:scale-[0.98] transition-all"
           >
             <MaterialIcon name="edit" />
@@ -73,6 +88,7 @@ export function VehicleDetailsPage({ onBack }: VehicleDetailsPageProps) {
           </button>
           <button
             type="button"
+            onClick={() => setSwitchOpen(true)}
             className="w-full h-14 rounded-lg text-primary text-xs font-semibold uppercase tracking-wide flex items-center justify-center gap-2 hover:bg-primary/5 active:scale-[0.98] transition-all"
           >
             <MaterialIcon name="swap_horiz" />
@@ -80,6 +96,32 @@ export function VehicleDetailsPage({ onBack }: VehicleDetailsPageProps) {
           </button>
         </section>
       </main>
+
+      {switchOpen && (
+        <div className="fixed inset-0 z-[80] bg-black/40 flex items-end">
+          <div className="w-full bg-surface rounded-t-[24px] p-6 pb-safe space-y-3">
+            <h3 className="text-xl font-semibold text-on-surface mb-2">Switch vehicle type</h3>
+            {VEHICLE_TYPES.map((opt) => (
+              <button
+                key={opt.type}
+                type="button"
+                onClick={() => handleSwitchType(opt.type)}
+                className="w-full flex items-center gap-3 p-4 rounded-xl bg-surface-container-low hover:bg-surface-container active:scale-[0.98]"
+              >
+                <MaterialIcon name={opt.icon} className="text-primary" />
+                <span className="text-base font-medium">{opt.label}</span>
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setSwitchOpen(false)}
+              className="w-full py-3 text-sm text-muted"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
 import { EDIT_PROFILE_PHOTO, MOCK_EDIT_PROFILE_DRAFT } from '@/lib/mockProfile';
+import { loadCourierProfile, updateCourierProfile } from '@/lib/courierProfileService';
+import { toast } from '@/lib/toast';
 
 type EditProfilePageProps = {
   onBack: () => void;
@@ -25,6 +27,36 @@ const FIELDS: FieldConfig[] = [
 
 export function EditProfilePage({ onBack, onSave }: EditProfilePageProps) {
   const [form, setForm] = useState(MOCK_EDIT_PROFILE_DRAFT);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    void loadCourierProfile().then((row) => {
+      if (!row) return;
+      setForm((prev) => ({
+        ...prev,
+        fullName: row.display_name ?? prev.fullName,
+        displayName: row.display_name ?? prev.displayName,
+        phone: row.phone ?? prev.phone,
+        email: row.email ?? prev.email,
+      }));
+    });
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    const ok = await updateCourierProfile({
+      display_name: form.displayName || form.fullName,
+      phone: form.phone,
+      email: form.email,
+    });
+    setSaving(false);
+    if (ok) {
+      toast.success('Profile updated');
+      onSave();
+    } else {
+      toast.error('Could not save profile');
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[70] bg-background flex flex-col">
@@ -80,10 +112,11 @@ export function EditProfilePage({ onBack, onSave }: EditProfilePageProps) {
       <div className="fixed bottom-0 w-full bg-surface/90 backdrop-blur-md px-[var(--spacing-edge)] py-4 pb-safe shadow-[0_-6px_12px_rgba(0,108,73,0.1)] border-t border-surface-container-low">
         <button
           type="button"
-          onClick={onSave}
-          className="w-full h-14 bg-primary text-on-primary rounded-xl text-xs font-semibold uppercase tracking-wide flex items-center justify-center shadow-primary active:scale-[0.98] transition-transform"
+          onClick={() => void handleSave()}
+          disabled={saving}
+          className="w-full h-14 bg-primary text-on-primary rounded-xl text-xs font-semibold uppercase tracking-wide flex items-center justify-center shadow-primary active:scale-[0.98] transition-transform disabled:opacity-60"
         >
-          Save Changes
+          {saving ? 'Saving…' : 'Save Changes'}
         </button>
       </div>
     </div>

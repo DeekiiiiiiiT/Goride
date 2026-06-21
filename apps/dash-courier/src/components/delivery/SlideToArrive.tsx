@@ -4,7 +4,7 @@ import { MaterialIcon } from '@/components/icons/MaterialIcon';
 type SlideToArriveProps = {
   label?: string;
   onComplete: () => void;
-  variant?: 'default' | 'en-route' | 'stacked';
+  variant?: 'default' | 'en-route' | 'stacked' | 'complete';
 };
 
 export function SlideToArrive({
@@ -20,8 +20,9 @@ export function SlideToArrive({
 
   const isEnRoute = variant === 'en-route';
   const isStacked = variant === 'stacked';
-  const thumbWidth = isEnRoute ? 68 : isStacked ? 48 : 50;
-  const thumbOffset = isEnRoute ? 6 : isStacked ? 4 : 8;
+  const isComplete = variant === 'complete';
+  const thumbWidth = isEnRoute ? 68 : isStacked || isComplete ? 48 : 50;
+  const thumbOffset = isEnRoute ? 6 : isStacked || isComplete ? 4 : 8;
 
   const getMaxDrag = useCallback(() => {
     const track = trackRef.current;
@@ -57,7 +58,7 @@ export function SlideToArrive({
     <div
       ref={trackRef}
       className={`relative w-full h-16 overflow-hidden flex items-center select-none touch-none ${
-        isEnRoute
+        isEnRoute || isComplete
           ? 'bg-primary rounded-xl shadow-md'
           : isStacked
             ? 'bg-surface-container-high rounded-xl shadow-primary'
@@ -80,26 +81,38 @@ export function SlideToArrive({
           style={{ width: dragX + thumbWidth + 8 }}
         />
       )}
+      {isComplete && (
+        <div
+          className="absolute left-0 top-0 bottom-0 bg-primary-container/30 pointer-events-none rounded-xl"
+          style={{ width: dragX + thumbWidth + 8 }}
+        />
+      )}
       <div
         className={`absolute top-2 bottom-2 flex items-center justify-center z-10 shadow-sm ${
           isEnRoute
             ? 'left-1.5 w-[68px] bg-surface rounded-lg text-primary'
-            : isStacked
-              ? 'left-1 w-12 bg-primary rounded-lg text-on-primary'
+            : isStacked || isComplete
+              ? 'left-1 w-12 bg-surface rounded-lg text-primary'
               : 'left-2 w-[50px] bg-primary rounded-full text-on-primary shadow-md'
         } ${dragging ? '' : 'transition-transform duration-200'}`}
         style={{ transform: `translateX(${dragX}px)` }}
       >
         <MaterialIcon
-          name={isEnRoute ? 'keyboard_double_arrow_right' : isStacked ? 'chevron_right' : 'arrow_forward'}
-          className={isEnRoute ? 'text-[32px]' : isStacked ? 'text-2xl' : 'text-2xl'}
+          name={
+            isEnRoute
+              ? 'keyboard_double_arrow_right'
+              : isStacked || isComplete
+                ? 'arrow_forward'
+                : 'arrow_forward'
+          }
+          className={isEnRoute ? 'text-[32px]' : 'text-2xl'}
           filled={isStacked}
         />
       </div>
       <div
         className={`w-full text-center z-0 pl-16 pr-4 relative overflow-hidden ${
-          isEnRoute
-            ? 'text-on-primary text-xl font-semibold tracking-wide'
+          isEnRoute || isComplete
+            ? 'text-on-primary text-xs font-semibold uppercase tracking-wide'
             : isStacked
               ? 'text-xl font-semibold text-primary opacity-80'
               : 'text-xs font-bold tracking-[0.1em] text-primary'
@@ -107,11 +120,22 @@ export function SlideToArrive({
       >
         <span
           className="relative z-10"
-          style={{ opacity: isStacked ? Math.max(0.3, 0.8 - (dragX / (maxDragRef.current || 1)) * 1.2) : 0.9 }}
+          style={{
+            opacity:
+              isStacked || isComplete
+                ? Math.max(0.3, 0.8 - (dragX / (maxDragRef.current || 1)) * 1.2)
+                : 0.9,
+          }}
         >
-          {isEnRoute ? `${label} →` : isStacked ? 'Slide to Arrive' : label}
+          {isEnRoute
+            ? `${label} →`
+            : isComplete
+              ? label
+              : isStacked
+                ? 'Slide to Arrive'
+                : label}
         </span>
-        {!isEnRoute && !isStacked && (
+        {!isEnRoute && !isStacked && !isComplete && (
           <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 to-transparent courier-shimmer" />
         )}
       </div>

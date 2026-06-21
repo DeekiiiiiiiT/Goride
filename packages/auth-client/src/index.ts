@@ -8,6 +8,7 @@ export {
   supabaseCourierAdmin,
   supabaseRidesAdmin,
   supabaseDashAdmin,
+  supabaseDashCustomer,
   supabaseFleetAdmin,
 } from './supabase';
 export { supabaseRecovery, isPasswordRecoveryUrl } from './supabaseRecovery';

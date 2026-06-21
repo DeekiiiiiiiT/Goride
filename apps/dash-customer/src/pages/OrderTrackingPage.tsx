@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '@roam/api-client';
-import { supabase } from '@roam/auth-client';
+import { supabase } from '@/lib/supabase';
 import { AlmostThereView } from '@/components/tracking/AlmostThereView';
 import { CourierAssignedView } from '@/components/tracking/CourierAssignedView';
 import { OnTheWayView } from '@/components/tracking/OnTheWayView';

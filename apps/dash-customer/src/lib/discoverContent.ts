@@ -48,6 +48,9 @@ export const CUISINE_CHIPS = [
   { id: 'chinese', label: 'Chinese', emoji: '🥡' },
   { id: 'indian', label: 'Indian', emoji: '🍛' },
   { id: 'healthy', label: 'Healthy', emoji: '🥗' },
+  { id: 'cafe', label: 'Cafe', emoji: '☕' },
+  { id: 'desserts', label: 'Desserts', emoji: '🍰' },
+  { id: 'breakfast', label: 'Breakfast', emoji: '🍳' },
 ] as const;
 
 export const HOME_CATEGORY_CHIPS = [

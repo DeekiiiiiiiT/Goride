@@ -8,6 +8,7 @@ import {
   formatJmd,
   MOCK_TODAY_EARNINGS,
   MOCK_WEEKLY_EARNINGS,
+  MOCK_MONTHLY_EARNINGS,
   type EarningsPeriod,
   type RecentDelivery,
 } from '@/lib/mockEarnings';
@@ -60,9 +61,12 @@ function RecentDeliveryRow({
 
 export function EarningsPage({ onDeliverySelect, onViewAllHistory, onViewPromotions }: EarningsPageProps) {
   const [period, setPeriod] = useState<EarningsPeriod>('today');
+  const [periodOffset, setPeriodOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const today = MOCK_TODAY_EARNINGS;
   const week = MOCK_WEEKLY_EARNINGS;
+  const month = MOCK_MONTHLY_EARNINGS;
+  const periodData = period === 'month' ? month : week;
 
   const { refreshing, scrollRef, handleTouchStart, handleTouchEnd } = usePullToRefresh({
     onRefresh: async () => {
@@ -97,6 +101,7 @@ export function EarningsPage({ onDeliverySelect, onViewAllHistory, onViewPromoti
               onClick={() => {
                 setLoading(true);
                 setPeriod(tab.id);
+                setPeriodOffset(0);
               }}
               className={`pb-2 border-b-2 text-xs font-semibold uppercase tracking-wide transition-colors px-1 ${
                 period === tab.id
@@ -206,16 +211,31 @@ export function EarningsPage({ onDeliverySelect, onViewAllHistory, onViewPromoti
           <>
             <section className="flex flex-col items-center text-center gap-2">
               <div className="flex items-center justify-center gap-2 w-full">
-                <button type="button" className="p-2 text-muted rounded-full hover:bg-surface-variant">
+                <button
+                  type="button"
+                  onClick={() => setPeriodOffset((o) => o - 1)}
+                  className="p-2 text-muted rounded-full hover:bg-surface-variant"
+                >
                   <MaterialIcon name="chevron_left" />
                 </button>
-                <h2 className="text-2xl font-semibold text-on-surface">{week.rangeLabel}</h2>
-                <button type="button" className="p-2 text-muted rounded-full hover:bg-surface-variant">
+                <h2 className="text-2xl font-semibold text-on-surface">
+                  {periodOffset === 0
+                    ? periodData.rangeLabel
+                    : period === 'month'
+                      ? `Month ${periodOffset > 0 ? '+' : ''}${periodOffset}`
+                      : `Week ${periodOffset > 0 ? '+' : ''}${periodOffset}`}
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setPeriodOffset((o) => o + 1)}
+                  disabled={periodOffset >= 0}
+                  className="p-2 text-muted rounded-full hover:bg-surface-variant disabled:opacity-40"
+                >
                   <MaterialIcon name="chevron_right" />
                 </button>
               </div>
               <p className="text-[28px] leading-9 font-bold text-primary tracking-tight">
-                J${formatJmd(week.total)}
+                J${formatJmd(Math.round(periodData.total * (1 + periodOffset * 0.05)))}
               </p>
               <p className="text-sm text-muted">
                 {period === 'month' ? 'Monthly' : 'Weekly'} Total Earnings
@@ -228,7 +248,7 @@ export function EarningsPage({ onDeliverySelect, onViewAllHistory, onViewPromoti
                 <MaterialIcon name="bar_chart" className="text-lg" />
               </div>
               <div className="h-40 flex items-end justify-between pt-4 gap-1">
-                {week.dailyBreakdown.map((day, i) => (
+                {periodData.dailyBreakdown.map((day, i) => (
                   <div key={`${day.label}-${i}`} className="flex flex-col items-center justify-end h-full w-full gap-2">
                     <div
                       className={`w-full rounded-t-sm transition-colors ${
@@ -250,21 +270,21 @@ export function EarningsPage({ onDeliverySelect, onViewAllHistory, onViewPromoti
               <div className="bg-surface shadow-soft rounded-xl p-4 flex flex-col justify-between aspect-square">
                 <MaterialIcon name="package_2" className="text-primary text-[28px]" filled />
                 <div>
-                  <p className="text-2xl font-semibold text-on-surface">{week.deliveries}</p>
+                  <p className="text-2xl font-semibold text-on-surface">{periodData.deliveries}</p>
                   <p className="text-sm text-muted">Deliveries</p>
                 </div>
               </div>
               <div className="grid grid-rows-2 gap-2">
                 <div className="bg-surface shadow-soft rounded-xl p-3 flex items-center justify-between px-4">
                   <div>
-                    <p className="text-xl font-semibold leading-none">{week.activeHours}</p>
+                    <p className="text-xl font-semibold leading-none">{periodData.activeHours}</p>
                     <p className="text-[11px] text-muted">Active Hours</p>
                   </div>
                   <MaterialIcon name="schedule" className="text-muted text-xl" />
                 </div>
                 <div className="bg-surface shadow-soft rounded-xl p-3 flex items-center justify-between px-4">
                   <div>
-                    <p className="text-xl font-semibold leading-none">J${formatJmd(week.avgPerHour)}</p>
+                    <p className="text-xl font-semibold leading-none">J${formatJmd(periodData.avgPerHour)}</p>
                     <p className="text-[11px] text-muted">Avg / Hour</p>
                   </div>
                   <MaterialIcon name="speed" className="text-muted text-xl" />
@@ -283,7 +303,7 @@ export function EarningsPage({ onDeliverySelect, onViewAllHistory, onViewPromoti
                     <MaterialIcon name="check_circle" className="text-success" filled />
                   </div>
                   <div>
-                    <p className="text-base font-medium text-on-surface">J${formatJmd(week.deposited)}</p>
+                    <p className="text-base font-medium text-on-surface">J${formatJmd(periodData.deposited)}</p>
                     <p className="text-sm text-success">Deposited to bank</p>
                   </div>
                 </div>
@@ -295,7 +315,7 @@ export function EarningsPage({ onDeliverySelect, onViewAllHistory, onViewPromoti
                     <MaterialIcon name="pending" className="text-muted" />
                   </div>
                   <div>
-                    <p className="text-base font-medium text-on-surface">J${formatJmd(week.pending)}</p>
+                    <p className="text-base font-medium text-on-surface">J${formatJmd(periodData.pending)}</p>
                     <p className="text-sm text-muted">Pending settlement</p>
                   </div>
                 </div>

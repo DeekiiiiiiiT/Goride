@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
-import { isFavorite, toggleFavorite } from '@/lib/favoritesStorage';
+import { isFavorite, subscribeFavorites, toggleFavorite } from '@/lib/favoritesStorage';
 import { hapticMedium } from '@/lib/haptics';
 import { toast } from '@/lib/toast';
 import { useLongPress } from '@/hooks/useLongPress';
@@ -13,6 +13,10 @@ type Props = {
 
 export function FavoriteButton({ merchantId, merchantName, className = '' }: Props) {
   const [favorited, setFavorited] = useState(() => isFavorite(merchantId));
+
+  useEffect(() => {
+    return subscribeFavorites(() => setFavorited(isFavorite(merchantId)));
+  }, [merchantId]);
 
   const handleToggle = () => {
     const added = toggleFavorite(merchantId);

@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import type { ActiveDelivery } from '@/lib/mockActiveDelivery';
+import { fireConfetti } from '@/lib/confetti';
 
 type DeliveryCompletePageProps = {
   delivery: ActiveDelivery;
@@ -9,6 +10,10 @@ type DeliveryCompletePageProps = {
 
 export function DeliveryCompletePage({ delivery, onBackToDash }: DeliveryCompletePageProps) {
   const { earnings, tripDistanceKm, tripMinutes } = delivery;
+
+  useEffect(() => {
+    fireConfetti();
+  }, []);
 
   return (
     <div className="fixed inset-0 z-[90] bg-background flex flex-col overflow-hidden">

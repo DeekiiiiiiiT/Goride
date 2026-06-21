@@ -11,7 +11,7 @@ import { PermissionsPage } from '@/pages/onboarding/PermissionsPage';
 import { AccountPendingPage } from '@/pages/onboarding/AccountPendingPage';
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { CourierHomePage } from '@/pages/home/CourierHomePage';
-import { isOnboardingComplete, markOnboardingComplete, resetOnboarding } from '@/lib/onboardingStorage';
+import { isOnboardingComplete, markOnboardingComplete, resetOnboarding, syncOnboardingFromProfile, isProfilePending } from '@/lib/onboardingStorage';
 import { clearSignupDraft, saveSignupDraft } from '@/lib/signupDraft';
 import {
   COURIER_OAUTH_INTENT_KEY,
@@ -46,8 +46,33 @@ export function CourierConsumerApp() {
     });
   }, []);
 
-  const handleSplashComplete = useCallback(() => {
-    setPhase(isOnboardingComplete() ? 'app' : 'welcome');
+  const finishLogin = useCallback(async () => {
+    await ensureCourierProfile();
+    const synced = await syncOnboardingFromProfile();
+    if (!synced && (await isProfilePending())) {
+      setPhase('account-pending');
+      return;
+    }
+    if (isOnboardingComplete()) {
+      setPhase('app');
+      return;
+    }
+    setPhase('profile-setup');
+  }, []);
+
+  const handleSplashComplete = useCallback(async () => {
+    if (!isOnboardingComplete()) {
+      setPhase('welcome');
+      return;
+    }
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (session && (await isProfilePending())) {
+      setPhase('account-pending');
+      return;
+    }
+    setPhase('app');
   }, []);
 
   useEffect(() => {
@@ -71,7 +96,7 @@ export function CourierConsumerApp() {
       }
 
       if (intent === COURIER_OAUTH_INTENT_LOGIN) {
-        finishOnboarding();
+        void finishLogin();
         return;
       }
 
@@ -94,7 +119,7 @@ export function CourierConsumerApp() {
     return () => {
       subscription.unsubscribe();
     };
-  }, [finishOnboarding]);
+  }, [finishOnboarding, finishLogin]);
 
   const handleSignOut = useCallback(() => {
     resetOnboarding();
@@ -189,7 +214,7 @@ export function CourierConsumerApp() {
     return (
       <LoginPage
         onBack={() => setPhase('welcome')}
-        onSignIn={finishOnboarding}
+        onSignIn={() => void finishLogin()}
         onSignUp={() => setPhase('sign-up')}
       />
     );

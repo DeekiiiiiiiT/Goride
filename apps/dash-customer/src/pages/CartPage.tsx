@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
+import { DeliveryInstructionsSheet } from '@/components/cart/DeliveryInstructionsSheet';
+import { ItemDetailSheet } from '@/components/restaurant/ItemDetailSheet';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PromoCodeInput } from '@/components/ui/PromoCodeInput';
 import { QuantityStepper } from '@/components/ui/QuantityStepper';
@@ -8,7 +10,7 @@ import { useCart } from '@/hooks/useCart';
 import { getSavedAddress } from '@/lib/addressStorage';
 import { saveCheckoutPreferences } from '@/lib/checkoutStorage';
 import { calculateOrderTotals, PROMO_CODES, type PromoCode } from '@/lib/orderPricing';
-import { formatJmd } from '@/lib/restaurantContent';
+import { formatJmd, getRestaurantProfile } from '@/lib/restaurantContent';
 import { toast } from '@/lib/toast';
 
 type Props = {
@@ -17,12 +19,19 @@ type Props = {
 };
 
 export default function CartPage({ onNavigate, session }: Props) {
-  const { items, merchantName, merchantId, updateQuantity, removeItem, clearCart, subtotal } = useCart();
+  const { items, merchantName, merchantId, updateQuantity, removeItem, replaceItem, clearCart, subtotal } = useCart();
   const savedAddress = getSavedAddress();
 
   const [deliveryInstructions, setDeliveryInstructions] = useState(savedAddress?.instructions ?? 'Leave at door • Gate code: 1234');
+  const [instructionsOpen, setInstructionsOpen] = useState(false);
+  const [editingCartItemId, setEditingCartItemId] = useState<string | null>(null);
   const [promoCode, setPromoCode] = useState('');
   const [appliedPromo, setAppliedPromo] = useState<PromoCode | null>(PROMO_CODES.WELCOME);
+
+  const editingCartItem = items.find((i) => i.id === editingCartItemId);
+  const editingMenuItem = editingCartItem && merchantId
+    ? getRestaurantProfile(merchantId).items.find((i) => i.id === editingCartItem.itemId) ?? null
+    : null;
 
   const deliveryAddress = savedAddress
     ? `${savedAddress.line1}${savedAddress.line2 ? `, ${savedAddress.line2}` : ''}`
@@ -108,7 +117,11 @@ export default function CartPage({ onNavigate, session }: Props) {
                 <p className="text-body-md text-on-surface-variant mt-1">{deliveryAddress}</p>
               </div>
             </div>
-            <button type="button" className="text-label-md font-semibold text-primary">
+            <button
+              type="button"
+              onClick={() => onNavigate('saved-addresses', { returnTo: 'cart' })}
+              className="text-label-md font-semibold text-primary"
+            >
               Change
             </button>
           </div>
@@ -120,7 +133,11 @@ export default function CartPage({ onNavigate, session }: Props) {
               </h4>
               <p className="text-body-md text-on-surface">{deliveryInstructions}</p>
             </div>
-            <button type="button" className="text-label-md font-semibold text-primary">
+            <button
+              type="button"
+              onClick={() => setInstructionsOpen(true)}
+              className="text-label-md font-semibold text-primary"
+            >
               Edit
             </button>
           </div>
@@ -153,7 +170,11 @@ export default function CartPage({ onNavigate, session }: Props) {
                       onChange={(q) => updateQuantity(item.id, q)}
                     />
                     <div className="flex gap-2">
-                      <button type="button" className="p-2 text-on-surface-variant">
+                      <button
+                        type="button"
+                        onClick={() => setEditingCartItemId(item.id)}
+                        className="p-2 text-on-surface-variant"
+                      >
                         <MaterialIcon name="edit" />
                       </button>
                       <button
@@ -238,6 +259,50 @@ export default function CartPage({ onNavigate, session }: Props) {
           <span>{formatJmd(total)}</span>
         </button>
       </div>
+
+      <DeliveryInstructionsSheet
+        open={instructionsOpen}
+        onClose={() => setInstructionsOpen(false)}
+        value={deliveryInstructions}
+        onSave={setDeliveryInstructions}
+      />
+
+      <ItemDetailSheet
+        item={editingMenuItem}
+        open={!!editingCartItemId && !!editingMenuItem}
+        mode="edit"
+        initialQuantity={editingCartItem?.quantity ?? 1}
+        initialInstructions={
+          editingCartItem?.options?.find((o) => o.name === 'Instructions')?.selections[0]?.name ?? ''
+        }
+        submitLabel="Update Item"
+        onClose={() => setEditingCartItemId(null)}
+        onAdd={(data) => {
+          if (!editingCartItemId || !editingCartItem || !merchantId) return;
+          const options =
+            data.optionsLabel || data.instructions
+              ? [
+                  ...(data.optionsLabel
+                    ? [{ name: 'Customizations', selections: [{ name: data.optionsLabel, priceAdjustment: 0 }] }]
+                    : []),
+                  ...(data.instructions
+                    ? [{ name: 'Instructions', selections: [{ name: data.instructions, priceAdjustment: 0 }] }]
+                    : []),
+                ]
+              : undefined;
+          replaceItem(editingCartItemId, {
+            itemId: editingCartItem.itemId,
+            merchantId,
+            name: editingCartItem.name,
+            price: data.unitPrice,
+            quantity: data.quantity,
+            imageUrl: editingCartItem.imageUrl,
+            options,
+          });
+          setEditingCartItemId(null);
+          toast.success('Item updated');
+        }}
+      />
     </div>
   );
 }

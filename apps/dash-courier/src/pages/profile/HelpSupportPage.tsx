@@ -1,15 +1,40 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
 import { HELP_TOPICS, SUPPORT_TICKETS } from '@/lib/mockSettings';
+import { HELP_ARTICLES } from '@/lib/helpContent';
 import { ROAM_LEGAL } from '@roam/business-config/legalUrls';
 
 type HelpSupportPageProps = {
   onBack: () => void;
+  onTopicSelect: (topicId: string) => void;
 };
 
-export function HelpSupportPage({ onBack }: HelpSupportPageProps) {
+export function HelpSupportPage({ onBack, onTopicSelect }: HelpSupportPageProps) {
   const [query, setQuery] = useState('');
+  const normalized = query.trim().toLowerCase();
+
+  const filteredTopics = useMemo(() => {
+    if (!normalized) return HELP_TOPICS;
+    return HELP_TOPICS.filter((topic) => {
+      if (topic.label.toLowerCase().includes(normalized)) return true;
+      const articles = HELP_ARTICLES[topic.id] ?? [];
+      return articles.some(
+        (a) =>
+          a.question.toLowerCase().includes(normalized) ||
+          a.answer.toLowerCase().includes(normalized),
+      );
+    });
+  }, [normalized]);
+
+  const filteredTickets = useMemo(() => {
+    if (!normalized) return SUPPORT_TICKETS;
+    return SUPPORT_TICKETS.filter(
+      (t) =>
+        t.title.toLowerCase().includes(normalized) ||
+        t.status.toLowerCase().includes(normalized),
+    );
+  }, [normalized]);
 
   return (
     <div className="fixed inset-0 z-[70] bg-background flex flex-col overflow-hidden">
@@ -47,10 +72,11 @@ export function HelpSupportPage({ onBack }: HelpSupportPageProps) {
         <section className="mb-6">
           <h3 className="text-2xl font-semibold text-on-background mb-4">Topics</h3>
           <div className="grid grid-cols-2 gap-4">
-            {HELP_TOPICS.map((topic) => (
+            {filteredTopics.map((topic) => (
               <button
                 key={topic.id}
                 type="button"
+                onClick={() => onTopicSelect(topic.id)}
                 className="bg-surface p-4 rounded-xl flex flex-col items-start gap-3 shadow-soft active:scale-95 transition-transform min-h-[100px] border border-surface-container-low hover:border-primary-fixed-dim text-left"
               >
                 <MaterialIcon name={topic.icon} className="text-primary text-[28px]" />
@@ -68,12 +94,12 @@ export function HelpSupportPage({ onBack }: HelpSupportPageProps) {
             </button>
           </div>
           <div className="bg-surface rounded-xl shadow-soft overflow-hidden">
-            {SUPPORT_TICKETS.map((ticket, i) => (
+            {filteredTickets.map((ticket, i) => (
               <button
                 key={ticket.id}
                 type="button"
                 className={`w-full flex items-center justify-between p-4 hover:bg-surface-container-lowest active:bg-surface-container-low transition-colors text-left ${
-                  i < SUPPORT_TICKETS.length - 1 ? 'border-b border-surface-variant' : ''
+                  i < filteredTickets.length - 1 ? 'border-b border-surface-variant' : ''
                 }`}
               >
                 <div className="flex items-center gap-3 min-w-0">

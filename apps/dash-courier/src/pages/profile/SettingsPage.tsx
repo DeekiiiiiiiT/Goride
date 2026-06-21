@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
 import { ROAM_LEGAL, accountDeletionMailto } from '@roam/business-config/legalUrls';
+import { loadAppSettings, saveAppSettings, type CourierAppSettings } from '@/lib/courierStorage';
 
 type SettingsPageProps = {
   onBack: () => void;
@@ -51,11 +52,30 @@ function SelectRow({ icon, label, value, options, onChange, border = true }: Sel
   );
 }
 
+function applyTheme(appearance: CourierAppSettings['appearance']) {
+  const root = document.documentElement;
+  if (appearance === 'Dark') {
+    root.classList.add('dark');
+  } else if (appearance === 'Light') {
+    root.classList.remove('dark');
+  } else {
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.classList.toggle('dark', prefersDark);
+  }
+}
+
 export function SettingsPage({ onBack }: SettingsPageProps) {
-  const [appearance, setAppearance] = useState('System');
-  const [language, setLanguage] = useState('English (US)');
-  const [navApp, setNavApp] = useState('Google Maps');
-  const [distanceUnits, setDistanceUnits] = useState('Miles');
+  const [settings, setSettings] = useState<CourierAppSettings>(() => loadAppSettings());
+
+  useEffect(() => {
+    applyTheme(settings.appearance);
+  }, [settings.appearance]);
+
+  const update = (patch: Partial<CourierAppSettings>) => {
+    const next = { ...settings, ...patch };
+    setSettings(next);
+    saveAppSettings(next);
+  };
 
   return (
     <div className="fixed inset-0 z-[70] bg-background flex flex-col overflow-hidden">
@@ -68,30 +88,30 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
             <SelectRow
               icon="palette"
               label="Appearance"
-              value={appearance}
+              value={settings.appearance}
               options={['Light', 'Dark', 'System']}
-              onChange={setAppearance}
+              onChange={(v) => update({ appearance: v as CourierAppSettings['appearance'] })}
             />
             <SelectRow
               icon="language"
               label="Language"
-              value={language}
+              value={settings.language}
               options={['English (US)', 'Spanish', 'French']}
-              onChange={setLanguage}
+              onChange={(v) => update({ language: v })}
             />
             <SelectRow
               icon="navigation"
               label="Navigation App"
-              value={navApp}
+              value={settings.navApp}
               options={['Google Maps', 'Waze', 'Apple Maps']}
-              onChange={setNavApp}
+              onChange={(v) => update({ navApp: v })}
             />
             <SelectRow
               icon="straighten"
               label="Distance Units"
-              value={distanceUnits}
-              options={['Miles', 'Kilometers']}
-              onChange={setDistanceUnits}
+              value={settings.distanceUnits === 'km' ? 'Kilometers' : 'Miles'}
+              options={['Kilometers', 'Miles']}
+              onChange={(v) => update({ distanceUnits: v === 'Kilometers' ? 'km' : 'Miles' })}
               border={false}
             />
           </div>

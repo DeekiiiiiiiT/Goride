@@ -1,7 +1,15 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { fireConfetti } from '@/lib/confetti';
+import {
+  enableOrderNotifications,
+  getNotificationPermissionState,
+  setNotificationPromptDismissed,
+  shouldShowNotificationPrompt,
+  type PermissionGrantState,
+} from '@/lib/notificationPermission';
 import { formatJmd } from '@/lib/restaurantContent';
+import { toast } from '@/lib/toast';
 
 type OrderItem = {
   name: string;
@@ -26,6 +34,10 @@ export default function OrderConfirmationPage({
   items = [],
   onNavigate,
 }: Props) {
+  const [notifState, setNotifState] = useState<PermissionGrantState>('prompt');
+  const [showPrompt, setShowPrompt] = useState(false);
+  const [enabling, setEnabling] = useState(false);
+
   const displayItems =
     items.length > 0
       ? items
@@ -37,6 +49,27 @@ export default function OrderConfirmationPage({
   useEffect(() => {
     fireConfetti();
   }, []);
+
+  useEffect(() => {
+    void getNotificationPermissionState().then((state) => {
+      setNotifState(state);
+      setShowPrompt(shouldShowNotificationPrompt(state));
+    });
+  }, []);
+
+  const handleEnableNotifications = async () => {
+    setEnabling(true);
+    const result = await enableOrderNotifications();
+    setNotifState(result);
+    setShowPrompt(false);
+    setEnabling(false);
+    if (result === 'granted') {
+      toast.success('Notifications enabled');
+    } else if (result === 'denied') {
+      toast.error('Notifications blocked in browser settings');
+      setNotificationPromptDismissed(true);
+    }
+  };
 
   return (
     <div className="bg-background text-on-background antialiased min-h-screen flex flex-col items-center p-4 pb-24">
@@ -97,20 +130,34 @@ export default function OrderConfirmationPage({
           </button>
         </div>
 
-        <div className="w-full bg-surface-container-lowest rounded-xl p-4 shadow-sm border border-surface-container flex items-center justify-between gap-4 mt-auto">
-          <div className="flex gap-4 items-center">
-            <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center shrink-0">
-              <MaterialIcon name="notifications_active" className="text-on-surface-variant" />
+        {showPrompt && notifState !== 'granted' && (
+          <div className="w-full bg-surface-container-lowest rounded-xl p-4 shadow-sm border border-surface-container flex items-center justify-between gap-4 mt-auto">
+            <div className="flex gap-4 items-center">
+              <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center shrink-0">
+                <MaterialIcon name="notifications_active" className="text-on-surface-variant" />
+              </div>
+              <div className="flex flex-col">
+                <p className="text-body-sm font-semibold text-on-background">Stay Updated</p>
+                <p className="text-label-sm text-on-surface-variant">Get notified when your order arrives</p>
+              </div>
             </div>
-            <div className="flex flex-col">
-              <p className="text-body-sm font-semibold text-on-background">Stay Updated</p>
-              <p className="text-label-sm text-on-surface-variant">Get notified when your order arrives</p>
-            </div>
+            <button
+              type="button"
+              disabled={enabling}
+              onClick={() => void handleEnableNotifications()}
+              className="shrink-0 bg-primary text-on-primary text-label-sm px-4 py-2 rounded-full font-semibold disabled:opacity-50"
+            >
+              {enabling ? '…' : 'Enable'}
+            </button>
           </div>
-          <button type="button" className="shrink-0 bg-surface-container-highest text-on-surface text-label-sm px-4 py-2 rounded-full">
-            Enable
-          </button>
-        </div>
+        )}
+
+        {notifState === 'granted' && (
+          <p className="text-body-sm text-primary font-medium mt-auto flex items-center gap-1">
+            <MaterialIcon name="check_circle" className="text-[16px]" filled />
+            Notifications enabled
+          </p>
+        )}
       </main>
     </div>
   );

@@ -27,7 +27,7 @@ export function AtRestaurantPage({
 
   const allItemIds = delivery.checklist.map((item) => item.id);
   const allChecked = allItemIds.every((id) => checked[id]);
-  const canConfirm = allChecked && confirmAll && hasPhoto;
+  const canConfirm = allChecked && confirmAll;
 
   const toggleItem = (id: string) => {
     setChecked((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -154,6 +154,7 @@ export function AtRestaurantPage({
 
         <section className="bg-surface rounded-xl shadow-soft p-4 flex flex-col gap-2">
           <h3 className="text-base text-on-surface font-medium">Photo of sealed order</h3>
+          <p className="text-sm text-muted">Optional — helps resolve disputes</p>
           <p className="text-sm text-muted mb-2">Required for contactless pickup</p>
           <input
             ref={fileInputRef}
@@ -185,7 +186,7 @@ export function AtRestaurantPage({
           <SlideToConfirm label="SLIDE TO CONFIRM PICKUP" onComplete={onConfirmPickup} variant="en-route" />
         ) : (
           <p className="text-center text-sm text-muted py-4">
-            Complete the checklist and photo to confirm pickup
+            Complete the checklist to confirm pickup
           </p>
         )}
       </div>

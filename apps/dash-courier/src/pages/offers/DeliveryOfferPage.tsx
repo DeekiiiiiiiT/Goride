@@ -11,6 +11,7 @@ type DeliveryOfferPageProps = {
   offer: SingleOffer;
   initialSeconds?: number;
   onClose: () => void;
+  onTimerExpire: () => void;
   onDecline: () => void;
   onAccept: () => void;
   onViewDetails: () => void;
@@ -21,13 +22,14 @@ export function DeliveryOfferPage({
   offer,
   initialSeconds = 90,
   onClose,
+  onTimerExpire,
   onDecline,
   onAccept,
   onViewDetails,
   onOfferShown,
 }: DeliveryOfferPageProps) {
   const shownRef = useRef(false);
-  const { seconds } = useCountdown(initialSeconds, onDecline);
+  const { seconds } = useCountdown(initialSeconds, onTimerExpire);
 
   useEffect(() => {
     if (!shownRef.current) {

@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { ROAM_LEGAL } from '@roam/business-config/legalUrls';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
+import { loadSignupDraft } from '@/lib/signupDraft';
 
 type DocumentStatus = 'verified' | 'pending' | 'upload' | 'rejected';
 
@@ -15,14 +16,22 @@ type DocumentItem = {
   border?: string;
 };
 
-const DOCUMENTS: DocumentItem[] = [
+const BASE_DOCUMENTS: DocumentItem[] = [
   {
-    id: 'license',
+    id: 'license-front',
     icon: 'id_card',
-    title: "Driver's license",
-    subtitle: 'Front and back',
+    title: "Driver's license (Front)",
+    subtitle: 'Clear photo of front',
     status: 'verified',
     accent: 'bg-success',
+  },
+  {
+    id: 'license-back',
+    icon: 'id_card',
+    title: "Driver's license (Back)",
+    subtitle: 'Clear photo of back',
+    status: 'pending',
+    accent: 'bg-warning',
   },
   {
     id: 'registration',
@@ -53,6 +62,14 @@ const DOCUMENTS: DocumentItem[] = [
   },
 ];
 
+function getDocumentsForVehicle(vehicleType: string): DocumentItem[] {
+  const motorizedIds = new Set(['registration', 'insurance']);
+  if (vehicleType === 'bicycle') {
+    return BASE_DOCUMENTS.filter((doc) => !motorizedIds.has(doc.id));
+  }
+  return BASE_DOCUMENTS;
+}
+
 const STATUS_STYLES: Record<DocumentStatus, string> = {
   verified: 'bg-success/10 text-success',
   pending: 'bg-warning/10 text-warning',
@@ -73,6 +90,8 @@ type DocumentsPageProps = {
 };
 
 export function DocumentsPage({ onBack, onContinue }: DocumentsPageProps) {
+  const draft = loadSignupDraft();
+  const documents = getDocumentsForVehicle(draft.vehicleType);
   const [consent, setConsent] = useState(false);
   const [activeUpload, setActiveUpload] = useState<string | null>('insurance');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -104,7 +123,7 @@ export function DocumentsPage({ onBack, onContinue }: DocumentsPageProps) {
         </div>
 
         <div className="space-y-4">
-          {DOCUMENTS.map((doc) => {
+          {documents.map((doc) => {
             const isExpanded = activeUpload === doc.id && doc.status === 'upload';
             return (
               <button

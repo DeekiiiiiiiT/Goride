@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { supabase, AuthRecoveryGate } from '@roam/auth-client';
+import { AuthRecoveryGate } from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
+import { toast } from 'sonner';
 import { DashAdminPortal } from '@dash-admin/DashAdminPortal';
 import HomePage from './pages/HomePage';
 import SearchPage from './pages/SearchPage';
@@ -27,6 +28,7 @@ import CategoryPage from './pages/CategoryPage';
 import RestaurantReviewsPage from './pages/RestaurantReviewsPage';
 import OutOfDeliveryPage from './pages/OutOfDeliveryPage';
 import ConnectionErrorPage from './pages/ConnectionErrorPage';
+import AboutPage from './pages/AboutPage';
 import type { TrackingPhase } from './lib/trackingContent';
 import CheckoutPage from './pages/CheckoutPage';
 import PaymentMethodsPage from './pages/PaymentMethodsPage';
@@ -35,6 +37,7 @@ import LoginPage from './pages/LoginPage';
 import PaymentCallbackPage from './pages/PaymentCallbackPage';
 import { CartProvider, useCart } from './hooks/useCart';
 import { useImmersiveMode } from './hooks/useImmersiveMode';
+import { useNetworkStatus } from './hooks/useNetworkStatus';
 import { FloatingCartBar } from './components/ui/FloatingCartBar';
 import { SplashPage } from './pages/onboarding/SplashPage';
 import { WelcomePage } from './pages/onboarding/WelcomePage';
@@ -46,6 +49,13 @@ import { DashAppHeader } from './components/layout/DashAppHeader';
 import { DashBottomNav, type DashTab } from './components/layout/DashBottomNav';
 import { isOnboardingComplete, markOnboardingComplete } from './lib/onboardingStorage';
 import { hasDeliveryAddress, saveDeliveryAddress } from './lib/addressStorage';
+import { supabase } from './lib/supabase';
+import {
+  consumeDashCustomerOAuthIntent,
+  DASH_CUSTOMER_OAUTH_INTENT_KEY,
+  DASH_CUSTOMER_OAUTH_INTENT_LOGIN,
+  DASH_CUSTOMER_OAUTH_INTENT_SIGNUP,
+} from './lib/dashCustomerAuth';
 
 type StackPage =
   | 'restaurant'
@@ -64,6 +74,7 @@ type StackPage =
   | 'favorites'
   | 'notification-settings'
   | 'help'
+  | 'about'
   | 'report-issue'
   | 'restaurant-reviews'
   | 'out-of-delivery'
@@ -81,6 +92,7 @@ type AppPhase =
   | 'verify-phone'
   | 'delivery-address'
   | 'delivery-details'
+  | 'out-of-delivery'
   | 'app';
 
 const IMMERSIVE_STACK_PAGES: StackPage[] = [
@@ -117,6 +129,7 @@ function DashCustomerApp() {
 
 function DashCustomerShell() {
   const { itemCount, subtotal } = useCart();
+  const { isOnline, wasOffline, clearWasOffline } = useNetworkStatus();
   const [phase, setPhase] = useState<AppPhase>('splash');
   const [loginSignUp, setLoginSignUp] = useState(true);
   const [pendingAddress, setPendingAddress] = useState<AddressSelection | null>(null);
@@ -128,25 +141,114 @@ function DashCustomerShell() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchMode, setSearchMode] = useState<'browse' | 'results' | 'deals' | 'category'>('browse');
   const [categoryId, setCategoryId] = useState('pizza');
+  const [oauthReturnPending, setOauthReturnPending] = useState(
+    () => typeof window !== 'undefined' && !!sessionStorage.getItem(DASH_CUSTOMER_OAUTH_INTENT_KEY),
+  );
+  const [outOfZoneReturnTo, setOutOfZoneReturnTo] = useState<string>('delivery-address');
+
+  useEffect(() => {
+    if (wasOffline && isOnline) {
+      toast.success('Back online');
+      clearWasOffline();
+    }
+  }, [wasOffline, isOnline, clearWasOffline]);
 
   useEffect(() => {
     document.title = 'Roam Dash';
   }, []);
 
+  const clearOAuthUrl = useCallback(() => {
+    const { hash, search, pathname } = window.location;
+    if (hash.includes('access_token') || search.includes('code=')) {
+      window.history.replaceState({}, '', pathname);
+    }
+  }, []);
+
+  const enterApp = useCallback(() => {
+    markOnboardingComplete();
+    setPhase('app');
+  }, []);
+
+  const goOutOfDelivery = useCallback((returnTo: string) => {
+    setOutOfZoneReturnTo(returnTo);
+    setPageData({ returnTo });
+    if (phase === 'app') {
+      setStackPage('out-of-delivery');
+    } else {
+      setPhase('out-of-delivery');
+    }
+  }, [phase]);
+
+  const handleOutOfZoneFromOnboarding = useCallback(() => {
+    goOutOfDelivery('delivery-address');
+  }, [goOutOfDelivery]);
+
+  const goToAddressSetup = useCallback(() => {
+    if (hasDeliveryAddress()) {
+      enterApp();
+      return;
+    }
+    setPhase('delivery-address');
+  }, [enterApp]);
+
+  const completeOAuthReturn = useCallback(
+    async (activeSession: Session | null) => {
+      if (!activeSession?.user) return false;
+
+      const intent = sessionStorage.getItem(DASH_CUSTOMER_OAUTH_INTENT_KEY);
+      if (!intent) return false;
+
+      consumeDashCustomerOAuthIntent();
+      clearOAuthUrl();
+      setOauthReturnPending(false);
+
+      if (intent === DASH_CUSTOMER_OAUTH_INTENT_LOGIN) {
+        goToAddressSetup();
+        return true;
+      }
+
+      if (intent === DASH_CUSTOMER_OAUTH_INTENT_SIGNUP) {
+        setPhase('verify-phone');
+        return true;
+      }
+
+      return false;
+    },
+    [clearOAuthUrl, goToAddressSetup],
+  );
+
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+    supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
+      setSession(initialSession);
+      await completeOAuthReturn(initialSession);
       setLoading(false);
     });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
+    } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
+      setSession(nextSession);
+      if (event === 'SIGNED_IN' && nextSession) {
+        await completeOAuthReturn(nextSession);
+      }
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [completeOAuthReturn]);
+
+  useEffect(() => {
+    if (!oauthReturnPending || loading || session) return;
+
+    const timeout = window.setTimeout(() => {
+      if (!sessionStorage.getItem(DASH_CUSTOMER_OAUTH_INTENT_KEY)) return;
+      consumeDashCustomerOAuthIntent();
+      setOauthReturnPending(false);
+      toast.error('Google sign-in could not be completed. Please try again.');
+      setPhase('login');
+    }, 8000);
+
+    return () => window.clearTimeout(timeout);
+  }, [oauthReturnPending, loading, session]);
 
   useEffect(() => {
     const path = window.location.pathname;
@@ -174,22 +276,26 @@ function DashCustomerShell() {
     window.scrollTo(0, 0);
   }, []);
 
-  const enterApp = useCallback(() => {
-    markOnboardingComplete();
-    setPhase('app');
-  }, []);
-
-  const goToAddressSetup = useCallback(() => {
-    if (hasDeliveryAddress()) {
-      enterApp();
+  const handleSplashComplete = useCallback(() => {
+    if (sessionStorage.getItem(DASH_CUSTOMER_OAUTH_INTENT_KEY)) {
+      if (session) {
+        void completeOAuthReturn(session);
+      } else {
+        consumeDashCustomerOAuthIntent();
+        setOauthReturnPending(false);
+        toast.error('Google sign-in could not be completed. Please try again.');
+        setPhase('login');
+      }
       return;
     }
-    setPhase('delivery-address');
-  }, [enterApp]);
 
-  const handleSplashComplete = useCallback(() => {
+    if (session) {
+      goToAddressSetup();
+      return;
+    }
+
     setPhase(isOnboardingComplete() ? 'app' : 'welcome');
-  }, []);
+  }, [completeOAuthReturn, goToAddressSetup, session]);
 
   const handleWelcomeSignIn = useCallback(() => {
     setLoginSignUp(false);
@@ -254,6 +360,13 @@ function DashCustomerShell() {
   );
 
   if (phase === 'splash') {
+    if (oauthReturnPending || loading) {
+      return (
+        <div className="app-fullscreen-screen bg-surface-container-lowest flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-container" />
+        </div>
+      );
+    }
     return <SplashPage onComplete={handleSplashComplete} />;
   }
 
@@ -297,10 +410,21 @@ function DashCustomerShell() {
     );
   }
 
+  if (phase === 'out-of-delivery') {
+    return (
+      <OutOfDeliveryPage
+        returnTo={outOfZoneReturnTo}
+        onReturn={() => setPhase('delivery-address')}
+        onNavigate={navigate}
+      />
+    );
+  }
+
   if (phase === 'delivery-address') {
     return (
       <DeliveryAddressPage
         onBack={() => setPhase(session ? 'app' : 'verify-phone')}
+        onOutOfZone={handleOutOfZoneFromOnboarding}
         onConfirm={(address) => {
           setPendingAddress(address);
           setPhase('delivery-details');
@@ -314,6 +438,7 @@ function DashCustomerShell() {
       <DeliveryDetailsPage
         address={pendingAddress}
         onBack={() => setPhase('delivery-address')}
+        onOutOfZone={handleOutOfZoneFromOnboarding}
         onSave={(details) => {
           saveDeliveryAddress(details);
           enterApp();
@@ -346,6 +471,7 @@ function DashCustomerShell() {
             onNavigate={navigate}
             onSearchFocus={() => handleTabChange('search')}
             showActiveOrder={!!session}
+            showQuickReorder={!!session}
           />
         );
       case 'search':
@@ -481,6 +607,8 @@ function DashCustomerShell() {
         return <NotificationSettingsPage onNavigate={navigate} />;
       case 'help':
         return <HelpPage onNavigate={navigate} />;
+      case 'about':
+        return <AboutPage onNavigate={navigate} />;
       case 'report-issue':
         return <ReportIssuePage onNavigate={navigate} />;
       case 'restaurant-reviews':
@@ -491,9 +619,31 @@ function DashCustomerShell() {
           />
         );
       case 'out-of-delivery':
-        return <OutOfDeliveryPage onNavigate={navigate} />;
+        return (
+          <OutOfDeliveryPage
+            onNavigate={navigate}
+            returnTo={(pageData?.returnTo as string | undefined) ?? 'saved-addresses'}
+            onReturn={() => {
+              const returnTo = (pageData?.returnTo as string | undefined) ?? 'saved-addresses';
+              if (returnTo === 'delivery-address') {
+                setPhase('delivery-address');
+                setStackPage(null);
+              } else {
+                navigate(returnTo);
+              }
+            }}
+          />
+        );
       case 'connection-error':
-        return <ConnectionErrorPage onNavigate={navigate} />;
+        return (
+          <ConnectionErrorPage
+            onNavigate={navigate}
+            hasActiveOrder={!!session}
+            onRetry={() => {
+              if (navigator.onLine) window.location.reload();
+            }}
+          />
+        );
       case 'login':
         return <LoginPage onNavigate={navigate} onSignInSuccess={() => navigate('home')} fullScreen />;
       case 'payment-callback-wipay':
@@ -512,6 +662,19 @@ function DashCustomerShell() {
     (!stackPage || stackPage === 'restaurant');
 
   const isImmersiveStack = !!stackPage && IMMERSIVE_STACK_PAGES.includes(stackPage);
+  const showOfflineOverlay = phase === 'app' && !isOnline && stackPage !== 'tracking';
+
+  if (showOfflineOverlay) {
+    return (
+      <ConnectionErrorPage
+        onNavigate={navigate}
+        hasActiveOrder={!!session}
+        onRetry={() => {
+          if (navigator.onLine) window.location.reload();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="app-shell bg-surface text-on-surface">

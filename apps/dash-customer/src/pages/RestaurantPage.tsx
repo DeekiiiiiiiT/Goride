@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { FavoriteButton } from '@/components/ui/FavoriteButton';
-import { ItemDetailSheet } from '@/components/restaurant/ItemDetailSheet';
+import { RestaurantMoreInfo } from '@/components/restaurant/RestaurantMoreInfo';
 import { NewCartModal } from '@/components/restaurant/NewCartModal';
 import { useCart, type CartItem } from '@/hooks/useCart';
 import { useParallaxHero } from '@/hooks/useParallaxHero';
@@ -188,6 +188,7 @@ export default function RestaurantPage({ merchantId, onNavigate }: Props) {
               <span className="text-body-sm text-on-surface-variant mt-1">{restaurant.distance}</span>
             </div>
           </div>
+          <RestaurantMoreInfo restaurant={restaurant} />
         </div>
       </section>
 

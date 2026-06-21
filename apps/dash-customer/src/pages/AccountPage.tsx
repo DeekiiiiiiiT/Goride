@@ -1,5 +1,5 @@
 import { Session } from '@supabase/supabase-js';
-import { supabase } from '@roam/auth-client';
+import { supabase } from '@/lib/supabase';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { ACCOUNT_MENU, getProfile, PROFILE_HEADER_AVATAR } from '@/lib/accountContent';
 
@@ -16,7 +16,7 @@ export default function AccountPage({ session, onNavigate }: AccountPageProps) {
 
   const handleMenuClick = (page?: string) => {
     if (!page) return;
-    if (!session && page !== 'login') {
+    if (!session && page !== 'login' && page !== 'about') {
       onNavigate('login');
       return;
     }
@@ -87,7 +87,7 @@ export default function AccountPage({ session, onNavigate }: AccountPageProps) {
           )}
         </section>
 
-        <section className="bg-surface-container-lowest rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.04)] overflow-hidden">
+        <section className="bg-surface-container-lowest rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.04)] overflow-hidden mb-6">
           <ul className="flex flex-col">
             {ACCOUNT_MENU.map((item, index) => (
               <li key={item.id}>
@@ -107,24 +107,31 @@ export default function AccountPage({ session, onNavigate }: AccountPageProps) {
                 </button>
               </li>
             ))}
+            {session && (
+              <>
+                <li>
+                  <div className="px-4">
+                    <div className="h-px bg-outline-variant opacity-20" />
+                  </div>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await supabase.auth.signOut();
+                      onNavigate('home');
+                    }}
+                    className="w-full flex items-center px-6 py-4 hover:bg-error-container transition-colors active:scale-[0.99]"
+                  >
+                    <MaterialIcon name="logout" className="text-error mr-4" />
+                    <span className="text-body-md text-error flex-grow text-left font-medium">Sign Out</span>
+                    <MaterialIcon name="chevron_right" className="text-outline-variant" />
+                  </button>
+                </li>
+              </>
+            )}
           </ul>
         </section>
-
-        {session && (
-          <section className="bg-surface-container-lowest rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.04)] overflow-hidden mb-6">
-            <button
-              type="button"
-              onClick={async () => {
-                await supabase.auth.signOut();
-                onNavigate('home');
-              }}
-              className="w-full flex items-center px-6 py-4 hover:bg-error-container transition-colors active:scale-[0.99]"
-            >
-              <MaterialIcon name="logout" className="text-error mr-4" />
-              <span className="text-body-md text-error flex-grow text-left font-medium">Sign Out</span>
-            </button>
-          </section>
-        )}
       </main>
     </div>
   );

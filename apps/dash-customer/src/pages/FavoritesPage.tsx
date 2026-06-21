@@ -1,9 +1,16 @@
 import { useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { AccountSubHeader } from '@/components/account/AccountSubHeader';
-import { FAVORITE_ITEMS, FAVORITE_RESTAURANTS } from '@/lib/accountSubContent';
-import { formatJmd } from '@/lib/restaurantContent';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { useCart } from '@/hooks/useCart';
+import {
+  toggleFavorite,
+  toggleFavoriteItem,
+  useFavorites,
+} from '@/lib/favoritesStorage';
+import { resolveFavoriteItem, resolveFavoriteRestaurant } from '@/lib/favoritesResolver';
+import { formatJmd } from '@/lib/restaurantContent';
+import { toast } from '@/lib/toast';
 
 type Props = {
   onNavigate: (page: string, data?: Record<string, unknown>) => void;
@@ -13,9 +20,18 @@ type Tab = 'restaurants' | 'items';
 
 export default function FavoritesPage({ onNavigate }: Props) {
   const [tab, setTab] = useState<Tab>('restaurants');
+  const { restaurantIds, itemKeys } = useFavorites();
   const { addItem } = useCart();
 
-  const handleAddItem = (item: (typeof FAVORITE_ITEMS)[number]) => {
+  const restaurants = restaurantIds
+    .map((id) => resolveFavoriteRestaurant(id))
+    .filter(Boolean);
+
+  const items = itemKeys
+    .map((key) => resolveFavoriteItem(key))
+    .filter((item): item is NonNullable<typeof item> => item !== null);
+
+  const handleAddItem = (item: (typeof items)[number]) => {
     addItem(
       {
         itemId: item.itemId,
@@ -53,7 +69,9 @@ export default function FavoritesPage({ onNavigate }: Props) {
             type="button"
             onClick={() => setTab('items')}
             className={`flex-1 py-2 text-center rounded-lg font-semibold text-label-md transition-all ${
-              tab === 'items' ? 'bg-surface-container-lowest text-primary shadow-sm' : 'text-on-surface-variant'
+              tab === 'items'
+                ? 'bg-surface-container-lowest text-primary shadow-sm'
+                : 'text-on-surface-variant'
             }`}
           >
             Items
@@ -61,54 +79,82 @@ export default function FavoritesPage({ onNavigate }: Props) {
         </div>
 
         {tab === 'restaurants' ? (
-          <div className="space-y-4">
-            {FAVORITE_RESTAURANTS.map(restaurant => (
-              <div
-                key={restaurant.id}
-                className="bg-surface-container-lowest rounded-xl overflow-hidden shadow-[0px_4px_20px_rgba(0,0,0,0.04)]"
-              >
-                <div className="h-48 w-full relative">
-                  <img src={restaurant.image} alt={restaurant.name} className="w-full h-full object-cover" />
-                  <button type="button" className="absolute top-4 right-4 w-10 h-10 rounded-full bg-surface-container-lowest/90 backdrop-blur-sm flex items-center justify-center text-tertiary shadow-sm">
-                    <MaterialIcon name="favorite" filled />
-                  </button>
-                  <div className="absolute bottom-4 left-4 bg-surface-container-lowest/90 backdrop-blur-sm px-3 py-1 rounded-full flex items-center gap-1">
-                    <MaterialIcon name="star" className="text-[16px] text-primary" filled />
-                    <span className="text-label-sm">{restaurant.rating}</span>
+          restaurants.length === 0 ? (
+            <EmptyState
+              icon="favorite"
+              title="Save your favorites for quick access"
+              description="Tap the heart on any restaurant to add it here."
+              actionLabel="Browse Restaurants"
+              onAction={() => onNavigate('home')}
+            />
+          ) : (
+            <div className="flex flex-col gap-4">
+              {restaurants.map((restaurant) => (
+                <div
+                  key={restaurant.merchantId}
+                  className="bg-surface-container-lowest rounded-xl overflow-hidden shadow-[0px_4px_20px_rgba(0,0,0,0.04)]"
+                >
+                  <div className="h-40 w-full relative">
+                    <img src={restaurant.image} alt={restaurant.name} className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        toggleFavorite(restaurant.merchantId);
+                        toast.success('Removed from favorites');
+                      }}
+                      className="absolute top-3 right-3 w-9 h-9 rounded-full bg-surface-container-lowest/90 flex items-center justify-center text-tertiary"
+                    >
+                      <MaterialIcon name="favorite" filled />
+                    </button>
                   </div>
-                </div>
-                <div className="p-4 flex justify-between items-start gap-4">
-                  <div>
-                    <h3 className="text-headline-sm font-semibold mb-1">{restaurant.name}</h3>
-                    <p className="text-body-sm text-on-surface-variant">{restaurant.cuisines}</p>
-                    <div className="flex items-center gap-2 mt-2 text-on-surface-variant">
-                      <MaterialIcon name="schedule" className="text-[16px]" />
-                      <span className="text-label-sm">{restaurant.eta}</span>
-                      <span className="text-outline-variant">•</span>
-                      <span className="text-label-sm">{restaurant.deliveryFee}</span>
+                  <div className="p-4 flex justify-between items-start gap-4">
+                    <div>
+                      <h3 className="text-headline-sm font-semibold mb-1">{restaurant.name}</h3>
+                      <p className="text-body-sm text-on-surface-variant">{restaurant.cuisines}</p>
+                      <div className="flex items-center gap-2 mt-2 text-on-surface-variant">
+                        <MaterialIcon name="schedule" className="text-[16px]" />
+                        <span className="text-label-sm">{restaurant.eta}</span>
+                        <span className="text-outline-variant">•</span>
+                        <span className="text-label-sm">{restaurant.deliveryFee}</span>
+                      </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => onNavigate('restaurant', { merchantId: restaurant.merchantId })}
+                      className="bg-primary text-on-primary px-4 py-2 rounded-lg font-semibold text-label-md shadow-sm shrink-0"
+                    >
+                      Order
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => onNavigate('restaurant', { merchantId: restaurant.merchantId })}
-                    className="bg-primary text-on-primary px-4 py-2 rounded-lg font-semibold text-label-md shadow-sm shrink-0"
-                  >
-                    Order
-                  </button>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )
+        ) : items.length === 0 ? (
+          <EmptyState
+            icon="favorite"
+            title="No favorite items yet"
+            description="Save dishes you love for faster ordering."
+            actionLabel="Browse Restaurants"
+            onAction={() => onNavigate('home')}
+          />
         ) : (
           <div className="grid grid-cols-2 gap-4">
-            {FAVORITE_ITEMS.map(item => (
+            {items.map((item) => (
               <div
                 key={item.id}
                 className="bg-surface-container-lowest rounded-xl overflow-hidden shadow-[0px_4px_20px_rgba(0,0,0,0.04)] flex flex-col"
               >
                 <div className="h-32 w-full relative">
                   <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
-                  <button type="button" className="absolute top-2 right-2 w-8 h-8 rounded-full bg-surface-container-lowest/90 backdrop-blur-sm flex items-center justify-center text-tertiary shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      toggleFavoriteItem(item.merchantId, item.itemId);
+                      toast.success('Removed from favorites');
+                    }}
+                    className="absolute top-2 right-2 w-8 h-8 rounded-full bg-surface-container-lowest/90 backdrop-blur-sm flex items-center justify-center text-tertiary shadow-sm"
+                  >
                     <MaterialIcon name="favorite" className="text-[18px]" filled />
                   </button>
                 </div>

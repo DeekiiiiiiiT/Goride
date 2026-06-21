@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { OnboardingHeader } from '@/components/layout/OnboardingHeader';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { loadSignupDraft, saveSignupDraft } from '@/lib/signupDraft';
+import { syncCourierProfileFromDraft } from '@/lib/ensureCourierProfile';
 
 type ProfileSetupPageProps = {
   onBack: () => void;
@@ -18,7 +19,7 @@ export function ProfileSetupPage({ onBack, onContinue }: ProfileSetupPageProps) 
 
   const handleContinue = () => {
     saveSignupDraft({ fullName, displayName, phone });
-    onContinue();
+    void syncCourierProfileFromDraft().finally(onContinue);
   };
 
   return (

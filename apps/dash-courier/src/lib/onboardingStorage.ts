@@ -23,3 +23,27 @@ export function resetOnboarding(): void {
     // ignore
   }
 }
+
+export async function syncOnboardingFromProfile(): Promise<boolean> {
+  try {
+    const { loadCourierProfile } = await import('@/lib/courierProfileService');
+    const profile = await loadCourierProfile();
+    if (profile?.onboarding_complete && profile.status === 'active') {
+      markOnboardingComplete();
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+export async function isProfilePending(): Promise<boolean> {
+  try {
+    const { loadCourierProfile } = await import('@/lib/courierProfileService');
+    const profile = await loadCourierProfile();
+    return profile?.status === 'pending';
+  } catch {
+    return false;
+  }
+}

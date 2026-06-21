@@ -23,7 +23,7 @@ export function NewCartModal({ open, currentRestaurant, onConfirm, onCancel }: P
           <div className="w-12 h-1.5 bg-surface-variant rounded-full" />
         </div>
 
-        <div className="px-margin-mobile pt-4 sm:pt-lg pb-2 text-center flex flex-col items-center">
+        <div className="px-margin-mobile pt-4 sm:pt-inset-lg pb-2 text-center flex flex-col items-center">
           <div className="w-12 h-12 rounded-full bg-error-container/30 flex items-center justify-center mb-4 text-error">
             <MaterialIcon name="shopping_cart_off" filled className="text-[28px]" />
           </div>
@@ -37,7 +37,7 @@ export function NewCartModal({ open, currentRestaurant, onConfirm, onCancel }: P
           </p>
         </div>
 
-        <div className="px-margin-mobile pb-lg pt-4 flex flex-col gap-3">
+        <div className="px-margin-mobile pb-inset-lg pt-4 flex flex-col gap-3">
           <button
             type="button"
             onClick={onConfirm}

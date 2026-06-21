@@ -9,7 +9,7 @@ type WelcomePageProps = {
 export function WelcomePage({ onGetStarted, onSignIn }: WelcomePageProps) {
   return (
     <div className="app-fullscreen-screen bg-background text-on-background antialiased">
-      <div className="relative h-2/3 w-full bg-surface-container-high rounded-b-[2.5rem] overflow-hidden shadow-[0px_10px_30px_rgba(0,0,0,0.08)] shrink-0">
+      <div className="relative h-[min(420px,48dvh)] w-full bg-surface-container-high rounded-b-[2.5rem] overflow-hidden shadow-[0px_10px_30px_rgba(0,0,0,0.08)] shrink-0">
         <img
           alt="Premium food spread"
           className="absolute inset-0 w-full h-full object-cover"
@@ -21,8 +21,8 @@ export function WelcomePage({ onGetStarted, onSignIn }: WelcomePageProps) {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col justify-between px-4 pt-8 pb-10 -mt-6 relative z-10 min-h-0">
-        <div className="text-center space-y-4 pt-4">
+      <div className="flex-1 flex flex-col justify-between w-full px-4 pt-6 pb-safe -mt-6 relative z-10 min-h-0">
+        <div className="text-center space-y-3 w-full shrink-0">
           <h1 className="text-[28px] leading-[34px] font-bold text-on-surface tracking-tight md:text-[48px] md:leading-[56px]">
             Welcome to <br className="md:hidden" />
             <span className="text-primary-container">Roam Dash</span>
@@ -32,7 +32,7 @@ export function WelcomePage({ onGetStarted, onSignIn }: WelcomePageProps) {
           </p>
         </div>
 
-        <div className="w-full max-w-sm mx-auto space-y-4 mt-auto">
+        <div className="w-full max-w-sm mx-auto space-y-3 mt-auto pt-4 shrink-0">
           <button
             type="button"
             onClick={onGetStarted}

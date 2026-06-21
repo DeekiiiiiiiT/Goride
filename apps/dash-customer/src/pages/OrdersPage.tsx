@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '@roam/api-client';
-import { supabase } from '@roam/auth-client';
+import { supabase } from '@/lib/supabase';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PullToRefresh } from '@/components/ui/PullToRefresh';

@@ -67,6 +67,24 @@ export const MOCK_TODAY_EARNINGS: TodayEarnings = {
   ],
 };
 
+export type MonthlyEarnings = WeeklyEarnings;
+
+export const MOCK_MONTHLY_EARNINGS: MonthlyEarnings = {
+  rangeLabel: 'October 2025',
+  total: 112400,
+  deliveries: 248,
+  activeHours: '156h',
+  avgPerHour: 720,
+  dailyBreakdown: [
+    { label: 'W1', amount: 28450, heightPercent: 70 },
+    { label: 'W2', amount: 31200, heightPercent: 85, isHighlight: true },
+    { label: 'W3', amount: 26800, heightPercent: 65 },
+    { label: 'W4', amount: 25950, heightPercent: 60 },
+  ],
+  deposited: 98400,
+  pending: 14000,
+};
+
 export const MOCK_WEEKLY_EARNINGS: WeeklyEarnings = {
   rangeLabel: 'Oct 22 - Oct 28',
   total: 28450,

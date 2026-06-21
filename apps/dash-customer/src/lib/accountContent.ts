@@ -47,7 +47,7 @@ export const ACCOUNT_MENU = [
   { id: 'favorites', icon: 'favorite', label: 'Favorites', page: 'favorites' },
   { id: 'notifications', icon: 'notifications_active', label: 'Notification Settings', page: 'notification-settings' },
   { id: 'help', icon: 'help', label: 'Help & Support', page: 'help' },
-  { id: 'about', icon: 'info', label: 'About' },
+  { id: 'about', icon: 'info', label: 'About', page: 'about' },
 ] as const;
 
 export const KINGSTON_MAP_PREVIEW =
