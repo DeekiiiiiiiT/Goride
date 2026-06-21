@@ -21,6 +21,41 @@ function configureVapid() {
   webpush.setVapidDetails(subject, publicKey, privateKey);
 }
 
+function formatJmd(amount: unknown) {
+  const value = Number(amount);
+  if (!Number.isFinite(value)) return "";
+  return `J$${value.toLocaleString("en-JM", { maximumFractionDigits: 0 })}`;
+}
+
+function resolvePushRequest(body: Record<string, unknown>) {
+  // Direct API: { merchantId, title, body, url }
+  if (body.merchantId) {
+    return {
+      merchantId: String(body.merchantId),
+      title: (body.title as string) || "New order",
+      message: (body.body as string) || "You have a new order",
+      url: (body.url as string) || "/orders",
+    };
+  }
+
+  // Supabase Database Webhook: { type, record: { merchant_id, order_number, total, ... } }
+  const record = body.record as Record<string, unknown> | undefined;
+  if (record?.merchant_id) {
+    const orderNumber = record.order_number ? String(record.order_number) : "New";
+    const total = formatJmd(record.total);
+    return {
+      merchantId: String(record.merchant_id),
+      title: "New order",
+      message: total
+        ? `Order #${orderNumber} — ${total}`
+        : `Order #${orderNumber} received`,
+      url: "/orders",
+    };
+  }
+
+  return null;
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405 });
@@ -29,14 +64,15 @@ Deno.serve(async (req) => {
   try {
     configureVapid();
     const body = await req.json();
-    const merchantId = body.merchantId as string;
-    const title = (body.title as string) || "New order";
-    const message = (body.body as string) || "You have a new order";
-    const url = (body.url as string) || "/orders";
+    const resolved = resolvePushRequest(body as Record<string, unknown>);
 
-    if (!merchantId) {
-      return new Response(JSON.stringify({ error: "merchantId required" }), { status: 400 });
+    if (!resolved) {
+      return new Response(JSON.stringify({ error: "merchantId or record.merchant_id required" }), {
+        status: 400,
+      });
     }
+
+    const { merchantId, title, message, url } = resolved;
 
     const { data: subscriptions, error } = await supabase
       .from("merchant_push_subscriptions")
