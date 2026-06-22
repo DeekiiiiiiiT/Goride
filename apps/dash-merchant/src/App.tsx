@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase, AuthRecoveryGate } from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
+import { toast } from 'sonner';
 import DashboardPage from './pages/DashboardPage';
 import OrdersPage from './pages/OrdersPage';
 import MenuPage from './pages/MenuPage';
@@ -19,6 +20,11 @@ import { PartnerTab } from './lib/partner-utils';
 import { shouldShowGoLiveScreen } from './lib/go-live';
 import { isUnifiedOnboardingEnabled } from './lib/partner-rollout';
 import { DashAdminPortal } from './admin/DashAdminPortal';
+import {
+  clearPartnerOAuthUrl,
+  consumePartnerOAuthIntent,
+  PARTNER_OAUTH_INTENT_KEY,
+} from './lib/partnerAuth';
 
 const SPLASH_MIN_MS = 1800;
 const PENDING_STATUSES = new Set(['pending', 'in_review', 'docs_requested']);
@@ -43,13 +49,27 @@ function DashMerchantApp() {
   const [splashComplete, setSplashComplete] = useState(false);
   const [currentPage, setCurrentPage] = useState<PartnerTab>('dashboard');
   const [goLiveDismissed, setGoLiveDismissed] = useState(false);
+  const [oauthReturnPending, setOauthReturnPending] = useState(
+    () => typeof window !== 'undefined' && !!sessionStorage.getItem(PARTNER_OAUTH_INTENT_KEY),
+  );
   const unifiedOnboarding = isUnifiedOnboardingEnabled();
+
+  const completeOAuthReturn = useCallback(async (activeSession: Session | null) => {
+    if (!activeSession?.user) return false;
+    if (!sessionStorage.getItem(PARTNER_OAUTH_INTENT_KEY)) return false;
+
+    consumePartnerOAuthIntent();
+    clearPartnerOAuthUrl();
+    setOauthReturnPending(false);
+    return true;
+  }, []);
 
   useEffect(() => {
     const splashStartedAt = Date.now();
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+    supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
+      setSession(initialSession);
+      await completeOAuthReturn(initialSession);
       setAuthReady(true);
 
       const elapsed = Date.now() - splashStartedAt;
@@ -59,12 +79,28 @@ function DashMerchantApp() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
       setSession(nextSession);
+      if (event === 'SIGNED_IN' && nextSession) {
+        await completeOAuthReturn(nextSession);
+      }
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [completeOAuthReturn]);
+
+  useEffect(() => {
+    if (!oauthReturnPending || !authReady || session) return;
+
+    const timeout = window.setTimeout(() => {
+      if (!sessionStorage.getItem(PARTNER_OAUTH_INTENT_KEY)) return;
+      consumePartnerOAuthIntent();
+      setOauthReturnPending(false);
+      toast.error('Google sign-in could not be completed. Please try again.');
+    }, 8000);
+
+    return () => window.clearTimeout(timeout);
+  }, [oauthReturnPending, authReady, session]);
 
   const { merchant, isLoading: merchantLoading, refetch } = useMerchant(session);
 

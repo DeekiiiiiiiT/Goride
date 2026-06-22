@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 import { isLocationComplete } from '@roam/location';
@@ -17,8 +17,8 @@ import {
   saveMerchantHours,
   submitMerchantApplication,
 } from '../../lib/partner-api';
-
-const DRAFT_KEY = 'roam_partner_wizard_draft';
+import { PARTNER_WIZARD_DRAFT_KEY } from '../../lib/partnerAuth';
+import { PartnerAccountFooter } from './PartnerAccountFooter';
 
 type WizardStep =
   | 'restaurant-info'
@@ -41,7 +41,7 @@ interface UnifiedOnboardingWizardProps {
 
 function loadDraft(): WizardDraft | null {
   try {
-    const raw = sessionStorage.getItem(DRAFT_KEY);
+    const raw = sessionStorage.getItem(PARTNER_WIZARD_DRAFT_KEY);
     if (!raw) return null;
     return JSON.parse(raw) as WizardDraft;
   } catch {
@@ -58,11 +58,11 @@ function saveDraft(step: WizardStep, formData: SignUpFormData, hours: DayHours[]
     accountNumber: '',
     routingNumber: '',
   };
-  sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ step, formData: safe, hours }));
+  sessionStorage.setItem(PARTNER_WIZARD_DRAFT_KEY, JSON.stringify({ step, formData: safe, hours }));
 }
 
 function clearDraft() {
-  sessionStorage.removeItem(DRAFT_KEY);
+  sessionStorage.removeItem(PARTNER_WIZARD_DRAFT_KEY);
 }
 
 export default function UnifiedOnboardingWizard({ session, onComplete }: UnifiedOnboardingWizardProps) {
@@ -149,9 +149,11 @@ export default function UnifiedOnboardingWizard({ session, onComplete }: Unified
     }
   };
 
+  let stepContent: React.ReactNode = null;
+
   switch (step) {
     case 'restaurant-info':
-      return (
+      stepContent = (
         <RestaurantInfoStep
           data={formData}
           onChange={updateForm}
@@ -159,8 +161,9 @@ export default function UnifiedOnboardingWizard({ session, onComplete }: Unified
           onContinue={() => setStep('location')}
         />
       );
+      break;
     case 'location':
-      return (
+      stepContent = (
         <LocationStep
           data={formData}
           onChange={updateForm}
@@ -168,8 +171,9 @@ export default function UnifiedOnboardingWizard({ session, onComplete }: Unified
           onContinue={() => setStep('business-details')}
         />
       );
+      break;
     case 'business-details':
-      return (
+      stepContent = (
         <BusinessDetailsStep
           data={formData}
           onChange={updateForm}
@@ -177,8 +181,9 @@ export default function UnifiedOnboardingWizard({ session, onComplete }: Unified
           onContinue={() => setStep('contact-hours')}
         />
       );
+      break;
     case 'contact-hours':
-      return (
+      stepContent = (
         <ContactHoursBrandingStep
           data={formData}
           hours={hours}
@@ -188,8 +193,9 @@ export default function UnifiedOnboardingWizard({ session, onComplete }: Unified
           onContinue={() => setStep('verification')}
         />
       );
+      break;
     case 'verification':
-      return (
+      stepContent = (
         <VerificationStep
           data={formData}
           onChange={updateForm}
@@ -198,8 +204,9 @@ export default function UnifiedOnboardingWizard({ session, onComplete }: Unified
           enableUpload
         />
       );
+      break;
     case 'bank-details':
-      return (
+      stepContent = (
         <BankDetailsStep
           data={formData}
           onChange={updateForm}
@@ -208,7 +215,18 @@ export default function UnifiedOnboardingWizard({ session, onComplete }: Unified
           isSubmitting={submitting}
         />
       );
+      break;
     default:
-      return null;
+      stepContent = null;
   }
+
+  return (
+    <>
+      {stepContent}
+      <PartnerAccountFooter
+        email={session.user.email}
+        className="pointer-events-auto fixed inset-x-0 bottom-[5.5rem] z-30 px-margin-mobile"
+      />
+    </>
+  );
 }

@@ -16,6 +16,7 @@ import {
   SectionHeader,
   TipCard,
 } from '../components/onboarding/OnboardingShell';
+import { PartnerAccountFooter } from '../components/onboarding/PartnerAccountFooter';
 
 interface OnboardingPageProps {
   session: Session;
@@ -526,6 +527,7 @@ export default function OnboardingPage({ session, onComplete }: OnboardingPagePr
         )}
 
         <p className="text-center text-label-sm text-on-surface-variant">Step {currentStep} of 5</p>
+        <PartnerAccountFooter email={session.user.email} className="mt-inset-sm" />
       </main>
 
       <OnboardingBottomNav

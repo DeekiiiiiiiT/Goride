@@ -1,0 +1,37 @@
+export const PARTNER_PRODUCTION_ORIGIN = 'https://partner.roamdash.co';
+
+export const PARTNER_OAUTH_INTENT_KEY = 'roam_partner_oauth_intent';
+export const PARTNER_OAUTH_INTENT_SIGNUP = 'signup';
+export const PARTNER_OAUTH_INTENT_LOGIN = 'login';
+
+export function getPartnerAuthRedirectUrl(): string {
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin}/`;
+  }
+  return `${PARTNER_PRODUCTION_ORIGIN}/`;
+}
+
+export function clearPartnerOAuthIntent(): void {
+  sessionStorage.removeItem(PARTNER_OAUTH_INTENT_KEY);
+}
+
+export function consumePartnerOAuthIntent(): string | null {
+  const intent = sessionStorage.getItem(PARTNER_OAUTH_INTENT_KEY);
+  if (intent) {
+    sessionStorage.removeItem(PARTNER_OAUTH_INTENT_KEY);
+  }
+  return intent;
+}
+
+export function clearPartnerOAuthUrl(): void {
+  const { hash, search, pathname } = window.location;
+  if (hash.includes('access_token') || search.includes('code=')) {
+    window.history.replaceState({}, '', pathname);
+  }
+}
+
+export const PARTNER_WIZARD_DRAFT_KEY = 'roam_partner_wizard_draft';
+
+export function clearPartnerWizardDraft(): void {
+  sessionStorage.removeItem(PARTNER_WIZARD_DRAFT_KEY);
+}
