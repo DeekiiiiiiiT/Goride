@@ -19,6 +19,7 @@ describe('verticalConfig', () => {
     expect(config.fulfillment_type).toBe('cook_to_order');
     expect(config.go_live_rule).toBe('menu_min_5');
     expect(config.required_document_types).toHaveLength(3);
+    expect(config.category_tags).toEqual([]);
   });
 
   it('getDefaultConfig with pharmacy vertical applies preset', () => {

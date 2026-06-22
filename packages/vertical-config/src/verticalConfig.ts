@@ -149,6 +149,7 @@ export function applyVerticalPreset(
     section_id: config.section_id,
     sort_order: config.sort_order,
     is_active: config.is_active,
+    category_tags: config.category_tags,
     required_document_types,
   };
 }
@@ -169,6 +170,7 @@ export function getDefaultConfig(
       ? normalizeRequiredDocumentTypes(partial.required_document_types, partial.vertical_type)
       : [...base.required_document_types],
     category_taxonomy_key: partial?.category_taxonomy_key ?? base.category_taxonomy_key,
+    category_tags: partial?.category_tags ?? [],
     default_prep_time_mins: partial?.default_prep_time_mins ?? base.default_prep_time_mins,
     max_delivery_radius_km: partial?.max_delivery_radius_km ?? base.max_delivery_radius_km,
     compliance_tier: partial?.compliance_tier ?? base.compliance_tier,
@@ -261,6 +263,13 @@ export function getVerticalLabels(
     catalogNoun: 'Menu',
     goLiveCatalogLabel: 'Menu added (minimum 5 items)',
   };
+}
+
+export function getCategoryTagsFromConfig(
+  config: MerchantBusinessTypeConfig | null | undefined,
+): string[] | null {
+  const tags = config?.category_tags?.map((t) => t.trim()).filter(Boolean);
+  return tags?.length ? tags : null;
 }
 
 export function getCategoryTaxonomyKey(

@@ -33,7 +33,7 @@ export function clearPartnerOAuthUrl(): void {
 export const PARTNER_WIZARD_DRAFT_KEY = 'roam_partner_wizard_draft';
 
 /** Bump when wizard step fields or draft shape changes (invalidates stale sessionStorage drafts). */
-export const PARTNER_WIZARD_DRAFT_VERSION = 2;
+export const PARTNER_WIZARD_DRAFT_VERSION = 3;
 
 export function clearPartnerWizardDraft(): void {
   sessionStorage.removeItem(PARTNER_WIZARD_DRAFT_KEY);

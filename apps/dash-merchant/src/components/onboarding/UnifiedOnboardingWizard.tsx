@@ -5,6 +5,7 @@ import { isLocationComplete } from '@roam/location';
 import { getBusinessTypeConfig } from '@roam/vertical-config';
 import { INITIAL_SIGN_UP_DATA, SignUpFormData } from '../../signup/types';
 import BusinessInfoStep from './BusinessInfoStep';
+import CategoriesStepContent from './CategoriesStepContent';
 import { useMerchantBusinessTypes } from '../../hooks/useMerchantBusinessTypes';
 import LocationStepContent from './LocationStepContent';
 import BusinessDetailsStepContent from './BusinessDetailsStepContent';
@@ -139,12 +140,12 @@ export default function UnifiedOnboardingWizard({
   };
 
   const goNext = () => {
-    const next = nextWizardStep(step);
+    const next = nextWizardStep(step, { typeConfig });
     if (next) setStep(next);
   };
 
   const goBack = () => {
-    const prev = prevWizardStep(step);
+    const prev = prevWizardStep(step, { typeConfig });
     if (prev) setStep(prev);
   };
 
@@ -221,6 +222,14 @@ export default function UnifiedOnboardingWizard({
     switch (step) {
       case 'restaurant-info':
         return <BusinessInfoStep data={formData} onChange={updateForm} />;
+      case 'categories':
+        return (
+          <CategoriesStepContent
+            data={formData}
+            onChange={updateForm}
+            typeConfig={typeConfig}
+          />
+        );
       case 'location':
         return <LocationStepContent data={formData} onChange={updateForm} />;
       case 'business-details':

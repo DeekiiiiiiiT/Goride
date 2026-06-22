@@ -65,6 +65,7 @@ export interface MerchantBusinessTypeConfig {
   fulfillment_type: FulfillmentType;
   required_document_types: MerchantDocumentType[];
   category_taxonomy_key: CategoryTaxonomyKey;
+  category_tags: string[];
   default_prep_time_mins: number;
   max_delivery_radius_km: number;
   compliance_tier: ComplianceTier;
@@ -98,6 +99,7 @@ export type MerchantOnboardingStatus = 'draft' | 'submitted';
 
 export type PartnerWizardStepKey =
   | 'restaurant-info'
+  | 'categories'
   | 'location'
   | 'business-details'
   | 'contact-hours'

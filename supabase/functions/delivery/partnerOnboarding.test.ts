@@ -32,7 +32,8 @@ Deno.test("mergeOnboardingDraft preserves existing keys", () => {
 
 Deno.test("wizardStepFromKey maps restaurant-info to 1", () => {
   assertEquals(wizardStepFromKey("restaurant-info"), 1);
-  assertEquals(wizardStepFromKey("location"), 2);
+  assertEquals(wizardStepFromKey("categories"), 2);
+  assertEquals(wizardStepFromKey("location"), 3);
 });
 
 Deno.test("isValidWizardStepKey", () => {

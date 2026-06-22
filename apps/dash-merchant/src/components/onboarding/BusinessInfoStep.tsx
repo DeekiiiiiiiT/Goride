@@ -6,16 +6,10 @@ import {
   getVerticalLabels,
   resolveVerticalType,
 } from '@roam/vertical-config';
-import {
-  CUISINE_OPTIONS,
-  INVENTORY_CATEGORY_OPTIONS,
-  PHARMACY_CATEGORY_OPTIONS,
-  SignUpFormData,
-} from '../../signup/types';
+import { SignUpFormData } from '../../signup/types';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
 import { useMerchantBusinessTypes } from '../../hooks/useMerchantBusinessTypes';
 import RegulatedVerticalBanner from './RegulatedVerticalBanner';
-import { categoryTaxonomyForConfig } from '../../lib/partner-onboarding-validation';
 import { inputClass } from './OnboardingShell';
 
 interface BusinessInfoStepProps {
@@ -45,9 +39,7 @@ export default function BusinessInfoStep({ data, onChange }: BusinessInfoStepPro
   const [editingType, setEditingType] = useState(false);
   const typeConfig = getBusinessTypeConfig(sections, data.businessType);
   const labels = getVerticalLabels(typeConfig?.vertical_type, typeConfig?.fulfillment_type);
-  const taxonomy = categoryTaxonomyForConfig(typeConfig);
   const isRegulated = getComplianceTier(typeConfig) === 'regulated';
-  const vertical = resolveVerticalType(typeConfig?.vertical_type);
 
   const hasSelectedType = sections.some((section) =>
     section.types.some((t) => t.is_active && t.id === data.businessType),
@@ -55,30 +47,13 @@ export default function BusinessInfoStep({ data, onChange }: BusinessInfoStepPro
 
   const showTypeSummary = hasSelectedType && isRegulated && !editingType;
 
-  const categoryOptions =
-    vertical === 'pharmacy'
-      ? PHARMACY_CATEGORY_OPTIONS
-      : taxonomy === 'inventory_category'
-        ? INVENTORY_CATEGORY_OPTIONS
-        : CUISINE_OPTIONS;
-
-  const maxCategories = taxonomy === 'cuisine' ? 3 : 5;
-
-  const toggleCategory = (category: string) => {
-    const field = taxonomy === 'cuisine' ? 'cuisineTypes' : 'inventoryCategories';
-    const current = taxonomy === 'cuisine' ? data.cuisineTypes : data.inventoryCategories;
-    const selected = current.includes(category);
-    if (selected) {
-      onChange({ [field]: current.filter((c) => c !== category) });
-      return;
-    }
-    if (current.length >= maxCategories) return;
-    onChange({ [field]: [...current, category] });
-  };
-
   const handleBusinessTypeChange = (businessType: string) => {
     const nextConfig = getBusinessTypeConfig(sections, businessType);
-    const patch: Partial<SignUpFormData> = { businessType };
+    const patch: Partial<SignUpFormData> = {
+      businessType,
+      cuisineTypes: [],
+      inventoryCategories: [],
+    };
     if (nextConfig) {
       patch.avgPrepTime = String(nextConfig.default_prep_time_mins);
       patch.deliveryRadius = String(nextConfig.max_delivery_radius_km);
@@ -86,9 +61,6 @@ export default function BusinessInfoStep({ data, onChange }: BusinessInfoStepPro
     setEditingType(false);
     onChange(patch);
   };
-
-  const selectedCategories =
-    taxonomy === 'cuisine' ? data.cuisineTypes : data.inventoryCategories;
 
   return (
     <div className="flex flex-col gap-8">
@@ -217,36 +189,6 @@ export default function BusinessInfoStep({ data, onChange }: BusinessInfoStepPro
                 className={`${inputClass} min-h-[120px] resize-none py-3`}
               />
             </div>
-
-            {(taxonomy === 'inventory_category' ||
-              taxonomy === 'cuisine' ||
-              vertical === 'pharmacy') && (
-              <div>
-                <label className="mb-3 block text-label-md text-on-surface-variant">
-                  {isRegulated ? 'Business Category' : `${labels.categoryFieldLabel} (Max ${maxCategories})`}
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {categoryOptions.map((category) => {
-                    const isSelected = selectedCategories.includes(category);
-                    return (
-                      <button
-                        key={category}
-                        type="button"
-                        onClick={() => toggleCategory(category)}
-                        className={`flex items-center gap-2 rounded-full border px-4 py-2 text-label-lg transition-all active:scale-95 ${
-                          isSelected
-                            ? 'border-primary bg-primary-container text-on-primary'
-                            : 'border-outline text-on-surface-variant hover:bg-surface-container-low'
-                        }`}
-                      >
-                        <MaterialIcon name={isSelected ? 'check' : 'add'} size={18} />
-                        {category}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
           </div>
         </section>
       )}

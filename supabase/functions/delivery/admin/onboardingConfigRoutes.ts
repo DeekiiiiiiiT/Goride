@@ -35,10 +35,40 @@ export interface BusinessTypeDto {
   max_delivery_radius_km: number;
   compliance_tier: string;
   go_live_rule: string;
+  category_tags: string[];
 }
 
 const TYPE_SELECT =
-  "id, section_id, label, sort_order, is_active, vertical_type, fulfillment_type, required_document_types, category_taxonomy_key, default_prep_time_mins, max_delivery_radius_km, compliance_tier, go_live_rule";
+  "id, section_id, label, sort_order, is_active, vertical_type, fulfillment_type, required_document_types, category_taxonomy_key, default_prep_time_mins, max_delivery_radius_km, compliance_tier, go_live_rule, category_tags";
+
+function normalizeCategoryTags(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set<string>();
+  const tags: string[] = [];
+  for (const item of input) {
+    const label = String(item).trim();
+    if (!label || label.length > 80) continue;
+    const key = label.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    tags.push(label);
+    if (tags.length >= 50) break;
+  }
+  return tags;
+}
+
+function parseCategoryTagsPatch(input: unknown): string[] | null {
+  if (input == null) return null;
+  if (!Array.isArray(input)) return null;
+  const tags = normalizeCategoryTags(input);
+  for (const item of input) {
+    const label = String(item).trim();
+    if (!label) continue;
+    if (label.length > 80) return null;
+  }
+  if (input.length > 50) return null;
+  return tags;
+}
 
 function normalizeTypeRow(row: Record<string, unknown>): BusinessTypeDto {
   const defaults = defaultBusinessTypeMetadata(String(row.id || "restaurant"));
@@ -58,6 +88,7 @@ function normalizeTypeRow(row: Record<string, unknown>): BusinessTypeDto {
     max_delivery_radius_km: Number(row.max_delivery_radius_km) || defaults.max_delivery_radius_km,
     compliance_tier: String(row.compliance_tier || defaults.compliance_tier),
     go_live_rule: String(row.go_live_rule || defaults.go_live_rule),
+    category_tags: normalizeCategoryTags(row.category_tags),
   };
 }
 
@@ -124,6 +155,11 @@ function parseMetadataPatch(
   }
   if (body.max_delivery_radius_km != null) {
     patch.max_delivery_radius_km = Number(body.max_delivery_radius_km);
+  }
+  if (body.category_tags != null) {
+    const tags = parseCategoryTagsPatch(body.category_tags);
+    if (tags === null) return null;
+    patch.category_tags = tags;
   }
   return patch;
 }

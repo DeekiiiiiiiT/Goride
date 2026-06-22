@@ -1,7 +1,7 @@
 /**
  * Partner app routing contract and rollout notes (internal).
  *
- * CANONICAL ONBOARDING: UnifiedOnboardingWizard (6 steps). See partner-onboarding-config.ts.
+ * CANONICAL ONBOARDING: UnifiedOnboardingWizard (7 steps). See partner-onboarding-config.ts.
  *
  * REGRESSION MATRIX: see PARTNER_ONBOARDING_REGRESSION in partner-smoke.ts
  *

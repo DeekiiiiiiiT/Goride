@@ -16,7 +16,7 @@ import {
   type MerchantBusinessTypeDto,
   type MerchantBusinessTypeSectionDto,
 } from '../../../services/dashAdminService';
-import { BusinessTypeMetadataPanel } from '../../../components/BusinessTypeMetadataPanel';
+import { BusinessTypeMetadataModal } from '../../../components/BusinessTypeMetadataModal';
 import { validateBusinessTypeMetadata } from '../../../utils/validateBusinessTypeMetadata';
 import { getDefaultConfig, isRegulatedVertical } from '@roam/vertical-config';
 import type { AdminOutletContext } from '../../../DashAdminPortal';
@@ -230,6 +230,23 @@ export function BusinessTypesPage() {
     }
   };
 
+  const openMetadata = (type: MerchantBusinessTypeDto) => {
+    setMetadataTypeId(type.id);
+    setMetadataDraft({
+      ...getDefaultConfig(type),
+      category_tags: Array.isArray(type.category_tags) ? [...type.category_tags] : [],
+    });
+  };
+
+  const closeMetadata = () => {
+    setMetadataTypeId(null);
+    setMetadataDraft(null);
+  };
+
+  const metadataType = metadataTypeId
+    ? sections.flatMap((section) => section.types).find((type) => type.id === metadataTypeId)
+    : undefined;
+
   const handleSaveMetadata = async (type: MerchantBusinessTypeDto) => {
     if (!metadataDraft) return;
     const validation = validateBusinessTypeMetadata(metadataDraft);
@@ -239,7 +256,7 @@ export function BusinessTypesPage() {
     }
     setBusy(true);
     try {
-      await updateMerchantBusinessType(token, type.id, {
+      const { type: saved } = await updateMerchantBusinessType(token, type.id, {
         vertical_type: metadataDraft.vertical_type,
         fulfillment_type: metadataDraft.fulfillment_type,
         category_taxonomy_key: metadataDraft.category_taxonomy_key,
@@ -248,21 +265,22 @@ export function BusinessTypesPage() {
         compliance_tier: metadataDraft.compliance_tier,
         go_live_rule: metadataDraft.go_live_rule,
         required_document_types: metadataDraft.required_document_types,
+        category_tags: metadataDraft.category_tags ?? [],
       });
-      setMetadataTypeId(null);
-      setMetadataDraft(null);
+      setSections((current) =>
+        current.map((section) => ({
+          ...section,
+          types: section.types.map((item) => (item.id === saved.id ? saved : item)),
+        })),
+      );
+      closeMetadata();
       toast.success('Metadata updated');
-      await refreshCatalog();
+      invalidateMerchantBusinessTypesCache();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to update metadata');
     } finally {
       setBusy(false);
     }
-  };
-
-  const openMetadata = (type: MerchantBusinessTypeDto) => {
-    setMetadataTypeId(type.id);
-    setMetadataDraft(getDefaultConfig(type));
   };
 
   const handleDeactivateType = async (id: string, label: string) => {
@@ -526,6 +544,11 @@ export function BusinessTypesPage() {
                                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
                                     {type.required_document_types?.length ?? 3} docs
                                   </span>
+                                  {(type.category_tags?.length ?? 0) > 0 && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+                                      {type.category_tags?.length} tags
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                               {canWrite && (
@@ -572,37 +595,6 @@ export function BusinessTypesPage() {
                             </>
                           )}
                         </div>
-                        {metadataTypeId === type.id && metadataDraft && (
-                          <div className="w-full px-4 pb-3">
-                            <BusinessTypeMetadataPanel
-                              value={metadataDraft}
-                              disabled={!canWrite || busy}
-                              onChange={setMetadataDraft}
-                            />
-                            {canWrite && (
-                              <div className="flex gap-2 mt-2">
-                                <button
-                                  type="button"
-                                  disabled={busy}
-                                  onClick={() => void handleSaveMetadata(type)}
-                                  className="px-3 py-1.5 text-sm rounded-lg bg-emerald-600 text-white disabled:opacity-50"
-                                >
-                                  Save metadata
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setMetadataTypeId(null);
-                                    setMetadataDraft(null);
-                                  }}
-                                  className="px-3 py-1.5 text-sm rounded-lg text-slate-400"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        )}
                       </div>
                     ))
                   )}
@@ -667,6 +659,20 @@ export function BusinessTypesPage() {
             );
           })}
         </div>
+      )}
+
+      {metadataDraft && metadataTypeId && metadataType && (
+        <BusinessTypeMetadataModal
+          open
+          typeLabel={metadataType.label}
+          typeId={metadataTypeId}
+          value={metadataDraft}
+          disabled={!canWrite || busy}
+          busy={busy}
+          onChange={setMetadataDraft}
+          onSave={() => void handleSaveMetadata(metadataType)}
+          onClose={closeMetadata}
+        />
       )}
     </div>
   );

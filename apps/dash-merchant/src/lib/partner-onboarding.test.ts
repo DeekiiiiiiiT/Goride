@@ -44,19 +44,28 @@ describe('partner-onboarding-validation', () => {
     expect(isValidBusinessEmail('not-an-email')).toBe(false);
   });
 
-  it('requires name, business type, and cuisine on step 1', () => {
+  it('requires name and business type on step 1', () => {
     expect(canContinueBusinessInfoStep(INITIAL_SIGN_UP_DATA)).toBe(false);
     expect(
       canContinueBusinessInfoStep({
         ...INITIAL_SIGN_UP_DATA,
         restaurantName: 'Test Kitchen',
         businessType: 'restaurant',
-        cuisineTypes: ['Jamaican'],
       }),
     ).toBe(true);
   });
 
-  it('does not require phone/email on step 1 (collected on step 4)', () => {
+  it('does not require cuisine on step 1 (collected on step 2)', () => {
+    const data = {
+      ...INITIAL_SIGN_UP_DATA,
+      restaurantName: 'Test Kitchen',
+      businessType: 'restaurant' as const,
+      cuisineTypes: [],
+    };
+    expect(canContinueBusinessInfoStep(data)).toBe(true);
+  });
+
+  it('does not require phone/email on step 1 (collected on step 5)', () => {
     const data = {
       ...INITIAL_SIGN_UP_DATA,
       restaurantName: 'Test Kitchen',

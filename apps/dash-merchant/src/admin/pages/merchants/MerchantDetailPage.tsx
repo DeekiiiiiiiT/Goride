@@ -3,6 +3,7 @@ import { useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { resolveGoLiveRule, resolveVerticalType } from '@roam/vertical-config';
+import { WIZARD_TOTAL_STEPS } from '../../../lib/partner-onboarding-config';
 import { MerchantStatusBadge } from '../../components/MerchantStatusBadge';
 import { MerchantActionDialog } from '../../components/MerchantActionDialog';
 import { useAdminConfirm } from '../../contexts/AdminConfirmContext';
@@ -228,7 +229,7 @@ export function MerchantDetailPage() {
           <div className="flex gap-2 mt-2">
             {merchant.onboarding_status === 'draft' ? (
               <span className="text-xs px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300">
-                Draft — Step {merchant.wizard_step ?? 1} of 6
+                Draft — Step {merchant.wizard_step ?? 1} of {WIZARD_TOTAL_STEPS}
               </span>
             ) : (
               <MerchantStatusBadge status={merchant.verification_status} />
@@ -284,7 +285,7 @@ export function MerchantDetailPage() {
         <section className="rounded-xl border border-sky-500/30 bg-sky-500/10 p-4">
           <h3 className="text-sm font-medium text-sky-200">Application in progress</h3>
           <p className="text-sm text-sky-100/80 mt-1">
-            Partner is on step {merchant.wizard_step ?? 1} of 6
+            Partner is on step {merchant.wizard_step ?? 1} of {WIZARD_TOTAL_STEPS}
             {merchant.wizard_step_key ? ` (${merchant.wizard_step_key})` : ''}.
             Application has not been submitted for review yet.
           </p>

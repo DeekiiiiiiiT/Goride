@@ -25,6 +25,26 @@ export function validateBusinessTypeMetadata(
     errors.push('Invalid category taxonomy.');
   }
 
+  if (config.category_taxonomy_key !== 'none') {
+    const tags = (config.category_tags ?? []).map((t) => t.trim()).filter(Boolean);
+    if (tags.length > 50) {
+      errors.push('A business type can have at most 50 category tags.');
+    }
+    const seen = new Set<string>();
+    for (const tag of tags) {
+      if (tag.length > 80) {
+        errors.push('Each category tag must be 80 characters or fewer.');
+        break;
+      }
+      const key = tag.toLowerCase();
+      if (seen.has(key)) {
+        errors.push('Category tags must be unique.');
+        break;
+      }
+      seen.add(key);
+    }
+  }
+
   const docs = config.required_document_types ?? [];
   for (const doc of docs) {
     if (!MERCHANT_DOCUMENT_TYPES.includes(doc as MerchantDocumentType)) {

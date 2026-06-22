@@ -100,6 +100,7 @@ export function hoursFromOnboardingDraft(
 export function isWizardStepId(value: string | null | undefined): value is WizardStepId {
   return [
     'restaurant-info',
+    'categories',
     'location',
     'business-details',
     'contact-hours',

@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
+import { WIZARD_TOTAL_STEPS } from '../../lib/partner-onboarding-config';
 import { PartnerWizardMobileBanner, PartnerWizardProgress } from './PartnerWizardProgress';
 
 export const ONBOARDING_STEPS = [
@@ -30,7 +31,7 @@ export function OnboardingHeader({
   currentStep,
   showProgress = true,
 }: OnboardingHeaderFullProps) {
-  if (currentStep === 5 && showSetupTitle) {
+  if (currentStep === 6 && showSetupTitle) {
     return (
       <header className="fixed top-0 z-50 flex w-full flex-col border-b border-outline-variant bg-surface safe-t safe-x">
         <div className="flex h-14 w-full items-center justify-between px-margin-mobile">
@@ -48,7 +49,7 @@ export function OnboardingHeader({
           )}
           <h1 className="text-title-lg font-semibold text-primary">Roam Dash Partner</h1>
           <span className="rounded-full bg-surface-container px-3 py-1 text-label-md text-on-surface-variant">
-            Step {currentStep} of 6
+            Step {currentStep} of {WIZARD_TOTAL_STEPS}
           </span>
         </div>
       </header>
@@ -72,7 +73,7 @@ export function OnboardingHeader({
           <h1 className="text-title-lg font-semibold text-primary">Roam Dash Partner</h1>
           {currentStep && (
             <span className="ml-auto hidden rounded-full bg-surface-container px-3 py-1 text-label-md text-on-surface-variant md:inline">
-              Step {currentStep} of 6
+              Step {currentStep} of {WIZARD_TOTAL_STEPS}
             </span>
           )}
         </div>

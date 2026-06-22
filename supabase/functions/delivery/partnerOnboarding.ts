@@ -4,11 +4,12 @@
 
 export const WIZARD_STEPS = [
   { id: 1, key: "restaurant-info", label: "Info" },
-  { id: 2, key: "location", label: "Location" },
-  { id: 3, key: "business-details", label: "Details" },
-  { id: 4, key: "contact-hours", label: "Contact" },
-  { id: 5, key: "verification", label: "Verify" },
-  { id: 6, key: "bank-details", label: "Payouts" },
+  { id: 2, key: "categories", label: "Categories" },
+  { id: 3, key: "location", label: "Location" },
+  { id: 4, key: "business-details", label: "Details" },
+  { id: 5, key: "contact-hours", label: "Contact" },
+  { id: 6, key: "verification", label: "Verify" },
+  { id: 7, key: "bank-details", label: "Payouts" },
 ] as const;
 
 export type WizardStepKey = (typeof WIZARD_STEPS)[number]["key"];
@@ -220,7 +221,7 @@ export function merchantPayloadFromBody(
     verification_status: "pending",
     onboarding_status: "submitted",
     submitted_at: new Date().toISOString(),
-    wizard_step: 6,
+    wizard_step: 7,
     wizard_step_key: "bank-details",
     last_onboarding_activity_at: new Date().toISOString(),
   };
@@ -230,7 +231,7 @@ export function incompleteSetupStageLabel(row: Record<string, unknown>): string 
   if (row.onboarding_status === "draft") {
     const step = Number(row.wizard_step) || wizardStepFromKey(String(row.wizard_step_key || ""));
     const label = wizardStepLabel(row.wizard_step_key as string);
-    return `Step ${step} of 6 — ${label}`;
+    return `Step ${step} of 7 — ${label}`;
   }
   return "";
 }

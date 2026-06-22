@@ -38,8 +38,8 @@ export default function OnboardingWizardShell({
       <OnboardingHeader
         currentStep={currentStep}
         onBack={showBack ? onBack : undefined}
-        showSetupTitle={currentStep === 5}
-        showProgress={currentStep !== 5}
+        showSetupTitle={currentStep === 6}
+        showProgress={currentStep !== 6}
       />
 
       <main

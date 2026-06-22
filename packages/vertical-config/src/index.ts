@@ -14,6 +14,7 @@ export {
   getBusinessTypeConfig,
   getVerticalLabels,
   getCategoryTaxonomyKey,
+  getCategoryTagsFromConfig,
   getComplianceTier,
   DOCUMENT_TYPE_LABELS,
 } from './verticalConfig';

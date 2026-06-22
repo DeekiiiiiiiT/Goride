@@ -11,23 +11,22 @@ export function isValidBusinessEmail(value: string): boolean {
   return EMAIL_PATTERN.test(value.trim());
 }
 
-export function canContinueBusinessInfoStep(
+export function canContinueBusinessInfoStep(data: SignUpFormData): boolean {
+  return data.restaurantName.trim().length >= 2 && data.businessType !== '';
+}
+
+export function canContinueCategoriesStep(
   data: SignUpFormData,
   typeConfig?: MerchantBusinessTypeConfig | null,
 ): boolean {
   const taxonomy = getCategoryTaxonomyKey(typeConfig ?? null);
-  const hasCategories =
-    taxonomy === 'inventory_category'
-      ? data.inventoryCategories.length > 0
-      : taxonomy === 'none'
-        ? true
-        : data.cuisineTypes.length > 0;
-
-  return (
-    data.restaurantName.trim().length >= 2 &&
-    data.businessType !== '' &&
-    hasCategories
-  );
+  if (taxonomy === 'inventory_category') {
+    return data.inventoryCategories.length > 0;
+  }
+  if (taxonomy === 'none') {
+    return true;
+  }
+  return data.cuisineTypes.length > 0;
 }
 
 export function canContinueLocationStep(data: SignUpFormData): boolean {
@@ -87,7 +86,9 @@ export function canContinueWizardStep(
 
   switch (stepId) {
     case 'restaurant-info':
-      return canContinueBusinessInfoStep(data, typeConfig);
+      return canContinueBusinessInfoStep(data);
+    case 'categories':
+      return canContinueCategoriesStep(data, typeConfig);
     case 'location':
       return canContinueLocationStep(data);
     case 'business-details':

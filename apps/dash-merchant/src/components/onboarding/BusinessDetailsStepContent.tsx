@@ -46,7 +46,7 @@ export default function BusinessDetailsStepContent({
   data,
   onChange,
   typeConfig,
-  stepNumber = 3,
+  stepNumber = 4,
 }: BusinessDetailsStepContentProps) {
   const labels = getVerticalLabels(typeConfig?.vertical_type, typeConfig?.fulfillment_type);
   const isPickAndPack = typeConfig?.fulfillment_type === 'pick_and_pack';

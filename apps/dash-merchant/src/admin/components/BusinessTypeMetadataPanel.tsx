@@ -1,5 +1,4 @@
 import React, { useCallback } from 'react';
-import { Settings, Package, Clock, FileText } from 'lucide-react';
 import type {
   CategoryTaxonomyKey,
   FulfillmentType,
@@ -13,6 +12,9 @@ import {
   isRegulatedVertical,
 } from '@roam/vertical-config';
 import { RequiredDocumentsEditor } from './RequiredDocumentsEditor';
+import { CategoryTagsEditor } from './CategoryTagsEditor';
+
+export type MetadataTabId = 'identity' | 'catalog' | 'logistics' | 'documents';
 
 const VERTICAL_OPTIONS: VerticalType[] = [
   'restaurant',
@@ -30,6 +32,7 @@ const GO_LIVE_OPTIONS: GoLiveRule[] = ['menu_min_5', 'catalog_imported', 'pos_co
 type Props = {
   value: MerchantBusinessTypeConfig;
   disabled?: boolean;
+  activeTab: MetadataTabId;
   onChange: (next: MerchantBusinessTypeConfig) => void;
 };
 
@@ -46,27 +49,12 @@ function hasCustomizations(current: MerchantBusinessTypeConfig, vertical: Vertic
   );
 }
 
-function SectionCard({
-  title,
-  icon: Icon,
-  children,
-}: {
-  title: string;
-  icon: React.ComponentType<{ className?: string }>;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-lg border border-slate-700 bg-slate-950/60 p-3 space-y-3">
-      <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-emerald-400">
-        <Icon className="h-3.5 w-3.5" />
-        {title}
-      </p>
-      {children}
-    </div>
-  );
-}
+const fieldClass =
+  'px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white w-full text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-600/50';
 
-export function BusinessTypeMetadataPanel({ value, disabled, onChange }: Props) {
+const labelClass = 'text-sm font-medium text-slate-300';
+
+export function BusinessTypeMetadataPanel({ value, disabled, activeTab, onChange }: Props) {
   const regulated = isRegulatedVertical(value.vertical_type);
 
   const patch = (partial: Partial<MerchantBusinessTypeConfig>) => {
@@ -97,26 +85,23 @@ export function BusinessTypeMetadataPanel({ value, disabled, onChange }: Props) 
     applyVerticalChange(vertical_type, false);
   };
 
-  const selectClass =
-    'px-2 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-white w-full';
-
-  return (
-    <div className="mt-3 space-y-3 text-sm">
-      {regulated && (
-        <p className="text-xs text-amber-300/90 rounded-md bg-amber-500/10 border border-amber-500/20 px-2 py-1.5">
-          Regulated vertical — requires compliance review before activation.
-        </p>
-      )}
-
-      <SectionCard title="Core Identity" icon={Settings}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className="flex flex-col gap-1 text-slate-300">
-            Vertical
+  if (activeTab === 'identity') {
+    return (
+      <div className="space-y-5">
+        <div>
+          <h3 className="text-base font-semibold text-white">Core identity</h3>
+          <p className="mt-1 text-sm text-slate-400">
+            Defines how this business type behaves on the partner setup form.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Vertical</span>
             <select
               disabled={disabled}
               value={value.vertical_type}
               onChange={(e) => handleVerticalChange(e.target.value as VerticalType)}
-              className={selectClass}
+              className={fieldClass}
             >
               {VERTICAL_OPTIONS.map((v) => (
                 <option key={v} value={v}>
@@ -125,13 +110,13 @@ export function BusinessTypeMetadataPanel({ value, disabled, onChange }: Props) 
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-slate-300">
-            Fulfillment
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Fulfillment</span>
             <select
               disabled={disabled}
               value={value.fulfillment_type}
               onChange={(e) => patch({ fulfillment_type: e.target.value as FulfillmentType })}
-              className={selectClass}
+              className={fieldClass}
             >
               {FULFILLMENT_OPTIONS.map((v) => (
                 <option key={v} value={v}>
@@ -141,17 +126,28 @@ export function BusinessTypeMetadataPanel({ value, disabled, onChange }: Props) 
             </select>
           </label>
         </div>
-      </SectionCard>
+      </div>
+    );
+  }
 
-      <SectionCard title="Catalog and Taxonomy" icon={Package}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className="flex flex-col gap-1 text-slate-300">
-            Category taxonomy
+  if (activeTab === 'catalog') {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h3 className="text-base font-semibold text-white">Catalog & taxonomy</h3>
+          <p className="mt-1 text-sm text-slate-400">
+            Controls category behaviour and the tags partners can select during signup.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Category taxonomy</span>
             <select
               disabled={disabled}
               value={value.category_taxonomy_key}
               onChange={(e) => patch({ category_taxonomy_key: e.target.value as CategoryTaxonomyKey })}
-              className={selectClass}
+              className={fieldClass}
             >
               {TAXONOMY_OPTIONS.map((v) => (
                 <option key={v} value={v}>
@@ -160,13 +156,13 @@ export function BusinessTypeMetadataPanel({ value, disabled, onChange }: Props) 
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-slate-300">
-            Go-live rule
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Go-live rule</span>
             <select
               disabled={disabled}
               value={value.go_live_rule}
               onChange={(e) => patch({ go_live_rule: e.target.value as GoLiveRule })}
-              className={selectClass}
+              className={fieldClass}
             >
               {GO_LIVE_OPTIONS.map((v) => (
                 <option key={v} value={v}>
@@ -175,10 +171,10 @@ export function BusinessTypeMetadataPanel({ value, disabled, onChange }: Props) 
               ))}
             </select>
           </label>
-          <div className="flex flex-col gap-1 text-slate-300 sm:col-span-2">
-            Compliance tier
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
+            <span className={labelClass}>Compliance tier</span>
             {regulated ? (
-              <span className="inline-flex w-fit items-center rounded-full bg-amber-500/15 border border-amber-500/30 px-3 py-1 text-xs text-amber-200">
+              <span className="inline-flex w-fit items-center rounded-full border border-amber-500/30 bg-amber-500/15 px-3 py-1 text-xs text-amber-200">
                 regulated (derived from vertical)
               </span>
             ) : (
@@ -188,12 +184,36 @@ export function BusinessTypeMetadataPanel({ value, disabled, onChange }: Props) 
             )}
           </div>
         </div>
-      </SectionCard>
 
-      <SectionCard title="SLA and Logistics" icon={Clock}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className="flex flex-col gap-1 text-slate-300">
-            Default prep (mins)
+        {value.category_taxonomy_key !== 'none' && (
+          <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-4">
+            <h4 className="text-sm font-medium text-white">Category tags</h4>
+            <p className="mt-1 mb-3 text-xs text-slate-500">
+              Shown to partners on the categories step of signup.
+            </p>
+            <CategoryTagsEditor
+              value={value.category_tags ?? []}
+              disabled={disabled}
+              onChange={(category_tags) => patch({ category_tags })}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (activeTab === 'logistics') {
+    return (
+      <div className="space-y-5">
+        <div>
+          <h3 className="text-base font-semibold text-white">SLA & logistics</h3>
+          <p className="mt-1 text-sm text-slate-400">
+            Default prep time and delivery radius applied when partners choose this type.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Default prep (mins)</span>
             <input
               type="number"
               min={5}
@@ -201,11 +221,11 @@ export function BusinessTypeMetadataPanel({ value, disabled, onChange }: Props) 
               disabled={disabled}
               value={value.default_prep_time_mins}
               onChange={(e) => patch({ default_prep_time_mins: Number(e.target.value) || 15 })}
-              className={selectClass}
+              className={fieldClass}
             />
           </label>
-          <label className="flex flex-col gap-1 text-slate-300">
-            Max delivery radius (km)
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>Max delivery radius (km)</span>
             <input
               type="number"
               min={1}
@@ -213,28 +233,29 @@ export function BusinessTypeMetadataPanel({ value, disabled, onChange }: Props) 
               disabled={disabled}
               value={value.max_delivery_radius_km}
               onChange={(e) => patch({ max_delivery_radius_km: Number(e.target.value) || 5 })}
-              className={selectClass}
+              className={fieldClass}
             />
           </label>
         </div>
-      </SectionCard>
+      </div>
+    );
+  }
 
-      <SectionCard title="KYC / Required Documents" icon={FileText}>
+  return (
+    <div className="space-y-5">
+      <div>
+        <h3 className="text-base font-semibold text-white">KYC & required documents</h3>
+        <p className="mt-1 text-sm text-slate-400">
+          Documents partners must upload before their application can be reviewed.
+        </p>
+      </div>
+      <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-4">
         <RequiredDocumentsEditor
           value={value.required_document_types}
           vertical={value.vertical_type}
           disabled={disabled}
           onChange={(required_document_types) => patch({ required_document_types })}
         />
-      </SectionCard>
-
-      <div className="flex flex-wrap gap-2 text-xs text-slate-400">
-        <span className="px-2 py-0.5 rounded-full bg-slate-800">{value.vertical_type}</span>
-        <span className="px-2 py-0.5 rounded-full bg-slate-800">{value.fulfillment_type}</span>
-        <span className="px-2 py-0.5 rounded-full bg-slate-800">{value.go_live_rule}</span>
-        <span className="px-2 py-0.5 rounded-full bg-slate-800">
-          {value.required_document_types.length} docs
-        </span>
       </div>
     </div>
   );
