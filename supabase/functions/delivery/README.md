@@ -39,6 +39,8 @@ Write actions require `dash_admin` or platform write roles (`dashPermissions.ts`
 | DELETE | `/admin/customers/:id` | Remove Dash customer (`dash_admin`+; body: `reason`, `confirm_name`) |
 | DELETE | `/admin/team/:userId` | Revoke dash admin team role |
 | GET/PATCH | `/admin/finance/*` | Payouts, disputes, reviews |
+| GET/POST/PATCH/DELETE | `/admin/onboarding/business-types` | Manage business type taxonomy |
+| GET/POST/PATCH/DELETE | `/admin/onboarding/business-type-sections` | Manage business type sections |
 
 Courier admin routes remain under `/admin/couriers/*`.
 
@@ -48,6 +50,7 @@ Courier admin routes remain under `/admin/couriers/*`.
 |--------|-------|-------------|
 | POST | `/partner/bootstrap` | Idempotent draft `merchants` row when partner signs in |
 | PATCH | `/partner/onboarding-draft` | Sync wizard step + partial form JSON |
+| GET | `/partner/business-types` | Active business type sections for partner setup form |
 | POST | `/merchants` | Final submit — transitions `draft` → `submitted` |
 
 Ops playbook: `docs/dash-admin/OPS_PLAYBOOK.md`

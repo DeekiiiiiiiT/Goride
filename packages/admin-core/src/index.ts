@@ -33,6 +33,7 @@ export { useAdminAuth } from './hooks/useAdminAuth';
 // Types
 export type {
   AdminNavItem,
+  AdminNavGroup,
   AdminSection,
   AdminPage,
   AdminProduct,

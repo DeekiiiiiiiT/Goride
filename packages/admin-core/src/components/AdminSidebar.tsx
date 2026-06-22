@@ -7,7 +7,7 @@ import {
   X,
 } from 'lucide-react';
 import { cn } from '../utils/cn';
-import type { AdminSidebarProps, AdminSection, AdminNavItem } from '../types/admin';
+import type { AdminSidebarProps, AdminSection, AdminNavItem, AdminNavGroup } from '../types/admin';
 
 /**
  * Render a single nav item (leaf node)
@@ -61,6 +61,67 @@ function NavItem({
 }
 
 /**
+ * Render a nested nav group inside a section (e.g. Onboarding under Merchants)
+ */
+function NavGroupItem({
+  group,
+  currentPage,
+  onNavigate,
+  canViewPage,
+}: {
+  group: AdminNavGroup;
+  currentPage: string;
+  onNavigate: (id: string) => void;
+  canViewPage: (id: string) => boolean;
+}) {
+  const visibleChildren = group.children.filter((c) => canViewPage(c.id));
+  const isChildActive = visibleChildren.some((c) => c.id === currentPage);
+  const [open, setOpen] = useState(isChildActive);
+
+  useEffect(() => {
+    if (visibleChildren.some((c) => c.id === currentPage)) {
+      setOpen(true);
+    }
+  }, [currentPage, visibleChildren]);
+
+  if (visibleChildren.length === 0) return null;
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={cn(
+          'w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+          isChildActive
+            ? 'text-amber-300'
+            : 'text-slate-500 hover:text-white hover:bg-slate-800'
+        )}
+      >
+        <span className="truncate">{group.label}</span>
+        {open ? (
+          <ChevronDown className="w-3 h-3 ml-auto text-slate-500" />
+        ) : (
+          <ChevronRight className="w-3 h-3 ml-auto text-slate-500" />
+        )}
+      </button>
+      {open && (
+        <div className="ml-3 mt-0.5 space-y-0.5 border-l border-slate-800 pl-2">
+          {visibleChildren.map((child) => (
+            <NavItem
+              key={child.id}
+              item={child}
+              active={currentPage === child.id}
+              onNavigate={onNavigate}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * Render a collapsible section with children
  */
 function SectionItem({
@@ -74,18 +135,27 @@ function SectionItem({
   onNavigate: (id: string) => void;
   canViewPage: (id: string) => boolean;
 }) {
-  const visibleChildren = section.children.filter(c => canViewPage(c.id));
-  const isChildActive = visibleChildren.some(c => c.id === currentPage);
+  const visibleChildren = section.children.filter((c) => canViewPage(c.id));
+  const visibleGroups = (section.groups ?? [])
+    .map((group) => ({
+      ...group,
+      children: group.children.filter((c) => canViewPage(c.id)),
+    }))
+    .filter((group) => group.children.length > 0);
+  const groupChildIds = visibleGroups.flatMap((g) => g.children.map((c) => c.id));
+  const isChildActive =
+    visibleChildren.some((c) => c.id === currentPage) ||
+    groupChildIds.includes(currentPage);
   const [open, setOpen] = useState(isChildActive);
 
   // Keep open when navigating to a child
   useEffect(() => {
-    if (visibleChildren.some(c => c.id === currentPage)) {
+    if (isChildActive) {
       setOpen(true);
     }
-  }, [currentPage, visibleChildren]);
+  }, [currentPage, isChildActive]);
 
-  if (visibleChildren.length === 0) return null;
+  if (visibleChildren.length === 0 && visibleGroups.length === 0) return null;
 
   const Icon = section.icon;
 
@@ -110,12 +180,21 @@ function SectionItem({
       </button>
       {open && (
         <div className="ml-4 mt-1 space-y-0.5 border-l border-slate-800 pl-2">
-          {visibleChildren.map(child => (
+          {visibleChildren.map((child) => (
             <NavItem
               key={child.id}
               item={child}
               active={currentPage === child.id}
               onNavigate={onNavigate}
+            />
+          ))}
+          {visibleGroups.map((group) => (
+            <NavGroupItem
+              key={group.id}
+              group={group}
+              currentPage={currentPage}
+              onNavigate={onNavigate}
+              canViewPage={canViewPage}
             />
           ))}
         </div>
@@ -149,6 +228,22 @@ export function AdminSidebar({
   const roleLabel = user?.role
     ? user.role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
     : 'Admin';
+
+  const topItems = config.topNavItems ?? [];
+  const pinAfterId = config.pinSectionsAfter;
+  const pinIndex = pinAfterId ? topItems.findIndex((item) => item.id === pinAfterId) : -1;
+  const topBeforeSections = pinIndex >= 0 ? topItems.slice(0, pinIndex + 1) : [];
+  const topAfterSections = pinIndex >= 0 ? topItems.slice(pinIndex + 1) : topItems;
+
+  const renderTopNavItem = (item: AdminNavItem) =>
+    canViewPage(item.id) ? (
+      <NavItem
+        key={item.id}
+        item={item}
+        active={currentPage === item.id}
+        onNavigate={onNavigate}
+      />
+    ) : null;
 
   return (
     <aside
@@ -193,20 +288,9 @@ export function AdminSidebar({
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-        {/* Top-level items */}
-        {config.topNavItems?.map(item =>
-          canViewPage(item.id) ? (
-            <NavItem
-              key={item.id}
-              item={item}
-              active={currentPage === item.id}
-              onNavigate={onNavigate}
-            />
-          ) : null
-        )}
+        {topBeforeSections.map(renderTopNavItem)}
 
-        {/* Sections */}
-        {config.sections.map(section => (
+        {config.sections.map((section) => (
           <SectionItem
             key={section.id}
             section={section}
@@ -215,6 +299,8 @@ export function AdminSidebar({
             canViewPage={canViewPage}
           />
         ))}
+
+        {topAfterSections.map(renderTopNavItem)}
       </nav>
 
       {/* User section */}

@@ -95,7 +95,7 @@ export function MerchantManager() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-semibold text-white">Merchants</h2>
+          <h2 className="text-xl font-semibold text-white">Applications</h2>
           <p className="text-sm text-slate-400">{total} total</p>
         </div>
         <button

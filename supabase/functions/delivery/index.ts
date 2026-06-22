@@ -2001,12 +2001,14 @@ app.post("/merchant/notifications/:id/read", async (c) => {
 });
 
 import { registerMerchantApplicationRoutes } from "./merchant_application_routes.ts";
+import { registerPartnerBusinessTypeRoutes } from "./admin/onboardingConfigRoutes.ts";
 import { registerCourierAdminRoutes } from "./admin/courierRoutes.ts";
 import { registerMerchantAdminRoutes } from "./admin/merchantRoutes.ts";
 import { registerOrderAdminRoutes } from "./admin/orderRoutes.ts";
 import { registerCustomerAdminRoutes } from "./admin/customerRoutes.ts";
 import { registerFinanceAdminRoutes } from "./admin/financeRoutes.ts";
 registerMerchantApplicationRoutes(app);
+registerPartnerBusinessTypeRoutes(app);
 registerMerchantAdminRoutes(app);
 registerOrderAdminRoutes(app);
 registerCustomerAdminRoutes(app);

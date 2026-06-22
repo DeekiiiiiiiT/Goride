@@ -188,7 +188,7 @@ export function MerchantDetailPage() {
         confirm_name: values.confirm_name,
       });
       toast.success(res.message || 'Merchant deleted');
-      navigate('/merchants');
+      navigate('/merchants/onboarding/applications');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Delete failed');
     }
@@ -213,7 +213,7 @@ export function MerchantDetailPage() {
     <div className="space-y-6 max-w-4xl">
       <button
         type="button"
-        onClick={() => navigate('/merchants')}
+        onClick={() => navigate('/merchants/onboarding/applications')}
         className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white"
       >
         <ArrowLeft className="w-4 h-4" />

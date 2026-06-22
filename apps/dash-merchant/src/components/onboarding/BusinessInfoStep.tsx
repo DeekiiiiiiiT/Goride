@@ -1,5 +1,6 @@
-import { BUSINESS_TYPES, CUISINE_OPTIONS, SignUpFormData } from '../../signup/types';
+import { CUISINE_OPTIONS, SignUpFormData } from '../../signup/types';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
+import { useMerchantBusinessTypes } from '../../hooks/useMerchantBusinessTypes';
 import { inputClass, SectionCard, SectionHeader } from './OnboardingShell';
 
 interface BusinessInfoStepProps {
@@ -8,6 +9,8 @@ interface BusinessInfoStepProps {
 }
 
 export default function BusinessInfoStep({ data, onChange }: BusinessInfoStepProps) {
+  const { sections, loading } = useMerchantBusinessTypes();
+
   const toggleCuisine = (cuisine: string) => {
     const selected = data.cuisineTypes.includes(cuisine);
     if (selected) {
@@ -17,6 +20,10 @@ export default function BusinessInfoStep({ data, onChange }: BusinessInfoStepPro
     if (data.cuisineTypes.length >= 3) return;
     onChange({ cuisineTypes: [...data.cuisineTypes, cuisine] });
   };
+
+  const hasSelectedType = sections.some((section) =>
+    section.types.some((t) => t.is_active && t.id === data.businessType),
+  );
 
   return (
     <SectionCard>
@@ -67,20 +74,30 @@ export default function BusinessInfoStep({ data, onChange }: BusinessInfoStepPro
           <div className="relative">
             <select
               id="business-type"
-              value={data.businessType}
-              onChange={(e) =>
-                onChange({ businessType: e.target.value as SignUpFormData['businessType'] })
-              }
-              className={`${inputClass} appearance-none pr-10`}
+              value={hasSelectedType ? data.businessType : ''}
+              onChange={(e) => onChange({ businessType: e.target.value })}
+              disabled={loading}
+              className={`${inputClass} appearance-none pr-10 disabled:opacity-60`}
             >
               <option disabled value="">
-                Select a type...
+                {loading ? 'Loading types...' : 'Select a type...'}
               </option>
-              {BUSINESS_TYPES.map((type) => (
-                <option key={type.value} value={type.value}>
-                  {type.label}
-                </option>
-              ))}
+              {sections.map((section) => {
+                const activeTypes = section.types.filter((t) => t.is_active);
+                if (!activeTypes.length) return null;
+                return (
+                  <optgroup key={section.id} label={section.label}>
+                    {activeTypes.map((type) => (
+                      <option key={type.id} value={type.id}>
+                        {type.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                );
+              })}
+              {!hasSelectedType && data.businessType ? (
+                <option value={data.businessType}>{data.businessType}</option>
+              ) : null}
             </select>
             <MaterialIcon
               name="expand_more"

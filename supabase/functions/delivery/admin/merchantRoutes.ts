@@ -14,6 +14,7 @@ import {
   requireDashWrite,
 } from "./dashPermissions.ts";
 import { mountDashTeamRoutes } from "./dashTeamRoutes.ts";
+import { mountOnboardingConfigAdminRoutes } from "./onboardingConfigRoutes.ts";
 import {
   ALLOWED_TRANSITIONS,
   canSuspendMerchant,
@@ -845,5 +846,6 @@ export function registerMerchantAdminRoutes(app: Hono) {
   });
 
   mountDashTeamRoutes(admin);
+  mountOnboardingConfigAdminRoutes(admin);
   app.route("/admin", admin);
 }

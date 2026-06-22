@@ -1,12 +1,7 @@
 import type { LocationValue } from '@roam/location';
 import type { MerchantDocumentType } from '@roam/types';
 
-export type BusinessType =
-  | 'restaurant'
-  | 'cafe'
-  | 'bakery'
-  | 'fast_food'
-  | 'other';
+export type BusinessType = string;
 
 export type AccountType = 'checking' | 'savings';
 

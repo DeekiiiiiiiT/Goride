@@ -20,6 +20,13 @@ import {
 import { DashAdminDashboard } from './pages/DashAdminDashboard';
 import { MerchantManager } from './pages/MerchantManager';
 import { MerchantDetailPage } from './pages/merchants/MerchantDetailPage';
+import {
+  MerchantsIndexRedirect,
+  MerchantsOnboardingIndexRedirect,
+  MerchantsSectionLayout,
+} from './pages/merchants/MerchantsSectionLayout';
+import { MerchantsOnboardingLayout } from './pages/merchants/MerchantsOnboardingLayout';
+import { BusinessTypesPage } from './pages/merchants/onboarding/BusinessTypesPage';
 import { OrdersListPage } from './pages/orders/OrdersListPage';
 import { OrderDetailPage } from './pages/orders/OrderDetailPage';
 import { SupportToolsPage } from './pages/SupportToolsPage';
@@ -135,8 +142,15 @@ export function DashAdminPortal() {
         <Routes>
           <Route element={<AdminLayoutShell session={session} />}>
             <Route index element={<DashAdminDashboard />} />
-            <Route path="merchants" element={<MerchantManager />} />
-            <Route path="merchants/:id" element={<MerchantDetailPage />} />
+            <Route path="merchants" element={<MerchantsSectionLayout />}>
+              <Route index element={<MerchantsIndexRedirect />} />
+              <Route path="onboarding" element={<MerchantsOnboardingLayout />}>
+                <Route index element={<MerchantsOnboardingIndexRedirect />} />
+                <Route path="applications" element={<MerchantManager />} />
+                <Route path="business-types" element={<BusinessTypesPage />} />
+              </Route>
+              <Route path=":id" element={<MerchantDetailPage />} />
+            </Route>
             <Route path="orders" element={<OrdersListPage />} />
             <Route path="orders/:id" element={<OrderDetailPage />} />
             <Route path="users" element={<DashTeamPage />} />

@@ -10,12 +10,21 @@ export interface AdminNavItem {
   href?: string;
 }
 
+/** Nested group inside a collapsible sidebar section (e.g. Onboarding under Merchants) */
+export interface AdminNavGroup {
+  id: string;
+  label: string;
+  children: AdminNavItem[];
+}
+
 /** A collapsible section in the admin sidebar */
 export interface AdminSection {
   id: string;
   label: string;
   icon: LucideIcon;
   children: AdminNavItem[];
+  /** Optional nested groups rendered inside the expanded section */
+  groups?: AdminNavGroup[];
 }
 
 /** A page/screen in the admin portal */
@@ -50,6 +59,8 @@ export interface AdminConfig {
   backToAppUrl?: string;
   /** Label for back link */
   backToAppLabel?: string;
+  /** Render `sections` immediately after this top nav item id (e.g. `dashboard`) */
+  pinSectionsAfter?: string;
 }
 
 /** Theme configuration for admin portal */

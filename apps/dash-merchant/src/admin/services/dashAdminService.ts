@@ -497,3 +497,88 @@ export function listMerchantOwners(accessToken: string, q?: string, page = 1) {
   if (q) sp.set('q', q);
   return deliveryFetch(accessToken, `/admin/merchant-owners?${sp}`);
 }
+
+export interface MerchantBusinessTypeDto {
+  id: string;
+  section_id: string;
+  label: string;
+  sort_order: number;
+  is_active: boolean;
+}
+
+export interface MerchantBusinessTypeSectionDto {
+  id: string;
+  label: string;
+  sort_order: number;
+  is_active: boolean;
+  types: MerchantBusinessTypeDto[];
+}
+
+export function listMerchantBusinessTypes(accessToken: string) {
+  return deliveryFetch<{ sections: MerchantBusinessTypeSectionDto[] }>(
+    accessToken,
+    '/admin/onboarding/business-types',
+  );
+}
+
+export function createMerchantBusinessTypeSection(
+  accessToken: string,
+  body: { label: string; id?: string; sort_order?: number },
+) {
+  return deliveryFetch<{ section: MerchantBusinessTypeSectionDto }>(
+    accessToken,
+    '/admin/onboarding/business-type-sections',
+    { method: 'POST', body: JSON.stringify(body) },
+  );
+}
+
+export function updateMerchantBusinessTypeSection(
+  accessToken: string,
+  id: string,
+  body: Partial<Pick<MerchantBusinessTypeSectionDto, 'label' | 'sort_order' | 'is_active'>>,
+) {
+  return deliveryFetch<{ section: MerchantBusinessTypeSectionDto }>(
+    accessToken,
+    `/admin/onboarding/business-type-sections/${id}`,
+    { method: 'PATCH', body: JSON.stringify(body) },
+  );
+}
+
+export function deleteMerchantBusinessTypeSection(accessToken: string, id: string) {
+  return deliveryFetch<{ ok: boolean }>(
+    accessToken,
+    `/admin/onboarding/business-type-sections/${id}`,
+    { method: 'DELETE' },
+  );
+}
+
+export function createMerchantBusinessType(
+  accessToken: string,
+  body: { label: string; section_id: string; id?: string; sort_order?: number },
+) {
+  return deliveryFetch<{ type: MerchantBusinessTypeDto }>(
+    accessToken,
+    '/admin/onboarding/business-types',
+    { method: 'POST', body: JSON.stringify(body) },
+  );
+}
+
+export function updateMerchantBusinessType(
+  accessToken: string,
+  id: string,
+  body: Partial<Pick<MerchantBusinessTypeDto, 'label' | 'section_id' | 'sort_order' | 'is_active'>>,
+) {
+  return deliveryFetch<{ type: MerchantBusinessTypeDto }>(
+    accessToken,
+    `/admin/onboarding/business-types/${id}`,
+    { method: 'PATCH', body: JSON.stringify(body) },
+  );
+}
+
+export function deleteMerchantBusinessType(accessToken: string, id: string) {
+  return deliveryFetch<{ ok: boolean }>(
+    accessToken,
+    `/admin/onboarding/business-types/${id}`,
+    { method: 'DELETE' },
+  );
+}
