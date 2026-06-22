@@ -95,7 +95,7 @@ export function AdminShell({
         </header>
 
         {/* Content area */}
-        <main className="dash-admin-shell-main flex-1 overflow-auto p-4 lg:p-8">
+        <main className="dash-admin-shell-main flex-1 overflow-auto bg-slate-950 p-4 lg:p-8">
           <div className="mx-auto max-w-7xl">{children}</div>
         </main>
       </div>

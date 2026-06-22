@@ -9,6 +9,8 @@ body:has(.rides-admin-portal) {
 }
 
 .dash-admin-portal {
+  min-height: 100dvh;
+  background-color: #020617;
   font-family: var(--font-sans, 'Inter', system-ui, -apple-system, sans-serif);
   -webkit-font-smoothing: antialiased;
 }
@@ -221,6 +223,7 @@ body:has(.rides-admin-portal) {
   flex: 1;
   overflow: auto;
   padding: 1rem;
+  background-color: #020617;
 }
 
 @media (min-width: 1024px) {

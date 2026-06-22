@@ -113,7 +113,7 @@ export function MerchantManager() {
       ) : items.length === 0 ? (
         <p className="text-slate-400 text-center py-12">No merchants found.</p>
       ) : (
-        <div className="rounded-xl border border-slate-800 overflow-hidden">
+        <div className="rounded-xl border border-slate-800 overflow-hidden bg-slate-950">
           <table className="w-full text-sm">
             <thead className="bg-slate-900/80 text-slate-400 text-left">
               <tr>
@@ -123,7 +123,7 @@ export function MerchantManager() {
                 <th className="px-4 py-3 font-medium">Submitted</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800">
+            <tbody className="divide-y divide-slate-800 bg-slate-950">
               {items.map((m) => (
                 <tr
                   key={m.id}

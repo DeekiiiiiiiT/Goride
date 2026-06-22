@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@import "../../../packages/admin-core/src/styles/admin-portal.css";
+
 /* Spacing: use gap-inset-*, p-inset-*, etc. for design tokens — not max-w-sm/md (Tailwind layout). */
 
 @source './**/*.{js,ts,jsx,tsx}';

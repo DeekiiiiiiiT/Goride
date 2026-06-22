@@ -72,7 +72,7 @@ export function OrdersListPage() {
       {loading ? (
         <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-amber-400" /></div>
       ) : (
-        <div className="rounded-xl border border-slate-800 overflow-hidden">
+        <div className="rounded-xl border border-slate-800 overflow-hidden bg-slate-950">
           <table className="w-full text-sm">
             <thead className="bg-slate-900/80 text-slate-400 text-left">
               <tr>
@@ -82,7 +82,7 @@ export function OrdersListPage() {
                 <th className="px-4 py-3">Placed</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800">
+            <tbody className="divide-y divide-slate-800 bg-slate-950">
               {orders.map((o) => (
                 <tr key={o.id} onClick={() => navigate(`/orders/${o.id}`)} className="hover:bg-slate-800/50 cursor-pointer">
                   <td className="px-4 py-3 text-white font-medium">{o.order_number}</td>

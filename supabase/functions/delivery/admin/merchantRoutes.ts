@@ -18,7 +18,6 @@ import {
   canSuspendMerchant,
   canTransitionOperational,
   getAuthAdmin,
-  getAuthAdmin,
   getDb,
   isChecklistComplete,
   isValidStatus,
