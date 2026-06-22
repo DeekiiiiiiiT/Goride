@@ -23,6 +23,7 @@ export function hasAnyDriverRole(roles: string[], allowed: ReadonlySet<string>):
 
 /** Roles allowed to delete driver profiles. */
 export const DRIVER_DELETE_ROLES = new Set([
+  "driver_admin",
   "platform_owner",
   "superadmin",
 ]);
@@ -45,7 +46,7 @@ export function requireDelete(admin: ProductAdminUser): Response | null {
     return new Response(
       JSON.stringify({
         error: "forbidden",
-        message: "platform_owner or superadmin required for delete actions",
+        message: "platform_owner, superadmin, or driver_admin required for delete actions",
       }),
       { status: 403, headers: { "Content-Type": "application/json" } },
     );

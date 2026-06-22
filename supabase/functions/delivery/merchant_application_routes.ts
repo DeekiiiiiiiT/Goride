@@ -3,6 +3,15 @@
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
+import {
+  buildDraftMerchantInsert,
+  isValidWizardStepKey,
+  mergeOnboardingDraft,
+  merchantPayloadFromBody,
+  mirrorDraftScalarsToColumns,
+  sanitizeOnboardingDraft,
+  wizardStepFromKey,
+} from "./partnerOnboarding.ts";
 
 type SupabaseClient = ReturnType<typeof createDeliveryClient>;
 
@@ -60,75 +69,6 @@ function mapsApiKey() {
     "";
 }
 
-function buildAddress(body: Record<string, unknown>): string {
-  if (typeof body.address === "string" && body.address.trim()) {
-    return body.address.trim();
-  }
-  const parts = [
-    body.streetAddress,
-    body.city,
-    body.postalCode,
-  ].filter((p) => typeof p === "string" && p.trim());
-  return parts.join(", ");
-}
-
-function parsePrepTime(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string") {
-    const digits = parseInt(value.replace(/\D/g, ""), 10);
-    if (Number.isFinite(digits)) return digits;
-  }
-  return 30;
-}
-
-function parseDeliveryRadius(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string") {
-    const digits = parseInt(value.replace(/\D/g, ""), 10);
-    if (Number.isFinite(digits)) return digits;
-  }
-  return 10;
-}
-
-function merchantPayloadFromBody(body: Record<string, unknown>, userId: string) {
-  const cuisineTypes = Array.isArray(body.cuisineTypes)
-    ? (body.cuisineTypes as string[]).filter(Boolean).slice(0, 3)
-    : [];
-  const primaryCuisine = typeof body.cuisineType === "string" && body.cuisineType
-    ? body.cuisineType
-    : cuisineTypes[0] || null;
-
-  const name = String(body.name || "").trim();
-  const slugBase = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
-
-  return {
-    owner_id: userId,
-    name,
-    slug: `${slugBase}-${Date.now().toString(36)}`,
-    description: body.description || null,
-    address: buildAddress(body),
-    lat: body.lat ?? null,
-    lng: body.lng ?? null,
-    phone: body.phone || null,
-    email: body.email || null,
-    cuisine_type: primaryCuisine,
-    cuisine_types: cuisineTypes,
-    logo_url: body.logoUrl || null,
-    cover_image_url: body.coverImageUrl || null,
-    delivery_radius_km: parseDeliveryRadius(body.deliveryRadiusKm ?? body.deliveryRadius),
-    avg_prep_time_mins: parsePrepTime(body.avgPrepTimeMins ?? body.avgPrepTime),
-    business_type: body.businessType || null,
-    business_registration_number: body.businessRegistrationNumber || null,
-    tax_id: body.taxId || null,
-    owner_full_name: body.ownerFullName || body.ownerName || null,
-    city: body.city || null,
-    postal_code: body.postalCode || null,
-    website: body.website || null,
-    verification_status: "pending",
-    submitted_at: new Date().toISOString(),
-  };
-}
-
 const MERCHANT_UPDATE_ALLOWLIST = new Set([
   "name",
   "description",
@@ -170,6 +110,85 @@ async function logMerchantAudit(
 }
 
 export function registerMerchantApplicationRoutes(app: Hono) {
+  app.post("/partner/bootstrap", async (c) => {
+    const authHeader = c.req.header("Authorization");
+    if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+    const supabase = createDeliveryClient(authHeader);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+    const existing = await getMerchantForUser(supabase, user.id);
+    if (existing) {
+      return c.json({ merchant: existing, created: false });
+    }
+
+    const sb = getServiceSupabase();
+    const insert = buildDraftMerchantInsert(user.id, user.email);
+    const { data, error } = await sb
+      .from("merchants")
+      .insert(insert)
+      .select()
+      .single();
+    if (error) return c.json({ error: error.message }, 500);
+
+    await logMerchantAudit(data.id as string, "onboarding_draft_created", user.id);
+    return c.json({ merchant: data, created: true }, 201);
+  });
+
+  app.patch("/partner/onboarding-draft", async (c) => {
+    const authHeader = c.req.header("Authorization");
+    if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+    const supabase = createDeliveryClient(authHeader);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const wizardStepKey = body.wizardStepKey;
+    if (!isValidWizardStepKey(wizardStepKey)) {
+      return c.json({ error: "Invalid wizardStepKey" }, 400);
+    }
+
+    const merchant = await getMerchantForUser(supabase, user.id);
+    if (!merchant) {
+      return c.json({ error: "No merchant draft found. Call POST /partner/bootstrap first." }, 404);
+    }
+
+    if (merchant.onboarding_status !== "draft") {
+      return c.json({ error: "Application already submitted" }, 409);
+    }
+
+    const draftPatch = sanitizeOnboardingDraft(body.draft);
+    const mergedDraft = mergeOnboardingDraft(
+      merchant.onboarding_draft as Record<string, unknown>,
+      draftPatch,
+    );
+    const wizardStep = typeof body.wizardStep === "number"
+      ? body.wizardStep
+      : wizardStepFromKey(wizardStepKey);
+    const now = new Date().toISOString();
+
+    const update = {
+      onboarding_draft: mergedDraft,
+      wizard_step: wizardStep,
+      wizard_step_key: wizardStepKey,
+      last_onboarding_activity_at: now,
+      ...mirrorDraftScalarsToColumns(mergedDraft),
+    };
+
+    const sb = getServiceSupabase();
+    const { data, error } = await sb
+      .from("merchants")
+      .update(update)
+      .eq("id", merchant.id)
+      .select()
+      .single();
+    if (error) return c.json({ error: error.message }, 500);
+
+    return c.json({ merchant: data });
+  });
+
   app.get("/maps-config", (c) => {
     const apiKey = mapsApiKey();
     if (!apiKey) {
@@ -276,42 +295,68 @@ export function registerMerchantApplicationRoutes(app: Hono) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-    const body = await c.req.json().catch(() => ({}));
-    if (!body.name || !String(body.name).trim()) {
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const name = String(body.name || body.restaurantName || "").trim();
+    if (!name) {
       return c.json({ error: "Restaurant name is required" }, 400);
     }
 
     const existing = await getMerchantForUser(supabase, user.id);
-    const payload = merchantPayloadFromBody(body as Record<string, unknown>, user.id);
+    const payload = merchantPayloadFromBody({ ...body, name }, user.id);
+    const sb = getServiceSupabase();
 
     let merchant: Record<string, unknown>;
+    let created = false;
+
     if (existing) {
-      const status = String(existing.verification_status || "pending");
-      if (!["pending", "rejected", "docs_requested"].includes(status)) {
+      const onboardingStatus = String(existing.onboarding_status || "submitted");
+      const verificationStatus = String(existing.verification_status || "pending");
+
+      if (onboardingStatus === "draft") {
+        const { data, error } = await sb
+          .from("merchants")
+          .update(payload)
+          .eq("id", existing.id)
+          .select()
+          .single();
+        if (error) return c.json({ error: error.message }, 500);
+        merchant = data as Record<string, unknown>;
+      } else if (!["pending", "rejected", "docs_requested"].includes(verificationStatus)) {
         return c.json({ error: "Merchant application already submitted" }, 409);
+      } else {
+        const { data, error } = await sb
+          .from("merchants")
+          .update(payload)
+          .eq("id", existing.id)
+          .select()
+          .single();
+        if (error) return c.json({ error: error.message }, 500);
+        merchant = data as Record<string, unknown>;
+        await logMerchantAudit(merchant.id as string, "application_updated", user.id, {
+          from_status: verificationStatus,
+          to_status: "pending",
+        });
       }
-      const { data, error } = await supabase
-        .from("merchants")
-        .update(payload)
-        .eq("id", existing.id)
-        .select()
-        .single();
-      if (error) return c.json({ error: error.message }, 500);
-      merchant = data as Record<string, unknown>;
-      await logMerchantAudit(merchant.id as string, "application_updated", user.id, {
-        from_status: status,
-        to_status: "pending",
-      });
     } else {
-      const { data, error } = await supabase
+      const { data, error } = await sb
         .from("merchants")
         .insert(payload)
         .select()
         .single();
       if (error) return c.json({ error: error.message }, 500);
       merchant = data as Record<string, unknown>;
+      created = true;
+    }
 
-      await supabase.from("merchant_team_members").insert({
+    const { data: teamRow } = await sb
+      .from("merchant_team_members")
+      .select("id")
+      .eq("merchant_id", merchant.id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (!teamRow) {
+      await sb.from("merchant_team_members").insert({
         merchant_id: merchant.id,
         user_id: user.id,
         email: body.email || user.email,
@@ -320,13 +365,15 @@ export function registerMerchantApplicationRoutes(app: Hono) {
         permissions: ["orders", "menu", "analytics", "payouts"],
         is_owner: true,
       });
+    }
 
+    if (created || String(existing?.onboarding_status) === "draft") {
       await logMerchantAudit(merchant.id as string, "application_submitted", user.id, {
         to_status: "pending",
       });
     }
 
-    return c.json({ merchant }, existing ? 200 : 201);
+    return c.json({ merchant }, created ? 201 : 200);
   });
 
   app.put("/merchants/:id", async (c) => {
@@ -589,6 +636,9 @@ export function registerMerchantApplicationRoutes(app: Hono) {
       merchant: {
         id: merchant.id,
         verification_status: merchant.verification_status,
+        onboarding_status: merchant.onboarding_status,
+        wizard_step: merchant.wizard_step,
+        wizard_step_key: merchant.wizard_step_key,
         verification_notes: merchant.verification_notes,
         rejection_reason: merchant.rejection_reason,
       },

@@ -47,6 +47,7 @@ import { MaintenancePage } from './components/MaintenancePage';
 import { FeatureFlagProvider } from './components/auth/FeatureFlagContext';
 import { WrongProductLineGate } from './components/auth/WrongProductLineGate';
 import { FleetProductAdminPortal } from './admin/FleetProductAdminPortal';
+import { AdminConfirmProvider } from './admin/contexts/AdminConfirmContext';
 import { PRODUCT_LINE, IS_ENTERPRISE_PRODUCT } from './config/productLine';
 import { AuthRecoveryGate } from '@roam/auth-client';
 
@@ -417,7 +418,9 @@ export default function App() {
     >
       {isAdmin ? (
         <QueryClientProvider client={queryClient}>
-          <FleetProductAdminPortal />
+          <AdminConfirmProvider>
+            <FleetProductAdminPortal />
+          </AdminConfirmProvider>
         </QueryClientProvider>
       ) : (
         <QueryClientProvider client={queryClient}>

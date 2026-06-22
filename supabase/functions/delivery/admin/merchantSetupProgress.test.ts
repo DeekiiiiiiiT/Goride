@@ -30,15 +30,15 @@ Deno.test("missingSetupLabels — lists gaps", () => {
   assertEquals(missing.includes("Bank / payouts"), true);
 });
 
-Deno.test("setupStageLabel — auth only", () => {
+Deno.test("setupStageLabel — merchant incomplete", () => {
   assertEquals(
-    setupStageLabel("auth_only", {
+    setupStageLabel("merchant", {
       profileComplete: false,
       documentsComplete: false,
       bankComplete: false,
       hoursComplete: false,
       menuComplete: false,
     }),
-    "Not started — wizard",
+    "Missing: Profile & location",
   );
 });

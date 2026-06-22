@@ -13,6 +13,7 @@ import {
   adminSettleCashRide,
   listRidesDashboardView,
 } from '../services/ridesAdminService';
+import { useAdminConfirm } from '../contexts/AdminConfirmContext';
 
 interface OutletContext {
   session: Session;
@@ -53,6 +54,7 @@ function isStaleGps(iso: string | null | undefined, thresholdMs = 15 * 60_000): 
 
 export function RideOperationsPage() {
   const { session, role } = useOutletContext<OutletContext>();
+  const { confirm } = useAdminConfirm();
   const [rides, setRides] = useState<RideRequestRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -84,7 +86,13 @@ export function RideOperationsPage() {
     const msg = stale
       ? `Cancel ride ${ride.id.slice(0, 8)}…? Driver GPS is stale — this will clear the stuck trip.`
       : `Cancel ride ${ride.id.slice(0, 8)}…?`;
-    if (!window.confirm(msg)) return;
+    const ok = await confirm({
+      title: 'Cancel ride?',
+      description: msg,
+      confirmLabel: 'Cancel ride',
+      variant: 'danger',
+    });
+    if (!ok) return;
 
     setActingId(ride.id);
     try {
@@ -99,13 +107,12 @@ export function RideOperationsPage() {
   };
 
   const runRelease = async (ride: RideRequestRow) => {
-    if (
-      !window.confirm(
-        `Release ride ${ride.id.slice(0, 8)}… to cash settlement? Driver must enter cash received.`,
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: 'Release to cash settlement?',
+      description: `Release ride ${ride.id.slice(0, 8)}… to cash settlement? Driver must enter cash received.`,
+      confirmLabel: 'Release',
+    });
+    if (!ok) return;
     setActingId(ride.id);
     try {
       await adminReleaseCashSettlement(session.access_token, ride.id);
@@ -119,13 +126,13 @@ export function RideOperationsPage() {
   };
 
   const runCompleteCard = async (ride: RideRequestRow) => {
-    if (
-      !window.confirm(
-        `Mark ride ${ride.id.slice(0, 8)}… completed? Use only if the passenger was dropped off.`,
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: 'Mark ride completed?',
+      description: `Mark ride ${ride.id.slice(0, 8)}… completed? Use only if the passenger was dropped off.`,
+      confirmLabel: 'Complete',
+      variant: 'danger',
+    });
+    if (!ok) return;
     setActingId(ride.id);
     try {
       await adminForceCompleteRide(session.access_token, ride.id);

@@ -31,6 +31,7 @@ import {
   unsuspendRider,
   type PlatformLedgerTripRow,
 } from '../../services/ridesAdminService';
+import { useAdminConfirm } from '../../contexts/AdminConfirmContext';
 
 type Tab = 'overview' | 'trips' | 'payments' | 'notes' | 'activity';
 
@@ -64,9 +65,10 @@ export function RiderDetailPage() {
   const [notes, setNotes] = useState<Awaited<ReturnType<typeof listRiderNotes>>['notes']>([]);
   const [noteText, setNoteText] = useState('');
   const [actionsOpen, setActionsOpen] = useState(false);
-  const [modal, setModal] = useState<'suspend' | 'ban' | 'delete' | null>(null);
+  const [modal, setModal] = useState<'suspend' | 'ban' | null>(null);
   const [reason, setReason] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  const { confirm, prompt } = useAdminConfirm();
 
   const [displayName, setDisplayName] = useState('');
   const [phone, setPhone] = useState('');
@@ -199,7 +201,13 @@ export function RiderDetailPage() {
 
   const doSignOut = async () => {
     if (!token || !userId) return;
-    if (!window.confirm('Sign this rider out on all devices?')) return;
+    const ok = await confirm({
+      title: 'Sign out rider?',
+      description: 'Sign this rider out on all devices.',
+      confirmLabel: 'Sign out',
+      variant: 'danger',
+    });
+    if (!ok) return;
     try {
       await signOutRiderAllDevices(token, userId);
       toast.success('All sessions ended');
@@ -209,12 +217,34 @@ export function RiderDetailPage() {
   };
 
   const doDelete = async () => {
-    if (!token || !userId) return;
+    if (!token || !userId || !rider) return;
+    const display = rider.email || rider.display_name || userId;
+    const values = await prompt({
+      title: 'Remove from Roam Rides?',
+      description: (
+        <>
+          Permanently removes this rider profile. Roam login and profiles in Driver, Courier, Dash,
+          or other apps are untouched.
+        </>
+      ),
+      confirmLabel: 'Remove rider',
+      variant: 'danger',
+      fields: [
+        { key: 'reason', label: 'Reason', required: true, multiline: true },
+        {
+          key: 'confirm_name',
+          label: `Type "${display}" to confirm`,
+          placeholder: display,
+          required: true,
+          matchValue: display,
+        },
+      ],
+    });
+    if (!values) return;
     setActionLoading(true);
     try {
       await deleteRider(token, userId);
       toast.success('Rider removed from Roam Rides');
-      setModal(null);
       navigate('/admin/users');
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Delete failed');
@@ -377,7 +407,7 @@ export function RiderDetailPage() {
                       className="w-full text-left px-3 py-2 hover:bg-slate-800 text-red-400 flex items-center gap-2"
                       onClick={() => {
                         setActionsOpen(false);
-                        setModal('delete');
+                        void doDelete();
                       }}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -390,48 +420,6 @@ export function RiderDetailPage() {
           </div>
         )}
       </div>
-
-      {/* Delete Modal */}
-      {modal === 'delete' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setModal(null)} />
-          <div className="relative w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white">Remove from Roam Rides</h3>
-              <button
-                type="button"
-                onClick={() => setModal(null)}
-                className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <p className="text-sm text-slate-400 mb-4">
-              This will permanently delete this rider's profile. They will be signed out and can sign up again as a new rider.
-            </p>
-            <p className="text-sm text-amber-300 mb-4">
-              This does <strong>not</strong> delete their account from other Roam products (Driver, Fleet, etc.).
-            </p>
-            <div className="flex justify-end gap-2 mt-4">
-              <button
-                type="button"
-                onClick={() => setModal(null)}
-                className="px-3 py-2 rounded-lg border border-slate-700 text-sm hover:bg-slate-800"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => void doDelete()}
-                disabled={actionLoading}
-                className="px-3 py-2 rounded-lg bg-red-600 text-white text-sm hover:bg-red-500 disabled:opacity-50"
-              >
-                {actionLoading ? 'Removing...' : 'Remove Rider'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <nav className="flex gap-1 border-b border-slate-800">
         {tabs.map((t) => (

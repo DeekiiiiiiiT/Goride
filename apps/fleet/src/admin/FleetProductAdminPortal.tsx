@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { supabaseFleetAdmin as supabase } from '@roam/auth-client';
-import { hasProductAdminRole, jwtPrimaryRole, isPlatformRole, useForgotPassword } from '@roam/auth-client';
+import { hasProductAdminRole, jwtPrimaryRole, useForgotPassword, hasAnyJwtRole } from '@roam/auth-client';
 import type { Session } from '@supabase/supabase-js';
 import {
   LayoutDashboard,
@@ -24,6 +24,7 @@ import {
 } from './fleetAdminService';
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
+import { useAdminConfirm } from './contexts/AdminConfirmContext';
 
 const DRIVER_ADMIN_URL = 'https://roamdriver.co/admin';
 const RIDES_ADMIN_URL = 'https://roam-s.co/admin';
@@ -123,9 +124,10 @@ function FleetAdminLogin({ onSession }: { onSession: (s: Session) => void }) {
   );
 }
 
-type ModalType = 'suspend' | 'delete' | null;
+type ModalType = 'suspend' | null;
 
 export function FleetProductAdminPortal() {
+  const { confirm, prompt } = useAdminConfirm();
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [customers, setCustomers] = useState<FleetAdminCustomer[]>([]);
@@ -161,7 +163,9 @@ export function FleetProductAdminPortal() {
   }, [session?.access_token]);
 
   const userRole = session?.user ? jwtPrimaryRole(session.user) : null;
-  const canDelete = userRole ? isPlatformRole(userRole) : false;
+  const canDelete = session?.user
+    ? hasAnyJwtRole(session.user, new Set(['fleet_admin', 'platform_owner', 'superadmin']))
+    : false;
 
   const doSuspend = async () => {
     if (!session?.access_token || !selectedCustomer || !reason.trim()) return;
@@ -196,7 +200,13 @@ export function FleetProductAdminPortal() {
 
   const doSignOut = async (customer: FleetAdminCustomer) => {
     if (!session?.access_token) return;
-    if (!window.confirm(`Sign out ${customer.email} from all devices?`)) return;
+    const ok = await confirm({
+      title: 'Sign out customer?',
+      description: `Sign out ${customer.email} from all devices?`,
+      confirmLabel: 'Sign out',
+      variant: 'danger',
+    });
+    if (!ok) return;
     setActionLoading(true);
     try {
       await signOutFleetCustomer(session.access_token, customer.id);
@@ -208,14 +218,34 @@ export function FleetProductAdminPortal() {
     }
   };
 
-  const doDelete = async () => {
-    if (!session?.access_token || !selectedCustomer) return;
+  const doDelete = async (customer: FleetAdminCustomer) => {
+    if (!session?.access_token) return;
+    const values = await prompt({
+      title: 'Remove from Roam Fleet?',
+      description: (
+        <>
+          Removes fleet manager access for <span className="text-white">{customer.email}</span>. Their
+          Roam login and other app profiles are untouched.
+        </>
+      ),
+      confirmLabel: 'Remove',
+      variant: 'danger',
+      fields: [
+        { key: 'reason', label: 'Reason', required: true, multiline: true },
+        {
+          key: 'confirm_name',
+          label: `Type "${customer.email}" to confirm`,
+          placeholder: customer.email,
+          required: true,
+          matchValue: customer.email,
+        },
+      ],
+    });
+    if (!values) return;
     setActionLoading(true);
     try {
-      await deleteFleetCustomer(session.access_token, selectedCustomer.id);
+      await deleteFleetCustomer(session.access_token, customer.id);
       toast.success('Customer removed from Roam Fleet');
-      setModal(null);
-      setSelectedCustomer(null);
       void loadCustomers();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to delete');
@@ -415,8 +445,7 @@ export function FleetProductAdminPortal() {
                                         className="w-full text-left px-3 py-2 hover:bg-slate-800 text-red-400 flex items-center gap-2"
                                         onClick={() => {
                                           setActionMenuId(null);
-                                          setSelectedCustomer(c);
-                                          setModal('delete');
+                                          void doDelete(c);
                                         }}
                                       >
                                         <Trash2 className="h-3.5 w-3.5" />
@@ -475,43 +504,6 @@ export function FleetProductAdminPortal() {
                 className="bg-amber-600 hover:bg-amber-500"
               >
                 {actionLoading ? 'Suspending...' : 'Suspend'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Modal */}
-      {modal === 'delete' && selectedCustomer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60" onClick={() => { setModal(null); setSelectedCustomer(null); }} />
-          <div className="relative w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white">Remove from Roam Fleet</h3>
-              <button
-                type="button"
-                onClick={() => { setModal(null); setSelectedCustomer(null); }}
-                className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <p className="text-sm text-slate-400 mb-4">
-              This will remove <strong>{selectedCustomer.email}</strong> from Roam Fleet. They will be signed out and can re-apply as a new customer.
-            </p>
-            <p className="text-sm text-amber-300 mb-4">
-              This does <strong>not</strong> delete their account from other Roam products (Driver, Rider, etc.).
-            </p>
-            <div className="flex justify-end gap-2 mt-4">
-              <Button variant="outline" onClick={() => { setModal(null); setSelectedCustomer(null); }}>
-                Cancel
-              </Button>
-              <Button
-                onClick={() => void doDelete()}
-                disabled={actionLoading}
-                className="bg-red-600 hover:bg-red-500"
-              >
-                {actionLoading ? 'Removing...' : 'Remove Customer'}
               </Button>
             </div>
           </div>

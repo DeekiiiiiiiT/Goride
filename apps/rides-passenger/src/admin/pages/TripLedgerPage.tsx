@@ -14,6 +14,7 @@ import {
   listPlatformLedgerTrips,
   type PlatformLedgerTripRow,
 } from '../services/ridesAdminService';
+import { useAdminConfirm } from '../contexts/AdminConfirmContext';
 
 interface OutletContext {
   session: Session;
@@ -29,6 +30,7 @@ function formatWhen(iso: string | null | undefined) {
 
 export function TripLedgerPage() {
   const { session } = useOutletContext<OutletContext>();
+  const { confirm } = useAdminConfirm();
   const token = session.access_token;
 
   const [loading, setLoading] = useState(true);
@@ -69,13 +71,12 @@ export function TripLedgerPage() {
   }, [load]);
 
   const runRelease = async (trip: PlatformLedgerTripRow) => {
-    if (
-      !window.confirm(
-        `Release ride ${trip.id.slice(0, 8)}… to cash settlement? Driver must enter cash received.`,
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: 'Release to cash settlement?',
+      description: `Release ride ${trip.id.slice(0, 8)}… to cash settlement? Driver must enter cash received.`,
+      confirmLabel: 'Release',
+    });
+    if (!ok) return;
     setActingId(trip.id);
     try {
       await adminReleaseCashSettlement(token, trip.id);
@@ -89,13 +90,13 @@ export function TripLedgerPage() {
   };
 
   const runCompleteCard = async (trip: PlatformLedgerTripRow) => {
-    if (
-      !window.confirm(
-        `Mark ride ${trip.id.slice(0, 8)}… completed? Use only if the passenger was dropped off.`,
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: 'Mark ride completed?',
+      description: `Mark ride ${trip.id.slice(0, 8)}… completed? Use only if the passenger was dropped off.`,
+      confirmLabel: 'Complete',
+      variant: 'danger',
+    });
+    if (!ok) return;
     setActingId(trip.id);
     try {
       await adminForceCompleteRide(token, trip.id);

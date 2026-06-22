@@ -151,14 +151,16 @@ export function MerchantManager() {
         </div>
       ) : tab === 'incomplete_setup' ? (
         incompleteItems.length === 0 ? (
-          <p className="text-slate-400 text-center py-12">No unfinished signups or setups.</p>
+          <p className="text-slate-400 text-center py-12">
+            No unfinished partner signups. Only users who sign into the partner portal appear here — not riders or drivers.
+          </p>
         ) : (
           <div className="rounded-xl border border-slate-800 overflow-hidden bg-slate-950">
             <table className="w-full text-sm">
               <thead className="bg-slate-900/80 text-slate-400 text-left">
                 <tr>
-                  <th className="px-4 py-3 font-medium">Account</th>
-                  <th className="px-4 py-3 font-medium">Type</th>
+                  <th className="px-4 py-3 font-medium">Restaurant</th>
+                  <th className="px-4 py-3 font-medium">Verification</th>
                   <th className="px-4 py-3 font-medium">Stage</th>
                   <th className="px-4 py-3 font-medium">Missing steps</th>
                   <th className="px-4 py-3 font-medium">Last activity</th>
@@ -167,7 +169,7 @@ export function MerchantManager() {
               <tbody className="divide-y divide-slate-800 bg-slate-950">
                 {incompleteItems.map((row) => (
                   <tr
-                    key={`${row.kind}-${row.userId}-${row.merchantId ?? 'none'}`}
+                    key={row.merchantId ?? row.userId}
                     onClick={() => {
                       if (row.merchantId) navigate(`/merchants/${row.merchantId}`);
                     }}
@@ -177,27 +179,22 @@ export function MerchantManager() {
                       <p className="font-medium text-white">
                         {row.merchantName || row.ownerEmail || 'Unknown'}
                       </p>
-                      <p className="text-slate-500 text-xs">{row.ownerEmail || '—'}</p>
+                      <p className="text-slate-500 text-xs">
+                        {row.kind === 'draft' ? 'Draft application' : row.ownerEmail || '—'}
+                      </p>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${
-                        row.kind === 'auth_only'
-                          ? 'bg-sky-500/15 text-sky-300'
-                          : 'bg-amber-500/15 text-amber-300'
-                      }`}>
-                        {row.kind === 'auth_only' ? 'Signed up only' : 'Application started'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-slate-300">
-                      {row.verificationStatus ? (
-                        <div className="flex flex-col gap-1">
-                          <MerchantStatusBadge status={row.verificationStatus as MerchantVerificationStatus} />
-                          <span className="text-xs text-slate-500">{row.setupStage}</span>
-                        </div>
+                      {row.kind === 'draft' ? (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300">
+                          Draft
+                        </span>
+                      ) : row.verificationStatus ? (
+                        <MerchantStatusBadge status={row.verificationStatus as MerchantVerificationStatus} />
                       ) : (
-                        row.setupStage
+                        '—'
                       )}
                     </td>
+                    <td className="px-4 py-3 text-slate-300 text-xs">{row.setupStage}</td>
                     <td className="px-4 py-3 text-slate-400">
                       {row.missingSteps.length ? (
                         <ul className="list-disc list-inside space-y-0.5 text-xs">

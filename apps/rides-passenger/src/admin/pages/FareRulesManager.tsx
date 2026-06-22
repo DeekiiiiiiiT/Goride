@@ -19,6 +19,7 @@ import { VehicleTypeSelect } from '../components/VehicleTypeSelect';
 import { useVehicleTypesContext } from '../context/VehicleTypesContext';
 import { FareRuleActionsMenu } from '../components/FareRuleActionsMenu';
 import { FareRuleDetailOverlay } from '../components/FareRuleDetailOverlay';
+import { useAdminConfirm } from '../contexts/AdminConfirmContext';
 import {
   buildLocationKey,
   currencyForMarket,
@@ -53,6 +54,7 @@ function defaultServiceSlug(services: { slug: string }[]): string {
 
 export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
   const { vehicleTypeTableLabel, services } = useVehicleTypesContext();
+  const { confirm } = useAdminConfirm();
   const [rules, setRules] = useState<FareRuleAdminDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -123,13 +125,13 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
     if (!accessToken) return;
     const label = rule.location_label ?? rule.location_key ?? rule.city;
     const vehicle = vehicleTypeTableLabel(rule.vehicle_type);
-    if (
-      !window.confirm(
-        `Delete fare rule for ${label} (${vehicle})? This cannot be undone.`
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: 'Delete fare rule?',
+      description: `Delete fare rule for ${label} (${vehicle})? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!ok) return;
     setDeleting(true);
     try {
       await deleteFareRule(accessToken, rule.id);

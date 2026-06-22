@@ -46,7 +46,7 @@ function LiveBadge({ status }: { status: CourierLiveStatus }) {
 export function CourierDetailPage() {
   const { userId } = useParams<{ userId: string }>();
   const { session } = useOutletContext<OutletContext>();
-  const { confirm } = useAdminConfirm();
+  const { confirm, prompt } = useAdminConfirm();
   const navigate = useNavigate();
   const token = session.access_token;
 
@@ -96,6 +96,66 @@ export function CourierDetailPage() {
   }
 
   const canWrite = permissions?.can_write;
+
+  const runSuspend = async () => {
+    if (!userId || !canWrite) return;
+    const values = await prompt({
+      title: 'Suspend courier',
+      description: 'The courier will be blocked until unsuspended.',
+      confirmLabel: 'Suspend',
+      variant: 'danger',
+      fields: [{ key: 'reason', label: 'Suspension reason', required: true, multiline: true }],
+    });
+    if (!values) return;
+    await suspendCourier(token, userId, values.reason);
+    toast.success('Suspended');
+    void load();
+  };
+
+  const runDeactivate = async () => {
+    if (!userId || !canWrite) return;
+    const values = await prompt({
+      title: 'Deactivate courier',
+      description: 'The courier profile will be deactivated.',
+      confirmLabel: 'Deactivate',
+      variant: 'danger',
+      fields: [{ key: 'reason', label: 'Deactivation reason', required: true, multiline: true }],
+    });
+    if (!values) return;
+    await deactivateCourier(token, userId, values.reason);
+    toast.success('Deactivated');
+    void load();
+  };
+
+  const runDelete = async () => {
+    if (!userId || !permissions?.can_delete) return;
+    const displayName = courier.display_name || courier.email || userId;
+    const values = await prompt({
+      title: 'Remove from Roam Courier?',
+      description: (
+        <>
+          Permanently removes this courier profile from Roam Dash Courier. Roam login and profiles
+          in Driver, Dash, or other apps are untouched.
+        </>
+      ),
+      confirmLabel: 'Remove courier',
+      variant: 'danger',
+      fields: [
+        { key: 'reason', label: 'Reason', required: true, multiline: true },
+        {
+          key: 'confirm_name',
+          label: `Type "${displayName}" to confirm`,
+          placeholder: displayName,
+          required: true,
+          matchValue: displayName,
+        },
+      ],
+    });
+    if (!values) return;
+    await deleteCourier(token, userId);
+    toast.success('Courier removed');
+    navigate('/users');
+  };
 
   return (
     <div className="space-y-6 text-slate-200">
@@ -165,14 +225,7 @@ export function CourierDetailPage() {
             <button
               type="button"
               className="px-3 py-2 rounded-lg border border-amber-500/40 text-amber-200 text-sm"
-              onClick={() => {
-                const reason = window.prompt('Suspension reason:');
-                if (!reason?.trim() || !userId) return;
-                void suspendCourier(token, userId, reason.trim()).then(() => {
-                  toast.success('Suspended');
-                  void load();
-                });
-              }}
+              onClick={() => void runSuspend()}
             >
               Suspend
             </button>
@@ -190,14 +243,7 @@ export function CourierDetailPage() {
             <button
               type="button"
               className="px-3 py-2 rounded-lg border border-red-500/40 text-red-200 text-sm"
-              onClick={() => {
-                const reason = window.prompt('Deactivation reason:');
-                if (!reason?.trim() || !userId) return;
-                void deactivateCourier(token, userId, reason.trim()).then(() => {
-                  toast.success('Deactivated');
-                  void load();
-                });
-              }}
+              onClick={() => void runDeactivate()}
             >
               Deactivate
             </button>
@@ -234,18 +280,7 @@ export function CourierDetailPage() {
             <button
               type="button"
               className="px-3 py-2 rounded-lg border border-red-600 text-red-300 text-sm"
-              onClick={async () => {
-                const ok = await confirm({
-                  title: 'Delete courier profile?',
-                  description: 'Removes profile only; auth user remains.',
-                  confirmLabel: 'Delete',
-                  variant: 'danger',
-                });
-                if (!ok || !userId) return;
-                await deleteCourier(token, userId);
-                toast.success('Deleted');
-                navigate('/users');
-              }}
+              onClick={() => void runDelete()}
             >
               Delete profile
             </button>

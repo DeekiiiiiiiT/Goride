@@ -22,7 +22,7 @@ import { ComplianceChecklist, BlockerChips } from '../../components/ComplianceCh
 import { formatBlockersList } from '../../utils/complianceLabels';
 
 type Tab = 'overview' | 'trips' | 'compliance';
-type ModalType = 'suspend' | 'deactivate' | 'delete' | null;
+type ModalType = 'suspend' | 'deactivate' | null;
 
 interface OutletContext {
   session: Session;
@@ -54,7 +54,7 @@ function LiveBadge({ status }: { status: DriverLiveStatus }) {
 export function DriverDetailPage() {
   const { userId } = useParams<{ userId: string }>();
   const { session } = useOutletContext<OutletContext>();
-  const { confirm } = useAdminConfirm();
+  const { confirm, prompt } = useAdminConfirm();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = session.access_token;
@@ -217,12 +217,40 @@ export function DriverDetailPage() {
   };
 
   const doDelete = async () => {
-    if (!token || !userId) return;
+    if (!token || !userId || !driver) return;
+    const displayName = driver.email || driver.display_name || userId;
+    const values = await prompt({
+      title: 'Remove from Roam Driver?',
+      description: (
+        <>
+          Permanently removes this driver profile from Roam Driver. The Roam login and profiles in
+          Rider, Courier, Dash, or other apps are untouched.
+        </>
+      ),
+      confirmLabel: 'Remove driver',
+      variant: 'danger',
+      fields: [
+        {
+          key: 'reason',
+          label: 'Reason',
+          placeholder: 'e.g. Test account cleanup',
+          required: true,
+          multiline: true,
+        },
+        {
+          key: 'confirm_name',
+          label: `Type "${displayName}" to confirm`,
+          placeholder: displayName,
+          required: true,
+          matchValue: displayName,
+        },
+      ],
+    });
+    if (!values) return;
     setActionLoading(true);
     try {
       await deleteDriver(token, userId);
       toast.success('Driver removed from Roam Driver');
-      setModal(null);
       navigate('/users');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to delete');
@@ -432,7 +460,7 @@ export function DriverDetailPage() {
                       className="w-full text-left px-3 py-2 hover:bg-slate-800 text-red-400 flex items-center gap-2"
                       onClick={() => {
                         setActionsOpen(false);
-                        setModal('delete');
+                        void doDelete();
                       }}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -514,37 +542,6 @@ export function DriverDetailPage() {
               className="px-3 py-2 rounded-lg bg-red-600 text-white text-sm hover:bg-red-500 disabled:opacity-50"
             >
               {actionLoading ? 'Deactivating...' : 'Deactivate'}
-            </button>
-          </div>
-        </Modal>
-      )}
-
-      {modal === 'delete' && (
-        <Modal
-          title="Remove from Roam Driver"
-          onClose={() => setModal(null)}
-        >
-          <p className="text-sm text-slate-400 mb-4">
-            This will permanently delete this driver's profile. They will be signed out and can sign up again as a new driver.
-          </p>
-          <p className="text-sm text-amber-300 mb-4">
-            This does <strong>not</strong> delete their account from other Roam products (Rider, Fleet, etc.).
-          </p>
-          <div className="flex justify-end gap-2 mt-4">
-            <button
-              type="button"
-              onClick={() => setModal(null)}
-              className="px-3 py-2 rounded-lg border border-slate-700 text-sm hover:bg-slate-800"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => void doDelete()}
-              disabled={actionLoading}
-              className="px-3 py-2 rounded-lg bg-red-600 text-white text-sm hover:bg-red-500 disabled:opacity-50"
-            >
-              {actionLoading ? 'Removing...' : 'Remove Driver'}
             </button>
           </div>
         </Modal>

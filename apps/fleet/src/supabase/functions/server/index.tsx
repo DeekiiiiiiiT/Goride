@@ -15044,10 +15044,10 @@ app.delete("/make-server-37f42386/fleet-admin/customers/:userId", async (c) => {
     const auth = await requireProductAdmin(c, "fleet");
     if (auth instanceof Response) return auth;
 
-    // Only platform admins can delete
-    const PLATFORM_ROLES = ["platform_owner", "superadmin"];
-    if (!PLATFORM_ROLES.includes(auth.role)) {
-      return c.json({ error: "forbidden", message: "platform_owner or superadmin required for delete" }, 403);
+    // Product or platform admins can delete fleet customer access
+    const FLEET_DELETE_ROLES = new Set(["platform_owner", "superadmin", "fleet_admin"]);
+    if (!FLEET_DELETE_ROLES.has(auth.role) && !auth.isPlatformRole) {
+      return c.json({ error: "forbidden", message: "platform_owner, superadmin, or fleet_admin required for delete" }, 403);
     }
 
     const userId = c.req.param("userId");

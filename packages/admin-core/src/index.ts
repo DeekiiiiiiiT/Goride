@@ -4,6 +4,21 @@ export { AdminSidebar } from './components/AdminSidebar';
 export { AdminAuthGate } from './components/AdminAuthGate';
 export { PermissionGate } from './components/PermissionGate';
 export { AppPermissionsTable } from './components/AppPermissionsTable';
+export { AdminConfirmDialog } from './components/AdminConfirmDialog';
+export { AdminFormDialog } from './components/AdminFormDialog';
+export type {
+  AdminConfirmDialogProps,
+  AdminConfirmVariant,
+} from './components/AdminConfirmDialog';
+export type { AdminFormDialogProps, AdminFormField } from './components/AdminFormDialog';
+export {
+  AdminConfirmProvider,
+  useAdminConfirm,
+} from './contexts/AdminConfirmContext';
+export type {
+  AdminConfirmOptions,
+  AdminPromptOptions,
+} from './contexts/AdminConfirmContext';
 export type { AppPermissionPolicyPatch } from './components/AppPermissionsTable';
 export {
   canWriteAppPermissionPolicy,

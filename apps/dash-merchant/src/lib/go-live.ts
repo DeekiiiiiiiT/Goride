@@ -35,7 +35,10 @@ export function shouldShowGoLiveScreen(merchant: Pick<Merchant, 'id' | 'verifica
 }
 
 /** Owner has not finished the partner onboarding application. */
-export function needsOwnerOnboarding(merchant: Pick<Merchant, 'submitted_at' | 'name'>): boolean {
+export function needsOwnerOnboarding(
+  merchant: Pick<Merchant, 'submitted_at' | 'name' | 'onboarding_status'>,
+): boolean {
+  if (merchant.onboarding_status === 'draft') return true;
   if (!merchant.submitted_at) return true;
   if (!merchant.name?.trim()) return true;
   return false;

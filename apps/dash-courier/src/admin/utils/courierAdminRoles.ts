@@ -14,7 +14,11 @@ export const COURIER_FORCE_APPROVE_ROLES = new Set([
   'courier_admin',
 ]);
 
-export const COURIER_DELETE_ROLES = new Set(['platform_owner', 'superadmin']);
+export const COURIER_DELETE_ROLES = new Set([
+  'courier_admin',
+  'platform_owner',
+  'superadmin',
+]);
 
 export function canWriteCourierAdmin(
   user: User | { app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> },

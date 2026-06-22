@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 import { isLocationComplete } from '@roam/location';
@@ -11,8 +11,10 @@ import VerificationStepContent from './VerificationStepContent';
 import BankDetailsStepContent from './BankDetailsStepContent';
 import OnboardingWizardShell from './OnboardingWizardShell';
 import {
+  bootstrapPartnerMerchant,
   saveBankAccount,
   saveMerchantHours,
+  saveOnboardingDraft,
   submitMerchantApplication,
 } from '../../lib/partner-api';
 import {
@@ -23,17 +25,25 @@ import {
 } from '../../lib/partner-onboarding-config';
 import { canContinueWizardStep } from '../../lib/partner-onboarding-validation';
 import {
+  formDataToOnboardingDraft,
+  hoursFromOnboardingDraft,
+  isWizardStepId,
+  onboardingDraftToFormData,
+} from '../../lib/partner-onboarding-draft-sync';
+import {
   loadPartnerWizardDraft,
   savePartnerWizardDraft,
 } from '../../lib/partner-wizard-draft';
 import { clearPartnerWizardDraft } from '../../lib/partnerAuth';
+import type { Merchant } from '../../hooks/useMerchant';
 
 interface UnifiedOnboardingWizardProps {
   session: Session;
+  serverMerchant?: Merchant | null;
   onComplete: () => void;
 }
 
-function initFormData(session: Session, draftData?: SignUpFormData): SignUpFormData {
+function initFormData(session: Session, draftData?: Partial<SignUpFormData>): SignUpFormData {
   return {
     ...INITIAL_SIGN_UP_DATA,
     ...draftData,
@@ -41,19 +51,48 @@ function initFormData(session: Session, draftData?: SignUpFormData): SignUpFormD
   };
 }
 
-export default function UnifiedOnboardingWizard({ session, onComplete }: UnifiedOnboardingWizardProps) {
-  const initial = useState(() => {
-    const draftResult = loadPartnerWizardDraft();
+function resolveInitialState(
+  session: Session,
+  serverMerchant?: Merchant | null,
+) {
+  const defaultHours = createDefaultHours();
+  const sessionDraft = loadPartnerWizardDraft();
+
+  if (serverMerchant?.onboarding_status === 'draft') {
+    const serverDraft = serverMerchant.onboarding_draft as Record<string, unknown> | undefined;
+    const stepKey = isWizardStepId(serverMerchant.wizard_step_key)
+      ? serverMerchant.wizard_step_key
+      : sessionDraft.ok
+        ? sessionDraft.draft.step
+        : 'restaurant-info';
     return {
-      step: (draftResult.ok ? draftResult.draft.step : 'restaurant-info') as WizardStepId,
-      formData: initFormData(session, draftResult.ok ? draftResult.draft.formData : undefined),
-      hours:
-        draftResult.ok && draftResult.draft.hours.length > 0
-          ? draftResult.draft.hours
-          : createDefaultHours(),
-      versionMismatch: !draftResult.ok && draftResult.reason === 'version_mismatch',
+      step: stepKey as WizardStepId,
+      formData: initFormData(
+        session,
+        onboardingDraftToFormData(serverDraft, session.user.email || ''),
+      ),
+      hours: hoursFromOnboardingDraft(serverDraft, defaultHours),
+      versionMismatch: false,
     };
-  })[0];
+  }
+
+  return {
+    step: (sessionDraft.ok ? sessionDraft.draft.step : 'restaurant-info') as WizardStepId,
+    formData: initFormData(session, sessionDraft.ok ? sessionDraft.draft.formData : undefined),
+    hours: sessionDraft.ok && sessionDraft.draft.hours.length > 0
+      ? sessionDraft.draft.hours
+      : defaultHours,
+    versionMismatch: !sessionDraft.ok && sessionDraft.reason === 'version_mismatch',
+  };
+}
+
+export default function UnifiedOnboardingWizard({
+  session,
+  serverMerchant,
+  onComplete,
+}: UnifiedOnboardingWizardProps) {
+  const initial = useState(() => resolveInitialState(session, serverMerchant))[0];
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [step, setStep] = useState<WizardStepId>(initial.step);
   const [formData, setFormData] = useState<SignUpFormData>(initial.formData);
@@ -71,7 +110,25 @@ export default function UnifiedOnboardingWizard({ session, onComplete }: Unified
 
   useEffect(() => {
     savePartnerWizardDraft(step, formData, hours);
-  }, [step, formData, hours]);
+
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      void saveOnboardingDraft({
+        wizardStepKey: step,
+        wizardStep: stepNumber,
+        draft: formDataToOnboardingDraft(formData, hours) as Record<string, unknown>,
+      }).catch(() => undefined);
+    }, 500);
+
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [step, formData, hours, stepNumber]);
+
+  useEffect(() => {
+    if (step !== 'verification') return;
+    void bootstrapPartnerMerchant().catch(() => undefined);
+  }, [step]);
 
   const updateForm = (patch: Partial<SignUpFormData>) => {
     setFormData((current) => ({ ...current, ...patch }));

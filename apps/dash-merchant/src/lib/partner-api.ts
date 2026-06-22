@@ -126,3 +126,23 @@ export async function saveMerchantHours(merchantId: string, hours: Array<{
     body: JSON.stringify({ hours }),
   });
 }
+
+export interface BootstrapMerchantResponse {
+  merchant: Record<string, unknown>;
+  created: boolean;
+}
+
+export function bootstrapPartnerMerchant(): Promise<BootstrapMerchantResponse> {
+  return deliveryFetch('/partner/bootstrap', { method: 'POST', body: '{}' });
+}
+
+export function saveOnboardingDraft(opts: {
+  wizardStepKey: string;
+  wizardStep?: number;
+  draft: Record<string, unknown>;
+}): Promise<{ merchant: Record<string, unknown> }> {
+  return deliveryFetch('/partner/onboarding-draft', {
+    method: 'PATCH',
+    body: JSON.stringify(opts),
+  });
+}

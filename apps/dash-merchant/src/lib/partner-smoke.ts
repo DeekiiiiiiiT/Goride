@@ -4,7 +4,9 @@
 export const PARTNER_ONBOARDING_REGRESSION = [
   'Approved merchant login → dashboard + bottom nav (no wizard)',
   'Fresh signup → auth → 6-step wizard → AccountPendingPage',
-  'Mid-wizard refresh → draft resumes at correct step (version 2)',
+  'Mid-wizard refresh → draft resumes at correct step (server + sessionStorage)',
+  'Partner sign-in → POST /partner/bootstrap creates draft merchant row',
+  'Admin Unfinished setup → shows Step N of 6 for draft merchants only',
   'Rejected merchant → resubmit application works',
   'Use a different account → clears draft + returns to login',
   'Google OAuth signup → wizard step 4 email prefilled from session',

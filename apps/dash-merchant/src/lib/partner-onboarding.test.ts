@@ -5,6 +5,7 @@ import {
   canContinueContactHoursStep,
   isValidBusinessEmail,
 } from './partner-onboarding-validation';
+import { needsOwnerOnboarding } from './go-live';
 import {
   loadPartnerWizardDraft,
   savePartnerWizardDraft,
@@ -66,6 +67,28 @@ describe('partner-onboarding-validation', () => {
     };
     expect(canContinueBusinessInfoStep(data)).toBe(true);
     expect(canContinueContactHoursStep(data)).toBe(false);
+  });
+});
+
+describe('needsOwnerOnboarding', () => {
+  it('returns true for draft merchants', () => {
+    expect(
+      needsOwnerOnboarding({
+        onboarding_status: 'draft',
+        submitted_at: null,
+        name: null,
+      }),
+    ).toBe(true);
+  });
+
+  it('returns false for submitted merchants with name', () => {
+    expect(
+      needsOwnerOnboarding({
+        onboarding_status: 'submitted',
+        submitted_at: '2026-01-01',
+        name: 'Code Blue',
+      }),
+    ).toBe(false);
   });
 });
 

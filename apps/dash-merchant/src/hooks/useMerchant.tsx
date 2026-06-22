@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '@roam/api-client';
+import type { MerchantOnboardingStatus, PartnerWizardStepKey } from '@roam/types';
 import { Session } from '@supabase/supabase-js';
 
 export type VerificationStatus =
@@ -11,7 +12,7 @@ export type VerificationStatus =
 
 export interface Merchant {
   id: string;
-  name: string;
+  name: string | null;
   slug: string;
   description: string;
   logo_url: string;
@@ -37,6 +38,11 @@ export interface Merchant {
   rejection_reason: string | null;
   submitted_at: string | null;
   verified_at: string | null;
+  onboarding_status?: MerchantOnboardingStatus;
+  wizard_step?: number;
+  wizard_step_key?: PartnerWizardStepKey | null;
+  onboarding_draft?: Record<string, unknown>;
+  last_onboarding_activity_at?: string | null;
 }
 
 export type TeamPermission = 'orders' | 'menu' | 'analytics' | 'payouts';

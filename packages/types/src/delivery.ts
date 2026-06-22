@@ -27,6 +27,53 @@ export type MerchantBusinessType =
   | 'fast_food'
   | 'other';
 
+export type MerchantOnboardingStatus = 'draft' | 'submitted';
+
+export type PartnerWizardStepKey =
+  | 'restaurant-info'
+  | 'location'
+  | 'business-details'
+  | 'contact-hours'
+  | 'verification'
+  | 'bank-details';
+
+/** Serializable partner wizard draft (no File blobs). */
+export interface PartnerOnboardingDraft {
+  restaurantName?: string;
+  phone?: string;
+  email?: string;
+  businessType?: MerchantBusinessType | '';
+  cuisineTypes?: string[];
+  location?: {
+    lat?: number;
+    lng?: number;
+    streetAddress?: string;
+    city?: string;
+    postalCode?: string;
+    formattedAddress?: string;
+  } | null;
+  streetAddress?: string;
+  city?: string;
+  postalCode?: string;
+  addressSearch?: string;
+  businessRegistrationNumber?: string;
+  taxId?: string;
+  avgPrepTime?: string;
+  deliveryRadius?: string;
+  ownerFullName?: string;
+  description?: string;
+  website?: string;
+  logoUrl?: string;
+  coverImageUrl?: string;
+  bankName?: string;
+  accountHolderName?: string;
+  accountType?: 'checking' | 'savings';
+  idFrontDoc?: { id: string; docType: string; status: string; fileName?: string } | null;
+  idBackDoc?: { id: string; docType: string; status: string; fileName?: string } | null;
+  proofOfBusinessDoc?: { id: string; docType: string; status: string; fileName?: string } | null;
+  hours?: Array<{ open: string; close: string; isClosed: boolean }>;
+}
+
 export interface Merchant {
   id: string;
   ownerId: string;
@@ -52,6 +99,11 @@ export interface Merchant {
   verificationNotes?: string | null;
   rejectionReason?: string | null;
   submittedAt?: string;
+  onboardingStatus?: MerchantOnboardingStatus;
+  wizardStep?: number;
+  wizardStepKey?: PartnerWizardStepKey | null;
+  onboardingDraft?: PartnerOnboardingDraft;
+  lastOnboardingActivityAt?: string | null;
   businessHours: BusinessHours;
   isActive: boolean;
   isVerified: boolean;

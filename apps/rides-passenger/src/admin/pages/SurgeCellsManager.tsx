@@ -8,6 +8,7 @@ import {
   resetSurgeCell,
   updateSurgeCell,
 } from '../services/ridesAdminService';
+import { useAdminConfirm } from '../contexts/AdminConfirmContext';
 
 const PAGE_SIZE = 50;
 
@@ -17,6 +18,7 @@ interface SurgeCellsManagerProps {
 }
 
 export function SurgeCellsManager({ accessToken, role }: SurgeCellsManagerProps) {
+  const { confirm } = useAdminConfirm();
   const canResetAll = role === 'platform_owner' || role === 'superadmin' || role === 'rides_admin';
 
   const [cells, setCells] = useState<SurgeCellAdminRow[]>([]);
@@ -64,11 +66,14 @@ export function SurgeCellsManager({ accessToken, role }: SurgeCellsManagerProps)
 
   const saveMultiplier = async () => {
     if (!accessToken || !editCell) return;
-    if (
-      multiplier > 1.5 &&
-      !window.confirm(`Set surge to ${multiplier}x? This affects rider quotes in this cell.`)
-    ) {
-      return;
+    if (multiplier > 1.5) {
+      const ok = await confirm({
+        title: 'High surge multiplier',
+        description: `Set surge to ${multiplier}x? This affects rider quotes in this cell.`,
+        confirmLabel: 'Apply surge',
+        variant: 'danger',
+      });
+      if (!ok) return;
     }
     setSaving(true);
     try {
@@ -101,13 +106,13 @@ export function SurgeCellsManager({ accessToken, role }: SurgeCellsManagerProps)
 
   const handleResetAll = async () => {
     if (!accessToken || !canResetAll) return;
-    if (
-      !window.confirm(
-        'Reset all surge cells? Open requests go to 0 and multipliers return to 1.0.'
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: 'Reset all surge cells?',
+      description: 'Reset all surge cells? Open requests go to 0 and multipliers return to 1.0.',
+      confirmLabel: 'Reset all',
+      variant: 'danger',
+    });
+    if (!ok) return;
     try {
       const res = await resetAllSurgeCells(accessToken, true);
       toast.success(`Reset ${res.rows_updated} cells`);

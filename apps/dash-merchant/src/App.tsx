@@ -18,6 +18,7 @@ import UnifiedOnboardingWizard from './components/onboarding/UnifiedOnboardingWi
 import { useMerchant } from './hooks/useMerchant';
 import { PartnerTab } from './lib/partner-utils';
 import { shouldShowGoLiveScreen, needsOwnerOnboarding, dismissGoLiveScreen } from './lib/go-live';
+import { bootstrapPartnerMerchant } from './lib/partner-api';
 import { DashAdminPortal } from './admin/DashAdminPortal';
 import {
   clearPartnerOAuthUrl,
@@ -108,6 +109,15 @@ function DashMerchantApp() {
 
   const { merchant, membership, isLoading: merchantLoading, refetch } = useMerchant(session);
 
+  useEffect(() => {
+    if (!session?.user) return;
+    void bootstrapPartnerMerchant()
+      .then(() => refetch())
+      .catch((err) => {
+        console.error('[partner] bootstrap failed:', err);
+      });
+  }, [session?.user?.id, refetch]);
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     setCurrentPage('dashboard');
@@ -139,6 +149,7 @@ function DashMerchantApp() {
     return (
       <UnifiedOnboardingWizard
         session={session}
+        serverMerchant={merchant}
         onComplete={() => void refetch()}
       />
     );

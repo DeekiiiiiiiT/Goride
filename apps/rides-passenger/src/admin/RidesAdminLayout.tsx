@@ -29,6 +29,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { RidesAdminLoginForm } from './components/RidesAdminLoginForm';
+import { AdminConfirmProvider } from './contexts/AdminConfirmContext';
 
 interface NavItem {
   id: string;
@@ -312,6 +313,7 @@ export function RidesAdminLayout() {
   };
 
   return (
+    <AdminConfirmProvider>
     <div className="rides-admin-portal dark flex h-screen bg-slate-950">
       {/* Mobile overlay */}
       {mobileOpen && (
@@ -447,5 +449,6 @@ export function RidesAdminLayout() {
         </main>
       </div>
     </div>
+    </AdminConfirmProvider>
   );
 }

@@ -14,7 +14,11 @@ export const DASH_FORCE_APPROVE_ROLES = new Set([
   'dash_admin',
 ]);
 
-export const DASH_DELETE_ROLES = new Set(['platform_owner', 'superadmin']);
+export const DASH_DELETE_ROLES = new Set([
+  'platform_owner',
+  'superadmin',
+  'dash_admin',
+]);
 
 export function canWriteDashAdmin(
   user: User | { app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> },

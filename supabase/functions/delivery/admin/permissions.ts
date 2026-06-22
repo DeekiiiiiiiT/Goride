@@ -14,6 +14,7 @@ export function hasAnyCourierRole(roles: string[], allowed: ReadonlySet<string>)
 
 /** Roles allowed to delete courier profiles. */
 export const COURIER_DELETE_ROLES = new Set([
+  "courier_admin",
   "platform_owner",
   "superadmin",
 ]);
@@ -36,7 +37,7 @@ export function requireDelete(admin: ProductAdminUser): Response | null {
     return new Response(
       JSON.stringify({
         error: "forbidden",
-        message: "platform_owner or superadmin required for delete actions",
+        message: "platform_owner, superadmin, or courier_admin required for delete actions",
       }),
       { status: 403, headers: { "Content-Type": "application/json" } },
     );

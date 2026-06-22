@@ -5,7 +5,9 @@
 import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
 import type {
   MerchantOperationalStatus,
+  MerchantOnboardingStatus,
   MerchantVerificationStatus,
+  PartnerWizardStepKey,
 } from '@roam/types/delivery';
 
 const DELIVERY_BASE = API_ENDPOINTS.delivery;
@@ -50,6 +52,11 @@ export interface DashMerchant {
   admin_assigned_to?: string | null;
   verification_checklist?: Record<string, boolean>;
   admin_internal_notes?: string | null;
+  onboarding_status?: MerchantOnboardingStatus;
+  wizard_step?: number;
+  wizard_step_key?: PartnerWizardStepKey | null;
+  onboarding_draft?: Record<string, unknown>;
+  last_onboarding_activity_at?: string | null;
 }
 
 export interface MerchantHours {
@@ -109,12 +116,15 @@ export interface SetupChecklistSnapshot {
 }
 
 export interface IncompleteSetupRow {
-  kind: 'auth_only' | 'merchant';
+  kind: 'draft' | 'merchant';
   userId: string;
   ownerEmail: string;
   merchantId: string | null;
   merchantName: string | null;
   verificationStatus: string | null;
+  onboardingStatus?: MerchantOnboardingStatus | null;
+  wizardStep?: number | null;
+  wizardStepKey?: PartnerWizardStepKey | null;
   setupStage: string;
   checklist: SetupChecklistSnapshot | null;
   missingSteps: string[];
@@ -127,7 +137,7 @@ export interface ListIncompleteSetupResponse {
   page: number;
   limit: number;
   counts: {
-    auth_only: number;
+    drafts: number;
     incomplete_merchants: number;
     total: number;
   };
@@ -306,6 +316,17 @@ export function reactivateMerchant(accessToken: string, id: string) {
   return deliveryFetch(accessToken, `/admin/merchants/${id}/reactivate`, { method: 'POST' });
 }
 
+export function deleteMerchant(
+  accessToken: string,
+  id: string,
+  payload: { reason: string; confirm_name: string },
+) {
+  return deliveryFetch<{ ok: boolean; message: string }>(accessToken, `/admin/merchants/${id}`, {
+    method: 'DELETE',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function patchMerchantOps(
   accessToken: string,
   id: string,
@@ -413,11 +434,33 @@ export function unsuspendCustomer(accessToken: string, id: string) {
   return deliveryFetch(accessToken, `/admin/customers/${id}/unsuspend`, { method: 'POST' });
 }
 
+export function deleteCustomer(
+  accessToken: string,
+  id: string,
+  payload: { reason: string; confirm_name: string },
+) {
+  return deliveryFetch<{ ok: boolean; message: string }>(accessToken, `/admin/customers/${id}`, {
+    method: 'DELETE',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function listDashTeam(accessToken: string) {
   return deliveryFetch<{ members: Array<{ userId: string; email: string; role: string }> }>(
     accessToken,
     '/admin/team',
   );
+}
+
+export function removeDashTeamMember(
+  accessToken: string,
+  userId: string,
+  payload?: { reason?: string },
+) {
+  return deliveryFetch<{ ok: boolean }>(accessToken, `/admin/team/${userId}`, {
+    method: 'DELETE',
+    body: JSON.stringify(payload ?? {}),
+  });
 }
 
 export function listPayouts(accessToken: string, opts: { merchant_id?: string; status?: string } = {}) {

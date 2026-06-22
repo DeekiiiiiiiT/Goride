@@ -15,6 +15,7 @@ import {
 import type { ServiceBodyTypeLink } from '@/types/vehicleTypes';
 import { ServiceBodyTypeLinker } from '../components/ServiceBodyTypeLinker';
 import { useVehicleTypesContext } from '../context/VehicleTypesContext';
+import { useAdminConfirm } from '../contexts/AdminConfirmContext';
 import {
   normalizeTransportSolutionSlug,
   validateTransportSolutionSlug,
@@ -237,6 +238,7 @@ type VehicleTypesManagerProps = {
 
 export function VehicleTypesManager({ kind, serviceCategory }: VehicleTypesManagerProps) {
   const { session } = useOutletContext<OutletContext>();
+  const { confirm } = useAdminConfirm();
   const { allVehicles, allServices, loading, reload } = useVehicleTypesContext();
   const items = kind === 'vehicle' ? allVehicles : allServices;
   const meta = KIND_META[kind];
@@ -395,9 +397,13 @@ export function VehicleTypesManager({ kind, serviceCategory }: VehicleTypesManag
 
   const handleDelete = async (row: RidesVehicleTypeDto) => {
     const kindLabel = row.solution_kind === 'service' ? 'service' : 'vehicle type';
-    if (!window.confirm(`Delete ${kindLabel} "${row.label}" (${row.slug})? This cannot be undone.`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: 'Delete?',
+      description: `Delete ${kindLabel} "${row.label}" (${row.slug})? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!ok) return;
     try {
       await deleteVehicleType(session.access_token, row.slug);
       toast.success('Deleted');

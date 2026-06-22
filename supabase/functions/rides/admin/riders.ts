@@ -41,9 +41,17 @@ const RIDER_WRITE_ROLES = new Set([
 
 const BAN_ROLES = new Set(["platform_owner", "superadmin"]);
 
-const DELETE_ROLES = new Set(["platform_owner", "superadmin"]);
+const DELETE_ROLES = new Set([
+  "rides_admin",
+  "platform_owner",
+  "superadmin",
+]);
 
 type AccountStatus = "active" | "suspended" | "banned";
+
+function hasAnyRiderRole(roles: string[], allowed: ReadonlySet<string>): boolean {
+  return roles.some((r) => allowed.has(r));
+}
 
 function serviceAuth() {
   return createClient(
@@ -73,9 +81,9 @@ function requireBan(admin: ProductAdminUser): Response | null {
 }
 
 function requireDelete(admin: ProductAdminUser): Response | null {
-  if (!DELETE_ROLES.has(admin.role)) {
+  if (!hasAnyRiderRole(admin.roles, DELETE_ROLES)) {
     return new Response(
-      JSON.stringify({ error: "forbidden", message: "platform_owner or superadmin required for delete actions" }),
+      JSON.stringify({ error: "forbidden", message: "platform_owner, superadmin, or rides_admin required for delete actions" }),
       { status: 403, headers: { "Content-Type": "application/json" } },
     );
   }
@@ -394,7 +402,7 @@ export function registerRiderAdminRoutes(admin: Hono) {
       permissions: {
         can_write: RIDER_WRITE_ROLES.has(adminUser.role),
         can_ban: BAN_ROLES.has(adminUser.role),
-        can_delete: DELETE_ROLES.has(adminUser.role),
+        can_delete: hasAnyRiderRole(adminUser.roles, DELETE_ROLES),
         can_see_reset_link: isPlatformRole(adminUser.role),
       },
     });

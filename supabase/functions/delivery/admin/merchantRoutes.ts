@@ -10,6 +10,7 @@ import {
 } from "../../_shared/authRecoveryRedirects.ts";
 import {
   canForceApproveMerchant,
+  requireDashDelete,
   requireDashWrite,
 } from "./dashPermissions.ts";
 import { mountDashTeamRoutes } from "./dashTeamRoutes.ts";
@@ -35,6 +36,7 @@ import {
   setupStageLabel,
   type SetupChecklist,
 } from "./merchantSetupProgress.ts";
+import { incompleteSetupStageLabel } from "../partnerOnboarding.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SLA_HOURS = 48;
@@ -156,12 +158,13 @@ export function registerMerchantAdminRoutes(app: Hono) {
       { data: liveOrders },
       { data: slaPending },
     ] = await Promise.all([
-      sb.from("merchants").select("verification_status, operational_status"),
+      sb.from("merchants").select("verification_status, operational_status, onboarding_status"),
       sb.from("orders").select("id, total").gte("placed_at", todayStart),
       sb.from("orders").select("id").in("status", [
         "placed", "accepted", "preparing", "ready", "picked_up", "in_transit",
       ]),
       sb.from("merchants").select("id")
+        .eq("onboarding_status", "submitted")
         .in("verification_status", ["pending", "in_review", "docs_requested"])
         .lt("submitted_at", slaCutoff),
     ]);
@@ -173,8 +176,10 @@ export function registerMerchantAdminRoutes(app: Hono) {
       active: 0, suspended: 0, deactivated: 0,
     };
     for (const m of merchants ?? []) {
-      const vs = (m as Record<string, unknown>).verification_status as string;
-      const os = (m as Record<string, unknown>).operational_status as string;
+      const row = m as Record<string, unknown>;
+      if (row.onboarding_status === "draft") continue;
+      const vs = row.verification_status as string;
+      const os = row.operational_status as string;
       if (vs && vs in verificationCounts) verificationCounts[vs]++;
       if (os && os in operationalCounts) operationalCounts[os]++;
     }
@@ -186,7 +191,7 @@ export function registerMerchantAdminRoutes(app: Hono) {
 
     return c.json({
       merchants: {
-        total: (merchants ?? []).length,
+        total: (merchants ?? []).filter((m) => (m as Record<string, unknown>).onboarding_status !== "draft").length,
         verification: verificationCounts,
         operational: operationalCounts,
       },
@@ -203,19 +208,21 @@ export function registerMerchantAdminRoutes(app: Hono) {
 
   admin.get("/merchants/stats", async (c) => {
     const sb = getDb();
-    const { data, error } = await sb.from("merchants").select("verification_status, operational_status");
+    const { data, error } = await sb.from("merchants").select("verification_status, operational_status, onboarding_status");
     if (error) return c.json({ error: error.message }, 500);
     const counts: Record<string, number> = {
       pending: 0, in_review: 0, docs_requested: 0, approved: 0, rejected: 0,
     };
     const operational: Record<string, number> = { active: 0, suspended: 0, deactivated: 0 };
     for (const row of data || []) {
-      const s = (row as Record<string, unknown>).verification_status as string;
-      const o = (row as Record<string, unknown>).operational_status as string;
+      const r = row as Record<string, unknown>;
+      if (r.onboarding_status === "draft") continue;
+      const s = r.verification_status as string;
+      const o = r.operational_status as string;
       if (s && s in counts) counts[s]++;
       if (o && o in operational) operational[o]++;
     }
-    return c.json({ counts, operational, total: (data || []).length });
+    return c.json({ counts, operational, total: (data || []).filter((r) => (r as Record<string, unknown>).onboarding_status !== "draft").length });
   });
 
   admin.get("/merchants/queue", async (c) => {
@@ -224,6 +231,7 @@ export function registerMerchantAdminRoutes(app: Hono) {
     let query = sb
       .from("merchants")
       .select("*")
+      .eq("onboarding_status", "submitted")
       .in("verification_status", ["pending", "in_review", "docs_requested"])
       .order("submitted_at", { ascending: true });
     if (assignee === "unassigned") {
@@ -243,6 +251,7 @@ export function registerMerchantAdminRoutes(app: Hono) {
   });
 
   admin.get("/merchants/incomplete-setup", async (c) => {
+    c.header("Cache-Control", "no-store");
     const sb = getDb();
     const q = c.req.query("q")?.trim().toLowerCase() ?? "";
     const limit = Math.min(parseInt(c.req.query("limit") || "100", 10) || 100, 200);
@@ -251,47 +260,83 @@ export function registerMerchantAdminRoutes(app: Hono) {
     const { data: merchants, error: merchErr } = await sb
       .from("merchants")
       .select("*")
-      .order("updated_at", { ascending: false })
+      .order("last_onboarding_activity_at", { ascending: false, nullsFirst: false })
       .limit(500);
     if (merchErr) return c.json({ error: merchErr.message }, 500);
 
     const checklistById = await checklistMapForMerchants(merchants ?? []);
 
     type IncompleteRow = {
-      kind: "auth_only" | "merchant";
+      kind: "draft" | "merchant";
       userId: string;
       ownerEmail: string;
       merchantId: string | null;
       merchantName: string | null;
       verificationStatus: string | null;
+      onboardingStatus: string | null;
+      wizardStep: number | null;
+      wizardStepKey: string | null;
       setupStage: string;
       checklist: SetupChecklist | null;
       missingSteps: string[];
       lastActivityAt: string | null;
     };
 
-    const merchantRows: IncompleteRow[] = [];
+    const rows: IncompleteRow[] = [];
+    let draftCount = 0;
+    let incompleteMerchantCount = 0;
 
     for (const m of merchants ?? []) {
       const row = m as Record<string, unknown>;
       const id = row.id as string;
+      const ownerId = row.owner_id as string;
+      const ownerEmail = (row.email as string) || await fetchOwnerEmail(ownerId);
+      const draft = row.onboarding_draft as Record<string, unknown> | undefined;
+      const draftEmail = typeof draft?.email === "string" ? draft.email : "";
+      const name = String(row.name || draft?.restaurantName || "");
+      const haystack = `${name} ${ownerEmail} ${draftEmail} ${row.phone ?? ""}`.toLowerCase();
+      if (q && !haystack.includes(q)) continue;
+
+      const onboardingStatus = String(row.onboarding_status || "submitted");
+
+      if (onboardingStatus === "draft") {
+        draftCount++;
+        rows.push({
+          kind: "draft",
+          userId: ownerId,
+          ownerEmail: ownerEmail || draftEmail,
+          merchantId: id,
+          merchantName: name || null,
+          verificationStatus: null,
+          onboardingStatus,
+          wizardStep: Number(row.wizard_step) || 1,
+          wizardStepKey: (row.wizard_step_key as string) || "restaurant-info",
+          setupStage: incompleteSetupStageLabel(row),
+          checklist: null,
+          missingSteps: ["Complete and submit partner application"],
+          lastActivityAt: (row.last_onboarding_activity_at as string)
+            || (row.updated_at as string)
+            || (row.created_at as string)
+            || null,
+        });
+        continue;
+      }
+
       const checklist = checklistById.get(id)!;
       if (isApplicationSetupComplete(checklist)) continue;
 
-      const ownerId = row.owner_id as string;
-      const ownerEmail = (row.email as string) || await fetchOwnerEmail(ownerId);
-      const name = String(row.name || "");
-      const haystack = `${name} ${ownerEmail} ${row.phone ?? ""}`.toLowerCase();
-      if (q && !haystack.includes(q)) continue;
-
+      incompleteMerchantCount++;
       const verificationStatus = String(row.verification_status || "pending");
-      merchantRows.push({
+      rows.push({
         kind: "merchant",
         userId: ownerId,
         ownerEmail,
         merchantId: id,
         merchantName: name || null,
         verificationStatus,
+        onboardingStatus,
+        wizardStep: Number(row.wizard_step) || null,
+        wizardStepKey: (row.wizard_step_key as string) || null,
         setupStage: verificationStatus === "approved"
           ? "Approved — finish setup"
           : setupStageLabel("merchant", checklist),
@@ -301,53 +346,7 @@ export function registerMerchantAdminRoutes(app: Hono) {
       });
     }
 
-    const { data: ownerRows } = await sb.from("merchants").select("owner_id");
-    const ownerIds = new Set((ownerRows ?? []).map((r) => (r as Record<string, unknown>).owner_id as string));
-
-    const authRows: IncompleteRow[] = [];
-    const auth = getAuthAdmin();
-    let authPage = 1;
-    const maxAuthPages = 5;
-
-    while (authPage <= maxAuthPages) {
-      const { data: listData, error: listErr } = await auth.auth.admin.listUsers({
-        page: authPage,
-        perPage: 100,
-      });
-      if (listErr) return c.json({ error: listErr.message }, 500);
-      const users = listData?.users ?? [];
-      if (!users.length) break;
-
-      for (const user of users) {
-        if (ownerIds.has(user.id)) continue;
-        const email = user.email ?? "";
-        if (q && !email.toLowerCase().includes(q)) continue;
-
-        authRows.push({
-          kind: "auth_only",
-          userId: user.id,
-          ownerEmail: email,
-          merchantId: null,
-          merchantName: null,
-          verificationStatus: null,
-          setupStage: setupStageLabel("auth_only", {
-            profileComplete: false,
-            documentsComplete: false,
-            bankComplete: false,
-            hoursComplete: false,
-            menuComplete: false,
-          }),
-          checklist: null,
-          missingSteps: ["Full partner onboarding wizard"],
-          lastActivityAt: user.last_sign_in_at ?? user.created_at ?? null,
-        });
-      }
-
-      if (users.length < 100) break;
-      authPage++;
-    }
-
-    const combined = [...authRows, ...merchantRows].sort((a, b) => {
+    const combined = rows.sort((a, b) => {
       const ta = a.lastActivityAt ? new Date(a.lastActivityAt).getTime() : 0;
       const tb = b.lastActivityAt ? new Date(b.lastActivityAt).getTime() : 0;
       return tb - ta;
@@ -363,9 +362,9 @@ export function registerMerchantAdminRoutes(app: Hono) {
       page,
       limit,
       counts: {
-        auth_only: authRows.length,
-        incomplete_merchants: merchantRows.length,
-        total: authRows.length + merchantRows.length,
+        drafts: draftCount,
+        incomplete_merchants: incompleteMerchantCount,
+        total,
       },
     });
   });
@@ -378,6 +377,7 @@ export function registerMerchantAdminRoutes(app: Hono) {
     const offset = (page - 1) * limit;
 
     let query = sb.from("merchants").select("*", { count: "exact" })
+      .neq("onboarding_status", "draft")
       .order("submitted_at", { ascending: false });
 
     if (status && status !== "all" && isValidStatus(status)) {
@@ -396,14 +396,16 @@ export function registerMerchantAdminRoutes(app: Hono) {
     const { data, error, count } = await query.range(offset, offset + limit - 1);
     if (error) return c.json({ error: error.message }, 500);
 
-    const { data: allStatuses } = await sb.from("merchants").select("verification_status, operational_status");
+    const { data: allStatuses } = await sb.from("merchants").select("verification_status, operational_status, onboarding_status");
     const counts: Record<string, number> = {
       pending: 0, in_review: 0, docs_requested: 0, approved: 0, rejected: 0,
     };
     const operational: Record<string, number> = { active: 0, suspended: 0, deactivated: 0 };
     for (const row of allStatuses || []) {
-      const s = (row as Record<string, unknown>).verification_status as string;
-      const o = (row as Record<string, unknown>).operational_status as string;
+      const r = row as Record<string, unknown>;
+      if (r.onboarding_status === "draft") continue;
+      const s = r.verification_status as string;
+      const o = r.operational_status as string;
       if (s && s in counts) counts[s]++;
       if (o && o in operational) operational[o]++;
     }
@@ -742,6 +744,64 @@ export function registerMerchantAdminRoutes(app: Hono) {
     const denied = requireDashWrite(adminFromCtx(c));
     if (denied) return denied;
     return setOperationalStatus(c, c.req.param("id"), adminFromCtx(c), "active");
+  });
+
+  admin.delete("/merchants/:id", async (c) => {
+    const admin = adminFromCtx(c);
+    const denied = requireDashDelete(admin);
+    if (denied) return denied;
+
+    const { id } = c.req.param();
+    const body = await c.req.json().catch(() => ({}));
+    const reason = String(body.reason || "").trim();
+    const confirmName = String(body.confirm_name || "").trim();
+    if (!reason) return c.json({ error: "reason is required" }, 400);
+    if (!confirmName) return c.json({ error: "confirm_name is required" }, 400);
+
+    const sb = getDb();
+    const { data: merchant, error: fetchErr } = await sb
+      .from("merchants")
+      .select("id, name, email, owner_id, verification_status, onboarding_status")
+      .eq("id", id)
+      .maybeSingle();
+    if (fetchErr) return c.json({ error: fetchErr.message }, 500);
+    if (!merchant) return c.json({ error: "Merchant not found" }, 404);
+
+    const row = merchant as Record<string, unknown>;
+    const merchantName = String(row.name || "").trim();
+    const expectedConfirm = (merchantName || id).toLowerCase();
+    if (confirmName.toLowerCase() !== expectedConfirm) {
+      return c.json({ error: "confirm_name must match merchant name" }, 400);
+    }
+
+    const payments = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      { db: { schema: "payments" } },
+    );
+    await payments.from("merchant_bank_accounts").delete().eq("merchant_id", id);
+    await payments.from("merchant_payouts").delete().eq("merchant_id", id);
+
+    const { error: ordersErr } = await sb.from("orders").delete().eq("merchant_id", id);
+    if (ordersErr) return c.json({ error: ordersErr.message }, 500);
+
+    const merchantEmail = String(row.email || "");
+    await writeKvAudit(
+      admin,
+      "roam_dash.merchant_deleted",
+      id,
+      merchantEmail,
+      `${reason} | name=${merchantName || "(draft)"}`,
+    );
+
+    const { error: deleteErr } = await sb.from("merchants").delete().eq("id", id);
+    if (deleteErr) return c.json({ error: deleteErr.message }, 500);
+
+    return c.json({
+      ok: true,
+      message:
+        "Dash partner store removed. Owner Roam login and other app profiles (Driver, Courier, etc.) were not changed.",
+    });
   });
 
   admin.post("/merchants/:id/reset-owner-password", async (c) => {

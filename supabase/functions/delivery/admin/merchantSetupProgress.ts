@@ -49,10 +49,9 @@ export function isApplicationSetupComplete(checklist: SetupChecklist): boolean {
 }
 
 export function setupStageLabel(
-  kind: 'auth_only' | 'merchant',
+  kind: 'merchant',
   checklist: SetupChecklist,
 ): string {
-  if (kind === 'auth_only') return 'Not started — wizard';
   const missing = missingSetupLabels(checklist);
   if (missing.length === 0) return 'Setup complete';
   return `Missing: ${missing[0]}`;

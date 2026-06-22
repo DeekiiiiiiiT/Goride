@@ -5,11 +5,12 @@ import { toast } from 'sonner';
 import { MerchantStatusBadge } from '../../components/MerchantStatusBadge';
 import { MerchantActionDialog } from '../../components/MerchantActionDialog';
 import { useAdminConfirm } from '../../contexts/AdminConfirmContext';
-import { canWriteDashAdmin } from '../../utils/dashAdminRoles';
+import { canDeleteDashAdmin, canWriteDashAdmin } from '../../utils/dashAdminRoles';
 import {
   assignMerchant,
   changeMerchantStatus,
   deactivateMerchant,
+  deleteMerchant,
   getMerchantDetail,
   patchMerchantOps,
   reactivateMerchant,
@@ -44,9 +45,10 @@ export function MerchantDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { session } = useOutletContext<AdminOutletContext>();
   const navigate = useNavigate();
-  const { confirm } = useAdminConfirm();
+  const { prompt } = useAdminConfirm();
   const token = session.access_token;
   const canWrite = canWriteDashAdmin(session.user);
+  const canDelete = canDeleteDashAdmin(session.user);
 
   const [loading, setLoading] = useState(true);
   const [merchant, setMerchant] = useState<DashMerchant | null>(null);
@@ -110,10 +112,24 @@ export function MerchantDetailPage() {
 
   const runSuspend = async () => {
     if (!merchant || !canWrite) return;
-    const reason = window.prompt('Suspension reason (required):');
-    if (!reason?.trim()) return;
+    const values = await prompt({
+      title: 'Suspend merchant',
+      description: 'The store will be blocked from operating until unsuspended.',
+      confirmLabel: 'Suspend',
+      variant: 'danger',
+      fields: [
+        {
+          key: 'reason',
+          label: 'Suspension reason',
+          placeholder: 'Why is this store being suspended?',
+          required: true,
+          multiline: true,
+        },
+      ],
+    });
+    if (!values) return;
     try {
-      await suspendMerchant(token, merchant.id, reason.trim());
+      await suspendMerchant(token, merchant.id, values.reason);
       toast.success('Merchant suspended');
       void load();
     } catch (e) {
@@ -131,6 +147,50 @@ export function MerchantDetailPage() {
       void load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Update failed');
+    }
+  };
+
+  const runDelete = async () => {
+    if (!merchant || !canDelete || !id) return;
+    const displayName = merchant.name?.trim() || id;
+    const values = await prompt({
+      title: 'Remove Dash partner store?',
+      description: (
+        <>
+          This permanently removes <span className="text-white font-medium">{displayName}</span> from
+          Roam Dash only — menu, documents, orders, and payouts. The owner&apos;s Roam login and
+          profiles in Driver, Courier, or other apps are untouched.
+        </>
+      ),
+      confirmLabel: 'Remove store',
+      variant: 'danger',
+      fields: [
+        {
+          key: 'reason',
+          label: 'Reason',
+          placeholder: 'e.g. Test merchant cleanup',
+          required: true,
+          multiline: true,
+        },
+        {
+          key: 'confirm_name',
+          label: `Type "${displayName}" to confirm`,
+          placeholder: displayName,
+          required: true,
+          matchValue: displayName,
+        },
+      ],
+    });
+    if (!values) return;
+    try {
+      const res = await deleteMerchant(token, merchant.id, {
+        reason: values.reason,
+        confirm_name: values.confirm_name,
+      });
+      toast.success(res.message || 'Merchant deleted');
+      navigate('/merchants');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Delete failed');
     }
   };
 
@@ -162,14 +222,22 @@ export function MerchantDetailPage() {
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-xl font-semibold text-white">{merchant.name}</h2>
+          <h2 className="text-xl font-semibold text-white">{merchant.name || ownerEmail || 'Draft application'}</h2>
           <p className="text-sm text-slate-400 mt-1">{ownerEmail || merchant.email}</p>
           <div className="flex gap-2 mt-2">
-            <MerchantStatusBadge status={merchant.verification_status} />
-            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">{opStatus}</span>
+            {merchant.onboarding_status === 'draft' ? (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300">
+                Draft — Step {merchant.wizard_step ?? 1} of 6
+              </span>
+            ) : (
+              <MerchantStatusBadge status={merchant.verification_status} />
+            )}
+            {merchant.onboarding_status !== 'draft' && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">{opStatus}</span>
+            )}
           </div>
         </div>
-        {canWrite && (
+        {canWrite && merchant.onboarding_status !== 'draft' && (
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => void assignMerchant(token, merchant.id, session.user.id)} className="px-3 py-1.5 text-sm rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800">
               Assign to me
@@ -191,6 +259,18 @@ export function MerchantDetailPage() {
         )}
       </div>
 
+      {merchant.onboarding_status === 'draft' && (
+        <section className="rounded-xl border border-sky-500/30 bg-sky-500/10 p-4">
+          <h3 className="text-sm font-medium text-sky-200">Application in progress</h3>
+          <p className="text-sm text-sky-100/80 mt-1">
+            Partner is on step {merchant.wizard_step ?? 1} of 6
+            {merchant.wizard_step_key ? ` (${merchant.wizard_step_key})` : ''}.
+            Application has not been submitted for review yet.
+          </p>
+        </section>
+      )}
+
+      {merchant.onboarding_status !== 'draft' && (
       <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
         <h3 className="text-sm font-medium text-white">Verification checklist</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -224,6 +304,7 @@ export function MerchantDetailPage() {
           </div>
         )}
       </section>
+      )}
 
       {documents.length > 0 && (
         <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
@@ -259,6 +340,23 @@ export function MerchantDetailPage() {
           ))}
         </div>
       </section>
+
+      {canDelete && (
+        <section className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 space-y-3">
+          <h3 className="text-sm font-medium text-red-200">Danger zone</h3>
+          <p className="text-sm text-red-100/70">
+            Remove this Dash partner store permanently. Use for test merchants or mistaken signups.
+            This does not delete the owner&apos;s Roam account or their access in other Roam apps.
+          </p>
+          <button
+            type="button"
+            onClick={() => void runDelete()}
+            className="px-3 py-1.5 text-sm rounded-lg bg-red-600/20 text-red-300 border border-red-500/30 hover:bg-red-600/30"
+          >
+            Remove Dash partner store
+          </button>
+        </section>
+      )}
 
       <MerchantActionDialog
         open={actionStatus != null}

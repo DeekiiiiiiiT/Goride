@@ -12,8 +12,7 @@ import {
   getDispatchSettings,
   updateDispatchSettings,
 } from '../services/ridesAdminService';
-
-const WRITE_ROLES = new Set(['platform_owner', 'superadmin', 'rides_admin']);
+import { useAdminConfirm } from '../contexts/AdminConfirmContext'; = new Set(['platform_owner', 'superadmin', 'rides_admin']);
 
 function isDeprecationEnabled(): boolean {
   if (typeof window === 'undefined') return false;
@@ -296,6 +295,7 @@ function SettingsSection({
 }
 
 export function DispatchSettingsForm({ accessToken, role }: DispatchSettingsFormProps) {
+  const { confirm } = useAdminConfirm();
   const isDeprecated = isDeprecationEnabled();
   const canEdit = isDeprecated ? false : (role ? WRITE_ROLES.has(role) : false);
 
@@ -379,7 +379,7 @@ export function DispatchSettingsForm({ accessToken, role }: DispatchSettingsForm
     return patch;
   };
 
-  const validateMatchingSection = (): boolean => {
+  const validateMatchingSection = async (): Promise<boolean> => {
     if (!form) return false;
     const radii = form.wave_radius_km.slice(0, form.max_match_waves);
     for (let i = 1; i < radii.length; i++) {
@@ -391,20 +391,21 @@ export function DispatchSettingsForm({ accessToken, role }: DispatchSettingsForm
     const aggressive =
       form.max_offers_per_wave > 10 ||
       radii.some((r, i) => i > 0 && r > (form.wave_radius_km[i - 1] ?? 0) * 2);
-    if (
-      aggressive &&
-      !window.confirm(
-        'These settings widen driver search or increase offers per wave. Save anyway?',
-      )
-    ) {
-      return false;
+    if (aggressive) {
+      const ok = await confirm({
+        title: 'Aggressive matching settings',
+        description: 'These settings widen driver search or increase offers per wave. Save anyway?',
+        confirmLabel: 'Save anyway',
+        variant: 'danger',
+      });
+      if (!ok) return false;
     }
     return true;
   };
 
   const handleSaveSection = async (section: SectionId) => {
     if (!accessToken || !form || !canEdit) return;
-    if (section === 'matching' && !validateMatchingSection()) return;
+    if (section === 'matching' && !(await validateMatchingSection())) return;
 
     setSavingSection(section);
     try {

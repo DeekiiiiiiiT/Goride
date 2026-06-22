@@ -18,13 +18,14 @@ Write actions require `dash_admin` or platform write roles (`dashPermissions.ts`
 | Method | Route | Description |
 |--------|-------|-------------|
 | GET | `/admin/dashboard/stats` | Platform KPIs |
-| GET | `/admin/merchants/incomplete-setup` | Auth-only signups + merchants with incomplete setup checklist |
+| GET | `/admin/merchants/incomplete-setup` | Draft merchants + submitted merchants with incomplete setup |
 | GET | `/admin/merchants/stats` | Verification counts |
 | GET | `/admin/merchants/queue` | SLA verification queue |
 | GET | `/admin/merchants` | List with filters |
 | GET | `/admin/merchants/:id` | Detail + team + docs |
 | POST | `/admin/merchants/:id/status` | Verification status change |
 | POST | `/admin/merchants/:id/suspend\|unsuspend\|deactivate\|reactivate` | Operational lifecycle |
+| DELETE | `/admin/merchants/:id` | Remove Dash partner store (`platform_owner` / `superadmin` / `dash_admin`; body: `reason`, `confirm_name`) |
 | PATCH | `/admin/merchants/:id/ops` | Force pause, commission |
 | PATCH | `/admin/merchants/:id/assign` | Reviewer assignment |
 | PATCH | `/admin/merchants/:id/checklist` | Verification checklist |
@@ -35,9 +36,19 @@ Write actions require `dash_admin` or platform write roles (`dashPermissions.ts`
 | GET | `/admin/orders/:id` | Order detail |
 | POST | `/admin/orders/:id/cancel\|complete` | Order ops |
 | GET | `/admin/customers` | Customer list |
+| DELETE | `/admin/customers/:id` | Remove Dash customer (`dash_admin`+; body: `reason`, `confirm_name`) |
+| DELETE | `/admin/team/:userId` | Revoke dash admin team role |
 | GET/PATCH | `/admin/finance/*` | Payouts, disputes, reviews |
 
 Courier admin routes remain under `/admin/couriers/*`.
+
+## Partner onboarding routes
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| POST | `/partner/bootstrap` | Idempotent draft `merchants` row when partner signs in |
+| PATCH | `/partner/onboarding-draft` | Sync wizard step + partial form JSON |
+| POST | `/merchants` | Final submit — transitions `draft` → `submitted` |
 
 Ops playbook: `docs/dash-admin/OPS_PLAYBOOK.md`
 
@@ -46,6 +57,20 @@ Ops playbook: `docs/dash-admin/OPS_PLAYBOOK.md`
 `pending` → `in_review` → `approved` | `rejected` | `docs_requested`
 
 Post-approval operations use `operational_status`: `active` | `suspended` | `deactivated`.
+
+## Product-scoped delete contract
+
+Destructive admin deletes use this shape across Dash routes (merchants, customers, team):
+
+```
+DELETE /admin/{entity}/:id
+Body: { reason: string, confirm_name: string }
+Auth: {product}_admin | platform_owner | superadmin
+Effect: remove product data only; auth.users unchanged
+Response: { ok: true, message: string }
+```
+
+`confirm_name` must match the entity display name (or id for drafts). Never deletes `auth.users`.
 
 ## SMTP
 

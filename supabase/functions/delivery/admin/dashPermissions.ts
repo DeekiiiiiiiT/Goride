@@ -10,6 +10,7 @@ export const DASH_WRITE_ROLES = new Set([
 export const DASH_DELETE_ROLES = new Set([
   "platform_owner",
   "superadmin",
+  "dash_admin",
 ]);
 
 export const DASH_FORCE_APPROVE_ROLES = new Set([
@@ -40,7 +41,7 @@ export function requireDashDelete(admin: ProductAdminUser): Response | null {
     return new Response(
       JSON.stringify({
         error: "forbidden",
-        message: "platform_owner or superadmin required for delete actions",
+        message: "platform_owner, superadmin, or dash_admin required for delete actions",
       }),
       { status: 403, headers: { "Content-Type": "application/json" } },
     );

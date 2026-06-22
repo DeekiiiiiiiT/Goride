@@ -93,6 +93,7 @@ app.get("/merchants", async (c) => {
   let query = supabase
     .from("merchants")
     .select("*")
+    .eq("onboarding_status", "submitted")
     .eq("is_active", true)
     .eq("is_accepting_orders", true);
   
@@ -118,6 +119,11 @@ app.get("/merchants/:id", async (c) => {
     .single();
   
   if (merchantError) return c.json({ error: merchantError.message }, 404);
+
+  const m = merchant as Record<string, unknown>;
+  if (m.onboarding_status === "draft" || !m.is_active) {
+    return c.json({ error: "Merchant not found" }, 404);
+  }
   
   const { data: categories } = await supabase
     .from("menu_categories")
