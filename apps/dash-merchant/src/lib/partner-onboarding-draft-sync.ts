@@ -14,6 +14,7 @@ export function formDataToOnboardingDraft(
     email: formData.email || undefined,
     businessType: formData.businessType || undefined,
     cuisineTypes: formData.cuisineTypes,
+    inventoryCategories: formData.inventoryCategories,
     location: formData.location
       ? {
           lat: formData.location.lat,
@@ -59,6 +60,7 @@ export function onboardingDraftToFormData(
     email: d.email || sessionEmail,
     businessType: (d.businessType as SignUpFormData['businessType']) ?? '',
     cuisineTypes: d.cuisineTypes ?? [],
+    inventoryCategories: d.inventoryCategories ?? [],
     location: d.location ?? null,
     streetAddress: d.streetAddress ?? d.location?.streetAddress ?? '',
     city: d.city ?? d.location?.city ?? '',

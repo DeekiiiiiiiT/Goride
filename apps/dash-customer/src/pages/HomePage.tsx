@@ -1,20 +1,19 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { ActiveOrderBanner } from '@/components/home/ActiveOrderBanner';
 import { QuickReorderSection } from '@/components/home/QuickReorderSection';
+import { DiscoverStoreCard } from '@/components/discovery/DiscoverStoreCard';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { FavoriteButton } from '@/components/ui/FavoriteButton';
 import { PromoCarousel } from '@/components/ui/PromoCarousel';
 import { PullToRefresh } from '@/components/ui/PullToRefresh';
 import { RestaurantCardSkeleton } from '@/components/ui/RestaurantCardSkeleton';
 import { toast } from '@/lib/toast';
 import {
-  CUISINE_CHIPS,
-  FEATURED_RESTAURANTS,
-  HOME_CATEGORY_CHIPS,
-  POPULAR_RESTAURANTS,
-  RECOMMENDED_RESTAURANTS,
-} from '@/lib/discoverContent';
+  fetchDiscoverMerchants,
+  HOME_VERTICAL_TABS,
+  type DiscoverMerchant,
+} from '@/lib/merchantDiscovery';
+import type { VerticalType } from '@roam/types';
 import { getSavedAddress } from '@/lib/addressStorage';
 
 type HomePageProps = {
@@ -22,120 +21,145 @@ type HomePageProps = {
   onSearchFocus?: () => void;
   showActiveOrder?: boolean;
   showQuickReorder?: boolean;
+  onProfileClick?: () => void;
 };
 
-const CUISINE_MATCH: Record<string, string> = {
-  all: '',
-  jamaican: 'jamaican',
-  pizza: 'pizza',
-  'fast-food': 'fast food',
-  chinese: 'chinese',
-  indian: 'indian',
-  healthy: 'healthy',
-  cafe: 'cafe',
-  desserts: 'dessert',
-  breakfast: 'breakfast',
-};
-
-function RatingBadge({ rating }: { rating: number }) {
-  return (
-    <div className="flex items-center gap-1 bg-surface-container px-1.5 py-0.5 rounded text-on-surface text-xs font-medium">
-      <MaterialIcon name="star" className="text-sm text-primary" filled />
-      {rating}
-    </div>
-  );
-}
-
-export default function HomePage({ onNavigate, onSearchFocus, showActiveOrder, showQuickReorder }: HomePageProps) {
-  const [selectedCuisine, setSelectedCuisine] = useState('all');
-  const [loading, setLoading] = useState(false);
+export default function HomePage({
+  onNavigate,
+  onSearchFocus,
+  showActiveOrder,
+  showQuickReorder,
+  onProfileClick,
+}: HomePageProps) {
+  const [selectedVertical, setSelectedVertical] = useState<VerticalType>('restaurant');
+  const [merchants, setMerchants] = useState<DiscoverMerchant[]>([]);
+  const [loading, setLoading] = useState(true);
   const savedAddress = getSavedAddress();
   const addressLabel = savedAddress
-    ? `${savedAddress.line1}${savedAddress.line2 ? `, ${savedAddress.line2}` : ''}`
-    : '45 Constant Spring Rd';
+    ? `Deliver to · ${savedAddress.line1}${savedAddress.line2 ? `, ${savedAddress.line2}` : ''}`
+    : 'Deliver to · 45 Constant Spring Rd';
 
-  const handleRefresh = useCallback(async () => {
+  const loadMerchants = useCallback(async (vertical: VerticalType) => {
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 800));
+    const data = await fetchDiscoverMerchants(vertical);
+    setMerchants(data);
     setLoading(false);
-    toast.success('Feed updated');
   }, []);
 
-  const filteredPopular =
-    selectedCuisine === 'all'
-      ? POPULAR_RESTAURANTS
-      : POPULAR_RESTAURANTS.filter((r) =>
-          r.cuisines.toLowerCase().includes(CUISINE_MATCH[selectedCuisine] ?? selectedCuisine),
-        );
+  useEffect(() => {
+    void loadMerchants(selectedVertical);
+  }, [loadMerchants, selectedVertical]);
+
+  const handleRefresh = useCallback(async () => {
+    await loadMerchants(selectedVertical);
+    toast.success('Feed updated');
+  }, [loadMerchants, selectedVertical]);
+
+  const filteredPopular = useMemo(() => {
+    if (selectedVertical === 'restaurant') return merchants;
+    return merchants.filter((m) => m.vertical_type === selectedVertical);
+  }, [merchants, selectedVertical]);
+
+  const openStore = (merchant: DiscoverMerchant) => {
+    onNavigate('restaurant', {
+      merchantId: merchant.id,
+      verticalType: merchant.vertical_type,
+    });
+  };
 
   return (
-    <PullToRefresh onRefresh={handleRefresh} className="bg-surface min-h-full">
+    <PullToRefresh onRefresh={handleRefresh} className="min-h-full bg-surface">
+      <header className="sticky top-0 z-40 flex h-16 w-full items-center justify-between border-b border-outline-variant/30 bg-surface px-4 shadow-sm safe-t">
+        <button
+          type="button"
+          onClick={() => onNavigate('addresses')}
+          className="flex max-w-[200px] items-center gap-2 rounded-full border border-outline-variant bg-surface-container-low px-3 py-1.5 shadow-sm transition-transform active:scale-95"
+        >
+          <MaterialIcon name="location_on" className="text-xl text-primary" />
+          <span className="truncate text-label-lg font-semibold text-on-surface">{addressLabel}</span>
+          <MaterialIcon name="keyboard_arrow_down" className="text-lg text-on-surface-variant" />
+        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            className="relative flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-surface-container-high"
+          >
+            <MaterialIcon name="notifications" className="text-on-surface-variant" />
+            <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-error" />
+          </button>
+          <button
+            type="button"
+            onClick={onProfileClick}
+            className="h-9 w-9 overflow-hidden rounded-full border border-outline-variant"
+          >
+            <img alt="Profile" className="h-full w-full object-cover" src="/images/avatar.png" />
+          </button>
+        </div>
+      </header>
+
       {showActiveOrder ? (
-        <main className="flex flex-col gap-6 px-4 mt-4 max-w-[1200px] mx-auto">
+        <main className="mx-auto mt-4 flex max-w-[1200px] flex-col gap-6 px-4">
           <ActiveOrderBanner onTrack={() => onNavigate('tracking', { orderId: '8492' })} />
-          <section className="flex overflow-x-auto no-scrollbar gap-2 pb-1 -mx-4 px-4">
-            {HOME_CATEGORY_CHIPS.map((chip) => (
-              <button
-                key={chip.id}
-                type="button"
-                className={`shrink-0 px-4 py-2 rounded-full text-sm font-semibold tracking-wide whitespace-nowrap active:scale-95 transition-transform ${chip.className}`}
-              >
-                {chip.label}
-              </button>
-            ))}
-          </section>
           <section className="flex flex-col gap-4">
             <h2 className="text-xl font-semibold text-on-surface">Recommended for you</h2>
             {loading ? (
               <RestaurantCardSkeleton count={2} variant="card" />
             ) : (
               <div className="grid grid-cols-2 gap-4">
-                {RECOMMENDED_RESTAURANTS.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => onNavigate('restaurant', { merchantId: item.id })}
-                    className={`bg-surface-container-lowest rounded-[24px] shadow-[0px_4px_20px_rgba(0,0,0,0.04)] overflow-hidden flex flex-col active:scale-[0.98] transition-transform text-left group ${
-                      item.large ? 'col-span-2' : 'col-span-1'
-                    }`}
-                  >
-                    <div className={`w-full relative overflow-hidden bg-surface-variant ${item.large ? 'aspect-[16/9]' : 'aspect-square'}`}>
-                      <img alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" src={item.image} />
-                    </div>
-                    <div className={`bg-surface-container-lowest w-full ${item.large ? 'p-4' : 'p-3'}`}>
-                      <h3 className={`font-semibold text-on-surface truncate ${item.large ? 'text-xl' : 'text-sm'}`}>{item.name}</h3>
-                      <p className="text-sm text-on-surface-variant mt-1 truncate">{item.meta}</p>
-                    </div>
-                  </button>
+                {filteredPopular.slice(0, 4).map((item) => (
+                  <DiscoverStoreCard key={item.id} merchant={item} onClick={() => openStore(item)} />
                 ))}
               </div>
             )}
           </section>
         </main>
       ) : (
-        <main>
-          <div className="px-4 py-2 flex flex-col gap-1 mt-1 max-w-[1200px] mx-auto">
-            <div className="flex items-center gap-1 text-on-surface">
-              <MaterialIcon name="location_on" className="text-primary text-lg" filled />
-              <span className="text-sm font-semibold tracking-wide">{addressLabel}</span>
-              <MaterialIcon name="expand_more" className="text-on-surface-variant text-base" />
-            </div>
-            <div className="flex items-center gap-1 text-on-surface-variant ml-6">
-              <MaterialIcon name="schedule" className="text-sm" />
-              <span className="text-sm">Now • 25-35 min</span>
-            </div>
-          </div>
-
-          <div className="px-4 py-2 mt-1 max-w-[1200px] mx-auto">
+        <main className="pb-8">
+          <section className="mx-auto mt-6 max-w-[1200px] px-4">
             <button
               type="button"
               onClick={onSearchFocus}
-              className="w-full bg-surface-container-high rounded-lg flex items-center px-4 py-3 shadow-sm text-left"
+              className="group relative flex h-14 w-full items-center rounded-xl border border-outline-variant bg-white shadow-sm transition-all"
             >
-              <MaterialIcon name="search" className="text-on-surface-variant" />
-              <span className="ml-2 text-base text-on-surface-variant">Search for restaurants or dishes</span>
+              <MaterialIcon
+                name="search"
+                className="pointer-events-none absolute left-4 text-on-surface-variant"
+              />
+              <span className="pl-12 text-body-md text-on-surface-variant">
+                Search restaurants, groceries, stores...
+              </span>
+              <span className="absolute right-4 rounded-lg p-1 text-primary transition-colors group-hover:bg-surface-container">
+                <MaterialIcon name="tune" />
+              </span>
             </button>
-          </div>
+          </section>
+
+          <section className="mt-6 overflow-x-auto no-scrollbar">
+            <div className="flex min-w-max gap-3 px-4 pb-2">
+              {HOME_VERTICAL_TABS.map((tab) => {
+                const active = selectedVertical === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setSelectedVertical(tab.id)}
+                    className={`flex items-center gap-2 whitespace-nowrap rounded-full px-6 py-2.5 text-label-lg font-semibold transition-all active:scale-95 ${
+                      active
+                        ? 'bg-primary text-on-primary shadow-md'
+                        : 'border border-outline-variant bg-white text-on-surface-variant hover:bg-surface-container-low'
+                    }`}
+                  >
+                    <MaterialIcon
+                      name={tab.icon}
+                      className="text-xl"
+                      filled={active && tab.filled}
+                    />
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
 
           <PromoCarousel onPromoClick={() => onNavigate('promotions')} />
 
@@ -145,106 +169,35 @@ export default function HomePage({ onNavigate, onSearchFocus, showActiveOrder, s
             </div>
           )}
 
-          <div className="flex overflow-x-auto px-4 gap-2 py-2 no-scrollbar items-center max-w-[1200px] mx-auto">
-            {CUISINE_CHIPS.map((chip) => (
+          <section className="mx-auto mt-8 max-w-[1200px] px-4">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-headline-lg-mobile font-bold text-on-surface">Popular near you</h2>
               <button
-                key={chip.id}
                 type="button"
-                onClick={() => setSelectedCuisine(chip.id)}
-                className={`flex items-center gap-1 px-4 py-2 rounded-full whitespace-nowrap text-sm font-semibold tracking-wide transition-colors active:scale-95 ${
-                  selectedCuisine === chip.id
-                    ? 'bg-surface-variant text-on-surface shadow-sm'
-                    : 'bg-surface-container text-on-surface border border-transparent hover:border-outline-variant'
-                }`}
+                className="flex items-center gap-1 text-label-lg font-semibold text-primary"
               >
-                {chip.emoji} {chip.label}
+                See all
+                <MaterialIcon name="arrow_forward" className="text-lg" />
               </button>
-            ))}
-          </div>
-
-          <section className="mt-6 max-w-[1200px] mx-auto">
-            <div className="px-4 flex justify-between items-end mb-2">
-              <h2 className="text-xl font-bold text-on-surface">Featured</h2>
             </div>
-            {loading ? (
-              <div className="px-4">
-                <RestaurantCardSkeleton count={2} variant="card" />
-              </div>
-            ) : (
-              <div className="flex overflow-x-auto px-4 gap-4 pb-4 pt-1 no-scrollbar snap-x">
-                {FEATURED_RESTAURANTS.map((restaurant) => (
-                  <button
-                    key={restaurant.id}
-                    type="button"
-                    onClick={() => onNavigate('restaurant', { merchantId: restaurant.id })}
-                    className="min-w-[80%] sm:min-w-[280px] snap-start bg-surface-container-lowest rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.04)] overflow-hidden flex flex-col active:scale-[0.98] transition-transform border border-surface-container-high text-left"
-                  >
-                    <div className="h-32 w-full relative">
-                      <img alt={restaurant.name} className="w-full h-full object-cover" src={restaurant.image} />
-                    </div>
-                    <div className="p-4 flex flex-col gap-1">
-                      <div className="flex justify-between items-start">
-                        <h3 className="text-lg font-bold text-on-surface">{restaurant.name}</h3>
-                        <RatingBadge rating={restaurant.rating} />
-                      </div>
-                      <p className="text-sm text-on-surface-variant">{restaurant.cuisines}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section className="mt-6 max-w-[1200px] mx-auto">
-            <div className="px-4 mb-2">
-              <h2 className="text-xl font-bold text-on-surface">Popular Near You</h2>
-            </div>
-            <div className="flex flex-col gap-6 px-4">
+            <div className="flex flex-col gap-6">
               {loading ? (
                 <RestaurantCardSkeleton count={2} />
               ) : filteredPopular.length === 0 ? (
                 <EmptyState
-                  icon="restaurant"
-                  title="No restaurants found"
-                  description="Try a different cuisine filter or pull to refresh."
-                  actionLabel="Clear filters"
-                  onAction={() => setSelectedCuisine('all')}
+                  icon="storefront"
+                  title="No stores found"
+                  description="Try another category or pull to refresh."
+                  actionLabel="Show all food"
+                  onAction={() => setSelectedVertical('restaurant')}
                 />
               ) : (
-                filteredPopular.map((restaurant) => (
-                  <button
-                    key={restaurant.id}
-                    type="button"
-                    onClick={() => onNavigate('restaurant', { merchantId: restaurant.id })}
-                    className="bg-surface-container-lowest rounded-[24px] shadow-[0px_4px_20px_rgba(0,0,0,0.04)] overflow-hidden flex flex-col active:scale-[0.98] transition-transform border border-surface-container-high group text-left"
-                  >
-                    <div className="h-48 w-full relative overflow-hidden">
-                      <img
-                        alt={restaurant.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        src={restaurant.image}
-                      />
-                      {restaurant.promoted && (
-                        <div className="absolute top-2 left-2 bg-surface-container-lowest/90 backdrop-blur-sm text-on-surface text-xs px-2 py-1 rounded-full shadow-sm flex items-center gap-1 border border-surface-container-high">
-                          <MaterialIcon name="campaign" className="text-xs text-primary" />
-                          Promoted
-                        </div>
-                      )}
-                      <div className="absolute top-2 right-2">
-                        <FavoriteButton merchantId={restaurant.id} merchantName={restaurant.name} />
-                      </div>
-                    </div>
-                    <div className="p-4 flex flex-col gap-1">
-                      <div className="flex justify-between items-center">
-                        <h3 className="text-xl font-bold text-on-surface">{restaurant.name}</h3>
-                        <div className="flex items-center gap-1 bg-surface-container px-2 py-1 rounded-full text-sm font-semibold tracking-wide">
-                          <MaterialIcon name="star" className="text-base text-primary" filled />
-                          {restaurant.rating}
-                        </div>
-                      </div>
-                      <p className="text-sm text-on-surface-variant">{restaurant.cuisines}</p>
-                    </div>
-                  </button>
+                filteredPopular.map((merchant) => (
+                  <DiscoverStoreCard
+                    key={merchant.id}
+                    merchant={merchant}
+                    onClick={() => openStore(merchant)}
+                  />
                 ))
               )}
             </div>

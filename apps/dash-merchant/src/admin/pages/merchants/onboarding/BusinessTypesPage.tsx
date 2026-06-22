@@ -12,8 +12,11 @@ import {
   listMerchantBusinessTypes,
   updateMerchantBusinessType,
   updateMerchantBusinessTypeSection,
+  type MerchantBusinessTypeDto,
   type MerchantBusinessTypeSectionDto,
 } from '../../../services/dashAdminService';
+import { BusinessTypeMetadataPanel } from '../../../components/BusinessTypeMetadataPanel';
+import { getDefaultConfig } from '@roam/vertical-config';
 import type { AdminOutletContext } from '../../../DashAdminPortal';
 import { invalidateMerchantBusinessTypesCache } from '../../../../hooks/useMerchantBusinessTypes';
 
@@ -34,6 +37,8 @@ export function BusinessTypesPage() {
   const [editingSectionLabel, setEditingSectionLabel] = useState('');
   const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
   const [editingTypeLabel, setEditingTypeLabel] = useState('');
+  const [metadataTypeId, setMetadataTypeId] = useState<string | null>(null);
+  const [metadataDraft, setMetadataDraft] = useState<MerchantBusinessTypeDto | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -118,7 +123,19 @@ export function BusinessTypesPage() {
     if (!label) return;
     setBusy(true);
     try {
-      await createMerchantBusinessType(token, { label, section_id: sectionId });
+      const defaults = getDefaultConfig({ label });
+      await createMerchantBusinessType(token, {
+        label,
+        section_id: sectionId,
+        vertical_type: defaults.vertical_type,
+        fulfillment_type: defaults.fulfillment_type,
+        category_taxonomy_key: defaults.category_taxonomy_key,
+        default_prep_time_mins: defaults.default_prep_time_mins,
+        max_delivery_radius_km: defaults.max_delivery_radius_km,
+        compliance_tier: defaults.compliance_tier,
+        go_live_rule: defaults.go_live_rule,
+        required_document_types: defaults.required_document_types,
+      });
       setNewTypeLabel('');
       setAddingTypeSectionId(null);
       toast.success('Business type added');
@@ -144,6 +161,36 @@ export function BusinessTypesPage() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleSaveMetadata = async (type: MerchantBusinessTypeDto) => {
+    if (!metadataDraft) return;
+    setBusy(true);
+    try {
+      await updateMerchantBusinessType(token, type.id, {
+        vertical_type: metadataDraft.vertical_type,
+        fulfillment_type: metadataDraft.fulfillment_type,
+        category_taxonomy_key: metadataDraft.category_taxonomy_key,
+        default_prep_time_mins: metadataDraft.default_prep_time_mins,
+        max_delivery_radius_km: metadataDraft.max_delivery_radius_km,
+        compliance_tier: metadataDraft.compliance_tier,
+        go_live_rule: metadataDraft.go_live_rule,
+        required_document_types: metadataDraft.required_document_types,
+      });
+      setMetadataTypeId(null);
+      setMetadataDraft(null);
+      toast.success('Metadata updated');
+      await refreshCatalog();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to update metadata');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openMetadata = (type: MerchantBusinessTypeDto) => {
+    setMetadataTypeId(type.id);
+    setMetadataDraft(getDefaultConfig(type));
   };
 
   const handleRemoveType = async (id: string, label: string) => {
@@ -313,9 +360,24 @@ export function BusinessTypesPage() {
                             <div>
                               <p className="text-sm text-white">{type.label}</p>
                               <p className="text-xs text-slate-500 font-mono">{type.id}</p>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+                                  {type.vertical_type ?? 'restaurant'}
+                                </span>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+                                  {type.fulfillment_type ?? 'cook_to_order'}
+                                </span>
+                              </div>
                             </div>
                             {canWrite && (
                               <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => openMetadata(type)}
+                                  className="px-2 py-1 text-xs rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
+                                >
+                                  Metadata
+                                </button>
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -338,6 +400,37 @@ export function BusinessTypesPage() {
                               </div>
                             )}
                           </>
+                        )}
+                        {metadataTypeId === type.id && metadataDraft && (
+                          <div className="w-full px-4 pb-3">
+                            <BusinessTypeMetadataPanel
+                              value={metadataDraft}
+                              disabled={!canWrite || busy}
+                              onChange={setMetadataDraft}
+                            />
+                            {canWrite && (
+                              <div className="flex gap-2 mt-2">
+                                <button
+                                  type="button"
+                                  disabled={busy}
+                                  onClick={() => void handleSaveMetadata(type)}
+                                  className="px-3 py-1.5 text-sm rounded-lg bg-emerald-600 text-white disabled:opacity-50"
+                                >
+                                  Save metadata
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setMetadataTypeId(null);
+                                    setMetadataDraft(null);
+                                  }}
+                                  className="px-3 py-1.5 text-sm rounded-lg text-slate-400"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
                     ))

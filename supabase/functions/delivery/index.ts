@@ -88,7 +88,7 @@ app.get("/health", (c) => c.json({ service: "delivery", status: "ok", timestamp:
 // List active merchants (public)
 app.get("/merchants", async (c) => {
   const supabase = getSupabase(null);
-  const { cuisine, lat, lng, radius } = c.req.query();
+  const { cuisine, lat, lng, radius, vertical } = c.req.query();
   
   let query = supabase
     .from("merchants")
@@ -99,6 +99,9 @@ app.get("/merchants", async (c) => {
   
   if (cuisine) {
     query = query.eq("cuisine_type", cuisine);
+  }
+  if (vertical) {
+    query = query.eq("vertical_type", vertical);
   }
   
   const { data, error } = await query.order("rating", { ascending: false });

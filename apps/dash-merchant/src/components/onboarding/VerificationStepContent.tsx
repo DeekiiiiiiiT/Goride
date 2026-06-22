@@ -1,15 +1,74 @@
+import type { MerchantBusinessTypeConfig, MerchantDocumentType } from '@roam/types';
+import { getBusinessTypeConfig } from '@roam/vertical-config';
 import { SignUpFormData, UploadedDocumentRef } from '../../signup/types';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
 import UploadArea from '../../signup/components/UploadArea';
 import { uploadMerchantDocument } from '../../lib/partner-api';
-import type { MerchantDocumentType } from '@roam/types';
-import { SectionCard, SectionHeader } from './OnboardingShell';
+import { inputClass } from './OnboardingShell';
+import { useMerchantBusinessTypes } from '../../hooks/useMerchantBusinessTypes';
 
 interface VerificationStepContentProps {
   data: SignUpFormData;
   onChange: (patch: Partial<SignUpFormData>) => void;
   enableUpload?: boolean;
+  typeConfig?: MerchantBusinessTypeConfig | null;
 }
+
+const DOC_CONFIG: Record<
+  MerchantDocumentType,
+  {
+    field: keyof SignUpFormData;
+    fileField: keyof SignUpFormData;
+    icon: string;
+    label: string;
+    hint: string;
+    accept: string;
+    regulated?: boolean;
+  }
+> = {
+  id_front: {
+    field: 'idFrontDoc',
+    fileField: 'idFrontFile',
+    icon: 'badge',
+    label: 'Front side',
+    hint: 'JPEG, PNG up to 10MB',
+    accept: 'image/*',
+  },
+  id_back: {
+    field: 'idBackDoc',
+    fileField: 'idBackFile',
+    icon: 'id_card',
+    label: 'Back side',
+    hint: 'JPEG, PNG up to 10MB',
+    accept: 'image/*',
+  },
+  proof_of_business: {
+    field: 'proofOfBusinessDoc',
+    fileField: 'proofOfBusinessFile',
+    icon: 'description',
+    label: 'Proof of business',
+    hint: 'Utility bill or lease — PDF, JPEG, PNG',
+    accept: '.pdf,image/*',
+  },
+  liquor_license: {
+    field: 'liquorLicenseDoc',
+    fileField: 'liquorLicenseFile',
+    icon: 'liquor',
+    label: 'Liquor license',
+    hint: 'PDF, JPEG, PNG up to 10MB',
+    accept: '.pdf,image/*',
+    regulated: true,
+  },
+  pharmacy_permit: {
+    field: 'pharmacyPermitDoc',
+    fileField: 'pharmacyPermitFile',
+    icon: 'clinical_notes',
+    label: 'Pharmaceutical Retail License',
+    hint: 'Required for pharmacy partners',
+    accept: '.pdf,image/*',
+    regulated: true,
+  },
+};
 
 function docRefFromUpload(
   docType: MerchantDocumentType,
@@ -28,98 +87,175 @@ export default function VerificationStepContent({
   data,
   onChange,
   enableUpload = false,
+  typeConfig: typeConfigProp,
 }: VerificationStepContentProps) {
-  const makeUploader = (
-    docType: MerchantDocumentType,
-    field: 'idFrontDoc' | 'idBackDoc' | 'proofOfBusinessDoc',
-    fileField: 'idFrontFile' | 'idBackFile' | 'proofOfBusinessFile',
-  ) => {
+  const { sections } = useMerchantBusinessTypes();
+  const typeConfig = typeConfigProp ?? getBusinessTypeConfig(sections, data.businessType);
+  const requiredDocs = typeConfig?.required_document_types ?? [
+    'id_front',
+    'id_back',
+    'proof_of_business',
+  ];
+
+  const makeUploader = (docType: MerchantDocumentType) => {
     if (!enableUpload) return undefined;
+    const cfg = DOC_CONFIG[docType];
     return async (file: File) => {
       const { document } = await uploadMerchantDocument(docType, file);
       const ref = docRefFromUpload(docType, file, document);
-      onChange({ [field]: ref, [fileField]: file });
+      onChange({ [cfg.field]: ref, [cfg.fileField]: file });
       return ref;
     };
   };
 
+  const idDocs = requiredDocs.filter((d) => d === 'id_front' || d === 'id_back');
+  const standardDocs = requiredDocs.filter(
+    (d) => d !== 'id_front' && d !== 'id_back' && !DOC_CONFIG[d]?.regulated,
+  );
+  const regulatedDocs = requiredDocs.filter((d) => DOC_CONFIG[d]?.regulated);
+
+  const ownerComplete = data.ownerFullName.trim().length > 0;
+
   return (
-    <SectionCard className="md:p-inset-lg">
-      <SectionHeader
-        icon="verified_user"
-        title="Verify your identity"
-        subtitle="To maintain a secure platform, we need to verify the business owner's details."
-      />
-      <hr className="border-outline-variant/50" />
-      <div className="flex flex-col gap-inset-lg">
-        <div>
-          <label className="mb-inset-xs block text-label-md font-semibold text-on-surface" htmlFor="ownerName">
-            Owner full name <span className="text-error">*</span>
-          </label>
+    <section className="space-y-8">
+      <div className="md:hidden">
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-title-md font-semibold text-on-surface">Verify & Compliance</h2>
+          <span className="text-label-md text-on-surface-variant">Step 5/6</span>
+        </div>
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-container-highest">
+          <div className="h-full w-5/6 rounded-full bg-primary" />
+        </div>
+      </div>
+
+      <header>
+        <h3 className="text-headline-md font-semibold text-on-background">Verification details</h3>
+        <p className="mt-2 text-body-md text-on-surface-variant">
+          Please upload the following documents to comply with local regulations and secure your account.
+        </p>
+      </header>
+
+      <div>
+        <label className="mb-2 block px-1 text-label-md text-on-surface-variant" htmlFor="ownerName">
+          Owner full name*
+        </label>
+        <div className="relative">
           <input
             id="ownerName"
             type="text"
-            className="h-12 w-full rounded-lg border border-outline-variant bg-transparent px-4 text-body-lg text-on-surface partner-field"
-            placeholder="e.g. Jane Doe"
+            className={`${inputClass} h-14 text-body-lg`}
+            placeholder="Enter name as it appears on ID"
             value={data.ownerFullName}
             onChange={(e) => onChange({ ownerFullName: e.target.value })}
           />
-        </div>
-
-        <div className="border-t border-outline-variant pt-inset-lg">
-          <h2 className="mb-inset-md text-headline-md font-semibold text-on-surface">Document upload</h2>
-          <div className="mb-inset-lg space-y-inset-sm">
-            <label className="block text-label-md font-semibold text-on-surface">Government ID</label>
-            <p className="mb-inset-xs text-body-sm text-on-surface-variant">
-              Upload clear photos of the front and back of your valid government-issued ID.
-            </p>
-            <div className="grid grid-cols-1 gap-inset-sm md:grid-cols-2">
-              <UploadArea
-                icon="badge"
-                label="Upload ID front"
-                hint="JPEG, PNG up to 10MB"
-                accept="image/*"
-                file={data.idFrontFile}
-                onChange={(file) => onChange({ idFrontFile: file })}
-                uploadedDoc={data.idFrontDoc}
-                onUpload={makeUploader('id_front', 'idFrontDoc', 'idFrontFile')}
-              />
-              <UploadArea
-                icon="id_card"
-                label="Upload ID back"
-                hint="JPEG, PNG up to 10MB"
-                accept="image/*"
-                file={data.idBackFile}
-                onChange={(file) => onChange({ idBackFile: file })}
-                uploadedDoc={data.idBackDoc}
-                onUpload={makeUploader('id_back', 'idBackDoc', 'idBackFile')}
-              />
-            </div>
-          </div>
-          <div className="space-y-inset-sm">
-            <label className="block text-label-md font-semibold text-on-surface">Proof of business</label>
-            <p className="mb-inset-xs text-body-sm text-on-surface-variant">
-              Business license, utility bill (last 3 months), or commercial lease agreement.
-            </p>
-            <UploadArea
-              icon="description"
-              label="Upload business document"
-              hint="PDF, JPEG, PNG up to 10MB"
-              accept=".pdf,image/*"
-              file={data.proofOfBusinessFile}
-              onChange={(file) => onChange({ proofOfBusinessFile: file })}
-              uploadedDoc={data.proofOfBusinessDoc}
-              onUpload={makeUploader('proof_of_business', 'proofOfBusinessDoc', 'proofOfBusinessFile')}
-              minHeight="min-h-[160px]"
+          {ownerComplete && (
+            <MaterialIcon
+              name="check_circle"
+              filled
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-primary"
             />
-          </div>
-        </div>
-
-        <div className="flex items-center justify-center gap-inset-xs text-on-surface-variant">
-          <MaterialIcon name="info" size={18} />
-          <span className="text-label-sm">Verification takes 1–2 business days.</span>
+          )}
         </div>
       </div>
-    </SectionCard>
+
+      {idDocs.length > 0 && (
+        <div className="space-y-4">
+          <label className="px-1 text-label-md uppercase tracking-wider text-on-surface-variant">
+            Government ID upload*
+          </label>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {idDocs.map((docType) => {
+              const cfg = DOC_CONFIG[docType];
+              return (
+                <UploadArea
+                  key={docType}
+                  icon={cfg.icon}
+                  label={cfg.label}
+                  hint={cfg.hint}
+                  accept={cfg.accept}
+                  file={data[cfg.fileField] as File | null}
+                  onChange={(file) => onChange({ [cfg.fileField]: file })}
+                  uploadedDoc={data[cfg.field] as UploadedDocumentRef | null}
+                  onUpload={makeUploader(docType)}
+                  minHeight="min-h-[12rem]"
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {standardDocs.map((docType) => {
+        const cfg = DOC_CONFIG[docType];
+        return (
+          <div key={docType} className="space-y-2">
+            <label className="px-1 text-label-md uppercase tracking-wider text-on-surface-variant">
+              Proof of business (Utility bill / Lease)
+            </label>
+            <UploadArea
+              icon={cfg.icon}
+              label={cfg.label}
+              hint={cfg.hint}
+              accept={cfg.accept}
+              file={data[cfg.fileField] as File | null}
+              onChange={(file) => onChange({ [cfg.fileField]: file })}
+              uploadedDoc={data[cfg.field] as UploadedDocumentRef | null}
+              onUpload={makeUploader(docType)}
+              minHeight="min-h-[140px]"
+            />
+          </div>
+        );
+      })}
+
+      {regulatedDocs.map((docType) => {
+        const cfg = DOC_CONFIG[docType];
+        return (
+          <div
+            key={docType}
+            className="space-y-4 rounded-r-xl border-l-4 border-primary bg-surface-container-low py-2 pl-4"
+          >
+            <div className="flex items-start justify-between pr-4">
+              <div>
+                <label className="text-title-md text-on-surface">
+                  {cfg.label}
+                  <span className="ml-1 text-error">*</span>
+                </label>
+                <p className="text-label-md text-on-surface-variant">{cfg.hint}</p>
+              </div>
+              <span className="rounded bg-primary px-2 py-1 text-[10px] font-bold uppercase text-on-primary">
+                New
+              </span>
+            </div>
+            <UploadArea
+              icon={cfg.icon}
+              label={cfg.label}
+              hint="PDF or image up to 10MB"
+              accept={cfg.accept}
+              file={data[cfg.fileField] as File | null}
+              onChange={(file) => onChange({ [cfg.fileField]: file })}
+              uploadedDoc={data[cfg.field] as UploadedDocumentRef | null}
+              onUpload={makeUploader(docType)}
+              minHeight="min-h-[120px]"
+            />
+          </div>
+        );
+      })}
+
+      <div className="flex flex-col items-center gap-6 rounded-2xl bg-surface-container-low p-6 md:flex-row">
+        <div className="flex-1">
+          <h4 className="flex items-center gap-2 text-title-md text-on-surface">
+            <MaterialIcon name="verified_user" className="text-primary" />
+            What&apos;s next?
+          </h4>
+          <p className="mt-2 text-body-md text-on-surface-variant">
+            Verification takes 1–2 business days. You&apos;ll receive an email and a push notification as
+            soon as your account is activated.
+          </p>
+        </div>
+        <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-xl bg-primary-container/20">
+          <MaterialIcon name="verified" filled className="text-4xl text-primary-container" />
+        </div>
+      </div>
+    </section>
   );
 }

@@ -16,16 +16,68 @@ export type CustomerAccountStatus = 'active' | 'suspended';
 
 export type DisputeStatus = 'open' | 'investigating' | 'resolved' | 'refunded' | 'denied';
 
-export type MerchantDocumentType = 'id_front' | 'id_back' | 'proof_of_business';
+export type MerchantDocumentType =
+  | 'id_front'
+  | 'id_back'
+  | 'proof_of_business'
+  | 'liquor_license'
+  | 'pharmacy_permit';
+
+export type VerticalType =
+  | 'restaurant'
+  | 'grocery'
+  | 'pharmacy'
+  | 'alcohol'
+  | 'convenience'
+  | 'retail';
+
+export type FulfillmentType = 'cook_to_order' | 'pick_and_pack';
+
+export type CategoryTaxonomyKey = 'cuisine' | 'inventory_category' | 'none';
+
+export type ComplianceTier = 'standard' | 'regulated';
+
+export type GoLiveRule = 'menu_min_5' | 'catalog_imported' | 'pos_connected';
+
+/** Admin-managed business type with vertical metadata. */
+export interface MerchantBusinessTypeConfig {
+  id: string;
+  section_id: string;
+  label: string;
+  sort_order: number;
+  is_active: boolean;
+  vertical_type: VerticalType;
+  fulfillment_type: FulfillmentType;
+  required_document_types: MerchantDocumentType[];
+  category_taxonomy_key: CategoryTaxonomyKey;
+  default_prep_time_mins: number;
+  max_delivery_radius_km: number;
+  compliance_tier: ComplianceTier;
+  go_live_rule: GoLiveRule;
+}
+
+export interface MerchantBusinessTypeSectionConfig {
+  id: string;
+  label: string;
+  sort_order: number;
+  is_active: boolean;
+  types: MerchantBusinessTypeConfig[];
+}
 
 export type MerchantDocumentStatus = 'pending' | 'approved' | 'rejected';
 
+/** Legacy slug ids; catalog may include additional types from admin. */
 export type MerchantBusinessType =
   | 'restaurant'
   | 'cafe'
   | 'bakery'
   | 'fast_food'
-  | 'other';
+  | 'grocery'
+  | 'convenience'
+  | 'pharmacy'
+  | 'alcohol'
+  | 'other'
+  | string;
 
 export type MerchantOnboardingStatus = 'draft' | 'submitted';
 
@@ -44,6 +96,7 @@ export interface PartnerOnboardingDraft {
   email?: string;
   businessType?: MerchantBusinessType | '';
   cuisineTypes?: string[];
+  inventoryCategories?: string[];
   location?: {
     lat?: number;
     lng?: number;
@@ -92,6 +145,9 @@ export interface Merchant {
   city?: string;
   postalCode?: string;
   businessType?: MerchantBusinessType;
+  verticalType?: VerticalType;
+  fulfillmentType?: FulfillmentType;
+  goLiveRule?: GoLiveRule;
   businessRegistrationNumber?: string;
   taxId?: string;
   ownerFullName?: string;
@@ -155,6 +211,7 @@ export interface MerchantApplicationPayload {
   lng: number;
   businessType?: MerchantBusinessType;
   cuisineTypes?: string[];
+  inventoryCategories?: string[];
   cuisineType?: string;
   avgPrepTimeMins?: number;
   deliveryRadiusKm?: number;

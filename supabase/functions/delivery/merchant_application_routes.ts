@@ -12,6 +12,16 @@ import {
   sanitizeOnboardingDraft,
   wizardStepFromKey,
 } from "./partnerOnboarding.ts";
+import { fetchBusinessTypeMetadataById } from "./admin/onboardingConfigRoutes.ts";
+import {
+  allowedDocumentTypesForMerchant,
+  rowToBusinessTypeMetadata,
+  verticalSnapshotFromMetadata,
+} from "./verticalMetadata.ts";
+import {
+  computeSetupChecklist,
+} from "./admin/merchantSetupProgress.ts";
+import { merchantGoLiveRuleFromRow } from "./verticalMetadata.ts";
 
 type SupabaseClient = ReturnType<typeof createDeliveryClient>;
 
@@ -302,7 +312,15 @@ export function registerMerchantApplicationRoutes(app: Hono) {
     }
 
     const existing = await getMerchantForUser(supabase, user.id);
-    const payload = merchantPayloadFromBody({ ...body, name }, user.id);
+    const businessTypeId = String(body.businessType || existing?.business_type || "");
+    const typeRow = businessTypeId
+      ? await fetchBusinessTypeMetadataById(businessTypeId)
+      : null;
+    const typeMeta = typeRow
+      ? rowToBusinessTypeMetadata(typeRow as unknown as Record<string, unknown>)
+      : rowToBusinessTypeMetadata(null);
+    const verticalSnapshot = verticalSnapshotFromMetadata(typeMeta);
+    const payload = merchantPayloadFromBody({ ...body, name }, user.id, verticalSnapshot);
     const sb = getServiceSupabase();
 
     let merchant: Record<string, unknown>;
@@ -439,7 +457,15 @@ export function registerMerchantApplicationRoutes(app: Hono) {
     const form = await c.req.parseBody();
     const file = form.file;
     const docType = String(form.docType || "");
-    const allowedTypes = new Set(["id_front", "id_back", "proof_of_business"]);
+    const businessTypeId = String(merchant.business_type || "");
+    const typeRow = businessTypeId
+      ? await fetchBusinessTypeMetadataById(businessTypeId)
+      : null;
+    const typeMeta = typeRow
+      ? rowToBusinessTypeMetadata(typeRow as unknown as Record<string, unknown>)
+      : rowToBusinessTypeMetadata(null);
+    const enableRegulated = Deno.env.get("ENABLE_REGULATED_VERTICAL_UPLOADS") === "true";
+    const allowedTypes = allowedDocumentTypesForMerchant(typeMeta, enableRegulated);
     if (!allowedTypes.has(docType)) {
       return c.json({ error: "Invalid docType" }, 400);
     }
@@ -611,6 +637,7 @@ export function registerMerchantApplicationRoutes(app: Hono) {
           bankComplete: false,
           hoursComplete: false,
           menuComplete: false,
+          catalogComplete: false,
         },
       });
     }
@@ -618,18 +645,30 @@ export function registerMerchantApplicationRoutes(app: Hono) {
     const serviceSb = getServiceSupabase();
     const payments = getPaymentsSupabase();
 
-    const [{ data: documents }, { data: hours }, { data: items }, { data: bank }] = await Promise.all([
+    const [{ data: documents }, { data: hours }, { count: menuItemCount }, { data: bank }] = await Promise.all([
       serviceSb.from("merchant_documents").select("doc_type, status").eq("merchant_id", merchant.id),
       serviceSb.from("merchant_hours").select("id").eq("merchant_id", merchant.id),
-      serviceSb.from("menu_items").select("id").eq("merchant_id", merchant.id).limit(5),
+      serviceSb.from("menu_items").select("id", { count: "exact", head: true }).eq("merchant_id", merchant.id),
       payments.from("merchant_bank_accounts").select("id").eq("merchant_id", merchant.id).eq("is_default", true).maybeSingle(),
     ]);
 
-    const docTypes = new Set((documents || []).map((d: { doc_type: string }) => d.doc_type));
-    const documentsComplete = ["id_front", "id_back", "proof_of_business"].every((t) => docTypes.has(t));
-    const profileComplete = Boolean(
-      merchant.name && merchant.address && merchant.lat != null && merchant.lng != null,
-    );
+    const businessTypeId = String(merchant.business_type || "");
+    const typeRow = businessTypeId
+      ? await fetchBusinessTypeMetadataById(businessTypeId)
+      : null;
+    const typeMeta = typeRow
+      ? rowToBusinessTypeMetadata(typeRow as unknown as Record<string, unknown>)
+      : rowToBusinessTypeMetadata(null);
+
+    const docTypes = (documents || []).map((d: { doc_type: string }) => d.doc_type);
+    const checklist = computeSetupChecklist({
+      merchant: merchant as Record<string, unknown>,
+      documentTypes: docTypes,
+      hoursCount: (hours || []).length,
+      menuItemCount: menuItemCount ?? 0,
+      hasBank: Boolean(bank),
+      requiredDocumentTypes: typeMeta.required_document_types,
+    });
 
     return c.json({
       hasMerchant: true,
@@ -641,16 +680,115 @@ export function registerMerchantApplicationRoutes(app: Hono) {
         wizard_step_key: merchant.wizard_step_key,
         verification_notes: merchant.verification_notes,
         rejection_reason: merchant.rejection_reason,
+        vertical_type: merchant.vertical_type,
+        fulfillment_type: merchant.fulfillment_type,
+        go_live_rule: merchant.go_live_rule ?? merchantGoLiveRuleFromRow(merchant as Record<string, unknown>),
       },
-      checklist: {
-        profileComplete,
-        documentsComplete,
-        bankComplete: Boolean(bank),
-        hoursComplete: (hours || []).length > 0,
-        menuComplete: (items || []).length >= 5,
-      },
+      checklist,
       documents: documents || [],
     });
+  });
+
+  app.get("/merchant/settings", async (c) => {
+    const authHeader = c.req.header("Authorization");
+    if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+    const supabase = createDeliveryClient(authHeader);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+    const merchant = await getMerchantForUser(supabase, user.id);
+    if (!merchant) {
+      return c.json({
+        settings: {
+          allows_pickup: true,
+          allows_scheduled: true,
+          allows_doubledash: false,
+        },
+      });
+    }
+
+    const serviceSb = getServiceSupabase();
+    const { data } = await serviceSb
+      .from("merchant_settings")
+      .select("allows_pickup, allows_scheduled, allows_doubledash")
+      .eq("merchant_id", merchant.id)
+      .maybeSingle();
+
+    return c.json({
+      settings: data ?? {
+        allows_pickup: true,
+        allows_scheduled: true,
+        allows_doubledash: false,
+      },
+    });
+  });
+
+  app.put("/merchant/settings", async (c) => {
+    const authHeader = c.req.header("Authorization");
+    if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+    const supabase = createDeliveryClient(authHeader);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+    const merchant = await getMerchantForUser(supabase, user.id);
+    if (!merchant) return c.json({ error: "Merchant not found" }, 404);
+
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const patch = {
+      merchant_id: merchant.id,
+      allows_pickup: body.allows_pickup !== undefined ? Boolean(body.allows_pickup) : true,
+      allows_scheduled: body.allows_scheduled !== undefined ? Boolean(body.allows_scheduled) : true,
+      allows_doubledash: body.allows_doubledash !== undefined ? Boolean(body.allows_doubledash) : false,
+    };
+
+    const serviceSb = getServiceSupabase();
+    const { data, error } = await serviceSb
+      .from("merchant_settings")
+      .upsert(patch, { onConflict: "merchant_id" })
+      .select("allows_pickup, allows_scheduled, allows_doubledash")
+      .single();
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ settings: data });
+  });
+
+  app.post("/merchants/:id/catalog/import", async (c) => {
+    const authHeader = c.req.header("Authorization");
+    if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+    const supabase = createDeliveryClient(authHeader);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+    const { id } = c.req.param();
+    const merchant = await getMerchantForUser(supabase, user.id);
+    if (!merchant || String(merchant.id) !== id) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const rows = Array.isArray(body.items) ? body.items as Record<string, unknown>[] : [];
+    if (!rows.length) return c.json({ error: "items array is required" }, 400);
+    if (rows.length > 500) return c.json({ error: "Maximum 500 items per import" }, 400);
+
+    const serviceSb = getServiceSupabase();
+    const inserts = rows.map((row, index) => ({
+      merchant_id: id,
+      name: String(row.name || "").trim(),
+      description: row.description ? String(row.description) : null,
+      price: Number(row.price) || 0,
+      sku: row.sku ? String(row.sku) : null,
+      upc: row.upc ? String(row.upc) : null,
+      unit: row.unit ? String(row.unit) : null,
+      stock_qty: row.stock_qty != null ? Number(row.stock_qty) : null,
+      is_available: row.is_available !== false,
+      sort_order: index,
+    })).filter((row) => row.name);
+
+    if (!inserts.length) return c.json({ error: "No valid items to import" }, 400);
+
+    const { error } = await serviceSb.from("menu_items").insert(inserts);
+    if (error) return c.json({ error: error.message }, 500);
+
+    return c.json({ imported: inserts.length });
   });
 }
 

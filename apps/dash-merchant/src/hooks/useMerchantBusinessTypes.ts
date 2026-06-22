@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
+import { getDefaultConfig } from '@roam/vertical-config';
 import { BUSINESS_TYPES } from '../signup/types';
 import type { MerchantBusinessTypeSectionDto } from '../admin/services/dashAdminService';
 
@@ -9,13 +10,15 @@ const FALLBACK_SECTIONS: MerchantBusinessTypeSectionDto[] = [
     label: 'Business Types',
     sort_order: 0,
     is_active: true,
-    types: BUSINESS_TYPES.map((t, i) => ({
-      id: t.value,
-      section_id: 'default',
-      label: t.label,
-      sort_order: i,
-      is_active: true,
-    })),
+    types: BUSINESS_TYPES.map((t, i) =>
+      getDefaultConfig({
+        id: t.value,
+        section_id: 'default',
+        label: t.label,
+        sort_order: i,
+        is_active: true,
+      }),
+    ),
   },
 ];
 

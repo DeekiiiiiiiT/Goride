@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { resolveGoLiveRule, resolveVerticalType } from '@roam/vertical-config';
 import { MerchantStatusBadge } from '../../components/MerchantStatusBadge';
 import { MerchantActionDialog } from '../../components/MerchantActionDialog';
 import { useAdminConfirm } from '../../contexts/AdminConfirmContext';
@@ -234,6 +235,26 @@ export function MerchantDetailPage() {
             )}
             {merchant.onboarding_status !== 'draft' && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">{opStatus}</span>
+            )}
+            {merchant.vertical_type && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-300">
+                {resolveVerticalType(merchant.vertical_type)}
+              </span>
+            )}
+            {merchant.fulfillment_type && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300">
+                {merchant.fulfillment_type}
+              </span>
+            )}
+            {merchant.go_live_rule && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300">
+                {resolveGoLiveRule(merchant.go_live_rule)}
+              </span>
+            )}
+            {(merchant.vertical_type === 'pharmacy' || merchant.vertical_type === 'alcohol') && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/15 text-red-300">
+                Compliance queue
+              </span>
             )}
           </div>
         </div>

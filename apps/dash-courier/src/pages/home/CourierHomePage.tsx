@@ -13,7 +13,8 @@ import { DeliveryOfferPage } from '@/pages/offers/DeliveryOfferPage';
 import { OfferDetailsPage } from '@/pages/offers/OfferDetailsPage';
 import { StackedOfferPage } from '@/pages/offers/StackedOfferPage';
 import { ActiveDeliveryNavPage } from '@/pages/delivery/ActiveDeliveryNavPage';
-import { AtRestaurantPage } from '@/pages/delivery/AtRestaurantPage';
+import { AtStorePage } from '@/pages/delivery/AtStorePage';
+import { AgeVerifyHandoffPage } from '@/pages/delivery/AgeVerifyHandoffPage';
 import { EnRoutePage } from '@/pages/delivery/EnRoutePage';
 import { AtCustomerPage } from '@/pages/delivery/AtCustomerPage';
 import { ConfirmHandoffPage } from '@/pages/delivery/ConfirmHandoffPage';
@@ -46,11 +47,12 @@ import { PayoutHistoryPage } from '@/pages/profile/PayoutHistoryPage';
 import { DeclineReasonSheet } from '@/components/offers/DeclineReasonSheet';
 import type { DeclineReasonId } from '@/lib/declineReasons';
 import { persistDeclineReason } from '@/lib/declineReasonStorage';
-import type { DropoffMethod } from '@/lib/mockActiveDelivery';
-import { MOCK_ACTIVE_DELIVERY } from '@/lib/mockActiveDelivery';
+import type { ActiveDelivery, DropoffMethod } from '@/lib/mockActiveDelivery';
+import { MOCK_ACTIVE_DELIVERY, MOCK_GROCERY_PICK_DELIVERY } from '@/lib/mockActiveDelivery';
 import { MOCK_CACHED_DELIVERY } from '@/lib/mockCachedDelivery';
 import {
   MOCK_DETAILED_OFFER,
+  MOCK_GROCERY_OFFER,
   MOCK_SINGLE_OFFER,
   MOCK_STACKED_OFFER,
 } from '@/lib/mockOffers';
@@ -94,9 +96,11 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   const [dashSummaryOpen, setDashSummaryOpen] = useState(false);
   const [promotionsOpen, setPromotionsOpen] = useState(false);
   const [locationIssueOpen, setLocationIssueOpen] = useState(false);
+  const [ageVerifyOpen, setAgeVerifyOpen] = useState(false);
   const [declineReasonOpen, setDeclineReasonOpen] = useState(false);
   const [pushBannerOpen, setPushBannerOpen] = useState(false);
   const [courierName, setCourierName] = useState<string | undefined>();
+  const [activeDelivery, setActiveDelivery] = useState<ActiveDelivery>(MOCK_ACTIVE_DELIVERY);
   const hasResolvedLocation = useRef(false);
   const feedback = useCourierFeedback();
   const { isOnline: networkOnline } = useNetworkStatus();
@@ -161,6 +165,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
     feedback.onComplete();
     toast.success('Delivery complete!', 'Earnings added to your balance.');
     dispatch.finishDelivery();
+    setActiveDelivery(MOCK_ACTIVE_DELIVERY);
     setActiveTab('home');
   }, [feedback, dispatch]);
 
@@ -215,8 +220,10 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   const handleAcceptSingleOffer = useCallback(() => {
     guardAction(() => {
       feedback.onAccept();
-      toast.success('Offer accepted', 'Navigation started to pickup.');
-      dispatch.acceptOffer(MOCK_SINGLE_OFFER.id);
+      const isGrocery = MOCK_GROCERY_OFFER.fulfillment_type === 'pick_and_pack';
+      setActiveDelivery(isGrocery ? MOCK_GROCERY_PICK_DELIVERY : MOCK_ACTIVE_DELIVERY);
+      toast.success('Offer accepted', isGrocery ? 'Head to Fresh Mart to shop.' : 'Navigation started to pickup.');
+      dispatch.acceptOffer(isGrocery ? MOCK_GROCERY_OFFER.id : MOCK_SINGLE_OFFER.id);
       setActiveTab('home');
     });
   }, [feedback, dispatch, guardAction]);
@@ -273,12 +280,16 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   const handleAtCustomerComplete = useCallback(
     (method: DropoffMethod) => {
       if (method === 'hand-to-customer') {
+        if (activeDelivery.vertical_type === 'alcohol') {
+          setAgeVerifyOpen(true);
+          return;
+        }
         dispatch.setDeliveryPhase('confirm-handoff');
       } else {
         dispatch.setDeliveryPhase('complete');
       }
     },
-    [dispatch],
+    [dispatch, activeDelivery.vertical_type],
   );
 
   const handleProfileNavigate = useCallback((destination: ProfileDestination) => {
@@ -403,7 +414,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
       {offerPhase === 'single' && (
         <ImmersiveScreen>
           <DeliveryOfferPage
-            offer={MOCK_SINGLE_OFFER}
+            offer={MOCK_GROCERY_OFFER}
             onClose={requestDeclineOffer}
             onTimerExpire={handleOfferTimerExpire}
             onDecline={requestDeclineOffer}
@@ -445,15 +456,15 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
       {deliveryPhase === 'pickup-nav' && !acceptedStacked && (
         <ImmersiveScreen>
           <ActiveDeliveryNavPage
-            delivery={MOCK_ACTIVE_DELIVERY}
+            delivery={activeDelivery}
             onArrived={() => dispatch.setDeliveryPhase('at-restaurant')}
           />
         </ImmersiveScreen>
       )}
 
       {deliveryPhase === 'at-restaurant' && !acceptedStacked && (
-        <AtRestaurantPage
-          delivery={MOCK_ACTIVE_DELIVERY}
+        <AtStorePage
+          delivery={activeDelivery}
           onClose={handleRequestUnassign}
           onConfirmPickup={() =>
             guardAction(() => dispatch.setDeliveryPhase('en-route'))
@@ -465,14 +476,14 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
 
       {deliveryPhase === 'en-route' && !networkOffline && !acceptedStacked && (
         <EnRoutePage
-          delivery={MOCK_ACTIVE_DELIVERY}
+          delivery={activeDelivery}
           onArrived={() => dispatch.setDeliveryPhase('at-customer')}
         />
       )}
 
       {deliveryPhase === 'at-customer' && !acceptedStacked && (
         <AtCustomerPage
-          delivery={MOCK_ACTIVE_DELIVERY}
+          delivery={activeDelivery}
           onBack={() => dispatch.setDeliveryPhase('en-route')}
           onComplete={handleAtCustomerComplete}
           onCustomerUnavailable={() => dispatch.setDeliveryPhase('customer-unavailable')}
@@ -495,16 +506,28 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
       )}
 
       {deliveryPhase === 'complete' && !acceptedStacked && (
-        <DeliveryCompletePage delivery={MOCK_ACTIVE_DELIVERY} onBackToDash={finishDelivery} />
+        <DeliveryCompletePage delivery={activeDelivery} onBackToDash={finishDelivery} />
       )}
 
       {deliveryPhase === 'order-cancelled' && (
         <OrderCancelledPage onBackToDash={finishDelivery} />
       )}
 
+      {ageVerifyOpen && (
+        <AgeVerifyHandoffPage
+          customerName={activeDelivery.customerName}
+          dropoffAddress={activeDelivery.dropoffAddress}
+          onBack={() => setAgeVerifyOpen(false)}
+          onComplete={() => {
+            setAgeVerifyOpen(false);
+            dispatch.setDeliveryPhase('confirm-handoff');
+          }}
+        />
+      )}
+
       {reportIssueOpen && isOnDelivery && (
         <ReportIssuePage
-          delivery={MOCK_ACTIVE_DELIVERY}
+          delivery={activeDelivery}
           onClose={() => setReportIssueOpen(false)}
           onSubmit={handleReportIssueSubmit}
           onRequestUnassign={handleRequestUnassign}

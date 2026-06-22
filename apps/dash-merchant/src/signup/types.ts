@@ -18,6 +18,7 @@ export interface SignUpFormData {
   email: string;
   businessType: BusinessType | '';
   cuisineTypes: string[];
+  inventoryCategories: string[];
   location: Partial<LocationValue> | null;
   streetAddress: string;
   city: string;
@@ -34,6 +35,10 @@ export interface SignUpFormData {
   idFrontDoc: UploadedDocumentRef | null;
   idBackDoc: UploadedDocumentRef | null;
   proofOfBusinessDoc: UploadedDocumentRef | null;
+  liquorLicenseFile: File | null;
+  pharmacyPermitFile: File | null;
+  liquorLicenseDoc: UploadedDocumentRef | null;
+  pharmacyPermitDoc: UploadedDocumentRef | null;
   description: string;
   website: string;
   logoUrl: string;
@@ -51,6 +56,7 @@ export const INITIAL_SIGN_UP_DATA: SignUpFormData = {
   email: '',
   businessType: '',
   cuisineTypes: [],
+  inventoryCategories: [],
   location: null,
   streetAddress: '',
   city: '',
@@ -67,6 +73,10 @@ export const INITIAL_SIGN_UP_DATA: SignUpFormData = {
   idFrontDoc: null,
   idBackDoc: null,
   proofOfBusinessDoc: null,
+  liquorLicenseFile: null,
+  pharmacyPermitFile: null,
+  liquorLicenseDoc: null,
+  pharmacyPermitDoc: null,
   description: '',
   website: '',
   logoUrl: '',
@@ -101,6 +111,33 @@ export const CUISINE_OPTIONS = [
   'Healthy',
   'Desserts',
   'Other',
+] as const;
+
+export const PHARMACY_CATEGORY_OPTIONS = [
+  'Health & Wellness',
+  'Medical Supplies',
+  'Personal Care',
+] as const;
+
+export const INVENTORY_CATEGORY_OPTIONS = [
+  'Fresh Produce',
+  'Dairy',
+  'Pantry',
+  'Snacks',
+  'Beverages',
+  'Household',
+  'Health & Wellness',
+  'Frozen',
+  'Other',
+] as const;
+
+export const RETAIL_PREP_TIME_OPTIONS = ['20', '30', '45', '60'] as const;
+
+export const RETAIL_DELIVERY_RADIUS_OPTIONS = [
+  { value: '5', label: '5 km' },
+  { value: '10', label: '10 km' },
+  { value: '15', label: '15 km' },
+  { value: '20', label: '20 km' },
 ] as const;
 
 export const BUSINESS_TYPES: { value: BusinessType; label: string }[] = [

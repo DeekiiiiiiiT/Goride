@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 import { isLocationComplete } from '@roam/location';
+import { getBusinessTypeConfig } from '@roam/vertical-config';
 import { INITIAL_SIGN_UP_DATA, SignUpFormData } from '../../signup/types';
 import BusinessInfoStep from './BusinessInfoStep';
+import { useMerchantBusinessTypes } from '../../hooks/useMerchantBusinessTypes';
 import LocationStepContent from './LocationStepContent';
 import BusinessDetailsStepContent from './BusinessDetailsStepContent';
 import ContactHoursBrandingContent, { createDefaultHours, type DayHours } from './ContactHoursBrandingContent';
@@ -93,6 +95,7 @@ export default function UnifiedOnboardingWizard({
 }: UnifiedOnboardingWizardProps) {
   const initial = useState(() => resolveInitialState(session, serverMerchant))[0];
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { sections } = useMerchantBusinessTypes();
 
   const [step, setStep] = useState<WizardStepId>(initial.step);
   const [formData, setFormData] = useState<SignUpFormData>(initial.formData);
@@ -107,6 +110,7 @@ export default function UnifiedOnboardingWizard({
 
   const stepNumber = wizardStepNumber(step);
   const enableUpload = true;
+  const typeConfig = getBusinessTypeConfig(sections, formData.businessType);
 
   useEffect(() => {
     savePartnerWizardDraft(step, formData, hours);
@@ -162,6 +166,7 @@ export default function UnifiedOnboardingWizard({
         address,
         businessType: formData.businessType || undefined,
         cuisineTypes: formData.cuisineTypes,
+        inventoryCategories: formData.inventoryCategories,
         cuisineType: formData.cuisineTypes[0],
         streetAddress: loc.streetAddress,
         city: loc.city,
@@ -210,7 +215,7 @@ export default function UnifiedOnboardingWizard({
     }
   };
 
-  const canContinue = canContinueWizardStep(step, formData, hours, { enableUpload });
+  const canContinue = canContinueWizardStep(step, formData, hours, { enableUpload, typeConfig });
 
   const renderStepContent = () => {
     switch (step) {
@@ -219,7 +224,14 @@ export default function UnifiedOnboardingWizard({
       case 'location':
         return <LocationStepContent data={formData} onChange={updateForm} />;
       case 'business-details':
-        return <BusinessDetailsStepContent data={formData} onChange={updateForm} />;
+        return (
+          <BusinessDetailsStepContent
+            data={formData}
+            onChange={updateForm}
+            typeConfig={typeConfig}
+            stepNumber={stepNumber}
+          />
+        );
       case 'contact-hours':
         return (
           <ContactHoursBrandingContent
@@ -231,7 +243,12 @@ export default function UnifiedOnboardingWizard({
         );
       case 'verification':
         return (
-          <VerificationStepContent data={formData} onChange={updateForm} enableUpload={enableUpload} />
+          <VerificationStepContent
+            data={formData}
+            onChange={updateForm}
+            enableUpload={enableUpload}
+            typeConfig={typeConfig}
+          />
         );
       case 'bank-details':
         return (

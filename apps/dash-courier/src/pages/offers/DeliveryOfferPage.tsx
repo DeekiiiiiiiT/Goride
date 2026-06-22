@@ -1,11 +1,12 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
-import { CountdownRing } from '@/components/ui/CountdownRing';
 import { useCountdown } from '@/hooks/useCountdown';
 import type { SingleOffer } from '@/lib/mockOffers';
 
 const MAP_PREVIEW =
-  'https://lh3.googleusercontent.com/aida-public/AB6AXuDQBH5q7_3ksAQFS8tbjGMja1g2svciZY7QwSfFb9x1g7EVZABCHevLSawNo0oy5IEkSkvRETmYM8FWAA7vR4XdXM5BYAhM-9XVtuxr-SpGre2ZpENYkrslkkqE79uGisVTF9mXOQfTarTlNqdZjPJXHJaP5o6v-1JdpSdVMXNkjJP63q5Hlot8NRRcJWbpGZHC0kDbFG3RRcAw6__hPf1y1OYreXt8TJUGoYH7DHZMg17mCDeg3nOEUG-8T_sPd4dsNFsgoUjmIoQ';
+  'https://lh3.googleusercontent.com/aida-public/AB6AXuBgOYXXmKCfXKrKEf-fZhopfbu7TV6DxKUOSjQ8zqx5RIccJsmpZvb-o6rDmSgKgHEwhY7ViLdPaCUhll0wv7XSV2EItA63XgyykoD_6seB2gWcsLrQeIiKiSBCu5w9e7Vv7Vj-Qs5b_VOJCLvblF23KRKLzF6FhZUchZzC-4Di0GeVmEq4uHdILyfyhLurN1v3kgTmL3p1NnWux-HEF3sdqyWYIMAeXjoLTt2Fp8WFdHYYshZqlhhBPUM-4l332fNcOocDdN2tShw';
+
+const TIMER_CIRCUMFERENCE = 213.6;
 
 type DeliveryOfferPageProps = {
   offer: SingleOffer;
@@ -20,7 +21,7 @@ type DeliveryOfferPageProps = {
 
 export function DeliveryOfferPage({
   offer,
-  initialSeconds = 90,
+  initialSeconds = 45,
   onClose,
   onTimerExpire,
   onDecline,
@@ -30,6 +31,11 @@ export function DeliveryOfferPage({
 }: DeliveryOfferPageProps) {
   const shownRef = useRef(false);
   const { seconds } = useCountdown(initialSeconds, onTimerExpire);
+  const progress = seconds / initialSeconds;
+  const ringOffset = TIMER_CIRCUMFERENCE * (1 - progress);
+  const urgent = seconds < 10;
+  const storeName = offer.storeName ?? offer.restaurant;
+  const isGrocery = offer.vertical_type === 'grocery' || offer.fulfillment_type === 'pick_and_pack';
 
   useEffect(() => {
     if (!shownRef.current) {
@@ -39,104 +45,151 @@ export function DeliveryOfferPage({
   }, [onOfferShown]);
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 h-full w-full overflow-hidden bg-background courier-offer-pulse-border">
-      <header className="flex justify-between items-center px-[var(--spacing-edge)] h-14 w-full z-50 bg-surface shadow-sm shrink-0">
+    <div className="mx-auto flex h-full min-h-0 w-full max-w-[430px] flex-col overflow-hidden bg-surface-container-lowest shadow-2xl">
+      <div className="relative h-48 shrink-0">
+        <img alt="" src={MAP_PREVIEW} className="h-full w-full object-cover opacity-80" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-surface-container-lowest" />
+        <div className="absolute left-4 right-4 top-4 z-10 flex justify-between">
+          <div className="flex items-center gap-2 rounded-full border border-outline-variant/30 bg-surface/90 px-3 py-1.5 shadow-sm backdrop-blur-md">
+            <MaterialIcon name="navigation" className="text-lg text-primary" />
+            <span className="text-label-lg font-semibold text-on-surface">{offer.totalDistanceKm} km total</span>
+          </div>
+          <div className="flex items-center gap-2 rounded-full border border-outline-variant/30 bg-surface/90 px-3 py-1.5 shadow-sm backdrop-blur-md">
+            <MaterialIcon name="schedule" className="text-lg text-primary" />
+            <span className="text-label-lg font-semibold text-on-surface">{offer.estMinutes} min total</span>
+          </div>
+        </div>
         <button
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="text-on-surface hover:bg-surface-container-high transition-colors p-2 rounded-full flex items-center justify-center"
+          className="absolute right-4 top-16 rounded-full bg-surface/90 p-2 shadow-sm backdrop-blur-md"
         >
           <MaterialIcon name="close" />
         </button>
-        <h1 className="text-xl font-bold text-on-surface uppercase tracking-tight">Delivery Offer</h1>
-        <div className="w-10" aria-hidden />
-      </header>
+      </div>
 
-      <main className="flex-1 overflow-y-auto px-[var(--spacing-edge)] pt-6 pb-36 flex flex-col gap-6">
-        <section className="flex flex-col items-center">
-          <CountdownRing seconds={seconds} totalSeconds={initialSeconds} />
-          <div className="text-center">
-            <h2 className="text-[28px] leading-9 font-bold text-success">J${offer.earnings}</h2>
-            {offer.tip > 0 && (
-              <p className="text-[11px] text-muted bg-surface-container px-3 py-1 rounded-full mt-2 inline-block">
-                Includes J${offer.tip} tip
-              </p>
-            )}
+      <main className="relative z-20 -mt-6 flex flex-1 flex-col gap-4 overflow-y-auto px-4 pb-36">
+        <div className="flex items-center justify-between rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-6 shadow-lg">
+          <div>
+            <p className="text-label-md uppercase tracking-wider text-on-surface-variant">Guaranteed Earnings</p>
+            <h1 className="text-headline-lg-mobile font-extrabold text-primary">${offer.earnings} JMD</h1>
           </div>
-        </section>
+          <div className="relative flex h-20 w-20 items-center justify-center">
+            <svg className="h-20 w-20 -rotate-90">
+              <circle
+                className="text-surface-container-high"
+                cx="40"
+                cy="40"
+                fill="transparent"
+                r="34"
+                stroke="currentColor"
+                strokeWidth="6"
+              />
+              <circle
+                className={urgent ? 'text-error' : 'text-primary'}
+                cx="40"
+                cy="40"
+                fill="transparent"
+                r="34"
+                stroke="currentColor"
+                strokeDasharray={TIMER_CIRCUMFERENCE}
+                strokeDashoffset={ringOffset}
+                strokeWidth="6"
+                style={{ transition: 'stroke-dashoffset 1s linear' }}
+              />
+            </svg>
+            <span className={`absolute text-headline-md font-bold ${urgent ? 'text-error' : 'text-on-surface'}`}>
+              {seconds}s
+            </span>
+          </div>
+        </div>
 
         <button
           type="button"
           onClick={onViewDetails}
-          className="bg-surface rounded-xl shadow-lg p-4 flex flex-col gap-4 relative overflow-hidden text-left w-full active:scale-[0.99] transition-transform"
+          className="overflow-hidden rounded-xl border border-outline-variant/40 bg-surface text-left shadow-sm active:scale-[0.99]"
         >
-          <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-full bg-surface-container-high flex items-center justify-center shrink-0">
-              <MaterialIcon name="restaurant" className="text-primary" />
+          <div className="flex items-center justify-between border-b border-outline-variant/20 bg-surface-container-low p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-container/10">
+                <MaterialIcon name="storefront" className="text-primary" filled />
+              </div>
+              <div>
+                <h2 className="text-headline-md font-bold leading-tight text-on-surface">{storeName}</h2>
+                <span className="mt-0.5 inline-block rounded-full bg-secondary-container px-2 py-0.5 text-[10px] font-bold uppercase tracking-tighter text-on-secondary-container">
+                  {isGrocery ? 'Grocery' : 'Restaurant'}
+                </span>
+              </div>
             </div>
-            <div className="flex-1">
-              <h3 className="text-xl font-semibold text-on-surface mb-1">{offer.restaurant}</h3>
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted flex items-center gap-1">
-                <MaterialIcon name="directions_walk" className="text-base" />
-                {offer.pickupDistanceKm} km to pickup
-              </span>
+            <div className="text-right">
+              <p className="text-label-md text-on-surface-variant">Pickup</p>
+              <p className="text-label-lg font-semibold text-on-surface">{offer.pickupDistanceKm} km</p>
             </div>
           </div>
-          <hr className="border-surface-variant" />
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <span className="text-[11px] text-muted uppercase font-medium">Total Distance</span>
-              <p className="text-base font-semibold text-on-surface">{offer.totalDistanceKm} km</p>
+          <div className="space-y-4 p-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1 rounded-lg bg-surface-container-low p-3">
+                <div className="flex items-center gap-2 text-on-surface-variant">
+                  <MaterialIcon name="shopping_basket" className="text-lg" />
+                  <span className="text-label-md">Order Size</span>
+                </div>
+                <p className="text-label-lg font-semibold text-on-surface">~{offer.itemCount} items</p>
+              </div>
+              <div className="flex flex-col gap-1 rounded-lg bg-surface-container-low p-3">
+                <div className="flex items-center gap-2 text-on-surface-variant">
+                  <MaterialIcon name="timer" className="text-lg" />
+                  <span className="text-label-md">Est. Shop</span>
+                </div>
+                <p className="text-label-lg font-semibold text-on-surface">
+                  {isGrocery ? '25 min' : `~${Math.max(10, offer.estMinutes - 10)} min`}
+                </p>
+              </div>
             </div>
-            <div>
-              <span className="text-[11px] text-muted uppercase font-medium">Est. Time</span>
-              <p className="text-base font-semibold text-on-surface">~{offer.estMinutes} min</p>
-            </div>
-            <div className="col-span-2">
-              <span className="text-[11px] text-muted uppercase font-medium">Dropoff</span>
-              <p className="text-sm text-on-surface flex items-center gap-1">
-                <MaterialIcon name="location_on" className="text-base text-muted" />
-                {offer.dropoffDistanceKm} km to customer
-              </p>
-            </div>
-            <div className="col-span-2">
-              <span className="text-[11px] text-muted uppercase font-medium">Items</span>
-              <p className="text-sm text-on-surface flex items-center gap-1">
-                <MaterialIcon name="shopping_bag" className="text-base text-muted" />
-                {offer.itemCount} items
-              </p>
-            </div>
+            {isGrocery && (
+              <div className="flex items-start gap-3 px-1">
+                <MaterialIcon name="info" className="mt-0.5 text-on-surface-variant" />
+                <p className="text-body-md leading-relaxed text-on-surface-variant">
+                  <span className="font-bold text-on-surface">Pick & pack order:</span> Ensure cold items are selected
+                  last to maintain freshness. Use the Roam Dash insulated bag.
+                </p>
+              </div>
+            )}
           </div>
         </button>
 
-        <section className="h-32 rounded-xl overflow-hidden shadow-sm border border-surface-variant relative">
-          <img src={MAP_PREVIEW} alt="" className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-surface/50 to-transparent" />
-        </section>
+        <div className="flex items-center gap-4 px-2">
+          <div className="flex flex-col items-center">
+            <div className="h-3 w-3 rounded-full border-2 border-primary bg-background" />
+            <div className="h-8 border-l-2 border-dashed border-outline-variant" />
+            <div className="h-3 w-3 rounded-full bg-tertiary" />
+          </div>
+          <div className="flex flex-1 items-center justify-between py-1">
+            <p className="text-label-lg font-semibold text-on-surface">Dropoff Point</p>
+            <p className="text-label-md text-on-surface-variant">{offer.dropoffDistanceKm} km from store</p>
+          </div>
+        </div>
       </main>
 
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-surface shadow-[0_-4px_12px_rgba(0,0,0,0.04)] px-[var(--spacing-edge)] pt-4 pb-safe border-t border-surface-variant md:max-w-md md:mx-auto">
-        <div className="flex gap-3 items-stretch pb-4">
+      <section className="fixed bottom-0 left-1/2 z-50 w-full max-w-[430px] -translate-x-1/2 border-t border-outline-variant/20 bg-white/80 p-4 backdrop-blur-md">
+        <div className="flex h-14 gap-3">
           <button
             type="button"
             onClick={onDecline}
-            className="flex-1 min-h-[60px] rounded-xl text-lg font-bold border-2 border-outline-variant text-muted hover:bg-surface-container-low transition-colors active:scale-95 flex items-center justify-center gap-2"
+            className="flex-1 rounded-xl border-2 border-outline text-label-lg font-semibold text-on-surface transition-all hover:bg-surface-container-high active:scale-95"
           >
-            <MaterialIcon name="close" className="text-2xl" />
             Decline
           </button>
           <button
             type="button"
             onClick={onAccept}
-            className="flex-[2] min-h-[60px] rounded-xl text-lg font-bold bg-success text-on-primary hover:bg-primary-container transition-colors shadow-lg shadow-success/20 active:scale-95 flex items-center justify-center gap-2"
+            className="flex flex-[2] items-center justify-center gap-2 rounded-xl bg-primary text-label-lg font-semibold text-on-primary shadow-lg shadow-primary/20 transition-all hover:brightness-110 active:scale-[0.98]"
           >
-            <MaterialIcon name="check" className="text-2xl" />
-            Accept
+            <MaterialIcon name="check_circle" />
+            Accept Offer
           </button>
         </div>
-      </div>
+      </section>
     </div>
   );
 }

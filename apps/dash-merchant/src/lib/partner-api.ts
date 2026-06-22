@@ -1,5 +1,6 @@
 import { API_ENDPOINTS } from '@roam/api-client';
 import { supabase } from '@roam/auth-client';
+import type { MerchantDocumentType } from '@roam/types';
 import type {
   MerchantApplicationPayload,
   MerchantBankAccountInput,
@@ -42,6 +43,8 @@ export interface ApplicationStatusResponse {
     verification_status: string;
     verification_notes?: string | null;
     rejection_reason?: string | null;
+    go_live_rule?: string | null;
+    vertical_type?: string | null;
   };
   checklist: {
     profileComplete: boolean;
@@ -49,6 +52,7 @@ export interface ApplicationStatusResponse {
     bankComplete: boolean;
     hoursComplete: boolean;
     menuComplete: boolean;
+    catalogComplete: boolean;
   };
   documents?: MerchantDocument[];
 }
@@ -69,7 +73,7 @@ export async function fetchMerchantDocuments(): Promise<{ documents: MerchantDoc
 }
 
 export async function uploadMerchantDocument(
-  docType: 'id_front' | 'id_back' | 'proof_of_business',
+  docType: MerchantDocumentType,
   file: File,
 ): Promise<{ document: MerchantDocument }> {
   const {
@@ -134,6 +138,43 @@ export interface BootstrapMerchantResponse {
 
 export function bootstrapPartnerMerchant(): Promise<BootstrapMerchantResponse> {
   return deliveryFetch('/partner/bootstrap', { method: 'POST', body: '{}' });
+}
+
+export function fetchMerchantSettings(): Promise<{
+  settings: {
+    allows_pickup: boolean;
+    allows_scheduled: boolean;
+    allows_doubledash: boolean;
+  };
+}> {
+  return deliveryFetch('/merchant/settings') as Promise<{
+    settings: {
+      allows_pickup: boolean;
+      allows_scheduled: boolean;
+      allows_doubledash: boolean;
+    };
+  }>;
+}
+
+export function saveMerchantSettings(settings: {
+  allows_pickup?: boolean;
+  allows_scheduled?: boolean;
+  allows_doubledash?: boolean;
+}) {
+  return deliveryFetch('/merchant/settings', {
+    method: 'PUT',
+    body: JSON.stringify(settings),
+  });
+}
+
+export function importMerchantCatalog(
+  merchantId: string,
+  items: Array<Record<string, unknown>>,
+) {
+  return deliveryFetch(`/merchants/${merchantId}/catalog/import`, {
+    method: 'POST',
+    body: JSON.stringify({ items }),
+  });
 }
 
 export function saveOnboardingDraft(opts: {

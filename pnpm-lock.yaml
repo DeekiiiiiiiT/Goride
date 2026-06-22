@@ -234,6 +234,9 @@ importers:
       '@roam/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@roam/vertical-config':
+        specifier: workspace:*
+        version: link:../../packages/vertical-config
       '@supabase/supabase-js':
         specifier: ^2
         version: 2.105.4
@@ -307,6 +310,9 @@ importers:
       '@roam/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@roam/vertical-config':
+        specifier: workspace:*
+        version: link:../../packages/vertical-config
       '@supabase/supabase-js':
         specifier: ^2
         version: 2.105.4
@@ -389,6 +395,9 @@ importers:
       '@roam/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@roam/vertical-config':
+        specifier: workspace:*
+        version: link:../../packages/vertical-config
       '@supabase/supabase-js':
         specifier: ^2
         version: 2.105.4
@@ -1581,6 +1590,16 @@ importers:
       vaul:
         specifier: ^1.1.2
         version: 1.1.2(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+
+  packages/vertical-config:
+    dependencies:
+      '@roam/types':
+        specifier: workspace:*
+        version: link:../types
+    devDependencies:
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(lightningcss@1.30.1)
 
 packages:
 

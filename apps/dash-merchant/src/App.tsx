@@ -184,6 +184,11 @@ function DashMerchantApp() {
           setRoutingEpoch((n) => n + 1);
           void refetch();
         }}
+        onOpenMenu={() => {
+          dismissGoLiveScreen(merchant.id);
+          setRoutingEpoch((n) => n + 1);
+          void refetch();
+        }}
       />
     );
   }

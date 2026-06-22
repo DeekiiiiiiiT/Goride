@@ -4,6 +4,7 @@ import { API_ENDPOINTS } from '@roam/api-client';
 import { supabase } from '@roam/auth-client';
 import { toast } from 'sonner';
 import { Merchant } from '../hooks/useMerchant';
+import { fetchMerchantSettings, saveMerchantSettings } from '../lib/partner-api';
 
 export interface TimeShift {
   open: string;
@@ -225,6 +226,10 @@ function deliveryExtrasKey(merchantId: string) {
   return `roam_delivery_extras_${merchantId}`;
 }
 
+function settingsMigratedKey(merchantId: string) {
+  return `roam_settings_migrated_${merchantId}`;
+}
+
 export function loadDeliveryExtras(merchantId: string): DeliveryExtras {
   try {
     const raw = localStorage.getItem(deliveryExtrasKey(merchantId));
@@ -297,6 +302,45 @@ export function useMerchantSettings(merchant: Merchant) {
       return fetchedHours;
     },
   });
+
+  const { data: serverSettings } = useQuery({
+    queryKey: ['merchant-settings', merchant.id],
+    queryFn: fetchMerchantSettings,
+    retry: 1,
+  });
+
+  useEffect(() => {
+    if (!serverSettings?.settings) return;
+    const { allows_pickup, allows_scheduled } = serverSettings.settings;
+    setFormData((prev) => ({
+      ...prev,
+      acceptsPickup: allows_pickup,
+      acceptsScheduled: allows_scheduled,
+    }));
+
+    const migrated = localStorage.getItem(settingsMigratedKey(merchant.id));
+    if (migrated) return;
+
+    const localExtras = loadDeliveryExtras(merchant.id);
+    const hasLocal =
+      localStorage.getItem(deliveryExtrasKey(merchant.id)) !== null;
+    if (!hasLocal) {
+      localStorage.setItem(settingsMigratedKey(merchant.id), '1');
+      return;
+    }
+
+    void saveMerchantSettings({
+      allows_pickup: localExtras.acceptsPickup,
+      allows_scheduled: localExtras.acceptsScheduled,
+    })
+      .then(() => {
+        localStorage.setItem(settingsMigratedKey(merchant.id), '1');
+        localStorage.removeItem(deliveryExtrasKey(merchant.id));
+      })
+      .catch(() => {
+        /* keep local fallback until next save */
+      });
+  }, [merchant.id, serverSettings]);
 
   useEffect(() => {
     const extras = loadHoursExtras(merchant.id);
@@ -488,11 +532,12 @@ export function useMerchantSettings(merchant: Merchant) {
   };
 
   const saveDelivery = async () => {
-    saveDeliveryExtras(merchant.id, {
-      acceptsPickup: formData.acceptsPickup,
-      acceptsScheduled: formData.acceptsScheduled,
-      maxDailyCapacity: formData.maxDailyCapacity,
+    await saveMerchantSettings({
+      allows_pickup: formData.acceptsPickup,
+      allows_scheduled: formData.acceptsScheduled,
     });
+    localStorage.setItem(settingsMigratedKey(merchant.id), '1');
+    localStorage.removeItem(deliveryExtrasKey(merchant.id));
     await updateMutation.mutateAsync(formData);
     toast.success('Delivery settings saved');
   };

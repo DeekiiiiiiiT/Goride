@@ -21,6 +21,7 @@ const DRAFT_JSON_ALLOWLIST = new Set([
   "email",
   "businessType",
   "cuisineTypes",
+  "inventoryCategories",
   "location",
   "streetAddress",
   "city",
@@ -168,13 +169,24 @@ export function parseDeliveryRadius(value: unknown): number {
   return 10;
 }
 
-export function merchantPayloadFromBody(body: Record<string, unknown>, userId: string) {
+export function merchantPayloadFromBody(
+  body: Record<string, unknown>,
+  userId: string,
+  verticalSnapshot?: {
+    vertical_type?: string;
+    fulfillment_type?: string;
+    go_live_rule?: string;
+  },
+) {
   const cuisineTypes = Array.isArray(body.cuisineTypes)
     ? (body.cuisineTypes as string[]).filter(Boolean).slice(0, 3)
     : [];
+  const inventoryCategories = Array.isArray(body.inventoryCategories)
+    ? (body.inventoryCategories as string[]).filter(Boolean).slice(0, 5)
+    : [];
   const primaryCuisine = typeof body.cuisineType === "string" && body.cuisineType
     ? body.cuisineType
-    : cuisineTypes[0] || null;
+    : cuisineTypes[0] || inventoryCategories[0] || null;
 
   const name = String(body.name || body.restaurantName || "").trim();
   const slugBase = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") || "merchant";
@@ -202,6 +214,9 @@ export function merchantPayloadFromBody(body: Record<string, unknown>, userId: s
     city: body.city || null,
     postal_code: body.postalCode || null,
     website: body.website || null,
+    vertical_type: verticalSnapshot?.vertical_type ?? null,
+    fulfillment_type: verticalSnapshot?.fulfillment_type ?? null,
+    go_live_rule: verticalSnapshot?.go_live_rule ?? null,
     verification_status: "pending",
     onboarding_status: "submitted",
     submitted_at: new Date().toISOString(),

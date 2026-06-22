@@ -1,4 +1,6 @@
 import type { Merchant } from '../hooks/useMerchant';
+import { fetchApplicationStatus } from './partner-api';
+import { resolveGoLiveRule } from '@roam/vertical-config';
 
 export function goLiveStorageKey(merchantId: string) {
   return `roam_go_live_complete_${merchantId}`;
@@ -32,6 +34,18 @@ export function shouldShowGoLiveScreen(merchant: Pick<Merchant, 'id' | 'verifica
   if (hasCompletedGoLive(merchant.id)) return false;
   if (hasDismissedGoLiveScreen(merchant.id)) return false;
   return true;
+}
+
+export async function isVerticalGoLiveReady(
+  merchant: Pick<Merchant, 'go_live_rule'>,
+): Promise<boolean> {
+  const status = await fetchApplicationStatus();
+  const rule = resolveGoLiveRule(merchant.go_live_rule ?? status.merchant?.go_live_rule);
+  const c = status.checklist;
+  if (rule === 'catalog_imported' || rule === 'pos_connected') {
+    return c.catalogComplete && c.profileComplete && c.hoursComplete && c.bankComplete;
+  }
+  return c.menuComplete && c.profileComplete && c.hoursComplete && c.bankComplete;
 }
 
 /** Owner has not finished the partner onboarding application. */

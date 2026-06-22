@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
+import { PartnerWizardMobileBanner, PartnerWizardProgress } from './PartnerWizardProgress';
 
 export const ONBOARDING_STEPS = [
   { id: 1, icon: 'store', label: 'Info' },
@@ -16,41 +17,73 @@ export { inputClass };
 
 interface OnboardingHeaderProps {
   showSetupTitle?: boolean;
-}
-
-interface OnboardingHeaderFullProps extends OnboardingHeaderProps {
+  onBack?: () => void;
   currentStep?: number;
+  showProgress?: boolean;
 }
 
-export function OnboardingHeader({ showSetupTitle, currentStep }: OnboardingHeaderFullProps) {
-  if (currentStep === 5) {
-    return (
-      <header className="fixed top-0 z-50 flex w-full flex-col border-b border-outline-variant bg-surface px-margin-mobile pb-inset-sm safe-t safe-x">
-        <div className="flex h-16 w-full items-center justify-between">
-          <MaterialIcon name="restaurant" className="text-2xl text-primary" filled />
-          <h1 className="text-headline-md font-semibold tracking-tight text-primary">Roam Dash Partner</h1>
-          <div className="h-6 w-6" />
-        </div>
-        {currentStep && <OnboardingStepper currentStep={currentStep} variant="labeled" />}
-      </header>
-    );
-  }
+interface OnboardingHeaderFullProps extends OnboardingHeaderProps {}
 
-  if (showSetupTitle) {
+export function OnboardingHeader({
+  showSetupTitle,
+  onBack,
+  currentStep,
+  showProgress = true,
+}: OnboardingHeaderFullProps) {
+  if (currentStep === 5 && showSetupTitle) {
     return (
-      <header className="fixed top-0 z-50 flex h-16 w-full items-center justify-center border-b border-outline-variant bg-surface px-margin-mobile shadow-sm safe-t safe-x">
-        <h1 className="text-headline-md font-semibold tracking-tight text-primary">Setup</h1>
+      <header className="fixed top-0 z-50 flex w-full flex-col border-b border-outline-variant bg-surface safe-t safe-x">
+        <div className="flex h-14 w-full items-center justify-between px-margin-mobile">
+          {onBack ? (
+            <button
+              type="button"
+              onClick={onBack}
+              className="-ml-2 rounded-full p-2 transition-colors hover:bg-surface-container-low active:scale-95"
+              aria-label="Back"
+            >
+              <MaterialIcon name="arrow_back" className="text-primary" />
+            </button>
+          ) : (
+            <div className="w-10" />
+          )}
+          <h1 className="text-title-lg font-semibold text-primary">Roam Dash Partner</h1>
+          <span className="rounded-full bg-surface-container px-3 py-1 text-label-md text-on-surface-variant">
+            Step {currentStep} of 6
+          </span>
+        </div>
       </header>
     );
   }
 
   return (
-    <header className="fixed top-0 z-50 flex h-16 w-full items-center justify-center border-b border-outline-variant bg-surface/90 px-margin-mobile shadow-[0_4px_12px_rgba(0,0,0,0.02)] backdrop-blur-md safe-t safe-x">
-      <div className="absolute left-margin-mobile flex items-center text-primary">
-        <MaterialIcon name="restaurant" filled size={22} />
-      </div>
-      <h1 className="text-headline-md font-semibold tracking-tight text-primary">Roam Dash Partner</h1>
-    </header>
+    <>
+      <header className="fixed top-0 z-50 flex w-full flex-col border-b border-outline-variant bg-surface safe-t safe-x">
+        <div className="flex h-14 w-full items-center gap-4 px-margin-mobile">
+          {onBack ? (
+            <button
+              type="button"
+              onClick={onBack}
+              className="-ml-2 rounded-full p-2 transition-colors hover:bg-surface-container-low active:scale-95"
+              aria-label="Back"
+            >
+              <MaterialIcon name="arrow_back" className="text-primary" />
+            </button>
+          ) : null}
+          <h1 className="text-title-lg font-semibold text-primary">Roam Dash Partner</h1>
+          {currentStep && (
+            <span className="ml-auto hidden rounded-full bg-surface-container px-3 py-1 text-label-md text-on-surface-variant md:inline">
+              Step {currentStep} of 6
+            </span>
+          )}
+        </div>
+        {currentStep && showProgress && (
+          <div className="hidden px-margin-mobile pb-3 md:block">
+            <PartnerWizardProgress currentStep={currentStep} />
+          </div>
+        )}
+      </header>
+      {currentStep && showProgress && <PartnerWizardMobileBanner currentStep={currentStep} />}
+    </>
   );
 }
 
@@ -158,47 +191,33 @@ export function OnboardingBottomNav({
   continueDisabled = false,
   isLoading = false,
   showBack = true,
-  layout = 'row',
 }: OnboardingBottomNavProps) {
-  const stacked = layout === 'stacked';
-
   return (
-    <nav className="fixed bottom-0 z-50 flex w-full items-center justify-between gap-inset-sm border-t border-outline-variant bg-surface px-margin-mobile py-inset-sm pb-[max(16px,env(safe-area-inset-bottom))] shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
+    <nav className="fixed bottom-0 z-50 flex w-full items-center justify-between gap-inset-sm border-t border-outline-variant bg-surface px-margin-mobile py-4 pb-[max(16px,env(safe-area-inset-bottom))] shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
       {showBack && onBack ? (
         <button
           type="button"
           onClick={onBack}
-          className={`flex items-center justify-center gap-2 rounded-lg border-2 border-secondary text-secondary transition-all hover:bg-secondary-fixed active:scale-[0.98] ${
-            stacked ? 'h-12 flex-col rounded-xl px-6' : 'h-12 flex-1 border border-outline px-6 text-on-surface-variant'
-          }`}
+          className="flex items-center justify-center gap-2 rounded-full border border-outline px-6 py-3 font-label-lg text-primary transition-all hover:bg-surface-container-low active:scale-[0.98]"
         >
-          <MaterialIcon name="arrow_back" size={stacked ? 20 : 18} />
-          <span className="text-label-md font-semibold">Back</span>
+          <MaterialIcon name="chevron_left" size={20} />
+          Back
         </button>
-      ) : null}
+      ) : (
+        <div />
+      )}
       <button
         type="button"
         onClick={onContinue}
         disabled={continueDisabled || isLoading}
-        className={`flex items-center justify-center gap-2 rounded-lg bg-primary-container text-on-primary-container shadow-sm transition-all hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${
-          stacked
-            ? 'h-12 flex-col rounded-xl px-6'
-            : showBack
-              ? 'h-12 flex-1 px-8'
-              : 'h-12 w-full px-8'
-        }`}
+        className="flex items-center justify-center gap-2 rounded-full bg-primary px-8 py-3 font-label-lg text-on-primary shadow-sm transition-all hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
       >
         {isLoading ? (
           <div className="partner-spinner !h-5 !w-5 !border-2" role="status" aria-label="Loading" />
         ) : (
           <>
-            {continueLabel === 'Create Restaurant' && (
-              <MaterialIcon name="check_circle" size={stacked ? 20 : 18} />
-            )}
-            <span className="text-label-md font-semibold">{isLoading ? 'Please wait...' : continueLabel}</span>
-            {continueLabel === 'Continue' && (
-              <MaterialIcon name="arrow_forward" size={stacked ? 20 : 18} />
-            )}
+            {continueLabel}
+            {continueLabel === 'Continue' && <MaterialIcon name="chevron_right" size={20} />}
           </>
         )}
       </button>

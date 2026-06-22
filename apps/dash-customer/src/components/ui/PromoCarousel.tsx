@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { PROMO_BANNERS } from '@/lib/discoverContent';
 
 type Props = {
@@ -58,20 +59,18 @@ export function PromoCarousel({ onPromoClick }: Props) {
             key={promo.id}
             type="button"
             onClick={() => onPromoClick?.(promo.id)}
-            className={`min-w-[85%] sm:min-w-[300px] snap-center rounded-xl p-4 flex flex-col justify-center relative overflow-hidden shadow-sm min-h-[120px] text-left active:scale-[0.98] transition-transform ${promo.className}`}
+            className={`relative flex h-[160px] w-[310px] shrink-0 snap-center flex-col justify-end overflow-hidden rounded-xl p-5 text-left shadow-sm transition-transform active:scale-[0.98] ${promo.className}`}
           >
-            <div className="relative z-10 w-2/3">
-              <h3 className="text-xl font-semibold mb-1">{promo.title}</h3>
-              <p className="text-sm opacity-90">{promo.subtitle}</p>
-              {promo.code && (
-                <div className={`mt-2 text-xs font-bold px-2 py-1 rounded inline-block ${promo.codeClassName}`}>
-                  Code: {promo.code}
-                </div>
-              )}
+            <div className="relative z-10 max-w-[200px]">
+              <h3 className="text-headline-md font-bold leading-tight">{promo.title}</h3>
+              <p className="mt-1 text-label-md uppercase tracking-wider opacity-80">{promo.subtitle}</p>
             </div>
-            {promo.id === 'welcome' && (
-              <div className="absolute right-0 top-0 h-full w-1/2 bg-gradient-to-l from-black/10 to-transparent" />
-            )}
+            <div className="absolute right-4 top-4 opacity-30">
+              <MaterialIcon
+                name={promo.id === 'welcome' ? 'delivery_dining' : 'local_offer'}
+                className="text-[64px] text-white"
+              />
+            </div>
           </button>
         ))}
       </div>

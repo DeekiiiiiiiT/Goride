@@ -57,6 +57,10 @@ export interface DashMerchant {
   wizard_step_key?: PartnerWizardStepKey | null;
   onboarding_draft?: Record<string, unknown>;
   last_onboarding_activity_at?: string | null;
+  vertical_type?: string | null;
+  fulfillment_type?: string | null;
+  go_live_rule?: string | null;
+  business_type_id?: string | null;
 }
 
 export interface MerchantHours {
@@ -498,13 +502,9 @@ export function listMerchantOwners(accessToken: string, q?: string, page = 1) {
   return deliveryFetch(accessToken, `/admin/merchant-owners?${sp}`);
 }
 
-export interface MerchantBusinessTypeDto {
-  id: string;
-  section_id: string;
-  label: string;
-  sort_order: number;
-  is_active: boolean;
-}
+import type { MerchantBusinessTypeConfig } from '@roam/types';
+
+export type MerchantBusinessTypeDto = MerchantBusinessTypeConfig;
 
 export interface MerchantBusinessTypeSectionDto {
   id: string;
@@ -554,7 +554,20 @@ export function deleteMerchantBusinessTypeSection(accessToken: string, id: strin
 
 export function createMerchantBusinessType(
   accessToken: string,
-  body: { label: string; section_id: string; id?: string; sort_order?: number },
+  body: {
+    label: string;
+    section_id: string;
+    id?: string;
+    sort_order?: number;
+    vertical_type?: string;
+    fulfillment_type?: string;
+    category_taxonomy_key?: string;
+    default_prep_time_mins?: number;
+    max_delivery_radius_km?: number;
+    compliance_tier?: string;
+    go_live_rule?: string;
+    required_document_types?: string[];
+  },
 ) {
   return deliveryFetch<{ type: MerchantBusinessTypeDto }>(
     accessToken,
@@ -566,7 +579,7 @@ export function createMerchantBusinessType(
 export function updateMerchantBusinessType(
   accessToken: string,
   id: string,
-  body: Partial<Pick<MerchantBusinessTypeDto, 'label' | 'section_id' | 'sort_order' | 'is_active'>>,
+  body: Partial<MerchantBusinessTypeDto>,
 ) {
   return deliveryFetch<{ type: MerchantBusinessTypeDto }>(
     accessToken,

@@ -15,6 +15,8 @@ import QueryErrorState from '../components/QueryErrorState';
 import PartnerSkeleton from '../components/PartnerSkeleton';
 import PartnerDesktopShell from '../components/layout/PartnerDesktopShell';
 import MenuDesktopDashboard from '../components/menu/MenuDesktopDashboard';
+import CatalogImportPanel from '../components/menu/CatalogImportPanel';
+import { resolveGoLiveRule } from '@roam/vertical-config';
 import { useAcceptingOrdersToggle } from '../hooks/useAcceptingOrdersToggle';
 import { useMerchantMenu } from '../hooks/useMerchantMenu';
 import { useMenuReorder } from '../hooks/useMenuReorder';
@@ -38,6 +40,10 @@ export default function MenuPage({ merchant, onNavigate }: MenuPageProps) {
     useAcceptingOrdersToggle(merchant);
   const dragEnabled = readFlag(merchant.id, 'menuDragReorder');
   const { reorderCategories, reorderItems } = useMenuReorder(merchant.id);
+
+  const usesCatalogImport =
+    resolveGoLiveRule(merchant.go_live_rule) === 'catalog_imported' ||
+    resolveGoLiveRule(merchant.go_live_rule) === 'pos_connected';
 
   const { data, isLoading, isError, refetch } = useMerchantMenu(merchant.id);
 
@@ -391,6 +397,12 @@ export default function MenuPage({ merchant, onNavigate }: MenuPageProps) {
           isMarkingAll={markAllAvailableMutation.isPending}
         />
       ) : (
+        <>
+          {usesCatalogImport && (
+            <div className="max-w-3xl mx-auto px-margin-mobile md:px-margin-tablet mb-inset-md">
+              <CatalogImportPanel merchantId={merchant.id} onImported={() => void refetch()} />
+            </div>
+          )}
         <MenuOverviewView
           categories={categories}
           itemsByCategory={itemsByCategory}
@@ -401,6 +413,7 @@ export default function MenuPage({ merchant, onNavigate }: MenuPageProps) {
           dragEnabled={dragEnabled}
           onReorderCategories={reorderCategories}
         />
+        </>
       )}
 
       {categorySheet}

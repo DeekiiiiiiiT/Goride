@@ -55,6 +55,20 @@ Courier admin routes remain under `/admin/couriers/*`.
 
 Ops playbook: `docs/dash-admin/OPS_PLAYBOOK.md`
 
+## Vertical metadata (multi-vertical Dash)
+
+Business types carry vertical config in `delivery.merchant_business_types` (`vertical_type`, `fulfillment_type`, `go_live_rule`, `compliance_tier`, etc.). Merchants snapshot these fields on submit.
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/merchants?vertical=` | Public discovery filter by `vertical_type` |
+| GET/PUT | `/merchant/settings` | Pickup / scheduled order flags (`merchant_settings`) |
+| POST | `/merchants/:id/catalog/import` | Bulk retail catalog import (CSV JSON body) |
+| GET | `/merchant/application-status` | Setup checklist (`menuComplete` / `catalogComplete` by `go_live_rule`) |
+| GET/PATCH | `/admin/onboarding/business-types` | CRUD with full metadata (regulated tier blocked until enabled) |
+
+Shared client helpers: `@roam/vertical-config`, `@roam/types`.
+
 ## Merchant verification status machine
 
 `pending` → `in_review` → `approved` | `rejected` | `docs_requested`

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { MaterialIcon } from '../signup/components/MaterialIcon';
+import { resolveGoLiveRule } from '@roam/vertical-config';
 import { fetchApplicationStatus, type ApplicationStatusResponse } from '../lib/partner-api';
 
 interface AccountPendingPageProps {
@@ -15,14 +16,22 @@ interface StatusItem {
 
 function mapChecklist(data: ApplicationStatusResponse): StatusItem[] {
   const c = data.checklist;
+  const goLiveRule = resolveGoLiveRule(
+    (data.merchant as { go_live_rule?: string } | undefined)?.go_live_rule,
+  );
+  const catalogItem =
+    goLiveRule === 'catalog_imported' || goLiveRule === 'pos_connected'
+      ? { label: 'Catalog (50+ items)', status: c.catalogComplete ? 'complete' as const : 'missing' as const }
+      : { label: 'Menu (5+ items)', status: c.menuComplete ? 'complete' as const : 'missing' as const };
+
   return [
-    { label: 'Restaurant info', status: c.profileComplete ? 'complete' : 'missing' },
+    { label: 'Store profile', status: c.profileComplete ? 'complete' : 'missing' },
     { label: 'Location', status: c.profileComplete ? 'complete' : 'missing' },
     { label: 'Business details', status: c.profileComplete ? 'complete' : 'missing' },
     { label: 'Identity verification', status: c.documentsComplete ? 'complete' : 'review' },
     { label: 'Bank details', status: c.bankComplete ? 'complete' : 'missing' },
     { label: 'Operating hours', status: c.hoursComplete ? 'complete' : 'missing' },
-    { label: 'Menu (5+ items)', status: c.menuComplete ? 'complete' : 'missing' },
+    catalogItem,
   ];
 }
 

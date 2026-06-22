@@ -6,7 +6,7 @@ import HomePage from './pages/HomePage';
 import SearchPage from './pages/SearchPage';
 import SearchResultsPage from './pages/SearchResultsPage';
 import AccountPage from './pages/AccountPage';
-import RestaurantPage from './pages/RestaurantPage';
+import StorePage from './pages/StorePage';
 import CartPage from './pages/CartPage';
 import OrdersPage from './pages/OrdersPage';
 import OrderTrackingPage from './pages/OrderTrackingPage';
@@ -30,6 +30,7 @@ import ConnectionErrorPage from './pages/ConnectionErrorPage';
 import AboutPage from './pages/AboutPage';
 import type { TrackingPhase } from './lib/trackingContent';
 import CheckoutPage from './pages/CheckoutPage';
+import AgeVerificationPage from './pages/AgeVerificationPage';
 import PaymentMethodsPage from './pages/PaymentMethodsPage';
 import AddCardPage from './pages/AddCardPage';
 import LoginPage from './pages/LoginPage';
@@ -78,6 +79,7 @@ type StackPage =
   | 'restaurant-reviews'
   | 'out-of-delivery'
   | 'connection-error'
+  | 'age-verification'
   | 'tracking'
   | 'login'
   | 'payment-callback-wipay'
@@ -472,6 +474,8 @@ function DashCustomerShell() {
   const showHeader =
     showShell &&
     stackPage !== 'login' &&
+    activeTab !== 'home' &&
+    activeTab !== 'search' &&
     activeTab !== 'account' &&
     !(activeTab === 'search' && searchMode === 'category');
 
@@ -484,6 +488,7 @@ function DashCustomerShell() {
             onSearchFocus={() => handleTabChange('search')}
             showActiveOrder={!!session}
             showQuickReorder={!!session}
+            onProfileClick={() => handleTabChange('account')}
           />
         );
       case 'search':
@@ -536,11 +541,24 @@ function DashCustomerShell() {
   const renderStackPage = () => {
     switch (stackPage) {
       case 'restaurant':
-        return <RestaurantPage merchantId={pageData?.merchantId as string | undefined} onNavigate={navigate} />;
+        return (
+          <StorePage
+            merchantId={pageData?.merchantId as string | undefined}
+            verticalType={pageData?.verticalType as string | undefined}
+            onNavigate={navigate}
+          />
+        );
       case 'cart':
         return <CartPage onNavigate={navigate} session={session} />;
       case 'checkout':
         return <CheckoutPage onNavigate={navigate} session={session} />;
+      case 'age-verification':
+        return (
+          <AgeVerificationPage
+            onVerified={() => navigate('checkout', pageData)}
+            onCancel={() => navigate('cart')}
+          />
+        );
       case 'payment-methods':
         return (
           <PaymentMethodsPage
@@ -671,7 +689,8 @@ function DashCustomerShell() {
     itemCount > 0 &&
     stackPage !== 'cart' &&
     stackPage !== 'checkout' &&
-    (!stackPage || stackPage === 'restaurant');
+    (!stackPage || stackPage === 'restaurant') &&
+    !['grocery', 'convenience', 'retail'].includes(sessionStorage.getItem('roam_cart_vertical') ?? '');
 
   const isImmersiveStack = !!stackPage && IMMERSIVE_STACK_PAGES.includes(stackPage);
   const showOfflineOverlay = phase === 'app' && !isOnline && stackPage !== 'tracking';
@@ -711,6 +730,7 @@ function DashCustomerShell() {
           total={subtotal}
           onClick={() => navigate('cart')}
           hasBottomNav={showBottomNav}
+          variant={stackPage === 'restaurant' ? 'store' : 'default'}
         />
       )}
 

@@ -16,6 +16,10 @@ import {
 import { calculateOrderTotals } from '@/lib/orderPricing';
 import { formatJmd } from '@/lib/restaurantContent';
 import { toast } from 'sonner';
+import { isAgeVerified } from '@/pages/AgeVerificationPage';
+import PharmacyNoticeSheet, {
+  isPharmacyNoticeAcknowledged,
+} from '@/components/checkout/PharmacyNoticeSheet';
 
 type Props = {
   onNavigate: (page: string, data?: Record<string, unknown>) => void;
@@ -39,6 +43,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
   const [showTipSheet, setShowTipSheet] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [showPharmacyNotice, setShowPharmacyNotice] = useState(false);
 
   const deliveryAddress = savedAddress
     ? `${savedAddress.line1}${savedAddress.line2 ? `, ${savedAddress.line2}` : ''}`
@@ -56,6 +61,16 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
       onNavigate('cart');
     }
   }, [items.length, onNavigate]);
+
+  useEffect(() => {
+    const vertical = sessionStorage.getItem('roam_cart_vertical');
+    if (vertical === 'alcohol' && !isAgeVerified()) {
+      onNavigate('age-verification');
+    }
+    if (vertical === 'pharmacy' && !isPharmacyNoticeAcknowledged()) {
+      setShowPharmacyNotice(true);
+    }
+  }, [onNavigate]);
 
   const handleDeliveryModeChange = (mode: 'standard' | 'scheduled') => {
     if (mode === 'scheduled') {
@@ -444,6 +459,14 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
           setShowTipSheet(false);
         }}
       />
+
+      {showPharmacyNotice && (
+        <PharmacyNoticeSheet
+          itemCount={items.length}
+          onContinue={() => setShowPharmacyNotice(false)}
+          onDismiss={() => onNavigate('cart')}
+        />
+      )}
     </div>
   );
 }

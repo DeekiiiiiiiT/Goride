@@ -14,6 +14,7 @@
     "@roam/auth-client": "workspace:*",
     "@roam/business-config": "workspace:*",
     "@roam/types": "workspace:*",
+    "@roam/vertical-config": "workspace:*",
     "@roam/ui": "workspace:*",
     "@supabase/supabase-js": "^2",
     "@tanstack/react-query": "*",
