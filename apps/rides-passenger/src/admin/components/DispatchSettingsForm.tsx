@@ -12,7 +12,9 @@ import {
   getDispatchSettings,
   updateDispatchSettings,
 } from '../services/ridesAdminService';
-import { useAdminConfirm } from '../contexts/AdminConfirmContext'; = new Set(['platform_owner', 'superadmin', 'rides_admin']);
+import { useAdminConfirm } from '../contexts/AdminConfirmContext';
+
+const WRITE_ROLES = new Set(['platform_owner', 'superadmin', 'rides_admin']);
 
 function isDeprecationEnabled(): boolean {
   if (typeof window === 'undefined') return false;
