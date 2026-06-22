@@ -12,7 +12,7 @@ import {
 } from '../services/dashAdminService';
 import type { AdminOutletContext } from '../DashAdminPortal';
 
-type TabId = 'all' | MerchantVerificationStatus | 'incomplete_setup';
+type TabId = 'all' | MerchantVerificationStatus | 'incomplete_setup' | 'regulated';
 
 export function MerchantManager() {
   const { session } = useOutletContext<AdminOutletContext>();
@@ -56,7 +56,8 @@ export function MerchantManager() {
         setItems([]);
       } else {
         const res = await listMerchants(accessToken, {
-          status: tab,
+          status: tab === 'regulated' ? 'all' : tab,
+          vertical_in: tab === 'regulated' ? 'pharmacy,alcohol' : undefined,
           search: debouncedSearch || undefined,
           limit: 100,
         });
@@ -78,6 +79,7 @@ export function MerchantManager() {
 
   const tabs: { id: TabId; label: string }[] = [
     { id: 'incomplete_setup', label: 'Unfinished setup' },
+    { id: 'regulated', label: 'Regulated' },
     { id: 'pending', label: 'Pending' },
     { id: 'in_review', label: 'In Review' },
     { id: 'docs_requested', label: 'Docs Requested' },
@@ -236,6 +238,11 @@ export function MerchantManager() {
                   <td className="px-4 py-3">
                     <p className="font-medium text-white">{m.name}</p>
                     <p className="text-slate-500 text-xs">{m.email || m.phone || '—'}</p>
+                    {m.vertical_type && (
+                      <span className="mt-1 inline-block text-[10px] px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300">
+                        {m.vertical_type}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <MerchantStatusBadge status={m.verification_status} />

@@ -2,6 +2,10 @@ export {
   DEFAULT_REQUIRED_DOCS,
   RESTAURANT_GO_LIVE_RULE,
   REGULATED_VERTICALS,
+  REGULATED_PERMIT_DOC,
+  getVerticalPreset,
+  applyVerticalPreset,
+  normalizeRequiredDocumentTypes,
   getDefaultConfig,
   resolveVerticalType,
   resolveFulfillmentType,
@@ -11,5 +15,6 @@ export {
   getVerticalLabels,
   getCategoryTaxonomyKey,
   getComplianceTier,
+  DOCUMENT_TYPE_LABELS,
 } from './verticalConfig';
 export type { VerticalLabels } from './verticalConfig';

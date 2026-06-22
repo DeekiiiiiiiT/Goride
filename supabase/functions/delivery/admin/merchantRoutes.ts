@@ -372,7 +372,7 @@ export function registerMerchantAdminRoutes(app: Hono) {
 
   admin.get("/merchants", async (c) => {
     const sb = getDb();
-    const { status, search, operational_status: opStatus } = c.req.query();
+    const { status, search, operational_status: opStatus, vertical_in: verticalIn } = c.req.query();
     const limit = Math.min(parseInt(c.req.query("limit") || "50", 10) || 50, 200);
     const page = Math.max(parseInt(c.req.query("page") || "1", 10) || 1, 1);
     const offset = (page - 1) * limit;
@@ -386,6 +386,14 @@ export function registerMerchantAdminRoutes(app: Hono) {
     }
     if (opStatus && opStatus !== "all") {
       query = query.eq("operational_status", opStatus);
+    }
+    if (verticalIn?.trim()) {
+      const verticals = verticalIn.split(",").map((v) => v.trim()).filter(Boolean);
+      if (verticals.length === 1) {
+        query = query.eq("vertical_type", verticals[0]);
+      } else if (verticals.length > 1) {
+        query = query.in("vertical_type", verticals);
+      }
     }
     if (search?.trim()) {
       const pattern = `%${search.trim()}%`;

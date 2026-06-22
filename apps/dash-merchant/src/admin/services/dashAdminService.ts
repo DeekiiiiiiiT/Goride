@@ -241,6 +241,7 @@ export function listMerchants(
   opts: {
     status?: MerchantVerificationStatus | 'all';
     operational_status?: MerchantOperationalStatus | 'all';
+    vertical_in?: string;
     search?: string;
     page?: number;
     limit?: number;
@@ -249,6 +250,7 @@ export function listMerchants(
   const sp = new URLSearchParams();
   if (opts.status) sp.set('status', opts.status);
   if (opts.operational_status) sp.set('operational_status', opts.operational_status);
+  if (opts.vertical_in) sp.set('vertical_in', opts.vertical_in);
   if (opts.search) sp.set('search', opts.search);
   if (opts.page != null) sp.set('page', String(opts.page));
   if (opts.limit != null) sp.set('limit', String(opts.limit));

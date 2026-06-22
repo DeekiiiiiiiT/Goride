@@ -65,7 +65,12 @@ Business types carry vertical config in `delivery.merchant_business_types` (`ver
 | GET/PUT | `/merchant/settings` | Pickup / scheduled order flags (`merchant_settings`) |
 | POST | `/merchants/:id/catalog/import` | Bulk retail catalog import (CSV JSON body) |
 | GET | `/merchant/application-status` | Setup checklist (`menuComplete` / `catalogComplete` by `go_live_rule`) |
-| GET/PATCH | `/admin/onboarding/business-types` | CRUD with full metadata (regulated tier blocked until enabled) |
+| GET/PATCH | `/admin/onboarding/business-types` | CRUD with full metadata (vertical presets, required docs, regulated tier) |
+| GET | `/admin/merchants?vertical_in=pharmacy,alcohol` | Filter merchant list by vertical snapshot |
+
+Admin UI: **Merchants → Onboarding → Business Types** — configure sections, vertical presets, KYC documents, activate/deactivate types. Use template selector when adding types (Restaurant, Grocery, Pharmacy, etc.).
+
+Regulated partners appear under **Merchants → Regulated** tab (`pharmacy` + `alcohol`).
 
 Shared client helpers: `@roam/vertical-config`, `@roam/types`.
 

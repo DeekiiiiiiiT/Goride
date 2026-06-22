@@ -23,6 +23,21 @@ export type MerchantDocumentType =
   | 'liquor_license'
   | 'pharmacy_permit';
 
+/** All valid merchant document types for admin + API validation. */
+export const MERCHANT_DOCUMENT_TYPES = [
+  'id_front',
+  'id_back',
+  'proof_of_business',
+  'liquor_license',
+  'pharmacy_permit',
+] as const satisfies readonly MerchantDocumentType[];
+
+export const BASE_MERCHANT_DOCUMENT_TYPES = [
+  'id_front',
+  'id_back',
+  'proof_of_business',
+] as const satisfies readonly MerchantDocumentType[];
+
 export type VerticalType =
   | 'restaurant'
   | 'grocery'

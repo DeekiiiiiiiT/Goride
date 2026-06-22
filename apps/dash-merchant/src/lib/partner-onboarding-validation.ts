@@ -17,7 +17,7 @@ export function canContinueBusinessInfoStep(
 ): boolean {
   const taxonomy = getCategoryTaxonomyKey(typeConfig ?? null);
   const hasCategories =
-    taxonomy === 'inventory_category' || taxonomy === 'product_category'
+    taxonomy === 'inventory_category'
       ? data.inventoryCategories.length > 0
       : taxonomy === 'none'
         ? true

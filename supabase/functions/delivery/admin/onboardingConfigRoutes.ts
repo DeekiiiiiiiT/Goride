@@ -5,7 +5,13 @@ import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { requireProductAdmin, type ProductAdminUser } from "../../_shared/productAdmin.ts";
 import { requireDashWrite } from "./dashPermissions.ts";
 import { getDb } from "./merchantAdminShared.ts";
-import { defaultBusinessTypeMetadata } from "../verticalMetadata.ts";
+import {
+  defaultBusinessTypeMetadata,
+  normalizeRequiredDocs,
+  REGULATED_VERTICALS,
+  resolveVerticalType,
+  MERCHANT_DOCUMENT_TYPE_ALLOWLIST,
+} from "../verticalMetadata.ts";
 
 export interface BusinessTypeSectionDto {
   id: string;
@@ -55,7 +61,10 @@ function normalizeTypeRow(row: Record<string, unknown>): BusinessTypeDto {
   };
 }
 
-function parseMetadataPatch(body: Record<string, unknown>): Record<string, unknown> | null {
+function parseMetadataPatch(
+  body: Record<string, unknown>,
+  currentVertical?: string | null,
+): Record<string, unknown> | null {
   const patch: Record<string, unknown> = {};
   const verticals = new Set([
     "restaurant", "grocery", "pharmacy", "alcohol", "convenience", "retail",
@@ -65,10 +74,18 @@ function parseMetadataPatch(body: Record<string, unknown>): Record<string, unkno
   const compliance = new Set(["standard", "regulated"]);
   const goLive = new Set(["menu_min_5", "catalog_imported", "pos_connected"]);
 
+  let effectiveVertical = currentVertical ? resolveVerticalType(currentVertical) : "restaurant";
+
   if (body.vertical_type != null) {
     const v = String(body.vertical_type);
     if (!verticals.has(v)) return null;
     patch.vertical_type = v;
+    effectiveVertical = resolveVerticalType(v);
+    if (REGULATED_VERTICALS.has(effectiveVertical)) {
+      patch.compliance_tier = "regulated";
+    } else {
+      patch.compliance_tier = "standard";
+    }
   }
   if (body.fulfillment_type != null) {
     const f = String(body.fulfillment_type);
@@ -83,7 +100,8 @@ function parseMetadataPatch(body: Record<string, unknown>): Record<string, unkno
   if (body.compliance_tier != null) {
     const c = String(body.compliance_tier);
     if (!compliance.has(c)) return null;
-    if (c === "regulated") return null;
+    if (c === "regulated" && !REGULATED_VERTICALS.has(effectiveVertical)) return null;
+    if (c === "standard" && REGULATED_VERTICALS.has(effectiveVertical)) return null;
     patch.compliance_tier = c;
   }
   if (body.go_live_rule != null) {
@@ -93,9 +111,13 @@ function parseMetadataPatch(body: Record<string, unknown>): Record<string, unkno
   }
   if (body.required_document_types != null) {
     if (!Array.isArray(body.required_document_types)) return null;
-    patch.required_document_types = (body.required_document_types as unknown[])
-      .map(String)
-      .filter(Boolean);
+    const docs = (body.required_document_types as unknown[]).map(String).filter(Boolean);
+    for (const doc of docs) {
+      if (!MERCHANT_DOCUMENT_TYPE_ALLOWLIST.has(doc)) return null;
+    }
+    patch.required_document_types = normalizeRequiredDocs(docs, effectiveVertical);
+  } else if (body.vertical_type != null) {
+    patch.required_document_types = normalizeRequiredDocs(undefined, effectiveVertical);
   }
   if (body.default_prep_time_mins != null) {
     patch.default_prep_time_mins = Number(body.default_prep_time_mins);
@@ -311,12 +333,22 @@ export function mountOnboardingConfigAdminRoutes(admin: Hono) {
     if (body.section_id != null) patch.section_id = String(body.section_id).trim();
     if (body.sort_order != null) patch.sort_order = Number(body.sort_order);
     if (body.is_active != null) patch.is_active = Boolean(body.is_active);
-    const metaPatch = parseMetadataPatch(body);
+
+    const sb = getDb();
+    const { data: existing } = await sb
+      .from("merchant_business_types")
+      .select("vertical_type")
+      .eq("id", id)
+      .maybeSingle();
+
+    const metaPatch = parseMetadataPatch(
+      body,
+      (existing as Record<string, unknown> | null)?.vertical_type as string | null,
+    );
     if (metaPatch === null) return c.json({ error: "Invalid metadata field" }, 400);
     Object.assign(patch, metaPatch);
     if (!Object.keys(patch).length) return c.json({ error: "No fields to update" }, 400);
 
-    const sb = getDb();
     const { data, error } = await sb
       .from("merchant_business_types")
       .update(patch)

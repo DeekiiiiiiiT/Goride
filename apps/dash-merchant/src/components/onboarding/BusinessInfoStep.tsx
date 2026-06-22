@@ -219,7 +219,6 @@ export default function BusinessInfoStep({ data, onChange }: BusinessInfoStepPro
             </div>
 
             {(taxonomy === 'inventory_category' ||
-              taxonomy === 'product_category' ||
               taxonomy === 'cuisine' ||
               vertical === 'pharmacy') && (
               <div>
