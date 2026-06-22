@@ -261,6 +261,14 @@ function DashCustomerShell() {
     } else if (path.includes('/payment/callback/paypal')) {
       setStackPage('payment-callback-paypal');
     }
+
+    const merchantId = new URLSearchParams(window.location.search).get('merchant')?.trim();
+    if (merchantId) {
+      setPhase('app');
+      setStackPage('restaurant');
+      setPageData({ merchantId });
+      window.history.replaceState({}, '', window.location.pathname);
+    }
   }, []);
 
   const navigate = useCallback((page: string, data?: Record<string, unknown>) => {

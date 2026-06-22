@@ -7,10 +7,12 @@
  *
  * ROUTING CONTRACT (App.tsx):
  * - !session → PartnerAuthFlow (welcome | carousel | login)
- * - session + pending verification → AccountPendingPage
  * - session + !merchant → UnifiedOnboardingWizard
- * - session + approved + !goLiveDismissed → OnboardingCompletePage
- * - session + approved + goLive → main app (unchanged)
+ * - session + owner + incomplete application → UnifiedOnboardingWizard
+ * - session + owner + pending verification → AccountPendingPage
+ * - session + owner + approved + verified_at + !goLiveDismissed → OnboardingCompletePage
+ * - session + owner + approved + goLive → main app
+ * - session + team member → main app (no owner onboarding gates)
  *
  * ROLLBACK PROCEDURE (if onboarding issues in production):
  * 1. Git revert to last known-good UnifiedOnboardingWizard / step components

@@ -17,7 +17,7 @@ import OnboardingCompletePage from './pages/OnboardingCompletePage';
 import UnifiedOnboardingWizard from './components/onboarding/UnifiedOnboardingWizard';
 import { useMerchant } from './hooks/useMerchant';
 import { PartnerTab } from './lib/partner-utils';
-import { shouldShowGoLiveScreen } from './lib/go-live';
+import { shouldShowGoLiveScreen, needsOwnerOnboarding } from './lib/go-live';
 import { DashAdminPortal } from './admin/DashAdminPortal';
 import {
   clearPartnerOAuthUrl,
@@ -133,8 +133,15 @@ function DashMerchantApp() {
     );
   }
 
-  if (merchant && PENDING_STATUSES.has(merchant.verification_status)) {
-    return <AccountPendingPage onSignOut={handleSignOut} />;
+  const isOwner = membership?.is_owner !== false;
+
+  if (isOwner && merchant && needsOwnerOnboarding(merchant)) {
+    return (
+      <UnifiedOnboardingWizard
+        session={session}
+        onComplete={() => void refetch()}
+      />
+    );
   }
 
   if (!merchant) {
@@ -146,9 +153,14 @@ function DashMerchantApp() {
     );
   }
 
+  if (isOwner && PENDING_STATUSES.has(merchant.verification_status)) {
+    return <AccountPendingPage onSignOut={handleSignOut} />;
+  }
+
   if (
+    isOwner &&
     !goLiveDismissed &&
-    shouldShowGoLiveScreen(merchant.verification_status, merchant.id)
+    shouldShowGoLiveScreen(merchant)
   ) {
     return (
       <OnboardingCompletePage

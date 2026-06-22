@@ -29,7 +29,7 @@ export default function OnboardingCompletePage({ merchant, onGoLive }: Onboardin
   }, []);
 
   const requiredComplete = SETUP_ITEMS.every((item) => checklist[item.key]);
-  const listingUrl = getCustomerListingUrl(merchant.slug);
+  const listingUrl = getCustomerListingUrl(merchant.id);
 
   const handleGoLive = () => {
     if (!requiredComplete) return;
@@ -105,14 +105,27 @@ export default function OnboardingCompletePage({ merchant, onGoLive }: Onboardin
             Go Live
           </button>
           <a
-            href={listingUrl}
+            href={requiredComplete ? listingUrl : undefined}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-outline-variant text-label-md font-semibold text-primary transition-colors hover:bg-surface-container-low"
+            aria-disabled={!requiredComplete}
+            onClick={(e) => {
+              if (!requiredComplete) e.preventDefault();
+            }}
+            className={`flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-outline-variant text-label-md font-semibold transition-colors ${
+              requiredComplete
+                ? 'text-primary hover:bg-surface-container-low'
+                : 'pointer-events-none text-on-surface-variant opacity-50'
+            }`}
           >
-            Preview listing
+            Preview on Roam Dash
             <MaterialIcon name="open_in_new" size={18} />
           </a>
+          {!requiredComplete && (
+            <p className="text-center text-body-sm text-on-surface-variant">
+              Finish the checklist above to preview your customer listing.
+            </p>
+          )}
         </div>
       </main>
     </div>
