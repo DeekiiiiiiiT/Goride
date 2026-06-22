@@ -18,6 +18,7 @@ Write actions require `dash_admin` or platform write roles (`dashPermissions.ts`
 | Method | Route | Description |
 |--------|-------|-------------|
 | GET | `/admin/dashboard/stats` | Platform KPIs |
+| GET | `/admin/merchants/incomplete-setup` | Auth-only signups + merchants with incomplete setup checklist |
 | GET | `/admin/merchants/stats` | Verification counts |
 | GET | `/admin/merchants/queue` | SLA verification queue |
 | GET | `/admin/merchants` | List with filters |

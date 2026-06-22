@@ -28,6 +28,14 @@ import {
   type OperationalStatus,
   type VerificationStatus,
 } from "./merchantAdminShared.ts";
+import {
+  computeSetupChecklist,
+  isApplicationSetupComplete,
+  missingSetupLabels,
+  setupStageLabel,
+  type SetupChecklist,
+} from "./merchantSetupProgress.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SLA_HOURS = 48;
 
@@ -43,6 +51,72 @@ async function fetchOwnerEmail(ownerId: string): Promise<string> {
   } catch {
     return "";
   }
+}
+
+function getPaymentsDb() {
+  return createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    { db: { schema: "payments" } },
+  );
+}
+
+async function checklistMapForMerchants(
+  merchants: Record<string, unknown>[],
+): Promise<Map<string, SetupChecklist>> {
+  const ids = merchants.map((m) => m.id as string).filter(Boolean);
+  const result = new Map<string, SetupChecklist>();
+  if (!ids.length) return result;
+
+  const sb = getDb();
+  const pdb = getPaymentsDb();
+
+  const [{ data: documents }, { data: hours }, { data: items }, { data: banks }] = await Promise.all([
+    sb.from("merchant_documents").select("merchant_id, doc_type").in("merchant_id", ids),
+    sb.from("merchant_hours").select("merchant_id").in("merchant_id", ids),
+    sb.from("menu_items").select("merchant_id").in("merchant_id", ids),
+    pdb.from("merchant_bank_accounts").select("merchant_id").in("merchant_id", ids).eq("is_default", true),
+  ]);
+
+  const docsByMerchant = new Map<string, string[]>();
+  for (const row of documents ?? []) {
+    const mid = (row as Record<string, unknown>).merchant_id as string;
+    const docType = (row as Record<string, unknown>).doc_type as string;
+    if (!docsByMerchant.has(mid)) docsByMerchant.set(mid, []);
+    docsByMerchant.get(mid)!.push(docType);
+  }
+
+  const hoursCount = new Map<string, number>();
+  for (const row of hours ?? []) {
+    const mid = (row as Record<string, unknown>).merchant_id as string;
+    hoursCount.set(mid, (hoursCount.get(mid) ?? 0) + 1);
+  }
+
+  const menuCount = new Map<string, number>();
+  for (const row of items ?? []) {
+    const mid = (row as Record<string, unknown>).merchant_id as string;
+    menuCount.set(mid, (menuCount.get(mid) ?? 0) + 1);
+  }
+
+  const bankSet = new Set(
+    (banks ?? []).map((row) => (row as Record<string, unknown>).merchant_id as string),
+  );
+
+  for (const merchant of merchants) {
+    const id = merchant.id as string;
+    result.set(
+      id,
+      computeSetupChecklist({
+        merchant,
+        documentTypes: docsByMerchant.get(id) ?? [],
+        hoursCount: hoursCount.get(id) ?? 0,
+        menuItemCount: menuCount.get(id) ?? 0,
+        hasBank: bankSet.has(id),
+      }),
+    );
+  }
+
+  return result;
 }
 
 async function notifyMerchant(
@@ -166,6 +240,134 @@ export function registerMerchantAdminRoutes(app: Hono) {
       return { ...m, sla_breached: ageH > SLA_HOURS };
     });
     return c.json({ merchants: items });
+  });
+
+  admin.get("/merchants/incomplete-setup", async (c) => {
+    const sb = getDb();
+    const q = c.req.query("q")?.trim().toLowerCase() ?? "";
+    const limit = Math.min(parseInt(c.req.query("limit") || "100", 10) || 100, 200);
+    const page = Math.max(parseInt(c.req.query("page") || "1", 10) || 1, 1);
+
+    const { data: merchants, error: merchErr } = await sb
+      .from("merchants")
+      .select("*")
+      .order("updated_at", { ascending: false })
+      .limit(500);
+    if (merchErr) return c.json({ error: merchErr.message }, 500);
+
+    const checklistById = await checklistMapForMerchants(merchants ?? []);
+
+    type IncompleteRow = {
+      kind: "auth_only" | "merchant";
+      userId: string;
+      ownerEmail: string;
+      merchantId: string | null;
+      merchantName: string | null;
+      verificationStatus: string | null;
+      setupStage: string;
+      checklist: SetupChecklist | null;
+      missingSteps: string[];
+      lastActivityAt: string | null;
+    };
+
+    const merchantRows: IncompleteRow[] = [];
+
+    for (const m of merchants ?? []) {
+      const row = m as Record<string, unknown>;
+      const id = row.id as string;
+      const checklist = checklistById.get(id)!;
+      if (isApplicationSetupComplete(checklist)) continue;
+
+      const ownerId = row.owner_id as string;
+      const ownerEmail = (row.email as string) || await fetchOwnerEmail(ownerId);
+      const name = String(row.name || "");
+      const haystack = `${name} ${ownerEmail} ${row.phone ?? ""}`.toLowerCase();
+      if (q && !haystack.includes(q)) continue;
+
+      const verificationStatus = String(row.verification_status || "pending");
+      merchantRows.push({
+        kind: "merchant",
+        userId: ownerId,
+        ownerEmail,
+        merchantId: id,
+        merchantName: name || null,
+        verificationStatus,
+        setupStage: verificationStatus === "approved"
+          ? "Approved — finish setup"
+          : setupStageLabel("merchant", checklist),
+        checklist,
+        missingSteps: missingSetupLabels(checklist),
+        lastActivityAt: (row.updated_at as string) || (row.submitted_at as string) || null,
+      });
+    }
+
+    const { data: ownerRows } = await sb.from("merchants").select("owner_id");
+    const ownerIds = new Set((ownerRows ?? []).map((r) => (r as Record<string, unknown>).owner_id as string));
+
+    const authRows: IncompleteRow[] = [];
+    const auth = getAuthAdmin();
+    let authPage = 1;
+    const maxAuthPages = 5;
+
+    while (authPage <= maxAuthPages) {
+      const { data: listData, error: listErr } = await auth.auth.admin.listUsers({
+        page: authPage,
+        perPage: 100,
+      });
+      if (listErr) return c.json({ error: listErr.message }, 500);
+      const users = listData?.users ?? [];
+      if (!users.length) break;
+
+      for (const user of users) {
+        if (ownerIds.has(user.id)) continue;
+        const email = user.email ?? "";
+        if (q && !email.toLowerCase().includes(q)) continue;
+
+        authRows.push({
+          kind: "auth_only",
+          userId: user.id,
+          ownerEmail: email,
+          merchantId: null,
+          merchantName: null,
+          verificationStatus: null,
+          setupStage: setupStageLabel("auth_only", {
+            profileComplete: false,
+            documentsComplete: false,
+            bankComplete: false,
+            hoursComplete: false,
+            menuComplete: false,
+          }),
+          checklist: null,
+          missingSteps: ["Full partner onboarding wizard"],
+          lastActivityAt: user.last_sign_in_at ?? user.created_at ?? null,
+        });
+      }
+
+      if (users.length < 100) break;
+      authPage++;
+    }
+
+    const combined = [...authRows, ...merchantRows].sort((a, b) => {
+      const ta = a.lastActivityAt ? new Date(a.lastActivityAt).getTime() : 0;
+      const tb = b.lastActivityAt ? new Date(b.lastActivityAt).getTime() : 0;
+      return tb - ta;
+    });
+
+    const total = combined.length;
+    const offset = (page - 1) * limit;
+    const items = combined.slice(offset, offset + limit);
+
+    return c.json({
+      items,
+      total,
+      page,
+      limit,
+      counts: {
+        auth_only: authRows.length,
+        incomplete_merchants: merchantRows.length,
+        total: authRows.length + merchantRows.length,
+      },
+    });
   });
 
   admin.get("/merchants", async (c) => {

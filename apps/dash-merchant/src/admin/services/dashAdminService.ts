@@ -100,6 +100,39 @@ export interface ListMerchantsResponse {
   operational?: Record<MerchantOperationalStatus, number>;
 }
 
+export interface SetupChecklistSnapshot {
+  profileComplete: boolean;
+  documentsComplete: boolean;
+  bankComplete: boolean;
+  hoursComplete: boolean;
+  menuComplete: boolean;
+}
+
+export interface IncompleteSetupRow {
+  kind: 'auth_only' | 'merchant';
+  userId: string;
+  ownerEmail: string;
+  merchantId: string | null;
+  merchantName: string | null;
+  verificationStatus: string | null;
+  setupStage: string;
+  checklist: SetupChecklistSnapshot | null;
+  missingSteps: string[];
+  lastActivityAt: string | null;
+}
+
+export interface ListIncompleteSetupResponse {
+  items: IncompleteSetupRow[];
+  total: number;
+  page: number;
+  limit: number;
+  counts: {
+    auth_only: number;
+    incomplete_merchants: number;
+    total: number;
+  };
+}
+
 export interface MerchantDetailResponse {
   merchant: DashMerchant;
   hours: MerchantHours[];
@@ -206,6 +239,17 @@ export function listMerchants(
   if (opts.page != null) sp.set('page', String(opts.page));
   if (opts.limit != null) sp.set('limit', String(opts.limit));
   return deliveryFetch(accessToken, `/admin/merchants?${sp}`);
+}
+
+export function listIncompleteSetup(
+  accessToken: string,
+  opts: { q?: string; page?: number; limit?: number } = {},
+): Promise<ListIncompleteSetupResponse> {
+  const sp = new URLSearchParams();
+  if (opts.q) sp.set('q', opts.q);
+  if (opts.page != null) sp.set('page', String(opts.page));
+  if (opts.limit != null) sp.set('limit', String(opts.limit));
+  return deliveryFetch(accessToken, `/admin/merchants/incomplete-setup?${sp}`);
 }
 
 export function getMerchantDetail(accessToken: string, id: string): Promise<MerchantDetailResponse> {

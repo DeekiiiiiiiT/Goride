@@ -3,10 +3,16 @@ import { useNavigate, useOutletContext } from 'react-router-dom';
 import { Loader2, RefreshCw, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { MerchantStatusBadge } from '../components/MerchantStatusBadge';
-import { listMerchants, type DashMerchant, type MerchantVerificationStatus } from '../services/dashAdminService';
+import {
+  listIncompleteSetup,
+  listMerchants,
+  type DashMerchant,
+  type IncompleteSetupRow,
+  type MerchantVerificationStatus,
+} from '../services/dashAdminService';
 import type { AdminOutletContext } from '../DashAdminPortal';
 
-type TabId = 'all' | MerchantVerificationStatus;
+type TabId = 'all' | MerchantVerificationStatus | 'incomplete_setup';
 
 export function MerchantManager() {
   const { session } = useOutletContext<AdminOutletContext>();
@@ -17,28 +23,48 @@ export function MerchantManager() {
   const [searchInput, setSearchInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [items, setItems] = useState<DashMerchant[]>([]);
+  const [incompleteItems, setIncompleteItems] = useState<IncompleteSetupRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [counts, setCounts] = useState({
     pending: 0, in_review: 0, docs_requested: 0, approved: 0, rejected: 0,
   });
+  const [incompleteCount, setIncompleteCount] = useState(0);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchInput.trim()), 300);
     return () => clearTimeout(t);
   }, [searchInput]);
 
+  useEffect(() => {
+    void listIncompleteSetup(accessToken, { limit: 1 })
+      .then((res) => setIncompleteCount(res.counts.total))
+      .catch(() => setIncompleteCount(0));
+  }, [accessToken]);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await listMerchants(accessToken, {
-        status: tab,
-        search: debouncedSearch || undefined,
-        limit: 100,
-      });
-      setItems(res.merchants);
-      setTotal(res.total);
-      setCounts(res.counts);
+      if (tab === 'incomplete_setup') {
+        const res = await listIncompleteSetup(accessToken, {
+          q: debouncedSearch || undefined,
+          limit: 100,
+        });
+        setIncompleteItems(res.items);
+        setTotal(res.total);
+        setIncompleteCount(res.counts.total);
+        setItems([]);
+      } else {
+        const res = await listMerchants(accessToken, {
+          status: tab,
+          search: debouncedSearch || undefined,
+          limit: 100,
+        });
+        setItems(res.merchants);
+        setTotal(res.total);
+        setCounts(res.counts);
+        setIncompleteItems([]);
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load merchants');
     } finally {
@@ -51,6 +77,7 @@ export function MerchantManager() {
   }, [load]);
 
   const tabs: { id: TabId; label: string }[] = [
+    { id: 'incomplete_setup', label: 'Unfinished setup' },
     { id: 'pending', label: 'Pending' },
     { id: 'in_review', label: 'In Review' },
     { id: 'docs_requested', label: 'Docs Requested' },
@@ -58,6 +85,11 @@ export function MerchantManager() {
     { id: 'rejected', label: 'Rejected' },
     { id: 'all', label: 'All' },
   ];
+
+  const formatDate = (iso: string | null) => {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleDateString();
+  };
 
   return (
     <div className="space-y-4">
@@ -89,7 +121,10 @@ export function MerchantManager() {
             }`}
           >
             {t.label}
-            {t.id !== 'all' && counts[t.id as keyof typeof counts] != null && (
+            {t.id === 'incomplete_setup' && incompleteCount > 0 && (
+              <span className="ml-1.5 opacity-70">({incompleteCount})</span>
+            )}
+            {t.id !== 'all' && t.id !== 'incomplete_setup' && counts[t.id as keyof typeof counts] != null && (
               <span className="ml-1.5 opacity-70">({counts[t.id as keyof typeof counts]})</span>
             )}
           </button>
@@ -101,7 +136,11 @@ export function MerchantManager() {
         <input
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
-          placeholder="Search name, email, phone, address..."
+          placeholder={
+            tab === 'incomplete_setup'
+              ? 'Search email or restaurant name...'
+              : 'Search name, email, phone, address...'
+          }
           className="w-full pl-10 pr-4 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
         />
       </div>
@@ -110,6 +149,73 @@ export function MerchantManager() {
         <div className="flex justify-center py-12">
           <Loader2 className="w-8 h-8 animate-spin text-amber-400" />
         </div>
+      ) : tab === 'incomplete_setup' ? (
+        incompleteItems.length === 0 ? (
+          <p className="text-slate-400 text-center py-12">No unfinished signups or setups.</p>
+        ) : (
+          <div className="rounded-xl border border-slate-800 overflow-hidden bg-slate-950">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-900/80 text-slate-400 text-left">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Account</th>
+                  <th className="px-4 py-3 font-medium">Type</th>
+                  <th className="px-4 py-3 font-medium">Stage</th>
+                  <th className="px-4 py-3 font-medium">Missing steps</th>
+                  <th className="px-4 py-3 font-medium">Last activity</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800 bg-slate-950">
+                {incompleteItems.map((row) => (
+                  <tr
+                    key={`${row.kind}-${row.userId}-${row.merchantId ?? 'none'}`}
+                    onClick={() => {
+                      if (row.merchantId) navigate(`/merchants/${row.merchantId}`);
+                    }}
+                    className={row.merchantId ? 'hover:bg-slate-800/50 cursor-pointer' : ''}
+                  >
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-white">
+                        {row.merchantName || row.ownerEmail || 'Unknown'}
+                      </p>
+                      <p className="text-slate-500 text-xs">{row.ownerEmail || '—'}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${
+                        row.kind === 'auth_only'
+                          ? 'bg-sky-500/15 text-sky-300'
+                          : 'bg-amber-500/15 text-amber-300'
+                      }`}>
+                        {row.kind === 'auth_only' ? 'Signed up only' : 'Application started'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-slate-300">
+                      {row.verificationStatus ? (
+                        <div className="flex flex-col gap-1">
+                          <MerchantStatusBadge status={row.verificationStatus as MerchantVerificationStatus} />
+                          <span className="text-xs text-slate-500">{row.setupStage}</span>
+                        </div>
+                      ) : (
+                        row.setupStage
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-slate-400">
+                      {row.missingSteps.length ? (
+                        <ul className="list-disc list-inside space-y-0.5 text-xs">
+                          {row.missingSteps.map((step) => (
+                            <li key={step}>{step}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-slate-400">{formatDate(row.lastActivityAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
       ) : items.length === 0 ? (
         <p className="text-slate-400 text-center py-12">No merchants found.</p>
       ) : (
