@@ -17,7 +17,7 @@ import OnboardingCompletePage from './pages/OnboardingCompletePage';
 import UnifiedOnboardingWizard from './components/onboarding/UnifiedOnboardingWizard';
 import { useMerchant } from './hooks/useMerchant';
 import { PartnerTab } from './lib/partner-utils';
-import { shouldShowGoLiveScreen, needsOwnerOnboarding } from './lib/go-live';
+import { shouldShowGoLiveScreen, needsOwnerOnboarding, dismissGoLiveScreen } from './lib/go-live';
 import { DashAdminPortal } from './admin/DashAdminPortal';
 import {
   clearPartnerOAuthUrl,
@@ -53,7 +53,7 @@ function DashMerchantApp() {
   const [authReady, setAuthReady] = useState(false);
   const [splashComplete, setSplashComplete] = useState(false);
   const [currentPage, setCurrentPage] = useState<PartnerTab>('dashboard');
-  const [goLiveDismissed, setGoLiveDismissed] = useState(false);
+  const [routingEpoch, setRoutingEpoch] = useState(0);
   const [oauthReturnPending, setOauthReturnPending] = useState(
     () => typeof window !== 'undefined' && !!sessionStorage.getItem(PARTNER_OAUTH_INTENT_KEY),
   );
@@ -159,14 +159,18 @@ function DashMerchantApp() {
 
   if (
     isOwner &&
-    !goLiveDismissed &&
     shouldShowGoLiveScreen(merchant)
   ) {
     return (
       <OnboardingCompletePage
         merchant={merchant}
         onGoLive={() => {
-          setGoLiveDismissed(true);
+          setRoutingEpoch((n) => n + 1);
+          void refetch();
+        }}
+        onContinueToDashboard={() => {
+          dismissGoLiveScreen(merchant.id);
+          setRoutingEpoch((n) => n + 1);
           void refetch();
         }}
       />

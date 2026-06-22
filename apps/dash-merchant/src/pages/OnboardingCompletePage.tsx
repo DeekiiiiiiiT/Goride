@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 import { MaterialIcon } from '../signup/components/MaterialIcon';
 import { Merchant } from '../hooks/useMerchant';
 import { useAcceptingOrdersToggle } from '../hooks/useAcceptingOrdersToggle';
-import { getCustomerListingUrl, markGoLiveComplete } from '../lib/go-live';
+import { markGoLiveComplete } from '../lib/go-live';
 import { fetchApplicationStatus } from '../lib/partner-api';
 
 interface OnboardingCompletePageProps {
   merchant: Merchant;
   onGoLive: () => void;
+  onContinueToDashboard: () => void;
 }
 
 const SETUP_ITEMS = [
@@ -17,7 +18,11 @@ const SETUP_ITEMS = [
   { key: 'bankComplete', label: 'Bank details confirmed' },
 ] as const;
 
-export default function OnboardingCompletePage({ merchant, onGoLive }: OnboardingCompletePageProps) {
+export default function OnboardingCompletePage({
+  merchant,
+  onGoLive,
+  onContinueToDashboard,
+}: OnboardingCompletePageProps) {
   const { toggleAcceptingOrders, isPending } = useAcceptingOrdersToggle(merchant);
   const [checklist, setChecklist] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
@@ -29,7 +34,6 @@ export default function OnboardingCompletePage({ merchant, onGoLive }: Onboardin
   }, []);
 
   const requiredComplete = SETUP_ITEMS.every((item) => checklist[item.key]);
-  const listingUrl = getCustomerListingUrl(merchant.id);
 
   const handleGoLive = () => {
     if (!requiredComplete) return;
@@ -61,7 +65,7 @@ export default function OnboardingCompletePage({ merchant, onGoLive }: Onboardin
           You&apos;re approved!
         </h1>
         <p className="mb-inset-xl text-center text-body-lg text-on-surface-variant">
-          Congratulations, your restaurant is now a Roam Dash Partner.
+          Complete the checklist below, then go live when you&apos;re ready.
         </p>
 
         <div className="onboarding-glass-card mb-inset-xl w-full rounded-xl border border-outline-variant p-inset-md text-left shadow-sm">
@@ -104,28 +108,13 @@ export default function OnboardingCompletePage({ merchant, onGoLive }: Onboardin
           >
             Go Live
           </button>
-          <a
-            href={requiredComplete ? listingUrl : undefined}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-disabled={!requiredComplete}
-            onClick={(e) => {
-              if (!requiredComplete) e.preventDefault();
-            }}
-            className={`flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-outline-variant text-label-md font-semibold transition-colors ${
-              requiredComplete
-                ? 'text-primary hover:bg-surface-container-low'
-                : 'pointer-events-none text-on-surface-variant opacity-50'
-            }`}
+          <button
+            type="button"
+            onClick={onContinueToDashboard}
+            className="flex h-12 w-full items-center justify-center rounded-lg border border-outline-variant text-label-md font-semibold text-on-surface transition-colors hover:bg-surface-container-low"
           >
-            Preview on Roam Dash
-            <MaterialIcon name="open_in_new" size={18} />
-          </a>
-          {!requiredComplete && (
-            <p className="text-center text-body-sm text-on-surface-variant">
-              Finish the checklist above to preview your customer listing.
-            </p>
-          )}
+            Continue to dashboard
+          </button>
         </div>
       </main>
     </div>
