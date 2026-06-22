@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { BrowserRouter } from 'react-router-dom';
 import { supabase, AuthRecoveryGate } from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
 import { toast } from 'sonner';
@@ -8,7 +9,6 @@ import MenuPage from './pages/MenuPage';
 import EarningsPage from './pages/EarningsPage';
 import SettingsPage from './pages/SettingsPage';
 import AnalyticsPage from './pages/AnalyticsPage';
-import OnboardingPage from './pages/OnboardingPage';
 import SplashPage from './pages/SplashPage';
 import PartnerAuthFlow from './components/PartnerAuthFlow';
 import PartnerBottomNav from './components/PartnerBottomNav';
@@ -18,7 +18,6 @@ import UnifiedOnboardingWizard from './components/onboarding/UnifiedOnboardingWi
 import { useMerchant } from './hooks/useMerchant';
 import { PartnerTab } from './lib/partner-utils';
 import { shouldShowGoLiveScreen } from './lib/go-live';
-import { isUnifiedOnboardingEnabled } from './lib/partner-rollout';
 import { DashAdminPortal } from './admin/DashAdminPortal';
 import {
   clearPartnerOAuthUrl,
@@ -38,7 +37,13 @@ export default function App() {
       subtitle={isAdmin ? 'Roam Dash Admin' : 'Roam Dash Partner'}
       signInHref={isAdmin ? '/admin' : '/'}
     >
-      {isAdmin ? <DashAdminPortal /> : <DashMerchantApp />}
+      {isAdmin ? (
+        <BrowserRouter basename="/admin">
+          <DashAdminPortal />
+        </BrowserRouter>
+      ) : (
+        <DashMerchantApp />
+      )}
     </AuthRecoveryGate>
   );
 }
@@ -52,7 +57,6 @@ function DashMerchantApp() {
   const [oauthReturnPending, setOauthReturnPending] = useState(
     () => typeof window !== 'undefined' && !!sessionStorage.getItem(PARTNER_OAUTH_INTENT_KEY),
   );
-  const unifiedOnboarding = isUnifiedOnboardingEnabled();
 
   const completeOAuthReturn = useCallback(async (activeSession: Session | null) => {
     if (!activeSession?.user) return false;
@@ -102,7 +106,7 @@ function DashMerchantApp() {
     return () => window.clearTimeout(timeout);
   }, [oauthReturnPending, authReady, session]);
 
-  const { merchant, isLoading: merchantLoading, refetch } = useMerchant(session);
+  const { merchant, membership, isLoading: merchantLoading, refetch } = useMerchant(session);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -134,15 +138,12 @@ function DashMerchantApp() {
   }
 
   if (!merchant) {
-    if (unifiedOnboarding) {
-      return (
-        <UnifiedOnboardingWizard
-          session={session}
-          onComplete={() => void refetch()}
-        />
-      );
-    }
-    return <OnboardingPage session={session} onComplete={() => void refetch()} />;
+    return (
+      <UnifiedOnboardingWizard
+        session={session}
+        onComplete={() => void refetch()}
+      />
+    );
   }
 
   if (
@@ -160,7 +161,28 @@ function DashMerchantApp() {
     );
   }
 
+  const allowedTabs: PartnerTab[] = (() => {
+    if (!membership || membership.is_owner || membership.role === 'admin') {
+      return ['dashboard', 'orders', 'menu', 'analytics', 'account', 'earnings'];
+    }
+    const tabs: PartnerTab[] = ['account'];
+    if (membership.permissions.includes('orders')) tabs.unshift('dashboard', 'orders');
+    if (membership.permissions.includes('menu')) tabs.push('menu');
+    if (membership.permissions.includes('analytics')) tabs.push('analytics');
+    if (membership.permissions.includes('payouts')) tabs.push('earnings');
+    return tabs;
+  })();
+
   const renderPage = () => {
+    if (currentPage === 'earnings' && !allowedTabs.includes('earnings')) {
+      return <DashboardPage merchant={merchant} onNavigate={setCurrentPage} />;
+    }
+    if (currentPage === 'menu' && !allowedTabs.includes('menu')) {
+      return <DashboardPage merchant={merchant} onNavigate={setCurrentPage} />;
+    }
+    if (currentPage === 'analytics' && !allowedTabs.includes('analytics')) {
+      return <DashboardPage merchant={merchant} onNavigate={setCurrentPage} />;
+    }
     switch (currentPage) {
       case 'dashboard':
         return <DashboardPage merchant={merchant} onNavigate={setCurrentPage} />;
@@ -197,7 +219,7 @@ function DashMerchantApp() {
         {renderPage()}
       </div>
       {currentPage !== 'earnings' && (
-        <PartnerBottomNav active={currentPage} onNavigate={setCurrentPage} />
+        <PartnerBottomNav active={currentPage} onNavigate={setCurrentPage} allowedTabs={allowedTabs.filter((t) => t !== 'earnings')} />
       )}
     </div>
   );

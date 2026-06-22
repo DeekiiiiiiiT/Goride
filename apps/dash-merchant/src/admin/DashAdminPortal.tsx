@@ -1,64 +1,98 @@
-import React, { useState, useEffect } from 'react';
-import { supabaseDashAdmin as supabase, hasProductAdminRole, jwtPrimaryRole } from '@roam/auth-client';
+import React, { useEffect, useState } from 'react';
+import { Routes, Route, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import {
+  supabaseDashAdmin as supabase,
+  hasProductAdminRole,
+  jwtPrimaryRole,
+  usePermissions,
+} from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
-import { LayoutDashboard, Store, ClipboardList, Loader2, ShieldAlert, Settings } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { Toaster } from 'sonner';
 import { AdminShell } from '@roam/admin-core';
-import type { AdminConfig } from '@roam/admin-core';
-import { MerchantManager } from './pages/MerchantManager';
-import { PlatformSettingsPage } from './pages/PlatformSettingsPage';
 import { AdminLoginForm } from './components/AdminLoginForm';
+import { AdminConfirmProvider } from './contexts/AdminConfirmContext';
+import {
+  DASH_ADMIN_CONFIG,
+  navIdToPath,
+  pathnameToNavId,
+} from './config/dashAdminNav';
+import { DashAdminDashboard } from './pages/DashAdminDashboard';
+import { MerchantManager } from './pages/MerchantManager';
+import { MerchantDetailPage } from './pages/merchants/MerchantDetailPage';
+import { OrdersListPage } from './pages/orders/OrdersListPage';
+import { OrderDetailPage } from './pages/orders/OrderDetailPage';
+import { SupportToolsPage } from './pages/SupportToolsPage';
+import { PlatformSettingsPage } from './pages/PlatformSettingsPage';
+import { DashTeamPage } from './pages/users/DashTeamPage';
+import { CustomersListPage } from './pages/customers/CustomersListPage';
+import { CustomerDetailPage } from './pages/customers/CustomerDetailPage';
+import { FinancePage } from './pages/finance/FinancePage';
+import { ReviewsPage } from './pages/reviews/ReviewsPage';
 
-type AdminPage = 'dashboard' | 'merchants' | 'orders' | 'settings';
+export type AdminOutletContext = { session: Session };
 
-const ALLOWED_ROLES = [
-  'platform_owner',
-  'platform_support',
-  'superadmin',
-  'dash_admin',
-  'dash_ops',
-];
-
-const DASH_ADMIN_CONFIG: AdminConfig = {
-  product: 'dash',
-  title: 'Roam Dash',
-  subtitle: 'Admin Portal',
-  sections: [],
-  topNavItems: [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'merchants', label: 'Merchants', icon: Store },
-    { id: 'orders', label: 'Orders', icon: ClipboardList },
-    { id: 'settings', label: 'Platform Settings', icon: Settings },
-  ],
-  allowedRoles: ALLOWED_ROLES,
-  backToAppUrl: '/',
-  backToAppLabel: 'Back to Roam Dash',
-};
-
-export function DashAdminPortal() {
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState<AdminPage>('merchants');
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+function AdminLayoutShell({ session }: { session: Session }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const userRole = jwtPrimaryRole(session.user);
+  const currentPage = pathnameToNavId(location.pathname);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     window.location.href = '/admin';
   };
+
+  const userName = session.user.email?.split('@')[0] || 'Admin';
+  const roleLabel = userRole
+    ? userRole.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+    : 'Admin';
+
+  return (
+    <AdminShell
+      config={DASH_ADMIN_CONFIG}
+      currentPage={currentPage}
+      onNavigate={(page) => navigate(navIdToPath(page))}
+      user={{
+        name: userName,
+        email: session.user.email,
+        role: roleLabel,
+      }}
+      onSignOut={handleSignOut}
+    >
+      <Outlet context={{ session }} />
+    </AdminShell>
+  );
+}
+
+function AccessDenied({ role }: { role: string }) {
+  return (
+    <div className="dash-admin-portal min-h-screen flex flex-col items-center justify-center bg-slate-950 text-slate-200 p-8">
+      <h1 className="text-xl font-semibold mb-2 text-white">Access Denied</h1>
+      <p className="text-slate-400 text-center max-w-md mb-6">
+        You don&apos;t have permission to access the Dash Admin Portal. Role:{' '}
+        <span className="font-mono text-amber-300/90">{role || '(none)'}</span>
+      </p>
+      <a href="/" className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-medium border border-slate-700">
+        Back to App
+      </a>
+    </div>
+  );
+}
+
+export function DashAdminPortal() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
+  const { hasPermission, loading: permsLoading } = usePermissions({ supabase });
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSession(s);
+      setLoading(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    return () => subscription.unsubscribe();
+  }, []);
 
   if (loading) {
     return (
@@ -78,74 +112,43 @@ export function DashAdminPortal() {
   }
 
   const userRole = jwtPrimaryRole(session.user);
-  const hasAccess = hasProductAdminRole(session.user, 'dash');
+  const hasJwtAccess = hasProductAdminRole(session.user, 'dash');
+  const hasDbAccess = hasPermission('dash.portal.access');
+  const hasAccess = hasJwtAccess || (!permsLoading && hasDbAccess);
 
-  if (!hasAccess) {
+  if (!hasAccess && !permsLoading) {
+    return <AccessDenied role={userRole || ''} />;
+  }
+
+  if (permsLoading && !hasJwtAccess) {
     return (
-      <div className="dash-admin-portal min-h-screen flex flex-col items-center justify-center bg-slate-950 text-slate-200 p-8">
-        <div className="w-16 h-16 rounded-full bg-red-500/15 flex items-center justify-center mb-4 ring-1 ring-red-500/30">
-          <ShieldAlert className="w-8 h-8 text-red-400" />
-        </div>
-        <h1 className="text-xl font-semibold mb-2 text-white">Access Denied</h1>
-        <p className="text-slate-400 text-center max-w-md mb-6">
-          You don&apos;t have permission to access the Dash Admin Portal. Your role:{' '}
-          <span className="font-mono text-amber-300/90">{userRole || '(none)'}</span>
-        </p>
-        <a
-          href="/"
-          className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-medium border border-slate-700 transition-colors"
-        >
-          Back to App
-        </a>
+      <div className="dash-admin-portal min-h-screen flex items-center justify-center bg-slate-950">
+        <Loader2 className="w-8 h-8 animate-spin text-amber-400" />
       </div>
     );
   }
 
-  const userName = session.user.email?.split('@')[0] || 'Admin';
-  const roleLabel = userRole
-    ? userRole.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
-    : 'Admin';
-
-  const renderPage = () => {
-    switch (currentPage) {
-      case 'merchants':
-        return <MerchantManager accessToken={session.access_token} />;
-      case 'orders':
-        return (
-          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-8">
-            <h2 className="text-xl font-semibold text-white mb-2">Order Operations</h2>
-            <p className="text-slate-400">Order management tools are coming soon.</p>
-          </div>
-        );
-      case 'settings':
-        return <PlatformSettingsPage session={session} />;
-      case 'dashboard':
-      default:
-        return (
-          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-8">
-            <h2 className="text-xl font-semibold text-white mb-2">Dashboard</h2>
-            <p className="text-slate-400">Overview metrics and analytics coming soon.</p>
-          </div>
-        );
-    }
-  };
-
   return (
     <div className="dash-admin-portal">
       <Toaster position="top-right" theme="dark" richColors />
-      <AdminShell
-        config={DASH_ADMIN_CONFIG}
-        currentPage={currentPage}
-        onNavigate={(page) => setCurrentPage(page as AdminPage)}
-        user={{
-          name: userName,
-          email: session.user.email,
-          role: roleLabel,
-        }}
-        onSignOut={handleSignOut}
-      >
-        {renderPage()}
-      </AdminShell>
+      <AdminConfirmProvider>
+        <Routes>
+          <Route element={<AdminLayoutShell session={session} />}>
+            <Route index element={<DashAdminDashboard />} />
+            <Route path="merchants" element={<MerchantManager />} />
+            <Route path="merchants/:id" element={<MerchantDetailPage />} />
+            <Route path="orders" element={<OrdersListPage />} />
+            <Route path="orders/:id" element={<OrderDetailPage />} />
+            <Route path="users" element={<DashTeamPage />} />
+            <Route path="customers" element={<CustomersListPage />} />
+            <Route path="customers/:id" element={<CustomerDetailPage />} />
+            <Route path="finance" element={<FinancePage />} />
+            <Route path="reviews" element={<ReviewsPage />} />
+            <Route path="support" element={<SupportToolsPage />} />
+            <Route path="settings" element={<PlatformSettingsPage session={session} />} />
+          </Route>
+        </Routes>
+      </AdminConfirmProvider>
     </div>
   );
 }

@@ -1,87 +1,90 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 import { isLocationComplete } from '@roam/location';
 import { INITIAL_SIGN_UP_DATA, SignUpFormData } from '../../signup/types';
-import RestaurantInfoStep from '../../signup/steps/RestaurantInfoStep';
-import LocationStep from '../../signup/steps/LocationStep';
-import BusinessDetailsStep from '../../signup/steps/BusinessDetailsStep';
-import VerificationStep from '../../signup/steps/VerificationStep';
-import BankDetailsStep from '../../signup/steps/BankDetailsStep';
-import ContactHoursBrandingStep, {
-  createDefaultHours,
-  type DayHours,
-} from './ContactHoursBrandingStep';
+import BusinessInfoStep from './BusinessInfoStep';
+import LocationStepContent from './LocationStepContent';
+import BusinessDetailsStepContent from './BusinessDetailsStepContent';
+import ContactHoursBrandingContent, { createDefaultHours, type DayHours } from './ContactHoursBrandingContent';
+import VerificationStepContent from './VerificationStepContent';
+import BankDetailsStepContent from './BankDetailsStepContent';
+import OnboardingWizardShell from './OnboardingWizardShell';
 import {
   saveBankAccount,
   saveMerchantHours,
   submitMerchantApplication,
 } from '../../lib/partner-api';
-import { PARTNER_WIZARD_DRAFT_KEY } from '../../lib/partnerAuth';
-import { PartnerAccountFooter } from './PartnerAccountFooter';
-
-type WizardStep =
-  | 'restaurant-info'
-  | 'location'
-  | 'business-details'
-  | 'contact-hours'
-  | 'verification'
-  | 'bank-details';
-
-interface WizardDraft {
-  step: WizardStep;
-  formData: SignUpFormData;
-  hours: DayHours[];
-}
+import {
+  type WizardStepId,
+  wizardStepNumber,
+  nextWizardStep,
+  prevWizardStep,
+} from '../../lib/partner-onboarding-config';
+import { canContinueWizardStep } from '../../lib/partner-onboarding-validation';
+import {
+  loadPartnerWizardDraft,
+  savePartnerWizardDraft,
+} from '../../lib/partner-wizard-draft';
+import { clearPartnerWizardDraft } from '../../lib/partnerAuth';
 
 interface UnifiedOnboardingWizardProps {
   session: Session;
   onComplete: () => void;
 }
 
-function loadDraft(): WizardDraft | null {
-  try {
-    const raw = sessionStorage.getItem(PARTNER_WIZARD_DRAFT_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as WizardDraft;
-  } catch {
-    return null;
-  }
-}
-
-function saveDraft(step: WizardStep, formData: SignUpFormData, hours: DayHours[]) {
-  const safe: SignUpFormData = {
-    ...formData,
-    idFrontFile: null,
-    idBackFile: null,
-    proofOfBusinessFile: null,
-    accountNumber: '',
-    routingNumber: '',
+function initFormData(session: Session, draftData?: SignUpFormData): SignUpFormData {
+  return {
+    ...INITIAL_SIGN_UP_DATA,
+    ...draftData,
+    email: draftData?.email || session.user.email || '',
   };
-  sessionStorage.setItem(PARTNER_WIZARD_DRAFT_KEY, JSON.stringify({ step, formData: safe, hours }));
-}
-
-function clearDraft() {
-  sessionStorage.removeItem(PARTNER_WIZARD_DRAFT_KEY);
 }
 
 export default function UnifiedOnboardingWizard({ session, onComplete }: UnifiedOnboardingWizardProps) {
-  const draft = loadDraft();
-  const [step, setStep] = useState<WizardStep>(draft?.step || 'restaurant-info');
-  const [formData, setFormData] = useState<SignUpFormData>(() => ({
-    ...INITIAL_SIGN_UP_DATA,
-    ...draft?.formData,
-    email: draft?.formData?.email || session.user.email || '',
-  }));
-  const [hours, setHours] = useState<DayHours[]>(draft?.hours || createDefaultHours());
+  const initial = useState(() => {
+    const draftResult = loadPartnerWizardDraft();
+    return {
+      step: (draftResult.ok ? draftResult.draft.step : 'restaurant-info') as WizardStepId,
+      formData: initFormData(session, draftResult.ok ? draftResult.draft.formData : undefined),
+      hours:
+        draftResult.ok && draftResult.draft.hours.length > 0
+          ? draftResult.draft.hours
+          : createDefaultHours(),
+      versionMismatch: !draftResult.ok && draftResult.reason === 'version_mismatch',
+    };
+  })[0];
+
+  const [step, setStep] = useState<WizardStepId>(initial.step);
+  const [formData, setFormData] = useState<SignUpFormData>(initial.formData);
+  const [hours, setHours] = useState<DayHours[]>(initial.hours);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    saveDraft(step, formData, hours);
+    if (initial.versionMismatch) {
+      toast.info('Your saved progress was reset. Please start again.');
+    }
+  }, [initial.versionMismatch]);
+
+  const stepNumber = wizardStepNumber(step);
+  const enableUpload = true;
+
+  useEffect(() => {
+    savePartnerWizardDraft(step, formData, hours);
   }, [step, formData, hours]);
 
   const updateForm = (patch: Partial<SignUpFormData>) => {
     setFormData((current) => ({ ...current, ...patch }));
+  };
+
+  const goNext = () => {
+    const next = nextWizardStep(step);
+    if (next) setStep(next);
+  };
+
+  const goBack = () => {
+    const prev = prevWizardStep(step);
+    if (prev) setStep(prev);
   };
 
   const handleSubmitApplication = async (skipBank = false) => {
@@ -102,6 +105,7 @@ export default function UnifiedOnboardingWizard({ session, onComplete }: Unified
         address,
         businessType: formData.businessType || undefined,
         cuisineTypes: formData.cuisineTypes,
+        cuisineType: formData.cuisineTypes[0],
         streetAddress: loc.streetAddress,
         city: loc.city,
         postalCode: loc.postalCode,
@@ -139,7 +143,7 @@ export default function UnifiedOnboardingWizard({ session, onComplete }: Unified
         });
       }
 
-      clearDraft();
+      clearPartnerWizardDraft();
       toast.success('Application submitted for review');
       onComplete();
     } catch (err) {
@@ -149,84 +153,69 @@ export default function UnifiedOnboardingWizard({ session, onComplete }: Unified
     }
   };
 
-  let stepContent: React.ReactNode = null;
+  const canContinue = canContinueWizardStep(step, formData, hours, { enableUpload });
 
-  switch (step) {
-    case 'restaurant-info':
-      stepContent = (
-        <RestaurantInfoStep
-          data={formData}
-          onChange={updateForm}
-          onBack={() => {}}
-          onContinue={() => setStep('location')}
-        />
-      );
-      break;
-    case 'location':
-      stepContent = (
-        <LocationStep
-          data={formData}
-          onChange={updateForm}
-          onBack={() => setStep('restaurant-info')}
-          onContinue={() => setStep('business-details')}
-        />
-      );
-      break;
-    case 'business-details':
-      stepContent = (
-        <BusinessDetailsStep
-          data={formData}
-          onChange={updateForm}
-          onBack={() => setStep('location')}
-          onContinue={() => setStep('contact-hours')}
-        />
-      );
-      break;
-    case 'contact-hours':
-      stepContent = (
-        <ContactHoursBrandingStep
-          data={formData}
-          hours={hours}
-          onChange={updateForm}
-          onHoursChange={setHours}
-          onBack={() => setStep('business-details')}
-          onContinue={() => setStep('verification')}
-        />
-      );
-      break;
-    case 'verification':
-      stepContent = (
-        <VerificationStep
-          data={formData}
-          onChange={updateForm}
-          onBack={() => setStep('contact-hours')}
-          onContinue={() => setStep('bank-details')}
-          enableUpload
-        />
-      );
-      break;
-    case 'bank-details':
-      stepContent = (
-        <BankDetailsStep
-          data={formData}
-          onChange={updateForm}
-          onSave={() => void handleSubmitApplication(false)}
-          onSkip={() => void handleSubmitApplication(true)}
-          isSubmitting={submitting}
-        />
-      );
-      break;
-    default:
-      stepContent = null;
+  const renderStepContent = () => {
+    switch (step) {
+      case 'restaurant-info':
+        return <BusinessInfoStep data={formData} onChange={updateForm} />;
+      case 'location':
+        return <LocationStepContent data={formData} onChange={updateForm} />;
+      case 'business-details':
+        return <BusinessDetailsStepContent data={formData} onChange={updateForm} />;
+      case 'contact-hours':
+        return (
+          <ContactHoursBrandingContent
+            data={formData}
+            hours={hours}
+            onChange={updateForm}
+            onHoursChange={setHours}
+          />
+        );
+      case 'verification':
+        return (
+          <VerificationStepContent data={formData} onChange={updateForm} enableUpload={enableUpload} />
+        );
+      case 'bank-details':
+        return (
+          <BankDetailsStepContent
+            data={formData}
+            onChange={updateForm}
+            onSave={() => void handleSubmitApplication(false)}
+            onSkip={() => void handleSubmitApplication(true)}
+            isSubmitting={submitting}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
+  if (step === 'bank-details') {
+    return (
+      <OnboardingWizardShell
+        currentStep={stepNumber}
+        session={session}
+        showBack
+        onBack={goBack}
+        showBottomNav={false}
+      >
+        {renderStepContent()}
+      </OnboardingWizardShell>
+    );
   }
 
   return (
-    <>
-      {stepContent}
-      <PartnerAccountFooter
-        email={session.user.email}
-        className="pointer-events-auto fixed inset-x-0 bottom-[5.5rem] z-30 px-margin-mobile"
-      />
-    </>
+    <OnboardingWizardShell
+      currentStep={stepNumber}
+      session={session}
+      showBack={stepNumber > 1}
+      onBack={goBack}
+      onContinue={goNext}
+      continueDisabled={!canContinue}
+      isLoading={submitting}
+    >
+      {renderStepContent()}
+    </OnboardingWizardShell>
   );
 }

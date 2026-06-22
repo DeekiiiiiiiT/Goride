@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { AuthRecoveryGate } from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
 import { toast } from 'sonner';
-import { DashAdminPortal } from '@dash-admin/DashAdminPortal';
 import HomePage from './pages/HomePage';
 import SearchPage from './pages/SearchPage';
 import SearchResultsPage from './pages/SearchResultsPage';
@@ -104,17 +103,22 @@ const IMMERSIVE_STACK_PAGES: StackPage[] = [
   'order-delivered',
 ];
 
-/** Customer ordering app (roamdash.co). Admin lives at /admin on the same domain. */
+/** Customer ordering app (roamdash.co). Admin portal: partner.roamdash.co/admin */
 export default function App() {
   const isAdmin = window.location.pathname.startsWith('/admin');
+
+  if (isAdmin) {
+    window.location.replace('https://partner.roamdash.co/admin');
+    return null;
+  }
 
   return (
     <AuthRecoveryGate
       title="Reset password"
-      subtitle={isAdmin ? 'Roam Dash Admin' : 'Roam Dash'}
-      signInHref={isAdmin ? '/admin' : '/'}
+      subtitle="Roam Dash"
+      signInHref="/"
     >
-      {isAdmin ? <DashAdminPortal /> : <DashCustomerApp />}
+      <DashCustomerApp />
     </AuthRecoveryGate>
   );
 }

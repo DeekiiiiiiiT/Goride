@@ -10,6 +10,12 @@ export type MerchantVerificationStatus =
   | 'approved'
   | 'rejected';
 
+export type MerchantOperationalStatus = 'active' | 'suspended' | 'deactivated';
+
+export type CustomerAccountStatus = 'active' | 'suspended';
+
+export type DisputeStatus = 'open' | 'investigating' | 'resolved' | 'refunded' | 'denied';
+
 export type MerchantDocumentType = 'id_front' | 'id_back' | 'proof_of_business';
 
 export type MerchantDocumentStatus = 'pending' | 'approved' | 'rejected';

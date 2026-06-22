@@ -39,6 +39,19 @@ export interface Merchant {
   verified_at: string | null;
 }
 
+export type TeamPermission = 'orders' | 'menu' | 'analytics' | 'payouts';
+
+export interface MerchantMembership {
+  role: 'staff' | 'manager' | 'admin';
+  permissions: TeamPermission[];
+  is_owner: boolean;
+}
+
+export interface MerchantProfileResponse {
+  merchant: Merchant;
+  membership: MerchantMembership;
+}
+
 export function useMerchant(session: Session | null) {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['my-merchant', session?.user?.id],
@@ -54,14 +67,15 @@ export function useMerchant(session: Session | null) {
       if (res.status === 404) return null;
       if (!res.ok) throw new Error('Failed to fetch merchant');
 
-      const data = await res.json();
-      return data.merchant as Merchant;
+      const data = await res.json() as MerchantProfileResponse;
+      return data;
     },
     enabled: !!session,
   });
 
   return {
-    merchant: data,
+    merchant: data?.merchant,
+    membership: data?.membership,
     isLoading,
     error,
     refetch,

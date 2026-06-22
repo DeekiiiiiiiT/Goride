@@ -1,63 +1,27 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2, RefreshCw, Search, Store, Utensils } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { useNavigate, useOutletContext } from 'react-router-dom';
+import { Loader2, RefreshCw, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { MerchantStatusBadge } from '../components/MerchantStatusBadge';
-import { MerchantDetailModal } from '../components/MerchantDetailModal';
-import {
-  listMerchants,
-  getMerchantDetail,
-  type DashMerchant,
-  type MerchantAuditEntry,
-  type MerchantBankAccountDetail,
-  type MerchantDocumentDetail,
-  type MerchantHours,
-  type MerchantStatusCounts,
-  type MerchantVerificationStatus,
-} from '../services/dashAdminService';
+import { listMerchants, type DashMerchant, type MerchantVerificationStatus } from '../services/dashAdminService';
+import type { AdminOutletContext } from '../DashAdminPortal';
 
 type TabId = 'all' | MerchantVerificationStatus;
 
-function fmtRelative(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  const diff = Date.now() - new Date(iso).getTime();
-  if (diff < 0) return 'Just now';
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 30) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString();
-}
+export function MerchantManager() {
+  const { session } = useOutletContext<AdminOutletContext>();
+  const navigate = useNavigate();
+  const accessToken = session.access_token;
 
-interface MerchantManagerProps {
-  accessToken: string | undefined;
-}
-
-export function MerchantManager({ accessToken }: MerchantManagerProps) {
   const [tab, setTab] = useState<TabId>('pending');
   const [searchInput, setSearchInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [items, setItems] = useState<DashMerchant[]>([]);
-  const [counts, setCounts] = useState<MerchantStatusCounts>({
-    pending: 0,
-    in_review: 0,
-    docs_requested: 0,
-    approved: 0,
-    rejected: 0,
-  });
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailMerchant, setDetailMerchant] = useState<DashMerchant | null>(null);
-  const [detailHours, setDetailHours] = useState<MerchantHours[]>([]);
-  const [detailAuditLog, setDetailAuditLog] = useState<MerchantAuditEntry[]>([]);
-  const [detailOwnerEmail, setDetailOwnerEmail] = useState('');
-  const [detailDocuments, setDetailDocuments] = useState<MerchantDocumentDetail[]>([]);
-  const [detailBankAccount, setDetailBankAccount] = useState<MerchantBankAccountDetail | null>(null);
+  const [counts, setCounts] = useState({
+    pending: 0, in_review: 0, docs_requested: 0, approved: 0, rejected: 0,
+  });
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchInput.trim()), 300);
@@ -65,7 +29,6 @@ export function MerchantManager({ accessToken }: MerchantManagerProps) {
   }, [searchInput]);
 
   const load = useCallback(async () => {
-    if (!accessToken) return;
     setLoading(true);
     try {
       const res = await listMerchants(accessToken, {
@@ -87,253 +50,113 @@ export function MerchantManager({ accessToken }: MerchantManagerProps) {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      void load();
-    }, 60_000);
-    return () => clearInterval(interval);
-  }, [load]);
-
-  const openDetail = async (merchant: DashMerchant) => {
-    if (!accessToken) return;
-    setDetailOpen(true);
-    setDetailLoading(true);
-    setDetailMerchant(merchant);
-    setDetailHours([]);
-    setDetailAuditLog([]);
-    setDetailOwnerEmail('');
-    setDetailDocuments([]);
-    setDetailBankAccount(null);
-    try {
-      const res = await getMerchantDetail(accessToken, merchant.id);
-      setDetailMerchant(res.merchant);
-      setDetailHours(res.hours);
-      setDetailAuditLog(res.auditLog);
-      setDetailOwnerEmail(res.ownerEmail);
-      setDetailDocuments(res.documents || []);
-      setDetailBankAccount(res.bankAccount || null);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to load details');
-    } finally {
-      setDetailLoading(false);
-    }
-  };
-
-  const handleUpdated = async () => {
-    await load();
-    if (detailMerchant && accessToken) {
-      try {
-        const res = await getMerchantDetail(accessToken, detailMerchant.id);
-        setDetailMerchant(res.merchant);
-        setDetailHours(res.hours);
-        setDetailAuditLog(res.auditLog);
-        setDetailOwnerEmail(res.ownerEmail);
-        setDetailDocuments(res.documents || []);
-        setDetailBankAccount(res.bankAccount || null);
-      } catch {
-        // Non-fatal
-      }
-    }
-  };
-
-  const totalAcrossTabs = useMemo(
-    () =>
-      counts.pending +
-      counts.in_review +
-      counts.docs_requested +
-      counts.approved +
-      counts.rejected,
-    [counts]
-  );
+  const tabs: { id: TabId; label: string }[] = [
+    { id: 'pending', label: 'Pending' },
+    { id: 'in_review', label: 'In Review' },
+    { id: 'docs_requested', label: 'Docs Requested' },
+    { id: 'approved', label: 'Approved' },
+    { id: 'rejected', label: 'Rejected' },
+    { id: 'all', label: 'All' },
+  ];
 
   return (
-    <div className="dash-admin-page space-y-6">
-      <div className="dash-admin-page__header">
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-amber-400/90 mb-1">
-            Merchants · Verification
-          </p>
-          <h1 className="text-2xl font-semibold text-white flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/15 ring-1 ring-emerald-500/30">
-              <Utensils className="w-5 h-5 text-emerald-400" />
-            </span>
-            Restaurant applications
-          </h1>
-          <p className="text-sm text-slate-400 mt-2 max-w-xl">
-            Review and approve merchant onboarding. Queue refreshes every minute.
-          </p>
+          <h2 className="text-xl font-semibold text-white">Merchants</h2>
+          <p className="text-sm text-slate-400">{total} total</p>
         </div>
         <button
+          type="button"
           onClick={() => void load()}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg text-slate-950 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 shadow-lg shadow-amber-500/20 disabled:opacity-50 transition-all"
+          className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
         >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className="w-4 h-4" />
           Refresh
         </button>
       </div>
 
-      <div className="dash-admin-stat-grid">
-        <button
-          type="button"
-          onClick={() => setTab('all')}
-          className={`dash-admin-stat-card text-left bg-slate-800/50 text-slate-200 border border-slate-600/50 ${
-            tab === 'all' ? 'ring-2 ring-white/25 shadow-lg' : ''
-          }`}
-        >
-          <div className="dash-admin-stat-card__label">All</div>
-          <div className="dash-admin-stat-card__value">{totalAcrossTabs}</div>
-        </button>
-        {(
-          [
-            ['pending', 'Pending', 'pending'],
-            ['in_review', 'In Review', 'review'],
-            ['docs_requested', 'Docs Requested', 'docs'],
-            ['approved', 'Approved', 'approved'],
-            ['rejected', 'Rejected', 'rejected'],
-          ] as const
-        ).map(([key, label, variant]) => (
+      <div className="flex flex-wrap gap-2">
+        {tabs.map((t) => (
           <button
-            key={key}
+            key={t.id}
             type="button"
-            onClick={() => setTab(key)}
-            className={`dash-admin-stat-card dash-admin-stat-card--${variant} text-left ${
-              tab === key ? 'ring-2 ring-white/25 shadow-lg' : ''
+            onClick={() => setTab(t.id)}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              tab === t.id
+                ? 'bg-amber-600 text-white'
+                : 'bg-slate-800 text-slate-400 hover:text-white'
             }`}
           >
-            <div className="dash-admin-stat-card__label">{label}</div>
-            <div className="dash-admin-stat-card__value">{counts[key]}</div>
+            {t.label}
+            {t.id !== 'all' && counts[t.id as keyof typeof counts] != null && (
+              <span className="ml-1.5 opacity-70">({counts[t.id as keyof typeof counts]})</span>
+            )}
           </button>
         ))}
       </div>
 
-      <div className="dash-admin-search">
-        <Search size={16} />
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
         <input
-          placeholder="Search name, email, phone, address..."
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
-          aria-label="Search merchants"
+          placeholder="Search name, email, phone, address..."
+          className="w-full pl-10 pr-4 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
         />
       </div>
 
-      {/* Table */}
-      <div className="border rounded-xl overflow-hidden bg-slate-900/50 border-slate-800 shadow-xl shadow-black/20">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-slate-800 bg-slate-800/30">
-              <th className="text-left px-4 py-3 text-xs font-medium text-slate-400 uppercase">
-                Logo
-              </th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-slate-400 uppercase">
-                Name
-              </th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-slate-400 uppercase hidden md:table-cell">
-                Cuisine
-              </th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-slate-400 uppercase hidden lg:table-cell">
-                Address
-              </th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-slate-400 uppercase hidden sm:table-cell">
-                Submitted
-              </th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-slate-400 uppercase">
-                Status
-              </th>
-              <th className="text-right px-4 py-3 text-xs font-medium text-slate-400 uppercase">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-amber-400" />
+        </div>
+      ) : items.length === 0 ? (
+        <p className="text-slate-400 text-center py-12">No merchants found.</p>
+      ) : (
+        <div className="rounded-xl border border-slate-800 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-900/80 text-slate-400 text-left">
               <tr>
-                <td colSpan={7} className="text-center py-16">
-                  <Loader2 className="w-6 h-6 animate-spin text-slate-400 mx-auto" />
-                </td>
+                <th className="px-4 py-3 font-medium">Restaurant</th>
+                <th className="px-4 py-3 font-medium">Verification</th>
+                <th className="px-4 py-3 font-medium">Operations</th>
+                <th className="px-4 py-3 font-medium">Submitted</th>
               </tr>
-            ) : items.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="text-center py-16 text-slate-400">
-                  <Store className="w-10 h-10 mx-auto mb-3 text-slate-600" />
-                  No merchants in this view.
-                  {debouncedSearch && ' Try clearing your search.'}
-                </td>
-              </tr>
-            ) : (
-              items.map((m) => (
+            </thead>
+            <tbody className="divide-y divide-slate-800">
+              {items.map((m) => (
                 <tr
                   key={m.id}
-                  className="cursor-pointer hover:bg-slate-800/30 border-t border-slate-800"
-                  onClick={() => void openDetail(m)}
+                  onClick={() => navigate(`/merchants/${m.id}`)}
+                  className="hover:bg-slate-800/50 cursor-pointer"
                 >
                   <td className="px-4 py-3">
-                    {m.logo_url ? (
-                      <img
-                        src={m.logo_url}
-                        alt=""
-                        className="w-10 h-10 rounded-md object-cover border border-slate-700"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded-md bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-500">
-                        <Store className="w-4 h-4" />
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-white">{m.name}</div>
-                    {m.email && <div className="text-xs text-slate-400 mt-0.5">{m.email}</div>}
-                  </td>
-                  <td className="px-4 py-3 text-slate-300 hidden md:table-cell">
-                    {m.cuisine_type || '—'}
-                  </td>
-                  <td
-                    className="px-4 py-3 text-slate-400 max-w-[240px] truncate hidden lg:table-cell"
-                    title={m.address || ''}
-                  >
-                    {m.address || '—'}
-                  </td>
-                  <td className="px-4 py-3 text-slate-400 text-sm hidden sm:table-cell">
-                    {fmtRelative(m.submitted_at)}
+                    <p className="font-medium text-white">{m.name}</p>
+                    <p className="text-slate-500 text-xs">{m.email || m.phone || '—'}</p>
                   </td>
                   <td className="px-4 py-3">
                     <MerchantStatusBadge status={m.verification_status} />
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void openDetail(m);
-                      }}
-                      className="px-3 py-1.5 text-sm font-medium border border-slate-700 rounded-lg text-slate-300 hover:bg-slate-800"
-                    >
-                      Review
-                    </button>
+                  <td className="px-4 py-3">
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                      m.operational_status === 'suspended'
+                        ? 'bg-red-500/15 text-red-300'
+                        : m.operational_status === 'deactivated'
+                        ? 'bg-slate-600/30 text-slate-400'
+                        : 'bg-emerald-500/15 text-emerald-300'
+                    }`}>
+                      {m.operational_status || 'active'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-slate-400">
+                    {m.submitted_at ? new Date(m.submitted_at).toLocaleDateString() : '—'}
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <p className="text-xs text-slate-500">
-        Showing {items.length} of {total} matching merchants.
-      </p>
-
-      <MerchantDetailModal
-        open={detailOpen}
-        onOpenChange={setDetailOpen}
-        accessToken={accessToken}
-        merchant={detailMerchant}
-        hours={detailHours}
-        auditLog={detailAuditLog}
-        ownerEmail={detailOwnerEmail}
-        documents={detailDocuments}
-        bankAccount={detailBankAccount}
-        loading={detailLoading}
-        onUpdated={handleUpdated}
-      />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,17 +1,16 @@
 /**
- * Dash Admin Service - API client for merchant verification and management
+ * Dash Admin Service - API client for Roam Dash admin portal
  */
 
 import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
+import type {
+  MerchantOperationalStatus,
+  MerchantVerificationStatus,
+} from '@roam/types/delivery';
 
 const DELIVERY_BASE = API_ENDPOINTS.delivery;
 
-export type MerchantVerificationStatus =
-  | 'pending'
-  | 'in_review'
-  | 'docs_requested'
-  | 'approved'
-  | 'rejected';
+export type { MerchantVerificationStatus, MerchantOperationalStatus };
 
 export interface DashMerchant {
   id: string;
@@ -38,6 +37,7 @@ export interface DashMerchant {
   rating: number | null;
   total_ratings: number | null;
   verification_status: MerchantVerificationStatus;
+  operational_status?: MerchantOperationalStatus;
   verification_notes: string | null;
   rejection_reason: string | null;
   verified_at: string | null;
@@ -45,6 +45,11 @@ export interface DashMerchant {
   submitted_at: string;
   created_at: string;
   updated_at: string | null;
+  suspended_at?: string | null;
+  suspended_reason?: string | null;
+  admin_assigned_to?: string | null;
+  verification_checklist?: Record<string, boolean>;
+  admin_internal_notes?: string | null;
 }
 
 export interface MerchantHours {
@@ -77,12 +82,22 @@ export interface MerchantStatusCounts {
   rejected: number;
 }
 
+export interface MerchantTeamMemberRow {
+  id: string;
+  email: string | null;
+  name: string;
+  role: string;
+  permissions: string[];
+  is_owner: boolean;
+}
+
 export interface ListMerchantsResponse {
   merchants: DashMerchant[];
   total: number;
   page: number;
   limit: number;
   counts: MerchantStatusCounts;
+  operational?: Record<MerchantOperationalStatus, number>;
 }
 
 export interface MerchantDetailResponse {
@@ -92,6 +107,8 @@ export interface MerchantDetailResponse {
   ownerEmail: string;
   documents?: MerchantDocumentDetail[];
   bankAccount?: MerchantBankAccountDetail | null;
+  team?: MerchantTeamMemberRow[];
+  pendingInvites?: Array<Record<string, unknown>>;
 }
 
 export interface MerchantDocumentDetail {
@@ -101,6 +118,7 @@ export interface MerchantDocumentDetail {
   file_path: string;
   signedUrl?: string | null;
   uploaded_at: string;
+  rejection_reason?: string | null;
 }
 
 export interface MerchantBankAccountDetail {
@@ -108,6 +126,27 @@ export interface MerchantBankAccountDetail {
   account_holder_name: string;
   account_last4: string;
   account_type: string;
+}
+
+export interface DashboardStats {
+  merchants: {
+    total: number;
+    verification: MerchantStatusCounts;
+    operational: Record<MerchantOperationalStatus, number>;
+  };
+  orders: { todayCount: number; todayGmv: number; liveCount: number };
+  sla: { staleVerifications: number };
+}
+
+export interface DashOrderRow {
+  id: string;
+  order_number: string;
+  status: string;
+  total: number;
+  placed_at: string;
+  merchant_id: string;
+  customer_id: string;
+  delivery_address: string;
 }
 
 function headers(accessToken: string, contentType?: string): HeadersInit {
@@ -122,85 +161,252 @@ function headers(accessToken: string, contentType?: string): HeadersInit {
 async function parseJsonResponse<T>(res: Response): Promise<T> {
   const text = await res.text();
   const trimmed = text.trim();
-
   if (trimmed.startsWith('<')) {
-    throw new Error(
-      'Server returned HTML instead of JSON. Check that the delivery Edge function is deployed and API env vars are set.'
-    );
+    throw new Error('Server returned HTML instead of JSON. Check delivery Edge function deployment.');
   }
-
   let body: unknown;
   try {
     body = trimmed ? JSON.parse(trimmed) : {};
   } catch {
     throw new Error('Invalid JSON response from server');
   }
-
   if (!res.ok) {
     const err = body as { error?: string; message?: string };
     throw new Error(err.error || err.message || `HTTP ${res.status}`);
   }
-
   return body as T;
 }
 
-export async function listMerchants(
+async function deliveryFetch<T>(
+  accessToken: string,
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  const res = await fetch(`${DELIVERY_BASE}${path}`, {
+    ...init,
+    headers: { ...headers(accessToken, init?.body ? 'application/json' : undefined), ...init?.headers },
+  });
+  return parseJsonResponse<T>(res);
+}
+
+export function listMerchants(
   accessToken: string,
   opts: {
     status?: MerchantVerificationStatus | 'all';
+    operational_status?: MerchantOperationalStatus | 'all';
     search?: string;
     page?: number;
     limit?: number;
-  } = {}
+  } = {},
 ): Promise<ListMerchantsResponse> {
   const sp = new URLSearchParams();
   if (opts.status) sp.set('status', opts.status);
+  if (opts.operational_status) sp.set('operational_status', opts.operational_status);
   if (opts.search) sp.set('search', opts.search);
   if (opts.page != null) sp.set('page', String(opts.page));
   if (opts.limit != null) sp.set('limit', String(opts.limit));
-
-  const res = await fetch(`${DELIVERY_BASE}/admin/merchants?${sp.toString()}`, {
-    headers: headers(accessToken),
-  });
-
-  return parseJsonResponse<ListMerchantsResponse>(res);
+  return deliveryFetch(accessToken, `/admin/merchants?${sp}`);
 }
 
-export async function getMerchantDetail(
-  accessToken: string,
-  id: string
-): Promise<MerchantDetailResponse> {
-  const res = await fetch(`${DELIVERY_BASE}/admin/merchants/${id}`, {
-    headers: headers(accessToken),
-  });
-
-  return parseJsonResponse<MerchantDetailResponse>(res);
+export function getMerchantDetail(accessToken: string, id: string): Promise<MerchantDetailResponse> {
+  return deliveryFetch(accessToken, `/admin/merchants/${id}`);
 }
 
-export async function changeMerchantStatus(
+export function changeMerchantStatus(
   accessToken: string,
   id: string,
   payload: {
     status: MerchantVerificationStatus;
     notes?: string;
     internal_notes?: string;
-  }
+    force?: boolean;
+    commission_rate?: number;
+    delivery_radius_km?: number;
+  },
 ): Promise<{ merchant: DashMerchant }> {
-  const res = await fetch(`${DELIVERY_BASE}/admin/merchants/${id}/status`, {
+  return deliveryFetch(accessToken, `/admin/merchants/${id}/status`, {
     method: 'POST',
-    headers: headers(accessToken, 'application/json'),
     body: JSON.stringify(payload),
   });
-
-  return parseJsonResponse<{ merchant: DashMerchant }>(res);
 }
 
-export async function getMerchantStats(
-  accessToken: string
-): Promise<{ counts: MerchantStatusCounts; total: number }> {
-  const res = await fetch(`${DELIVERY_BASE}/admin/merchants/stats`, {
-    headers: headers(accessToken),
-  });
+export function getMerchantStats(
+  accessToken: string,
+): Promise<{ counts: MerchantStatusCounts; operational?: Record<string, number>; total: number }> {
+  return deliveryFetch(accessToken, '/admin/merchants/stats');
+}
 
-  return parseJsonResponse<{ counts: MerchantStatusCounts; total: number }>(res);
+export function getDashboardStats(accessToken: string): Promise<DashboardStats> {
+  return deliveryFetch(accessToken, '/admin/dashboard/stats');
+}
+
+export function suspendMerchant(accessToken: string, id: string, reason: string) {
+  return deliveryFetch(accessToken, `/admin/merchants/${id}/suspend`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function unsuspendMerchant(accessToken: string, id: string) {
+  return deliveryFetch(accessToken, `/admin/merchants/${id}/unsuspend`, { method: 'POST' });
+}
+
+export function deactivateMerchant(accessToken: string, id: string, reason: string) {
+  return deliveryFetch(accessToken, `/admin/merchants/${id}/deactivate`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function reactivateMerchant(accessToken: string, id: string) {
+  return deliveryFetch(accessToken, `/admin/merchants/${id}/reactivate`, { method: 'POST' });
+}
+
+export function patchMerchantOps(
+  accessToken: string,
+  id: string,
+  payload: {
+    is_accepting_orders?: boolean;
+    commission_rate?: number;
+    delivery_radius_km?: number;
+    admin_internal_notes?: string;
+  },
+) {
+  return deliveryFetch(accessToken, `/admin/merchants/${id}/ops`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function assignMerchant(accessToken: string, id: string, assignedTo: string | null) {
+  return deliveryFetch(accessToken, `/admin/merchants/${id}/assign`, {
+    method: 'PATCH',
+    body: JSON.stringify({ assigned_to: assignedTo }),
+  });
+}
+
+export function updateMerchantChecklist(
+  accessToken: string,
+  id: string,
+  checklist: Record<string, boolean>,
+) {
+  return deliveryFetch(accessToken, `/admin/merchants/${id}/checklist`, {
+    method: 'PATCH',
+    body: JSON.stringify({ checklist }),
+  });
+}
+
+export function reviewMerchantDocument(
+  accessToken: string,
+  docId: string,
+  payload: { status: string; rejection_reason?: string },
+) {
+  return deliveryFetch(accessToken, `/admin/merchants/documents/${docId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function listOrders(
+  accessToken: string,
+  opts: {
+    status?: string;
+    merchant_id?: string;
+    q?: string;
+    page?: number;
+    limit?: number;
+  } = {},
+): Promise<{ orders: DashOrderRow[]; total: number; page: number; limit: number }> {
+  const sp = new URLSearchParams();
+  if (opts.status) sp.set('status', opts.status);
+  if (opts.merchant_id) sp.set('merchant_id', opts.merchant_id);
+  if (opts.q) sp.set('q', opts.q);
+  if (opts.page != null) sp.set('page', String(opts.page));
+  if (opts.limit != null) sp.set('limit', String(opts.limit));
+  return deliveryFetch(accessToken, `/admin/orders?${sp}`);
+}
+
+export function getOrderDetail(
+  accessToken: string,
+  orderId: string,
+): Promise<{ order: Record<string, unknown>; events: Array<Record<string, unknown>> }> {
+  return deliveryFetch(accessToken, `/admin/orders/${orderId}`);
+}
+
+export function cancelOrder(accessToken: string, orderId: string, reason: string) {
+  return deliveryFetch(accessToken, `/admin/orders/${orderId}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function completeOrder(accessToken: string, orderId: string) {
+  return deliveryFetch(accessToken, `/admin/orders/${orderId}/complete`, { method: 'POST' });
+}
+
+export function listCustomers(
+  accessToken: string,
+  opts: { q?: string; page?: number } = {},
+) {
+  const sp = new URLSearchParams();
+  if (opts.q) sp.set('q', opts.q);
+  if (opts.page) sp.set('page', String(opts.page));
+  return deliveryFetch(accessToken, `/admin/customers?${sp}`);
+}
+
+export function getCustomerDetail(accessToken: string, id: string) {
+  return deliveryFetch(accessToken, `/admin/customers/${id}`);
+}
+
+export function suspendCustomer(accessToken: string, id: string, reason: string) {
+  return deliveryFetch(accessToken, `/admin/customers/${id}/suspend`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function unsuspendCustomer(accessToken: string, id: string) {
+  return deliveryFetch(accessToken, `/admin/customers/${id}/unsuspend`, { method: 'POST' });
+}
+
+export function listDashTeam(accessToken: string) {
+  return deliveryFetch<{ members: Array<{ userId: string; email: string; role: string }> }>(
+    accessToken,
+    '/admin/team',
+  );
+}
+
+export function listPayouts(accessToken: string, opts: { merchant_id?: string; status?: string } = {}) {
+  const sp = new URLSearchParams();
+  if (opts.merchant_id) sp.set('merchant_id', opts.merchant_id);
+  if (opts.status) sp.set('status', opts.status);
+  return deliveryFetch(accessToken, `/admin/finance/payouts?${sp}`);
+}
+
+export function listDisputes(accessToken: string, status?: string) {
+  const sp = status ? `?status=${status}` : '';
+  return deliveryFetch(accessToken, `/admin/finance/disputes${sp}`);
+}
+
+export function listReviews(accessToken: string, merchantId?: string) {
+  const sp = merchantId ? `?merchant_id=${merchantId}` : '';
+  return deliveryFetch(accessToken, `/admin/finance/reviews${sp}`);
+}
+
+export function hideReview(accessToken: string, orderId: string, hidden: boolean) {
+  return deliveryFetch(accessToken, `/admin/finance/reviews/${orderId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ review_hidden: hidden }),
+  });
+}
+
+export function listPromotions(accessToken: string, merchantId?: string) {
+  const sp = merchantId ? `?merchant_id=${merchantId}` : '';
+  return deliveryFetch(accessToken, `/admin/finance/promotions${sp}`);
+}
+
+export function listMerchantOwners(accessToken: string, q?: string, page = 1) {
+  const sp = new URLSearchParams({ page: String(page) });
+  if (q) sp.set('q', q);
+  return deliveryFetch(accessToken, `/admin/merchant-owners?${sp}`);
 }

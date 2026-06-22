@@ -13,6 +13,7 @@ import { cors } from "https://deno.land/x/hono@v4.3.11/middleware.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { jwtPrimaryRole } from "../_shared/authEdge.ts";
 import { requireProductAdmin } from "../_shared/productAdmin.ts";
+import { resolveMerchantAccess } from "./merchantAuth.ts";
 
 const app = new Hono().basePath("/delivery");
 
@@ -73,202 +74,6 @@ function getAuthClient(authHeader: string) {
     Deno.env.get("SUPABASE_ANON_KEY")!,
     { global: { headers: { Authorization: authHeader } } },
   );
-}
-
-// ============================================================================
-// Admin role guard (platform_owner / superadmin / platform_support)
-// ----------------------------------------------------------------------------
-// Mirrors the role-check pattern from
-// apps/fleet/src/supabase/functions/server/pending_vehicle_catalog_routes.ts:
-// reads the caller's role from auth metadata and rejects non-admins.
-// ============================================================================
-
-const ADMIN_ROLES = new Set([
-  "platform_owner",
-  "superadmin",
-  "platform_support",
-  // Legacy fleet aliases that resolve to platform_owner via resolveRole()
-  "admin",
-]);
-
-type AdminUser = { id: string; email: string; role: string };
-
-async function requireAdmin(c: any): Promise<AdminUser | Response> {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader) {
-    return c.json({ error: "Unauthorized: missing Authorization header" }, 401);
-  }
-  const auth = getAuthClient(authHeader);
-  const { data: { user }, error } = await auth.auth.getUser();
-  if (error || !user) {
-    return c.json({ error: "Unauthorized: invalid token" }, 401);
-  }
-  const rawRole = jwtPrimaryRole(user);
-  if (!ADMIN_ROLES.has(rawRole)) {
-    return c.json({
-      error: "Forbidden",
-      message: "Platform admin role required",
-      currentRole: rawRole || "(none)",
-    }, 403);
-  }
-  return { id: user.id, email: user.email || "", role: rawRole };
-}
-
-// ============================================================================
-// Status transition rules for merchant verification
-// ============================================================================
-
-type VerificationStatus =
-  | "pending"
-  | "in_review"
-  | "docs_requested"
-  | "approved"
-  | "rejected";
-
-const ALLOWED_TRANSITIONS: Record<VerificationStatus, VerificationStatus[]> = {
-  pending: ["in_review", "approved", "rejected"],
-  in_review: ["approved", "rejected", "docs_requested"],
-  docs_requested: ["in_review", "approved", "rejected"],
-  approved: [], // Phase 2: add "suspended"
-  rejected: ["pending"], // merchant resubmit
-};
-
-function isValidStatus(s: unknown): s is VerificationStatus {
-  return typeof s === "string" && s in ALLOWED_TRANSITIONS;
-}
-
-// ============================================================================
-// Email helper (no-op if SMTP env vars unset)
-// Real implementation lives in Phase 1.5 - this is a stub that the status
-// handler will call. Logs to console for now, sends real SMTP later.
-// ============================================================================
-
-async function sendNotificationEmail(opts: {
-  to: string;
-  subject: string;
-  html: string;
-  text: string;
-}): Promise<{ sent: boolean; reason?: string }> {
-  const host = Deno.env.get("SMTP_HOST");
-  const port = Deno.env.get("SMTP_PORT");
-  const user = Deno.env.get("SMTP_USER");
-  const pass = Deno.env.get("SMTP_PASS");
-  const from = Deno.env.get("SMTP_FROM") || user;
-
-  if (!host || !port || !user || !pass || !from) {
-    console.log(
-      `[email] SMTP not configured - skipping send to ${opts.to}: "${opts.subject}"`,
-    );
-    return { sent: false, reason: "smtp_not_configured" };
-  }
-
-  try {
-    const { SMTPClient } = await import("https://deno.land/x/denomailer@1.6.0/mod.ts");
-    const client = new SMTPClient({
-      connection: {
-        hostname: host,
-        port: Number(port),
-        tls: true,
-        auth: { username: user, password: pass },
-      },
-    });
-    await client.send({
-      from,
-      to: opts.to,
-      subject: opts.subject,
-      content: opts.text,
-      html: opts.html,
-    });
-    await client.close();
-    return { sent: true };
-  } catch (e) {
-    console.error(`[email] Failed to send to ${opts.to}:`, e);
-    return { sent: false, reason: e instanceof Error ? e.message : "unknown" };
-  }
-}
-
-function renderStatusEmail(
-  status: VerificationStatus,
-  merchant: { name: string; rejection_reason?: string | null; verification_notes?: string | null },
-): { subject: string; html: string; text: string } {
-  const portalUrl = "https://partner.roamdash.co";
-  switch (status) {
-    case "approved":
-      return {
-        subject: `${merchant.name} is now live on Roam Dash!`,
-        text:
-          `Great news! Your restaurant "${merchant.name}" has been approved and is now visible to customers on Roam Dash.\n\n` +
-          `Log in to your partner portal to start managing orders: ${portalUrl}\n\n` +
-          `- The Roam Dash team`,
-        html: `<div style="font-family:Inter,sans-serif;max-width:560px;margin:auto;padding:24px;">
-  <h1 style="color:#10b981;">You're live on Roam Dash!</h1>
-  <p>Great news! <strong>${merchant.name}</strong> has been approved and is now visible to customers.</p>
-  <p>Log in to your partner portal to start managing orders.</p>
-  <p><a href="${portalUrl}" style="background:#10b981;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;">Open Partner Portal</a></p>
-  <p style="color:#64748b;font-size:14px;margin-top:24px;">- The Roam Dash team</p>
-</div>`,
-      };
-    case "rejected":
-      return {
-        subject: `Update on your Roam Dash application`,
-        text:
-          `Hi from Roam Dash,\n\n` +
-          `Unfortunately we were unable to approve "${merchant.name}" at this time.\n\n` +
-          `Reason: ${merchant.rejection_reason || "Not specified"}\n\n` +
-          `You can edit your application and resubmit at any time: ${portalUrl}\n\n` +
-          `- The Roam Dash team`,
-        html: `<div style="font-family:Inter,sans-serif;max-width:560px;margin:auto;padding:24px;">
-  <h1 style="color:#dc2626;">Application update</h1>
-  <p>Unfortunately we were unable to approve <strong>${merchant.name}</strong> at this time.</p>
-  <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;margin:16px 0;">
-    <p style="margin:0;"><strong>Reason:</strong> ${merchant.rejection_reason || "Not specified"}</p>
-  </div>
-  <p>You can edit your application and resubmit at any time.</p>
-  <p><a href="${portalUrl}" style="background:#10b981;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;">Edit & Resubmit</a></p>
-  <p style="color:#64748b;font-size:14px;margin-top:24px;">- The Roam Dash team</p>
-</div>`,
-      };
-    case "docs_requested":
-      return {
-        subject: `Additional information needed for ${merchant.name}`,
-        text:
-          `Hi from Roam Dash,\n\n` +
-          `Our team needs a bit more info before we can approve "${merchant.name}".\n\n` +
-          `Note from reviewer: ${merchant.verification_notes || "Please log in to see details"}\n\n` +
-          `Log in to your portal to update your application: ${portalUrl}\n\n` +
-          `- The Roam Dash team`,
-        html: `<div style="font-family:Inter,sans-serif;max-width:560px;margin:auto;padding:24px;">
-  <h1 style="color:#f59e0b;">More info needed</h1>
-  <p>Our team needs a bit more info before we can approve <strong>${merchant.name}</strong>.</p>
-  <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px;margin:16px 0;">
-    <p style="margin:0;"><strong>Note from reviewer:</strong> ${merchant.verification_notes || "Please log in to see details"}</p>
-  </div>
-  <p><a href="${portalUrl}" style="background:#10b981;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;">Open Partner Portal</a></p>
-  <p style="color:#64748b;font-size:14px;margin-top:24px;">- The Roam Dash team</p>
-</div>`,
-      };
-    case "in_review":
-      return {
-        subject: `Your Roam Dash application is being reviewed`,
-        text:
-          `Hi from Roam Dash,\n\n` +
-          `A reviewer has started looking at your application for "${merchant.name}".\n` +
-          `We will be in touch soon - typically within 24-48 hours.\n\n` +
-          `- The Roam Dash team`,
-        html: `<div style="font-family:Inter,sans-serif;max-width:560px;margin:auto;padding:24px;">
-  <h1 style="color:#2563eb;">Under review</h1>
-  <p>A reviewer has started looking at your application for <strong>${merchant.name}</strong>.</p>
-  <p>We will be in touch soon - typically within 24-48 hours.</p>
-  <p style="color:#64748b;font-size:14px;margin-top:24px;">- The Roam Dash team</p>
-</div>`,
-      };
-    default:
-      return {
-        subject: `Update on ${merchant.name}`,
-        text: `Status updated to: ${status}`,
-        html: `<p>Status updated to: <strong>${status}</strong></p>`,
-      };
-  }
 }
 
 // ============================================================================
@@ -339,26 +144,28 @@ app.get("/merchants/:id", async (c) => {
 app.get("/merchant/profile", async (c) => {
   const authHeader = c.req.header("Authorization");
   if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
-  
+
   const supabase = getSupabase(authHeader);
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return c.json({ error: "Unauthorized" }, 401);
-  
-  const { data: merchant, error } = await supabase
-    .from("merchants")
-    .select("*")
-    .eq("owner_id", user.id)
-    .single();
-  
-  if (error && error.code !== "PGRST116") {
-    return c.json({ error: error.message }, 500);
-  }
-  
-  if (!merchant) {
+
+  const resolved = await resolveMerchantAccess(user.id, user.email);
+  if (!resolved) {
+    const { data: owned } = await supabase
+      .from("merchants")
+      .select("*")
+      .eq("owner_id", user.id)
+      .maybeSingle();
+    if (owned) {
+      return c.json({
+        merchant: owned,
+        membership: { role: "admin", permissions: ["orders", "menu", "analytics", "payouts"], is_owner: true },
+      });
+    }
     return c.json({ error: "No merchant found" }, 404);
   }
-  
-  return c.json({ merchant });
+
+  return c.json({ merchant: resolved.merchant, membership: resolved.membership });
 });
 
 // Resubmit a rejected application
@@ -413,18 +220,19 @@ app.post("/merchant/resubmit", async (c) => {
   return c.json({ merchant: updated });
 });
 
-// Resolve merchant owned by authenticated user
+// Resolve merchant for authenticated user (owner or team member)
 async function getMerchantForUser(
-  supabase: ReturnType<typeof getSupabase>,
+  _supabase: ReturnType<typeof getSupabase>,
   userId: string,
+  userEmail?: string | null,
 ) {
-  const { data: merchant, error } = await supabase
-    .from("merchants")
-    .select("*")
-    .eq("owner_id", userId)
-    .single();
-  if (error || !merchant) return null;
-  return merchant as Record<string, unknown>;
+  const resolved = await resolveMerchantAccess(userId, userEmail);
+  if (!resolved) return null;
+  return resolved.merchant;
+}
+
+async function getMerchantAccessForUser(userId: string, userEmail?: string | null) {
+  return resolveMerchantAccess(userId, userEmail);
 }
 
 // ============================================================================
@@ -639,7 +447,7 @@ app.get("/merchant/menu", async (c) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-  const merchant = await getMerchantForUser(supabase, user.id);
+  const merchant = await getMerchantForUser(supabase, user.id, user.email);
   if (!merchant) return c.json({ error: "Not a merchant" }, 403);
 
   const merchantId = merchant.id as string;
@@ -677,7 +485,7 @@ app.put("/merchant/menu/reorder", async (c) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-  const merchant = await getMerchantForUser(supabase, user.id);
+  const merchant = await getMerchantForUser(supabase, user.id, user.email);
   if (!merchant) return c.json({ error: "Not a merchant" }, 403);
 
   const merchantId = merchant.id as string;
@@ -1046,320 +854,6 @@ app.post("/orders/:id/accept-delivery", async (c) => {
 });
 
 // ============================================================================
-// ADMIN: Merchant Verification Queue
-// ----------------------------------------------------------------------------
-// All routes here require platform_owner / superadmin / platform_support role.
-// Mounted at /delivery/admin/merchants/* (basePath adds /delivery).
-// ============================================================================
-
-// Counts of merchants grouped by verification_status
-app.get("/admin/merchants/stats", async (c) => {
-  const admin = await requireProductAdmin(c, "dash");
-  if (admin instanceof Response) return admin;
-  const sb = getServiceSupabase();
-  const { data, error } = await sb
-    .from("merchants")
-    .select("verification_status");
-  if (error) return c.json({ error: error.message }, 500);
-  const counts: Record<string, number> = {
-    pending: 0,
-    in_review: 0,
-    docs_requested: 0,
-    approved: 0,
-    rejected: 0,
-  };
-  for (const row of data || []) {
-    const s = (row as Record<string, unknown>).verification_status as string;
-    if (s && s in counts) counts[s]++;
-  }
-  const total = (data || []).length;
-  return c.json({ counts, total });
-});
-
-// List merchants with filter, search, pagination
-app.get("/admin/merchants", async (c) => {
-  const admin = await requireProductAdmin(c, "dash");
-  if (admin instanceof Response) return admin;
-
-  const sb = getServiceSupabase();
-  const { status, search } = c.req.query();
-  const limit = Math.min(parseInt(c.req.query("limit") || "50", 10) || 50, 200);
-  const page = Math.max(parseInt(c.req.query("page") || "1", 10) || 1, 1);
-  const offset = (page - 1) * limit;
-
-  let query = sb
-    .from("merchants")
-    .select("*", { count: "exact" })
-    .order("submitted_at", { ascending: false });
-
-  if (status && status !== "all" && isValidStatus(status)) {
-    query = query.eq("verification_status", status);
-  }
-
-  if (search && search.trim()) {
-    const pattern = `%${search.trim()}%`;
-    query = query.or(
-      `name.ilike.${pattern},email.ilike.${pattern},phone.ilike.${pattern},address.ilike.${pattern}`,
-    );
-  }
-
-  const { data, error, count } = await query.range(offset, offset + limit - 1);
-  if (error) return c.json({ error: error.message }, 500);
-
-  // Compute counts for tab badges
-  const { data: allStatuses } = await sb
-    .from("merchants")
-    .select("verification_status");
-  const counts: Record<string, number> = {
-    pending: 0,
-    in_review: 0,
-    docs_requested: 0,
-    approved: 0,
-    rejected: 0,
-  };
-  for (const row of allStatuses || []) {
-    const s = (row as Record<string, unknown>).verification_status as string;
-    if (s && s in counts) counts[s]++;
-  }
-
-  return c.json({
-    merchants: data || [],
-    total: count ?? 0,
-    page,
-    limit,
-    counts,
-  });
-});
-
-// Get single merchant with hours, owner email, and audit history
-app.get("/admin/merchants/:id", async (c) => {
-  const admin = await requireProductAdmin(c, "dash");
-  if (admin instanceof Response) return admin;
-  const { id } = c.req.param();
-
-  const sb = getServiceSupabase();
-  const { data: merchant, error } = await sb
-    .from("merchants")
-    .select("*")
-    .eq("id", id)
-    .single();
-  if (error || !merchant) {
-    return c.json({ error: error?.message || "Merchant not found" }, 404);
-  }
-
-  const { data: hours } = await sb
-    .from("merchant_hours")
-    .select("*")
-    .eq("merchant_id", id)
-    .order("day_of_week");
-
-  const { data: auditLog } = await sb
-    .from("merchant_audit_log")
-    .select("*")
-    .eq("merchant_id", id)
-    .order("created_at", { ascending: false });
-
-  // Look up owner email via auth.users (service-role client can read this)
-  let ownerEmail = "";
-  try {
-    const adminSb = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-    const ownerId = (merchant as Record<string, unknown>).owner_id as string;
-    if (ownerId) {
-      const { data: ownerData } = await adminSb.auth.admin.getUserById(ownerId);
-      ownerEmail = ownerData?.user?.email || "";
-    }
-  } catch (e) {
-    console.error("[admin] Failed to fetch owner email:", e);
-  }
-
-  const { extendAdminMerchantDetail } = await import("./merchant_application_routes.ts");
-  const { documents, bankAccount } = await extendAdminMerchantDetail(id);
-
-  return c.json({
-    merchant,
-    hours: hours || [],
-    auditLog: auditLog || [],
-    ownerEmail,
-    documents,
-    bankAccount,
-  });
-});
-
-// Change verification status (the main admin action)
-app.post("/admin/merchants/:id/status", async (c) => {
-  const admin = await requireProductAdmin(c, "dash");
-  if (admin instanceof Response) return admin;
-  const { id } = c.req.param();
-  const body = await c.req.json().catch(() => ({}));
-  const { status: newStatus, notes, internal_notes } = body as {
-    status?: string;
-    notes?: string;
-    internal_notes?: string;
-  };
-
-  if (!isValidStatus(newStatus)) {
-    return c.json({
-      error: "Invalid status",
-      allowed: Object.keys(ALLOWED_TRANSITIONS),
-    }, 400);
-  }
-
-  const sb = getServiceSupabase();
-  const { data: current, error: fetchErr } = await sb
-    .from("merchants")
-    .select("*")
-    .eq("id", id)
-    .single();
-  if (fetchErr || !current) {
-    return c.json({ error: "Merchant not found" }, 404);
-  }
-
-  const fromStatus = (current as Record<string, unknown>).verification_status as VerificationStatus;
-  const allowed = ALLOWED_TRANSITIONS[fromStatus] || [];
-  if (fromStatus !== newStatus && !allowed.includes(newStatus)) {
-    return c.json({
-      error: `Cannot transition from "${fromStatus}" to "${newStatus}"`,
-      allowed,
-    }, 400);
-  }
-
-  // Build update payload
-  const update: Record<string, unknown> = {
-    verification_status: newStatus,
-  };
-  if (newStatus === "approved") {
-    update.verified_at = new Date().toISOString();
-    update.verified_by = admin.id;
-    update.rejection_reason = null;
-  }
-  if (newStatus === "rejected") {
-    update.rejection_reason = notes || null;
-    update.verified_by = admin.id;
-  }
-  if (newStatus === "docs_requested" || newStatus === "in_review") {
-    update.verified_by = admin.id;
-  }
-  if (typeof internal_notes === "string" && internal_notes.length > 0) {
-    update.verification_notes = internal_notes;
-  } else if (newStatus === "docs_requested" && notes) {
-    // When asking for docs, store the visible message as verification_notes
-    // so the merchant can see what was requested.
-    update.verification_notes = notes;
-  }
-
-  const { data: updated, error: updateErr } = await sb
-    .from("merchants")
-    .update(update)
-    .eq("id", id)
-    .select()
-    .single();
-  if (updateErr) return c.json({ error: updateErr.message }, 500);
-
-  // Write merchant_audit_log row
-  await sb.from("merchant_audit_log").insert({
-    merchant_id: id,
-    actor_id: admin.id,
-    actor_email: admin.email,
-    action: "status_changed",
-    from_status: fromStatus,
-    to_status: newStatus,
-    notes: notes || null,
-    internal_notes: internal_notes || null,
-  });
-
-  // Insert in-app notification (skip "in_review" - that's internal-only)
-  if (newStatus !== "in_review") {
-    const title =
-      newStatus === "approved"
-        ? "Your restaurant is approved!"
-        : newStatus === "rejected"
-        ? "Application not approved"
-        : newStatus === "docs_requested"
-        ? "Additional info needed"
-        : `Status: ${newStatus}`;
-    const bodyText =
-      newStatus === "approved"
-        ? "Congratulations! Your restaurant is now live on Roam Dash and visible to customers."
-        : newStatus === "rejected"
-        ? notes || "Please review the reason and edit your application to resubmit."
-        : newStatus === "docs_requested"
-        ? notes || "Please log in and update the requested information."
-        : `Your status was changed to ${newStatus}.`;
-    await sb.from("merchant_notifications").insert({
-      merchant_id: id,
-      type: "verification_status_change",
-      title,
-      body: bodyText,
-    });
-  }
-
-  // Send email if we have a recipient email
-  const merchantEmail = (updated as Record<string, unknown>).email as string | undefined;
-  if (merchantEmail) {
-    const tpl = renderStatusEmail(newStatus, {
-      name: (updated as Record<string, unknown>).name as string,
-      rejection_reason: (updated as Record<string, unknown>).rejection_reason as string | null,
-      verification_notes: (updated as Record<string, unknown>).verification_notes as string | null,
-    });
-    const result = await sendNotificationEmail({
-      to: merchantEmail,
-      subject: tpl.subject,
-      html: tpl.html,
-      text: tpl.text,
-    });
-    if (result.sent) {
-      // Mark the latest unsent notification as email sent
-      const { data: latestUnsent } = await sb
-        .from("merchant_notifications")
-        .select("id")
-        .eq("merchant_id", id)
-        .is("email_sent_at", null)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (latestUnsent) {
-        await sb
-          .from("merchant_notifications")
-          .update({ email_sent_at: new Date().toISOString() })
-          .eq("id", (latestUnsent as Record<string, unknown>).id as string);
-      }
-    }
-  }
-
-  // Also log to the platform-wide admin audit log so it appears in Activity Log.
-  // The KV store is in the public schema and owned by the fleet make-server,
-  // but any service-role client can write to it directly.
-  try {
-    const kvClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-    const ts = new Date();
-    const tsKey = ts.toISOString().replace(/[:.]/g, "-");
-    const suffix = Math.random().toString(36).slice(2, 8);
-    await kvClient.from("kv_store_37f42386").upsert({
-      key: `audit:${tsKey}:${suffix}`,
-      value: {
-        actorId: admin.id,
-        actorName: admin.email || "Admin",
-        action: "roam_dash.merchant_status_changed",
-        targetId: id,
-        targetEmail: merchantEmail || "",
-        details: `${fromStatus} -> ${newStatus}${notes ? ` (${notes})` : ""}`,
-        timestamp: ts.toISOString(),
-      },
-    });
-  } catch (e) {
-    console.error("[audit-bridge] failed to write KV audit entry:", e);
-  }
-
-  return c.json({ merchant: updated });
-});
-
-// ============================================================================
 // Merchant analytics
 // ============================================================================
 
@@ -1523,7 +1017,7 @@ app.get("/merchant/analytics", async (c) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-  const merchant = await getMerchantForUser(supabase, user.id);
+  const merchant = await getMerchantForUser(supabase, user.id, user.email);
   if (!merchant) return c.json({ error: "Not a merchant" }, 403);
 
   const merchantId = merchant.id as string;
@@ -1738,7 +1232,7 @@ app.get("/merchant/earnings", async (c) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-  const merchant = await getMerchantForUser(supabase, user.id);
+  const merchant = await getMerchantForUser(supabase, user.id, user.email);
   if (!merchant) return c.json({ error: "Not a merchant" }, 403);
 
   const merchantId = merchant.id as string;
@@ -1868,7 +1362,7 @@ app.get("/merchant/earnings/payouts/:id", async (c) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-  const merchant = await getMerchantForUser(supabase, user.id);
+  const merchant = await getMerchantForUser(supabase, user.id, user.email);
   if (!merchant) return c.json({ error: "Not a merchant" }, 403);
 
   const merchantId = merchant.id as string;
@@ -1970,7 +1464,7 @@ app.get("/merchant/team", async (c) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-  const merchant = await getMerchantForUser(supabase, user.id);
+  const merchant = await getMerchantForUser(supabase, user.id, user.email);
   if (!merchant) return c.json({ error: "Not a merchant" }, 403);
 
   const merchantId = merchant.id as string;
@@ -2010,7 +1504,7 @@ app.post("/merchant/team/invites", async (c) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-  const merchant = await getMerchantForUser(supabase, user.id);
+  const merchant = await getMerchantForUser(supabase, user.id, user.email);
   if (!merchant) return c.json({ error: "Not a merchant" }, 403);
 
   const body = await c.req.json();
@@ -2077,7 +1571,7 @@ app.delete("/merchant/team/invites/:id", async (c) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-  const merchant = await getMerchantForUser(supabase, user.id);
+  const merchant = await getMerchantForUser(supabase, user.id, user.email);
   if (!merchant) return c.json({ error: "Not a merchant" }, 403);
 
   const inviteId = c.req.param("id");
@@ -2100,7 +1594,7 @@ app.patch("/merchant/team/members/:id", async (c) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-  const merchant = await getMerchantForUser(supabase, user.id);
+  const merchant = await getMerchantForUser(supabase, user.id, user.email);
   if (!merchant) return c.json({ error: "Not a merchant" }, 403);
 
   const memberId = c.req.param("id");
@@ -2143,6 +1637,85 @@ app.patch("/merchant/team/members/:id", async (c) => {
 
   if (error) return c.json({ error: error.message }, 500);
   return c.json({ member: mapTeamMember(data as Record<string, unknown>) });
+});
+
+app.get("/merchant/team/invites/pending", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.email) return c.json({ error: "Unauthorized" }, 401);
+
+  const sb = getServiceSupabase();
+  const email = user.email.trim().toLowerCase();
+  const { data, error } = await sb
+    .from("merchant_team_invites")
+    .select("*, merchants(name)")
+    .eq("status", "pending")
+    .ilike("email", email);
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ invites: data ?? [] });
+});
+
+app.post("/merchant/team/invites/:id/accept", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.email) return c.json({ error: "Unauthorized" }, 401);
+
+  const inviteId = c.req.param("id");
+  const sb = getServiceSupabase();
+  const email = user.email.trim().toLowerCase();
+
+  const { data: invite, error: fetchErr } = await sb
+    .from("merchant_team_invites")
+    .select("*")
+    .eq("id", inviteId)
+    .eq("status", "pending")
+    .ilike("email", email)
+    .single();
+  if (fetchErr || !invite) return c.json({ error: "Invite not found" }, 404);
+
+  const merchantId = (invite as Record<string, unknown>).merchant_id as string;
+  const { data: member, error: memberErr } = await sb
+    .from("merchant_team_members")
+    .insert({
+      merchant_id: merchantId,
+      user_id: user.id,
+      email,
+      name: user.email.split("@")[0],
+      role: (invite as Record<string, unknown>).role,
+      permissions: (invite as Record<string, unknown>).permissions,
+      is_owner: false,
+    })
+    .select()
+    .single();
+  if (memberErr) return c.json({ error: memberErr.message }, 500);
+
+  await sb.from("merchant_team_invites")
+    .update({ status: "accepted" })
+    .eq("id", inviteId);
+
+  return c.json({ member: mapTeamMember(member as Record<string, unknown>) });
+});
+
+app.post("/merchant/team/invites/:id/decline", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.email) return c.json({ error: "Unauthorized" }, 401);
+
+  const sb = getServiceSupabase();
+  const { error } = await sb
+    .from("merchant_team_invites")
+    .update({ status: "cancelled" })
+    .eq("id", c.req.param("id"))
+    .eq("status", "pending")
+    .ilike("email", user.email.trim().toLowerCase());
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ ok: true });
 });
 
 // ============================================================================
@@ -2203,7 +1776,7 @@ app.get("/merchant/promotions", async (c) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-  const merchant = await getMerchantForUser(supabase, user.id);
+  const merchant = await getMerchantForUser(supabase, user.id, user.email);
   if (!merchant) return c.json({ error: "Not a merchant" }, 403);
 
   const { data, error } = await supabase
@@ -2229,7 +1802,7 @@ app.post("/merchant/promotions", async (c) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-  const merchant = await getMerchantForUser(supabase, user.id);
+  const merchant = await getMerchantForUser(supabase, user.id, user.email);
   if (!merchant) return c.json({ error: "Not a merchant" }, 403);
 
   const body = await c.req.json();
@@ -2271,7 +1844,7 @@ app.patch("/merchant/promotions/:id", async (c) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-  const merchant = await getMerchantForUser(supabase, user.id);
+  const merchant = await getMerchantForUser(supabase, user.id, user.email);
   if (!merchant) return c.json({ error: "Not a merchant" }, 403);
 
   const promotionId = c.req.param("id");
@@ -2306,7 +1879,7 @@ app.post("/merchant/push/subscribe", async (c) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-  const merchant = await getMerchantForUser(supabase, user.id);
+  const merchant = await getMerchantForUser(supabase, user.id, user.email);
   if (!merchant) return c.json({ error: "Not a merchant" }, 403);
 
   const body = await c.req.json();
@@ -2340,7 +1913,7 @@ app.delete("/merchant/push/unsubscribe", async (c) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-  const merchant = await getMerchantForUser(supabase, user.id);
+  const merchant = await getMerchantForUser(supabase, user.id, user.email);
   if (!merchant) return c.json({ error: "Not a merchant" }, 403);
 
   const body = await c.req.json().catch(() => ({}));
@@ -2368,7 +1941,7 @@ app.post("/merchant/push/test", async (c) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-  const merchant = await getMerchantForUser(supabase, user.id);
+  const merchant = await getMerchantForUser(supabase, user.id, user.email);
   if (!merchant) return c.json({ error: "Not a merchant" }, 403);
 
   // Actual send is handled by merchant-push edge function in production
@@ -2423,7 +1996,15 @@ app.post("/merchant/notifications/:id/read", async (c) => {
 
 import { registerMerchantApplicationRoutes } from "./merchant_application_routes.ts";
 import { registerCourierAdminRoutes } from "./admin/courierRoutes.ts";
+import { registerMerchantAdminRoutes } from "./admin/merchantRoutes.ts";
+import { registerOrderAdminRoutes } from "./admin/orderRoutes.ts";
+import { registerCustomerAdminRoutes } from "./admin/customerRoutes.ts";
+import { registerFinanceAdminRoutes } from "./admin/financeRoutes.ts";
 registerMerchantApplicationRoutes(app);
+registerMerchantAdminRoutes(app);
+registerOrderAdminRoutes(app);
+registerCustomerAdminRoutes(app);
+registerFinanceAdminRoutes(app);
 registerCourierAdminRoutes(app);
 
 Deno.serve(app.fetch);

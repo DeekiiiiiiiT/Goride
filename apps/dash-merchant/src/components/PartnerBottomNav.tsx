@@ -4,20 +4,24 @@ import { PartnerTab } from '../lib/partner-utils';
 interface PartnerBottomNavProps {
   active: PartnerTab;
   onNavigate: (tab: PartnerTab) => void;
+  allowedTabs?: PartnerTab[];
 }
 
-const NAV_ITEMS: { key: PartnerTab; label: string; icon: string }[] = [
-  { key: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
-  { key: 'orders', label: 'Orders', icon: 'receipt_long' },
-  { key: 'menu', label: 'Menu', icon: 'restaurant_menu' },
-  { key: 'analytics', label: 'Analytics', icon: 'leaderboard' },
+const NAV_ITEMS: { key: PartnerTab; label: string; icon: string; permission?: string }[] = [
+  { key: 'dashboard', label: 'Dashboard', icon: 'dashboard', permission: 'orders' },
+  { key: 'orders', label: 'Orders', icon: 'receipt_long', permission: 'orders' },
+  { key: 'menu', label: 'Menu', icon: 'restaurant_menu', permission: 'menu' },
+  { key: 'analytics', label: 'Analytics', icon: 'leaderboard', permission: 'analytics' },
   { key: 'account', label: 'Account', icon: 'person' },
 ];
 
-export default function PartnerBottomNav({ active, onNavigate }: PartnerBottomNavProps) {
+export default function PartnerBottomNav({ active, onNavigate, allowedTabs }: PartnerBottomNavProps) {
+  const items = allowedTabs
+    ? NAV_ITEMS.filter((item) => allowedTabs.includes(item.key))
+    : NAV_ITEMS;
   return (
     <nav className="fixed bottom-0 left-0 z-50 flex h-[var(--app-bottom-nav-total)] w-full items-center justify-around border-t border-outline-variant bg-surface safe-x safe-b shadow-lg md:hidden">
-      {NAV_ITEMS.map((item) => {
+      {items.map((item) => {
         const isActive = active === item.key;
 
         return (

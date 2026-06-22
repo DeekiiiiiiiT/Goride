@@ -1,0 +1,273 @@
+import React, { useCallback, useEffect, useState } from 'react';
+import { useNavigate, useOutletContext, useParams } from 'react-router-dom';
+import { ArrowLeft, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { MerchantStatusBadge } from '../../components/MerchantStatusBadge';
+import { MerchantActionDialog } from '../../components/MerchantActionDialog';
+import { useAdminConfirm } from '../../contexts/AdminConfirmContext';
+import { canWriteDashAdmin } from '../../utils/dashAdminRoles';
+import {
+  assignMerchant,
+  changeMerchantStatus,
+  deactivateMerchant,
+  getMerchantDetail,
+  patchMerchantOps,
+  reactivateMerchant,
+  reviewMerchantDocument,
+  suspendMerchant,
+  unsuspendMerchant,
+  updateMerchantChecklist,
+  type DashMerchant,
+  type MerchantAuditEntry,
+  type MerchantDocumentDetail,
+  type MerchantVerificationStatus,
+} from '../../services/dashAdminService';
+import type { AdminOutletContext } from '../../DashAdminPortal';
+
+const CHECKLIST_KEYS = [
+  { key: 'id_verified', label: 'ID verified' },
+  { key: 'business_proof_verified', label: 'Business proof verified' },
+  { key: 'bank_verified', label: 'Bank account verified' },
+  { key: 'hours_verified', label: 'Hours verified' },
+  { key: 'menu_preview_verified', label: 'Menu preview verified' },
+];
+
+const ALLOWED_NEXT: Record<MerchantVerificationStatus, MerchantVerificationStatus[]> = {
+  pending: ['in_review', 'approved', 'rejected'],
+  in_review: ['docs_requested', 'approved', 'rejected'],
+  docs_requested: ['in_review', 'approved', 'rejected'],
+  approved: [],
+  rejected: [],
+};
+
+export function MerchantDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const { session } = useOutletContext<AdminOutletContext>();
+  const navigate = useNavigate();
+  const { confirm } = useAdminConfirm();
+  const token = session.access_token;
+  const canWrite = canWriteDashAdmin(session.user);
+
+  const [loading, setLoading] = useState(true);
+  const [merchant, setMerchant] = useState<DashMerchant | null>(null);
+  const [auditLog, setAuditLog] = useState<MerchantAuditEntry[]>([]);
+  const [ownerEmail, setOwnerEmail] = useState('');
+  const [documents, setDocuments] = useState<MerchantDocumentDetail[]>([]);
+  const [actionStatus, setActionStatus] = useState<MerchantVerificationStatus | null>(null);
+  const [checklist, setChecklist] = useState<Record<string, boolean>>({});
+  const [actionBusy, setActionBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!id) return;
+    setLoading(true);
+    try {
+      const res = await getMerchantDetail(token, id);
+      setMerchant(res.merchant);
+      setAuditLog(res.auditLog);
+      setOwnerEmail(res.ownerEmail);
+      setDocuments(res.documents || []);
+      setChecklist(res.merchant.verification_checklist || {});
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to load merchant');
+    } finally {
+      setLoading(false);
+    }
+  }, [id, token]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const submitAction = async (
+    target: MerchantVerificationStatus,
+    payload: { notes?: string; internal_notes?: string },
+  ) => {
+    if (!merchant) return;
+    setActionBusy(true);
+    try {
+      await changeMerchantStatus(token, merchant.id, { status: target, ...payload });
+      toast.success('Status updated');
+      setActionStatus(null);
+      void load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Action failed');
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const toggleChecklist = async (key: string, value: boolean) => {
+    if (!merchant || !canWrite) return;
+    const next = { ...checklist, [key]: value };
+    setChecklist(next);
+    try {
+      await updateMerchantChecklist(token, merchant.id, next);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to update checklist');
+      void load();
+    }
+  };
+
+  const runSuspend = async () => {
+    if (!merchant || !canWrite) return;
+    const reason = window.prompt('Suspension reason (required):');
+    if (!reason?.trim()) return;
+    try {
+      await suspendMerchant(token, merchant.id, reason.trim());
+      toast.success('Merchant suspended');
+      void load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Suspend failed');
+    }
+  };
+
+  const runOpsToggle = async () => {
+    if (!merchant || !canWrite) return;
+    try {
+      await patchMerchantOps(token, merchant.id, {
+        is_accepting_orders: !merchant.is_accepting_orders,
+      });
+      toast.success(merchant.is_accepting_orders ? 'Orders paused' : 'Orders resumed');
+      void load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Update failed');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-16">
+        <Loader2 className="w-8 h-8 animate-spin text-amber-400" />
+      </div>
+    );
+  }
+
+  if (!merchant) {
+    return <p className="text-slate-400">Merchant not found.</p>;
+  }
+
+  const allowed = ALLOWED_NEXT[merchant.verification_status] || [];
+  const opStatus = merchant.operational_status || 'active';
+
+  return (
+    <div className="space-y-6 max-w-4xl">
+      <button
+        type="button"
+        onClick={() => navigate('/merchants')}
+        className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Back to merchants
+      </button>
+
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-semibold text-white">{merchant.name}</h2>
+          <p className="text-sm text-slate-400 mt-1">{ownerEmail || merchant.email}</p>
+          <div className="flex gap-2 mt-2">
+            <MerchantStatusBadge status={merchant.verification_status} />
+            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">{opStatus}</span>
+          </div>
+        </div>
+        {canWrite && (
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => void assignMerchant(token, merchant.id, session.user.id)} className="px-3 py-1.5 text-sm rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800">
+              Assign to me
+            </button>
+            <button type="button" onClick={() => void runOpsToggle()} className="px-3 py-1.5 text-sm rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800">
+              {merchant.is_accepting_orders ? 'Force pause' : 'Resume orders'}
+            </button>
+            {opStatus === 'active' && merchant.verification_status === 'approved' && (
+              <button type="button" onClick={() => void runSuspend()} className="px-3 py-1.5 text-sm rounded-lg bg-red-600/20 text-red-300 border border-red-500/30">
+                Suspend
+              </button>
+            )}
+            {opStatus === 'suspended' && (
+              <button type="button" onClick={async () => { await unsuspendMerchant(token, merchant.id); void load(); }} className="px-3 py-1.5 text-sm rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/30">
+                Unsuspend
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
+        <h3 className="text-sm font-medium text-white">Verification checklist</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {CHECKLIST_KEYS.map(({ key, label }) => (
+            <label key={key} className="flex items-center gap-2 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                checked={!!checklist[key]}
+                disabled={!canWrite}
+                onChange={(e) => void toggleChecklist(key, e.target.checked)}
+                className="rounded border-slate-600"
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+        {canWrite && (
+          <div className="flex flex-wrap gap-2 pt-2">
+            {allowed.includes('in_review') && (
+              <button type="button" onClick={() => setActionStatus('in_review')} className="px-3 py-1.5 text-sm rounded-lg bg-slate-800 text-white">Mark in review</button>
+            )}
+            {allowed.includes('docs_requested') && (
+              <button type="button" onClick={() => setActionStatus('docs_requested')} className="px-3 py-1.5 text-sm rounded-lg bg-amber-600/20 text-amber-200">Request docs</button>
+            )}
+            {allowed.includes('approved') && (
+              <button type="button" onClick={() => setActionStatus('approved')} className="px-3 py-1.5 text-sm rounded-lg bg-emerald-600 text-white">Approve</button>
+            )}
+            {allowed.includes('rejected') && (
+              <button type="button" onClick={() => setActionStatus('rejected')} className="px-3 py-1.5 text-sm rounded-lg bg-red-600/20 text-red-300">Reject</button>
+            )}
+          </div>
+        )}
+      </section>
+
+      {documents.length > 0 && (
+        <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
+          <h3 className="text-sm font-medium text-white">Documents</h3>
+          {documents.map((doc) => (
+            <div key={doc.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+              <span className="text-slate-300">{doc.doc_type} — {doc.status}</span>
+              {canWrite && doc.status === 'pending' && (
+                <div className="flex gap-2">
+                  <button type="button" onClick={async () => { await reviewMerchantDocument(token, doc.id, { status: 'approved' }); void load(); }} className="text-emerald-400 text-xs">Approve</button>
+                  <button type="button" onClick={async () => { await reviewMerchantDocument(token, doc.id, { status: 'rejected', rejection_reason: 'Rejected by admin' }); void load(); }} className="text-red-400 text-xs">Reject</button>
+                </div>
+              )}
+              {doc.signedUrl && (
+                <a href={doc.signedUrl} target="_blank" rel="noreferrer" className="text-amber-400 text-xs">View</a>
+              )}
+            </div>
+          ))}
+        </section>
+      )}
+
+      <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+        <h3 className="text-sm font-medium text-white mb-3">Audit log</h3>
+        <div className="space-y-2 max-h-64 overflow-y-auto">
+          {auditLog.map((entry) => (
+            <div key={entry.id} className="text-xs text-slate-400 border-b border-slate-800 pb-2">
+              <span className="text-slate-300">{entry.action}</span>
+              {entry.from_status && entry.to_status && (
+                <span> — {entry.from_status} → {entry.to_status}</span>
+              )}
+              <span className="block text-slate-500">{new Date(entry.created_at).toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <MerchantActionDialog
+        open={actionStatus != null}
+        onOpenChange={(open) => !open && setActionStatus(null)}
+        targetStatus={actionStatus}
+        merchantName={merchant.name}
+        busy={actionBusy}
+        onConfirm={(payload) => actionStatus && submitAction(actionStatus, payload)}
+      />
+    </div>
+  );
+}

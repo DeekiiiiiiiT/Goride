@@ -85,13 +85,26 @@ export const INITIAL_SIGN_UP_DATA: SignUpFormData = {
 
 export const CUISINE_OPTIONS = [
   'Jamaican',
+  'Caribbean',
   'Chinese',
   'Indian',
+  'Italian',
+  'American',
+  'Fast Food',
   'Pizza',
   'Burgers',
   'Sushi',
-  'Mexican',
+  'Seafood',
+  'Vegetarian',
   'Vegan',
+  'Bakery',
+  'Cafe',
+  'Mexican',
+  'Japanese',
+  'Thai',
+  'BBQ',
+  'Healthy',
+  'Desserts',
   'Other',
 ] as const;
 
