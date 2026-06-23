@@ -25,8 +25,8 @@ export default function PartnerTopBar({
   onSettings,
 }: PartnerTopBarProps) {
   return (
-    <header className="relative z-20 flex h-16 w-full shrink-0 items-center justify-between border-b border-outline-variant bg-surface px-margin-tablet py-inset-xs shadow-sm">
-      <div className="flex items-center gap-inset-sm">
+    <header className="safe-t relative z-20 flex h-14 w-full shrink-0 items-center justify-between gap-inset-sm border-b border-outline-variant bg-surface px-margin-mobile py-inset-xs shadow-sm lg:h-16 lg:px-margin-tablet">
+      <div className="flex min-w-0 items-center gap-inset-sm">
         {variant === 'merchant' ? (
           <>
             {merchant.logo_url ? (
@@ -43,13 +43,13 @@ export default function PartnerTopBar({
             <h1 className="text-headline-md font-bold tracking-tight text-primary">{merchant.name}</h1>
           </>
         ) : (
-          <h1 className="text-headline-md font-bold text-primary">Roam Dash Partner</h1>
+          <h1 className="truncate text-headline-md font-bold text-primary">Roam Dash Partner</h1>
         )}
       </div>
 
-      <div className="flex items-center gap-inset-md">
+      <div className="flex shrink-0 items-center gap-inset-xs lg:gap-inset-md">
         <div className="flex items-center gap-inset-xs rounded-full border border-outline-variant bg-surface-container-low px-inset-xs py-[4px]">
-          <span className="hidden text-label-md font-semibold text-on-surface md:inline">{toggleLabel}</span>
+          <span className="hidden text-label-md font-semibold text-on-surface xl:inline">{toggleLabel}</span>
           <label className="relative inline-flex cursor-pointer items-center">
             <input
               type="checkbox"
@@ -60,12 +60,12 @@ export default function PartnerTopBar({
             />
             <div className="peer h-6 w-11 rounded-full bg-surface-variant after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-outline-variant after:bg-white after:transition-all peer-checked:bg-primary-container peer-checked:after:translate-x-full peer-disabled:opacity-50" />
           </label>
-          <span className="ml-1 mr-2 text-label-md font-semibold text-primary-container">
+          <span className="mr-1 text-label-md font-semibold text-primary-container lg:mr-2">
             {isAcceptingOrders ? 'Open' : 'Paused'}
           </span>
         </div>
 
-        <div className="flex items-center gap-inset-sm text-on-surface-variant">
+        <div className="flex items-center gap-inset-xs text-on-surface-variant lg:gap-inset-sm">
           <button
             type="button"
             className="relative flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-surface-container-low active:scale-95"

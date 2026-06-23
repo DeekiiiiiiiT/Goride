@@ -41,11 +41,11 @@ export default function PartnerSideNav({
   return (
     <nav
       className={`flex h-full shrink-0 flex-col border-r border-outline-variant bg-surface-container-low py-inset-md px-inset-sm ${
-        compact ? 'w-20' : 'w-64'
+        compact ? 'w-20' : 'w-[4.5rem] xl:w-64'
       }`}
     >
       {showRestaurantInfo && !compact && (
-        <div className="mb-inset-lg flex items-center gap-inset-xs px-2">
+        <div className="mb-inset-lg hidden items-center gap-inset-xs px-2 xl:flex">
           {merchant.logo_url ? (
             <img
               src={merchant.logo_url}
@@ -80,7 +80,7 @@ export default function PartnerSideNav({
                 } ${compact ? 'justify-center' : ''}`}
               >
                 <MaterialIcon name={item.icon} filled={isActive} size={22} />
-                {!compact && <span>{item.label}</span>}
+                {!compact && <span className="hidden xl:inline">{item.label}</span>}
               </button>
             </li>
           );
@@ -91,10 +91,11 @@ export default function PartnerSideNav({
         <button
           type="button"
           onClick={onGoOffline}
-          className="mt-auto flex w-full items-center justify-center gap-inset-sm rounded-lg border border-outline-variant px-inset-md py-inset-sm text-label-md text-on-surface-variant transition-colors hover:bg-surface-variant"
+          className="mt-auto flex w-full items-center justify-center gap-inset-sm rounded-lg border border-outline-variant px-inset-md py-inset-sm text-label-md text-on-surface-variant transition-colors hover:bg-surface-variant xl:justify-center"
+          aria-label="Go offline"
         >
           <MaterialIcon name="power_settings_new" size={20} />
-          Go Offline
+          <span className="hidden xl:inline">Go Offline</span>
         </button>
       )}
     </nav>

@@ -40,6 +40,7 @@ import { getItemOptionLines, Order } from '../types/order';
 interface OrdersPageProps {
   merchant: Merchant;
   onNavigate?: (tab: PartnerTab) => void;
+  onOpenMobileNav?: () => void;
 }
 
 type OrderFilter = 'placed' | 'preparing' | 'ready' | 'completed' | 'cancelled';
@@ -72,7 +73,7 @@ function openOrderView(
   setters.setViewOrderId(order.id);
 }
 
-export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
+export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: OrdersPageProps) {
   const [filter, setFilter] = useState<OrderFilter>('placed');
   const [sortOrder, setSortOrder] = useState<SortOrder>('oldest');
   const [newOrderIds, setNewOrderIds] = useState<Set<string>>(new Set());
@@ -518,7 +519,7 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
 
   return (
     <>
-    <div className="hidden h-dvh md:flex">
+    <div className="hidden h-dvh lg:flex">
       <PartnerDesktopShell
         merchant={merchant}
         activeNavKey={isHistoryView ? 'history' : 'orders'}
@@ -572,9 +573,19 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
       </PartnerDesktopShell>
     </div>
 
-    <div className="flex min-h-dvh flex-col bg-background text-on-background antialiased md:hidden">
-      <header className="sticky top-0 z-50 mx-auto flex h-16 w-full max-w-full items-center justify-between border-b border-outline-variant bg-surface px-margin-mobile shadow-sm">
-        <div className="flex items-center gap-inset-xs">
+    <div className="flex min-h-dvh flex-col bg-background text-on-background antialiased lg:hidden">
+      <header className="safe-t sticky top-0 z-50 mx-auto flex h-16 w-full max-w-full items-center justify-between border-b border-outline-variant bg-surface px-margin-mobile shadow-sm">
+        <div className="flex min-w-0 items-center gap-inset-xs">
+          {onOpenMobileNav && (
+            <button
+              type="button"
+              onClick={onOpenMobileNav}
+              className="btn-touch -ml-1 flex h-10 w-10 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high active:scale-95"
+              aria-label="Open navigation"
+            >
+              <MaterialIcon name="menu" size={24} />
+            </button>
+          )}
           <h1 className="text-headline-md font-bold text-primary">Orders</h1>
           <button
             type="button"
@@ -975,7 +986,7 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
       )}
 
       {detailOrder?.status === 'placed' && (
-        <div className="md:hidden">
+        <div className="lg:hidden">
         <NewOrderAlertView
           order={detailOrder}
           open={Boolean(detailOrderId && !showOrderDetail && !showFirstOrderCelebration)}

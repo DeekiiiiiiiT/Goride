@@ -12,13 +12,15 @@ export function hasCompletedGoLive(merchantId: string) {
 
 export function markGoLiveComplete(merchantId: string) {
   localStorage.setItem(goLiveStorageKey(merchantId), '1');
+  clearRestaurantSetupInProgress(merchantId);
+  localStorage.removeItem(goLiveDismissedKey(merchantId));
 }
 
 export function goLiveDismissedKey(merchantId: string) {
   return `roam_go_live_dismissed_${merchantId}`;
 }
 
-/** Skip the full-screen go-live gate; owner can finish setup in the partner app. */
+/** Owner finished setup but chose dashboard over going live yet. */
 export function dismissGoLiveScreen(merchantId: string) {
   localStorage.setItem(goLiveDismissedKey(merchantId), '1');
 }
@@ -27,13 +29,34 @@ export function hasDismissedGoLiveScreen(merchantId: string) {
   return localStorage.getItem(goLiveDismissedKey(merchantId)) === '1';
 }
 
+export function restaurantSetupInProgressKey(merchantId: string) {
+  return `roam_restaurant_setup_${merchantId}`;
+}
+
+/** Owner left the approved screen to set up menu/catalog in the partner app. */
+export function markRestaurantSetupInProgress(merchantId: string) {
+  localStorage.setItem(restaurantSetupInProgressKey(merchantId), '1');
+}
+
+export function hasRestaurantSetupInProgress(merchantId: string) {
+  return localStorage.getItem(restaurantSetupInProgressKey(merchantId)) === '1';
+}
+
+export function clearRestaurantSetupInProgress(merchantId: string) {
+  localStorage.removeItem(restaurantSetupInProgressKey(merchantId));
+}
+
 /** Post-approval go-live screen — only after platform admin sets verified_at. */
 export function shouldShowGoLiveScreen(merchant: Pick<Merchant, 'id' | 'verification_status' | 'verified_at'>): boolean {
   if (merchant.verification_status !== 'approved') return false;
   if (!merchant.verified_at) return false;
   if (hasCompletedGoLive(merchant.id)) return false;
-  if (hasDismissedGoLiveScreen(merchant.id)) return false;
   return true;
+}
+
+/** Allow main app navigation instead of the full-screen go-live gate. */
+export function shouldBypassGoLiveGate(merchantId: string): boolean {
+  return hasDismissedGoLiveScreen(merchantId) || hasRestaurantSetupInProgress(merchantId);
 }
 
 export async function isVerticalGoLiveReady(

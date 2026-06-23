@@ -8,6 +8,7 @@ interface PartnerHeaderProps {
   onNotificationsClick: () => void;
   onSettingsClick: () => void;
   onStatusClick?: () => void;
+  onOpenNav?: () => void;
 }
 
 const STATUS_STYLES: Record<
@@ -37,6 +38,7 @@ export default function PartnerHeader({
   onNotificationsClick,
   onSettingsClick,
   onStatusClick,
+  onOpenNav,
 }: PartnerHeaderProps) {
   const status = getStoreStatus(merchant.is_active, merchant.is_accepting_orders);
   const statusStyle = STATUS_STYLES[status];
@@ -45,6 +47,16 @@ export default function PartnerHeader({
     <header className="sticky top-0 z-50 w-full border-b border-outline-variant bg-surface font-headline-md text-primary shadow-sm">
       <div className="mx-auto flex h-16 w-full max-w-screen-xl items-center justify-between px-margin-mobile md:px-margin-tablet">
         <div className="flex min-w-0 items-center gap-inset-xs">
+          {onOpenNav && (
+            <button
+              type="button"
+              onClick={onOpenNav}
+              className="btn-touch -ml-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-low active:scale-95 lg:hidden"
+              aria-label="Open navigation"
+            >
+              <MaterialIcon name="menu" size={22} />
+            </button>
+          )}
           {merchant.logo_url ? (
             <img
               alt=""

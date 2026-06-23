@@ -76,8 +76,8 @@ export default function EditItemView({
   const isNew = !item?.id;
 
   return (
-    <div className="fixed inset-0 z-[60] flex min-h-dvh flex-col bg-[#FAFAFA]">
-      <header className="sticky top-0 z-50 flex h-16 w-full items-center justify-between border-b border-outline-variant bg-surface/80 px-margin-mobile shadow-sm backdrop-blur-md">
+    <div className="app-fullscreen-screen z-[60] bg-[#FAFAFA]">
+      <header className="flex h-16 w-full shrink-0 items-center justify-between border-b border-outline-variant bg-surface/80 px-margin-mobile shadow-sm backdrop-blur-md">
         <button
           type="button"
           onClick={onBack}
@@ -91,7 +91,7 @@ export default function EditItemView({
         <div className="w-12" />
       </header>
 
-      <main className="mx-auto flex w-full max-w-3xl flex-grow flex-col gap-8 px-margin-mobile pb-32 pt-6 md:px-margin-tablet">
+      <main className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-8 overflow-y-auto px-margin-mobile pb-32 pt-6 md:px-margin-tablet">
         <section className="overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-sm">
           <div className="[&>div]:m-0 [&>div>div]:aspect-auto [&>div>div]:h-48 [&>div>div]:rounded-none [&>div>div]:border-0">
             <ImageUpload

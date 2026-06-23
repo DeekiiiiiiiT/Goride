@@ -29,6 +29,7 @@ import { formatElapsedTimer, formatJmd, formatTimeAgo, PartnerTab } from '../lib
 interface DashboardPageProps {
   merchant: Merchant;
   onNavigate: (page: PartnerTab) => void;
+  onOpenMobileNav?: () => void;
 }
 
 interface OrderItem {
@@ -94,7 +95,7 @@ function pauseStorageKey(merchantId: string) {
   return `roam_partner_pause_until_${merchantId}`;
 }
 
-export default function DashboardPage({ merchant, onNavigate }: DashboardPageProps) {
+export default function DashboardPage({ merchant, onNavigate, onOpenMobileNav }: DashboardPageProps) {
   const [, setTick] = useState(0);
   const [pauseSheetOpen, setPauseSheetOpen] = useState(false);
   const [performanceWarningOpen, setPerformanceWarningOpen] = useState(false);
@@ -450,6 +451,7 @@ export default function DashboardPage({ merchant, onNavigate }: DashboardPagePro
         <DashboardSimpleHeader
           notificationCount={newOrders.length}
           onNotificationsClick={() => onNavigate('orders')}
+          onOpenNav={onOpenMobileNav}
         />
       ) : (
         <PartnerHeader
@@ -458,6 +460,7 @@ export default function DashboardPage({ merchant, onNavigate }: DashboardPagePro
           onNotificationsClick={() => onNavigate('orders')}
           onSettingsClick={() => onNavigate('account')}
           onStatusClick={handleStatusClick}
+          onOpenNav={onOpenMobileNav}
         />
       )}
 

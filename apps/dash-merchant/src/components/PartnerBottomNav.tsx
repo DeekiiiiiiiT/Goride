@@ -20,7 +20,7 @@ export default function PartnerBottomNav({ active, onNavigate, allowedTabs }: Pa
     ? NAV_ITEMS.filter((item) => allowedTabs.includes(item.key))
     : NAV_ITEMS;
   return (
-    <nav className="fixed bottom-0 left-0 z-50 flex h-[var(--app-bottom-nav-total)] w-full items-center justify-around border-t border-outline-variant bg-surface safe-x safe-b shadow-lg md:hidden">
+    <nav className="fixed bottom-0 left-0 z-50 flex h-[var(--app-bottom-nav-total)] w-full items-center justify-around border-t border-outline-variant bg-surface safe-x safe-b shadow-lg lg:hidden">
       {items.map((item) => {
         const isActive = active === item.key;
 

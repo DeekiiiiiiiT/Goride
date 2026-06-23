@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { supabase, AuthRecoveryGate } from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
@@ -12,12 +12,20 @@ import AnalyticsPage from './pages/AnalyticsPage';
 import SplashPage from './pages/SplashPage';
 import PartnerAuthFlow from './components/PartnerAuthFlow';
 import PartnerBottomNav from './components/PartnerBottomNav';
+import PartnerMobileNavDrawer from './components/layout/PartnerMobileNavDrawer';
 import AccountPendingPage from './pages/AccountPendingPage';
 import OnboardingCompletePage from './pages/OnboardingCompletePage';
 import UnifiedOnboardingWizard from './components/onboarding/UnifiedOnboardingWizard';
 import { useMerchant } from './hooks/useMerchant';
 import { PartnerTab } from './lib/partner-utils';
-import { shouldShowGoLiveScreen, needsOwnerOnboarding, dismissGoLiveScreen } from './lib/go-live';
+import {
+  shouldShowGoLiveScreen,
+  shouldBypassGoLiveGate,
+  needsOwnerOnboarding,
+  dismissGoLiveScreen,
+  markRestaurantSetupInProgress,
+  hasRestaurantSetupInProgress,
+} from './lib/go-live';
 import { bootstrapPartnerMerchant } from './lib/partner-api';
 import { DashAdminPortal } from './admin/DashAdminPortal';
 import {
@@ -55,6 +63,9 @@ function DashMerchantApp() {
   const [splashComplete, setSplashComplete] = useState(false);
   const [currentPage, setCurrentPage] = useState<PartnerTab>('dashboard');
   const [routingEpoch, setRoutingEpoch] = useState(0);
+  const [setupMenuMode, setSetupMenuMode] = useState(false);
+  const [viewingGoLiveProgress, setViewingGoLiveProgress] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [oauthReturnPending, setOauthReturnPending] = useState(
     () => typeof window !== 'undefined' && !!sessionStorage.getItem(PARTNER_OAUTH_INTENT_KEY),
   );
@@ -118,10 +129,19 @@ function DashMerchantApp() {
       });
   }, [session?.user?.id, refetch]);
 
+  useEffect(() => {
+    if (!merchant?.id) return;
+    if (hasRestaurantSetupInProgress(merchant.id)) {
+      setSetupMenuMode(true);
+    }
+  }, [merchant?.id]);
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     setCurrentPage('dashboard');
   };
+
+  const isOwner = membership?.is_owner !== false;
 
   const showSplash = !splashComplete || !authReady || (!!session && merchantLoading);
 
@@ -142,8 +162,6 @@ function DashMerchantApp() {
       />
     );
   }
-
-  const isOwner = membership?.is_owner !== false;
 
   if (isOwner && merchant && needsOwnerOnboarding(merchant)) {
     return (
@@ -168,27 +186,36 @@ function DashMerchantApp() {
     return <AccountPendingPage onSignOut={handleSignOut} />;
   }
 
-  if (
+  const showGoLiveGate =
     isOwner &&
-    shouldShowGoLiveScreen(merchant)
-  ) {
+    shouldShowGoLiveScreen(merchant) &&
+    (!shouldBypassGoLiveGate(merchant.id) || viewingGoLiveProgress);
+
+  if (showGoLiveGate) {
     return (
       <OnboardingCompletePage
         merchant={merchant}
+        setupInProgress={setupMenuMode}
         onGoLive={() => {
+          setSetupMenuMode(false);
+          setViewingGoLiveProgress(false);
           setRoutingEpoch((n) => n + 1);
           void refetch();
         }}
         onContinueToDashboard={() => {
           dismissGoLiveScreen(merchant.id);
+          setSetupMenuMode(false);
+          setViewingGoLiveProgress(false);
           setRoutingEpoch((n) => n + 1);
           void refetch();
         }}
-        onOpenMenu={() => {
-          dismissGoLiveScreen(merchant.id);
-          setRoutingEpoch((n) => n + 1);
-          void refetch();
+        onOpenSetup={() => {
+          markRestaurantSetupInProgress(merchant.id);
+          setSetupMenuMode(true);
+          setViewingGoLiveProgress(false);
+          setCurrentPage('menu');
         }}
+        refreshKey={routingEpoch}
       />
     );
   }
@@ -205,53 +232,99 @@ function DashMerchantApp() {
     return tabs;
   })();
 
+  const handlePartnerNavigate = (page: PartnerTab) => {
+    setCurrentPage(page);
+  };
+
+  const openMobileNav = () => setMobileNavOpen(true);
+
   const renderPage = () => {
     if (currentPage === 'earnings' && !allowedTabs.includes('earnings')) {
-      return <DashboardPage merchant={merchant} onNavigate={setCurrentPage} />;
+      return <DashboardPage merchant={merchant} onNavigate={handlePartnerNavigate} />;
     }
     if (currentPage === 'menu' && !allowedTabs.includes('menu')) {
-      return <DashboardPage merchant={merchant} onNavigate={setCurrentPage} />;
+      return <DashboardPage merchant={merchant} onNavigate={handlePartnerNavigate} />;
     }
     if (currentPage === 'analytics' && !allowedTabs.includes('analytics')) {
-      return <DashboardPage merchant={merchant} onNavigate={setCurrentPage} />;
+      return <DashboardPage merchant={merchant} onNavigate={handlePartnerNavigate} />;
     }
     switch (currentPage) {
       case 'dashboard':
-        return <DashboardPage merchant={merchant} onNavigate={setCurrentPage} />;
+        return (
+          <DashboardPage
+            merchant={merchant}
+            onNavigate={handlePartnerNavigate}
+            onOpenMobileNav={openMobileNav}
+          />
+        );
       case 'orders':
-        return <OrdersPage merchant={merchant} onNavigate={setCurrentPage} />;
+        return (
+          <OrdersPage
+            merchant={merchant}
+            onNavigate={handlePartnerNavigate}
+            onOpenMobileNav={openMobileNav}
+          />
+        );
       case 'menu':
-        return <MenuPage merchant={merchant} onNavigate={setCurrentPage} />;
+        return (
+          <MenuPage
+            merchant={merchant}
+            onNavigate={handlePartnerNavigate}
+            onOpenMobileNav={openMobileNav}
+            setupBanner={
+              setupMenuMode
+                ? {
+                    onViewProgress: () => {
+                      setViewingGoLiveProgress(true);
+                      setRoutingEpoch((n) => n + 1);
+                    },
+                  }
+                : undefined
+            }
+          />
+        );
       case 'analytics':
-        return <AnalyticsPage merchant={merchant} onNavigate={setCurrentPage} />;
+        return <AnalyticsPage merchant={merchant} onNavigate={handlePartnerNavigate} />;
       case 'earnings':
-        return <EarningsPage onNavigate={setCurrentPage} />;
+        return <EarningsPage onNavigate={handlePartnerNavigate} />;
       case 'account':
         return (
           <SettingsPage
             merchant={merchant}
-            onNavigate={setCurrentPage}
+            onNavigate={handlePartnerNavigate}
             onSignOut={handleSignOut}
           />
         );
       default:
-        return <DashboardPage merchant={merchant} onNavigate={setCurrentPage} />;
+        return <DashboardPage merchant={merchant} onNavigate={handlePartnerNavigate} />;
     }
   };
 
   return (
-    <div className="partner-app-shell min-h-dvh bg-background sm:mx-auto sm:max-w-xl md:mx-0 md:max-w-none">
+    <div className="partner-app-shell min-h-dvh bg-background sm:mx-auto sm:max-w-xl lg:mx-0 lg:max-w-none">
+      <PartnerMobileNavDrawer
+        open={mobileNavOpen}
+        onClose={() => setMobileNavOpen(false)}
+        merchant={merchant}
+        active={currentPage}
+        allowedTabs={allowedTabs}
+        onNavigate={handlePartnerNavigate}
+      />
       <div
         className={
           currentPage === 'earnings'
             ? 'flex-1'
-            : 'partner-main-with-nav flex-1 md:pb-0'
+            : 'partner-main-with-nav flex-1 lg:pb-0'
         }
       >
         {renderPage()}
       </div>
       {currentPage !== 'earnings' && (
-        <PartnerBottomNav active={currentPage} onNavigate={setCurrentPage} allowedTabs={allowedTabs.filter((t) => t !== 'earnings')} />
+        <PartnerBottomNav
+          active={currentPage}
+          onNavigate={handlePartnerNavigate}
+          allowedTabs={allowedTabs.filter((t) => t !== 'earnings')}
+        />
       )}
     </div>
   );

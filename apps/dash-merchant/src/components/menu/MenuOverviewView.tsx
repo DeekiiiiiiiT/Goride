@@ -31,7 +31,7 @@ export default function MenuOverviewView({
   const canDrag = dragEnabled && managementMode && Boolean(onReorderCategories);
 
   return (
-    <div className="max-w-3xl mx-auto px-margin-mobile md:px-margin-tablet">
+    <div className="mx-auto w-full max-w-xl px-margin-mobile md:px-margin-tablet lg:max-w-3xl">
       <div className="mb-inset-lg mt-inset-sm flex items-center justify-between md:mt-inset-lg">
         <div>
           <h1 className="mb-inset-base text-headline-lg-mobile text-on-background md:text-headline-lg">

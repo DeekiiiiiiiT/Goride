@@ -27,9 +27,29 @@ import { PartnerTab } from '../lib/partner-utils';
 interface MenuPageProps {
   merchant: Merchant;
   onNavigate?: (tab: PartnerTab) => void;
+  onOpenMobileNav?: () => void;
+  setupBanner?: { onViewProgress: () => void };
 }
 
-export default function MenuPage({ merchant, onNavigate }: MenuPageProps) {
+function SetupMenuBanner({ onViewProgress }: { onViewProgress: () => void }) {
+  return (
+    <div className="sticky top-0 z-40 border-b border-outline-variant bg-primary-container/15 px-margin-mobile py-3 md:px-margin-tablet">
+      <button
+        type="button"
+        onClick={onViewProgress}
+        className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 text-left"
+      >
+        <div>
+          <p className="text-label-md font-semibold text-on-surface">Restaurant setup in progress</p>
+          <p className="text-body-sm text-on-surface-variant">View progress and go live when your menu is ready.</p>
+        </div>
+        <MaterialIcon name="chevron_right" className="shrink-0 text-primary" />
+      </button>
+    </div>
+  );
+}
+
+export default function MenuPage({ merchant, onNavigate, onOpenMobileNav, setupBanner }: MenuPageProps) {
   const [view, setView] = useState<MenuView>('overview');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
@@ -263,7 +283,7 @@ export default function MenuPage({ merchant, onNavigate }: MenuPageProps) {
 
   if (view === 'category' && selectedCategory) {
     return (
-      <div className="md:hidden">
+      <div className="lg:hidden">
         <CategoryItemsView
           categoryName={selectedCategory.name}
           items={itemsByCategory[selectedCategory.id] || []}
@@ -299,7 +319,7 @@ export default function MenuPage({ merchant, onNavigate }: MenuPageProps) {
 
   return (
     <>
-      <div className="hidden h-dvh md:flex">
+      <div className="hidden h-dvh lg:flex">
         <PartnerDesktopShell
           merchant={merchant}
           activeNavKey="menu"
@@ -359,8 +379,9 @@ export default function MenuPage({ merchant, onNavigate }: MenuPageProps) {
         {categorySheet}
       </div>
 
-      <div className="min-h-screen bg-background pb-24 md:hidden">
-      <MenuPageHeader merchant={merchant} />
+      <div className="min-h-dvh bg-background pb-24 lg:hidden">
+      <MenuPageHeader merchant={merchant} onOpenNav={onOpenMobileNav} />
+      {setupBanner && <SetupMenuBanner onViewProgress={setupBanner.onViewProgress} />}
 
       {isLoading ? (
         <div className="mx-auto max-w-3xl px-margin-mobile py-inset-md md:px-margin-tablet">

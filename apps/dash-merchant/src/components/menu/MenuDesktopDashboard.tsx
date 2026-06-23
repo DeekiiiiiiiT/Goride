@@ -59,21 +59,21 @@ export default function MenuDesktopDashboard({
   }, [activeCategoryId, itemsByCategory, search]);
 
   return (
-    <main className="flex flex-1 overflow-hidden bg-background">
-      <aside className="flex h-full w-80 shrink-0 flex-col border-r border-outline-variant bg-surface-container-lowest">
-        <div className="flex shrink-0 items-center justify-between border-b border-outline-variant bg-surface p-inset-md">
-          <h2 className="text-headline-md font-bold text-on-surface">Categories</h2>
+    <main className="flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background">
+      <aside className="flex h-full w-48 shrink-0 flex-col border-r border-outline-variant bg-surface-container-lowest lg:w-52 xl:w-60 2xl:w-72">
+        <div className="flex shrink-0 items-center justify-between border-b border-outline-variant bg-surface p-inset-sm lg:p-inset-md">
+          <h2 className="truncate text-headline-md font-bold text-on-surface">Categories</h2>
           <button
             type="button"
             onClick={onAddCategory}
-            className="rounded-full p-1 text-primary-container transition-colors hover:bg-surface-variant"
+            className="btn-touch rounded-full p-1 text-primary-container transition-colors hover:bg-surface-variant"
             aria-label="Add category"
           >
             <MaterialIcon name="add" />
           </button>
         </div>
 
-        <div className="flex flex-1 flex-col gap-inset-base overflow-y-auto p-inset-sm">
+        <div className="flex min-h-0 flex-1 flex-col gap-inset-base overflow-y-auto p-inset-sm">
           <SortableList
             items={categories}
             disabled={!dragEnabled || !onReorderCategories}
@@ -123,22 +123,23 @@ export default function MenuDesktopDashboard({
           />
         </div>
 
-        <div className="shrink-0 border-t border-outline-variant bg-surface p-inset-md">
+        <div className="shrink-0 border-t border-outline-variant bg-surface p-inset-sm lg:p-inset-md">
           <button
             type="button"
             onClick={onAddCategory}
-            className="flex w-full items-center justify-center gap-inset-sm rounded-lg border-2 border-dashed border-outline-variant bg-surface-container-lowest px-inset-md py-inset-sm text-label-md font-semibold text-primary transition-all hover:border-primary hover:bg-surface-variant"
+            className="btn-touch flex w-full items-center justify-center gap-inset-sm rounded-lg border-2 border-dashed border-outline-variant bg-surface-container-lowest px-inset-sm py-inset-sm text-label-md font-semibold text-primary transition-all hover:border-primary hover:bg-surface-variant lg:px-inset-md"
           >
             <MaterialIcon name="add_circle" />
-            Add Category
+            <span className="hidden sm:inline">Add Category</span>
+            <span className="sm:hidden">Add</span>
           </button>
         </div>
       </aside>
 
-      <section className="relative flex h-full flex-1 flex-col overflow-hidden bg-background">
-        <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-outline-variant bg-surface/90 p-inset-md backdrop-blur-md">
-          <div>
-            <h2 className="text-headline-lg font-bold text-on-surface">
+      <section className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background">
+        <div className="sticky top-0 z-10 flex shrink-0 flex-col gap-3 border-b border-outline-variant bg-surface/90 p-inset-sm backdrop-blur-md sm:flex-row sm:items-center sm:justify-between lg:p-inset-md">
+          <div className="min-w-0">
+            <h2 className="truncate text-headline-md font-bold text-on-surface lg:text-headline-lg">
               {activeCategory?.name || 'Menu'}
             </h2>
             <p className="mt-1 text-body-sm text-on-surface-variant">
@@ -148,15 +149,15 @@ export default function MenuDesktopDashboard({
           <button
             type="button"
             onClick={onAddItem}
-            className="flex h-12 items-center gap-inset-sm rounded-lg bg-primary-container px-inset-md py-inset-sm text-label-md font-semibold text-on-primary shadow-sm transition-colors hover:bg-primary"
+            className="btn-touch flex h-12 shrink-0 items-center justify-center gap-inset-sm self-start rounded-lg bg-primary-container px-inset-md py-inset-sm text-label-md font-semibold text-on-primary shadow-sm transition-colors hover:bg-primary sm:self-auto"
           >
             <MaterialIcon name="add" />
             Add Item
           </button>
         </div>
 
-        <div className="flex shrink-0 items-center justify-between border-b border-outline-variant bg-surface-container-lowest px-inset-md py-inset-sm">
-          <div className="relative w-64">
+        <div className="flex shrink-0 flex-col gap-3 border-b border-outline-variant bg-surface-container-lowest px-inset-sm py-inset-sm sm:flex-row sm:items-center sm:justify-between lg:px-inset-md">
+          <div className="relative min-w-0 flex-1 sm:max-w-xs lg:max-w-sm">
             <MaterialIcon
               name="search"
               className="absolute left-3 top-1/2 -translate-y-1/2 text-outline"
@@ -167,18 +168,18 @@ export default function MenuDesktopDashboard({
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search items..."
-              className="w-full rounded-lg border border-outline-variant bg-surface py-2 pl-10 pr-4 text-body-sm transition-all focus:border-primary-container focus:outline-none focus:ring-1 focus:ring-primary-container"
+              className="input-touch w-full rounded-lg border border-outline-variant bg-surface py-2 pl-10 pr-4 text-body-sm transition-all focus:border-primary-container focus:outline-none focus:ring-1 focus:ring-primary-container"
             />
           </div>
-          <div className="flex items-center gap-inset-sm">
+          <div className="flex shrink-0 items-center gap-inset-sm self-end sm:self-auto">
             <button
               type="button"
-              className="flex items-center gap-inset-xs rounded-lg border border-outline-variant px-3 py-1.5 text-label-md font-semibold text-on-surface-variant transition-colors hover:bg-surface-variant"
+              className="btn-touch hidden items-center gap-inset-xs rounded-lg border border-outline-variant px-3 py-1.5 text-label-md font-semibold text-on-surface-variant transition-colors hover:bg-surface-variant sm:flex"
             >
               <MaterialIcon name="filter_list" size={18} />
               Filter
             </button>
-            <div className="flex overflow-hidden rounded-lg border border-outline-variant">
+            <div className="hidden overflow-hidden rounded-lg border border-outline-variant sm:flex">
               <button
                 type="button"
                 className="bg-surface-variant p-1.5 text-on-surface transition-colors hover:bg-surface-container-high"
@@ -197,9 +198,9 @@ export default function MenuDesktopDashboard({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-inset-md">
+        <div className="flex-1 overflow-y-auto p-inset-sm lg:p-inset-md">
           {categoryItems.length === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center py-16 text-center">
+            <div className="mx-auto flex h-full max-w-lg flex-col items-center justify-center py-12 text-center lg:py-16">
               <MaterialIcon name="restaurant_menu" className="mb-4 text-outline" size={48} />
               <p className="text-body-sm text-on-surface-variant">
                 {search ? 'No items match your search' : 'No items in this category yet'}
@@ -208,7 +209,7 @@ export default function MenuDesktopDashboard({
                 <button
                   type="button"
                   onClick={onAddItem}
-                  className="mt-4 rounded-lg bg-primary-container px-inset-md py-inset-sm text-label-md font-semibold text-on-primary-container"
+                  className="btn-touch mt-4 rounded-lg bg-primary-container px-inset-md py-inset-sm text-label-md font-semibold text-on-primary-container"
                 >
                   Add Item
                 </button>
@@ -221,7 +222,7 @@ export default function MenuDesktopDashboard({
               onReorder={(ordered) => {
                 if (activeCategoryId) onReorderItems?.(activeCategoryId, ordered);
               }}
-              className="grid grid-cols-1 gap-inset-md pb-inset-xl md:grid-cols-2 xl:grid-cols-3"
+              className="grid grid-cols-1 gap-inset-md pb-inset-xl sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-[repeat(auto-fill,minmax(240px,1fr))]"
               renderItem={(item, dragHandle) => (
                 <div className="relative">
                   {dragHandle && (

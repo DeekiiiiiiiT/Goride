@@ -10,8 +10,9 @@
  * - session + !merchant → UnifiedOnboardingWizard
  * - session + owner + incomplete application → UnifiedOnboardingWizard
  * - session + owner + pending verification → AccountPendingPage
- * - session + owner + approved + verified_at + !goLiveDismissed → OnboardingCompletePage
- * - session + owner + approved + goLive → main app
+ * - session + owner + approved + verified_at + !goLiveComplete → OnboardingCompletePage
+ *   (restaurant setup via setupMenuMode; go live only after menu/catalog ready)
+ * - session + owner + approved + goLiveComplete → main app
  * - session + team member → main app (no owner onboarding gates)
  *
  * ROLLBACK PROCEDURE (if onboarding issues in production):

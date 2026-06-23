@@ -8,24 +8,25 @@ import { fetchApplicationStatus } from '../lib/partner-api';
 
 interface OnboardingCompletePageProps {
   merchant: Merchant;
+  setupInProgress?: boolean;
   onGoLive: () => void;
   onContinueToDashboard: () => void;
-  onOpenMenu?: () => void;
+  onOpenSetup?: () => void;
+  refreshKey?: number;
 }
 
 type ChecklistItem = {
   key: string;
   label: string;
-  subtext?: string;
-  actionLabel?: string;
-  onAction?: () => void;
 };
 
 export default function OnboardingCompletePage({
   merchant,
+  setupInProgress = false,
   onGoLive,
   onContinueToDashboard,
-  onOpenMenu,
+  onOpenSetup,
+  refreshKey = 0,
 }: OnboardingCompletePageProps) {
   const { toggleAcceptingOrders, isPending } = useAcceptingOrdersToggle(merchant);
   const [checklist, setChecklist] = useState<Record<string, boolean>>({});
@@ -35,42 +36,41 @@ export default function OnboardingCompletePage({
   const usesCatalog = goLiveRule === 'catalog_imported' || goLiveRule === 'pos_connected';
   const vertical = resolveVerticalType(merchant.vertical_type);
 
-  const setupItems: ChecklistItem[] = useMemo(
+  const applicationItems: ChecklistItem[] = useMemo(
     () => [
       { key: 'profileComplete', label: 'Profile complete' },
       { key: 'documentsComplete', label: 'Identity documents' },
       { key: 'hoursComplete', label: 'Business hours set' },
-      usesCatalog
-        ? {
-            key: 'catalogComplete',
-            label: 'Catalog uploaded (minimum 50 items)',
-            subtext: 'Upload your inventory CSV or add products in the partner app.',
-            actionLabel: 'Go to Inventory Manager',
-            onAction: onOpenMenu,
-          }
-        : {
-            key: 'menuComplete',
-            label: 'Menu added (minimum 5 items)',
-            subtext: 'Add menu items in the partner app.',
-            actionLabel: 'Go to Menu',
-            onAction: onOpenMenu,
-          },
     ],
-    [usesCatalog, onOpenMenu],
+    [],
   );
 
+  const restaurantSetupKey = usesCatalog ? 'catalogComplete' : 'menuComplete';
+  const restaurantSetupLabel = usesCatalog ? 'Inventory ready' : 'Restaurant set up';
+  const restaurantSetupHint = usesCatalog
+    ? 'Upload products so customers can browse and order.'
+    : 'Add your menu categories and items so customers can browse and order.';
+  const setupButtonLabel = usesCatalog ? 'Set up inventory' : 'Set up your restaurant';
+
   useEffect(() => {
+    setLoading(true);
     void fetchApplicationStatus()
       .then((res) => setChecklist(res.checklist))
       .finally(() => setLoading(false));
-  }, []);
+  }, [refreshKey]);
 
-  const completedCount = setupItems.filter((item) => checklist[item.key]).length;
-  const progressPct = Math.round((completedCount / setupItems.length) * 100);
-  const requiredComplete = setupItems.every((item) => checklist[item.key]);
+  const applicationComplete = applicationItems.every((item) => checklist[item.key]);
+  const restaurantReady = Boolean(checklist[restaurantSetupKey]);
+  const canGoLive = applicationComplete && restaurantReady;
+
+  const progressItems = [...applicationItems, { key: restaurantSetupKey, label: restaurantSetupLabel }];
+  const completedCount = progressItems.filter((item) => checklist[item.key]).length;
+  const progressPct = progressItems.length
+    ? Math.round((completedCount / progressItems.length) * 100)
+    : 0;
 
   const handleGoLive = () => {
-    if (!requiredComplete) return;
+    if (!canGoLive) return;
     toggleAcceptingOrders(true, {
       onSuccess: () => {
         markGoLiveComplete(merchant.id);
@@ -112,7 +112,9 @@ export default function OnboardingCompletePage({
             You&apos;re approved!
           </h2>
           <p className="mx-auto mt-2 max-w-md text-body-lg text-on-surface-variant">
-            Complete setup to go live and start receiving orders from the local community.
+            {restaurantReady
+              ? 'Your restaurant is ready. Go live when you want to start accepting orders.'
+              : 'Set up your restaurant next, then go live when you are ready to accept orders.'}
           </p>
         </div>
 
@@ -120,7 +122,7 @@ export default function OnboardingCompletePage({
           <div className="lg:col-span-8">
             <div className="rounded-xl border border-outline-variant bg-surface-container-lowest p-6 shadow-sm">
               <div className="mb-6 flex items-center justify-between">
-                <h3 className="text-title-lg font-semibold text-on-surface">Onboarding Status</h3>
+                <h3 className="text-title-lg font-semibold text-on-surface">Setup progress</h3>
                 {!loading && (
                   <span className="rounded-full bg-primary/10 px-3 py-1 text-label-md text-primary">
                     {progressPct}% Complete
@@ -131,43 +133,55 @@ export default function OnboardingCompletePage({
               {loading ? (
                 <p className="text-body-sm text-on-surface-variant">Loading checklist…</p>
               ) : (
-                <div className="space-y-3">
-                  {setupItems.map((item) => {
-                    const done = checklist[item.key];
-                    const pending = !done;
-                    return (
-                      <div
-                        key={item.key}
-                        className={`flex items-start gap-4 rounded-lg p-4 ${
-                          pending
-                            ? 'border-2 border-primary/20 bg-primary/5'
-                            : 'bg-surface-container-low'
-                        }`}
-                      >
-                        <MaterialIcon
-                          name={done ? 'check_circle' : 'radio_button_unchecked'}
-                          filled={done}
-                          className={`mt-0.5 shrink-0 ${done ? 'text-primary' : 'text-primary-fixed-dim'}`}
-                        />
-                        <div className="flex-1">
-                          <p className="text-title-md text-on-surface">{item.label}</p>
-                          {pending && item.subtext && (
-                            <p className="mt-1 text-body-md text-on-surface-variant">{item.subtext}</p>
-                          )}
-                          {pending && item.actionLabel && item.onAction && (
-                            <button
-                              type="button"
-                              onClick={item.onAction}
-                              className="mt-3 flex items-center gap-1 text-label-lg font-semibold text-primary hover:underline"
-                            >
-                              {item.actionLabel}
-                              <MaterialIcon name="arrow_forward" size={16} />
-                            </button>
-                          )}
-                        </div>
+                <div className="space-y-6">
+                  <section>
+                    <p className="mb-3 text-label-md font-semibold uppercase tracking-wide text-on-surface-variant">
+                      Application
+                    </p>
+                    <div className="space-y-3">
+                      {applicationItems.map((item) => {
+                        const done = checklist[item.key];
+                        return (
+                          <div
+                            key={item.key}
+                            className="flex items-start gap-4 rounded-lg bg-surface-container-low p-4"
+                          >
+                            <MaterialIcon
+                              name={done ? 'check_circle' : 'radio_button_unchecked'}
+                              filled={done}
+                              className={`mt-0.5 shrink-0 ${done ? 'text-primary' : 'text-primary-fixed-dim'}`}
+                            />
+                            <p className="text-title-md text-on-surface">{item.label}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+
+                  <section>
+                    <p className="mb-3 text-label-md font-semibold uppercase tracking-wide text-on-surface-variant">
+                      Restaurant
+                    </p>
+                    <div
+                      className={`flex items-start gap-4 rounded-lg p-4 ${
+                        restaurantReady
+                          ? 'bg-surface-container-low'
+                          : 'border-2 border-primary/20 bg-primary/5'
+                      }`}
+                    >
+                      <MaterialIcon
+                        name={restaurantReady ? 'check_circle' : 'radio_button_unchecked'}
+                        filled={restaurantReady}
+                        className={`mt-0.5 shrink-0 ${restaurantReady ? 'text-primary' : 'text-primary-fixed-dim'}`}
+                      />
+                      <div className="flex-1">
+                        <p className="text-title-md text-on-surface">{restaurantSetupLabel}</p>
+                        {!restaurantReady && (
+                          <p className="mt-1 text-body-md text-on-surface-variant">{restaurantSetupHint}</p>
+                        )}
                       </div>
-                    );
-                  })}
+                    </div>
+                  </section>
                 </div>
               )}
             </div>
@@ -175,7 +189,7 @@ export default function OnboardingCompletePage({
 
           <div className="space-y-4 lg:col-span-4">
             <div className="rounded-xl border border-outline-variant bg-surface-container-highest p-6">
-              <h4 className="mb-4 text-title-md font-semibold text-on-surface">What&apos;s Next?</h4>
+              <h4 className="mb-4 text-title-md font-semibold text-on-surface">What&apos;s next?</h4>
               <ul className="space-y-4">
                 <li className="flex gap-3">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-label-lg font-semibold text-primary">
@@ -183,16 +197,22 @@ export default function OnboardingCompletePage({
                   </span>
                   <p className="text-body-md text-on-surface-variant">
                     {usesCatalog
-                      ? 'Finish uploading your stock items to enable ordering.'
-                      : 'Finish adding menu items to enable ordering.'}
+                      ? 'Set up your inventory in the partner app.'
+                      : 'Set up your menu and restaurant details in the partner app.'}
                   </p>
                 </li>
                 <li className="flex gap-3">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-label-lg text-on-surface-variant">
+                  <span
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-label-lg font-semibold ${
+                      restaurantReady
+                        ? 'bg-white text-primary'
+                        : 'bg-white text-on-surface-variant'
+                    }`}
+                  >
                     2
                   </span>
                   <p className="text-body-md text-on-surface-variant">
-                    Click &apos;Go Live&apos; to become visible to customers in your area.
+                    Go live when you are ready to accept orders from customers.
                   </p>
                 </li>
               </ul>
@@ -201,22 +221,36 @@ export default function OnboardingCompletePage({
         </div>
 
         <div className="mt-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
-          <button
-            type="button"
-            onClick={handleGoLive}
-            disabled={isPending || loading || !requiredComplete}
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-secondary-container px-10 font-label-lg text-on-secondary-container disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-          >
-            <MaterialIcon name="bolt" />
-            Go Live
-          </button>
-          <button
-            type="button"
-            onClick={onContinueToDashboard}
-            className="flex h-12 w-full items-center justify-center rounded-full border border-outline px-10 font-label-lg text-primary hover:bg-primary/5 sm:w-auto"
-          >
-            Continue to dashboard
-          </button>
+          {!restaurantReady ? (
+            <button
+              type="button"
+              onClick={onOpenSetup}
+              disabled={loading || !onOpenSetup}
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-secondary-container px-10 font-label-lg text-on-secondary-container disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+            >
+              <MaterialIcon name={setupInProgress ? 'arrow_back' : 'storefront'} />
+              {setupInProgress ? 'Back to menu' : setupButtonLabel}
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={handleGoLive}
+                disabled={isPending || loading || !canGoLive}
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-secondary-container px-10 font-label-lg text-on-secondary-container disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+              >
+                <MaterialIcon name="bolt" />
+                Go Live
+              </button>
+              <button
+                type="button"
+                onClick={onContinueToDashboard}
+                className="flex h-12 w-full items-center justify-center rounded-full border border-outline px-10 font-label-lg text-primary hover:bg-primary/5 sm:w-auto"
+              >
+                Continue to dashboard
+              </button>
+            </>
+          )}
         </div>
       </main>
 

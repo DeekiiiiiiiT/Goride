@@ -244,6 +244,25 @@ async function getMerchantAccessForUser(userId: string, userEmail?: string | nul
   return resolveMerchantAccess(userId, userEmail);
 }
 
+async function requireOwnedMerchant(
+  authHeader: string,
+  merchantId: string,
+): Promise<
+  | { ok: true; merchant: Record<string, unknown> }
+  | { ok: false; status: number; message: string }
+> {
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, status: 401, message: "Unauthorized" };
+
+  const merchant = await getMerchantForUser(supabase, user.id, user.email);
+  if (!merchant || String(merchant.id) !== merchantId) {
+    return { ok: false, status: 403, message: "Forbidden" };
+  }
+
+  return { ok: true, merchant };
+}
+
 // ============================================================================
 // Operating Hours
 // ============================================================================
@@ -316,12 +335,15 @@ app.post("/merchants/:id/hours", async (c) => {
 app.post("/merchants/:merchantId/categories", async (c) => {
   const authHeader = c.req.header("Authorization");
   if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
-  
-  const supabase = getSupabase(authHeader);
+
   const { merchantId } = c.req.param();
+  const access = await requireOwnedMerchant(authHeader, merchantId);
+  if (!access.ok) return c.json({ error: access.message }, access.status);
+
   const body = await c.req.json();
-  
-  const { data, error } = await supabase
+  const serviceSb = getServiceSupabase();
+
+  const { data, error } = await serviceSb
     .from("menu_categories")
     .insert({
       merchant_id: merchantId,
@@ -331,7 +353,7 @@ app.post("/merchants/:merchantId/categories", async (c) => {
     })
     .select()
     .single();
-  
+
   if (error) return c.json({ error: error.message }, 500);
   return c.json({ category: data }, 201);
 });
@@ -340,12 +362,15 @@ app.post("/merchants/:merchantId/categories", async (c) => {
 app.put("/merchants/:merchantId/categories/:categoryId", async (c) => {
   const authHeader = c.req.header("Authorization");
   if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
-  
-  const supabase = getSupabase(authHeader);
-  const { categoryId } = c.req.param();
+
+  const { merchantId, categoryId } = c.req.param();
+  const access = await requireOwnedMerchant(authHeader, merchantId);
+  if (!access.ok) return c.json({ error: access.message }, access.status);
+
   const body = await c.req.json();
-  
-  const { data, error } = await supabase
+  const serviceSb = getServiceSupabase();
+
+  const { data, error } = await serviceSb
     .from("menu_categories")
     .update({
       name: body.name,
@@ -353,9 +378,10 @@ app.put("/merchants/:merchantId/categories/:categoryId", async (c) => {
       sort_order: body.sortOrder,
     })
     .eq("id", categoryId)
+    .eq("merchant_id", merchantId)
     .select()
     .single();
-  
+
   if (error) return c.json({ error: error.message }, 500);
   return c.json({ category: data });
 });
@@ -364,21 +390,26 @@ app.put("/merchants/:merchantId/categories/:categoryId", async (c) => {
 app.delete("/merchants/:merchantId/categories/:categoryId", async (c) => {
   const authHeader = c.req.header("Authorization");
   if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
-  
-  const supabase = getSupabase(authHeader);
+
   const { merchantId, categoryId } = c.req.param();
-  
+  const access = await requireOwnedMerchant(authHeader, merchantId);
+  if (!access.ok) return c.json({ error: access.message }, access.status);
+
+  const serviceSb = getServiceSupabase();
+
   // Move items in this category to uncategorized (null)
-  await supabase
+  await serviceSb
     .from("menu_items")
     .update({ category_id: null })
-    .eq("category_id", categoryId);
-  
-  const { error } = await supabase
+    .eq("category_id", categoryId)
+    .eq("merchant_id", merchantId);
+
+  const { error } = await serviceSb
     .from("menu_categories")
     .delete()
-    .eq("id", categoryId);
-  
+    .eq("id", categoryId)
+    .eq("merchant_id", merchantId);
+
   if (error) return c.json({ error: error.message }, 500);
   return c.json({ success: true });
 });
@@ -464,8 +495,9 @@ app.get("/merchant/menu", async (c) => {
   if (!merchant) return c.json({ error: "Not a merchant" }, 403);
 
   const merchantId = merchant.id as string;
+  const serviceSb = getServiceSupabase();
 
-  const { data: categories, error: catError } = await supabase
+  const { data: categories, error: catError } = await serviceSb
     .from("menu_categories")
     .select("*")
     .eq("merchant_id", merchantId)
@@ -474,7 +506,7 @@ app.get("/merchant/menu", async (c) => {
 
   if (catError) return c.json({ error: catError.message }, 500);
 
-  const { data: items, error: itemError } = await supabase
+  const { data: items, error: itemError } = await serviceSb
     .from("menu_items")
     .select("*")
     .eq("merchant_id", merchantId)
@@ -505,13 +537,14 @@ app.put("/merchant/menu/reorder", async (c) => {
   const body = await c.req.json();
   const categories = Array.isArray(body.categories) ? body.categories : [];
   const items = Array.isArray(body.items) ? body.items : [];
+  const serviceSb = getServiceSupabase();
 
   let categoriesUpdated = 0;
   let itemsUpdated = 0;
 
   for (const entry of categories) {
     if (!entry?.id || entry.sortOrder == null) continue;
-    const { error } = await supabase
+    const { error } = await serviceSb
       .from("menu_categories")
       .update({ sort_order: entry.sortOrder })
       .eq("id", entry.id)
@@ -526,7 +559,7 @@ app.put("/merchant/menu/reorder", async (c) => {
     if (entry.categoryId !== undefined) {
       update.category_id = entry.categoryId;
     }
-    const { error } = await supabase
+    const { error } = await serviceSb
       .from("menu_items")
       .update(update)
       .eq("id", entry.id)
@@ -915,7 +948,7 @@ const CATEGORY_COLORS = [
 const DAY_OF_WEEK_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 async function buildItemCategoryMap(
-  supabase: ReturnType<typeof getSupabase>,
+  supabase: ReturnType<typeof getServiceSupabase>,
   merchantId: string,
 ): Promise<Record<string, string>> {
   const { data: categories } = await supabase
@@ -1039,10 +1072,13 @@ app.get("/merchant/analytics", async (c) => {
 
   const now = new Date();
   const fromDate = from ? new Date(from) : new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const toDate = to ? new Date(to) : now;
-  toDate.setHours(23, 59, 59, 999);
+  const toDate = to ? new Date(to) : new Date(now);
+  if (!to) {
+    toDate.setHours(23, 59, 59, 999);
+  }
 
-  const { data: orders, error } = await supabase
+  const serviceSb = getServiceSupabase();
+  const { data: orders, error } = await serviceSb
     .from("orders")
     .select("*")
     .eq("merchant_id", merchantId)
@@ -1156,7 +1192,7 @@ app.get("/merchant/analytics", async (c) => {
       : 0,
   }));
 
-  const itemCategoryMap = await buildItemCategoryMap(supabase, merchantId);
+  const itemCategoryMap = await buildItemCategoryMap(serviceSb, merchantId);
   const categoryBreakdown = buildCategoryBreakdown(delivered, itemCategoryMap, totalRevenue);
   const revenueByDayOfWeek = buildRevenueByDayOfWeek(delivered);
   const revenueByHour = buildRevenueByHour(delivered);
