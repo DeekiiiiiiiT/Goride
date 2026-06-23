@@ -18,9 +18,10 @@ import PartnerSkeleton from '../components/PartnerSkeleton';
 interface AnalyticsPageProps {
   merchant: Merchant;
   onNavigate: (page: PartnerTab) => void;
+  onOpenMobileNav?: () => void;
 }
 
-export default function AnalyticsPage({ merchant, onNavigate }: AnalyticsPageProps) {
+export default function AnalyticsPage({ merchant, onNavigate, onOpenMobileNav }: AnalyticsPageProps) {
   const [navTab, setNavTab] = useState<AnalyticsNavTab>('health');
   const [healthView, setHealthView] = useState<HealthView>('overview');
   const [timeRange, setTimeRange] = useState<AnalyticsTimeRange>('today');
@@ -96,9 +97,13 @@ export default function AnalyticsPage({ merchant, onNavigate }: AnalyticsPagePro
         isAcceptingOrders={isAcceptingOrders}
         onToggleAcceptingOrders={toggleAcceptingOrders}
         togglePending={togglePending}
+        onOpenNav={onOpenMobileNav}
       />
 
-      <main className="mx-auto max-w-lg overflow-y-auto px-margin-mobile pb-4 pt-16 md:max-w-3xl md:px-margin-tablet">
+      <main
+        className="mx-auto max-w-lg overflow-y-auto px-margin-mobile pb-4 pt-16 md:max-w-3xl md:px-margin-tablet"
+        data-partner-scroll
+      >
         {navTab === 'reviews' ? (
           isLoading ? (
             <PartnerSkeleton variant="card" count={3} />

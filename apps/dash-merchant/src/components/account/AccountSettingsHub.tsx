@@ -22,6 +22,7 @@ interface AccountSettingsHubProps {
   onNavigate: (page: PartnerTab) => void;
   onOpenSection: (section: AccountSection) => void;
   onSignOut: () => void;
+  onOpenMobileNav?: () => void;
   notificationCount?: number;
 }
 
@@ -30,6 +31,7 @@ export default function AccountSettingsHub({
   onNavigate,
   onOpenSection,
   onSignOut,
+  onOpenMobileNav,
   notificationCount = 0,
 }: AccountSettingsHubProps) {
   const rating = merchant.rating > 0 ? merchant.rating.toFixed(1) : '4.8';
@@ -44,42 +46,61 @@ export default function AccountSettingsHub({
 
   return (
     <div className="flex min-h-dvh flex-col bg-surface pt-16 text-on-surface antialiased">
-      <header className="fixed top-0 z-50 flex h-16 w-full items-center justify-between border-b border-outline-variant bg-surface px-margin-mobile md:px-margin-tablet">
-        <button
-          type="button"
-          onClick={() => onNavigate('dashboard')}
-          className="flex h-12 w-12 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-high active:scale-95"
-        >
-          <MaterialIcon name="storefront" />
-        </button>
-        <h1 className="flex-1 text-center text-headline-md font-bold text-primary">Roam Dash</h1>
-        <button
-          type="button"
-          disabled={togglePending}
-          onClick={() => toggleAcceptingOrders(!isAcceptingOrders)}
-          className={`mr-1 flex h-8 items-center gap-1 rounded-full px-2 text-label-sm font-semibold ${
-            storeStatus === 'open'
-              ? 'bg-primary-container/15 text-primary-container'
-              : 'bg-surface-container text-on-surface-variant'
-          }`}
-        >
-          <span
-            className={`h-2 w-2 rounded-full ${
-              storeStatus === 'open' ? 'bg-primary-container' : 'bg-outline'
+      <header className="safe-t fixed top-0 z-50 flex h-16 w-full items-center justify-between gap-inset-xs border-b border-outline-variant bg-surface px-margin-mobile md:px-margin-tablet">
+        <div className="z-10 flex shrink-0 items-center">
+          <button
+            type="button"
+            onClick={onOpenMobileNav}
+            className={`btn-touch flex h-12 w-12 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high active:scale-95 lg:hidden ${onOpenMobileNav ? '' : 'invisible'}`}
+            aria-label="Open navigation"
+            disabled={!onOpenMobileNav}
+          >
+            <MaterialIcon name="menu" size={24} />
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate('dashboard')}
+            className="hidden h-12 w-12 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-high active:scale-95 lg:flex"
+            aria-label="Dashboard"
+          >
+            <MaterialIcon name="storefront" />
+          </button>
+        </div>
+
+        <h1 className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-headline-md font-bold text-primary">
+          Roam Dash
+        </h1>
+
+        <div className="z-10 flex shrink-0 items-center gap-0.5">
+          <button
+            type="button"
+            disabled={togglePending}
+            onClick={() => toggleAcceptingOrders(!isAcceptingOrders)}
+            className={`flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 text-label-sm font-semibold ${
+              storeStatus === 'open'
+                ? 'bg-primary-container/15 text-primary-container'
+                : 'bg-surface-container text-on-surface-variant'
             }`}
-          />
-          {storeStatus === 'open' ? 'Open' : 'Paused'}
-        </button>
-        <button
-          type="button"
-          onClick={() => onNavigate('orders')}
-          className="relative flex h-12 w-12 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-high active:scale-95"
-        >
-          <MaterialIcon name="notifications" />
-          {notificationCount > 0 && (
-            <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-error" />
-          )}
-        </button>
+          >
+            <span
+              className={`h-2 w-2 shrink-0 rounded-full ${
+                storeStatus === 'open' ? 'bg-primary-container' : 'bg-outline'
+              }`}
+            />
+            {storeStatus === 'open' ? 'Open' : 'Paused'}
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate('orders')}
+            className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-high active:scale-95"
+            aria-label="Notifications"
+          >
+            <MaterialIcon name="notifications" />
+            {notificationCount > 0 && (
+              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-error" />
+            )}
+          </button>
+        </div>
       </header>
 
       <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-inset-lg px-margin-mobile py-inset-md md:px-margin-tablet">

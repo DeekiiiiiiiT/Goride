@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
+import { useImmersiveMode } from '../../hooks/useImmersiveMode';
 import {
   BUSINESS_DAYS,
   DaySchedule,
@@ -110,6 +112,8 @@ export default function BusinessHoursView({
   const [newSpecialName, setNewSpecialName] = useState('');
   const [newSpecialDate, setNewSpecialDate] = useState('');
 
+  useImmersiveMode(true);
+
   const handleAddSpecialDate = () => {
     if (!newSpecialName.trim() || !newSpecialDate) return;
     onAddSpecialDate({
@@ -122,9 +126,9 @@ export default function BusinessHoursView({
     setShowAddSpecial(false);
   };
 
-  return (
-    <div className="fixed inset-0 z-[60] flex min-h-dvh flex-col bg-background pb-[120px] text-on-background">
-      <header className="sticky top-0 z-50 flex h-16 w-full items-center justify-between border-b border-outline-variant bg-surface/90 px-margin-mobile backdrop-blur-md md:border-none md:px-margin-tablet">
+  return createPortal(
+    <div className="app-fullscreen-screen safe-x safe-t bg-background text-on-background">
+      <header className="flex h-16 w-full shrink-0 items-center justify-between border-b border-outline-variant bg-surface/90 px-margin-mobile backdrop-blur-md md:border-none md:px-margin-tablet">
         <div className="flex items-center gap-inset-xs">
           <button
             type="button"
@@ -140,19 +144,10 @@ export default function BusinessHoursView({
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-inset-lg px-margin-mobile py-inset-md md:px-margin-tablet">
+      <main className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-inset-lg overflow-y-auto px-margin-mobile py-inset-md md:px-margin-tablet">
         <div className="hidden flex-col gap-inset-xs md:flex">
-          <div className="flex items-center gap-inset-sm">
-            <button
-              type="button"
-              onClick={onBack}
-              className="flex h-10 w-10 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container active:scale-95"
-            >
-              <MaterialIcon name="arrow_back" />
-            </button>
-            <h1 className="text-headline-lg text-on-background">Business Hours</h1>
-          </div>
-          <p className="pl-14 text-body-sm text-on-surface-variant">
+          <h1 className="text-headline-lg text-on-background">Business Hours</h1>
+          <p className="text-body-sm text-on-surface-variant">
             Set your regular store hours and special holiday schedules.
           </p>
         </div>
@@ -353,7 +348,7 @@ export default function BusinessHoursView({
         </section>
       </main>
 
-      <div className="fixed bottom-0 z-40 w-full border-t border-outline-variant bg-surface/95 p-margin-mobile shadow-[0_-4px_12px_rgba(0,0,0,0.05)] backdrop-blur-sm md:bottom-16 md:px-margin-tablet">
+      <footer className="shrink-0 border-t border-outline-variant bg-surface/95 px-margin-mobile py-inset-sm shadow-[0_-4px_12px_rgba(0,0,0,0.05)] backdrop-blur-sm safe-b md:px-margin-tablet">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-inset-sm md:justify-end">
           <button
             type="button"
@@ -372,7 +367,8 @@ export default function BusinessHoursView({
             {isSaving ? 'Saving...' : 'Save Hours'}
           </button>
         </div>
-      </div>
-    </div>
+      </footer>
+    </div>,
+    document.body,
   );
 }

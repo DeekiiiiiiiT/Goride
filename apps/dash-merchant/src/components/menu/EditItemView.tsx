@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ImageUpload from '../ImageUpload';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
 import {
@@ -35,6 +35,7 @@ export default function EditItemView({
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [optionGroupSheetOpen, setOptionGroupSheetOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<ModifierGroup | null>(null);
+  const mainRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (item) {
@@ -44,6 +45,7 @@ export default function EditItemView({
       setFormData(createEmptyMenuItem(defaultCategoryId));
       setExpandedGroups(new Set());
     }
+    mainRef.current?.scrollTo({ top: 0, behavior: 'instant' });
   }, [item, defaultCategoryId]);
 
   const toggleGroup = (groupId: string) => {
@@ -91,27 +93,29 @@ export default function EditItemView({
         <div className="w-12" />
       </header>
 
-      <main className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-8 overflow-y-auto px-margin-mobile pb-32 pt-6 md:px-margin-tablet">
-        <section className="overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-sm">
-          <div className="[&>div]:m-0 [&>div>div]:aspect-auto [&>div>div]:h-48 [&>div>div]:rounded-none [&>div>div]:border-0">
+      <main
+        ref={mainRef}
+        data-partner-scroll
+        className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-8 overflow-y-auto px-margin-mobile pb-32 pt-6 md:px-margin-tablet"
+      >
+        <section className="flex flex-col gap-6 rounded-xl border border-outline-variant bg-surface-container-lowest p-6 shadow-sm">
+          <h2 className="mb-2 text-headline-md text-on-surface">Basic Details</h2>
+
+          <div className="flex flex-col gap-2">
             <ImageUpload
+              label="Item photo"
               value={formData.image_url}
               onChange={(url) => setFormData((prev) => ({ ...prev, image_url: url }))}
               folder="menu-items"
               aspectRatio="cover"
-              placeholder="Tap to change"
+              placeholder="Tap to add a photo of this dish"
+              className="w-full"
             />
-          </div>
-          <div className="border-t border-outline-variant bg-surface-container-low p-4">
             <p className="flex items-center gap-2 text-body-sm text-on-surface-variant">
               <MaterialIcon name="info" className="text-base" />
               Recommended size: 1080×1080px. Max 5MB.
             </p>
           </div>
-        </section>
-
-        <section className="flex flex-col gap-6 rounded-xl border border-outline-variant bg-surface-container-lowest p-6 shadow-sm">
-          <h2 className="mb-2 text-headline-md text-on-surface">Basic Details</h2>
 
           <div className="flex flex-col gap-2">
             <label className="text-label-md text-on-surface-variant" htmlFor="itemName">

@@ -10,9 +10,10 @@ import PartnerSkeleton from '../components/PartnerSkeleton';
 
 interface EarningsPageProps {
   onNavigate: (page: PartnerTab) => void;
+  onOpenMobileNav?: () => void;
 }
 
-export default function EarningsPage({ onNavigate }: EarningsPageProps) {
+export default function EarningsPage({ onNavigate, onOpenMobileNav }: EarningsPageProps) {
   const [selectedPayoutId, setSelectedPayoutId] = useState<string | null>(null);
   const { data, isLoading, isError, refetch } = useMerchantEarnings();
   const payoutQuery = useMerchantPayoutDetail(selectedPayoutId);
@@ -53,7 +54,7 @@ export default function EarningsPage({ onNavigate }: EarningsPageProps) {
         <header className="fixed top-0 z-50 flex h-16 w-full items-center justify-center border-b border-outline-variant bg-surface/80 px-margin-mobile backdrop-blur-md">
           <h1 className="text-headline-md font-bold text-primary">Earnings</h1>
         </header>
-        <main className="mx-auto flex w-full max-w-3xl flex-grow flex-col gap-inset-lg px-margin-mobile pb-[100px] pt-20">
+        <main className="mx-auto flex w-full max-w-3xl flex-grow flex-col gap-inset-lg px-margin-mobile pb-[100px] pt-16 md:px-margin-tablet">
           <PartnerSkeleton variant="card" count={3} />
           <PartnerSkeleton variant="chart" />
         </main>
@@ -80,10 +81,10 @@ export default function EarningsPage({ onNavigate }: EarningsPageProps) {
 
   return (
     <div className="flex min-h-dvh flex-col bg-surface text-on-surface antialiased">
-      <header className="fixed top-0 z-50 flex h-16 w-full items-center justify-between border-b border-outline-variant bg-surface/80 px-margin-mobile backdrop-blur-md md:px-margin-tablet">
+      <header className="safe-t fixed top-0 z-50 flex h-16 w-full items-center justify-between border-b border-outline-variant bg-surface/80 px-margin-mobile backdrop-blur-md md:px-margin-tablet">
         <button
           type="button"
-          onClick={() => onNavigate('dashboard')}
+          onClick={onOpenMobileNav ?? (() => onNavigate('dashboard'))}
           className="flex h-12 w-12 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container active:scale-95"
           aria-label="Menu"
         >
@@ -99,8 +100,8 @@ export default function EarningsPage({ onNavigate }: EarningsPageProps) {
         </button>
       </header>
 
-      <main className="mx-auto flex w-full max-w-3xl flex-grow flex-col gap-inset-lg px-margin-mobile pb-[100px] pt-20 md:px-margin-tablet md:pb-inset-lg">
-        <section className="mt-inset-md flex flex-col items-center gap-inset-sm text-center">
+      <main className="mx-auto flex w-full max-w-3xl flex-grow flex-col gap-inset-lg px-margin-mobile pb-[100px] pt-16 md:px-margin-tablet md:pb-inset-lg">
+        <section className="flex flex-col items-center gap-inset-sm text-center">
           <h2 className="text-label-sm uppercase tracking-widest text-on-surface-variant">
             Current Balance
           </h2>

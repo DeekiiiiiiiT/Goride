@@ -1,4 +1,5 @@
 import { MaterialIcon } from '../signup/components/MaterialIcon';
+import { PARTNER_BOTTOM_NAV_ITEMS } from '../lib/partner-nav';
 import { PartnerTab } from '../lib/partner-utils';
 
 interface PartnerBottomNavProps {
@@ -7,18 +8,10 @@ interface PartnerBottomNavProps {
   allowedTabs?: PartnerTab[];
 }
 
-const NAV_ITEMS: { key: PartnerTab; label: string; icon: string; permission?: string }[] = [
-  { key: 'dashboard', label: 'Dashboard', icon: 'dashboard', permission: 'orders' },
-  { key: 'orders', label: 'Orders', icon: 'receipt_long', permission: 'orders' },
-  { key: 'menu', label: 'Menu', icon: 'restaurant_menu', permission: 'menu' },
-  { key: 'analytics', label: 'Analytics', icon: 'leaderboard', permission: 'analytics' },
-  { key: 'account', label: 'Account', icon: 'person' },
-];
-
 export default function PartnerBottomNav({ active, onNavigate, allowedTabs }: PartnerBottomNavProps) {
   const items = allowedTabs
-    ? NAV_ITEMS.filter((item) => allowedTabs.includes(item.key))
-    : NAV_ITEMS;
+    ? PARTNER_BOTTOM_NAV_ITEMS.filter((item) => allowedTabs.includes(item.key))
+    : PARTNER_BOTTOM_NAV_ITEMS;
   return (
     <nav className="fixed bottom-0 left-0 z-50 flex h-[var(--app-bottom-nav-total)] w-full items-center justify-around border-t border-outline-variant bg-surface safe-x safe-b shadow-lg lg:hidden">
       {items.map((item) => {

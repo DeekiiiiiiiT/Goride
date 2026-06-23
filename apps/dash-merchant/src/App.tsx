@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { supabase, AuthRecoveryGate } from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
@@ -33,6 +33,7 @@ import {
   consumePartnerOAuthIntent,
   PARTNER_OAUTH_INTENT_KEY,
 } from './lib/partnerAuth';
+import { resetPartnerScroll } from './lib/reset-partner-scroll';
 
 const SPLASH_MIN_MS = 1800;
 const PENDING_STATUSES = new Set(['pending', 'in_review', 'docs_requested']);
@@ -66,6 +67,7 @@ function DashMerchantApp() {
   const [setupMenuMode, setSetupMenuMode] = useState(false);
   const [viewingGoLiveProgress, setViewingGoLiveProgress] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const mainContentRef = useRef<HTMLDivElement>(null);
   const [oauthReturnPending, setOauthReturnPending] = useState(
     () => typeof window !== 'undefined' && !!sessionStorage.getItem(PARTNER_OAUTH_INTENT_KEY),
   );
@@ -135,6 +137,10 @@ function DashMerchantApp() {
       setSetupMenuMode(true);
     }
   }, [merchant?.id]);
+
+  useEffect(() => {
+    resetPartnerScroll(mainContentRef.current);
+  }, [currentPage]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -234,6 +240,10 @@ function DashMerchantApp() {
 
   const handlePartnerNavigate = (page: PartnerTab) => {
     setCurrentPage(page);
+    setMobileNavOpen(false);
+    requestAnimationFrame(() => {
+      resetPartnerScroll(mainContentRef.current);
+    });
   };
 
   const openMobileNav = () => setMobileNavOpen(true);
@@ -284,15 +294,22 @@ function DashMerchantApp() {
           />
         );
       case 'analytics':
-        return <AnalyticsPage merchant={merchant} onNavigate={handlePartnerNavigate} />;
+        return (
+          <AnalyticsPage
+            merchant={merchant}
+            onNavigate={handlePartnerNavigate}
+            onOpenMobileNav={openMobileNav}
+          />
+        );
       case 'earnings':
-        return <EarningsPage onNavigate={handlePartnerNavigate} />;
+        return <EarningsPage onNavigate={handlePartnerNavigate} onOpenMobileNav={openMobileNav} />;
       case 'account':
         return (
           <SettingsPage
             merchant={merchant}
             onNavigate={handlePartnerNavigate}
             onSignOut={handleSignOut}
+            onOpenMobileNav={openMobileNav}
           />
         );
       default:
@@ -308,9 +325,11 @@ function DashMerchantApp() {
         merchant={merchant}
         active={currentPage}
         allowedTabs={allowedTabs}
+        bottomNavVisible={currentPage !== 'earnings'}
         onNavigate={handlePartnerNavigate}
       />
       <div
+        ref={mainContentRef}
         className={
           currentPage === 'earnings'
             ? 'flex-1'

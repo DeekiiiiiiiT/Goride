@@ -556,6 +556,7 @@ export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: Or
 
       <main
         className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-inset-sm overflow-y-auto px-margin-mobile py-inset-sm md:max-w-[1200px] md:px-inset-lg"
+        data-partner-scroll
         {...pullToRefreshProps}
       >
         {(pullDistance > 0 || isRefreshing || isInitialLoading) && (

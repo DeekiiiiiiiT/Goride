@@ -130,7 +130,7 @@ export default function CategoryItemsView({
         <div />
       </header>
 
-      <main className="flex-1 overflow-y-auto p-margin-mobile pb-32">
+      <main className="flex-1 overflow-y-auto p-margin-mobile pb-32" data-partner-scroll>
         <div className="mx-auto max-w-3xl">
           <SortableList
             items={items}

@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Merchant } from '../hooks/useMerchant';
 import { PartnerTab } from '../lib/partner-utils';
+import { resetPartnerScroll } from '../lib/reset-partner-scroll';
 import { useMerchantSettings } from '../hooks/useMerchantSettings';
 import AccountSettingsHub, { AccountSection } from '../components/account/AccountSettingsHub';
 import EditProfileView from '../components/account/EditProfileView';
@@ -15,6 +16,7 @@ interface SettingsPageProps {
   merchant: Merchant;
   onNavigate: (page: PartnerTab) => void;
   onSignOut: () => void;
+  onOpenMobileNav?: () => void;
   notificationCount?: number;
 }
 
@@ -22,9 +24,17 @@ export default function SettingsPage({
   merchant,
   onNavigate,
   onSignOut,
+  onOpenMobileNav,
   notificationCount = 0,
 }: SettingsPageProps) {
   const [activeSection, setActiveSection] = useState<AccountSection | null>(null);
+
+  useEffect(() => {
+    if (activeSection === null) {
+      resetPartnerScroll();
+    }
+  }, [activeSection]);
+
   const {
     formData,
     setFormData,
@@ -143,6 +153,7 @@ export default function SettingsPage({
       onNavigate={onNavigate}
       onOpenSection={setActiveSection}
       onSignOut={onSignOut}
+      onOpenMobileNav={onOpenMobileNav}
       notificationCount={notificationCount}
     />
   );
