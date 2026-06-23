@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import { Session } from '@supabase/supabase-js';
+import { WIZARD_TOTAL_STEPS } from '../../lib/partner-onboarding-config';
 import {
   OnboardingBottomNav,
   OnboardingHeader,
@@ -38,8 +39,8 @@ export default function OnboardingWizardShell({
       <OnboardingHeader
         currentStep={currentStep}
         onBack={showBack ? onBack : undefined}
-        showSetupTitle={currentStep === 6}
-        showProgress={currentStep !== 6}
+        showSetupTitle={currentStep === WIZARD_TOTAL_STEPS}
+        showProgress={currentStep !== WIZARD_TOTAL_STEPS}
       />
 
       <main

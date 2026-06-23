@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { MaterialIcon } from '../signup/components/MaterialIcon';
-import { resolveGoLiveRule } from '@roam/vertical-config';
 import { fetchApplicationStatus, type ApplicationStatusResponse } from '../lib/partner-api';
 
 interface AccountPendingPageProps {
@@ -15,23 +14,21 @@ interface StatusItem {
 }
 
 function mapChecklist(data: ApplicationStatusResponse): StatusItem[] {
-  const c = data.checklist;
-  const goLiveRule = resolveGoLiveRule(
-    (data.merchant as { go_live_rule?: string } | undefined)?.go_live_rule,
-  );
-  const catalogItem =
-    goLiveRule === 'catalog_imported' || goLiveRule === 'pos_connected'
-      ? { label: 'Catalog (50+ items)', status: c.catalogComplete ? 'complete' as const : 'missing' as const }
-      : { label: 'Menu (5+ items)', status: c.menuComplete ? 'complete' as const : 'missing' as const };
+  const review = data.reviewChecklist ?? {
+    profileComplete: data.checklist.profileComplete,
+    documentsComplete: data.checklist.documentsComplete,
+    hoursComplete: data.checklist.hoursComplete,
+  };
 
   return [
-    { label: 'Store profile', status: c.profileComplete ? 'complete' : 'missing' },
-    { label: 'Location', status: c.profileComplete ? 'complete' : 'missing' },
-    { label: 'Business details', status: c.profileComplete ? 'complete' : 'missing' },
-    { label: 'Identity verification', status: c.documentsComplete ? 'complete' : 'review' },
-    { label: 'Bank details', status: c.bankComplete ? 'complete' : 'missing' },
-    { label: 'Operating hours', status: c.hoursComplete ? 'complete' : 'missing' },
-    catalogItem,
+    { label: 'Store profile', status: review.profileComplete ? 'complete' : 'missing' },
+    { label: 'Location', status: review.profileComplete ? 'complete' : 'missing' },
+    { label: 'Business details', status: review.profileComplete ? 'complete' : 'missing' },
+    {
+      label: 'Identity verification',
+      status: review.documentsComplete ? 'complete' : 'review',
+    },
+    { label: 'Operating hours', status: review.hoursComplete ? 'complete' : 'missing' },
   ];
 }
 
@@ -110,6 +107,9 @@ export default function AccountPendingPage({ onSignOut }: AccountPendingPageProp
 
           <div className="mb-inset-lg w-full rounded-xl border border-outline-variant bg-surface-container-lowest p-inset-md text-left shadow-sm">
             <h2 className="mb-inset-sm text-headline-md font-semibold text-on-surface">Application Status</h2>
+            <p className="mb-inset-sm text-body-sm text-on-surface-variant">
+              Items from your signup application. Menu and payout setup come after approval.
+            </p>
             {loading ? (
               <p className="text-body-sm text-on-surface-variant">Loading checklist…</p>
             ) : (

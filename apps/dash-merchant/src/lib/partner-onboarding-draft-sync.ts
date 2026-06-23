@@ -1,7 +1,8 @@
 import type { PartnerOnboardingDraft } from '@roam/types';
-import type { DayHours } from '../components/onboarding/ContactHoursBrandingContent';
+import type { DayHours } from '../components/onboarding/operating-hours';
 import type { SignUpFormData } from '../signup/types';
 import type { WizardStepId } from './partner-onboarding-config';
+import { normalizeWizardStepKey } from './partner-onboarding-config';
 
 /** Strip File fields and secrets before sending to server. */
 export function formDataToOnboardingDraft(
@@ -98,13 +99,14 @@ export function hoursFromOnboardingDraft(
 }
 
 export function isWizardStepId(value: string | null | undefined): value is WizardStepId {
+  if (value === 'contact-hours' || value === 'bank-details') return true;
   return [
     'restaurant-info',
     'categories',
     'location',
     'business-details',
-    'contact-hours',
+    'operating-hours',
+    'branding',
     'verification',
-    'bank-details',
   ].includes(value ?? '');
 }

@@ -102,9 +102,9 @@ export type PartnerWizardStepKey =
   | 'categories'
   | 'location'
   | 'business-details'
-  | 'contact-hours'
-  | 'verification'
-  | 'bank-details';
+  | 'operating-hours'
+  | 'branding'
+  | 'verification';
 
 /** Serializable partner wizard draft (no File blobs). */
 export interface PartnerOnboardingDraft {

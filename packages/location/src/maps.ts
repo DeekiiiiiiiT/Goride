@@ -1,4 +1,4 @@
-import { API_ENDPOINTS } from '@roam/api-client';
+import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
 
 let mapsLoadedPromise: Promise<void> | null = null;
 let cachedApiKey: string | null = null;
@@ -18,7 +18,9 @@ export async function loadPartnerMapsApi(): Promise<void> {
   mapsLoadedPromise = new Promise((resolve, reject) => {
     void (async () => {
       try {
-        const res = await fetch(`${API_ENDPOINTS.delivery}/maps-config`);
+        const res = await fetch(`${API_ENDPOINTS.delivery}/maps-config`, {
+          headers: supabaseAnonFunctionHeaders(),
+        });
         if (!res.ok) throw new Error('Maps configuration unavailable');
         const data = await res.json();
         if (!data.apiKey) throw new Error('Maps API key missing');

@@ -7,9 +7,9 @@ export const WIZARD_STEPS = [
   { id: 2, key: "categories", label: "Categories" },
   { id: 3, key: "location", label: "Location" },
   { id: 4, key: "business-details", label: "Details" },
-  { id: 5, key: "contact-hours", label: "Contact" },
-  { id: 6, key: "verification", label: "Verify" },
-  { id: 7, key: "bank-details", label: "Payouts" },
+  { id: 5, key: "operating-hours", label: "Hours" },
+  { id: 6, key: "branding", label: "Branding" },
+  { id: 7, key: "verification", label: "Verify" },
 ] as const;
 
 export type WizardStepKey = (typeof WIZARD_STEPS)[number]["key"];
@@ -46,8 +46,22 @@ const DRAFT_JSON_ALLOWLIST = new Set([
   "hours",
 ]);
 
+const LEGACY_WIZARD_STEP_ALIASES: Record<string, WizardStepKey> = {
+  "contact-hours": "operating-hours",
+  "bank-details": "verification",
+};
+
+function normalizeWizardStepKey(key: string): WizardStepKey {
+  if (key in LEGACY_WIZARD_STEP_ALIASES) {
+    return LEGACY_WIZARD_STEP_ALIASES[key];
+  }
+  if (isValidWizardStepKey(key)) return key;
+  return "restaurant-info";
+}
+
 export function wizardStepFromKey(key: string): number {
-  const found = WIZARD_STEPS.find((s) => s.key === key);
+  const normalized = normalizeWizardStepKey(key);
+  const found = WIZARD_STEPS.find((s) => s.key === normalized);
   return found?.id ?? 1;
 }
 
@@ -57,7 +71,8 @@ export function wizardKeyFromStep(step: number): WizardStepKey {
 }
 
 export function wizardStepLabel(key: string | null | undefined): string {
-  const found = WIZARD_STEPS.find((s) => s.key === key);
+  const normalized = key ? normalizeWizardStepKey(key) : "restaurant-info";
+  const found = WIZARD_STEPS.find((s) => s.key === normalized);
   return found?.label ?? "Info";
 }
 
@@ -222,7 +237,7 @@ export function merchantPayloadFromBody(
     onboarding_status: "submitted",
     submitted_at: new Date().toISOString(),
     wizard_step: 7,
-    wizard_step_key: "bank-details",
+    wizard_step_key: "verification",
     last_onboarding_activity_at: new Date().toISOString(),
   };
 }

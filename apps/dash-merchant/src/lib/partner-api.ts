@@ -54,6 +54,11 @@ export interface ApplicationStatusResponse {
     menuComplete: boolean;
     catalogComplete: boolean;
   };
+  reviewChecklist?: {
+    profileComplete: boolean;
+    documentsComplete: boolean;
+    hoursComplete: boolean;
+  };
   documents?: MerchantDocument[];
 }
 

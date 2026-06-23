@@ -9,6 +9,7 @@ import { formatElapsedTimer, formatJmd, formatTimeAgo, getStoreStatus, PartnerTa
 import NewOrderDetailSheet from '../components/NewOrderDetailSheet';
 import NewOrderAlertView from '../components/NewOrderAlertView';
 import FirstOrderCelebrationView from '../components/FirstOrderCelebrationView';
+import PayoutSetupSheet from '../components/PayoutSetupSheet';
 import PartnerDesktopShell from '../components/layout/PartnerDesktopShell';
 import OrdersDesktopDashboard from '../components/orders/OrdersDesktopDashboard';
 import { useAcceptingOrdersToggle } from '../hooks/useAcceptingOrdersToggle';
@@ -29,8 +30,11 @@ import OrderHistoryView from '../components/OrderHistoryView';
 import { getInitials } from '../lib/order-utils';
 import {
   markFirstOrderCelebrationSeen,
+  markPayoutSetupDismissed,
   shouldShowFirstOrderCelebration,
+  hasDismissedPayoutSetup,
 } from '../lib/first-order';
+import { fetchBankAccount } from '../lib/partner-api';
 import { getItemOptionLines, Order } from '../types/order';
 
 interface OrdersPageProps {
@@ -76,6 +80,8 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
   const [detailOrderId, setDetailOrderId] = useState<string | null>(null);
   const [showOrderDetail, setShowOrderDetail] = useState(false);
   const [showFirstOrderCelebration, setShowFirstOrderCelebration] = useState(false);
+  const [showPayoutSetup, setShowPayoutSetup] = useState(false);
+  const pendingPayoutSetupRef = useRef(false);
   const [rejectOrderId, setRejectOrderId] = useState<string | null>(null);
   const [acceptedOrderId, setAcceptedOrderId] = useState<string | null>(null);
   const [viewOrderId, setViewOrderId] = useState<string | null>(null);
@@ -116,6 +122,13 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
 
           if (shouldShowFirstOrderCelebration(merchant.id)) {
             setShowFirstOrderCelebration(true);
+            void fetchBankAccount()
+              .then(({ bankAccount }) => {
+                if (!bankAccount && !hasDismissedPayoutSetup(merchant.id)) {
+                  pendingPayoutSetupRef.current = true;
+                }
+              })
+              .catch(() => undefined);
           }
 
           playNewOrderAlert(notificationSettings, audioRef);
@@ -481,6 +494,15 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
     markFirstOrderCelebrationSeen(merchant.id);
     setShowFirstOrderCelebration(false);
     setShowOrderDetail(true);
+    if (pendingPayoutSetupRef.current) {
+      pendingPayoutSetupRef.current = false;
+      setShowPayoutSetup(true);
+    }
+  };
+
+  const handleDismissPayoutSetup = () => {
+    markPayoutSetupDismissed(merchant.id);
+    setShowPayoutSetup(false);
   };
 
   const handleNavigate = (tab: PartnerTab) => {
@@ -1007,6 +1029,12 @@ export default function OrdersPage({ merchant, onNavigate }: OrdersPageProps) {
           onReject={handleOpenReject}
         />
       )}
+
+      <PayoutSetupSheet
+        open={showPayoutSetup}
+        onClose={handleDismissPayoutSetup}
+        onSaved={() => setShowPayoutSetup(false)}
+      />
     </div>
     </>
   );

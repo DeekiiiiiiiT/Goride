@@ -10,6 +10,7 @@ import { SignUpFormData } from '../../signup/types';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
 import { useMerchantBusinessTypes } from '../../hooks/useMerchantBusinessTypes';
 import RegulatedVerticalBanner from './RegulatedVerticalBanner';
+import ContactInfoSection from './ContactInfoSection';
 import { inputClass } from './OnboardingShell';
 
 interface BusinessInfoStepProps {
@@ -192,6 +193,8 @@ export default function BusinessInfoStep({ data, onChange }: BusinessInfoStepPro
           </div>
         </section>
       )}
+
+      {hasSelectedType && <ContactInfoSection data={data} onChange={onChange} />}
 
       {!isRegulated && (
         <div className="flex items-start gap-4 rounded-xl border border-tertiary-fixed bg-warning-container p-4">

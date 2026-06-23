@@ -2,7 +2,7 @@ import { isLocationComplete } from '@roam/location';
 import type { CategoryTaxonomyKey, MerchantBusinessTypeConfig, MerchantDocumentType } from '@roam/types';
 import { getCategoryTaxonomyKey, getDefaultConfig } from '@roam/vertical-config';
 import type { SignUpFormData } from '../signup/types';
-import type { DayHours } from '../components/onboarding/ContactHoursBrandingContent';
+import type { DayHours } from '../components/onboarding/operating-hours';
 import type { WizardStepId } from './partner-onboarding-config';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -12,7 +12,13 @@ export function isValidBusinessEmail(value: string): boolean {
 }
 
 export function canContinueBusinessInfoStep(data: SignUpFormData): boolean {
-  return data.restaurantName.trim().length >= 2 && data.businessType !== '';
+  const digits = data.phone.replace(/\D/g, '');
+  return (
+    data.restaurantName.trim().length >= 2 &&
+    data.businessType !== '' &&
+    digits.length >= 7 &&
+    isValidBusinessEmail(data.email)
+  );
 }
 
 export function canContinueCategoriesStep(
@@ -37,9 +43,20 @@ export function canContinueBusinessDetailsStep(_data: SignUpFormData): boolean {
   return true;
 }
 
-export function canContinueContactHoursStep(data: SignUpFormData): boolean {
+export function canContinueContactStep(data: SignUpFormData): boolean {
   const digits = data.phone.replace(/\D/g, '');
   return digits.length >= 7 && isValidBusinessEmail(data.email);
+}
+
+/** @deprecated Use canContinueContactStep — contact is collected on step 1. */
+export const canContinueContactHoursStep = canContinueContactStep;
+
+export function canContinueOperatingHoursStep(_hours: DayHours[]): boolean {
+  return true;
+}
+
+export function canContinueBrandingStep(_data: SignUpFormData): boolean {
+  return true;
 }
 
 function docUploaded(
@@ -93,12 +110,12 @@ export function canContinueWizardStep(
       return canContinueLocationStep(data);
     case 'business-details':
       return canContinueBusinessDetailsStep(data);
-    case 'contact-hours':
-      return canContinueContactHoursStep(data);
+    case 'operating-hours':
+      return canContinueOperatingHoursStep(_hours);
+    case 'branding':
+      return canContinueBrandingStep(data);
     case 'verification':
       return canContinueVerificationStep(data, options?.enableUpload ?? false, requiredDocs);
-    case 'bank-details':
-      return true;
     default:
       return false;
   }

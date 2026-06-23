@@ -82,42 +82,52 @@ export default function UploadArea({
           const dropped = e.dataTransfer.files[0];
           if (dropped) void handleFile(dropped);
         }}
-        onClick={() => !uploading && inputRef.current?.click()}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            inputRef.current?.click();
+            if (!uploading) inputRef.current?.click();
           }
         }}
         role="button"
         tabIndex={0}
       >
+        <div className="pointer-events-none flex flex-col items-center justify-center">
+          {uploading ? (
+            <MaterialIcon name="progress_activity" className="mb-2 animate-spin text-primary" size={32} />
+          ) : (
+            <MaterialIcon
+              name={isComplete ? 'check_circle' : icon}
+              filled={isComplete}
+              className={`mb-2 ${isComplete ? 'text-primary' : 'text-outline'}`}
+              size={displayName ? 28 : 36}
+            />
+          )}
+          <span
+            className={`mb-1 text-label-md font-semibold ${displayName ? 'text-secondary' : 'text-primary'}`}
+          >
+            {uploading ? 'Uploading…' : displayName || label}
+          </span>
+          {!displayName && !uploading && (
+            <span className="text-label-sm text-on-surface-variant">{hint}</span>
+          )}
+          {uploadedDoc && (
+            <span className="mt-1 text-label-sm capitalize text-on-surface-variant">
+              Status: {uploadedDoc.status}
+            </span>
+          )}
+        </div>
         <input
           ref={inputRef}
           type="file"
           accept={accept}
-          className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+          aria-label={label}
+          className="absolute inset-0 z-[1] h-full w-full cursor-pointer opacity-0"
           disabled={uploading}
-          onChange={(e) => void handleFile(e.target.files?.[0] ?? null)}
+          onChange={(e) => {
+            void handleFile(e.target.files?.[0] ?? null);
+            e.target.value = '';
+          }}
         />
-        {uploading ? (
-          <MaterialIcon name="progress_activity" className="mb-2 animate-spin text-primary" size={32} />
-        ) : (
-          <MaterialIcon name={isComplete ? 'check_circle' : icon} filled={isComplete} className={`mb-2 ${isComplete ? 'text-primary' : 'text-outline'}`} size={displayName ? 28 : 36} />
-        )}
-        <span
-          className={`mb-1 text-label-md font-semibold ${displayName ? 'text-secondary' : 'text-primary'}`}
-        >
-          {uploading ? 'Uploading…' : displayName || label}
-        </span>
-        {!displayName && !uploading && (
-          <span className="text-label-sm text-on-surface-variant">{hint}</span>
-        )}
-        {uploadedDoc && (
-          <span className="mt-1 text-label-sm capitalize text-on-surface-variant">
-            Status: {uploadedDoc.status}
-          </span>
-        )}
       </div>
       {error && <p className="text-label-sm text-error">{error}</p>}
     </div>

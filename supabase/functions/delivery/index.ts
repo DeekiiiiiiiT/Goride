@@ -273,6 +273,11 @@ app.post("/merchants/:id/hours", async (c) => {
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   
   const { id } = c.req.param();
+  const merchant = await getMerchantForUser(supabase, user.id, user.email);
+  if (!merchant || merchant.id !== id) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
   const body = await c.req.json();
   const { hours } = body;
   
@@ -280,13 +285,12 @@ app.post("/merchants/:id/hours", async (c) => {
     return c.json({ error: "Hours must be an array" }, 400);
   }
   
-  // Delete existing hours for this merchant
-  await supabase
+  const serviceSb = getServiceSupabase();
+  await serviceSb
     .from("merchant_hours")
     .delete()
     .eq("merchant_id", id);
   
-  // Insert new hours
   const hoursData = hours.map((h: any) => ({
     merchant_id: id,
     day_of_week: h.dayOfWeek,
@@ -295,7 +299,7 @@ app.post("/merchants/:id/hours", async (c) => {
     is_closed: h.isClosed || false,
   }));
   
-  const { data, error } = await supabase
+  const { data, error } = await serviceSb
     .from("merchant_hours")
     .insert(hoursData)
     .select();

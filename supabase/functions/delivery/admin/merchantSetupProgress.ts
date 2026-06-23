@@ -18,6 +18,12 @@ export type SetupChecklist = {
   catalogComplete: boolean;
 };
 
+export type ApplicationReviewChecklist = {
+  profileComplete: boolean;
+  documentsComplete: boolean;
+  hoursComplete: boolean;
+};
+
 export const SETUP_CHECKLIST_FIELDS: Array<{ key: keyof SetupChecklist; label: string }> = [
   { key: "profileComplete", label: "Profile & location" },
   { key: "documentsComplete", label: "Identity documents" },
@@ -33,6 +39,53 @@ function requiredDocumentsComplete(
 ): boolean {
   const docSet = new Set(documentTypes);
   return requiredTypes.every((t) => docSet.has(t));
+}
+
+function draftHoursCount(merchant: Record<string, unknown>): number {
+  const draft = merchant.onboarding_draft;
+  if (!draft || typeof draft !== "object" || Array.isArray(draft)) return 0;
+  const hours = (draft as Record<string, unknown>).hours;
+  return Array.isArray(hours) ? hours.length : 0;
+}
+
+export function computeApplicationReviewChecklist(input: {
+  merchant: Record<string, unknown>;
+  documentTypes: string[];
+  hoursCount: number;
+  requiredDocumentTypes?: string[];
+}): ApplicationReviewChecklist {
+  const { merchant, documentTypes, hoursCount } = input;
+  const required = input.requiredDocumentTypes ?? ["id_front", "id_back", "proof_of_business"];
+
+  return {
+    profileComplete: Boolean(
+      merchant.name && merchant.address && merchant.lat != null && merchant.lng != null,
+    ),
+    documentsComplete: requiredDocumentsComplete(documentTypes, required),
+    hoursComplete: hoursCount > 0 || draftHoursCount(merchant) > 0,
+  };
+}
+
+export async function persistMerchantHoursFromDraft(
+  serviceSb: { from: (table: string) => any },
+  merchantId: string,
+  draft: unknown,
+): Promise<void> {
+  if (!draft || typeof draft !== "object" || Array.isArray(draft)) return;
+  const hours = (draft as Record<string, unknown>).hours;
+  if (!Array.isArray(hours) || hours.length === 0) return;
+
+  const rows = hours.map((entry: Record<string, unknown>, index: number) => ({
+    merchant_id: merchantId,
+    day_of_week: typeof entry.dayOfWeek === "number" ? entry.dayOfWeek : index,
+    open_time: String(entry.open ?? entry.open_time ?? "09:00"),
+    close_time: String(entry.close ?? entry.close_time ?? "21:00"),
+    is_closed: Boolean(entry.isClosed ?? entry.is_closed ?? false),
+  }));
+
+  await serviceSb.from("merchant_hours").delete().eq("merchant_id", merchantId);
+  const { error } = await serviceSb.from("merchant_hours").insert(rows);
+  if (error) throw error;
 }
 
 function catalogRuleComplete(
@@ -68,7 +121,7 @@ export function computeSetupChecklist(input: {
     ),
     documentsComplete: requiredDocumentsComplete(documentTypes, required),
     bankComplete: hasBank,
-    hoursComplete: hoursCount > 0,
+    hoursComplete: hoursCount > 0 || draftHoursCount(merchant) > 0,
     menuComplete: catalog.menuComplete,
     catalogComplete: catalog.catalogComplete,
   };
@@ -78,7 +131,6 @@ export function isGoLiveReady(checklist: SetupChecklist, goLiveRule: GoLiveRule)
   const base =
     checklist.profileComplete &&
     checklist.documentsComplete &&
-    checklist.bankComplete &&
     checklist.hoursComplete;
   if (goLiveRule === "catalog_imported" || goLiveRule === "pos_connected") {
     return base && checklist.catalogComplete;
@@ -91,6 +143,7 @@ export function missingSetupLabels(
   goLiveRule: GoLiveRule = "menu_min_5",
 ): string[] {
   const fields = SETUP_CHECKLIST_FIELDS.filter(({ key }) => {
+    if (key === "bankComplete") return false;
     if (key === "menuComplete" && goLiveRule !== "menu_min_5") return false;
     if (key === "catalogComplete" && goLiveRule === "menu_min_5") return false;
     return !checklist[key];

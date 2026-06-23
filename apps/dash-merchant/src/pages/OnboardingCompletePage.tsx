@@ -40,7 +40,6 @@ export default function OnboardingCompletePage({
       { key: 'profileComplete', label: 'Profile complete' },
       { key: 'documentsComplete', label: 'Identity documents' },
       { key: 'hoursComplete', label: 'Business hours set' },
-      { key: 'bankComplete', label: 'Bank details confirmed' },
       usesCatalog
         ? {
             key: 'catalogComplete',

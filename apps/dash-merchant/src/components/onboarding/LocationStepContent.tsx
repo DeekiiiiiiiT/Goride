@@ -1,4 +1,4 @@
-import { isLocationComplete, type LocationValue } from '@roam/location';
+import { type LocationValue } from '@roam/location';
 import PartnerLocationPicker from '../PartnerLocationPicker';
 import { SignUpFormData } from '../../signup/types';
 import { SectionCard, SectionHeader } from './OnboardingShell';
@@ -28,8 +28,6 @@ export default function LocationStepContent({ data, onChange }: LocationStepCont
     });
   };
 
-  const complete = isLocationComplete(data.location ?? locationValue);
-
   return (
     <SectionCard>
       <SectionHeader
@@ -43,11 +41,6 @@ export default function LocationStepContent({ data, onChange }: LocationStepCont
         onChange={handleLocationChange}
         mapHeightClass="h-[280px]"
       />
-      {!complete && (
-        <p className="text-center text-body-sm text-on-surface-variant">
-          Search for your address and confirm the pin on the map.
-        </p>
-      )}
     </SectionCard>
   );
 }

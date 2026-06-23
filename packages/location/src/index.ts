@@ -8,3 +8,9 @@ export {
   getPlaceDetails,
   type AddressSuggestion,
 } from './geocode';
+export {
+  getCurrentPosition,
+  getCurrentPositionWithAccuracy,
+  type GeoCoordinates,
+  type GeoPositionWithAccuracy,
+} from './geolocation';

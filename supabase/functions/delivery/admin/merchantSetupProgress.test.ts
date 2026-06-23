@@ -41,7 +41,7 @@ Deno.test("missingSetupLabels — lists gaps", () => {
     catalogComplete: false,
   });
   assertEquals(missing.includes("Identity documents"), true);
-  assertEquals(missing.includes("Bank / payouts"), true);
+  assertEquals(missing.includes("Bank / payouts"), false);
 });
 
 Deno.test("setupStageLabel — merchant incomplete", () => {

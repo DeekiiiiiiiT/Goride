@@ -20,6 +20,8 @@ import {
 } from "./verticalMetadata.ts";
 import {
   computeSetupChecklist,
+  computeApplicationReviewChecklist,
+  persistMerchantHoursFromDraft,
 } from "./admin/merchantSetupProgress.ts";
 import { merchantGoLiveRuleFromRow } from "./verticalMetadata.ts";
 
@@ -391,6 +393,14 @@ export function registerMerchantApplicationRoutes(app: Hono) {
       });
     }
 
+    if (existing?.onboarding_status === "draft" && existing.onboarding_draft) {
+      try {
+        await persistMerchantHoursFromDraft(sb, merchant.id as string, existing.onboarding_draft);
+      } catch {
+        // Hours sync is best-effort; draft still holds the schedule.
+      }
+    }
+
     return c.json({ merchant }, created ? 201 : 200);
   });
 
@@ -652,6 +662,20 @@ export function registerMerchantApplicationRoutes(app: Hono) {
       payments.from("merchant_bank_accounts").select("id").eq("merchant_id", merchant.id).eq("is_default", true).maybeSingle(),
     ]);
 
+    let hoursCount = (hours || []).length;
+    if (hoursCount === 0 && merchant.onboarding_draft) {
+      try {
+        await persistMerchantHoursFromDraft(serviceSb, merchant.id, merchant.onboarding_draft);
+        const { data: syncedHours } = await serviceSb
+          .from("merchant_hours")
+          .select("id")
+          .eq("merchant_id", merchant.id);
+        hoursCount = (syncedHours || []).length;
+      } catch {
+        // Fall back to draft-based review checklist below.
+      }
+    }
+
     const businessTypeId = String(merchant.business_type || "");
     const typeRow = businessTypeId
       ? await fetchBusinessTypeMetadataById(businessTypeId)
@@ -664,9 +688,15 @@ export function registerMerchantApplicationRoutes(app: Hono) {
     const checklist = computeSetupChecklist({
       merchant: merchant as Record<string, unknown>,
       documentTypes: docTypes,
-      hoursCount: (hours || []).length,
+      hoursCount,
       menuItemCount: menuItemCount ?? 0,
       hasBank: Boolean(bank),
+      requiredDocumentTypes: typeMeta.required_document_types,
+    });
+    const reviewChecklist = computeApplicationReviewChecklist({
+      merchant: merchant as Record<string, unknown>,
+      documentTypes: docTypes,
+      hoursCount,
       requiredDocumentTypes: typeMeta.required_document_types,
     });
 
@@ -685,6 +715,7 @@ export function registerMerchantApplicationRoutes(app: Hono) {
         go_live_rule: merchant.go_live_rule ?? merchantGoLiveRuleFromRow(merchant as Record<string, unknown>),
       },
       checklist,
+      reviewChecklist,
       documents: documents || [],
     });
   });

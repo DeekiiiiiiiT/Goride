@@ -15,7 +15,7 @@ import {
   PARTNER_WIZARD_DRAFT_VERSION,
   clearPartnerWizardDraft,
 } from './partnerAuth';
-import type { DayHours } from '../components/onboarding/ContactHoursBrandingContent';
+import type { DayHours } from '../components/onboarding/operating-hours';
 
 const defaultHours: DayHours[] = Array.from({ length: 7 }, () => ({
   open: '09:00',
@@ -44,13 +44,22 @@ describe('partner-onboarding-validation', () => {
     expect(isValidBusinessEmail('not-an-email')).toBe(false);
   });
 
-  it('requires name and business type on step 1', () => {
+  it('requires name, business type, phone, and email on step 1', () => {
     expect(canContinueBusinessInfoStep(INITIAL_SIGN_UP_DATA)).toBe(false);
     expect(
       canContinueBusinessInfoStep({
         ...INITIAL_SIGN_UP_DATA,
         restaurantName: 'Test Kitchen',
         businessType: 'restaurant',
+      }),
+    ).toBe(false);
+    expect(
+      canContinueBusinessInfoStep({
+        ...INITIAL_SIGN_UP_DATA,
+        restaurantName: 'Test Kitchen',
+        businessType: 'restaurant',
+        phone: '8765551234',
+        email: 'owner@restaurant.com',
       }),
     ).toBe(true);
   });
@@ -61,11 +70,13 @@ describe('partner-onboarding-validation', () => {
       restaurantName: 'Test Kitchen',
       businessType: 'restaurant' as const,
       cuisineTypes: [],
+      phone: '8765551234',
+      email: 'owner@restaurant.com',
     };
     expect(canContinueBusinessInfoStep(data)).toBe(true);
   });
 
-  it('does not require phone/email on step 1 (collected on step 5)', () => {
+  it('requires phone and email on step 1', () => {
     const data = {
       ...INITIAL_SIGN_UP_DATA,
       restaurantName: 'Test Kitchen',
@@ -74,7 +85,7 @@ describe('partner-onboarding-validation', () => {
       phone: '',
       email: '',
     };
-    expect(canContinueBusinessInfoStep(data)).toBe(true);
+    expect(canContinueBusinessInfoStep(data)).toBe(false);
     expect(canContinueContactHoursStep(data)).toBe(false);
   });
 });

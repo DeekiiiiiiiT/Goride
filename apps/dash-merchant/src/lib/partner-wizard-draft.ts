@@ -1,11 +1,12 @@
 import type { SignUpFormData } from '../signup/types';
-import type { DayHours } from '../components/onboarding/ContactHoursBrandingContent';
+import type { DayHours } from '../components/onboarding/operating-hours';
 import {
   PARTNER_WIZARD_DRAFT_KEY,
   PARTNER_WIZARD_DRAFT_VERSION,
   clearPartnerWizardDraft,
 } from './partnerAuth';
 import type { WizardStepId } from './partner-onboarding-config';
+import { normalizeWizardStepKey } from './partner-onboarding-config';
 
 export interface PartnerWizardDraft {
   version: number;
@@ -60,7 +61,7 @@ export function loadPartnerWizardDraft(): LoadPartnerWizardDraftResult {
       ok: true,
       draft: {
         version: PARTNER_WIZARD_DRAFT_VERSION,
-        step: parsed.step,
+        step: normalizeWizardStepKey(parsed.step),
         formData: parsed.formData,
         hours: parsed.hours ?? [],
       },
