@@ -2,13 +2,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '@roam/api-client';
 import { supabase } from '@roam/auth-client';
 import { toast } from 'sonner';
-import { Merchant } from '../../hooks/useMerchant';
-import { Order, OrderEvent } from '../../types/order';
+import { Merchant } from '../hooks/useMerchant';
+import { usePageVisibility } from '../hooks/usePageVisibility';
+import { useOrderDetailRealtime } from '../hooks/useMerchantOrdersRealtime';
+import { Order, OrderEvent } from '../types/order';
 import PreparingOrderDetail from '../components/order-detail/PreparingOrderDetail';
 import ReadyOrderDetail from '../components/order-detail/ReadyOrderDetail';
 import PickedUpOrderDetail from '../components/order-detail/PickedUpOrderDetail';
 import CompletedOrderDetail from '../components/order-detail/CompletedOrderDetail';
 import { MaterialIcon } from '../signup/components/MaterialIcon';
+import { merchantOrdersKeys } from '../lib/merchant-orders-query';
+import { resolveOrdersRefetchInterval } from '../lib/merchant-orders-sync-policy';
 
 interface OrderDetailPageProps {
   orderId: string;
@@ -24,9 +28,11 @@ export default function OrderDetailPage({
   onReject,
 }: OrderDetailPageProps) {
   const queryClient = useQueryClient();
+  const isTabVisible = usePageVisibility();
+  const { realtimeStatus } = useOrderDetailRealtime({ orderId });
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['order', orderId],
+    queryKey: merchantOrdersKeys.order(orderId),
     queryFn: async () => {
       const {
         data: { session },
@@ -39,7 +45,8 @@ export default function OrderDetailPage({
       if (!res.ok) throw new Error('Failed to load order');
       return res.json() as Promise<{ order: Order; events: OrderEvent[] }>;
     },
-    refetchInterval: 10000,
+    refetchInterval: resolveOrdersRefetchInterval({ realtimeStatus, isTabVisible }),
+    refetchIntervalInBackground: false,
   });
 
   const updateStatusMutation = useMutation({
@@ -64,8 +71,8 @@ export default function OrderDetailPage({
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['order', orderId] });
-      queryClient.invalidateQueries({ queryKey: ['merchant-orders'] });
+      void queryClient.invalidateQueries({ queryKey: merchantOrdersKeys.order(orderId) });
+      void queryClient.invalidateQueries({ queryKey: merchantOrdersKeys.all });
       toast.success('Order updated');
     },
     onError: (err: Error) => toast.error(err.message),

@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { API_ENDPOINTS } from '@roam/api-client';
 import { supabase } from '@roam/auth-client';
 import { Merchant } from '../hooks/useMerchant';
 import { toast } from 'sonner';
@@ -15,6 +14,9 @@ import OrdersDesktopDashboard from '../components/orders/OrdersDesktopDashboard'
 import { useAcceptingOrdersToggle } from '../hooks/useAcceptingOrdersToggle';
 import { useNotificationSettings } from '../hooks/useNotificationSettings';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
+import { usePageVisibility } from '../hooks/usePageVisibility';
+import { useMerchantActiveOrders } from '../hooks/useMerchantActiveOrders';
+import { useMerchantOrdersRealtime } from '../hooks/useMerchantOrdersRealtime';
 import QueryErrorState from '../components/QueryErrorState';
 import SwipeableOrderCard from '../components/orders/SwipeableOrderCard';
 import { playNewOrderAlert } from '../lib/partner-order-alert';
@@ -36,6 +38,17 @@ import {
 } from '../lib/first-order';
 import { fetchBankAccount } from '../lib/partner-api';
 import { getItemOptionLines, Order } from '../types/order';
+import {
+  fetchMerchantHistoryOrders,
+  merchantOrdersKeys,
+} from '../lib/merchant-orders-query';
+import {
+  computeTodayStats,
+  countOrdersByStatus,
+  filterOrdersByTab,
+  getActiveQueueOrders,
+  sortOrders,
+} from '../lib/merchant-orders-filters';
 
 interface OrdersPageProps {
   merchant: Merchant;
@@ -95,153 +108,93 @@ export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: Or
     useNotificationSettings(merchant.id);
   const storeStatus = getStoreStatus(merchant.is_active, isAcceptingOrders);
   const swipeEnabled = readFlag(merchant.id, 'swipeAcceptOrders');
+  const isTabVisible = usePageVisibility();
+  const [showReconnecting, setShowReconnecting] = useState(false);
 
   useEffect(() => {
     const interval = window.setInterval(() => setTick((value) => value + 1), 1000);
     return () => window.clearInterval(interval);
   }, []);
 
+  const handleRealtimeInsert = useCallback(
+    (payload: { new: Record<string, unknown> }) => {
+      const newOrder = payload.new as Order;
+      setNewOrderIds((prev) => new Set([...prev, newOrder.id]));
+      setDetailOrderId(newOrder.id);
+      setShowOrderDetail(false);
+      setFilter('placed');
+
+      if (shouldShowFirstOrderCelebration(merchant.id)) {
+        setShowFirstOrderCelebration(true);
+        void fetchBankAccount()
+          .then(({ bankAccount }) => {
+            if (!bankAccount && !hasDismissedPayoutSetup(merchant.id)) {
+              pendingPayoutSetupRef.current = true;
+            }
+          })
+          .catch(() => undefined);
+      }
+
+      playNewOrderAlert(notificationSettings, audioRef);
+
+      toast.success(`New order received! #${newOrder.order_number || 'New'}`, {
+        duration: 10000,
+      });
+    },
+    [merchant.id, notificationSettings],
+  );
+
+  const { realtimeStatus } = useMerchantOrdersRealtime({
+    merchantId: merchant.id,
+    onInsert: handleRealtimeInsert,
+  });
+
   useEffect(() => {
-    const channel = supabase
-      .channel('merchant-orders')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'delivery',
-          table: 'orders',
-          filter: `merchant_id=eq.${merchant.id}`,
-        },
-        (payload) => {
-          queryClient.invalidateQueries({ queryKey: ['merchant-orders'] });
+    if (realtimeStatus === 'connected') {
+      setShowReconnecting(false);
+      return;
+    }
 
-          const newOrder = payload.new as Order;
-          setNewOrderIds((prev) => new Set([...prev, newOrder.id]));
-          setDetailOrderId(newOrder.id);
-          setShowOrderDetail(false);
-          setFilter('placed');
-
-          if (shouldShowFirstOrderCelebration(merchant.id)) {
-            setShowFirstOrderCelebration(true);
-            void fetchBankAccount()
-              .then(({ bankAccount }) => {
-                if (!bankAccount && !hasDismissedPayoutSetup(merchant.id)) {
-                  pendingPayoutSetupRef.current = true;
-                }
-              })
-              .catch(() => undefined);
-          }
-
-          playNewOrderAlert(notificationSettings, audioRef);
-
-          toast.success(`New order received! #${newOrder.order_number || 'New'}`, {
-            duration: 10000,
-          });
-        },
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'delivery',
-          table: 'orders',
-          filter: `merchant_id=eq.${merchant.id}`,
-        },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ['merchant-orders'] });
-        },
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [merchant.id, notificationSettings, queryClient]);
+    const timer = window.setTimeout(() => setShowReconnecting(true), 3000);
+    return () => window.clearTimeout(timer);
+  }, [realtimeStatus]);
 
   const isHistoryView = filter === 'completed' || filter === 'cancelled';
 
-  const { data, isLoading, isError, refetch, isFetching } = useQuery({
-    queryKey: ['merchant-orders', filter],
-    queryFn: async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
-
-      const statusParam =
-        filter === 'completed'
-          ? 'delivered'
-          : filter === 'cancelled'
-            ? 'cancelled'
-            : null;
-
-      const url = statusParam
-        ? `${API_ENDPOINTS.delivery}/merchant/orders?status=${statusParam}`
-        : `${API_ENDPOINTS.delivery}/merchant/orders`;
-
-      const res = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-      if (!res.ok) throw new Error('Failed to fetch orders');
-      return res.json();
-    },
+  const {
+    orders: activeOrders,
+    isLoading,
+    isError,
+    refetch,
+    isInitialLoading,
+  } = useMerchantActiveOrders({
+    realtimeStatus,
+    isTabVisible,
     enabled: !isHistoryView,
-    refetchInterval: 10000,
   });
 
   const { data: deliveredHistoryData, isLoading: deliveredHistoryLoading } = useQuery({
-    queryKey: ['merchant-orders', 'history', 'delivered'],
+    queryKey: merchantOrdersKeys.history('delivered'),
     queryFn: async () => {
       const {
         data: { session },
       } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
-
-      const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/orders?status=delivered`, {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-      if (!res.ok) throw new Error('Failed to fetch orders');
-      return res.json();
+      return fetchMerchantHistoryOrders(session, 'delivered');
     },
     enabled: isHistoryView,
   });
 
   const { data: cancelledHistoryData, isLoading: cancelledHistoryLoading } = useQuery({
-    queryKey: ['merchant-orders', 'history', 'cancelled'],
+    queryKey: merchantOrdersKeys.history('cancelled'),
     queryFn: async () => {
       const {
         data: { session },
       } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
-
-      const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/orders?status=cancelled`, {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-      if (!res.ok) throw new Error('Failed to fetch orders');
-      return res.json();
+      return fetchMerchantHistoryOrders(session, 'cancelled');
     },
     enabled: isHistoryView,
-  });
-
-  const { data: activeData } = useQuery({
-    queryKey: ['merchant-orders', 'active'],
-    queryFn: async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
-
-      const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/orders`, {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-      if (!res.ok) throw new Error('Failed to fetch orders');
-      return res.json();
-    },
-    refetchInterval: 10000,
   });
 
   const updateStatusMutation = useMutation({
@@ -282,7 +235,7 @@ export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: Or
       return res.json();
     },
     onSuccess: (_, { orderId, status }) => {
-      queryClient.invalidateQueries({ queryKey: ['merchant-orders'] });
+      void queryClient.invalidateQueries({ queryKey: merchantOrdersKeys.all });
       setDetailOrderId((current) => (current === orderId ? null : current));
       setShowOrderDetail(false);
       setRejectOrderId((current) => (current === orderId ? null : current));
@@ -301,40 +254,19 @@ export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: Or
     },
   });
 
-  const allOrders: Order[] = data?.orders || [];
-  const activeOrders: Order[] = activeData?.orders || allOrders;
+  const allOrders: Order[] = activeOrders;
   const completedHistoryOrders: Order[] = deliveredHistoryData?.orders || [];
   const cancelledHistoryOrders: Order[] = cancelledHistoryData?.orders || [];
   const historyOrders = filter === 'completed' ? completedHistoryOrders : cancelledHistoryOrders;
   const historyLoading =
     filter === 'completed' ? deliveredHistoryLoading : cancelledHistoryLoading;
 
-  const counts = useMemo(
-    () => ({
-      placed: activeOrders.filter((o) => o.status === 'placed').length,
-      preparing: activeOrders.filter((o) => ['accepted', 'preparing'].includes(o.status)).length,
-      ready: activeOrders.filter((o) => o.status === 'ready').length,
-    }),
-    [activeOrders],
+  const counts = useMemo(() => countOrdersByStatus(activeOrders), [activeOrders]);
+
+  const orders = useMemo(
+    () => sortOrders(filterOrdersByTab(allOrders, filter), sortOrder),
+    [allOrders, filter, sortOrder],
   );
-
-  const orders = useMemo(() => {
-    let filtered = allOrders;
-
-    if (filter === 'placed') {
-      filtered = allOrders.filter((o) => o.status === 'placed');
-    } else if (filter === 'preparing') {
-      filtered = allOrders.filter((o) => ['accepted', 'preparing'].includes(o.status));
-    } else if (filter === 'ready') {
-      filtered = allOrders.filter((o) => o.status === 'ready');
-    }
-
-    return [...filtered].sort((a, b) => {
-      const aTime = new Date(a.placed_at || a.created_at).getTime();
-      const bTime = new Date(b.placed_at || b.created_at).getTime();
-      return sortOrder === 'oldest' ? aTime - bTime : bTime - aTime;
-    });
-  }, [allOrders, filter, sortOrder]);
 
   const detailOrder = useMemo(() => {
     if (!detailOrderId) return null;
@@ -411,32 +343,15 @@ export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: Or
     return undefined;
   };
 
-  const queueOrders = useMemo(() => {
-    const active = activeOrders.filter((order) =>
-      ['placed', 'accepted', 'preparing', 'ready'].includes(order.status),
-    );
-    return [...active].sort((a, b) => {
-      const aTime = new Date(a.placed_at || a.created_at).getTime();
-      const bTime = new Date(b.placed_at || b.created_at).getTime();
-      return sortOrder === 'oldest' ? aTime - bTime : bTime - aTime;
-    });
-  }, [activeOrders, sortOrder]);
+  const queueOrders = useMemo(
+    () => getActiveQueueOrders(activeOrders, sortOrder),
+    [activeOrders, sortOrder],
+  );
 
-  const todayStats = useMemo(() => {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-
-    const todayOrders = activeOrders.filter((order) => {
-      const orderDate = new Date(order.placed_at || order.created_at);
-      return orderDate >= todayStart && order.status !== 'cancelled';
-    });
-
-    return {
-      ordersToday: todayOrders.length,
-      revenue: todayOrders.reduce((sum, order) => sum + order.total, 0),
-      avgPrepMins: merchant.avg_prep_time_mins || 12,
-    };
-  }, [activeOrders, merchant.avg_prep_time_mins]);
+  const todayStats = useMemo(
+    () => computeTodayStats(activeOrders, merchant.avg_prep_time_mins || 12),
+    [activeOrders, merchant.avg_prep_time_mins],
+  );
 
   useEffect(() => {
     if (detailOrderId && window.matchMedia('(min-width: 768px)').matches) {
@@ -512,7 +427,7 @@ export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: Or
 
   const { pullToRefreshProps, isRefreshing, pullDistance } = usePullToRefresh({
     onRefresh: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['merchant-orders'] });
+      await queryClient.invalidateQueries({ queryKey: merchantOrdersKeys.all });
       await refetch();
     },
   });
@@ -607,12 +522,19 @@ export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: Or
             {storeStatus === 'open' ? 'Open' : storeStatus === 'paused' ? 'Paused' : 'Closed'}
           </button>
         </div>
-        <button
-          type="button"
-          onClick={() =>
-            updateSettings({ newOrderAlerts: !notificationSettings.newOrderAlerts })
-          }
-          className={`relative flex h-12 w-12 items-center justify-center rounded-full transition-colors duration-150 active:scale-95 ${
+        <div className="flex items-center gap-inset-xs">
+          {showReconnecting && (
+            <span className="flex items-center gap-1 text-label-sm text-on-surface-variant">
+              <MaterialIcon name="sync" size={14} className="animate-spin" />
+              Reconnecting…
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() =>
+              updateSettings({ newOrderAlerts: !notificationSettings.newOrderAlerts })
+            }
+            className={`relative flex h-12 w-12 items-center justify-center rounded-full transition-colors duration-150 active:scale-95 ${
             notificationSettings.newOrderAlerts
               ? 'text-on-surface-variant hover:bg-surface-container-low'
               : 'bg-surface-variant text-tertiary'
@@ -629,20 +551,21 @@ export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: Or
             </span>
           )}
         </button>
+        </div>
       </header>
 
       <main
         className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-inset-sm overflow-y-auto px-margin-mobile py-inset-sm md:max-w-[1200px] md:px-inset-lg"
         {...pullToRefreshProps}
       >
-        {(pullDistance > 0 || isRefreshing || isFetching) && (
+        {(pullDistance > 0 || isRefreshing || isInitialLoading) && (
           <div className="flex items-center justify-center gap-2 py-1 text-label-sm text-on-surface-variant">
             <MaterialIcon
               name="refresh"
-              className={isRefreshing || isFetching ? 'animate-spin' : ''}
+              className={isRefreshing || isInitialLoading ? 'animate-spin' : ''}
               size={16}
             />
-            {isRefreshing || isFetching ? 'Refreshing orders…' : 'Pull to refresh'}
+            {isRefreshing || isInitialLoading ? 'Refreshing orders…' : 'Pull to refresh'}
           </div>
         )}
         {!isHistoryView && (

@@ -20,7 +20,7 @@ export const PARTNER_SMOKE_CHECKLIST = [
   'Onboarding: branding step uploads logo/cover with crop',
   'Onboarding: verification documents upload on step 5',
   'Login → Dashboard loads (approved merchant)',
-  'Orders: realtime new order toast + accept → preparing → ready',
+  'Orders: realtime primary (delivery.orders replication) + adaptive poll fallback; no 10s refresh banner',
   'Menu: add/edit item, toggle sold-out, drag reorder',
   'Analytics: overview + sales breakdown (category, day, hour charts)',
   'Earnings: Account → Earnings loads live or empty state',

@@ -5,6 +5,13 @@ import { supabase } from '@roam/auth-client';
 import { toast } from 'sonner';
 import { Merchant } from '../hooks/useMerchant';
 import { useMerchantMenu } from '../hooks/useMerchantMenu';
+import { usePageVisibility } from '../hooks/usePageVisibility';
+import { useMerchantActiveOrders } from '../hooks/useMerchantActiveOrders';
+import { useMerchantOrdersRealtime } from '../hooks/useMerchantOrdersRealtime';
+import {
+  fetchMerchantHistoryOrders,
+  merchantOrdersKeys,
+} from '../lib/merchant-orders-query';
 import PartnerHeader from '../components/PartnerHeader';
 import DashboardSimpleHeader from '../components/dashboard/DashboardSimpleHeader';
 import StoreClosedView, { PendingAction } from '../components/dashboard/StoreClosedView';
@@ -101,6 +108,13 @@ export default function DashboardPage({ merchant, onNavigate, onOpenMobileNav }:
   const [performanceWarningOpen, setPerformanceWarningOpen] = useState(false);
   const queryClient = useQueryClient();
   const resumeTimerRef = useRef<number | null>(null);
+  const isTabVisible = usePageVisibility();
+  const { realtimeStatus } = useMerchantOrdersRealtime({ merchantId: merchant.id });
+
+  const { orders: activeOrders } = useMerchantActiveOrders({
+    realtimeStatus,
+    isTabVisible,
+  });
 
   useEffect(() => {
     const interval = window.setInterval(() => setTick((value) => value + 1), 1000);
@@ -207,54 +221,25 @@ export default function DashboardPage({ merchant, onNavigate, onOpenMobileNav }:
     };
   }, [merchant.id, merchant.is_accepting_orders]);
 
-  const { data: ordersData } = useQuery({
-    queryKey: ['merchant-orders-all'],
-    queryFn: async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
-
-      const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/orders`, {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-      if (!res.ok) throw new Error('Failed to fetch orders');
-      return res.json();
-    },
-    refetchInterval: 10000,
-  });
-
   const { data: deliveredHistoryData } = useQuery({
-    queryKey: ['merchant-orders', 'history', 'delivered'],
+    queryKey: merchantOrdersKeys.history('delivered'),
     queryFn: async () => {
       const {
         data: { session },
       } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
-
-      const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/orders?status=delivered`, {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-      if (!res.ok) throw new Error('Failed to fetch orders');
-      return res.json();
+      return fetchMerchantHistoryOrders(session, 'delivered');
     },
   });
 
   const { data: cancelledHistoryData } = useQuery({
-    queryKey: ['merchant-orders', 'history', 'cancelled'],
+    queryKey: merchantOrdersKeys.history('cancelled'),
     queryFn: async () => {
       const {
         data: { session },
       } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
-
-      const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/orders?status=cancelled`, {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-      if (!res.ok) throw new Error('Failed to fetch orders');
-      return res.json();
+      return fetchMerchantHistoryOrders(session, 'cancelled');
     },
   });
 
@@ -279,7 +264,6 @@ export default function DashboardPage({ merchant, onNavigate, onOpenMobileNav }:
     resumeMutation.mutate();
   };
 
-  const activeOrders: Order[] = ordersData?.orders || [];
   const completedOrders: Order[] = deliveredHistoryData?.orders || [];
   const cancelledOrders: Order[] = cancelledHistoryData?.orders || [];
 
