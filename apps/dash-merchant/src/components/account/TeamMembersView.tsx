@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import QueryErrorState from '../QueryErrorState';
 import PartnerSkeleton from '../PartnerSkeleton';
-import { toast } from 'sonner';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
 import { useTeamMembers } from '../../hooks/useTeamMembers';
+import EditTeamMemberSheet from './EditTeamMemberSheet';
 import {
   formatAccessSummary,
   formatRoleLabel,
   TEAM_PERMISSIONS,
   TEAM_ROLE_OPTIONS,
+  TeamMember,
   TeamPermission,
   TeamRole,
 } from '../../types/team';
@@ -63,18 +64,23 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
     pendingInvites,
     sendInvite,
     cancelInvite,
+    resendInvite,
     updateMember,
+    removeMember,
     roleDefaultPermissions,
     isLoading,
     isError,
     refetch,
+    isSaving,
   } = useTeamMembers(merchantId);
 
   const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteName, setInviteName] = useState('');
   const [inviteRole, setInviteRole] = useState<TeamRole>('staff');
   const [invitePermissions, setInvitePermissions] = useState<TeamPermission[]>(
     roleDefaultPermissions.staff
   );
+  const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
 
   const handleRoleChange = (role: TeamRole) => {
     setInviteRole(role);
@@ -90,25 +96,22 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
   };
 
   const handleSendInvite = () => {
-    const sent = sendInvite(inviteEmail, inviteRole, invitePermissions);
+    const sent = sendInvite(inviteEmail, inviteRole, invitePermissions, inviteName);
     if (!sent) return;
     setInviteEmail('');
+    setInviteName('');
     setInviteRole('staff');
     setInvitePermissions(roleDefaultPermissions.staff);
   };
 
-  const handleEditMember = (memberId: string, name: string, currentRole: TeamRole) => {
-    const nextRole = window.prompt(
-      `Change role for ${name} (admin, manager, staff)`,
-      currentRole,
-    ) as TeamRole | null;
-    if (!nextRole || !['admin', 'manager', 'staff'].includes(nextRole)) return;
-    updateMember(memberId, { role: nextRole, permissions: roleDefaultPermissions[nextRole] });
+  const handleRemoveMember = (member: TeamMember) => {
+    if (!window.confirm(`Remove ${member.name} from your team?`)) return;
+    removeMember(member.id);
   };
 
   if (isLoading) {
     return (
-      <div className="fixed inset-0 z-[60] flex min-h-dvh flex-col bg-background p-margin-mobile pt-20">
+      <div className="app-fullscreen-screen safe-x safe-t z-[60] bg-background p-margin-mobile pt-20">
         <PartnerSkeleton variant="list" count={4} />
       </div>
     );
@@ -116,15 +119,15 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
 
   if (isError) {
     return (
-      <div className="fixed inset-0 z-[60] flex min-h-dvh flex-col bg-background p-margin-mobile pt-20">
+      <div className="app-fullscreen-screen safe-x safe-t z-[60] bg-background p-margin-mobile pt-20">
         <QueryErrorState message="Could not load team" onRetry={() => refetch()} />
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex min-h-dvh flex-col bg-background pb-[100px] text-on-background md:pb-0">
-      <header className="sticky top-0 z-50 flex h-16 w-full items-center gap-inset-sm border-b border-outline-variant bg-surface/80 px-margin-mobile backdrop-blur-md">
+    <div className="app-fullscreen-screen safe-x safe-t z-[60] bg-background text-on-background">
+      <header className="flex h-16 w-full shrink-0 items-center gap-inset-sm border-b border-outline-variant bg-surface/80 px-margin-mobile backdrop-blur-md md:px-margin-tablet">
         <button
           type="button"
           onClick={onBack}
@@ -136,7 +139,7 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
         <h1 className="text-headline-md font-bold text-primary">Team Members</h1>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl space-y-inset-lg p-margin-mobile md:p-margin-tablet">
+      <main className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-inset-lg overflow-y-auto p-margin-mobile pb-[var(--app-bottom-nav-total)] md:p-margin-tablet">
         <section className="space-y-inset-md">
           <h2 className="text-headline-md text-on-background">Current Team</h2>
           <div className="grid grid-cols-1 gap-inset-md md:grid-cols-2 lg:grid-cols-3">
@@ -158,14 +161,24 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
                   <div className="flex flex-col items-end gap-inset-xs">
                     <RoleBadge role={member.role} filled={member.isOwner} />
                     {!member.isOwner && (
-                      <button
-                        type="button"
-                        onClick={() => handleEditMember(member.id, member.name, member.role)}
-                        className="rounded-full p-1 text-on-surface-variant transition-colors hover:bg-surface-variant hover:text-error"
-                        title="Edit member"
-                      >
-                        <MaterialIcon name="edit" size={20} />
-                      </button>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setEditingMember(member)}
+                          className="rounded-full p-1 text-on-surface-variant transition-colors hover:bg-surface-variant"
+                          title="Edit member"
+                        >
+                          <MaterialIcon name="edit" size={20} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveMember(member)}
+                          className="rounded-full p-1 text-on-surface-variant transition-colors hover:bg-error-container/20 hover:text-error"
+                          title="Remove member"
+                        >
+                          <MaterialIcon name="person_remove" size={20} />
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -178,6 +191,20 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
           <section className="space-y-inset-md lg:col-span-8">
             <h2 className="text-headline-md text-on-background">Invite Team Member</h2>
             <div className="space-y-inset-md rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm">
+              <div className="space-y-inset-xs">
+                <label className="block text-label-md text-on-surface-variant" htmlFor="invite-name">
+                  Name (optional)
+                </label>
+                <input
+                  id="invite-name"
+                  type="text"
+                  value={inviteName}
+                  onChange={(event) => setInviteName(event.target.value)}
+                  placeholder="Colleague name"
+                  className={inputClass}
+                />
+              </div>
+
               <div className="space-y-inset-xs">
                 <label className="block text-label-md text-on-surface-variant" htmlFor="invite-email">
                   Email Address
@@ -265,14 +292,24 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
                         <span className="text-xs text-tertiary">Pending</span>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => cancelInvite(invite.id)}
-                      className="flex h-10 w-10 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-error-container/20 hover:text-error"
-                      title="Cancel Invite"
-                    >
-                      <MaterialIcon name="close" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => resendInvite(invite.id)}
+                        className="flex h-10 w-10 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-variant"
+                        title="Resend Invite"
+                      >
+                        <MaterialIcon name="send" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => cancelInvite(invite.id)}
+                        className="flex h-10 w-10 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-error-container/20 hover:text-error"
+                        title="Cancel Invite"
+                      >
+                        <MaterialIcon name="close" />
+                      </button>
+                    </div>
                   </div>
                 ))
               )}
@@ -280,6 +317,17 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
           </section>
         </div>
       </main>
+      {editingMember && (
+        <EditTeamMemberSheet
+          member={editingMember}
+          isSaving={isSaving}
+          onClose={() => setEditingMember(null)}
+          onSave={(updates) => {
+            updateMember(editingMember.id, updates);
+            setEditingMember(null);
+          }}
+        />
+      )}
     </div>
   );
 }

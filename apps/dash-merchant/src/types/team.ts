@@ -2,6 +2,12 @@ export type TeamRole = 'staff' | 'manager' | 'admin';
 
 export type TeamPermission = 'orders' | 'menu' | 'analytics' | 'payouts';
 
+export interface MerchantMembership {
+  role: TeamRole;
+  permissions: TeamPermission[];
+  is_owner: boolean;
+}
+
 export interface TeamMember {
   id: string;
   name: string;
@@ -16,6 +22,8 @@ export interface PendingInvite {
   email: string;
   role: TeamRole;
   permissions: TeamPermission[];
+  emailSent?: boolean;
+  emailSentAt?: string;
 }
 
 export interface TeamData {

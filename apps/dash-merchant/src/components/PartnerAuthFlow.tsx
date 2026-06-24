@@ -7,9 +7,10 @@ type AuthStep = 'welcome' | 'onboarding' | 'login';
 
 interface PartnerAuthFlowProps {
   onLoginSuccess: () => void;
+  inviteMode?: boolean;
 }
 
-export default function PartnerAuthFlow({ onLoginSuccess }: PartnerAuthFlowProps) {
+export default function PartnerAuthFlow({ onLoginSuccess, inviteMode = false }: PartnerAuthFlowProps) {
   const [step, setStep] = useState<AuthStep>('welcome');
   const [signUpMode, setSignUpMode] = useState(false);
 
@@ -39,6 +40,7 @@ export default function PartnerAuthFlow({ onLoginSuccess }: PartnerAuthFlowProps
   return (
     <LoginPage
       initialSignUp={signUpMode}
+      inviteMode={inviteMode}
       onBack={() => setStep(signUpMode ? 'onboarding' : 'welcome')}
       onApply={() => setStep('onboarding')}
       onSuccess={onLoginSuccess}

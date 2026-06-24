@@ -13,6 +13,16 @@ async function fetchTeam(): Promise<TeamData> {
   return deliveryFetch('/merchant/team') as Promise<TeamData>;
 }
 
+interface InviteResponse {
+  invite: {
+    id: string;
+    email: string;
+    role: string;
+    permissions: string[];
+    emailSent?: boolean;
+  };
+}
+
 export function useTeamMembers(_merchantId: string) {
   const queryClient = useQueryClient();
   const query = useQuery({
@@ -25,20 +35,26 @@ export function useTeamMembers(_merchantId: string) {
   const inviteMutation = useMutation({
     mutationFn: async ({
       email,
+      name,
       role,
       permissions,
     }: {
       email: string;
+      name?: string;
       role: TeamRole;
       permissions: TeamPermission[];
     }) =>
       deliveryFetch('/merchant/team/invites', {
         method: 'POST',
-        body: JSON.stringify({ email, role, permissions }),
-      }),
-    onSuccess: () => {
+        body: JSON.stringify({ email, name, role, permissions }),
+      }) as Promise<InviteResponse>,
+    onSuccess: (data) => {
       invalidate();
-      toast.success('Invite sent');
+      if (data.invite.emailSent === false) {
+        toast.warning('Invite saved but email could not be sent');
+      } else {
+        toast.success('Invite sent');
+      }
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -53,13 +69,30 @@ export function useTeamMembers(_merchantId: string) {
     onError: (error: Error) => toast.error(error.message),
   });
 
+  const resendInviteMutation = useMutation({
+    mutationFn: async (inviteId: string) =>
+      deliveryFetch(`/merchant/team/invites/${inviteId}/resend`, {
+        method: 'POST',
+        body: '{}',
+      }) as Promise<InviteResponse>,
+    onSuccess: (data) => {
+      invalidate();
+      if (data.invite.emailSent === false) {
+        toast.warning('Invite updated but email could not be sent');
+      } else {
+        toast.success('Invite resent');
+      }
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
   const updateMemberMutation = useMutation({
     mutationFn: async ({
       memberId,
       updates,
     }: {
       memberId: string;
-      updates: Partial<Pick<TeamMember, 'permissions' | 'role'>>;
+      updates: Partial<Pick<TeamMember, 'permissions' | 'role' | 'name'>>;
     }) =>
       deliveryFetch(`/merchant/team/members/${memberId}`, {
         method: 'PATCH',
@@ -72,13 +105,28 @@ export function useTeamMembers(_merchantId: string) {
     onError: (error: Error) => toast.error(error.message),
   });
 
-  const sendInvite = (email: string, role: TeamRole, permissions: TeamPermission[]) => {
+  const removeMemberMutation = useMutation({
+    mutationFn: async (memberId: string) =>
+      deliveryFetch(`/merchant/team/members/${memberId}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      invalidate();
+      toast.success('Team member removed');
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const sendInvite = (
+    email: string,
+    role: TeamRole,
+    permissions: TeamPermission[],
+    name?: string,
+  ) => {
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) {
       toast.error('Enter an email address');
       return false;
     }
-    inviteMutation.mutate({ email: normalizedEmail, role, permissions });
+    inviteMutation.mutate({ email: normalizedEmail, name: name?.trim() || undefined, role, permissions });
     return true;
   };
 
@@ -86,11 +134,19 @@ export function useTeamMembers(_merchantId: string) {
     cancelInviteMutation.mutate(inviteId);
   };
 
+  const resendInvite = (inviteId: string) => {
+    resendInviteMutation.mutate(inviteId);
+  };
+
   const updateMember = (
     memberId: string,
-    updates: Partial<Pick<TeamMember, 'permissions' | 'role'>>,
+    updates: Partial<Pick<TeamMember, 'permissions' | 'role' | 'name'>>,
   ) => {
     updateMemberMutation.mutate({ memberId, updates });
+  };
+
+  const removeMember = (memberId: string) => {
+    removeMemberMutation.mutate(memberId);
   };
 
   return {
@@ -101,7 +157,13 @@ export function useTeamMembers(_merchantId: string) {
     refetch: query.refetch,
     sendInvite,
     cancelInvite,
+    resendInvite,
     updateMember,
+    removeMember,
     roleDefaultPermissions: ROLE_DEFAULT_PERMISSIONS,
+    isSaving:
+      inviteMutation.isPending ||
+      updateMemberMutation.isPending ||
+      removeMemberMutation.isPending,
   };
 }

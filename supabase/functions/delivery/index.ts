@@ -13,7 +13,11 @@ import { cors } from "https://deno.land/x/hono@v4.3.11/middleware.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { jwtPrimaryRole } from "../_shared/authEdge.ts";
 import { requireProductAdmin } from "../_shared/productAdmin.ts";
-import { resolveMerchantAccess } from "./merchantAuth.ts";
+import { resolveMerchantAccess, requireResolvedMerchantWithPermission, requireMerchantPermission, type TeamPermission } from "./merchantAuth.ts";
+import {
+  registerMerchantTeamRoutes,
+  getPendingTeamInviteForProfile,
+} from "./merchantTeam.ts";
 
 const app = new Hono().basePath("/delivery");
 
@@ -171,10 +175,19 @@ app.get("/merchant/profile", async (c) => {
         membership: { role: "admin", permissions: ["orders", "menu", "analytics", "payouts"], is_owner: true },
       });
     }
+    const pendingTeamInvite = await getPendingTeamInviteForProfile(getServiceSupabase, user.email);
+    if (pendingTeamInvite) {
+      return c.json({ error: "No merchant found", pendingTeamInvite }, 404);
+    }
     return c.json({ error: "No merchant found" }, 404);
   }
 
-  return c.json({ merchant: resolved.merchant, membership: resolved.membership });
+  const pendingTeamInvite = await getPendingTeamInviteForProfile(getServiceSupabase, user.email);
+  return c.json({
+    merchant: resolved.merchant,
+    membership: resolved.membership,
+    ...(pendingTeamInvite ? { pendingTeamInvite } : {}),
+  });
 });
 
 // Resubmit a rejected application
@@ -240,8 +253,26 @@ async function getMerchantForUser(
   return resolved.merchant;
 }
 
-async function getMerchantAccessForUser(userId: string, userEmail?: string | null) {
-  return resolveMerchantAccess(userId, userEmail);
+  authHeader: string,
+  merchantId: string,
+  permission?: TeamPermission,
+): Promise<
+  | { ok: true; merchant: Record<string, unknown> }
+  | { ok: false; status: number; message: string }
+> {
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, status: 401, message: "Unauthorized" };
+
+  const resolved = await resolveMerchantAccess(user.id, user.email);
+  if (!resolved || String(resolved.merchant.id) !== merchantId) {
+    return { ok: false, status: 403, message: "Forbidden" };
+  }
+  if (permission && !requireMerchantPermission(resolved.membership, permission)) {
+    return { ok: false, status: 403, message: "Forbidden" };
+  }
+
+  return { ok: true, merchant: resolved.merchant };
 }
 
 async function requireOwnedMerchant(
@@ -251,16 +282,7 @@ async function requireOwnedMerchant(
   | { ok: true; merchant: Record<string, unknown> }
   | { ok: false; status: number; message: string }
 > {
-  const supabase = getSupabase(authHeader);
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { ok: false, status: 401, message: "Unauthorized" };
-
-  const merchant = await getMerchantForUser(supabase, user.id, user.email);
-  if (!merchant || String(merchant.id) !== merchantId) {
-    return { ok: false, status: 403, message: "Forbidden" };
-  }
-
-  return { ok: true, merchant };
+  return requireMerchantForId(authHeader, merchantId);
 }
 
 // ============================================================================
@@ -337,7 +359,7 @@ app.post("/merchants/:merchantId/categories", async (c) => {
   if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
 
   const { merchantId } = c.req.param();
-  const access = await requireOwnedMerchant(authHeader, merchantId);
+  const access = await requireMerchantForId(authHeader, merchantId, "menu");
   if (!access.ok) return c.json({ error: access.message }, access.status);
 
   const body = await c.req.json();
@@ -364,7 +386,7 @@ app.put("/merchants/:merchantId/categories/:categoryId", async (c) => {
   if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
 
   const { merchantId, categoryId } = c.req.param();
-  const access = await requireOwnedMerchant(authHeader, merchantId);
+  const access = await requireMerchantForId(authHeader, merchantId, "menu");
   if (!access.ok) return c.json({ error: access.message }, access.status);
 
   const body = await c.req.json();
@@ -392,7 +414,7 @@ app.delete("/merchants/:merchantId/categories/:categoryId", async (c) => {
   if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
 
   const { merchantId, categoryId } = c.req.param();
-  const access = await requireOwnedMerchant(authHeader, merchantId);
+  const access = await requireMerchantForId(authHeader, merchantId, "menu");
   if (!access.ok) return c.json({ error: access.message }, access.status);
 
   const serviceSb = getServiceSupabase();
@@ -418,12 +440,15 @@ app.delete("/merchants/:merchantId/categories/:categoryId", async (c) => {
 app.post("/merchants/:merchantId/items", async (c) => {
   const authHeader = c.req.header("Authorization");
   if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
-  
-  const supabase = getSupabase(authHeader);
+
   const { merchantId } = c.req.param();
+  const access = await requireMerchantForId(authHeader, merchantId, "menu");
+  if (!access.ok) return c.json({ error: access.message }, access.status);
+
+  const serviceSb = getServiceSupabase();
   const body = await c.req.json();
   
-  const { data, error } = await supabase
+  const { data, error } = await serviceSb
     .from("menu_items")
     .insert({
       merchant_id: merchantId,
@@ -449,15 +474,19 @@ app.post("/merchants/:merchantId/items", async (c) => {
 app.put("/merchants/:merchantId/items/:itemId", async (c) => {
   const authHeader = c.req.header("Authorization");
   if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
-  
-  const supabase = getSupabase(authHeader);
-  const { itemId } = c.req.param();
+
+  const { merchantId, itemId } = c.req.param();
+  const access = await requireMerchantForId(authHeader, merchantId, "menu");
+  if (!access.ok) return c.json({ error: access.message }, access.status);
+
+  const serviceSb = getServiceSupabase();
   const body = await c.req.json();
   
-  const { data, error } = await supabase
+  const { data, error } = await serviceSb
     .from("menu_items")
     .update(body)
     .eq("id", itemId)
+    .eq("merchant_id", merchantId)
     .select()
     .single();
   
@@ -469,14 +498,17 @@ app.put("/merchants/:merchantId/items/:itemId", async (c) => {
 app.delete("/merchants/:merchantId/items/:itemId", async (c) => {
   const authHeader = c.req.header("Authorization");
   if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
-  
-  const supabase = getSupabase(authHeader);
-  const { itemId } = c.req.param();
-  
-  const { error } = await supabase
+
+  const { merchantId, itemId } = c.req.param();
+  const access = await requireMerchantForId(authHeader, merchantId, "menu");
+  if (!access.ok) return c.json({ error: access.message }, access.status);
+
+  const serviceSb = getServiceSupabase();
+  const { error } = await serviceSb
     .from("menu_items")
     .delete()
-    .eq("id", itemId);
+    .eq("id", itemId)
+    .eq("merchant_id", merchantId);
   
   if (error) return c.json({ error: error.message }, 500);
   return c.json({ success: true });
@@ -491,10 +523,10 @@ app.get("/merchant/menu", async (c) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-  const merchant = await getMerchantForUser(supabase, user.id, user.email);
-  if (!merchant) return c.json({ error: "Not a merchant" }, 403);
+  const access = await requireResolvedMerchantWithPermission(user.id, user.email, "menu");
+  if (!access.ok) return c.json({ error: access.message }, access.status);
 
-  const merchantId = merchant.id as string;
+  const merchantId = access.resolved.merchant.id as string;
   const serviceSb = getServiceSupabase();
 
   const { data: categories, error: catError } = await serviceSb
@@ -515,7 +547,7 @@ app.get("/merchant/menu", async (c) => {
   if (itemError) return c.json({ error: itemError.message }, 500);
 
   return c.json({
-    merchant,
+    merchant: access.resolved.merchant,
     categories: categories || [],
     items: items || [],
   });
@@ -530,10 +562,10 @@ app.put("/merchant/menu/reorder", async (c) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-  const merchant = await getMerchantForUser(supabase, user.id, user.email);
-  if (!merchant) return c.json({ error: "Not a merchant" }, 403);
+  const access = await requireResolvedMerchantWithPermission(user.id, user.email, "menu");
+  if (!access.ok) return c.json({ error: access.message }, access.status);
 
-  const merchantId = merchant.id as string;
+  const merchantId = access.resolved.merchant.id as string;
   const body = await c.req.json();
   const categories = Array.isArray(body.categories) ? body.categories : [];
   const items = Array.isArray(body.items) ? body.items : [];
@@ -690,6 +722,11 @@ app.put("/orders/:id/status", async (c) => {
   const { id } = c.req.param();
   const body = await c.req.json();
   const { status, notes, actorType, estimatedPrepTimeMins } = body;
+
+  if (actorType === "merchant") {
+    const access = await requireResolvedMerchantWithPermission(user.id, user.email, "orders");
+    if (!access.ok) return c.json({ error: access.message }, access.status);
+  }
   
   // Valid status transitions
   const validTransitions: Record<string, string[]> = {
@@ -793,15 +830,10 @@ app.get("/merchant/orders", async (c) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   
-  // Get merchant owned by this user
-  const { data: merchant } = await supabase
-    .from("merchants")
-    .select("id")
-    .eq("owner_id", user.id)
-    .single();
-  
-  if (!merchant) return c.json({ error: "Not a merchant" }, 403);
-  
+  const access = await requireResolvedMerchantWithPermission(user.id, user.email, "orders");
+  if (!access.ok) return c.json({ error: access.message }, access.status);
+
+  const merchantId = access.resolved.merchant.id as string;
   const { status, from, to, limit } = c.req.query();
   
   let query = supabase
@@ -810,7 +842,7 @@ app.get("/merchant/orders", async (c) => {
       *,
       customer:customers(id, name, phone)
     `)
-    .eq("merchant_id", merchant.id);
+    .eq("merchant_id", merchantId);
   
   if (status) {
     query = query.eq("status", status);
@@ -1063,10 +1095,10 @@ app.get("/merchant/analytics", async (c) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-  const merchant = await getMerchantForUser(supabase, user.id, user.email);
-  if (!merchant) return c.json({ error: "Not a merchant" }, 403);
+  const access = await requireResolvedMerchantWithPermission(user.id, user.email, "analytics");
+  if (!access.ok) return c.json({ error: access.message }, access.status);
 
-  const merchantId = merchant.id as string;
+  const merchantId = access.resolved.merchant.id as string;
   const { from, to, granularity: rawGranularity } = c.req.query();
   const granularity = rawGranularity === "day" ? "day" : "hour";
 
@@ -1281,9 +1313,10 @@ app.get("/merchant/earnings", async (c) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-  const merchant = await getMerchantForUser(supabase, user.id, user.email);
-  if (!merchant) return c.json({ error: "Not a merchant" }, 403);
+  const access = await requireResolvedMerchantWithPermission(user.id, user.email, "payouts");
+  if (!access.ok) return c.json({ error: access.message }, access.status);
 
+  const merchant = access.resolved.merchant;
   const merchantId = merchant.id as string;
   const commissionRate = Number(merchant.commission_rate ?? 0.15);
   const platformFeePercent = Math.round(commissionRate * 100);
@@ -1411,9 +1444,10 @@ app.get("/merchant/earnings/payouts/:id", async (c) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-  const merchant = await getMerchantForUser(supabase, user.id, user.email);
-  if (!merchant) return c.json({ error: "Not a merchant" }, 403);
+  const access = await requireResolvedMerchantWithPermission(user.id, user.email, "payouts");
+  if (!access.ok) return c.json({ error: access.message }, access.status);
 
+  const merchant = access.resolved.merchant;
   const merchantId = merchant.id as string;
   const payoutId = c.req.param("id");
   const commissionRate = Number(merchant.commission_rate ?? 0.15);
@@ -1476,295 +1510,6 @@ app.get("/merchant/earnings/payouts/:id", async (c) => {
     platformFee,
     netAmount,
   });
-});
-
-// ============================================================================
-// Merchant team
-// ============================================================================
-
-const VALID_TEAM_ROLES = new Set(["staff", "manager", "admin"]);
-const VALID_TEAM_PERMISSIONS = new Set(["orders", "menu", "analytics", "payouts"]);
-
-function mapTeamMember(row: Record<string, unknown>) {
-  return {
-    id: String(row.id),
-    name: String(row.name),
-    email: row.email ? String(row.email) : undefined,
-    role: String(row.role),
-    permissions: (row.permissions as string[]) || [],
-    isOwner: Boolean(row.is_owner),
-  };
-}
-
-function mapTeamInvite(row: Record<string, unknown>) {
-  return {
-    id: String(row.id),
-    email: String(row.email),
-    role: String(row.role),
-    permissions: (row.permissions as string[]) || [],
-  };
-}
-
-app.get("/merchant/team", async (c) => {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
-
-  const supabase = getSupabase(authHeader);
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-
-  const merchant = await getMerchantForUser(supabase, user.id, user.email);
-  if (!merchant) return c.json({ error: "Not a merchant" }, 403);
-
-  const merchantId = merchant.id as string;
-  const [membersRes, invitesRes] = await Promise.all([
-    supabase
-      .from("merchant_team_members")
-      .select("*")
-      .eq("merchant_id", merchantId)
-      .order("is_owner", { ascending: false })
-      .order("created_at", { ascending: true }),
-    supabase
-      .from("merchant_team_invites")
-      .select("*")
-      .eq("merchant_id", merchantId)
-      .eq("status", "pending")
-      .order("created_at", { ascending: false }),
-  ]);
-
-  if (membersRes.error) return c.json({ error: membersRes.error.message }, 500);
-  if (invitesRes.error) return c.json({ error: invitesRes.error.message }, 500);
-
-  return c.json({
-    members: (membersRes.data || []).map((row) =>
-      mapTeamMember(row as Record<string, unknown>)
-    ),
-    pendingInvites: (invitesRes.data || []).map((row) =>
-      mapTeamInvite(row as Record<string, unknown>)
-    ),
-  });
-});
-
-app.post("/merchant/team/invites", async (c) => {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
-
-  const supabase = getSupabase(authHeader);
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-
-  const merchant = await getMerchantForUser(supabase, user.id, user.email);
-  if (!merchant) return c.json({ error: "Not a merchant" }, 403);
-
-  const body = await c.req.json();
-  const email = String(body.email || "").trim().toLowerCase();
-  const role = String(body.role || "staff");
-  const permissions = Array.isArray(body.permissions) ? body.permissions : [];
-
-  if (!email) return c.json({ error: "Email is required" }, 400);
-  if (!VALID_TEAM_ROLES.has(role)) return c.json({ error: "Invalid role" }, 400);
-  if (!permissions.every((p: string) => VALID_TEAM_PERMISSIONS.has(p))) {
-    return c.json({ error: "Invalid permissions" }, 400);
-  }
-
-  const merchantId = merchant.id as string;
-  const { data: existingMember } = await supabase
-    .from("merchant_team_members")
-    .select("id")
-    .eq("merchant_id", merchantId)
-    .ilike("email", email)
-    .maybeSingle();
-
-  if (existingMember) {
-    return c.json({ error: "This email already has access" }, 409);
-  }
-
-  const { data: existingInvite } = await supabase
-    .from("merchant_team_invites")
-    .select("id")
-    .eq("merchant_id", merchantId)
-    .eq("status", "pending")
-    .ilike("email", email)
-    .maybeSingle();
-
-  if (existingInvite) {
-    return c.json({ error: "A pending invite already exists for this email" }, 409);
-  }
-
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 14);
-
-  const { data, error } = await supabase
-    .from("merchant_team_invites")
-    .insert({
-      merchant_id: merchantId,
-      email,
-      role,
-      permissions,
-      status: "pending",
-      invited_by: user.id,
-      expires_at: expiresAt.toISOString(),
-    })
-    .select()
-    .single();
-
-  if (error) return c.json({ error: error.message }, 500);
-  return c.json({ invite: mapTeamInvite(data as Record<string, unknown>) }, 201);
-});
-
-app.delete("/merchant/team/invites/:id", async (c) => {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
-
-  const supabase = getSupabase(authHeader);
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-
-  const merchant = await getMerchantForUser(supabase, user.id, user.email);
-  if (!merchant) return c.json({ error: "Not a merchant" }, 403);
-
-  const inviteId = c.req.param("id");
-  const { error } = await supabase
-    .from("merchant_team_invites")
-    .update({ status: "cancelled" })
-    .eq("id", inviteId)
-    .eq("merchant_id", merchant.id as string)
-    .eq("status", "pending");
-
-  if (error) return c.json({ error: error.message }, 500);
-  return c.json({ ok: true });
-});
-
-app.patch("/merchant/team/members/:id", async (c) => {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
-
-  const supabase = getSupabase(authHeader);
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-
-  const merchant = await getMerchantForUser(supabase, user.id, user.email);
-  if (!merchant) return c.json({ error: "Not a merchant" }, 403);
-
-  const memberId = c.req.param("id");
-  const body = await c.req.json();
-  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
-
-  if (body.role != null) {
-    if (!VALID_TEAM_ROLES.has(String(body.role))) {
-      return c.json({ error: "Invalid role" }, 400);
-    }
-    updates.role = body.role;
-  }
-  if (body.permissions != null) {
-    if (!Array.isArray(body.permissions) ||
-      !body.permissions.every((p: string) => VALID_TEAM_PERMISSIONS.has(p))) {
-      return c.json({ error: "Invalid permissions" }, 400);
-    }
-    updates.permissions = body.permissions;
-  }
-
-  const { data: member } = await supabase
-    .from("merchant_team_members")
-    .select("is_owner")
-    .eq("id", memberId)
-    .eq("merchant_id", merchant.id as string)
-    .single();
-
-  if (!member) return c.json({ error: "Member not found" }, 404);
-  if ((member as Record<string, unknown>).is_owner) {
-    return c.json({ error: "Cannot modify owner" }, 400);
-  }
-
-  const { data, error } = await supabase
-    .from("merchant_team_members")
-    .update(updates)
-    .eq("id", memberId)
-    .eq("merchant_id", merchant.id as string)
-    .select()
-    .single();
-
-  if (error) return c.json({ error: error.message }, 500);
-  return c.json({ member: mapTeamMember(data as Record<string, unknown>) });
-});
-
-app.get("/merchant/team/invites/pending", async (c) => {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
-  const supabase = getSupabase(authHeader);
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user?.email) return c.json({ error: "Unauthorized" }, 401);
-
-  const sb = getServiceSupabase();
-  const email = user.email.trim().toLowerCase();
-  const { data, error } = await sb
-    .from("merchant_team_invites")
-    .select("*, merchants(name)")
-    .eq("status", "pending")
-    .ilike("email", email);
-  if (error) return c.json({ error: error.message }, 500);
-  return c.json({ invites: data ?? [] });
-});
-
-app.post("/merchant/team/invites/:id/accept", async (c) => {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
-  const supabase = getSupabase(authHeader);
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user?.email) return c.json({ error: "Unauthorized" }, 401);
-
-  const inviteId = c.req.param("id");
-  const sb = getServiceSupabase();
-  const email = user.email.trim().toLowerCase();
-
-  const { data: invite, error: fetchErr } = await sb
-    .from("merchant_team_invites")
-    .select("*")
-    .eq("id", inviteId)
-    .eq("status", "pending")
-    .ilike("email", email)
-    .single();
-  if (fetchErr || !invite) return c.json({ error: "Invite not found" }, 404);
-
-  const merchantId = (invite as Record<string, unknown>).merchant_id as string;
-  const { data: member, error: memberErr } = await sb
-    .from("merchant_team_members")
-    .insert({
-      merchant_id: merchantId,
-      user_id: user.id,
-      email,
-      name: user.email.split("@")[0],
-      role: (invite as Record<string, unknown>).role,
-      permissions: (invite as Record<string, unknown>).permissions,
-      is_owner: false,
-    })
-    .select()
-    .single();
-  if (memberErr) return c.json({ error: memberErr.message }, 500);
-
-  await sb.from("merchant_team_invites")
-    .update({ status: "accepted" })
-    .eq("id", inviteId);
-
-  return c.json({ member: mapTeamMember(member as Record<string, unknown>) });
-});
-
-app.post("/merchant/team/invites/:id/decline", async (c) => {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
-  const supabase = getSupabase(authHeader);
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user?.email) return c.json({ error: "Unauthorized" }, 401);
-
-  const sb = getServiceSupabase();
-  const { error } = await sb
-    .from("merchant_team_invites")
-    .update({ status: "cancelled" })
-    .eq("id", c.req.param("id"))
-    .eq("status", "pending")
-    .ilike("email", user.email.trim().toLowerCase());
-  if (error) return c.json({ error: error.message }, 500);
-  return c.json({ ok: true });
 });
 
 // ============================================================================
@@ -2051,6 +1796,7 @@ import { registerOrderAdminRoutes } from "./admin/orderRoutes.ts";
 import { registerCustomerAdminRoutes } from "./admin/customerRoutes.ts";
 import { registerFinanceAdminRoutes } from "./admin/financeRoutes.ts";
 registerMerchantApplicationRoutes(app);
+registerMerchantTeamRoutes(app, { getSupabase, getServiceSupabase });
 registerPartnerBusinessTypeRoutes(app);
 registerMerchantAdminRoutes(app);
 registerOrderAdminRoutes(app);

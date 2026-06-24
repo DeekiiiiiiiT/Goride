@@ -2,6 +2,7 @@ import { toast } from 'sonner';
 import { Merchant } from '../../hooks/useMerchant';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
 import { useAcceptingOrdersToggle } from '../../hooks/useAcceptingOrdersToggle';
+import StoreStatusToggle from '../layout/StoreStatusToggle';
 import { getStoreStatus, PartnerTab } from '../../lib/partner-utils';
 import { formatMemberSince } from '../../hooks/useMerchantSettings';
 import SettingsMenuRow from './SettingsMenuRow';
@@ -19,6 +20,7 @@ export type AccountSection =
 
 interface AccountSettingsHubProps {
   merchant: Merchant;
+  isOwner?: boolean;
   onNavigate: (page: PartnerTab) => void;
   onOpenSection: (section: AccountSection) => void;
   onSignOut: () => void;
@@ -28,6 +30,7 @@ interface AccountSettingsHubProps {
 
 export default function AccountSettingsHub({
   merchant,
+  isOwner = false,
   onNavigate,
   onOpenSection,
   onSignOut,
@@ -45,9 +48,10 @@ export default function AccountSettingsHub({
   };
 
   return (
-    <div className="flex min-h-dvh flex-col bg-surface pt-16 text-on-surface antialiased">
-      <header className="safe-t fixed top-0 z-50 flex h-16 w-full items-center justify-between gap-inset-xs border-b border-outline-variant bg-surface px-margin-mobile md:px-margin-tablet">
-        <div className="z-10 flex shrink-0 items-center">
+    <div className="flex min-h-dvh flex-col bg-surface text-on-surface antialiased">
+      <header className="safe-t sticky top-0 z-50 w-full shrink-0 border-b border-outline-variant bg-surface shadow-sm">
+        <div className="safe-x relative flex h-16 w-full items-center justify-between gap-inset-xs md:px-margin-tablet">
+          <div className="z-10 flex shrink-0 items-center">
           <button
             type="button"
             onClick={onOpenMobileNav}
@@ -65,34 +69,23 @@ export default function AccountSettingsHub({
           >
             <MaterialIcon name="storefront" />
           </button>
-        </div>
+          </div>
 
-        <h1 className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-headline-md font-bold text-primary">
-          Roam Dash
-        </h1>
+          <h1 className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-headline-md font-bold text-primary">
+            Roam Dash
+          </h1>
 
-        <div className="z-10 flex shrink-0 items-center gap-0.5">
-          <button
-            type="button"
-            disabled={togglePending}
-            onClick={() => toggleAcceptingOrders(!isAcceptingOrders)}
-            className={`flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 text-label-sm font-semibold ${
-              storeStatus === 'open'
-                ? 'bg-primary-container/15 text-primary-container'
-                : 'bg-surface-container text-on-surface-variant'
-            }`}
-          >
-            <span
-              className={`h-2 w-2 shrink-0 rounded-full ${
-                storeStatus === 'open' ? 'bg-primary-container' : 'bg-outline'
-              }`}
-            />
-            {storeStatus === 'open' ? 'Open' : 'Paused'}
-          </button>
+          <div className="z-10 flex shrink-0 items-center gap-1">
+          <StoreStatusToggle
+            storeStatus={storeStatus}
+            isAcceptingOrders={isAcceptingOrders}
+            onToggle={toggleAcceptingOrders}
+            pending={togglePending}
+          />
           <button
             type="button"
             onClick={() => onNavigate('orders')}
-            className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-high active:scale-95"
+            className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-high active:scale-95"
             aria-label="Notifications"
           >
             <MaterialIcon name="notifications" />
@@ -100,10 +93,11 @@ export default function AccountSettingsHub({
               <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-error" />
             )}
           </button>
+          </div>
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-inset-lg px-margin-mobile py-inset-md md:px-margin-tablet">
+      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-inset-lg px-margin-mobile py-inset-md pb-[var(--app-bottom-nav-total)] md:px-margin-tablet lg:pb-inset-lg">
         <section className="flex flex-col items-center justify-center gap-inset-xs text-center">
           <div className="relative mb-inset-xs h-[120px] w-[120px] rounded-full border border-outline-variant bg-surface p-1 shadow-sm">
             {merchant.logo_url ? (
@@ -159,11 +153,13 @@ export default function AccountSettingsHub({
             label="Bank & Payouts"
             onClick={() => onNavigate('earnings')}
           />
-          <SettingsMenuRow
-            icon="people"
-            label="Team Members"
-            onClick={() => onOpenSection('team')}
-          />
+          {isOwner && (
+            <SettingsMenuRow
+              icon="people"
+              label="Team Members"
+              onClick={() => onOpenSection('team')}
+            />
+          )}
           <SettingsMenuRow
             icon="campaign"
             label="Promotions & Marketing"

@@ -1,5 +1,7 @@
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
 import { Merchant } from '../../hooks/useMerchant';
+import { getStoreStatus } from '../../lib/partner-utils';
+import StoreStatusToggle from './StoreStatusToggle';
 
 type PartnerTopBarVariant = 'merchant' | 'brand';
 
@@ -48,22 +50,15 @@ export default function PartnerTopBar({
       </div>
 
       <div className="flex shrink-0 items-center gap-inset-xs lg:gap-inset-md">
-        <div className="flex items-center gap-inset-xs rounded-full border border-outline-variant bg-surface-container-low px-inset-xs py-[4px]">
-          <span className="hidden text-label-md font-semibold text-on-surface xl:inline">{toggleLabel}</span>
-          <label className="relative inline-flex cursor-pointer items-center">
-            <input
-              type="checkbox"
-              className="peer sr-only"
-              checked={isAcceptingOrders}
-              disabled={togglePending}
-              onChange={(event) => onToggleAcceptingOrders(event.target.checked)}
-            />
-            <div className="peer h-6 w-11 rounded-full bg-surface-variant after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-outline-variant after:bg-white after:transition-all peer-checked:bg-primary-container peer-checked:after:translate-x-full peer-disabled:opacity-50" />
-          </label>
-          <span className="mr-1 text-label-md font-semibold text-primary-container lg:mr-2">
-            {isAcceptingOrders ? 'Open' : 'Paused'}
-          </span>
-        </div>
+        <StoreStatusToggle
+          storeStatus={getStoreStatus(merchant.is_active, isAcceptingOrders)}
+          isAcceptingOrders={isAcceptingOrders}
+          onToggle={onToggleAcceptingOrders}
+          pending={togglePending}
+          size="md"
+          showHeading
+          headingLabel={toggleLabel}
+        />
 
         <div className="flex items-center gap-inset-xs text-on-surface-variant lg:gap-inset-sm">
           <button

@@ -141,8 +141,83 @@ export interface BootstrapMerchantResponse {
   created: boolean;
 }
 
-export function bootstrapPartnerMerchant(): Promise<BootstrapMerchantResponse> {
-  return deliveryFetch('/partner/bootstrap', { method: 'POST', body: '{}' });
+export class PendingTeamInviteError extends Error {
+  inviteToken: string;
+
+  constructor(inviteToken: string) {
+    super('pending_team_invite');
+    this.name = 'PendingTeamInviteError';
+    this.inviteToken = inviteToken;
+  }
+}
+
+export async function bootstrapPartnerMerchant(): Promise<BootstrapMerchantResponse> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_ENDPOINTS.delivery}/partner/bootstrap`, {
+    method: 'POST',
+    headers,
+    body: '{}',
+  });
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 409 && body.error === 'pending_team_invite' && body.inviteToken) {
+    throw new PendingTeamInviteError(String(body.inviteToken));
+  }
+  if (!res.ok) {
+    throw new Error(body.error || `Request failed: ${res.status}`);
+  }
+  return body as BootstrapMerchantResponse;
+}
+
+export interface PendingTeamInviteSummary {
+  id: string;
+  token: string;
+  merchantName: string;
+  role: string;
+  expiresAt?: string;
+}
+
+export interface TeamInvitePreviewData {
+  merchantName: string;
+  role: string;
+  permissions: string[];
+  inviteeEmailMasked: string;
+  expiresAt?: string;
+  isExpired: boolean;
+}
+
+export interface PendingTeamInvite {
+  id: string;
+  email: string;
+  role: string;
+  permissions: string[];
+  token: string;
+  expiresAt?: string;
+  merchantName: string;
+}
+
+export async function fetchTeamInvitePreview(token: string): Promise<{ invite: TeamInvitePreviewData }> {
+  const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/team/invites/preview/${token}`);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(body.error || `Request failed: ${res.status}`);
+  }
+  return body as { invite: TeamInvitePreviewData };
+}
+
+export async function fetchPendingTeamInvites(): Promise<{ invites: PendingTeamInvite[] }> {
+  return deliveryFetch('/merchant/team/invites/pending') as Promise<{ invites: PendingTeamInvite[] }>;
+}
+
+export async function acceptTeamInvite(inviteId: string) {
+  return deliveryFetch(`/merchant/team/invites/${inviteId}/accept`, { method: 'POST', body: '{}' });
+}
+
+export async function declineTeamInvite(inviteId: string) {
+  return deliveryFetch(`/merchant/team/invites/${inviteId}/decline`, { method: 'POST', body: '{}' });
+}
+
+export async function resendTeamInvite(inviteId: string) {
+  return deliveryFetch(`/merchant/team/invites/${inviteId}/resend`, { method: 'POST', body: '{}' });
 }
 
 export function fetchMerchantSettings(): Promise<{

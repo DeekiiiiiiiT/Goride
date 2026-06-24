@@ -26,7 +26,13 @@ import {
   markRestaurantSetupInProgress,
   hasRestaurantSetupInProgress,
 } from './lib/go-live';
-import { bootstrapPartnerMerchant } from './lib/partner-api';
+import { bootstrapPartnerMerchant, PendingTeamInviteError } from './lib/partner-api';
+import TeamInviteLandingPage from './pages/TeamInviteLandingPage';
+import TeamInviteBanner from './components/account/TeamInviteBanner';
+import {
+  parseTeamInviteTokenFromPath,
+  persistTeamInviteToken,
+} from './lib/teamInviteSession';
 import { DashAdminPortal } from './admin/DashAdminPortal';
 import {
   clearPartnerOAuthUrl,
@@ -120,13 +126,23 @@ function DashMerchantApp() {
     return () => window.clearTimeout(timeout);
   }, [oauthReturnPending, authReady, session]);
 
-  const { merchant, membership, isLoading: merchantLoading, refetch } = useMerchant(session);
+  const [inviteTokenOverride, setInviteTokenOverride] = useState<string | null>(
+    () => parseTeamInviteTokenFromPath(),
+  );
+
+  const { merchant, membership, pendingTeamInvite, isLoading: merchantLoading, refetch } =
+    useMerchant(session);
 
   useEffect(() => {
     if (!session?.user) return;
     void bootstrapPartnerMerchant()
       .then(() => refetch())
       .catch((err) => {
+        if (err instanceof PendingTeamInviteError) {
+          persistTeamInviteToken(err.inviteToken);
+          setInviteTokenOverride(err.inviteToken);
+          return;
+        }
         console.error('[partner] bootstrap failed:', err);
       });
   }, [session?.user?.id, refetch]);
@@ -147,9 +163,26 @@ function DashMerchantApp() {
     setCurrentPage('dashboard');
   };
 
-  const isOwner = membership?.is_owner !== false;
+  const isOwner = membership?.is_owner === true;
+  const invitePathToken = parseTeamInviteTokenFromPath();
+  const shouldShowInviteLanding =
+    !!invitePathToken ||
+    (!!session && !merchantLoading && !merchant && !!(inviteTokenOverride || pendingTeamInvite));
 
   const showSplash = !splashComplete || !authReady || (!!session && merchantLoading);
+
+  if (shouldShowInviteLanding) {
+    return (
+      <TeamInviteLandingPage
+        session={session}
+        inviteToken={inviteTokenOverride || pendingTeamInvite?.token || invitePathToken}
+        onAccepted={() => {
+          setInviteTokenOverride(null);
+          void refetch();
+        }}
+      />
+    );
+  }
 
   if (showSplash) {
     return <SplashPage />;
@@ -307,6 +340,7 @@ function DashMerchantApp() {
         return (
           <SettingsPage
             merchant={merchant}
+            isOwner={isOwner}
             onNavigate={handlePartnerNavigate}
             onSignOut={handleSignOut}
             onOpenMobileNav={openMobileNav}
@@ -336,6 +370,9 @@ function DashMerchantApp() {
             : 'partner-main-with-nav flex-1 lg:pb-0'
         }
       >
+        {pendingTeamInvite && (
+          <TeamInviteBanner invite={pendingTeamInvite} onResolved={() => void refetch()} />
+        )}
         {renderPage()}
       </div>
       {currentPage !== 'earnings' && (

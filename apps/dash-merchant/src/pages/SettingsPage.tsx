@@ -14,6 +14,7 @@ import PromotionsView from '../components/account/PromotionsView';
 
 interface SettingsPageProps {
   merchant: Merchant;
+  isOwner?: boolean;
   onNavigate: (page: PartnerTab) => void;
   onSignOut: () => void;
   onOpenMobileNav?: () => void;
@@ -22,12 +23,19 @@ interface SettingsPageProps {
 
 export default function SettingsPage({
   merchant,
+  isOwner = false,
   onNavigate,
   onSignOut,
   onOpenMobileNav,
   notificationCount = 0,
 }: SettingsPageProps) {
   const [activeSection, setActiveSection] = useState<AccountSection | null>(null);
+
+  useEffect(() => {
+    if (activeSection === 'team' && !isOwner) {
+      setActiveSection(null);
+    }
+  }, [activeSection, isOwner]);
 
   useEffect(() => {
     if (activeSection === null) {
@@ -110,7 +118,7 @@ export default function SettingsPage({
     );
   }
 
-  if (activeSection === 'team') {
+  if (activeSection === 'team' && isOwner) {
     return (
       <TeamMembersView
         merchantId={merchant.id}
@@ -150,6 +158,7 @@ export default function SettingsPage({
   return (
     <AccountSettingsHub
       merchant={merchant}
+      isOwner={isOwner}
       onNavigate={onNavigate}
       onOpenSection={setActiveSection}
       onSignOut={onSignOut}

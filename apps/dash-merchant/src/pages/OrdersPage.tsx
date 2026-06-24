@@ -11,6 +11,7 @@ import FirstOrderCelebrationView from '../components/FirstOrderCelebrationView';
 import PayoutSetupSheet from '../components/PayoutSetupSheet';
 import PartnerDesktopShell from '../components/layout/PartnerDesktopShell';
 import OrdersDesktopDashboard from '../components/orders/OrdersDesktopDashboard';
+import StoreStatusToggle from '../components/layout/StoreStatusToggle';
 import { useAcceptingOrdersToggle } from '../hooks/useAcceptingOrdersToggle';
 import { useNotificationSettings } from '../hooks/useNotificationSettings';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
@@ -489,38 +490,25 @@ export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: Or
     </div>
 
     <div className="flex min-h-dvh flex-col bg-background text-on-background antialiased lg:hidden">
-      <header className="safe-t sticky top-0 z-50 mx-auto flex h-16 w-full max-w-full items-center justify-between border-b border-outline-variant bg-surface px-margin-mobile shadow-sm">
+      <header className="safe-t safe-x sticky top-0 z-50 mx-auto flex h-16 w-full max-w-full items-center justify-between border-b border-outline-variant bg-surface shadow-sm">
         <div className="flex min-w-0 items-center gap-inset-xs">
           {onOpenMobileNav && (
             <button
               type="button"
               onClick={onOpenMobileNav}
-              className="btn-touch -ml-1 flex h-10 w-10 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high active:scale-95"
+              className="btn-touch -ml-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high active:scale-95"
               aria-label="Open navigation"
             >
               <MaterialIcon name="menu" size={24} />
             </button>
           )}
-          <h1 className="text-headline-md font-bold text-primary">Orders</h1>
-          <button
-            type="button"
-            disabled={togglePending}
-            onClick={() => toggleAcceptingOrders(!isAcceptingOrders)}
-            className={`ml-inset-xs flex items-center gap-1 rounded-full px-2 py-1 text-label-sm font-semibold ${
-              storeStatus === 'open'
-                ? 'bg-primary-container text-on-primary-container'
-                : storeStatus === 'paused'
-                  ? 'bg-warning/20 text-[#d97706]'
-                  : 'bg-error-container text-on-error-container'
-            }`}
-          >
-            <span
-              className={`h-2 w-2 rounded-full ${
-                storeStatus === 'open' ? 'animate-subtle-pulse bg-on-primary-container' : 'bg-current'
-              }`}
-            />
-            {storeStatus === 'open' ? 'Open' : storeStatus === 'paused' ? 'Paused' : 'Closed'}
-          </button>
+          <h1 className="shrink-0 text-headline-md font-bold text-primary">Orders</h1>
+          <StoreStatusToggle
+            storeStatus={storeStatus}
+            isAcceptingOrders={isAcceptingOrders}
+            onToggle={toggleAcceptingOrders}
+            pending={togglePending}
+          />
         </div>
         <div className="flex items-center gap-inset-xs">
           {showReconnecting && (

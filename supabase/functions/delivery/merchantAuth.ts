@@ -102,3 +102,21 @@ export function requireMerchantPermission(
   if (membership.is_owner || membership.role === "admin") return true;
   return membership.permissions.includes(permission);
 }
+
+export async function requireResolvedMerchantWithPermission(
+  userId: string,
+  userEmail: string | null | undefined,
+  permission: TeamPermission,
+): Promise<
+  | { ok: true; resolved: ResolvedMerchantAccess }
+  | { ok: false; status: number; message: string }
+> {
+  const resolved = await resolveMerchantAccess(userId, userEmail);
+  if (!resolved) {
+    return { ok: false, status: 403, message: "Not a merchant" };
+  }
+  if (!requireMerchantPermission(resolved.membership, permission)) {
+    return { ok: false, status: 403, message: "Forbidden" };
+  }
+  return { ok: true, resolved };
+}

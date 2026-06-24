@@ -23,7 +23,8 @@ import {
   computeApplicationReviewChecklist,
   persistMerchantHoursFromDraft,
 } from "./admin/merchantSetupProgress.ts";
-import { merchantGoLiveRuleFromRow } from "./verticalMetadata.ts";
+import { resolveMerchantAccess, requireResolvedMerchantWithPermission } from "./merchantAuth.ts";
+import { findPendingInviteForEmail } from "./merchantTeam.ts";
 
 type SupabaseClient = ReturnType<typeof createDeliveryClient>;
 
@@ -136,6 +137,25 @@ export function registerMerchantApplicationRoutes(app: Hono) {
     }
 
     const sb = getServiceSupabase();
+    if (user.email) {
+      const pendingInvite = await findPendingInviteForEmail(sb, user.email);
+      if (pendingInvite) {
+        return c.json({
+          error: "pending_team_invite",
+          inviteToken: String(pendingInvite.token),
+        }, 409);
+      }
+
+      const { data: teamMember } = await sb
+        .from("merchant_team_members")
+        .select("merchant_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (teamMember) {
+        return c.json({ error: "Already a team member" }, 409);
+      }
+    }
+
     const insert = buildDraftMerchantInsert(user.id, user.email);
     const { data, error } = await sb
       .from("merchants")
@@ -530,14 +550,14 @@ export function registerMerchantApplicationRoutes(app: Hono) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-    const merchant = await getMerchantForUser(supabase, user.id);
-    if (!merchant) return c.json({ bankAccount: null });
+    const access = await requireResolvedMerchantWithPermission(user.id, user.email, "payouts");
+    if (!access.ok) return c.json({ bankAccount: null });
 
     const payments = getPaymentsSupabase();
     const { data, error } = await payments
       .from("merchant_bank_accounts")
       .select("id, merchant_id, bank_name, account_holder_name, account_last4, routing_number_last4, account_type, is_default, is_verified")
-      .eq("merchant_id", merchant.id)
+      .eq("merchant_id", access.resolved.merchant.id)
       .eq("is_default", true)
       .maybeSingle();
     if (error) return c.json({ error: error.message }, 500);
@@ -551,8 +571,10 @@ export function registerMerchantApplicationRoutes(app: Hono) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-    const merchant = await getMerchantForUser(supabase, user.id);
-    if (!merchant) return c.json({ error: "Merchant not found" }, 404);
+    const access = await requireResolvedMerchantWithPermission(user.id, user.email, "payouts");
+    if (!access.ok) return c.json({ error: access.message }, access.status);
+
+    const merchant = access.resolved.merchant;
 
     const body = await c.req.json().catch(() => ({}));
     const bankName = String(body.bankName || "").trim();

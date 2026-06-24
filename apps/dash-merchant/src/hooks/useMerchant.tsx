@@ -8,6 +8,10 @@ import type {
   VerticalType,
 } from '@roam/types';
 import { Session } from '@supabase/supabase-js';
+import type { PendingTeamInviteSummary } from '../lib/partner-api';
+import type { MerchantMembership, TeamPermission } from '../types/team';
+
+export type { MerchantMembership, TeamPermission };
 
 export type VerificationStatus =
   | 'pending'
@@ -54,17 +58,10 @@ export interface Merchant {
   go_live_rule?: GoLiveRule | null;
 }
 
-export type TeamPermission = 'orders' | 'menu' | 'analytics' | 'payouts';
-
-export interface MerchantMembership {
-  role: 'staff' | 'manager' | 'admin';
-  permissions: TeamPermission[];
-  is_owner: boolean;
-}
-
 export interface MerchantProfileResponse {
   merchant: Merchant;
   membership: MerchantMembership;
+  pendingTeamInvite?: PendingTeamInviteSummary;
 }
 
 export function useMerchant(session: Session | null) {
@@ -75,22 +72,33 @@ export function useMerchant(session: Session | null) {
 
       const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/profile`, {
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${session.access_token}`,
         },
       });
 
-      if (res.status === 404) return null;
+      if (res.status === 404) {
+        const body = await res.json().catch(() => ({}));
+        if (body.pendingTeamInvite) {
+          return {
+            merchant: null,
+            membership: null,
+            pendingTeamInvite: body.pendingTeamInvite as PendingTeamInviteSummary,
+          };
+        }
+        return null;
+      }
       if (!res.ok) throw new Error('Failed to fetch merchant');
 
-      const data = await res.json() as MerchantProfileResponse;
-      return data;
+      const profile = (await res.json()) as MerchantProfileResponse;
+      return profile;
     },
     enabled: !!session,
   });
 
   return {
-    merchant: data?.merchant,
-    membership: data?.membership,
+    merchant: data?.merchant ?? undefined,
+    membership: data?.membership ?? undefined,
+    pendingTeamInvite: data?.pendingTeamInvite,
     isLoading,
     error,
     refetch,

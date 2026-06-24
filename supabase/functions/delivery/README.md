@@ -96,4 +96,23 @@ Response: { ok: true, message: string }
 
 ## SMTP
 
-See original README section for `SMTP_*` env vars for verification emails.
+See original README section for `SMTP_*` env vars for verification emails and **team invite emails**.
+
+## Merchant team invites
+
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| GET | `/merchant/team` | Owner | Roster + pending invites |
+| POST | `/merchant/team/invites` | Owner | Sends SMTP email when configured |
+| POST | `/merchant/team/invites/:id/resend` | Owner | Regenerates token |
+| DELETE | `/merchant/team/invites/:id` | Owner | Cancel pending invite |
+| PATCH | `/merchant/team/members/:id` | Owner | Update role/permissions |
+| DELETE | `/merchant/team/members/:id` | Owner | Remove member |
+| GET | `/merchant/team/invites/preview/:token` | Public | Sanitized invite preview |
+| GET | `/merchant/team/invites/pending` | Invitee | List invites for session email |
+| POST | `/merchant/team/invites/:id/accept` | Invitee | Join store team |
+| POST | `/merchant/team/invites/:id/decline` | Invitee | Decline invite |
+
+Env: `PARTNER_PORTAL_URL` (default `https://partner.roamdash.co`) for invite links.
+
+Hosting: partner SPA must serve `index.html` for `/team-invite/*` paths.

@@ -15,6 +15,7 @@ interface LoginPageProps {
   onSuccess: () => void;
   initialSignUp?: boolean;
   initialEmail?: string;
+  inviteMode?: boolean;
   onBack?: () => void;
   onApply?: () => void;
 }
@@ -49,10 +50,11 @@ export default function LoginPage({
   onSuccess,
   initialSignUp = false,
   initialEmail = '',
+  inviteMode = false,
   onBack,
   onApply,
 }: LoginPageProps) {
-  const [isSignUp, setIsSignUp] = useState(initialSignUp);
+  const [isSignUp, setIsSignUp] = useState(initialSignUp || inviteMode);
   const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -205,6 +207,11 @@ export default function LoginPage({
                 onChange={(e) => setEmail(e.target.value)}
                 required
               />
+              {inviteMode && (
+                <p className="text-body-sm text-on-surface-variant">
+                  Use the same email address that received the team invite.
+                </p>
+              )}
             </div>
 
             {!forgotMode && (

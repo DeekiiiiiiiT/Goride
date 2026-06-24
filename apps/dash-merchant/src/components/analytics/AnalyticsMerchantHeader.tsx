@@ -1,6 +1,7 @@
 import { Merchant } from '../../hooks/useMerchant';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
 import { getStoreStatus } from '../../lib/partner-utils';
+import StoreStatusToggle from '../layout/StoreStatusToggle';
 
 interface AnalyticsMerchantHeaderProps {
   merchant: Merchant;
@@ -20,7 +21,7 @@ export default function AnalyticsMerchantHeader({
   const storeStatus = getStoreStatus(merchant.is_active, isAcceptingOrders);
 
   return (
-    <header className="safe-t fixed top-0 z-50 flex h-12 w-full items-center justify-between border-b border-outline-variant bg-surface px-margin-mobile">
+    <header className="safe-t safe-x fixed top-0 z-50 flex h-12 w-full items-center justify-between border-b border-outline-variant bg-surface">
       <div className="flex min-w-0 items-center gap-inset-xs">
         <button
           type="button"
@@ -41,23 +42,12 @@ export default function AnalyticsMerchantHeader({
         <span className="truncate text-headline-md font-bold text-primary">Roam Dash Merchant</span>
       </div>
 
-      <button
-        type="button"
-        disabled={togglePending}
-        onClick={() => onToggleAcceptingOrders(!isAcceptingOrders)}
-        className={`flex h-8 items-center gap-1 rounded-full px-2 text-label-sm font-semibold transition-colors ${
-          storeStatus === 'open'
-            ? 'bg-primary-container/15 text-primary-container'
-            : 'bg-surface-container text-on-surface-variant'
-        }`}
-      >
-        <span
-          className={`h-2 w-2 rounded-full ${
-            storeStatus === 'open' ? 'bg-primary-container' : 'bg-outline'
-          }`}
-        />
-        {storeStatus === 'open' ? 'Open' : 'Paused'}
-      </button>
+      <StoreStatusToggle
+        storeStatus={storeStatus}
+        isAcceptingOrders={isAcceptingOrders}
+        onToggle={onToggleAcceptingOrders}
+        pending={togglePending}
+      />
     </header>
   );
 }
