@@ -65,6 +65,21 @@ export async function logMerchantAudit(
   await sb.from("merchant_audit_log").insert(opts);
 }
 
+/** denomailer expects a bare email or { mail, name } — not `Name <email>` as one string */
+function normalizeSmtpFrom(raw: string | undefined): string | { mail: string; name?: string } {
+  const trimmed = (raw ?? "").trim().replace(/^["']|["']$/g, "");
+  if (!trimmed) return "";
+
+  const bracketed = trimmed.match(/^(.+?)\s*<([^>]+)>$/);
+  if (bracketed) {
+    const name = bracketed[1].trim().replace(/^["']|["']$/g, "");
+    const mail = bracketed[2].trim();
+    return name ? { mail, name } : mail;
+  }
+
+  return trimmed;
+}
+
 export async function sendNotificationEmail(opts: {
   to: string;
   subject: string;
@@ -75,7 +90,8 @@ export async function sendNotificationEmail(opts: {
   const port = Deno.env.get("SMTP_PORT");
   const user = Deno.env.get("SMTP_USER");
   const pass = Deno.env.get("SMTP_PASS");
-  const from = Deno.env.get("SMTP_FROM") || user;
+  const fromRaw = Deno.env.get("SMTP_FROM") || user;
+  const from = normalizeSmtpFrom(fromRaw);
 
   if (!host || !port || !user || !pass || !from) {
     console.log(`[email] SMTP not configured - skipping send to ${opts.to}`);

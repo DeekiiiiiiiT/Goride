@@ -253,6 +253,7 @@ async function getMerchantForUser(
   return resolved.merchant;
 }
 
+async function requireMerchantForId(
   authHeader: string,
   merchantId: string,
   permission?: TeamPermission,
