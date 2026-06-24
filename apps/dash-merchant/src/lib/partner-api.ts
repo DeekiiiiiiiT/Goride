@@ -1,4 +1,4 @@
-import { API_ENDPOINTS } from '@roam/api-client';
+import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
 import { supabase } from '@roam/auth-client';
 import type { MerchantDocumentType } from '@roam/types';
 import type {
@@ -196,7 +196,9 @@ export interface PendingTeamInvite {
 }
 
 export async function fetchTeamInvitePreview(token: string): Promise<{ invite: TeamInvitePreviewData }> {
-  const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/team/invites/preview/${token}`);
+  const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/team/invites/preview/${token}`, {
+    headers: supabaseAnonFunctionHeaders(),
+  });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(body.error || `Request failed: ${res.status}`);
@@ -210,6 +212,10 @@ export async function fetchPendingTeamInvites(): Promise<{ invites: PendingTeamI
 
 export async function acceptTeamInvite(inviteId: string) {
   return deliveryFetch(`/merchant/team/invites/${inviteId}/accept`, { method: 'POST', body: '{}' });
+}
+
+export async function acceptTeamInviteByToken(token: string) {
+  return deliveryFetch(`/merchant/team/invites/token/${token}/accept`, { method: 'POST', body: '{}' });
 }
 
 export async function declineTeamInvite(inviteId: string) {

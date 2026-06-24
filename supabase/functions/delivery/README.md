@@ -94,9 +94,21 @@ Response: { ok: true, message: string }
 
 `confirm_name` must match the entity display name (or id for drafts). Never deletes `auth.users`.
 
-## SMTP
+## SMTP / Resend
 
-See original README section for `SMTP_*` env vars for verification emails and **team invite emails**.
+Required Edge Function secrets for transactional email (merchant approval, team invites):
+
+| Secret | Example | Notes |
+|--------|---------|-------|
+| `SMTP_HOST` | `smtp.resend.com` | |
+| `SMTP_PORT` | `465` | |
+| `SMTP_USER` | `resend` | Auth username only — **not** used as From address |
+| `SMTP_PASS` | `re_...` | Resend API key |
+| `SMTP_FROM` | `Roam Dash <noreply@roam-s.co>` | **Required** — must be a verified Resend domain |
+| `RESEND_FROM` | (optional) | Overrides `SMTP_FROM` for Resend API sends |
+
+Resend sends use the REST API when `SMTP_HOST` contains `resend.com` and `SMTP_PASS` starts with `re_`.
+Never use the SMTP username (`resend`) as the sender — it is not a valid email address.
 
 ## Merchant team invites
 
@@ -108,8 +120,9 @@ See original README section for `SMTP_*` env vars for verification emails and **
 | DELETE | `/merchant/team/invites/:id` | Owner | Cancel pending invite |
 | PATCH | `/merchant/team/members/:id` | Owner | Update role/permissions |
 | DELETE | `/merchant/team/members/:id` | Owner | Remove member |
-| GET | `/merchant/team/invites/preview/:token` | Public | Sanitized invite preview |
+| GET | `/merchant/team/invites/preview/:token` | Public (anon `apikey` + `Authorization`) | Sanitized invite preview |
 | GET | `/merchant/team/invites/pending` | Invitee | List invites for session email |
+| POST | `/merchant/team/invites/token/:token/accept` | Invitee | Join store team via invite link |
 | POST | `/merchant/team/invites/:id/accept` | Invitee | Join store team |
 | POST | `/merchant/team/invites/:id/decline` | Invitee | Decline invite |
 

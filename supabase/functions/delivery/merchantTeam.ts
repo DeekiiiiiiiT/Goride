@@ -576,6 +576,79 @@ export function registerMerchantTeamRoutes(app: Hono, deps: TeamDeps) {
     return c.json({ invites });
   });
 
+  app.post("/merchant/team/invites/token/:token/accept", async (c) => {
+    const authHeader = c.req.header("Authorization");
+    if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+    const supabase = getSupabaseFromDeps(authHeader);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.email) return c.json({ error: "Unauthorized" }, 401);
+
+    const token = c.req.param("token");
+    const sb = getServiceSb();
+    const email = user.email.trim().toLowerCase();
+
+    const { data: invite, error: fetchErr } = await sb
+      .from("merchant_team_invites")
+      .select("*, merchants(verification_status)")
+      .eq("token", token)
+      .eq("status", "pending")
+      .ilike("email", email)
+      .single();
+
+    if (fetchErr || !invite) {
+      return c.json({ error: "Sign in with the email address that received this invite" }, 403);
+    }
+
+    const row = invite as Record<string, unknown>;
+    const inviteId = String(row.id);
+    if (isInviteExpired(row)) return c.json({ error: "Invite expired" }, 410);
+
+    const merchant = row.merchants as Record<string, unknown> | null;
+    if (!merchant || merchant.verification_status !== "approved") {
+      return c.json({ error: "Store is not available yet" }, 403);
+    }
+
+    const { data: existingMember } = await sb
+      .from("merchant_team_members")
+      .select("id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (existingMember) {
+      return c.json({ error: "You already belong to a store team" }, 409);
+    }
+
+    const merchantId = row.merchant_id as string;
+    const displayName = row.invitee_name
+      ? String(row.invitee_name)
+      : (user.user_metadata?.name as string | undefined) || email.split("@")[0];
+
+    const { data: member, error: memberErr } = await sb
+      .from("merchant_team_members")
+      .insert({
+        merchant_id: merchantId,
+        user_id: user.id,
+        email,
+        name: displayName,
+        role: row.role,
+        permissions: row.permissions,
+        is_owner: false,
+      })
+      .select()
+      .single();
+
+    if (memberErr) return c.json({ error: memberErr.message }, 500);
+
+    await sb.from("merchant_team_invites")
+      .update({
+        status: "accepted",
+        accepted_at: new Date().toISOString(),
+      })
+      .eq("id", inviteId);
+
+    return c.json({ member: mapTeamMember(member as Record<string, unknown>) });
+  });
+
   app.post("/merchant/team/invites/:id/accept", async (c) => {
     const authHeader = c.req.header("Authorization");
     if (!authHeader) return c.json({ error: "Unauthorized" }, 401);

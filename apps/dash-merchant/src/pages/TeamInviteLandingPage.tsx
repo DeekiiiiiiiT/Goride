@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { toast } from 'sonner';
+import { supabase } from '@roam/auth-client';
 import { MaterialIcon } from '../signup/components/MaterialIcon';
 import PartnerAuthFlow from '../components/PartnerAuthFlow';
 import {
-  acceptTeamInvite,
-  fetchPendingTeamInvites,
+  acceptTeamInviteByToken,
   fetchTeamInvitePreview,
   type TeamInvitePreviewData,
 } from '../lib/partner-api';
@@ -32,6 +32,7 @@ export default function TeamInviteLandingPage({
   const [preview, setPreview] = useState<TeamInvitePreviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState(false);
+  const [wrongAccount, setWrongAccount] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const acceptAttempted = useRef(false);
 
@@ -53,31 +54,36 @@ export default function TeamInviteLandingPage({
   }, [token]);
 
   useEffect(() => {
-    if (!session?.user || !token || acceptAttempted.current) return;
+    if (!session?.user || !token || !preview || acceptAttempted.current) return;
     acceptAttempted.current = true;
     void (async () => {
       setClaiming(true);
+      setWrongAccount(false);
       try {
-        const pending = await fetchPendingTeamInvites();
-        const match = pending.invites.find((entry) => entry.token === token);
-        if (!match) {
-          toast.error('Sign in with the email address that received this invite');
-          acceptAttempted.current = false;
-          return;
-        }
-        await acceptTeamInvite(match.id);
+        await acceptTeamInviteByToken(token);
         clearTeamInviteToken();
         clearTeamInvitePath();
-        toast.success(`You joined ${match.merchantName}`);
+        toast.success(`You joined ${preview.merchantName}`);
         onAccepted();
       } catch (err) {
         acceptAttempted.current = false;
-        toast.error(err instanceof Error ? err.message : 'Could not accept invite');
+        const message = err instanceof Error ? err.message : 'Could not accept invite';
+        if (message.includes('email address that received this invite')) {
+          setWrongAccount(true);
+          return;
+        }
+        toast.error(message);
       } finally {
         setClaiming(false);
       }
     })();
-  }, [session?.user, token, onAccepted]);
+  }, [session?.user, token, preview, onAccepted]);
+
+  const handleSignOut = async () => {
+    acceptAttempted.current = false;
+    setWrongAccount(false);
+    await supabase.auth.signOut();
+  };
 
   if (loading) {
     return (
@@ -119,6 +125,22 @@ export default function TeamInviteLandingPage({
           </>
         ) : (
           <p className="text-body-sm text-on-surface-variant">This invite link is invalid or expired.</p>
+        )}
+
+        {wrongAccount && preview && (
+          <div className="space-y-inset-sm rounded-lg border border-error/30 bg-error-container/20 p-inset-md">
+            <p className="text-body-sm text-on-surface">
+              You&apos;re signed in as <strong>{session?.user?.email}</strong>, but this invite was sent to{' '}
+              <strong>{preview.inviteeEmailMasked}</strong>.
+            </p>
+            <button
+              type="button"
+              onClick={() => void handleSignOut()}
+              className="min-h-[44px] w-full rounded-lg border border-outline-variant bg-surface px-inset-md py-2 text-body-md font-semibold text-primary"
+            >
+              Sign out and use invited email
+            </button>
+          </div>
         )}
 
         {!session && preview && (

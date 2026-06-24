@@ -65,8 +65,8 @@ export async function logMerchantAudit(
   await sb.from("merchant_audit_log").insert(opts);
 }
 
-/** denomailer expects a bare email or { mail, name } — not `Name <email>` as one string */
-function normalizeSmtpFrom(raw: string | undefined): string | { mail: string; name?: string } {
+/** denomailer `from` must be a single mail string, e.g. `Name <email@domain.com>` */
+function normalizeSmtpFrom(raw: string | undefined): string {
   const trimmed = (raw ?? "").trim().replace(/^["']|["']$/g, "");
   if (!trimmed) return "";
 
@@ -74,10 +74,72 @@ function normalizeSmtpFrom(raw: string | undefined): string | { mail: string; na
   if (bracketed) {
     const name = bracketed[1].trim().replace(/^["']|["']$/g, "");
     const mail = bracketed[2].trim();
-    return name ? { mail, name } : mail;
+    return name ? `${name} <${mail}>` : mail;
   }
 
+  const embedded = trimmed.match(/<([^>\s]+@[^>\s]+)>/);
+  if (embedded) return embedded[1].trim();
+
+  const loose = trimmed.match(/[^\s<>]+@[^\s<>]+\.[^\s<>]+/);
+  if (loose) return loose[0];
+
   return trimmed;
+}
+
+function isValidFromField(from: string): boolean {
+  if (!from) return false;
+  if (/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(from)) return true;
+  return /^.+\s<[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+>$/.test(from);
+}
+
+function resolveEmailFrom(smtpFromSecret: string, smtpUser: string | undefined): string {
+  const candidates = [
+    smtpFromSecret,
+    Deno.env.get("RESEND_FROM")?.trim(),
+    smtpUser?.includes("@") ? smtpUser : "",
+  ].filter((v): v is string => Boolean(v));
+
+  for (const raw of candidates) {
+    const normalized = normalizeSmtpFrom(raw);
+    if (isValidFromField(normalized)) return normalized;
+  }
+  return "";
+}
+
+async function sendViaResendApi(
+  opts: { to: string; subject: string; html: string; text: string },
+  apiKey: string,
+  from: string,
+): Promise<{ sent: boolean; reason?: string }> {
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from,
+      to: [opts.to],
+      subject: opts.subject,
+      html: opts.html,
+      text: opts.text,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    let reason = body || res.statusText;
+    try {
+      const parsed = JSON.parse(body) as { message?: string };
+      if (parsed.message) reason = parsed.message;
+    } catch {
+      // keep raw body
+    }
+    console.error(`[email] Resend API failed for ${opts.to}:`, reason);
+    return { sent: false, reason };
+  }
+
+  return { sent: true };
 }
 
 export async function sendNotificationEmail(opts: {
@@ -90,12 +152,23 @@ export async function sendNotificationEmail(opts: {
   const port = Deno.env.get("SMTP_PORT");
   const user = Deno.env.get("SMTP_USER");
   const pass = Deno.env.get("SMTP_PASS");
-  const fromRaw = Deno.env.get("SMTP_FROM") || user;
-  const from = normalizeSmtpFrom(fromRaw);
+  const smtpFromSecret = Deno.env.get("SMTP_FROM")?.trim() || "";
+  let from = resolveEmailFrom(smtpFromSecret, user);
+  const useResendApi = Boolean(host?.includes("resend.com") && pass?.startsWith("re_"));
 
-  if (!host || !port || !user || !pass || !from) {
+  if (!from && useResendApi) {
+    // Last resort: verified domain default (override via RESEND_FROM or SMTP_FROM secrets)
+    from = normalizeSmtpFrom("Roam Dash <noreply@roam-s.co>");
+  }
+
+  if (!host || !port || !user || !pass || !from || !isValidFromField(from)) {
     console.log(`[email] SMTP not configured - skipping send to ${opts.to}`);
-    return { sent: false, reason: "smtp_not_configured" };
+    return { sent: false, reason: !isValidFromField(from) ? "invalid_smtp_from" : "smtp_not_configured" };
+  }
+
+  // Resend: prefer REST API (same API key as SMTP_PASS) — avoids denomailer from-field quirks
+  if (useResendApi) {
+    return sendViaResendApi(opts, pass, from);
   }
 
   try {
