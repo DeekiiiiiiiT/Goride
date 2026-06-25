@@ -5,14 +5,19 @@ import { MaterialIcon } from '../../signup/components/MaterialIcon';
 import { useTeamMembers } from '../../hooks/useTeamMembers';
 import EditTeamMemberSheet from './EditTeamMemberSheet';
 import {
+  defaultJobStationForRole,
   formatAccessSummary,
   formatRoleLabel,
+  JobStation,
   TEAM_PERMISSIONS,
   TEAM_ROLE_OPTIONS,
   TeamMember,
   TeamPermission,
   TeamRole,
 } from '../../types/team';
+import JobStationPicker from '../staff-ops/shared/JobStationPicker';
+import JobStationBadge from '../staff-ops/shared/JobStationBadge';
+import { readFlag, setFlag } from '../../lib/partner-feature-flags';
 
 interface TeamMembersViewProps {
   merchantId: string;
@@ -77,14 +82,19 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteName, setInviteName] = useState('');
   const [inviteRole, setInviteRole] = useState<TeamRole>('staff');
+  const [inviteJobStation, setInviteJobStation] = useState<JobStation>('counter');
   const [invitePermissions, setInvitePermissions] = useState<TeamPermission[]>(
     roleDefaultPermissions.staff
+  );
+  const [staffOpsEnabled, setStaffOpsEnabled] = useState(() =>
+    readFlag(merchantId, 'staffOperationsV1'),
   );
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
 
   const handleRoleChange = (role: TeamRole) => {
     setInviteRole(role);
     setInvitePermissions(roleDefaultPermissions[role]);
+    setInviteJobStation(defaultJobStationForRole(role));
   };
 
   const togglePermission = (permission: TeamPermission) => {
@@ -96,11 +106,12 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
   };
 
   const handleSendInvite = () => {
-    const sent = sendInvite(inviteEmail, inviteRole, invitePermissions, inviteName);
+    const sent = sendInvite(inviteEmail, inviteRole, invitePermissions, inviteName, inviteJobStation);
     if (!sent) return;
     setInviteEmail('');
     setInviteName('');
     setInviteRole('staff');
+    setInviteJobStation('counter');
     setInvitePermissions(roleDefaultPermissions.staff);
   };
 
@@ -140,6 +151,29 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
       </header>
 
       <main className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-inset-lg overflow-y-auto p-margin-mobile pb-[var(--app-bottom-nav-total)] md:p-margin-tablet">
+        <section className="rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-md">
+          <label className="flex min-h-[48px] cursor-pointer items-center justify-between gap-inset-md">
+            <div>
+              <p className="text-body-sm font-semibold text-on-background">
+                Enable staff stations (beta)
+              </p>
+              <p className="text-label-sm text-on-surface-variant">
+                Counter and kitchen staff get dedicated order views
+              </p>
+            </div>
+            <input
+              type="checkbox"
+              checked={staffOpsEnabled}
+              onChange={(event) => {
+                const enabled = event.target.checked;
+                setStaffOpsEnabled(enabled);
+                setFlag(merchantId, 'staffOperationsV1', enabled);
+              }}
+              className="h-5 w-5"
+            />
+          </label>
+        </section>
+
         <section className="space-y-inset-md">
           <h2 className="text-headline-md text-on-background">Current Team</h2>
           <div className="grid grid-cols-1 gap-inset-md md:grid-cols-2 lg:grid-cols-3">
@@ -156,6 +190,7 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
                       <p className="text-body-sm text-on-surface-variant">
                         {formatAccessSummary(member.permissions, member.isOwner)}
                       </p>
+                      <JobStationBadge station={member.jobStation} />
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-inset-xs">
@@ -241,6 +276,8 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
                   </div>
                 </div>
               </div>
+
+              <JobStationPicker value={inviteJobStation} onChange={setInviteJobStation} />
 
               <div className="space-y-inset-sm pt-inset-sm">
                 <h4 className="text-label-md text-on-surface-variant">Permissions</h4>

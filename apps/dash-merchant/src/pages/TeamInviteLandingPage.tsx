@@ -97,6 +97,7 @@ export default function TeamInviteLandingPage({
     return (
       <PartnerAuthFlow
         inviteMode
+        onCancel={() => setShowAuth(false)}
         onLoginSuccess={() => setShowAuth(false)}
       />
     );
@@ -119,7 +120,7 @@ export default function TeamInviteLandingPage({
             <p className="text-body-sm text-on-surface-variant">
               Invite sent to {preview.inviteeEmailMasked}
               {preview.expiresAt
-                ? ` · Expires ${new Date(preview.expiresAt).toLocaleDateString()}`
+                ? ` · Expires ${new Date(preview.expiresAt).toLocaleString()}`
                 : ''}
             </p>
           </>
@@ -153,7 +154,7 @@ export default function TeamInviteLandingPage({
               onClick={() => setShowAuth(true)}
               className="min-h-[48px] w-full rounded-lg bg-primary-container px-inset-lg py-3 text-headline-md font-bold text-on-primary shadow-sm"
             >
-              Continue to sign in
+              Sign in to join team
             </button>
           </>
         )}

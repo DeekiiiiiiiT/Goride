@@ -5,6 +5,9 @@ import { Session } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 import DashboardPage from './pages/DashboardPage';
 import OrdersPage from './pages/OrdersPage';
+import CounterOrdersPage from './pages/staff-ops/CounterOrdersPage';
+import KitchenQueuePage from './pages/staff-ops/KitchenQueuePage';
+import { resolveStaffOpsRoute } from './lib/staff-ops-routing';
 import MenuPage from './pages/MenuPage';
 import EarningsPage from './pages/EarningsPage';
 import SettingsPage from './pages/SettingsPage';
@@ -32,6 +35,7 @@ import TeamInviteBanner from './components/account/TeamInviteBanner';
 import {
   parseTeamInviteTokenFromPath,
   persistTeamInviteToken,
+  readTeamInviteToken,
 } from './lib/teamInviteSession';
 import { DashAdminPortal } from './admin/DashAdminPortal';
 import {
@@ -135,6 +139,8 @@ function DashMerchantApp() {
 
   useEffect(() => {
     if (!session?.user) return;
+    // Never auto-create a restaurant draft while staff is accepting a team invite.
+    if (parseTeamInviteTokenFromPath() || readTeamInviteToken()) return;
     void bootstrapPartnerMerchant()
       .then(() => refetch())
       .catch((err) => {
@@ -165,9 +171,17 @@ function DashMerchantApp() {
 
   const isOwner = membership?.is_owner === true;
   const invitePathToken = parseTeamInviteTokenFromPath();
+  const storedInviteToken = readTeamInviteToken();
+  const activeInviteToken =
+    invitePathToken ||
+    inviteTokenOverride ||
+    storedInviteToken ||
+    pendingTeamInvite?.token;
+  const inTeamInviteFlow = !!activeInviteToken || !!pendingTeamInvite;
+
   const shouldShowInviteLanding =
     !!invitePathToken ||
-    (!!session && !merchantLoading && !merchant && !!(inviteTokenOverride || pendingTeamInvite));
+    (!!session && !merchantLoading && !merchant && inTeamInviteFlow);
 
   const showSplash = !splashComplete || !authReady || (!!session && merchantLoading);
 
@@ -175,7 +189,7 @@ function DashMerchantApp() {
     return (
       <TeamInviteLandingPage
         session={session}
-        inviteToken={inviteTokenOverride || pendingTeamInvite?.token || invitePathToken}
+        inviteToken={activeInviteToken}
         onAccepted={() => {
           setInviteTokenOverride(null);
           void refetch();
@@ -212,7 +226,7 @@ function DashMerchantApp() {
     );
   }
 
-  if (!merchant) {
+  if (!merchant && !inTeamInviteFlow) {
     return (
       <UnifiedOnboardingWizard
         session={session}
@@ -300,7 +314,29 @@ function DashMerchantApp() {
             onOpenMobileNav={openMobileNav}
           />
         );
-      case 'orders':
+      case 'orders': {
+        const staffRoute = merchant
+          ? resolveStaffOpsRoute(merchant.id, membership ?? undefined)
+          : null;
+        if (staffRoute === 'counter') {
+          return (
+            <CounterOrdersPage
+              merchant={merchant}
+              staffName={session.user.user_metadata?.name as string | undefined}
+              onNavigate={handlePartnerNavigate}
+              onOpenMobileNav={openMobileNav}
+            />
+          );
+        }
+        if (staffRoute === 'kitchen') {
+          return (
+            <KitchenQueuePage
+              merchant={merchant}
+              onNavigate={handlePartnerNavigate}
+              onOpenMobileNav={openMobileNav}
+            />
+          );
+        }
         return (
           <OrdersPage
             merchant={merchant}
@@ -308,6 +344,7 @@ function DashMerchantApp() {
             onOpenMobileNav={openMobileNav}
           />
         );
+      }
       case 'menu':
         return (
           <MenuPage

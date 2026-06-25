@@ -7,6 +7,7 @@ import {
   TeamMember,
   TeamPermission,
   TeamRole,
+  JobStation,
 } from '../types/team';
 
 async function fetchTeam(): Promise<TeamData> {
@@ -38,15 +39,17 @@ export function useTeamMembers(_merchantId: string) {
       name,
       role,
       permissions,
+      jobStation,
     }: {
       email: string;
       name?: string;
       role: TeamRole;
       permissions: TeamPermission[];
+      jobStation?: JobStation;
     }) =>
       deliveryFetch('/merchant/team/invites', {
         method: 'POST',
-        body: JSON.stringify({ email, name, role, permissions }),
+        body: JSON.stringify({ email, name, role, permissions, jobStation }),
       }) as Promise<InviteResponse>,
     onSuccess: (data) => {
       invalidate();
@@ -92,11 +95,14 @@ export function useTeamMembers(_merchantId: string) {
       updates,
     }: {
       memberId: string;
-      updates: Partial<Pick<TeamMember, 'permissions' | 'role' | 'name'>>;
+      updates: Partial<Pick<TeamMember, 'permissions' | 'role' | 'name' | 'jobStation'>>;
     }) =>
       deliveryFetch(`/merchant/team/members/${memberId}`, {
         method: 'PATCH',
-        body: JSON.stringify(updates),
+        body: JSON.stringify({
+          ...updates,
+          jobStation: updates.jobStation,
+        }),
       }),
     onSuccess: () => {
       invalidate();
@@ -120,13 +126,20 @@ export function useTeamMembers(_merchantId: string) {
     role: TeamRole,
     permissions: TeamPermission[],
     name?: string,
+    jobStation?: JobStation,
   ) => {
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) {
       toast.error('Enter an email address');
       return false;
     }
-    inviteMutation.mutate({ email: normalizedEmail, name: name?.trim() || undefined, role, permissions });
+    inviteMutation.mutate({
+      email: normalizedEmail,
+      name: name?.trim() || undefined,
+      role,
+      permissions,
+      jobStation,
+    });
     return true;
   };
 

@@ -54,7 +54,7 @@ export default function LoginPage({
   onBack,
   onApply,
 }: LoginPageProps) {
-  const [isSignUp, setIsSignUp] = useState(initialSignUp || inviteMode);
+  const [isSignUp, setIsSignUp] = useState(inviteMode ? false : initialSignUp);
   const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -118,11 +118,17 @@ export default function LoginPage({
           email,
           password,
           options: {
-            emailRedirectTo: `${window.location.origin}/`,
+            emailRedirectTo: inviteMode
+              ? `${window.location.origin}${window.location.pathname}`
+              : `${window.location.origin}/`,
           },
         });
         if (error) throw error;
-        toast.success('Account created! Check your email to verify.');
+        toast.success(
+          inviteMode
+            ? 'Account created! Joining your team…'
+            : 'Account created! Check your email to verify.',
+        );
         onSuccess();
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -140,23 +146,33 @@ export default function LoginPage({
 
   const title = forgotMode
     ? 'Reset your password'
-    : isSignUp
-      ? 'Create your account'
-      : 'Welcome back';
+    : inviteMode
+      ? isSignUp
+        ? 'Create your account'
+        : 'Join your team'
+      : isSignUp
+        ? 'Create your account'
+        : 'Welcome back';
 
   const subtitle = forgotMode
     ? "We'll email you a link to reset your password."
-    : isSignUp
-      ? 'Complete registration to submit your application.'
-      : 'Sign in to manage your Roam Dash store.';
+    : inviteMode
+      ? isSignUp
+        ? 'Use the email from your invite. No restaurant setup required.'
+        : 'Sign in with the email that received the team invite.'
+      : isSignUp
+        ? 'Complete registration to submit your application.'
+        : 'Sign in to manage your Roam Dash store.';
 
   const submitLabel = isLoading || forgotLoading
     ? 'Please wait...'
     : forgotMode
       ? 'Send reset email'
-      : isSignUp
-        ? 'Create Account'
-        : 'Sign In';
+      : inviteMode && isSignUp
+        ? 'Create account & join'
+        : isSignUp
+          ? 'Create Account'
+          : 'Sign In';
 
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center bg-[#fafafa] p-margin-mobile antialiased text-on-background safe-t md:p-margin-tablet">
@@ -332,7 +348,35 @@ export default function LoginPage({
         </div>
 
         <div className="mt-inset-lg text-center">
-          {isSignUp ? (
+          {inviteMode ? (
+            !forgotMode && (
+              <p className="text-body-sm text-on-surface-variant">
+                {isSignUp ? (
+                  <>
+                    Already have an account?{' '}
+                    <button
+                      type="button"
+                      onClick={() => setIsSignUp(false)}
+                      className="ml-inset-xs text-label-md font-semibold text-primary transition-colors hover:text-primary-fixed-dim"
+                    >
+                      Sign in
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    First time here?{' '}
+                    <button
+                      type="button"
+                      onClick={() => setIsSignUp(true)}
+                      className="ml-inset-xs text-label-md font-semibold text-primary transition-colors hover:text-primary-fixed-dim"
+                    >
+                      Create account
+                    </button>
+                  </>
+                )}
+              </p>
+            )
+          ) : isSignUp ? (
             <p className="text-body-sm text-on-surface-variant">
               Already have an account?{' '}
               <button

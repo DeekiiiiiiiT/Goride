@@ -41,6 +41,11 @@ export interface Order {
   delivery_address?: string;
   delivery_instructions?: string;
   payment_method: string;
+  lastHandledBy?: {
+    name: string;
+    at: string;
+    action: string;
+  } | null;
 }
 
 export interface OrderEvent {

@@ -2,10 +2,14 @@ export type TeamRole = 'staff' | 'manager' | 'admin';
 
 export type TeamPermission = 'orders' | 'menu' | 'analytics' | 'payouts';
 
+/** Restaurant job station — separate from admin role/permissions. */
+export type JobStation = 'counter' | 'kitchen' | 'manager';
+
 export interface MerchantMembership {
   role: TeamRole;
   permissions: TeamPermission[];
   is_owner: boolean;
+  job_station?: JobStation | null;
 }
 
 export interface TeamMember {
@@ -15,6 +19,7 @@ export interface TeamMember {
   role: TeamRole;
   permissions: TeamPermission[];
   isOwner?: boolean;
+  jobStation?: JobStation | null;
 }
 
 export interface PendingInvite {
@@ -24,6 +29,7 @@ export interface PendingInvite {
   permissions: TeamPermission[];
   emailSent?: boolean;
   emailSentAt?: string;
+  jobStation?: JobStation | null;
 }
 
 export interface TeamData {
@@ -43,6 +49,22 @@ export const TEAM_ROLE_OPTIONS: { value: TeamRole; label: string }[] = [
   { value: 'manager', label: 'Manager' },
   { value: 'admin', label: 'Admin' },
 ];
+
+export const JOB_STATION_OPTIONS: { value: JobStation; label: string; description: string }[] = [
+  { value: 'counter', label: 'Counter', description: 'Accept orders, prep time, driver handoff' },
+  { value: 'kitchen', label: 'Kitchen', description: 'Prep queue only — mark orders ready' },
+  { value: 'manager', label: 'Manager', description: 'Full dashboard access' },
+];
+
+export function defaultJobStationForRole(role: TeamRole): JobStation {
+  if (role === 'staff') return 'counter';
+  return 'manager';
+}
+
+export function formatJobStationLabel(station: JobStation | null | undefined) {
+  if (!station) return 'Legacy (all orders)';
+  return JOB_STATION_OPTIONS.find((entry) => entry.value === station)?.label ?? station;
+}
 
 export const ROLE_DEFAULT_PERMISSIONS: Record<TeamRole, TeamPermission[]> = {
   staff: ['orders'],

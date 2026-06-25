@@ -2,12 +2,22 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 export type TeamPermission = "orders" | "menu" | "analytics" | "payouts";
 export type TeamRole = "staff" | "manager" | "admin";
+export type JobStation = "counter" | "kitchen" | "manager";
 
 export type MerchantMembership = {
   role: TeamRole;
   permissions: TeamPermission[];
   is_owner: boolean;
+  job_station: JobStation | null;
 };
+
+function readJobStation(row: Record<string, unknown>): JobStation | null {
+  const value = row.job_station;
+  if (value === "counter" || value === "kitchen" || value === "manager") {
+    return value;
+  }
+  return null;
+}
 
 export type ResolvedMerchantAccess = {
   merchant: Record<string, unknown>;
@@ -41,6 +51,7 @@ export async function resolveMerchantAccess(
         role: "admin",
         permissions: ["orders", "menu", "analytics", "payouts"],
         is_owner: true,
+        job_station: null,
       },
     };
   }
@@ -61,6 +72,7 @@ export async function resolveMerchantAccess(
         role: ((member as Record<string, unknown>).role as TeamRole) || "staff",
         permissions: ((member as Record<string, unknown>).permissions as TeamPermission[]) || ["orders"],
         is_owner: false,
+        job_station: readJobStation(member as Record<string, unknown>),
       },
     };
   }
@@ -86,6 +98,7 @@ export async function resolveMerchantAccess(
             role: ((pendingMember as Record<string, unknown>).role as TeamRole) || "staff",
             permissions: ((pendingMember as Record<string, unknown>).permissions as TeamPermission[]) || ["orders"],
             is_owner: false,
+            job_station: readJobStation(pendingMember as Record<string, unknown>),
           },
         };
       }

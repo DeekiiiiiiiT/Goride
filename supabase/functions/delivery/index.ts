@@ -172,7 +172,7 @@ app.get("/merchant/profile", async (c) => {
     if (owned) {
       return c.json({
         merchant: owned,
-        membership: { role: "admin", permissions: ["orders", "menu", "analytics", "payouts"], is_owner: true },
+        membership: { role: "admin", permissions: ["orders", "menu", "analytics", "payouts"], is_owner: true, job_station: null },
       });
     }
     const pendingTeamInvite = await getPendingTeamInviteForProfile(getServiceSupabase, user.email);
@@ -823,6 +823,59 @@ app.get("/customer/orders", async (c) => {
 });
 
 // Merchant incoming orders
+async function enrichOrdersWithLastHandledBy(
+  sb: ReturnType<typeof getServiceSupabase>,
+  merchantId: string,
+  orders: Record<string, unknown>[],
+) {
+  if (!orders.length) return orders;
+
+  const orderIds = orders.map((order) => String(order.id));
+  const { data: events } = await sb
+    .from("order_events")
+    .select("order_id, status, actor_id, created_at, actor_type")
+    .in("order_id", orderIds)
+    .eq("actor_type", "merchant")
+    .order("created_at", { ascending: false });
+
+  const { data: members } = await sb
+    .from("merchant_team_members")
+    .select("user_id, name")
+    .eq("merchant_id", merchantId);
+
+  const memberNameByUserId = new Map<string, string>();
+  for (const member of members || []) {
+    const row = member as Record<string, unknown>;
+    if (row.user_id) {
+      memberNameByUserId.set(String(row.user_id), String(row.name));
+    }
+  }
+
+  const latestByOrder = new Map<string, Record<string, unknown>>();
+  for (const event of events || []) {
+    const row = event as Record<string, unknown>;
+    const orderId = String(row.order_id);
+    if (!latestByOrder.has(orderId)) {
+      latestByOrder.set(orderId, row);
+    }
+  }
+
+  return orders.map((order) => {
+    const latest = latestByOrder.get(String(order.id));
+    if (!latest?.actor_id) return order;
+    const name = memberNameByUserId.get(String(latest.actor_id));
+    if (!name) return order;
+    return {
+      ...order,
+      lastHandledBy: {
+        name,
+        at: String(latest.created_at),
+        action: String(latest.status),
+      },
+    };
+  });
+}
+
 app.get("/merchant/orders", async (c) => {
   const authHeader = c.req.header("Authorization");
   if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
@@ -870,7 +923,12 @@ app.get("/merchant/orders", async (c) => {
   const { data: orders, error } = await query.order("created_at", { ascending: true });
   
   if (error) return c.json({ error: error.message }, 500);
-  return c.json({ orders: orders || [] });
+  const enriched = await enrichOrdersWithLastHandledBy(
+    getServiceSupabase(),
+    merchantId,
+    (orders || []) as Record<string, unknown>[],
+  );
+  return c.json({ orders: enriched });
 });
 
 // Available orders for couriers

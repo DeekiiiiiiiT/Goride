@@ -1,12 +1,14 @@
 export type PartnerFeatureFlag =
   | 'menuDragReorder'
   | 'swipeAcceptOrders'
-  | 'webPushNotifications';
+  | 'webPushNotifications'
+  | 'staffOperationsV1';
 
 const FLAG_DEFAULTS: Record<PartnerFeatureFlag, boolean> = {
   menuDragReorder: true,
   swipeAcceptOrders: true,
   webPushNotifications: true,
+  staffOperationsV1: false,
 };
 
 function storageKey(merchantId: string) {
@@ -45,6 +47,7 @@ export function enableAllPartnerFlags(merchantId: string) {
       menuDragReorder: true,
       swipeAcceptOrders: true,
       webPushNotifications: true,
+      staffOperationsV1: true,
     } satisfies Record<PartnerFeatureFlag, boolean>),
   );
 }

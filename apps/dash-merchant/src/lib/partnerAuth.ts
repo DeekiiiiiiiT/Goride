@@ -6,7 +6,11 @@ export const PARTNER_OAUTH_INTENT_LOGIN = 'login';
 
 export function getPartnerAuthRedirectUrl(): string {
   if (typeof window !== 'undefined' && window.location?.origin) {
-    return `${window.location.origin}/`;
+    const { origin, pathname } = window.location;
+    if (pathname.startsWith('/team-invite/')) {
+      return `${origin}${pathname}`;
+    }
+    return `${origin}/`;
   }
   return `${PARTNER_PRODUCTION_ORIGIN}/`;
 }

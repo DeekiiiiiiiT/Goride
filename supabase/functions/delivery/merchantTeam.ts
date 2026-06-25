@@ -8,6 +8,8 @@ import {
 } from "./merchantAuth.ts";
 
 export const VALID_TEAM_ROLES = new Set(["staff", "manager", "admin"]);
+export const TEAM_INVITE_TTL_HOURS = 24;
+export const VALID_JOB_STATIONS = new Set(["counter", "kitchen", "manager"]);
 export const VALID_TEAM_PERMISSIONS = new Set<TeamPermission>([
   "orders",
   "menu",
@@ -16,6 +18,7 @@ export const VALID_TEAM_PERMISSIONS = new Set<TeamPermission>([
 ]);
 
 export function mapTeamMember(row: Record<string, unknown>) {
+  const jobStation = row.job_station;
   return {
     id: String(row.id),
     name: String(row.name),
@@ -23,10 +26,37 @@ export function mapTeamMember(row: Record<string, unknown>) {
     role: String(row.role),
     permissions: (row.permissions as string[]) || [],
     isOwner: Boolean(row.is_owner),
+    jobStation:
+      jobStation === "counter" || jobStation === "kitchen" || jobStation === "manager"
+        ? String(jobStation)
+        : null,
   };
 }
 
+export function defaultJobStationForRole(role: string): string | null {
+  if (role === "staff") return "counter";
+  if (role === "manager" || role === "admin") return "manager";
+  return null;
+}
+
+export function parseJobStationInput(
+  value: unknown,
+  role: string,
+): string | null {
+  if (value == null || value === "") {
+    return defaultJobStationForRole(role);
+  }
+  const station = String(value);
+  if (!VALID_JOB_STATIONS.has(station)) return null;
+  return station;
+}
+
+export function jobStationRequiresOrders(station: string | null): boolean {
+  return station === "counter" || station === "kitchen";
+}
+
 export function mapTeamInvite(row: Record<string, unknown>, emailSent?: boolean) {
+  const jobStation = row.job_station;
   return {
     id: String(row.id),
     email: String(row.email),
@@ -34,6 +64,10 @@ export function mapTeamInvite(row: Record<string, unknown>, emailSent?: boolean)
     permissions: (row.permissions as string[]) || [],
     emailSent: emailSent ?? Boolean(row.email_sent_at),
     emailSentAt: row.email_sent_at ? String(row.email_sent_at) : undefined,
+    jobStation:
+      jobStation === "counter" || jobStation === "kitchen" || jobStation === "manager"
+        ? String(jobStation)
+        : null,
   };
 }
 
@@ -71,6 +105,10 @@ export function isInviteExpired(invite: Record<string, unknown>): boolean {
   return expiresAt.getTime() <= Date.now();
 }
 
+export function teamInviteExpiresAt(): Date {
+  return new Date(Date.now() + TEAM_INVITE_TTL_HOURS * 60 * 60 * 1000);
+}
+
 export function assertOwnerAccess(
   resolved: ResolvedMerchantAccess,
 ): { ok: true } | { ok: false; status: number; message: string } {
@@ -88,10 +126,12 @@ export function renderTeamInviteEmail(opts: {
   expiresAt: Date;
 }): { subject: string; html: string; text: string } {
   const roleLabel = formatTeamRoleLabel(opts.role);
-  const expiryLabel = opts.expiresAt.toLocaleDateString("en-US", {
+  const expiryLabel = opts.expiresAt.toLocaleString("en-US", {
     month: "long",
     day: "numeric",
     year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
   });
   const subject = `You're invited to join ${opts.merchantName} on Roam Dash`;
   const text = [
@@ -253,6 +293,10 @@ export function registerMerchantTeamRoutes(app: Hono, deps: TeamDeps) {
         role: String(row.role),
         permissions: (row.permissions as string[]) || [],
         inviteeEmailMasked: maskEmail(String(row.email)),
+        jobStation:
+          row.job_station === "counter" || row.job_station === "kitchen" || row.job_station === "manager"
+            ? String(row.job_station)
+            : null,
         expiresAt: row.expires_at ? String(row.expires_at) : undefined,
         isExpired: false,
       },
@@ -308,11 +352,18 @@ export function registerMerchantTeamRoutes(app: Hono, deps: TeamDeps) {
     const role = String(body.role || "staff");
     const inviteeName = body.name ? String(body.name).trim() : null;
     const permissions = Array.isArray(body.permissions) ? body.permissions : [];
+    const jobStation = parseJobStationInput(body.jobStation, role);
 
     if (!email) return c.json({ error: "Email is required" }, 400);
     if (!VALID_TEAM_ROLES.has(role)) return c.json({ error: "Invalid role" }, 400);
     if (!permissions.every((p: string) => VALID_TEAM_PERMISSIONS.has(p as TeamPermission))) {
       return c.json({ error: "Invalid permissions" }, 400);
+    }
+    if (body.jobStation != null && body.jobStation !== "" && jobStation == null) {
+      return c.json({ error: "Invalid job station" }, 400);
+    }
+    if (jobStationRequiresOrders(jobStation) && !permissions.includes("orders")) {
+      return c.json({ error: "Counter and kitchen stations require orders permission" }, 400);
     }
 
     const merchantId = access.resolved.merchant.id as string;
@@ -339,8 +390,7 @@ export function registerMerchantTeamRoutes(app: Hono, deps: TeamDeps) {
       return c.json({ error: "A pending invite already exists for this email" }, 409);
     }
 
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 14);
+    const expiresAt = teamInviteExpiresAt();
     const token = generateInviteToken();
 
     const { data, error } = await sb
@@ -350,6 +400,7 @@ export function registerMerchantTeamRoutes(app: Hono, deps: TeamDeps) {
         email,
         role,
         permissions,
+        job_station: jobStation,
         status: "pending",
         invited_by: access.user.id,
         expires_at: expiresAt.toISOString(),
@@ -402,7 +453,12 @@ export function registerMerchantTeamRoutes(app: Hono, deps: TeamDeps) {
     const newToken = generateInviteToken();
     const { data: updated, error } = await sb
       .from("merchant_team_invites")
-      .update({ token: newToken, email_sent_at: null, email_send_error: null })
+      .update({
+        token: newToken,
+        expires_at: teamInviteExpiresAt().toISOString(),
+        email_sent_at: null,
+        email_send_error: null,
+      })
       .eq("id", inviteId)
       .select()
       .single();
@@ -468,6 +524,14 @@ export function registerMerchantTeamRoutes(app: Hono, deps: TeamDeps) {
     if (body.name != null) {
       const name = String(body.name).trim();
       if (name) updates.name = name;
+    }
+    if (body.jobStation !== undefined) {
+      const nextRole = String(body.role ?? updates.role ?? "staff");
+      const station = parseJobStationInput(body.jobStation, nextRole);
+      if (body.jobStation != null && body.jobStation !== "" && station == null) {
+        return c.json({ error: "Invalid job station" }, 400);
+      }
+      updates.job_station = station;
     }
 
     const sb = getServiceSb();
@@ -633,6 +697,7 @@ export function registerMerchantTeamRoutes(app: Hono, deps: TeamDeps) {
         role: row.role,
         permissions: row.permissions,
         is_owner: false,
+        job_station: row.job_station ?? null,
       })
       .select()
       .single();
@@ -703,6 +768,7 @@ export function registerMerchantTeamRoutes(app: Hono, deps: TeamDeps) {
         role: row.role,
         permissions: row.permissions,
         is_owner: false,
+        job_station: row.job_station ?? null,
       })
       .select()
       .single();

@@ -118,7 +118,7 @@ Never use the SMTP username (`resend`) as the sender — it is not a valid email
 | POST | `/merchant/team/invites` | Owner | Sends SMTP email when configured |
 | POST | `/merchant/team/invites/:id/resend` | Owner | Regenerates token |
 | DELETE | `/merchant/team/invites/:id` | Owner | Cancel pending invite |
-| PATCH | `/merchant/team/members/:id` | Owner | Update role/permissions |
+| PATCH | `/merchant/team/members/:id` | Owner | Update role, permissions, `job_station` |
 | DELETE | `/merchant/team/members/:id` | Owner | Remove member |
 | GET | `/merchant/team/invites/preview/:token` | Public (anon `apikey` + `Authorization`) | Sanitized invite preview |
 | GET | `/merchant/team/invites/pending` | Invitee | List invites for session email |
@@ -129,3 +129,5 @@ Never use the SMTP username (`resend`) as the sender — it is not a valid email
 Env: `PARTNER_PORTAL_URL` (default `https://partner.roamdash.co`) for invite links.
 
 Hosting: partner SPA must serve `index.html` for `/team-invite/*` paths.
+
+`job_station` on invites and members: `counter` | `kitchen` | `manager` | `NULL` (legacy). Invites accept copies station to the new member row. `GET /merchant/profile` and `GET /merchant/orders` expose `membership.job_station` and optional `lastHandledBy` on orders.

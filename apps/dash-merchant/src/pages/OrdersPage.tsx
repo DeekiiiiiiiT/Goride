@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@roam/auth-client';
 import { Merchant } from '../hooks/useMerchant';
 import { toast } from 'sonner';
@@ -18,6 +18,7 @@ import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import { usePageVisibility } from '../hooks/usePageVisibility';
 import { useMerchantActiveOrders } from '../hooks/useMerchantActiveOrders';
 import { useMerchantOrdersRealtime } from '../hooks/useMerchantOrdersRealtime';
+import { useOrderStatusMutation } from '../hooks/useOrderStatusMutation';
 import QueryErrorState from '../components/QueryErrorState';
 import SwipeableOrderCard from '../components/orders/SwipeableOrderCard';
 import { playNewOrderAlert } from '../lib/partner-order-alert';
@@ -198,45 +199,8 @@ export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: Or
     enabled: isHistoryView,
   });
 
-  const updateStatusMutation = useMutation({
-    mutationFn: async ({
-      orderId,
-      status,
-      notes,
-      estimatedPrepTimeMins,
-    }: {
-      orderId: string;
-      status: string;
-      notes?: string;
-      estimatedPrepTimeMins?: number;
-    }) => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
-
-      const res = await fetch(`${API_ENDPOINTS.delivery}/orders/${orderId}/status`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          status,
-          actorType: 'merchant',
-          notes,
-          estimatedPrepTimeMins,
-        }),
-      });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || 'Failed to update order');
-      }
-      return res.json();
-    },
-    onSuccess: (_, { orderId, status }) => {
-      void queryClient.invalidateQueries({ queryKey: merchantOrdersKeys.all });
+  const updateStatusMutation = useOrderStatusMutation({
+    onSuccess: ({ orderId, status }) => {
       setDetailOrderId((current) => (current === orderId ? null : current));
       setShowOrderDetail(false);
       setRejectOrderId((current) => (current === orderId ? null : current));
@@ -249,9 +213,6 @@ export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: Or
         updated.delete(orderId);
         return updated;
       });
-    },
-    onError: (error: Error) => {
-      toast.error(error.message);
     },
   });
 

@@ -8,13 +8,18 @@ type AuthStep = 'welcome' | 'onboarding' | 'login';
 interface PartnerAuthFlowProps {
   onLoginSuccess: () => void;
   inviteMode?: boolean;
+  onCancel?: () => void;
 }
 
-export default function PartnerAuthFlow({ onLoginSuccess, inviteMode = false }: PartnerAuthFlowProps) {
-  const [step, setStep] = useState<AuthStep>('welcome');
+export default function PartnerAuthFlow({
+  onLoginSuccess,
+  inviteMode = false,
+  onCancel,
+}: PartnerAuthFlowProps) {
+  const [step, setStep] = useState<AuthStep>(inviteMode ? 'login' : 'welcome');
   const [signUpMode, setSignUpMode] = useState(false);
 
-  if (step === 'welcome') {
+  if (!inviteMode && step === 'welcome') {
     return (
       <WelcomePage
         onGetStarted={() => setStep('onboarding')}
@@ -26,7 +31,7 @@ export default function PartnerAuthFlow({ onLoginSuccess, inviteMode = false }: 
     );
   }
 
-  if (step === 'onboarding') {
+  if (!inviteMode && step === 'onboarding') {
     return (
       <OnboardingCarouselPage
         onComplete={() => {
@@ -41,8 +46,12 @@ export default function PartnerAuthFlow({ onLoginSuccess, inviteMode = false }: 
     <LoginPage
       initialSignUp={signUpMode}
       inviteMode={inviteMode}
-      onBack={() => setStep(signUpMode ? 'onboarding' : 'welcome')}
-      onApply={() => setStep('onboarding')}
+      onBack={
+        inviteMode
+          ? onCancel
+          : () => setStep(signUpMode ? 'onboarding' : 'welcome')
+      }
+      onApply={inviteMode ? undefined : () => setStep('onboarding')}
       onSuccess={onLoginSuccess}
     />
   );

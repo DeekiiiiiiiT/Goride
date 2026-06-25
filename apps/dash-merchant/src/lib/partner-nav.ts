@@ -1,4 +1,16 @@
 import { PartnerTab } from './partner-utils';
+import type { MerchantMembership } from '../types/team';
+
+/** Optional nav label when staff has a job station (e.g. Kitchen). */
+export function getPartnerTabLabel(
+  tab: PartnerTab,
+  membership?: MerchantMembership | null,
+): string {
+  if (tab === 'orders' && membership?.job_station === 'kitchen') {
+    return 'Kitchen';
+  }
+  return PARTNER_BOTTOM_NAV_ITEMS.find((item) => item.key === tab)?.label ?? tab;
+}
 
 export type PartnerNavItem = { key: PartnerTab; label: string; icon: string };
 

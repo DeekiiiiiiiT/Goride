@@ -1,18 +1,26 @@
 import { useState } from 'react';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
 import {
+  defaultJobStationForRole,
   ROLE_DEFAULT_PERMISSIONS,
   TEAM_PERMISSIONS,
   TEAM_ROLE_OPTIONS,
   TeamMember,
   TeamPermission,
   TeamRole,
+  JobStation,
 } from '../../types/team';
+import JobStationPicker from '../staff-ops/shared/JobStationPicker';
 
 interface EditTeamMemberSheetProps {
   member: TeamMember;
   onClose: () => void;
-  onSave: (updates: { role: TeamRole; permissions: TeamPermission[]; name?: string }) => void;
+  onSave: (updates: {
+    role: TeamRole;
+    permissions: TeamPermission[];
+    name?: string;
+    jobStation?: JobStation;
+  }) => void;
   isSaving?: boolean;
 }
 
@@ -25,10 +33,14 @@ export default function EditTeamMemberSheet({
   const [role, setRole] = useState<TeamRole>(member.role);
   const [name, setName] = useState(member.name);
   const [permissions, setPermissions] = useState<TeamPermission[]>(member.permissions);
+  const [jobStation, setJobStation] = useState<JobStation>(
+    member.jobStation ?? defaultJobStationForRole(member.role),
+  );
 
   const handleRoleChange = (nextRole: TeamRole) => {
     setRole(nextRole);
     setPermissions(ROLE_DEFAULT_PERMISSIONS[nextRole]);
+    setJobStation(defaultJobStationForRole(nextRole));
   };
 
   const togglePermission = (permission: TeamPermission) => {
@@ -80,6 +92,8 @@ export default function EditTeamMemberSheet({
             </select>
           </div>
 
+          <JobStationPicker value={jobStation} onChange={setJobStation} />
+
           <div className="space-y-inset-sm">
             <h3 className="text-label-md text-on-surface-variant">Permissions</h3>
             {TEAM_PERMISSIONS.map((permission) => (
@@ -106,7 +120,9 @@ export default function EditTeamMemberSheet({
           <button
             type="button"
             disabled={isSaving}
-            onClick={() => onSave({ role, permissions, name: name.trim() || member.name })}
+            onClick={() =>
+              onSave({ role, permissions, name: name.trim() || member.name, jobStation })
+            }
             className="min-h-[48px] flex-1 rounded-lg bg-primary-container font-semibold text-on-primary"
           >
             Save
