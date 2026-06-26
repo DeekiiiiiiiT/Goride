@@ -4,6 +4,7 @@ import { supabase } from '@roam/auth-client';
 import {
   fetchMerchantActiveOrders,
   merchantOrdersKeys,
+  type MerchantOrdersChannel,
 } from '../lib/merchant-orders-query';
 import { readDeviceSession } from '../lib/store-tablet-session';
 import {
@@ -16,12 +17,15 @@ interface UseMerchantActiveOrdersOptions {
   realtimeStatus: MerchantOrdersRealtimeStatus;
   isTabVisible: boolean;
   enabled?: boolean;
+  /** Default roam_app — use all when unified counter/kitchen is enabled. */
+  channel?: MerchantOrdersChannel;
 }
 
 export function useMerchantActiveOrders({
   realtimeStatus,
   isTabVisible,
   enabled = true,
+  channel = 'roam_app',
 }: UseMerchantActiveOrdersOptions) {
   const refetchInterval = resolveOrdersRefetchInterval({ realtimeStatus, isTabVisible });
   const prevIntervalRef = useRef(refetchInterval);
@@ -39,15 +43,15 @@ export function useMerchantActiveOrders({
   }, [refetchInterval, realtimeStatus, isTabVisible]);
 
   const query = useQuery({
-    queryKey: merchantOrdersKeys.active(),
+    queryKey: merchantOrdersKeys.active(channel),
     queryFn: async () => {
       const device = readDeviceSession();
-      if (device) return fetchMerchantActiveOrders();
+      if (device) return fetchMerchantActiveOrders(null, channel);
       const {
         data: { session },
       } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
-      return fetchMerchantActiveOrders(session);
+      return fetchMerchantActiveOrders(session, channel);
     },
     enabled,
     refetchInterval,

@@ -14,6 +14,10 @@ import KitchenTicketCard, {
   KitchenTicketDetail,
 } from '../../components/staff-ops/kitchen/KitchenTicketCard';
 import EndShiftButton from '../../components/staff-ops/station/EndShiftButton';
+import { CAPABILITY_IN_STORE, hasCapability } from '../../lib/merchant-capabilities';
+import { useRestaurantSettings } from '../../hooks/useRestaurantSettings';
+import { kitchenQueueOrders } from '../../lib/staff-ops-order-filters';
+import type { MerchantOrdersChannel } from '../../lib/merchant-orders-query';
 import { Order } from '../../types/order';
 
 interface KitchenQueuePageProps {
@@ -25,13 +29,7 @@ interface KitchenQueuePageProps {
 }
 
 function kitchenQueue(orders: Order[]) {
-  return orders
-    .filter((order) => order.status === 'accepted' || order.status === 'preparing')
-    .sort(
-      (a, b) =>
-        new Date(a.accepted_at || a.placed_at || a.created_at).getTime() -
-        new Date(b.accepted_at || b.placed_at || b.created_at).getTime(),
-    );
+  return kitchenQueueOrders(orders);
 }
 
 export default function KitchenQueuePage({
@@ -44,6 +42,11 @@ export default function KitchenQueuePage({
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const isTabVisible = usePageVisibility();
   const { isAcceptingOrders, toggleAcceptingOrders } = useAcceptingOrdersToggle(merchant);
+  const showChannelBadge = hasCapability(merchant, CAPABILITY_IN_STORE);
+  const restaurantSettings = useRestaurantSettings(merchant);
+  const showInStoreOnKitchen =
+    showChannelBadge && Boolean(restaurantSettings.data?.showInStoreOnKitchen);
+  const ordersChannel: MerchantOrdersChannel = showInStoreOnKitchen ? 'all' : 'roam_app';
 
   const { realtimeStatus } = useMerchantOrdersRealtime({
     merchantId: merchant.id,
@@ -53,6 +56,7 @@ export default function KitchenQueuePage({
     realtimeStatus,
     isTabVisible,
     enabled: true,
+    channel: ordersChannel,
   });
 
   const queue = useMemo(() => kitchenQueue(orders), [orders]);
@@ -106,6 +110,7 @@ export default function KitchenQueuePage({
           key={order.id}
           order={order}
           selected={selectedOrder?.id === order.id}
+          showChannelBadge={showChannelBadge && Boolean(order.channel)}
           onSelect={() => setSelectedOrderId(order.id)}
         />
       ))}

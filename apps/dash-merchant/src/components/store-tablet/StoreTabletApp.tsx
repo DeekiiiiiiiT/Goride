@@ -14,8 +14,10 @@ import StationKioskFlow from '../staff-ops/station/StationKioskFlow';
 import ActingShiftBar from '../staff-ops/station/ActingShiftBar';
 import CounterOrdersPage from '../../pages/staff-ops/CounterOrdersPage';
 import KitchenQueuePage from '../../pages/staff-ops/KitchenQueuePage';
+import PosRegisterPage from '../../pages/restaurant-mgmt/PosRegisterPage';
 import DashboardPage from '../../pages/DashboardPage';
 import OrdersPage from '../../pages/OrdersPage';
+import { hasCapability, CAPABILITY_IN_STORE } from '../../lib/merchant-capabilities';
 
 type TabletView = 'pairing' | 'kiosk' | 'station';
 
@@ -96,6 +98,14 @@ export default function StoreTabletApp() {
           merchant={merchant}
           staffName={actingMember.name}
           onNavigate={noop}
+        />
+      );
+    }
+    if (deviceSession.station === 'pos') {
+      return (
+        <PosRegisterPage
+          merchant={merchant}
+          useApi={hasCapability(merchant, CAPABILITY_IN_STORE)}
         />
       );
     }

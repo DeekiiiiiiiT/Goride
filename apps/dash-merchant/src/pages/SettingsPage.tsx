@@ -11,6 +11,8 @@ import TeamMembersView from '../components/account/TeamMembersView';
 import NotificationSettingsView from '../components/account/NotificationSettingsView';
 import HelpSupportView from '../components/account/HelpSupportView';
 import PromotionsView from '../components/account/PromotionsView';
+import RestaurantMgmtFlow from './restaurant-mgmt/RestaurantMgmtFlow';
+import { CAPABILITY_IN_STORE, hasCapability } from '../lib/merchant-capabilities';
 
 interface SettingsPageProps {
   merchant: Merchant;
@@ -122,6 +124,7 @@ export default function SettingsPage({
     return (
       <TeamMembersView
         merchantId={merchant.id}
+        inStoreEnabled={hasCapability(merchant, CAPABILITY_IN_STORE)}
         onBack={() => setActiveSection(null)}
       />
     );
@@ -150,6 +153,15 @@ export default function SettingsPage({
     return (
       <PromotionsView
         merchantId={merchant.id}
+        onBack={() => setActiveSection(null)}
+      />
+    );
+  }
+
+  if (activeSection === 'restaurant-mgmt') {
+    return (
+      <RestaurantMgmtFlow
+        merchant={merchant}
         onBack={() => setActiveSection(null)}
       />
     );

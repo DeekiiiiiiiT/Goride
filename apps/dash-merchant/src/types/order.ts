@@ -11,6 +11,8 @@ export interface OrderItem {
 export interface Order {
   id: string;
   order_number: string;
+  channel?: string;
+  fulfillment_type?: string;
   status: string;
   total: number;
   subtotal: number;

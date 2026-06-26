@@ -651,6 +651,10 @@ export function registerMerchantAdminRoutes(app: Hono) {
     if (body.commission_rate != null) updates.commission_rate = Number(body.commission_rate);
     if (body.delivery_radius_km != null) updates.delivery_radius_km = Number(body.delivery_radius_km);
     if (body.admin_internal_notes != null) updates.admin_internal_notes = String(body.admin_internal_notes);
+    if (body.capabilities != null && Array.isArray(body.capabilities)) {
+      const caps = [...new Set(["roam_delivery", ...body.capabilities.map(String)])];
+      updates.capabilities = caps;
+    }
     const sb = getDb();
     const { data, error } = await sb.from("merchants").update(updates).eq("id", id).select().single();
     if (error) return c.json({ error: error.message }, 500);

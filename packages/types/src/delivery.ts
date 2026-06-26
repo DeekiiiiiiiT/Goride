@@ -48,6 +48,12 @@ export type VerticalType =
 
 export type FulfillmentType = 'cook_to_order' | 'pick_and_pack';
 
+export type OrderChannel = 'roam_app' | 'in_store' | 'phone';
+
+export type InStoreFulfillmentType = 'delivery' | 'pickup' | 'dine_in' | 'counter';
+
+export type MerchantCapability = 'roam_delivery' | 'in_store_operations';
+
 export type CategoryTaxonomyKey = 'cuisine' | 'inventory_category' | 'none';
 
 export type ComplianceTier = 'standard' | 'regulated';

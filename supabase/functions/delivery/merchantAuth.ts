@@ -1,8 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-export type TeamPermission = "orders" | "menu" | "analytics" | "payouts";
+export type TeamPermission = "orders" | "menu" | "analytics" | "payouts" | "inventory";
 export type TeamRole = "staff" | "manager" | "admin";
-export type JobStation = "counter" | "kitchen" | "manager";
+export type JobStation = "counter" | "kitchen" | "manager" | "pos";
 
 export type MerchantMembership = {
   role: TeamRole;
@@ -13,7 +13,7 @@ export type MerchantMembership = {
 
 function readJobStation(row: Record<string, unknown>): JobStation | null {
   const value = row.job_station;
-  if (value === "counter" || value === "kitchen" || value === "manager") {
+  if (value === "counter" || value === "kitchen" || value === "manager" || value === "pos") {
     return value;
   }
   return null;

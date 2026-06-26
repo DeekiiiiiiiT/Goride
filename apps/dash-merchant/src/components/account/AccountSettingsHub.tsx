@@ -6,6 +6,8 @@ import StoreStatusToggle from '../layout/StoreStatusToggle';
 import { getStoreStatus, PartnerTab } from '../../lib/partner-utils';
 import { formatMemberSince } from '../../hooks/useMerchantSettings';
 import SettingsMenuRow from './SettingsMenuRow';
+import RestaurantMgmtOptInCard from '../restaurant-mgmt/RestaurantMgmtOptInCard';
+import { canAccessRestaurantMgmt } from '../../lib/merchant-capabilities';
 
 export type AccountSection =
   | 'profile'
@@ -16,7 +18,8 @@ export type AccountSection =
   | 'notifications'
   | 'help'
   | 'legal'
-  | 'promotions';
+  | 'promotions'
+  | 'restaurant-mgmt';
 
 interface AccountSettingsHubProps {
   merchant: Merchant;
@@ -131,6 +134,13 @@ export default function AccountSettingsHub({
             <span className="text-label-md text-on-surface">{rating} Rating</span>
           </div>
         </section>
+
+        {canAccessRestaurantMgmt(merchant.id, merchant) && (
+          <RestaurantMgmtOptInCard
+            merchant={merchant}
+            onOpenRestaurantMgmt={() => onOpenSection('restaurant-mgmt')}
+          />
+        )}
 
         <section className="divide-y divide-outline-variant overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-sm">
           <SettingsMenuRow

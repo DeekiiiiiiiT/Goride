@@ -33,11 +33,9 @@ import { readFlag } from '../../lib/partner-feature-flags';
 
 
 interface TeamMembersViewProps {
-
   merchantId: string;
-
+  inStoreEnabled?: boolean;
   onBack: () => void;
-
 }
 
 
@@ -114,7 +112,7 @@ function RoleBadge({ role, filled = false }: { role: TeamRole; filled?: boolean 
 
 
 
-export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewProps) {
+export default function TeamMembersView({ merchantId, inStoreEnabled = false, onBack }: TeamMembersViewProps) {
 
   const {
 
@@ -153,25 +151,15 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
     queryFn: getStoreTabletPairing,
   });
 
-  const serverStaffOps = pairingFlagsQuery.data?.staffOperationsEnabled;
-  const serverStaffPin = pairingFlagsQuery.data?.staffStationPinEnabled;
-
-  const [staffOpsEnabled] = useState(() =>
-    readFlag(merchantId, 'staffOperationsV1'),
-  );
-
-  const [staffPinEnabled] = useState(() =>
-    readFlag(merchantId, 'staffStationPinV1'),
-  );
-
-  const effectiveStaffOps = serverStaffOps ?? staffOpsEnabled;
-  const effectiveStaffPin = serverStaffPin ?? staffPinEnabled;
+  const staffOpsEnabled =
+    pairingFlagsQuery.data?.staffOperationsEnabled ??
+    readFlag(merchantId, 'staffOperationsV1');
+  const staffPinEnabled =
+    pairingFlagsQuery.data?.staffStationPinEnabled ??
+    readFlag(merchantId, 'staffStationPinV1');
+  const pinSignInEnabled = staffOpsEnabled && staffPinEnabled;
 
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
-
-
-
-  const pinSignInEnabled = effectiveStaffOps && effectiveStaffPin;
 
 
 
@@ -256,6 +244,7 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
             <AddTeamMemberPanel
 
               pinSignInEnabled={pinSignInEnabled}
+              inStoreEnabled={inStoreEnabled}
 
               isSaving={isSaving}
 
@@ -399,7 +388,7 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
 
                         <JobStationBadge station={member.jobStation} />
 
-                        {member.loginType === 'roster' && staffPinEnabled && (
+                        {member.loginType === 'roster' && pinSignInEnabled && (
 
                           <span className="rounded-full bg-surface-variant px-2 py-0.5 text-label-sm text-on-surface-variant">
 
@@ -478,6 +467,7 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
         <EditTeamMemberSheet
 
           member={editingMember}
+          inStoreEnabled={inStoreEnabled}
 
           isSaving={isSaving}
 

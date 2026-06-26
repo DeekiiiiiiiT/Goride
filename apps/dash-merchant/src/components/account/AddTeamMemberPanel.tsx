@@ -8,6 +8,7 @@ import {
   ROLE_DEFAULT_PERMISSIONS,
   TEAM_PERMISSIONS,
   TEAM_ROLE_OPTIONS,
+  type JobStation,
   type JobStationSelection,
   type TeamPermission,
   type TeamRole,
@@ -15,6 +16,7 @@ import {
 
 interface AddTeamMemberPanelProps {
   pinSignInEnabled: boolean;
+  inStoreEnabled?: boolean;
   onAddRoster: (payload: {
     name: string;
     role: 'staff' | 'manager';
@@ -33,6 +35,8 @@ interface AddTeamMemberPanelProps {
 const inputClass =
   'h-12 w-full rounded-lg border border-outline-variant bg-transparent px-4 text-body-lg text-on-background outline-none transition-colors placeholder:text-on-surface-variant/50 focus:border-primary-container focus:ring-1 focus:ring-primary-container';
 
+const BASE_STATIONS: JobStation[] = ['counter', 'kitchen', 'manager'];
+
 const ROLE_HINTS: Record<TeamRole, string> = {
   staff: 'Signs in with a PIN on the store tablet. No email needed.',
   manager: 'Signs in with a PIN on the store tablet, then gets the full manager dashboard.',
@@ -41,6 +45,7 @@ const ROLE_HINTS: Record<TeamRole, string> = {
 
 export default function AddTeamMemberPanel({
   pinSignInEnabled,
+  inStoreEnabled = false,
   onAddRoster,
   onSendInvite,
   isSaving = false,
@@ -53,6 +58,9 @@ export default function AddTeamMemberPanel({
 
   const usesEmail = !pinSignInEnabled || role === 'admin';
   const usesPin = pinSignInEnabled && (role === 'staff' || role === 'manager');
+  const permissionOptions = inStoreEnabled
+    ? TEAM_PERMISSIONS
+    : TEAM_PERMISSIONS.filter((entry) => entry.id !== 'inventory');
 
   const handleRoleChange = (nextRole: TeamRole) => {
     setRole(nextRole);
@@ -171,13 +179,17 @@ export default function AddTeamMemberPanel({
         </div>
       )}
 
-      <JobStationPicker value={jobStation} onChange={setJobStation} />
+      <JobStationPicker
+        value={jobStation}
+        onChange={setJobStation}
+        allowedStations={inStoreEnabled ? [...BASE_STATIONS, 'pos'] : BASE_STATIONS}
+      />
 
       {!pinSignInEnabled && (
         <div className="space-y-inset-sm border-t border-outline-variant pt-inset-md">
           <h4 className="text-label-md text-on-surface-variant">Permissions</h4>
           <div className="grid grid-cols-1 gap-inset-sm sm:grid-cols-2">
-            {TEAM_PERMISSIONS.map((permission) => (
+            {permissionOptions.map((permission) => (
               <label
                 key={permission.id}
                 className="flex min-h-[48px] cursor-pointer items-center gap-inset-sm rounded-lg border border-outline-variant p-3 transition-colors hover:bg-surface-variant"

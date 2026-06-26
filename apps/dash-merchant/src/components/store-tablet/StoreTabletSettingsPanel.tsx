@@ -1,12 +1,6 @@
 import { useState } from 'react';
 import { JOB_STATION_OPTIONS, type JobStation } from '../../types/team';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
-import {
-  MOCK_PAIRING_CODE,
-  MOCK_PAIRING_FLAGS,
-  MOCK_STATION_LINKS,
-  MOCK_STORE_NAME,
-} from './fixtures';
 
 export interface StoreTabletPairingData {
   storeName: string;
@@ -17,8 +11,7 @@ export interface StoreTabletPairingData {
 }
 
 interface StoreTabletSettingsPanelProps {
-  data?: StoreTabletPairingData;
-  useMockData?: boolean;
+  data: StoreTabletPairingData;
   onRegenerate?: () => void;
   onToggleStaffOps?: (enabled: boolean) => void;
   onToggleStaffPin?: (enabled: boolean) => void;
@@ -31,7 +24,6 @@ function qrImageUrl(link: string) {
 
 export default function StoreTabletSettingsPanel({
   data,
-  useMockData = false,
   onRegenerate,
   onToggleStaffOps,
   onToggleStaffPin,
@@ -39,16 +31,6 @@ export default function StoreTabletSettingsPanel({
 }: StoreTabletSettingsPanelProps) {
   const [confirmRegenerate, setConfirmRegenerate] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-
-  const pairing = useMockData || !data
-    ? {
-        storeName: MOCK_STORE_NAME,
-        pairingCode: MOCK_PAIRING_CODE,
-        stationLinks: MOCK_STATION_LINKS,
-        staffOperationsEnabled: MOCK_PAIRING_FLAGS.staffOperationsEnabled,
-        staffStationPinEnabled: MOCK_PAIRING_FLAGS.staffStationPinEnabled,
-      }
-    : data;
 
   const copyText = async (key: string, text: string) => {
     await navigator.clipboard.writeText(text);
@@ -81,10 +63,9 @@ export default function StoreTabletSettingsPanel({
         </div>
         <input
           type="checkbox"
-          checked={pairing.staffOperationsEnabled}
+          checked={data.staffOperationsEnabled}
           onChange={(event) => onToggleStaffOps?.(event.target.checked)}
           className="h-5 w-5"
-          disabled={useMockData}
         />
       </label>
 
@@ -95,22 +76,21 @@ export default function StoreTabletSettingsPanel({
         </div>
         <input
           type="checkbox"
-          checked={pairing.staffStationPinEnabled}
+          checked={data.staffStationPinEnabled}
           onChange={(event) => onToggleStaffPin?.(event.target.checked)}
           className="h-5 w-5"
-          disabled={useMockData}
         />
       </label>
 
       <div className="rounded-lg border border-outline-variant bg-surface p-inset-md">
         <p className="text-label-md text-on-surface-variant">Store pairing code</p>
         <p className="mt-inset-xs font-mono text-headline-md font-bold tracking-widest text-on-background">
-          {pairing.pairingCode}
+          {data.pairingCode}
         </p>
         <div className="mt-inset-md flex flex-wrap gap-inset-sm">
           <button
             type="button"
-            onClick={() => void copyText('code', pairing.pairingCode)}
+            onClick={() => void copyText('code', data.pairingCode)}
             className="flex items-center gap-1 rounded-full border border-outline-variant px-3 py-2 text-label-sm"
           >
             <MaterialIcon name="content_copy" size={16} />
@@ -118,7 +98,7 @@ export default function StoreTabletSettingsPanel({
           </button>
           <button
             type="button"
-            disabled={isRegenerating || useMockData}
+            disabled={isRegenerating}
             onClick={handleRegenerate}
             className="flex items-center gap-1 rounded-full border border-outline-variant px-3 py-2 text-label-sm text-error"
           >
@@ -136,11 +116,11 @@ export default function StoreTabletSettingsPanel({
       <div className="space-y-inset-md">
         <p className="text-label-md font-semibold text-on-background">Station links &amp; QR codes</p>
         <p className="text-body-sm text-on-surface-variant">
-          Bookmark or scan on each iPad for {pairing.storeName}.
+          Bookmark or scan on each iPad for {data.storeName}.
         </p>
         <div className="grid gap-inset-md md:grid-cols-3">
           {JOB_STATION_OPTIONS.map((option) => {
-            const link = pairing.stationLinks[option.value];
+            const link = data.stationLinks[option.value];
             const copyKey = `link-${option.value}`;
             return (
               <div

@@ -61,6 +61,7 @@ export interface DashMerchant {
   fulfillment_type?: string | null;
   go_live_rule?: string | null;
   business_type_id?: string | null;
+  capabilities?: string[];
 }
 
 export interface MerchantHours {
@@ -341,6 +342,7 @@ export function patchMerchantOps(
     commission_rate?: number;
     delivery_radius_km?: number;
     admin_internal_notes?: string;
+    capabilities?: string[];
   },
 ) {
   return deliveryFetch(accessToken, `/admin/merchants/${id}/ops`, {

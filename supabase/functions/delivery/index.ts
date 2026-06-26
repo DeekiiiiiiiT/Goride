@@ -23,6 +23,11 @@ import {
   resolveEnrolledDevice,
   resolveShiftTokenFromRequest,
 } from "./merchantStationRoutes.ts";
+import {
+  inStoreStatusTransitions,
+  registerMerchantRestaurantRoutes,
+  roamStatusTransitions,
+} from "./merchantRestaurantRoutes.ts";
 
 const app = new Hono().basePath("/delivery");
 
@@ -726,15 +731,10 @@ app.put("/orders/:id/status", async (c) => {
   const body = await c.req.json();
   const { status, notes, actorType, estimatedPrepTimeMins } = body;
 
-  const validTransitions: Record<string, string[]> = {
-    placed: ["accepted", "cancelled"],
-    accepted: ["preparing", "cancelled"],
-    preparing: ["ready"],
-    ready: ["picked_up", "cancelled"],
-    picked_up: ["in_transit"],
-    in_transit: ["delivered"],
-    delivered: ["completed"],
-  };
+  function transitionsForChannel(channel: string | null | undefined): Record<string, string[]> {
+    if (channel === "in_store" || channel === "phone") return inStoreStatusTransitions();
+    return roamStatusTransitions();
+  }
 
   if (deviceToken && actorType === "merchant") {
     const serviceSb = getServiceSupabase();
@@ -743,7 +743,7 @@ app.put("/orders/:id/status", async (c) => {
 
     const { data: order, error: orderError } = await serviceSb
       .from("orders")
-      .select("status, merchant_id")
+      .select("status, merchant_id, channel")
       .eq("id", id)
       .single();
 
@@ -753,7 +753,7 @@ app.put("/orders/:id/status", async (c) => {
       return c.json({ error: "Order not found" }, 404);
     }
 
-    const allowed = validTransitions[String(orderRow.status)] || [];
+    const allowed = transitionsForChannel(String(orderRow.channel ?? "roam_app"))[String(orderRow.status)] || [];
     if (!allowed.includes(status)) {
       return c.json({ error: `Invalid status transition from ${orderRow.status} to ${status}` }, 400);
     }
@@ -819,14 +819,13 @@ app.put("/orders/:id/status", async (c) => {
   // Get current order
   const { data: order, error: orderError } = await supabase
     .from("orders")
-    .select("status")
+    .select("status, channel")
     .eq("id", id)
     .single();
   
   if (orderError) return c.json({ error: orderError.message }, 404);
   
-  // Validate transition
-  const allowed = validTransitions[order.status] || [];
+  const allowed = transitionsForChannel((order as { channel?: string }).channel)[order.status] || [];
   if (!allowed.includes(status)) {
     return c.json({ error: `Invalid status transition from ${order.status} to ${status}` }, 400);
   }
@@ -978,7 +977,7 @@ async function enrichOrdersWithLastHandledBy(
 app.get("/merchant/orders", async (c) => {
   const deviceToken = c.req.header("X-Station-Device-Token");
   const authHeader = c.req.header("Authorization");
-  const { status, from, to, limit } = c.req.query();
+  const { status, from, to, limit, channel } = c.req.query();
 
   let merchantId: string;
   let queryClient: ReturnType<typeof getSupabase>;
@@ -1010,12 +1009,22 @@ app.get("/merchant/orders", async (c) => {
       customer:customers(id, name, phone)
     `)
     .eq("merchant_id", merchantId);
+
+  const channelFilter = channel ?? "roam_app";
+  if (channelFilter !== "all") {
+    query = query.eq("channel", channelFilter);
+  }
   
   if (status) {
     query = query.eq("status", status);
   } else {
-    // Default: show active orders
-    query = query.in("status", ["placed", "accepted", "preparing", "ready"]);
+    const activeStatuses =
+      channelFilter === "in_store"
+        ? ["paid", "preparing", "ready"]
+        : channelFilter === "all"
+          ? ["placed", "accepted", "preparing", "ready", "paid"]
+          : ["placed", "accepted", "preparing", "ready"];
+    query = query.in("status", activeStatuses);
   }
 
   if (from) {
@@ -1970,6 +1979,7 @@ import { registerFinanceAdminRoutes } from "./admin/financeRoutes.ts";
 registerMerchantApplicationRoutes(app);
 registerMerchantTeamRoutes(app, { getSupabase, getServiceSupabase });
 registerMerchantStationRoutes(app, { getSupabase, getServiceSupabase });
+registerMerchantRestaurantRoutes(app);
 registerPartnerBusinessTypeRoutes(app);
 registerMerchantAdminRoutes(app);
 registerOrderAdminRoutes(app);

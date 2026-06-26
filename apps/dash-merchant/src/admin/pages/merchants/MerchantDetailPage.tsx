@@ -152,6 +152,22 @@ export function MerchantDetailPage() {
     }
   };
 
+  const runInStoreToggle = async () => {
+    if (!merchant || !canWrite) return;
+    const caps = merchant.capabilities ?? ['roam_delivery'];
+    const hasInStore = caps.includes('in_store_operations');
+    const next = hasInStore
+      ? caps.filter((c) => c !== 'in_store_operations')
+      : [...caps, 'in_store_operations'];
+    try {
+      await patchMerchantOps(token, merchant.id, { capabilities: next });
+      toast.success(hasInStore ? 'In-store ops disabled' : 'In-store ops enabled');
+      void load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Capability update failed');
+    }
+  };
+
   const runDelete = async () => {
     if (!merchant || !canDelete || !id) return;
     const displayName = merchant.name?.trim() || id;
@@ -252,6 +268,11 @@ export function MerchantDetailPage() {
                 {resolveGoLiveRule(merchant.go_live_rule)}
               </span>
             )}
+            {(merchant.capabilities ?? ['roam_delivery']).includes('in_store_operations') && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300">
+                In-store POS
+              </span>
+            )}
             {(merchant.vertical_type === 'pharmacy' || merchant.vertical_type === 'alcohol') && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/15 text-red-300">
                 Compliance queue
@@ -266,6 +287,15 @@ export function MerchantDetailPage() {
             </button>
             <button type="button" onClick={() => void runOpsToggle()} className="px-3 py-1.5 text-sm rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800">
               {merchant.is_accepting_orders ? 'Force pause' : 'Resume orders'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void runInStoreToggle()}
+              className="px-3 py-1.5 text-sm rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
+            >
+              {(merchant.capabilities ?? ['roam_delivery']).includes('in_store_operations')
+                ? 'Disable in-store POS'
+                : 'Enable in-store POS'}
             </button>
             {opStatus === 'active' && merchant.verification_status === 'approved' && (
               <button type="button" onClick={() => void runSuspend()} className="px-3 py-1.5 text-sm rounded-lg bg-red-600/20 text-red-300 border border-red-500/30">

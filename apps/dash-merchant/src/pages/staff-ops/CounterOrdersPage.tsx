@@ -23,6 +23,13 @@ import NewOrderDetailSheet from '../../components/NewOrderDetailSheet';
 import QueryErrorState from '../../components/QueryErrorState';
 import CounterOrderCard from '../../components/staff-ops/counter/CounterOrderCard';
 import EndShiftButton from '../../components/staff-ops/station/EndShiftButton';
+import { CAPABILITY_IN_STORE, hasCapability } from '../../lib/merchant-capabilities';
+import { useRestaurantSettings } from '../../hooks/useRestaurantSettings';
+import {
+  counterOrdersForTab,
+  counterReadyTabLabel,
+} from '../../lib/staff-ops-order-filters';
+import type { MerchantOrdersChannel } from '../../lib/merchant-orders-query';
 import { Order } from '../../types/order';
 
 interface CounterOrdersPageProps {
@@ -35,18 +42,8 @@ interface CounterOrdersPageProps {
 
 type CounterTab = 'new' | 'kitchen' | 'ready';
 
-const TABS: { key: CounterTab; label: string }[] = [
-  { key: 'new', label: 'New' },
-  { key: 'kitchen', label: 'In Kitchen' },
-  { key: 'ready', label: 'Ready for Driver' },
-];
-
 function filterByTab(orders: Order[], tab: CounterTab) {
-  if (tab === 'new') return orders.filter((order) => order.status === 'placed');
-  if (tab === 'kitchen') {
-    return orders.filter((order) => order.status === 'accepted' || order.status === 'preparing');
-  }
-  return orders.filter((order) => order.status === 'ready');
+  return counterOrdersForTab(orders, tab);
 }
 
 export default function CounterOrdersPage({
@@ -62,6 +59,17 @@ export default function CounterOrdersPage({
   const [acceptedOrderId, setAcceptedOrderId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const { isAcceptingOrders, toggleAcceptingOrders } = useAcceptingOrdersToggle(merchant);
+  const showChannelBadge = hasCapability(merchant, CAPABILITY_IN_STORE);
+  const restaurantSettings = useRestaurantSettings(merchant);
+  const showInStoreOnCounter =
+    showChannelBadge && Boolean(restaurantSettings.data?.showInStoreOnCounter);
+  const ordersChannel: MerchantOrdersChannel = showInStoreOnCounter ? 'all' : 'roam_app';
+
+  const tabs: { key: CounterTab; label: string }[] = [
+    { key: 'new', label: 'New' },
+    { key: 'kitchen', label: 'In Kitchen' },
+    { key: 'ready', label: counterReadyTabLabel(showInStoreOnCounter) },
+  ];
   const storeStatus = getStoreStatus(merchant.is_active, isAcceptingOrders);
   const { settings: notificationSettings } = useNotificationSettings(merchant.id);
   const isTabVisible = usePageVisibility();
@@ -86,6 +94,7 @@ export default function CounterOrdersPage({
     realtimeStatus,
     isTabVisible,
     enabled: true,
+    channel: ordersChannel,
   });
 
   const updateStatusMutation = useOrderStatusMutation({
@@ -178,7 +187,7 @@ export default function CounterOrdersPage({
         </div>
       </div>
       <div className="flex gap-1 overflow-x-auto px-margin-mobile pb-inset-sm lg:px-margin-tablet">
-        {TABS.map((entry) => {
+        {tabs.map((entry) => {
           const count =
             entry.key === 'new'
               ? newCount
@@ -221,6 +230,7 @@ export default function CounterOrdersPage({
         <CounterOrderCard
           key={order.id}
           order={order}
+          showChannelBadge={showChannelBadge && Boolean(order.channel)}
           isSubmitting={updateStatusMutation.isPending}
           onOpen={() => setDetailOrderId(order.id)}
           onAccept={() => handleAccept(order.id)}

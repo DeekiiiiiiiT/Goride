@@ -1,11 +1,14 @@
 import { MaterialIcon } from '../../../signup/components/MaterialIcon';
 import { formatJmd } from '../../../lib/partner-utils';
 import { Order } from '../../../types/order';
+import type { OrderChannel } from '../../../types/restaurant-mgmt';
+import OrderChannelChip from '../../restaurant-mgmt/OrderChannelChip';
 import HandledByLabel from '../shared/HandledByLabel';
 import OrderElapsedTimer from '../shared/OrderElapsedTimer';
 
 interface CounterOrderCardProps {
   order: Order;
+  showChannelBadge?: boolean;
   onOpen?: () => void;
   onAccept?: () => void;
   onReject?: () => void;
@@ -23,6 +26,7 @@ function itemSummary(order: Order) {
 
 export default function CounterOrderCard({
   order,
+  showChannelBadge,
   onOpen,
   onAccept,
   onReject,
@@ -37,9 +41,14 @@ export default function CounterOrderCard({
       <button type="button" onClick={onOpen} className="w-full text-left">
         <div className="flex items-start justify-between gap-inset-sm">
           <div>
-            <p className="text-label-md uppercase tracking-wide text-on-surface-variant">
-              Order #{order.order_number}
-            </p>
+            <div className="flex flex-wrap items-center gap-inset-xs">
+              <p className="text-label-md uppercase tracking-wide text-on-surface-variant">
+                Order #{order.order_number}
+              </p>
+              {showChannelBadge && order.channel && (
+                <OrderChannelChip channel={order.channel as OrderChannel} />
+              )}
+            </div>
             <p className="text-headline-md font-bold text-on-background">{formatJmd(order.total)}</p>
           </div>
           <OrderElapsedTimer startedAt={startedAt} className="text-primary-container" />

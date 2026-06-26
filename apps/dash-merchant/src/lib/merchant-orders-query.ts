@@ -19,24 +19,29 @@ export interface MerchantOrdersResponse {
 
 export const merchantOrdersKeys = {
   all: ['merchant-orders'] as const,
-  active: () => ['merchant-orders', 'active'] as const,
+  active: (channel: MerchantOrdersChannel = 'roam_app') =>
+    ['merchant-orders', 'active', channel] as const,
   history: (status: MerchantOrdersHistoryStatus) =>
     ['merchant-orders', 'history', status] as const,
   order: (orderId: string) => ['order', orderId] as const,
 };
 
+export type MerchantOrdersChannel = 'roam_app' | 'in_store' | 'all';
+
 export async function fetchMerchantActiveOrders(
   session?: Session | null,
+  channel: MerchantOrdersChannel = 'roam_app',
 ): Promise<MerchantOrdersResponse> {
+  const channelQuery = channel === 'all' ? 'channel=all' : `channel=${channel}`;
   const device = readDeviceSession();
   if (device) {
     const headers = await getStationAuthHeaders('');
-    const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/orders`, { headers });
+    const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/orders?${channelQuery}`, { headers });
     if (!res.ok) throw new Error('Failed to fetch orders');
     return res.json();
   }
   if (!session) throw new Error('Not authenticated');
-  const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/orders`, {
+  const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/orders?${channelQuery}`, {
     headers: {
       Authorization: `Bearer ${session.access_token}`,
       ...supabaseAnonFunctionHeaders(),

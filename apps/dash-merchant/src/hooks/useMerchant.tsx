@@ -56,6 +56,7 @@ export interface Merchant {
   vertical_type?: VerticalType | null;
   fulfillment_type?: FulfillmentType | null;
   go_live_rule?: GoLiveRule | null;
+  capabilities?: string[];
 }
 
 export interface MerchantProfileResponse {

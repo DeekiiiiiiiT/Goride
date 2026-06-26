@@ -3,7 +3,8 @@ export type PartnerFeatureFlag =
   | 'swipeAcceptOrders'
   | 'webPushNotifications'
   | 'staffOperationsV1'
-  | 'staffStationPinV1';
+  | 'staffStationPinV1'
+  | 'restaurantMgmtPreviewV1';
 
 const FLAG_DEFAULTS: Record<PartnerFeatureFlag, boolean> = {
   menuDragReorder: true,
@@ -11,6 +12,7 @@ const FLAG_DEFAULTS: Record<PartnerFeatureFlag, boolean> = {
   webPushNotifications: true,
   staffOperationsV1: false,
   staffStationPinV1: false,
+  restaurantMgmtPreviewV1: false,
 };
 
 function storageKey(merchantId: string) {
@@ -51,6 +53,7 @@ export function enableAllPartnerFlags(merchantId: string) {
       webPushNotifications: true,
       staffOperationsV1: true,
       staffStationPinV1: true,
+      restaurantMgmtPreviewV1: true,
     } satisfies Record<PartnerFeatureFlag, boolean>),
   );
 }

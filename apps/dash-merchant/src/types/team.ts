@@ -1,9 +1,9 @@
 export type TeamRole = 'staff' | 'manager' | 'admin';
 
-export type TeamPermission = 'orders' | 'menu' | 'analytics' | 'payouts';
+export type TeamPermission = 'orders' | 'menu' | 'analytics' | 'payouts' | 'inventory';
 
 /** Restaurant job station — separate from admin role/permissions. */
-export type JobStation = 'counter' | 'kitchen' | 'manager';
+export type JobStation = 'counter' | 'kitchen' | 'manager' | 'pos';
 
 /** UI value for job station picker — includes explicit unassigned option. */
 export type JobStationSelection = JobStation | 'none';
@@ -59,6 +59,7 @@ export const TEAM_PERMISSIONS: { id: TeamPermission; label: string }[] = [
   { id: 'menu', label: 'Edit menu' },
   { id: 'analytics', label: 'View analytics' },
   { id: 'payouts', label: 'Manage payouts' },
+  { id: 'inventory', label: 'Manage inventory' },
 ];
 
 export const TEAM_ROLE_OPTIONS: { value: TeamRole; label: string }[] = [
@@ -71,6 +72,7 @@ export const JOB_STATION_OPTIONS: { value: JobStation; label: string; descriptio
   { value: 'counter', label: 'Counter', description: 'Accept orders, prep time, driver handoff' },
   { value: 'kitchen', label: 'Kitchen', description: 'Prep queue only — mark orders ready' },
   { value: 'manager', label: 'Manager', description: 'Full dashboard access' },
+  { value: 'pos', label: 'POS Register', description: 'In-store sales and checkout' },
 ];
 
 export function defaultJobStationForRole(role: TeamRole): JobStation {

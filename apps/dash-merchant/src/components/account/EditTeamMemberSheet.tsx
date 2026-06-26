@@ -28,7 +28,11 @@ interface EditTeamMemberSheetProps {
   onResetPin?: (memberId: string) => void;
   isSaving?: boolean;
   isResettingPin?: boolean;
+  /** When false, POS register station is hidden from the picker. */
+  inStoreEnabled?: boolean;
 }
+
+const BASE_STATIONS: JobStation[] = ['counter', 'kitchen', 'manager'];
 
 const ROSTER_ROLE_OPTIONS = TEAM_ROLE_OPTIONS.filter(
   (option) => option.value === 'staff' || option.value === 'manager',
@@ -41,6 +45,7 @@ export default function EditTeamMemberSheet({
   onResetPin,
   isSaving = false,
   isResettingPin = false,
+  inStoreEnabled = false,
 }: EditTeamMemberSheetProps) {
   const isRoster = member.loginType === 'roster';
   const [role, setRole] = useState<TeamRole>(member.role);
@@ -49,7 +54,9 @@ export default function EditTeamMemberSheet({
   const [jobStation, setJobStation] = useState<JobStationSelection>(
     jobStationFromApi(member.jobStation),
   );
-  const [confirmReset, setConfirmReset] = useState(false);
+  const permissionOptions = inStoreEnabled
+    ? TEAM_PERMISSIONS
+    : TEAM_PERMISSIONS.filter((entry) => entry.id !== 'inventory');
 
   const handleRoleChange = (nextRole: TeamRole) => {
     setRole(nextRole);
@@ -115,12 +122,16 @@ export default function EditTeamMemberSheet({
             </select>
           </div>
 
-          <JobStationPicker value={jobStation} onChange={setJobStation} />
+          <JobStationPicker
+            value={jobStation}
+            onChange={setJobStation}
+            allowedStations={inStoreEnabled ? [...BASE_STATIONS, 'pos'] : BASE_STATIONS}
+          />
 
           {!isRoster && (
             <div className="space-y-inset-sm">
               <h3 className="text-label-md text-on-surface-variant">Permissions</h3>
-              {TEAM_PERMISSIONS.map((permission) => (
+              {permissionOptions.map((permission) => (
                 <label key={permission.id} className="flex items-center gap-inset-sm">
                   <input
                     type="checkbox"

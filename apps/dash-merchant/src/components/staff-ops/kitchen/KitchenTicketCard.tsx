@@ -1,15 +1,23 @@
 import { MaterialIcon } from '../../../signup/components/MaterialIcon';
 import { getItemOptionLines, Order } from '../../../types/order';
+import type { OrderChannel } from '../../../types/restaurant-mgmt';
+import OrderChannelChip from '../../restaurant-mgmt/OrderChannelChip';
 import HandledByLabel from '../shared/HandledByLabel';
 import OrderElapsedTimer from '../shared/OrderElapsedTimer';
 
 interface KitchenTicketCardProps {
   order: Order;
   selected?: boolean;
+  showChannelBadge?: boolean;
   onSelect: () => void;
 }
 
-export default function KitchenTicketCard({ order, selected, onSelect }: KitchenTicketCardProps) {
+export default function KitchenTicketCard({
+  order,
+  selected,
+  showChannelBadge,
+  onSelect,
+}: KitchenTicketCardProps) {
   const startedAt = order.accepted_at || order.placed_at || order.created_at;
   const statusLabel = order.status === 'accepted' ? 'Accepted' : 'Preparing';
 
@@ -26,9 +34,14 @@ export default function KitchenTicketCard({ order, selected, onSelect }: Kitchen
       <div className="flex items-center justify-between gap-inset-sm">
         <div>
           <p className="text-headline-md font-bold text-on-background">#{order.order_number}</p>
-          <span className="mt-1 inline-block rounded-full bg-surface-variant px-2 py-0.5 text-label-sm font-semibold uppercase text-on-surface-variant">
-            {statusLabel}
-          </span>
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            <span className="inline-block rounded-full bg-surface-variant px-2 py-0.5 text-label-sm font-semibold uppercase text-on-surface-variant">
+              {statusLabel}
+            </span>
+            {showChannelBadge && order.channel && (
+              <OrderChannelChip channel={order.channel as OrderChannel} />
+            )}
+          </div>
         </div>
         <OrderElapsedTimer startedAt={startedAt} className="text-lg text-primary-container" />
       </div>
