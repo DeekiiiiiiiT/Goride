@@ -18,6 +18,10 @@ import {
   registerMerchantTeamRoutes,
   getPendingTeamInviteForProfile,
 } from "./merchantTeam.ts";
+import {
+  registerMerchantStationRoutes,
+  resolveShiftTokenFromRequest,
+} from "./merchantStationRoutes.ts";
 
 const app = new Hono().basePath("/delivery");
 
@@ -34,6 +38,7 @@ app.use("*", cors({
     "x-client-info",
     "accept-profile",
     "prefer",
+    "X-Staff-Shift-Token",
   ],
 }));
 
@@ -779,13 +784,29 @@ app.put("/orders/:id/status", async (c) => {
     .single();
   
   if (updateError) return c.json({ error: updateError.message }, 500);
-  
+
+  const shiftHeader = c.req.header("X-Staff-Shift-Token");
+  let teamMemberId: string | null = null;
+  if (shiftHeader && actorType === "merchant") {
+    const access = await requireResolvedMerchantWithPermission(user.id, user.email, "orders");
+    if (access.ok) {
+      const serviceSb = getServiceSupabase();
+      const shift = await resolveShiftTokenFromRequest(
+        shiftHeader,
+        access.resolved.merchant.id as string,
+        serviceSb,
+      );
+      if (shift) teamMemberId = shift.teamMemberId;
+    }
+  }
+
   // Log event
   await supabase.from("order_events").insert({
     order_id: id,
     status,
     actor_type: actorType,
     actor_id: user.id,
+    team_member_id: teamMemberId,
     notes,
   });
   
@@ -833,19 +854,21 @@ async function enrichOrdersWithLastHandledBy(
   const orderIds = orders.map((order) => String(order.id));
   const { data: events } = await sb
     .from("order_events")
-    .select("order_id, status, actor_id, created_at, actor_type")
+    .select("order_id, status, actor_id, team_member_id, created_at, actor_type")
     .in("order_id", orderIds)
     .eq("actor_type", "merchant")
     .order("created_at", { ascending: false });
 
   const { data: members } = await sb
     .from("merchant_team_members")
-    .select("user_id, name")
+    .select("id, user_id, name")
     .eq("merchant_id", merchantId);
 
   const memberNameByUserId = new Map<string, string>();
+  const memberNameById = new Map<string, string>();
   for (const member of members || []) {
     const row = member as Record<string, unknown>;
+    memberNameById.set(String(row.id), String(row.name));
     if (row.user_id) {
       memberNameByUserId.set(String(row.user_id), String(row.name));
     }
@@ -862,8 +885,13 @@ async function enrichOrdersWithLastHandledBy(
 
   return orders.map((order) => {
     const latest = latestByOrder.get(String(order.id));
-    if (!latest?.actor_id) return order;
-    const name = memberNameByUserId.get(String(latest.actor_id));
+    if (!latest) return order;
+    const teamMemberId = latest.team_member_id ? String(latest.team_member_id) : null;
+    const name = teamMemberId
+      ? memberNameById.get(teamMemberId)
+      : latest.actor_id
+        ? memberNameByUserId.get(String(latest.actor_id))
+        : undefined;
     if (!name) return order;
     return {
       ...order,
@@ -1856,6 +1884,7 @@ import { registerCustomerAdminRoutes } from "./admin/customerRoutes.ts";
 import { registerFinanceAdminRoutes } from "./admin/financeRoutes.ts";
 registerMerchantApplicationRoutes(app);
 registerMerchantTeamRoutes(app, { getSupabase, getServiceSupabase });
+registerMerchantStationRoutes(app, { getSupabase, getServiceSupabase });
 registerPartnerBusinessTypeRoutes(app);
 registerMerchantAdminRoutes(app);
 registerOrderAdminRoutes(app);

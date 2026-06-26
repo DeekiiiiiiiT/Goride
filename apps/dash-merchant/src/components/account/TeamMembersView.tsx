@@ -17,6 +17,8 @@ import {
 } from '../../types/team';
 import JobStationPicker from '../staff-ops/shared/JobStationPicker';
 import JobStationBadge from '../staff-ops/shared/JobStationBadge';
+import AddFloorStaffForm from '../staff-ops/station/AddFloorStaffForm';
+import { formatPinStatusLabel } from '../../types/team';
 import { readFlag, setFlag } from '../../lib/partner-feature-flags';
 
 interface TeamMembersViewProps {
@@ -72,11 +74,14 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
     resendInvite,
     updateMember,
     removeMember,
+    addRosterMember,
+    resetMemberPinById,
     roleDefaultPermissions,
     isLoading,
     isError,
     refetch,
     isSaving,
+    isResettingPin,
   } = useTeamMembers(merchantId);
 
   const [inviteEmail, setInviteEmail] = useState('');
@@ -89,7 +94,17 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
   const [staffOpsEnabled, setStaffOpsEnabled] = useState(() =>
     readFlag(merchantId, 'staffOperationsV1'),
   );
+  const [staffPinEnabled, setStaffPinEnabled] = useState(() =>
+    readFlag(merchantId, 'staffStationPinV1'),
+  );
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
+
+  const floorStaffUsesPin = staffOpsEnabled && staffPinEnabled;
+  const inviteUsesEmail =
+    !floorStaffUsesPin ||
+    inviteRole === 'manager' ||
+    inviteRole === 'admin' ||
+    inviteJobStation === 'manager';
 
   const handleRoleChange = (role: TeamRole) => {
     setInviteRole(role);
@@ -172,6 +187,28 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
               className="h-5 w-5"
             />
           </label>
+          {staffOpsEnabled && (
+            <label className="mt-inset-md flex min-h-[48px] cursor-pointer items-center justify-between gap-inset-md border-t border-outline-variant pt-inset-md">
+              <div>
+                <p className="text-body-sm font-semibold text-on-background">
+                  Tablet PIN sign-in (beta)
+                </p>
+                <p className="text-label-sm text-on-surface-variant">
+                  Floor staff pick their name and PIN on the store tablet — no email needed
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={staffPinEnabled}
+                onChange={(event) => {
+                  const enabled = event.target.checked;
+                  setStaffPinEnabled(enabled);
+                  setFlag(merchantId, 'staffStationPinV1', enabled);
+                }}
+                className="h-5 w-5"
+              />
+            </label>
+          )}
         </section>
 
         <section className="space-y-inset-md">
@@ -190,7 +227,14 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
                       <p className="text-body-sm text-on-surface-variant">
                         {formatAccessSummary(member.permissions, member.isOwner)}
                       </p>
-                      <JobStationBadge station={member.jobStation} />
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        <JobStationBadge station={member.jobStation} />
+                        {member.loginType === 'roster' && staffPinEnabled && (
+                          <span className="rounded-full bg-surface-variant px-2 py-0.5 text-label-sm text-on-surface-variant">
+                            {formatPinStatusLabel(member.pinStatus)}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-inset-xs">
@@ -223,9 +267,27 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
         </section>
 
         <div className="grid grid-cols-1 gap-inset-lg lg:grid-cols-12">
-          <section className="space-y-inset-md lg:col-span-8">
-            <h2 className="text-headline-md text-on-background">Invite Team Member</h2>
+          {floorStaffUsesPin && (
+            <section className="lg:col-span-4">
+              <AddFloorStaffForm
+                onSubmit={({ name, jobStation }) => addRosterMember(name, jobStation)}
+                isSaving={isSaving}
+              />
+            </section>
+          )}
+
+          <section className={`space-y-inset-md ${floorStaffUsesPin ? 'lg:col-span-8' : 'lg:col-span-8'}`}>
+            <h2 className="text-headline-md text-on-background">
+              {floorStaffUsesPin ? 'Invite manager' : 'Invite Team Member'}
+            </h2>
             <div className="space-y-inset-md rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm">
+              {floorStaffUsesPin && !inviteUsesEmail && (
+                <p className="text-body-sm text-on-surface-variant">
+                  Counter and kitchen staff are added above. Use this section to invite managers by
+                  email.
+                </p>
+              )}
+
               <div className="space-y-inset-xs">
                 <label className="block text-label-md text-on-surface-variant" htmlFor="invite-name">
                   Name (optional)
@@ -240,19 +302,21 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
                 />
               </div>
 
-              <div className="space-y-inset-xs">
-                <label className="block text-label-md text-on-surface-variant" htmlFor="invite-email">
-                  Email Address
-                </label>
-                <input
-                  id="invite-email"
-                  type="email"
-                  value={inviteEmail}
-                  onChange={(event) => setInviteEmail(event.target.value)}
-                  placeholder="colleague@restaurant.com"
-                  className={inputClass}
-                />
-              </div>
+              {inviteUsesEmail && (
+                <div className="space-y-inset-xs">
+                  <label className="block text-label-md text-on-surface-variant" htmlFor="invite-email">
+                    Email Address
+                  </label>
+                  <input
+                    id="invite-email"
+                    type="email"
+                    value={inviteEmail}
+                    onChange={(event) => setInviteEmail(event.target.value)}
+                    placeholder="colleague@restaurant.com"
+                    className={inputClass}
+                  />
+                </div>
+              )}
 
               <div className="space-y-inset-xs">
                 <label className="block text-label-md text-on-surface-variant" htmlFor="invite-role">
@@ -299,6 +363,7 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
                 </div>
               </div>
 
+              {inviteUsesEmail && (
               <div className="pt-inset-md">
                 <button
                   type="button"
@@ -308,6 +373,7 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
                   Send Invite
                 </button>
               </div>
+              )}
             </div>
           </section>
 
@@ -358,6 +424,8 @@ export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewP
         <EditTeamMemberSheet
           member={editingMember}
           isSaving={isSaving}
+          isResettingPin={isResettingPin}
+          onResetPin={resetMemberPinById}
           onClose={() => setEditingMember(null)}
           onSave={(updates) => {
             updateMember(editingMember.id, updates);

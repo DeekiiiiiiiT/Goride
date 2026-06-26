@@ -22,6 +22,7 @@ import OrderAcceptedSheet from '../../components/OrderAcceptedSheet';
 import NewOrderDetailSheet from '../../components/NewOrderDetailSheet';
 import QueryErrorState from '../../components/QueryErrorState';
 import CounterOrderCard from '../../components/staff-ops/counter/CounterOrderCard';
+import EndShiftButton from '../../components/staff-ops/station/EndShiftButton';
 import { Order } from '../../types/order';
 
 interface CounterOrdersPageProps {
@@ -29,6 +30,7 @@ interface CounterOrdersPageProps {
   staffName?: string;
   onNavigate?: (tab: PartnerTab) => void;
   onOpenMobileNav?: () => void;
+  onEndShift?: () => void;
 }
 
 type CounterTab = 'new' | 'kitchen' | 'ready';
@@ -52,6 +54,7 @@ export default function CounterOrdersPage({
   staffName,
   onNavigate,
   onOpenMobileNav,
+  onEndShift,
 }: CounterOrdersPageProps) {
   const [tab, setTab] = useState<CounterTab>('new');
   const [detailOrderId, setDetailOrderId] = useState<string | null>(null);
@@ -86,6 +89,7 @@ export default function CounterOrdersPage({
   });
 
   const updateStatusMutation = useOrderStatusMutation({
+    merchantId: merchant.id,
     onSuccess: ({ orderId, status }) => {
       setDetailOrderId((current) => (current === orderId ? null : current));
       setRejectOrderId((current) => (current === orderId ? null : current));
@@ -162,11 +166,16 @@ export default function CounterOrdersPage({
             <p className="text-label-sm text-on-surface-variant">Signed in as {staffName}</p>
           )}
         </div>
-        <StoreStatusToggle
-          storeStatus={storeStatus}
-          isAcceptingOrders={isAcceptingOrders}
-          onToggle={toggleAcceptingOrders}
-        />
+        <div className="flex items-center gap-inset-sm">
+          {onEndShift && (
+            <EndShiftButton merchantId={merchant.id} onEnded={onEndShift} />
+          )}
+          <StoreStatusToggle
+            storeStatus={storeStatus}
+            isAcceptingOrders={isAcceptingOrders}
+            onToggle={toggleAcceptingOrders}
+          />
+        </div>
       </div>
       <div className="flex gap-1 overflow-x-auto px-margin-mobile pb-inset-sm lg:px-margin-tablet">
         {TABS.map((entry) => {

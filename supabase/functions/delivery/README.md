@@ -131,3 +131,20 @@ Env: `PARTNER_PORTAL_URL` (default `https://partner.roamdash.co`) for invite lin
 Hosting: partner SPA must serve `index.html` for `/team-invite/*` paths.
 
 `job_station` on invites and members: `counter` | `kitchen` | `manager` | `NULL` (legacy). Invites accept copies station to the new member row. `GET /merchant/profile` and `GET /merchant/orders` expose `membership.job_station` and optional `lastHandledBy` on orders.
+
+## Staff station PIN (floor roster)
+
+Roster members (`login_type = roster`) sign in on a shared tablet: owner/manager stays logged in, staff pick their name and enter a self-set PIN. Feature-flagged on the client (`staffOperationsV1` + `staffStationPinV1`).
+
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| POST | `/merchant/team/members/roster` | Owner | Create floor staff (name + `job_station`); no email |
+| POST | `/merchant/team/members/:id/pin-reset` | Owner | Lock PIN; clears hash and active shift sessions |
+| GET | `/merchant/station/roster` | Owner/manager device JWT | Safe roster list (`pin_status`, no hash) |
+| POST | `/merchant/station/pin/create` | Owner/manager device JWT | First PIN or after reset (`memberId`, `pin`, `confirmPin`) |
+| POST | `/merchant/station/pin/verify` | Owner/manager device JWT | Normal shift login; returns `shiftToken` |
+| POST | `/merchant/station/shift/end` | Device JWT + `X-Staff-Shift-Token` | End shift |
+
+`PUT /orders/:id/status` accepts optional `X-Staff-Shift-Token` to set `order_events.team_member_id` for `lastHandledBy` attribution while keeping `actor_id` as the device user.
+
+Member fields: `login_type` (`account` \| `roster`), `pin_status` (`unset` \| `active` \| `locked`). PINs stored as bcrypt hash only.

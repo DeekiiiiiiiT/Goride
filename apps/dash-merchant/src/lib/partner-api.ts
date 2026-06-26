@@ -7,6 +7,8 @@ import type {
   MerchantBankAccountMasked,
   MerchantDocument,
 } from '@roam/types';
+import type { JobStation, RosterMember } from '../types/team';
+import { readShift } from './station-shift-session';
 
 export async function getAuthHeaders(contentType = 'application/json') {
   const {
@@ -271,5 +273,74 @@ export function saveOnboardingDraft(opts: {
   return deliveryFetch('/partner/onboarding-draft', {
     method: 'PATCH',
     body: JSON.stringify(opts),
+  });
+}
+
+export async function deliveryFetchWithShift(
+  merchantId: string,
+  path: string,
+  init?: RequestInit,
+) {
+  const headers = await getAuthHeaders();
+  const shift = readShift(merchantId);
+  const merged: Record<string, string> = { ...headers, ...(init?.headers as Record<string, string>) };
+  if (shift?.token) merged['X-Staff-Shift-Token'] = shift.token;
+  const res = await fetch(`${API_ENDPOINTS.delivery}${path}`, {
+    ...init,
+    headers: merged,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Request failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function createRosterMember(payload: {
+  name: string;
+  jobStation: JobStation;
+}) {
+  return deliveryFetch('/merchant/team/members/roster', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function resetMemberPin(memberId: string) {
+  return deliveryFetch(`/merchant/team/members/${memberId}/pin-reset`, {
+    method: 'POST',
+    body: '{}',
+  });
+}
+
+export async function fetchStationRoster(): Promise<{ members: RosterMember[] }> {
+  return deliveryFetch('/merchant/station/roster') as Promise<{ members: RosterMember[] }>;
+}
+
+export async function createStaffPin(payload: {
+  memberId: string;
+  pin: string;
+  confirmPin: string;
+}): Promise<{ shiftToken: string; expiresAt: string; member: RosterMember }> {
+  return deliveryFetch('/merchant/station/pin/create', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }) as Promise<{ shiftToken: string; expiresAt: string; member: RosterMember }>;
+}
+
+export async function verifyStaffPin(payload: {
+  memberId: string;
+  pin: string;
+}): Promise<{ shiftToken: string; expiresAt: string; member: RosterMember }> {
+  return deliveryFetch('/merchant/station/pin/verify', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }) as Promise<{ shiftToken: string; expiresAt: string; member: RosterMember }>;
+}
+
+export async function endShift(merchantId: string) {
+  return deliveryFetchWithShift(merchantId, '/merchant/station/shift/end', {
+    method: 'POST',
+    body: '{}',
   });
 }

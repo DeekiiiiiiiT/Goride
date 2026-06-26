@@ -13,12 +13,15 @@ import QueryErrorState from '../../components/QueryErrorState';
 import KitchenTicketCard, {
   KitchenTicketDetail,
 } from '../../components/staff-ops/kitchen/KitchenTicketCard';
+import EndShiftButton from '../../components/staff-ops/station/EndShiftButton';
 import { Order } from '../../types/order';
 
 interface KitchenQueuePageProps {
   merchant: Merchant;
+  staffName?: string;
   onNavigate?: (tab: PartnerTab) => void;
   onOpenMobileNav?: () => void;
+  onEndShift?: () => void;
 }
 
 function kitchenQueue(orders: Order[]) {
@@ -33,8 +36,10 @@ function kitchenQueue(orders: Order[]) {
 
 export default function KitchenQueuePage({
   merchant,
+  staffName,
   onNavigate,
   onOpenMobileNav,
+  onEndShift,
 }: KitchenQueuePageProps) {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const isTabVisible = usePageVisibility();
@@ -55,7 +60,7 @@ export default function KitchenQueuePage({
     ? queue.find((order) => order.id === selectedOrderId) ?? null
     : queue[0] ?? null;
 
-  const updateStatusMutation = useOrderStatusMutation();
+  const updateStatusMutation = useOrderStatusMutation({ merchantId: merchant.id });
 
   const header = (
     <header className="flex items-center justify-between border-b border-outline-variant/40 bg-[#1c1917] px-margin-mobile py-inset-md text-white lg:px-margin-tablet">
@@ -69,10 +74,17 @@ export default function KitchenQueuePage({
           Menu
         </button>
         <h1 className="text-headline-md font-bold">Kitchen Queue</h1>
-        <p className="text-label-sm text-white/70">{merchant.name}</p>
+        <p className="text-label-sm text-white/70">
+          {staffName ? `Signed in as ${staffName}` : merchant.name}
+        </p>
       </div>
-      <div className="rounded-full bg-primary-container px-3 py-1 text-label-md font-bold text-on-primary">
-        {queue.length} ticket{queue.length === 1 ? '' : 's'}
+      <div className="flex items-center gap-inset-sm">
+        {onEndShift && (
+          <EndShiftButton merchantId={merchant.id} onEnded={onEndShift} />
+        )}
+        <div className="rounded-full bg-primary-container px-3 py-1 text-label-md font-bold text-on-primary">
+          {queue.length} ticket{queue.length === 1 ? '' : 's'}
+        </div>
       </div>
     </header>
   );

@@ -7,6 +7,9 @@ import DashboardPage from './pages/DashboardPage';
 import OrdersPage from './pages/OrdersPage';
 import CounterOrdersPage from './pages/staff-ops/CounterOrdersPage';
 import KitchenQueuePage from './pages/staff-ops/KitchenQueuePage';
+import StationKioskFlow from './components/staff-ops/station/StationKioskFlow';
+import { resolveStationKioskRoute } from './lib/station-kiosk-routing';
+import { getActingMember } from './lib/station-shift-session';
 import { resolveStaffOpsRoute } from './lib/staff-ops-routing';
 import MenuPage from './pages/MenuPage';
 import EarningsPage from './pages/EarningsPage';
@@ -315,6 +318,51 @@ function DashMerchantApp() {
           />
         );
       case 'orders': {
+        const kioskRoute = merchant
+          ? resolveStationKioskRoute(merchant.id, membership ?? undefined)
+          : null;
+
+        if (kioskRoute === 'kiosk' && merchant) {
+          return (
+            <div className="min-h-screen bg-background pb-[var(--app-bottom-nav-total)]">
+              <StationKioskFlow
+                merchantId={merchant.id}
+                storeName={merchant.name || 'Store'}
+                onShiftStarted={() => setRoutingEpoch((n) => n + 1)}
+              />
+            </div>
+          );
+        }
+
+        const actingMember = merchant ? getActingMember(merchant.id) : null;
+        const displayStaffName =
+          actingMember?.name ??
+          (session.user.user_metadata?.name as string | undefined);
+        const handleEndShift = () => setRoutingEpoch((n) => n + 1);
+
+        if (kioskRoute === 'counter' && merchant) {
+          return (
+            <CounterOrdersPage
+              merchant={merchant}
+              staffName={displayStaffName}
+              onNavigate={handlePartnerNavigate}
+              onOpenMobileNav={openMobileNav}
+              onEndShift={actingMember ? handleEndShift : undefined}
+            />
+          );
+        }
+        if (kioskRoute === 'kitchen' && merchant) {
+          return (
+            <KitchenQueuePage
+              merchant={merchant}
+              staffName={actingMember?.name}
+              onNavigate={handlePartnerNavigate}
+              onOpenMobileNav={openMobileNav}
+              onEndShift={actingMember ? handleEndShift : undefined}
+            />
+          );
+        }
+
         const staffRoute = merchant
           ? resolveStaffOpsRoute(merchant.id, membership ?? undefined)
           : null;
@@ -322,7 +370,7 @@ function DashMerchantApp() {
           return (
             <CounterOrdersPage
               merchant={merchant}
-              staffName={session.user.user_metadata?.name as string | undefined}
+              staffName={displayStaffName}
               onNavigate={handlePartnerNavigate}
               onOpenMobileNav={openMobileNav}
             />

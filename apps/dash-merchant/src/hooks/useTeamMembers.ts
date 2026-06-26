@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { deliveryFetch } from '../lib/partner-api';
+import { createRosterMember, deliveryFetch, resetMemberPin } from '../lib/partner-api';
 import {
   ROLE_DEFAULT_PERMISSIONS,
   TeamData,
@@ -121,6 +121,25 @@ export function useTeamMembers(_merchantId: string) {
     onError: (error: Error) => toast.error(error.message),
   });
 
+  const createRosterMutation = useMutation({
+    mutationFn: async (payload: { name: string; jobStation: JobStation }) =>
+      createRosterMember(payload),
+    onSuccess: () => {
+      invalidate();
+      toast.success('Floor staff added');
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const resetPinMutation = useMutation({
+    mutationFn: async (memberId: string) => resetMemberPin(memberId),
+    onSuccess: () => {
+      invalidate();
+      toast.success('PIN reset — staff must create a new PIN on the tablet');
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
   const sendInvite = (
     email: string,
     role: TeamRole,
@@ -162,6 +181,14 @@ export function useTeamMembers(_merchantId: string) {
     removeMemberMutation.mutate(memberId);
   };
 
+  const addRosterMember = (name: string, jobStation: JobStation) => {
+    createRosterMutation.mutate({ name, jobStation });
+  };
+
+  const resetMemberPinById = (memberId: string) => {
+    resetPinMutation.mutate(memberId);
+  };
+
   return {
     members: query.data?.members ?? [],
     pendingInvites: query.data?.pendingInvites ?? [],
@@ -173,10 +200,15 @@ export function useTeamMembers(_merchantId: string) {
     resendInvite,
     updateMember,
     removeMember,
+    addRosterMember,
+    resetMemberPinById,
     roleDefaultPermissions: ROLE_DEFAULT_PERMISSIONS,
     isSaving:
       inviteMutation.isPending ||
       updateMemberMutation.isPending ||
-      removeMemberMutation.isPending,
+      removeMemberMutation.isPending ||
+      createRosterMutation.isPending ||
+      resetPinMutation.isPending,
+    isResettingPin: resetPinMutation.isPending,
   };
 }

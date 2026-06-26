@@ -1,4 +1,5 @@
 import type { Order } from '../../types/order';
+import type { PinStatus, RosterMember } from '../../types/team';
 
 const baseOrder: Omit<Order, 'id' | 'order_number' | 'status' | 'items'> = {
   total: 3200,
@@ -50,3 +51,10 @@ export const MOCK_COUNTER_ORDERS: Order[] = [
 export const MOCK_KITCHEN_ORDERS: Order[] = MOCK_COUNTER_ORDERS.filter((order) =>
   ['accepted', 'preparing'].includes(order.status),
 );
+
+export const MOCK_ROSTER_MEMBERS: RosterMember[] = [
+  { id: 'r1', name: 'Maria Lopez', jobStation: 'counter', pinStatus: 'active' },
+  { id: 'r2', name: 'Andre Chen', jobStation: 'kitchen', pinStatus: 'active' },
+  { id: 'r3', name: 'Kayra Williams', jobStation: 'kitchen', pinStatus: 'unset' },
+  { id: 'r4', name: 'Ricardo Blake', jobStation: 'counter', pinStatus: 'locked' as PinStatus },
+];

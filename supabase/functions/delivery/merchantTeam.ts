@@ -19,6 +19,8 @@ export const VALID_TEAM_PERMISSIONS = new Set<TeamPermission>([
 
 export function mapTeamMember(row: Record<string, unknown>) {
   const jobStation = row.job_station;
+  const loginType = row.login_type === "roster" ? "roster" : "account";
+  const pinStatus = row.pin_status;
   return {
     id: String(row.id),
     name: String(row.name),
@@ -26,6 +28,11 @@ export function mapTeamMember(row: Record<string, unknown>) {
     role: String(row.role),
     permissions: (row.permissions as string[]) || [],
     isOwner: Boolean(row.is_owner),
+    loginType,
+    pinStatus:
+      pinStatus === "unset" || pinStatus === "active" || pinStatus === "locked"
+        ? String(pinStatus)
+        : "unset",
     jobStation:
       jobStation === "counter" || jobStation === "kitchen" || jobStation === "manager"
         ? String(jobStation)

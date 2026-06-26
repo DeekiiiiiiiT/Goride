@@ -5,6 +5,10 @@ export type TeamPermission = 'orders' | 'menu' | 'analytics' | 'payouts';
 /** Restaurant job station — separate from admin role/permissions. */
 export type JobStation = 'counter' | 'kitchen' | 'manager';
 
+export type LoginType = 'account' | 'roster';
+
+export type PinStatus = 'unset' | 'active' | 'locked';
+
 export interface MerchantMembership {
   role: TeamRole;
   permissions: TeamPermission[];
@@ -20,6 +24,15 @@ export interface TeamMember {
   permissions: TeamPermission[];
   isOwner?: boolean;
   jobStation?: JobStation | null;
+  loginType?: LoginType;
+  pinStatus?: PinStatus;
+}
+
+export interface RosterMember {
+  id: string;
+  name: string;
+  jobStation: 'counter' | 'kitchen' | null;
+  pinStatus: PinStatus;
 }
 
 export interface PendingInvite {
@@ -91,4 +104,10 @@ export function formatAccessSummary(permissions: TeamPermission[], isOwner?: boo
 
 export function formatRoleLabel(role: TeamRole) {
   return TEAM_ROLE_OPTIONS.find((entry) => entry.value === role)?.label ?? role;
+}
+
+export function formatPinStatusLabel(status: PinStatus | undefined) {
+  if (status === 'active') return 'Active';
+  if (status === 'locked') return 'Locked — must set new PIN';
+  return 'Not set';
 }

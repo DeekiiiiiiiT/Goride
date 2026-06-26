@@ -4,14 +4,23 @@ interface JobStationPickerProps {
   value: JobStation;
   onChange: (station: JobStation) => void;
   disabled?: boolean;
+  allowedStations?: JobStation[];
 }
 
-export default function JobStationPicker({ value, onChange, disabled }: JobStationPickerProps) {
+export default function JobStationPicker({
+  value,
+  onChange,
+  disabled,
+  allowedStations,
+}: JobStationPickerProps) {
+  const options = allowedStations
+    ? JOB_STATION_OPTIONS.filter((option) => allowedStations.includes(option.value))
+    : JOB_STATION_OPTIONS;
   return (
     <div className="space-y-inset-xs">
       <p className="text-label-md text-on-surface-variant">Job station</p>
       <div className="grid gap-inset-xs">
-        {JOB_STATION_OPTIONS.map((option) => {
+        {options.map((option) => {
           const selected = value === option.value;
           return (
             <button

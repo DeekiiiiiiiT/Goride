@@ -12,5 +12,12 @@
 | 5 | Counter Ready Handoff | — | Covered in Counter tab "Ready for Driver" |
 | 6 | Team Invite Job Station | — | Covered in `JobStationPicker` |
 | 7 | Edit Team Member Job Station | — | Covered in `EditTeamMemberSheet` |
+| 8 | Staff Picker (kiosk) | `962ebd7bbf6f44f7bada8b421d1dc495` | Done |
+| 9 | Enter PIN (kiosk) | `3f75b7ba326b425ba0035d14a5660a7d` | Done |
+| 10 | Create PIN (kiosk) | `d7b9effdefa049e39ac737c3eddc0f22` | Done |
+| 11 | Add Floor Staff | `f43d6ac2701a431281fba783c8494944` | Done |
+| 12 | Team Member PIN Status | `bfaf900376024d5c8762e4b4469e304f` | Done |
 
 React implementation: `apps/dash-merchant/src/components/staff-ops/` and `pages/staff-ops/`.
+
+**PO sign-off:** [ ] All 5 PIN station screens approved
