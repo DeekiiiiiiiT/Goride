@@ -1,6 +1,8 @@
-import { API_ENDPOINTS } from '@roam/api-client';
+import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
 import type { Session } from '@supabase/supabase-js';
 import type { Order } from '../types/order';
+import { getStationAuthHeaders } from './partner-api';
+import { readDeviceSession } from './store-tablet-session';
 
 /**
  * Query key inventory (invalidation uses prefix ['merchant-orders']):
@@ -24,11 +26,20 @@ export const merchantOrdersKeys = {
 };
 
 export async function fetchMerchantActiveOrders(
-  session: Session,
+  session?: Session | null,
 ): Promise<MerchantOrdersResponse> {
+  const device = readDeviceSession();
+  if (device) {
+    const headers = await getStationAuthHeaders('');
+    const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/orders`, { headers });
+    if (!res.ok) throw new Error('Failed to fetch orders');
+    return res.json();
+  }
+  if (!session) throw new Error('Not authenticated');
   const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/orders`, {
     headers: {
       Authorization: `Bearer ${session.access_token}`,
+      ...supabaseAnonFunctionHeaders(),
     },
   });
   if (!res.ok) throw new Error('Failed to fetch orders');

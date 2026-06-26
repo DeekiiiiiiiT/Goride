@@ -5,6 +5,9 @@ export type TeamPermission = 'orders' | 'menu' | 'analytics' | 'payouts';
 /** Restaurant job station — separate from admin role/permissions. */
 export type JobStation = 'counter' | 'kitchen' | 'manager';
 
+/** UI value for job station picker — includes explicit unassigned option. */
+export type JobStationSelection = JobStation | 'none';
+
 export type LoginType = 'account' | 'roster';
 
 export type PinStatus = 'unset' | 'active' | 'locked';
@@ -31,7 +34,8 @@ export interface TeamMember {
 export interface RosterMember {
   id: string;
   name: string;
-  jobStation: 'counter' | 'kitchen' | null;
+  role: Extract<TeamRole, 'staff' | 'manager'>;
+  jobStation: JobStation | null;
   pinStatus: PinStatus;
 }
 
@@ -74,8 +78,24 @@ export function defaultJobStationForRole(role: TeamRole): JobStation {
   return 'manager';
 }
 
+export const NO_JOB_STATION_OPTION = {
+  value: 'none' as const,
+  label: 'No station',
+  description: 'Uses role permissions only — not locked to a tablet view',
+};
+
+export function jobStationSelectionToApi(
+  station: JobStationSelection,
+): JobStation | null {
+  return station === 'none' ? null : station;
+}
+
+export function jobStationFromApi(station: JobStation | null | undefined): JobStationSelection {
+  return station ?? 'none';
+}
+
 export function formatJobStationLabel(station: JobStation | null | undefined) {
-  if (!station) return 'Legacy (all orders)';
+  if (!station) return NO_JOB_STATION_OPTION.label;
   return JOB_STATION_OPTIONS.find((entry) => entry.value === station)?.label ?? station;
 }
 

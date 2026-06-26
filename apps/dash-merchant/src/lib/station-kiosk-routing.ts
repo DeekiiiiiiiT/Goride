@@ -1,9 +1,9 @@
 import { readFlag } from './partner-feature-flags';
-import { getActingStation, readShift } from './station-shift-session';
+import { getActingKioskRoute, readShift } from './station-shift-session';
 import { resolveStaffOpsRoute, type StaffOpsRoute } from './staff-ops-routing';
 import type { MerchantMembership } from '../types/team';
 
-export type StationKioskRoute = StaffOpsRoute | 'kiosk' | null;
+export type StationKioskRoute = StaffOpsRoute | 'manager' | 'kiosk' | null;
 
 export function isStationPinEnabled(merchantId: string): boolean {
   return readFlag(merchantId, 'staffOperationsV1') && readFlag(merchantId, 'staffStationPinV1');
@@ -27,8 +27,8 @@ export function resolveStationKioskRoute(
     return resolveStaffOpsRoute(merchantId, membership);
   }
 
-  const activeStation = getActingStation(merchantId);
-  if (activeStation) return activeStation;
+  const activeRoute = getActingKioskRoute(merchantId);
+  if (activeRoute) return activeRoute;
 
   if (readShift(merchantId)) return null;
 

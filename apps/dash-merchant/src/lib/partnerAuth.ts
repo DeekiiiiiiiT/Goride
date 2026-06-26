@@ -10,6 +10,9 @@ export function getPartnerAuthRedirectUrl(): string {
     if (pathname.startsWith('/team-invite/')) {
       return `${origin}${pathname}`;
     }
+    if (pathname === '/tablet' || pathname.startsWith('/tablet/')) {
+      return `${origin}${pathname}${window.location.search}`;
+    }
     return `${origin}/`;
   }
   return `${PARTNER_PRODUCTION_ORIGIN}/`;

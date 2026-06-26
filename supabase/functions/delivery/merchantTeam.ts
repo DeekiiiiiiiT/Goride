@@ -50,6 +50,7 @@ export function parseJobStationInput(
   value: unknown,
   role: string,
 ): string | null {
+  if (value === "none") return null;
   if (value == null || value === "") {
     return defaultJobStationForRole(role);
   }
@@ -366,7 +367,7 @@ export function registerMerchantTeamRoutes(app: Hono, deps: TeamDeps) {
     if (!permissions.every((p: string) => VALID_TEAM_PERMISSIONS.has(p as TeamPermission))) {
       return c.json({ error: "Invalid permissions" }, 400);
     }
-    if (body.jobStation != null && body.jobStation !== "" && jobStation == null) {
+    if (body.jobStation != null && body.jobStation !== "" && body.jobStation !== "none" && jobStation == null) {
       return c.json({ error: "Invalid job station" }, 400);
     }
     if (jobStationRequiresOrders(jobStation) && !permissions.includes("orders")) {
@@ -533,12 +534,16 @@ export function registerMerchantTeamRoutes(app: Hono, deps: TeamDeps) {
       if (name) updates.name = name;
     }
     if (body.jobStation !== undefined) {
-      const nextRole = String(body.role ?? updates.role ?? "staff");
-      const station = parseJobStationInput(body.jobStation, nextRole);
-      if (body.jobStation != null && body.jobStation !== "" && station == null) {
-        return c.json({ error: "Invalid job station" }, 400);
+      if (body.jobStation === "none") {
+        updates.job_station = null;
+      } else {
+        const nextRole = String(body.role ?? updates.role ?? "staff");
+        const station = parseJobStationInput(body.jobStation, nextRole);
+        if (body.jobStation != null && body.jobStation !== "" && station == null) {
+          return c.json({ error: "Invalid job station" }, 400);
+        }
+        updates.job_station = station;
       }
-      updates.job_station = station;
     }
 
     const sb = getServiceSb();

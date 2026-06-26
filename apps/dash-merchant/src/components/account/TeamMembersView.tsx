@@ -1,438 +1,507 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+
 import QueryErrorState from '../QueryErrorState';
+
 import PartnerSkeleton from '../PartnerSkeleton';
+
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
+
 import { useTeamMembers } from '../../hooks/useTeamMembers';
+
 import EditTeamMemberSheet from './EditTeamMemberSheet';
+
+import AddTeamMemberPanel from './AddTeamMemberPanel';
+
 import {
-  defaultJobStationForRole,
+
   formatAccessSummary,
+
   formatRoleLabel,
-  JobStation,
-  TEAM_PERMISSIONS,
-  TEAM_ROLE_OPTIONS,
+
+  formatPinStatusLabel,
   TeamMember,
-  TeamPermission,
   TeamRole,
 } from '../../types/team';
-import JobStationPicker from '../staff-ops/shared/JobStationPicker';
+
 import JobStationBadge from '../staff-ops/shared/JobStationBadge';
-import AddFloorStaffForm from '../staff-ops/station/AddFloorStaffForm';
-import { formatPinStatusLabel } from '../../types/team';
-import { readFlag, setFlag } from '../../lib/partner-feature-flags';
+import StoreTabletSettingsSection from '../store-tablet/StoreTabletSettingsSection';
+import { getStoreTabletPairing } from '../../lib/partner-api';
+
+import { readFlag } from '../../lib/partner-feature-flags';
+
+
 
 interface TeamMembersViewProps {
+
   merchantId: string;
+
   onBack: () => void;
+
 }
 
-const inputClass =
-  'h-12 w-full rounded-lg border border-outline-variant bg-transparent px-4 text-body-lg text-on-background outline-none transition-colors placeholder:text-on-surface-variant/50 focus:border-primary-container focus:ring-1 focus:ring-primary-container';
+
 
 function MemberAvatar({
+
   name,
+
   isOwner,
+
 }: {
+
   name: string;
+
   isOwner?: boolean;
+
 }) {
+
   const initial = name.trim().charAt(0).toUpperCase();
 
+
+
   return (
+
     <div
+
       className={`flex h-12 w-12 items-center justify-center rounded-full text-headline-md font-bold ${
+
         isOwner
+
           ? 'bg-primary-container text-on-primary-container'
+
           : 'bg-surface-variant text-on-surface-variant'
+
       }`}
+
     >
+
       {initial}
+
     </div>
+
   );
+
 }
+
+
 
 function RoleBadge({ role, filled = false }: { role: TeamRole; filled?: boolean }) {
+
   return (
+
     <span
+
       className={`rounded-full px-2 py-1 text-label-sm ${
+
         filled
+
           ? 'bg-surface-variant text-on-surface-variant'
+
           : 'border border-outline-variant text-on-surface-variant'
+
       }`}
+
     >
+
       {formatRoleLabel(role)}
+
     </span>
+
   );
+
 }
+
+
 
 export default function TeamMembersView({ merchantId, onBack }: TeamMembersViewProps) {
+
   const {
+
     members,
+
     pendingInvites,
+
     sendInvite,
+
     cancelInvite,
+
     resendInvite,
+
     updateMember,
+
     removeMember,
+
     addRosterMember,
+
     resetMemberPinById,
-    roleDefaultPermissions,
+
     isLoading,
+
     isError,
+
     refetch,
+
     isSaving,
+
     isResettingPin,
+
   } = useTeamMembers(merchantId);
 
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteName, setInviteName] = useState('');
-  const [inviteRole, setInviteRole] = useState<TeamRole>('staff');
-  const [inviteJobStation, setInviteJobStation] = useState<JobStation>('counter');
-  const [invitePermissions, setInvitePermissions] = useState<TeamPermission[]>(
-    roleDefaultPermissions.staff
-  );
-  const [staffOpsEnabled, setStaffOpsEnabled] = useState(() =>
+  const pairingFlagsQuery = useQuery({
+    queryKey: ['store-tablet-pairing', merchantId],
+    queryFn: getStoreTabletPairing,
+  });
+
+  const serverStaffOps = pairingFlagsQuery.data?.staffOperationsEnabled;
+  const serverStaffPin = pairingFlagsQuery.data?.staffStationPinEnabled;
+
+  const [staffOpsEnabled] = useState(() =>
     readFlag(merchantId, 'staffOperationsV1'),
   );
-  const [staffPinEnabled, setStaffPinEnabled] = useState(() =>
+
+  const [staffPinEnabled] = useState(() =>
     readFlag(merchantId, 'staffStationPinV1'),
   );
+
+  const effectiveStaffOps = serverStaffOps ?? staffOpsEnabled;
+  const effectiveStaffPin = serverStaffPin ?? staffPinEnabled;
+
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
 
-  const floorStaffUsesPin = staffOpsEnabled && staffPinEnabled;
-  const inviteUsesEmail =
-    !floorStaffUsesPin ||
-    inviteRole === 'manager' ||
-    inviteRole === 'admin' ||
-    inviteJobStation === 'manager';
 
-  const handleRoleChange = (role: TeamRole) => {
-    setInviteRole(role);
-    setInvitePermissions(roleDefaultPermissions[role]);
-    setInviteJobStation(defaultJobStationForRole(role));
-  };
 
-  const togglePermission = (permission: TeamPermission) => {
-    setInvitePermissions((current) =>
-      current.includes(permission)
-        ? current.filter((entry) => entry !== permission)
-        : [...current, permission]
-    );
-  };
+  const pinSignInEnabled = effectiveStaffOps && effectiveStaffPin;
 
-  const handleSendInvite = () => {
-    const sent = sendInvite(inviteEmail, inviteRole, invitePermissions, inviteName, inviteJobStation);
-    if (!sent) return;
-    setInviteEmail('');
-    setInviteName('');
-    setInviteRole('staff');
-    setInviteJobStation('counter');
-    setInvitePermissions(roleDefaultPermissions.staff);
-  };
+
 
   const handleRemoveMember = (member: TeamMember) => {
+
     if (!window.confirm(`Remove ${member.name} from your team?`)) return;
+
     removeMember(member.id);
+
   };
 
+
+
   if (isLoading) {
+
     return (
+
       <div className="app-fullscreen-screen safe-x safe-t z-[60] bg-background p-margin-mobile pt-20">
+
         <PartnerSkeleton variant="list" count={4} />
+
       </div>
+
     );
+
   }
+
+
 
   if (isError) {
+
     return (
+
       <div className="app-fullscreen-screen safe-x safe-t z-[60] bg-background p-margin-mobile pt-20">
+
         <QueryErrorState message="Could not load team" onRetry={() => refetch()} />
+
       </div>
+
     );
+
   }
 
+
+
   return (
+
     <div className="app-fullscreen-screen safe-x safe-t z-[60] bg-background text-on-background">
+
       <header className="flex h-16 w-full shrink-0 items-center gap-inset-sm border-b border-outline-variant bg-surface/80 px-margin-mobile backdrop-blur-md md:px-margin-tablet">
+
         <button
+
           type="button"
+
           onClick={onBack}
+
           className="flex h-12 w-12 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-low active:scale-95"
+
           aria-label="Back"
+
         >
+
           <MaterialIcon name="arrow_back" />
+
         </button>
+
         <h1 className="text-headline-md font-bold text-primary">Team Members</h1>
+
       </header>
 
-      <main className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-inset-lg overflow-y-auto p-margin-mobile pb-[var(--app-bottom-nav-total)] md:p-margin-tablet">
-        <section className="rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-md">
-          <label className="flex min-h-[48px] cursor-pointer items-center justify-between gap-inset-md">
-            <div>
-              <p className="text-body-sm font-semibold text-on-background">
-                Enable staff stations (beta)
-              </p>
-              <p className="text-label-sm text-on-surface-variant">
-                Counter and kitchen staff get dedicated order views
-              </p>
-            </div>
-            <input
-              type="checkbox"
-              checked={staffOpsEnabled}
-              onChange={(event) => {
-                const enabled = event.target.checked;
-                setStaffOpsEnabled(enabled);
-                setFlag(merchantId, 'staffOperationsV1', enabled);
-              }}
-              className="h-5 w-5"
-            />
-          </label>
-          {staffOpsEnabled && (
-            <label className="mt-inset-md flex min-h-[48px] cursor-pointer items-center justify-between gap-inset-md border-t border-outline-variant pt-inset-md">
-              <div>
-                <p className="text-body-sm font-semibold text-on-background">
-                  Tablet PIN sign-in (beta)
-                </p>
-                <p className="text-label-sm text-on-surface-variant">
-                  Floor staff pick their name and PIN on the store tablet — no email needed
-                </p>
-              </div>
-              <input
-                type="checkbox"
-                checked={staffPinEnabled}
-                onChange={(event) => {
-                  const enabled = event.target.checked;
-                  setStaffPinEnabled(enabled);
-                  setFlag(merchantId, 'staffStationPinV1', enabled);
-                }}
-                className="h-5 w-5"
-              />
-            </label>
-          )}
-        </section>
 
-        <section className="space-y-inset-md">
-          <h2 className="text-headline-md text-on-background">Current Team</h2>
-          <div className="grid grid-cols-1 gap-inset-md md:grid-cols-2 lg:grid-cols-3">
-            {members.map((member) => (
-              <div
-                key={member.id}
-                className="relative overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm transition-shadow hover:shadow-md"
-              >
-                <div className="mb-inset-sm flex items-start justify-between">
-                  <div className="flex items-center gap-inset-sm">
-                    <MemberAvatar name={member.name} isOwner={member.isOwner} />
-                    <div>
-                      <h3 className="text-headline-md text-on-background">{member.name}</h3>
-                      <p className="text-body-sm text-on-surface-variant">
-                        {formatAccessSummary(member.permissions, member.isOwner)}
-                      </p>
-                      <div className="mt-1 flex flex-wrap items-center gap-1">
-                        <JobStationBadge station={member.jobStation} />
-                        {member.loginType === 'roster' && staffPinEnabled && (
-                          <span className="rounded-full bg-surface-variant px-2 py-0.5 text-label-sm text-on-surface-variant">
-                            {formatPinStatusLabel(member.pinStatus)}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end gap-inset-xs">
-                    <RoleBadge role={member.role} filled={member.isOwner} />
-                    {!member.isOwner && (
-                      <div className="flex gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setEditingMember(member)}
-                          className="rounded-full p-1 text-on-surface-variant transition-colors hover:bg-surface-variant"
-                          title="Edit member"
-                        >
-                          <MaterialIcon name="edit" size={20} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveMember(member)}
-                          className="rounded-full p-1 text-on-surface-variant transition-colors hover:bg-error-container/20 hover:text-error"
-                          title="Remove member"
-                        >
-                          <MaterialIcon name="person_remove" size={20} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+
+      <main className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-inset-lg overflow-y-auto p-margin-mobile pb-[var(--app-bottom-nav-total)] md:p-margin-tablet">
+
+        <StoreTabletSettingsSection merchantId={merchantId} />
 
         <div className="grid grid-cols-1 gap-inset-lg lg:grid-cols-12">
-          {floorStaffUsesPin && (
-            <section className="lg:col-span-4">
-              <AddFloorStaffForm
-                onSubmit={({ name, jobStation }) => addRosterMember(name, jobStation)}
-                isSaving={isSaving}
-              />
-            </section>
-          )}
 
-          <section className={`space-y-inset-md ${floorStaffUsesPin ? 'lg:col-span-8' : 'lg:col-span-8'}`}>
-            <h2 className="text-headline-md text-on-background">
-              {floorStaffUsesPin ? 'Invite manager' : 'Invite Team Member'}
-            </h2>
-            <div className="space-y-inset-md rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm">
-              {floorStaffUsesPin && !inviteUsesEmail && (
-                <p className="text-body-sm text-on-surface-variant">
-                  Counter and kitchen staff are added above. Use this section to invite managers by
-                  email.
-                </p>
-              )}
+          <section className="lg:col-span-7">
 
-              <div className="space-y-inset-xs">
-                <label className="block text-label-md text-on-surface-variant" htmlFor="invite-name">
-                  Name (optional)
-                </label>
-                <input
-                  id="invite-name"
-                  type="text"
-                  value={inviteName}
-                  onChange={(event) => setInviteName(event.target.value)}
-                  placeholder="Colleague name"
-                  className={inputClass}
-                />
-              </div>
+            <AddTeamMemberPanel
 
-              {inviteUsesEmail && (
-                <div className="space-y-inset-xs">
-                  <label className="block text-label-md text-on-surface-variant" htmlFor="invite-email">
-                    Email Address
-                  </label>
-                  <input
-                    id="invite-email"
-                    type="email"
-                    value={inviteEmail}
-                    onChange={(event) => setInviteEmail(event.target.value)}
-                    placeholder="colleague@restaurant.com"
-                    className={inputClass}
-                  />
-                </div>
-              )}
+              pinSignInEnabled={pinSignInEnabled}
 
-              <div className="space-y-inset-xs">
-                <label className="block text-label-md text-on-surface-variant" htmlFor="invite-role">
-                  Role
-                </label>
-                <div className="relative">
-                  <select
-                    id="invite-role"
-                    value={inviteRole}
-                    onChange={(event) => handleRoleChange(event.target.value as TeamRole)}
-                    className={`${inputClass} appearance-none pr-10`}
-                  >
-                    {TEAM_ROLE_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-on-surface-variant">
-                    <MaterialIcon name="expand_more" />
-                  </div>
-                </div>
-              </div>
+              isSaving={isSaving}
 
-              <JobStationPicker value={inviteJobStation} onChange={setInviteJobStation} />
+              onAddRoster={({ name, role, jobStation }) =>
 
-              <div className="space-y-inset-sm pt-inset-sm">
-                <h4 className="text-label-md text-on-surface-variant">Permissions</h4>
-                <div className="grid grid-cols-1 gap-inset-sm sm:grid-cols-2">
-                  {TEAM_PERMISSIONS.map((permission) => (
-                    <label
-                      key={permission.id}
-                      className="flex min-h-[48px] cursor-pointer items-center gap-inset-sm rounded-lg border border-outline-variant p-3 transition-colors hover:bg-surface-variant"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={invitePermissions.includes(permission.id)}
-                        onChange={() => togglePermission(permission.id)}
-                        className="h-5 w-5 rounded border-outline-variant text-primary-container focus:ring-2 focus:ring-primary-container focus:ring-offset-2"
-                      />
-                      <span className="text-body-sm text-on-background">{permission.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
+                addRosterMember(name, role, jobStation)
 
-              {inviteUsesEmail && (
-              <div className="pt-inset-md">
-                <button
-                  type="button"
-                  onClick={handleSendInvite}
-                  className="min-h-[48px] w-full rounded-lg bg-primary-container px-inset-lg py-3 text-headline-md font-bold text-on-primary shadow-sm transition-all hover:bg-primary/90 active:scale-95 sm:w-auto"
-                >
-                  Send Invite
-                </button>
-              </div>
-              )}
-            </div>
+              }
+
+              onSendInvite={({ email, name, role, permissions, jobStation }) =>
+                sendInvite(email, role, permissions, name, jobStation)
+              }
+
+            />
+
           </section>
 
-          <section className="space-y-inset-md lg:col-span-4">
-            <h2 className="text-headline-md text-on-background">Pending Invites</h2>
-            <div className="space-y-inset-md rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm">
+
+
+          <section className="space-y-inset-md lg:col-span-5">
+
+            <h2 className="text-headline-md text-on-background">Pending invites</h2>
+
+            <div className="space-y-inset-md rounded-xl border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm">
+
               {pendingInvites.length === 0 ? (
+
                 <p className="text-body-sm text-on-surface-variant">No pending invites</p>
+
               ) : (
+
                 pendingInvites.map((invite) => (
+
                   <div
+
                     key={invite.id}
+
                     className="flex items-center justify-between border-b border-outline-variant pb-inset-md last:border-0 last:pb-0"
+
                   >
+
                     <div>
+
                       <p className="text-sm text-on-background">{invite.email}</p>
-                      <div className="mt-1 flex items-center gap-inset-xs">
+
+                      <div className="mt-1 flex flex-wrap items-center gap-inset-xs">
+
                         <RoleBadge role={invite.role} filled />
+
+                        <JobStationBadge station={invite.jobStation} />
+
                         <span className="text-xs text-tertiary">Pending</span>
+
                       </div>
+
                     </div>
+
                     <div className="flex items-center gap-1">
+
                       <button
+
                         type="button"
+
                         onClick={() => resendInvite(invite.id)}
+
                         className="flex h-10 w-10 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-variant"
+
                         title="Resend Invite"
+
                       >
+
                         <MaterialIcon name="send" />
+
                       </button>
+
                       <button
+
                         type="button"
+
                         onClick={() => cancelInvite(invite.id)}
+
                         className="flex h-10 w-10 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-error-container/20 hover:text-error"
+
                         title="Cancel Invite"
+
                       >
+
                         <MaterialIcon name="close" />
+
                       </button>
+
                     </div>
+
                   </div>
+
                 ))
+
               )}
+
             </div>
+
           </section>
+
         </div>
+
+
+
+        <section className="space-y-inset-md">
+
+          <h2 className="text-headline-md text-on-background">Current team</h2>
+
+          <div className="grid grid-cols-1 gap-inset-md md:grid-cols-2 lg:grid-cols-3">
+
+            {members.map((member) => (
+
+              <div
+
+                key={member.id}
+
+                className="relative overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm transition-shadow hover:shadow-md"
+
+              >
+
+                <div className="mb-inset-sm flex items-start justify-between">
+
+                  <div className="flex items-center gap-inset-sm">
+
+                    <MemberAvatar name={member.name} isOwner={member.isOwner} />
+
+                    <div>
+
+                      <h3 className="text-headline-md text-on-background">{member.name}</h3>
+
+                      <p className="text-body-sm text-on-surface-variant">
+
+                        {formatAccessSummary(member.permissions, member.isOwner)}
+
+                      </p>
+
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+
+                        <JobStationBadge station={member.jobStation} />
+
+                        {member.loginType === 'roster' && staffPinEnabled && (
+
+                          <span className="rounded-full bg-surface-variant px-2 py-0.5 text-label-sm text-on-surface-variant">
+
+                            {formatPinStatusLabel(member.pinStatus)}
+
+                          </span>
+
+                        )}
+
+                      </div>
+
+                    </div>
+
+                  </div>
+
+                  <div className="flex flex-col items-end gap-inset-xs">
+
+                    <RoleBadge role={member.role} filled={member.isOwner} />
+
+                    {!member.isOwner && (
+
+                      <div className="flex gap-1">
+
+                        <button
+
+                          type="button"
+
+                          onClick={() => setEditingMember(member)}
+
+                          className="rounded-full p-1 text-on-surface-variant transition-colors hover:bg-surface-variant"
+
+                          title="Edit member"
+
+                        >
+
+                          <MaterialIcon name="edit" size={20} />
+
+                        </button>
+
+                        <button
+
+                          type="button"
+
+                          onClick={() => handleRemoveMember(member)}
+
+                          className="rounded-full p-1 text-on-surface-variant transition-colors hover:bg-error-container/20 hover:text-error"
+
+                          title="Remove member"
+
+                        >
+
+                          <MaterialIcon name="person_remove" size={20} />
+
+                        </button>
+
+                      </div>
+
+                    )}
+
+                  </div>
+
+                </div>
+
+              </div>
+
+            ))}
+
+          </div>
+
+        </section>
+
       </main>
+
       {editingMember && (
+
         <EditTeamMemberSheet
+
           member={editingMember}
+
           isSaving={isSaving}
+
           isResettingPin={isResettingPin}
+
           onResetPin={resetMemberPinById}
+
           onClose={() => setEditingMember(null)}
+
           onSave={(updates) => {
+
             updateMember(editingMember.id, updates);
+
             setEditingMember(null);
+
           }}
+
         />
+
       )}
+
     </div>
+
   );
+
 }
+

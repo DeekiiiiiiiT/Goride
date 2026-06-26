@@ -145,6 +145,27 @@ Roster members (`login_type = roster`) sign in on a shared tablet: owner/manager
 | POST | `/merchant/station/pin/verify` | Owner/manager device JWT | Normal shift login; returns `shiftToken` |
 | POST | `/merchant/station/shift/end` | Device JWT + `X-Staff-Shift-Token` | End shift |
 
-`PUT /orders/:id/status` accepts optional `X-Staff-Shift-Token` to set `order_events.team_member_id` for `lastHandledBy` attribution while keeping `actor_id` as the device user.
+`PUT /orders/:id/status` accepts optional `X-Staff-Shift-Token` to set `order_events.team_member_id` for `lastHandledBy` attribution while keeping `actor_id` as the device user. When `X-Station-Device-Token` is present (enrolled store tablet), JWT is not required.
 
 Member fields: `login_type` (`account` \| `roster`), `pin_status` (`unset` \| `active` \| `locked`). PINs stored as bcrypt hash only.
+
+## Store tablet pairing (enterprise floor iPads)
+
+Floor tablets pair once with a rotatable store code — no owner email login on the device. Staff still use per-shift PINs (`merchant_shift_sessions`).
+
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| GET | `/merchant/station/pairing` | Owner JWT | Pairing code, deep links, `staff_operations_enabled` / `staff_station_pin_enabled` |
+| PATCH | `/merchant/station/pairing/flags` | Owner JWT | Toggle server-side staff flags |
+| POST | `/merchant/station/pairing/regenerate` | Owner JWT | New code; revokes all enrolled devices |
+| POST | `/merchant/station/device/enroll` | Public (`code` + `station`) | Returns `deviceToken`, `merchantId`, `storeName`; rate-limited |
+| GET | `/merchant/station/device/ping` | `X-Station-Device-Token` | Updates `last_seen_at`; returns server flags |
+| POST | `/merchant/station/device/revoke` | Owner JWT or device token | Unpair single tablet |
+
+Dual auth on station routes: `Authorization: Bearer <jwt>` **or** `X-Station-Device-Token`. Device path binds `merchant_id` + enrolled `station` (counter/kitchen/manager).
+
+`GET /merchant/orders` and `PUT /orders/:id/status` accept device token when shift token present for floor order actions.
+
+Env: `STATION_DEVICE_SECRET` (device token HMAC; 90-day TTL). `PARTNER_PORTAL_URL` used for `/tablet?code=ROAM-XXXX&station=` deep links.
+
+Client: `apps/dash-merchant/src/components/store-tablet/`, session key `roam_store_tablet_{merchantId}`.

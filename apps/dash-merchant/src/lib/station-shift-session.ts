@@ -1,4 +1,7 @@
-import type { JobStation, RosterMember } from '../types/team';
+import {
+  type JobStation,
+  type RosterMember,
+} from '../types/team';
 
 export interface StationShiftSession {
   token: string;
@@ -38,7 +41,20 @@ export function getActingMember(merchantId: string): RosterMember | null {
   return readShift(merchantId)?.member ?? null;
 }
 
+export function getActingKioskRoute(
+  merchantId: string,
+): 'counter' | 'kitchen' | 'manager' | null {
+  const member = getActingMember(merchantId);
+  if (!member) return null;
+
+  const station = member.jobStation;
+  if (station === 'counter' || station === 'kitchen') return station;
+  if (station === 'manager' || member.role === 'manager') return 'manager';
+  return null;
+}
+
+/** @deprecated Use getActingKioskRoute */
 export function getActingStation(merchantId: string): JobStation | null {
-  const station = getActingMember(merchantId)?.jobStation;
-  return station === 'counter' || station === 'kitchen' ? station : null;
+  const route = getActingKioskRoute(merchantId);
+  return route === 'counter' || route === 'kitchen' ? route : null;
 }

@@ -1,14 +1,16 @@
-import * as bcrypt from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
-
 export const PIN_MIN_LENGTH = 4;
 export const PIN_MAX_LENGTH = 6;
 export const PIN_MAX_ATTEMPTS = 5;
 export const PIN_LOCKOUT_MINUTES = 15;
 export const SHIFT_TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 
+const PBKDF2_ITERATIONS = 120_000;
+
 const TRIVIAL_PINS = new Set([
   "0000", "1111", "2222", "3333", "4444", "5555", "6666", "7777", "8888", "9999",
   "1234", "4321", "0123", "1212", "6969",
+  "000000", "111111", "222222", "333333", "444444", "555555", "666666",
+  "123456", "654321",
 ]);
 
 export function validatePinFormat(pin: string): string | null {
@@ -21,13 +23,66 @@ export function validatePinFormat(pin: string): string | null {
   return null;
 }
 
+function bytesToBase64(bytes: Uint8Array): string {
+  return btoa(String.fromCharCode(...bytes));
+}
+
+function base64ToBytes(value: string): Uint8Array {
+  const binary = atob(value);
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+async function derivePinBytes(
+  pin: string,
+  salt: Uint8Array,
+  iterations: number,
+): Promise<Uint8Array> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(pin),
+    "PBKDF2",
+    false,
+    ["deriveBits"],
+  );
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      salt,
+      iterations,
+      hash: "SHA-256",
+    },
+    key,
+    256,
+  );
+  return new Uint8Array(bits);
+}
+
+function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  return diff === 0;
+}
+
 export async function hashPin(pin: string): Promise<string> {
-  return bcrypt.hash(pin);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const derived = await derivePinBytes(pin, salt, PBKDF2_ITERATIONS);
+  return `pbkdf2$${PBKDF2_ITERATIONS}$${bytesToBase64(salt)}$${bytesToBase64(derived)}`;
 }
 
 export async function verifyPin(pin: string, hash: string): Promise<boolean> {
   if (!hash) return false;
-  return bcrypt.compare(pin, hash);
+
+  const parts = hash.split("$");
+  if (parts[0] !== "pbkdf2" || parts.length !== 4) return false;
+
+  const iterations = Number(parts[1]);
+  if (!Number.isFinite(iterations) || iterations < 1) return false;
+
+  const salt = base64ToBytes(parts[2]);
+  const expected = base64ToBytes(parts[3]);
+  const derived = await derivePinBytes(pin, salt, iterations);
+  return constantTimeEqual(derived, expected);
 }
 
 function shiftSecret(): string {

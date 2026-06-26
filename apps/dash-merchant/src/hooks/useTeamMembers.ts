@@ -45,11 +45,17 @@ export function useTeamMembers(_merchantId: string) {
       name?: string;
       role: TeamRole;
       permissions: TeamPermission[];
-      jobStation?: JobStation;
+      jobStation?: JobStation | null;
     }) =>
       deliveryFetch('/merchant/team/invites', {
         method: 'POST',
-        body: JSON.stringify({ email, name, role, permissions, jobStation }),
+        body: JSON.stringify({
+          email,
+          name,
+          role,
+          permissions,
+          jobStation: jobStation == null ? 'none' : jobStation,
+        }),
       }) as Promise<InviteResponse>,
     onSuccess: (data) => {
       invalidate();
@@ -101,7 +107,12 @@ export function useTeamMembers(_merchantId: string) {
         method: 'PATCH',
         body: JSON.stringify({
           ...updates,
-          jobStation: updates.jobStation,
+          jobStation:
+            updates.jobStation === undefined
+              ? undefined
+              : updates.jobStation == null
+                ? 'none'
+                : updates.jobStation,
         }),
       }),
     onSuccess: () => {
@@ -122,11 +133,14 @@ export function useTeamMembers(_merchantId: string) {
   });
 
   const createRosterMutation = useMutation({
-    mutationFn: async (payload: { name: string; jobStation: JobStation }) =>
-      createRosterMember(payload),
+    mutationFn: async (payload: {
+      name: string;
+      role: 'staff' | 'manager';
+      jobStation: JobStation | null;
+    }) => createRosterMember(payload),
     onSuccess: () => {
       invalidate();
-      toast.success('Floor staff added');
+      toast.success('Team member added');
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -145,7 +159,7 @@ export function useTeamMembers(_merchantId: string) {
     role: TeamRole,
     permissions: TeamPermission[],
     name?: string,
-    jobStation?: JobStation,
+    jobStation?: JobStation | null,
   ) => {
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) {
@@ -157,7 +171,7 @@ export function useTeamMembers(_merchantId: string) {
       name: name?.trim() || undefined,
       role,
       permissions,
-      jobStation,
+      jobStation: jobStation ?? null,
     });
     return true;
   };
@@ -172,7 +186,7 @@ export function useTeamMembers(_merchantId: string) {
 
   const updateMember = (
     memberId: string,
-    updates: Partial<Pick<TeamMember, 'permissions' | 'role' | 'name'>>,
+    updates: Partial<Pick<TeamMember, 'permissions' | 'role' | 'name' | 'jobStation'>>,
   ) => {
     updateMemberMutation.mutate({ memberId, updates });
   };
@@ -181,8 +195,12 @@ export function useTeamMembers(_merchantId: string) {
     removeMemberMutation.mutate(memberId);
   };
 
-  const addRosterMember = (name: string, jobStation: JobStation) => {
-    createRosterMutation.mutate({ name, jobStation });
+  const addRosterMember = (
+    name: string,
+    role: 'staff' | 'manager',
+    jobStation: JobStation | null,
+  ) => {
+    createRosterMutation.mutate({ name, role, jobStation });
   };
 
   const resetMemberPinById = (memberId: string) => {

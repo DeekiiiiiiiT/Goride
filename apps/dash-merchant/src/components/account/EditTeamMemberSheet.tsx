@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
 import {
   defaultJobStationForRole,
+  jobStationFromApi,
+  jobStationSelectionToApi,
   ROLE_DEFAULT_PERMISSIONS,
   TEAM_PERMISSIONS,
   TEAM_ROLE_OPTIONS,
@@ -9,6 +11,7 @@ import {
   TeamPermission,
   TeamRole,
   JobStation,
+  JobStationSelection,
 } from '../../types/team';
 import JobStationPicker from '../staff-ops/shared/JobStationPicker';
 import TeamMemberPinSection from '../staff-ops/station/TeamMemberPinSection';
@@ -20,12 +23,16 @@ interface EditTeamMemberSheetProps {
     role: TeamRole;
     permissions: TeamPermission[];
     name?: string;
-    jobStation?: JobStation;
+    jobStation?: JobStation | null;
   }) => void;
   onResetPin?: (memberId: string) => void;
   isSaving?: boolean;
   isResettingPin?: boolean;
 }
+
+const ROSTER_ROLE_OPTIONS = TEAM_ROLE_OPTIONS.filter(
+  (option) => option.value === 'staff' || option.value === 'manager',
+);
 
 export default function EditTeamMemberSheet({
   member,
@@ -39,15 +46,15 @@ export default function EditTeamMemberSheet({
   const [role, setRole] = useState<TeamRole>(member.role);
   const [name, setName] = useState(member.name);
   const [permissions, setPermissions] = useState<TeamPermission[]>(member.permissions);
-  const [jobStation, setJobStation] = useState<JobStation>(
-    member.jobStation ?? defaultJobStationForRole(member.role),
+  const [jobStation, setJobStation] = useState<JobStationSelection>(
+    jobStationFromApi(member.jobStation),
   );
   const [confirmReset, setConfirmReset] = useState(false);
 
   const handleRoleChange = (nextRole: TeamRole) => {
     setRole(nextRole);
     setPermissions(ROLE_DEFAULT_PERMISSIONS[nextRole]);
-    setJobStation(defaultJobStationForRole(nextRole));
+    setJobStation(jobStationFromApi(defaultJobStationForRole(nextRole)));
   };
 
   const togglePermission = (permission: TeamPermission) => {
@@ -90,50 +97,40 @@ export default function EditTeamMemberSheet({
             />
           </div>
 
+          <div>
+            <label className="text-label-md text-on-surface-variant" htmlFor="member-role">
+              Role
+            </label>
+            <select
+              id="member-role"
+              value={role}
+              onChange={(event) => handleRoleChange(event.target.value as TeamRole)}
+              className="mt-inset-xs h-12 w-full rounded-lg border border-outline-variant px-4"
+            >
+              {(isRoster ? ROSTER_ROLE_OPTIONS : TEAM_ROLE_OPTIONS).map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <JobStationPicker value={jobStation} onChange={setJobStation} />
+
           {!isRoster && (
-            <>
-              <div>
-                <label className="text-label-md text-on-surface-variant" htmlFor="member-role">
-                  Role
+            <div className="space-y-inset-sm">
+              <h3 className="text-label-md text-on-surface-variant">Permissions</h3>
+              {TEAM_PERMISSIONS.map((permission) => (
+                <label key={permission.id} className="flex items-center gap-inset-sm">
+                  <input
+                    type="checkbox"
+                    checked={permissions.includes(permission.id)}
+                    onChange={() => togglePermission(permission.id)}
+                  />
+                  <span className="text-body-sm">{permission.label}</span>
                 </label>
-                <select
-                  id="member-role"
-                  value={role}
-                  onChange={(event) => handleRoleChange(event.target.value as TeamRole)}
-                  className="mt-inset-xs h-12 w-full rounded-lg border border-outline-variant px-4"
-                >
-                  {TEAM_ROLE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <JobStationPicker value={jobStation} onChange={setJobStation} />
-
-              <div className="space-y-inset-sm">
-                <h3 className="text-label-md text-on-surface-variant">Permissions</h3>
-                {TEAM_PERMISSIONS.map((permission) => (
-                  <label key={permission.id} className="flex items-center gap-inset-sm">
-                    <input
-                      type="checkbox"
-                      checked={permissions.includes(permission.id)}
-                      onChange={() => togglePermission(permission.id)}
-                    />
-                    <span className="text-body-sm">{permission.label}</span>
-                  </label>
-                ))}
-              </div>
-            </>
-          )}
-
-          {isRoster && (
-            <JobStationPicker
-              value={jobStation}
-              onChange={setJobStation}
-              allowedStations={['counter', 'kitchen']}
-            />
+              ))}
+            </div>
           )}
 
           {isRoster && onResetPin && (
@@ -145,7 +142,7 @@ export default function EditTeamMemberSheet({
               />
               {confirmReset && (
                 <p className="text-body-sm text-on-surface-variant">
-                  Tap Reset PIN again to confirm. Staff will need to create a new PIN on the store
+                  Tap Reset PIN again to confirm. They will need to create a new PIN on the store
                   tablet.
                 </p>
               )}
@@ -166,10 +163,10 @@ export default function EditTeamMemberSheet({
             disabled={isSaving}
             onClick={() =>
               onSave({
-                role: isRoster ? 'staff' : role,
-                permissions: isRoster ? ['orders'] : permissions,
+                role,
+                permissions: isRoster ? ROLE_DEFAULT_PERMISSIONS[role] : permissions,
                 name: name.trim() || member.name,
-                jobStation,
+                jobStation: jobStationSelectionToApi(jobStation),
               })
             }
             className="min-h-[48px] flex-1 rounded-lg bg-primary-container font-semibold text-on-primary"

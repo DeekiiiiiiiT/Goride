@@ -1,10 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@roam/auth-client';
 import { API_ENDPOINTS } from '@roam/api-client';
 import { toast } from 'sonner';
 import { merchantOrdersKeys } from '../lib/merchant-orders-query';
-import { getAuthHeaders } from '../lib/partner-api';
+import { getStationAuthHeaders } from '../lib/partner-api';
 import { readShift } from '../lib/station-shift-session';
+import { readDeviceSession } from '../lib/store-tablet-session';
+import { supabase } from '@roam/auth-client';
 
 export interface OrderStatusUpdate {
   orderId: string;
@@ -21,14 +22,17 @@ export function useOrderStatusMutation(options?: {
 
   return useMutation({
     mutationFn: async ({ orderId, status, notes, estimatedPrepTimeMins }: OrderStatusUpdate) => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
+      const device = readDeviceSession();
+      if (!device?.deviceToken) {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!session) throw new Error('Not authenticated');
+      }
 
-      const headers = await getAuthHeaders();
-      const shift =
-        options?.merchantId != null ? readShift(options.merchantId) : null;
+      const headers = await getStationAuthHeaders();
+      const merchantId = options?.merchantId ?? device?.merchantId;
+      const shift = merchantId != null ? readShift(merchantId) : null;
       if (shift?.token) {
         headers['X-Staff-Shift-Token'] = shift.token;
       }

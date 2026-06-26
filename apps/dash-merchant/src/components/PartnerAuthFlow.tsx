@@ -1,18 +1,20 @@
 import { useState } from 'react';
-import WelcomePage from '../pages/WelcomePage';
+import AuthEntryPage from '../components/store-tablet/AuthEntryPage';
 import OnboardingCarouselPage from '../pages/OnboardingCarouselPage';
 import LoginPage from '../pages/LoginPage';
 
-type AuthStep = 'welcome' | 'onboarding' | 'login';
+type AuthStep = 'welcome' | 'onboarding' | 'login' | 'store-tablet';
 
 interface PartnerAuthFlowProps {
   onLoginSuccess: () => void;
+  onStoreTablet?: () => void;
   inviteMode?: boolean;
   onCancel?: () => void;
 }
 
 export default function PartnerAuthFlow({
   onLoginSuccess,
+  onStoreTablet,
   inviteMode = false,
   onCancel,
 }: PartnerAuthFlowProps) {
@@ -21,11 +23,17 @@ export default function PartnerAuthFlow({
 
   if (!inviteMode && step === 'welcome') {
     return (
-      <WelcomePage
-        onGetStarted={() => setStep('onboarding')}
-        onSignIn={() => {
+      <AuthEntryPage
+        onOwnerSignIn={() => {
           setSignUpMode(false);
           setStep('login');
+        }}
+        onStoreTablet={() => {
+          if (onStoreTablet) {
+            onStoreTablet();
+            return;
+          }
+          window.location.href = '/tablet';
         }}
       />
     );

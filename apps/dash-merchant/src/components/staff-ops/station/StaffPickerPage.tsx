@@ -1,14 +1,28 @@
 import { useMemo, useState } from 'react';
 import JobStationBadge from '../shared/JobStationBadge';
-import type { JobStation, RosterMember } from '../../../types/team';
+import {
+  formatJobStationLabel,
+  formatRoleLabel,
+  type JobStation,
+  type RosterMember,
+} from '../../../types/team';
 
-type StationFilter = 'all' | 'counter' | 'kitchen';
+type StationFilter = 'all' | JobStation;
 
 interface StaffPickerPageProps {
   storeName: string;
   members: RosterMember[];
   onSelect: (member: RosterMember) => void;
+  initialFilter?: StationFilter;
+  lockFilter?: boolean;
 }
+
+const TABS: { key: StationFilter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'counter', label: 'Counter' },
+  { key: 'kitchen', label: 'Kitchen' },
+  { key: 'manager', label: 'Manager' },
+];
 
 function MemberAvatar({ name }: { name: string }) {
   const initial = name.trim().charAt(0).toUpperCase();
@@ -19,43 +33,60 @@ function MemberAvatar({ name }: { name: string }) {
   );
 }
 
-export default function StaffPickerPage({ storeName, members, onSelect }: StaffPickerPageProps) {
-  const [filter, setFilter] = useState<StationFilter>('all');
+export default function StaffPickerPage({
+  storeName,
+  members,
+  onSelect,
+  initialFilter = 'all',
+  lockFilter = false,
+}: StaffPickerPageProps) {
+  const [filter, setFilter] = useState<StationFilter>(initialFilter);
+  const activeFilter = lockFilter ? initialFilter : filter;
+  const stationLocked = lockFilter && activeFilter !== 'all';
+  const stationLabel = stationLocked ? formatJobStationLabel(activeFilter) : null;
 
   const filtered = useMemo(() => {
-    if (filter === 'all') return members;
-    return members.filter((member) => member.jobStation === filter);
-  }, [filter, members]);
-
-  const tabs: { key: StationFilter; label: string }[] = [
-    { key: 'all', label: 'All' },
-    { key: 'counter', label: 'Counter' },
-    { key: 'kitchen', label: 'Kitchen' },
-  ];
+    if (activeFilter === 'all') return members;
+    return members.filter((member) => {
+      const station = member.jobStation ?? (member.role === 'manager' ? 'manager' : null);
+      return station === activeFilter;
+    });
+  }, [activeFilter, members]);
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-inset-lg px-margin-tablet py-inset-lg">
       <header className="text-center">
         <h1 className="text-headline-lg font-bold text-on-background">{storeName}</h1>
-        <p className="mt-inset-xs text-body-lg text-on-surface-variant">Who&apos;s working today?</p>
+        <p className="mt-inset-xs text-body-lg text-on-surface-variant">
+          {stationLocked
+            ? `Who's working ${stationLabel} today?`
+            : "Who's working today?"}
+        </p>
+        {stationLocked && (
+          <p className="mt-inset-xs inline-flex items-center gap-1 rounded-full bg-primary-container/20 px-3 py-1 text-label-md font-semibold text-primary-container">
+            {stationLabel} shift
+          </p>
+        )}
       </header>
 
-      <div className="flex justify-center gap-inset-sm">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => setFilter(tab.key)}
-            className={`rounded-full px-5 py-2 text-label-lg font-semibold transition-colors ${
-              filter === tab.key
-                ? 'bg-primary-container text-on-primary-container'
-                : 'bg-surface-container-low text-on-surface-variant'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {!stationLocked && (
+        <div className="flex flex-wrap justify-center gap-inset-sm">
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setFilter(tab.key)}
+              className={`rounded-full px-5 py-2 text-label-lg font-semibold transition-colors ${
+                activeFilter === tab.key
+                  ? 'bg-primary-container text-on-primary-container'
+                  : 'bg-surface-container-low text-on-surface-variant'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-inset-md md:grid-cols-3">
         {filtered.map((member) => (
@@ -67,16 +98,21 @@ export default function StaffPickerPage({ storeName, members, onSelect }: StaffP
           >
             <MemberAvatar name={member.name} />
             <span className="text-title-md font-semibold text-on-background">{member.name}</span>
-            {member.jobStation && (
-              <JobStationBadge station={member.jobStation as JobStation} />
-            )}
+            <div className="flex flex-wrap items-center justify-center gap-1">
+              <span className="rounded-full bg-surface-variant px-2 py-0.5 text-label-sm text-on-surface-variant">
+                {formatRoleLabel(member.role)}
+              </span>
+              {member.jobStation && <JobStationBadge station={member.jobStation as JobStation} />}
+            </div>
           </button>
         ))}
       </div>
 
       {filtered.length === 0 && (
         <p className="text-center text-body-md text-on-surface-variant">
-          No floor staff yet. Ask your manager to add staff in Team settings.
+          {stationLocked
+            ? `No ${stationLabel?.toLowerCase()} staff yet. Ask your manager to add team members for this station.`
+            : 'No team members yet. Ask your manager to add staff in Team settings.'}
         </p>
       )}
 

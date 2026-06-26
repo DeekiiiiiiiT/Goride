@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import StaffPickerPage from './StaffPickerPage';
 import PinPad, { type PinPadMode } from './PinPad';
 import { MOCK_ROSTER_MEMBERS } from '../fixtures';
-import type { RosterMember } from '../../../types/team';
+import type { JobStation, RosterMember } from '../../../types/team';
 import {
   createStaffPin,
   fetchStationRoster,
@@ -17,7 +17,9 @@ interface StationKioskFlowProps {
   merchantId: string;
   storeName: string;
   useMockData?: boolean;
-  onShiftStarted: () => void;
+  initialStationFilter?: JobStation;
+  lockStationFilter?: boolean;
+  onShiftStarted: (member: RosterMember) => void;
 }
 
 function pinModeForMember(member: RosterMember): PinPadMode {
@@ -30,6 +32,8 @@ export default function StationKioskFlow({
   merchantId,
   storeName,
   useMockData = false,
+  initialStationFilter,
+  lockStationFilter = false,
   onShiftStarted,
 }: StationKioskFlowProps) {
   const [step, setStep] = useState<KioskStep>('picker');
@@ -88,7 +92,7 @@ export default function StationKioskFlow({
         expiresAt: response.expiresAt,
         member: response.member,
       });
-      onShiftStarted();
+      onShiftStarted(response.member);
     } catch (error) {
       setPinError(error instanceof Error ? error.message : 'Could not sign in');
     } finally {
@@ -116,6 +120,12 @@ export default function StationKioskFlow({
   }
 
   return (
-    <StaffPickerPage storeName={storeName} members={members} onSelect={handleSelect} />
+    <StaffPickerPage
+      storeName={storeName}
+      members={members}
+      onSelect={handleSelect}
+      initialFilter={initialStationFilter ?? 'all'}
+      lockFilter={lockStationFilter}
+    />
   );
 }

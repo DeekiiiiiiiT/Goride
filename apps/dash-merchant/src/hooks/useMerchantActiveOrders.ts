@@ -5,6 +5,7 @@ import {
   fetchMerchantActiveOrders,
   merchantOrdersKeys,
 } from '../lib/merchant-orders-query';
+import { readDeviceSession } from '../lib/store-tablet-session';
 import {
   logOrdersSyncDiagnostics,
   resolveOrdersRefetchInterval,
@@ -40,6 +41,8 @@ export function useMerchantActiveOrders({
   const query = useQuery({
     queryKey: merchantOrdersKeys.active(),
     queryFn: async () => {
+      const device = readDeviceSession();
+      if (device) return fetchMerchantActiveOrders();
       const {
         data: { session },
       } = await supabase.auth.getSession();

@@ -1,10 +1,16 @@
-import { JOB_STATION_OPTIONS, JobStation } from '../../../types/team';
+import {
+  JOB_STATION_OPTIONS,
+  NO_JOB_STATION_OPTION,
+  type JobStation,
+  type JobStationSelection,
+} from '../../../types/team';
 
 interface JobStationPickerProps {
-  value: JobStation;
-  onChange: (station: JobStation) => void;
+  value: JobStationSelection;
+  onChange: (station: JobStationSelection) => void;
   disabled?: boolean;
   allowedStations?: JobStation[];
+  includeNone?: boolean;
 }
 
 export default function JobStationPicker({
@@ -12,14 +18,18 @@ export default function JobStationPicker({
   onChange,
   disabled,
   allowedStations,
+  includeNone = true,
 }: JobStationPickerProps) {
-  const options = allowedStations
+  const stationOptions = allowedStations
     ? JOB_STATION_OPTIONS.filter((option) => allowedStations.includes(option.value))
     : JOB_STATION_OPTIONS;
+
+  const options = includeNone ? [NO_JOB_STATION_OPTION, ...stationOptions] : stationOptions;
+
   return (
     <div className="space-y-inset-xs">
       <p className="text-label-md text-on-surface-variant">Job station</p>
-      <div className="grid gap-inset-xs">
+      <div className="grid gap-inset-xs sm:grid-cols-2">
         {options.map((option) => {
           const selected = value === option.value;
           return (

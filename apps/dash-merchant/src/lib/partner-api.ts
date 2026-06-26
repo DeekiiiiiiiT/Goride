@@ -9,6 +9,7 @@ import type {
 } from '@roam/types';
 import type { JobStation, RosterMember } from '../types/team';
 import { readShift } from './station-shift-session';
+import { readDeviceSession } from './store-tablet-session';
 
 export async function getAuthHeaders(contentType = 'application/json') {
   const {
@@ -276,12 +277,125 @@ export function saveOnboardingDraft(opts: {
   });
 }
 
+export async function getStationAuthHeaders(contentType = 'application/json') {
+  const device = readDeviceSession();
+  if (device?.deviceToken) {
+    return supabaseAnonFunctionHeaders({
+      'X-Station-Device-Token': device.deviceToken,
+      ...(contentType ? { 'Content-Type': contentType } : {}),
+    });
+  }
+  const authHeaders = await getAuthHeaders(contentType);
+  return {
+    ...supabaseAnonFunctionHeaders(),
+    ...authHeaders,
+  };
+}
+
+export async function deliveryFetchStation(path: string, init?: RequestInit) {
+  const headers = await getStationAuthHeaders();
+  const res = await fetch(`${API_ENDPOINTS.delivery}${path}`, {
+    ...init,
+    headers: {
+      ...headers,
+      ...(init?.headers || {}),
+    },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Request failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export interface StoreTabletPairingResponse {
+  storeName: string;
+  pairingCode: string;
+  stationLinks: Record<JobStation, string>;
+  staffOperationsEnabled: boolean;
+  staffStationPinEnabled: boolean;
+}
+
+export async function getStoreTabletPairing(): Promise<StoreTabletPairingResponse> {
+  return deliveryFetch('/merchant/station/pairing') as Promise<StoreTabletPairingResponse>;
+}
+
+export async function regeneratePairingCode(): Promise<StoreTabletPairingResponse> {
+  return deliveryFetch('/merchant/station/pairing/regenerate', {
+    method: 'POST',
+    body: '{}',
+  }) as Promise<StoreTabletPairingResponse>;
+}
+
+export async function updateStoreTabletFlags(flags: {
+  staffOperationsEnabled?: boolean;
+  staffStationPinEnabled?: boolean;
+}): Promise<StoreTabletPairingResponse> {
+  return deliveryFetch('/merchant/station/pairing/flags', {
+    method: 'PATCH',
+    body: JSON.stringify(flags),
+  }) as Promise<StoreTabletPairingResponse>;
+}
+
+export interface EnrollStoreTabletResponse {
+  deviceToken: string;
+  expiresAt: string;
+  merchantId: string;
+  storeName: string;
+  station: JobStation;
+  staffOperationsEnabled: boolean;
+  staffStationPinEnabled: boolean;
+}
+
+export async function enrollStoreTablet(payload: {
+  code: string;
+  station: JobStation;
+}): Promise<EnrollStoreTabletResponse> {
+  const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/station/device/enroll`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...supabaseAnonFunctionHeaders(),
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Request failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function pingStoreTabletDevice(): Promise<StoreTabletPairingResponse & { station: JobStation }> {
+  return deliveryFetchStation('/merchant/station/device/ping') as Promise<
+    StoreTabletPairingResponse & { station: JobStation }
+  >;
+}
+
+export async function revokeStoreTabletDevice() {
+  const device = readDeviceSession();
+  if (!device) return { ok: true };
+  const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/station/device/revoke`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Station-Device-Token': device.deviceToken,
+      ...supabaseAnonFunctionHeaders(),
+    },
+    body: '{}',
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Request failed: ${res.status}`);
+  }
+  return res.json();
+}
 export async function deliveryFetchWithShift(
   merchantId: string,
   path: string,
   init?: RequestInit,
 ) {
-  const headers = await getAuthHeaders();
+  const headers = await getStationAuthHeaders();
   const shift = readShift(merchantId);
   const merged: Record<string, string> = { ...headers, ...(init?.headers as Record<string, string>) };
   if (shift?.token) merged['X-Staff-Shift-Token'] = shift.token;
@@ -298,11 +412,15 @@ export async function deliveryFetchWithShift(
 
 export async function createRosterMember(payload: {
   name: string;
-  jobStation: JobStation;
+  role: 'staff' | 'manager';
+  jobStation: JobStation | null;
 }) {
   return deliveryFetch('/merchant/team/members/roster', {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      ...payload,
+      jobStation: payload.jobStation == null ? 'none' : payload.jobStation,
+    }),
   });
 }
 
@@ -314,7 +432,7 @@ export async function resetMemberPin(memberId: string) {
 }
 
 export async function fetchStationRoster(): Promise<{ members: RosterMember[] }> {
-  return deliveryFetch('/merchant/station/roster') as Promise<{ members: RosterMember[] }>;
+  return deliveryFetchStation('/merchant/station/roster') as Promise<{ members: RosterMember[] }>;
 }
 
 export async function createStaffPin(payload: {
@@ -322,7 +440,7 @@ export async function createStaffPin(payload: {
   pin: string;
   confirmPin: string;
 }): Promise<{ shiftToken: string; expiresAt: string; member: RosterMember }> {
-  return deliveryFetch('/merchant/station/pin/create', {
+  return deliveryFetchStation('/merchant/station/pin/create', {
     method: 'POST',
     body: JSON.stringify(payload),
   }) as Promise<{ shiftToken: string; expiresAt: string; member: RosterMember }>;
@@ -332,7 +450,7 @@ export async function verifyStaffPin(payload: {
   memberId: string;
   pin: string;
 }): Promise<{ shiftToken: string; expiresAt: string; member: RosterMember }> {
-  return deliveryFetch('/merchant/station/pin/verify', {
+  return deliveryFetchStation('/merchant/station/pin/verify', {
     method: 'POST',
     body: JSON.stringify(payload),
   }) as Promise<{ shiftToken: string; expiresAt: string; member: RosterMember }>;

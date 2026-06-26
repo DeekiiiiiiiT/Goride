@@ -20,6 +20,7 @@ import {
 } from "./merchantTeam.ts";
 import {
   registerMerchantStationRoutes,
+  resolveEnrolledDevice,
   resolveShiftTokenFromRequest,
 } from "./merchantStationRoutes.ts";
 
@@ -39,6 +40,7 @@ app.use("*", cors({
     "accept-profile",
     "prefer",
     "X-Staff-Shift-Token",
+    "X-Station-Device-Token",
   ],
 }));
 
@@ -718,23 +720,12 @@ app.get("/orders/:id", async (c) => {
 
 // Update order status
 app.put("/orders/:id/status", async (c) => {
+  const deviceToken = c.req.header("X-Station-Device-Token");
   const authHeader = c.req.header("Authorization");
-  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
-  
-  const supabase = getSupabase(authHeader);
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-  
   const { id } = c.req.param();
   const body = await c.req.json();
   const { status, notes, actorType, estimatedPrepTimeMins } = body;
 
-  if (actorType === "merchant") {
-    const access = await requireResolvedMerchantWithPermission(user.id, user.email, "orders");
-    if (!access.ok) return c.json({ error: access.message }, access.status);
-  }
-  
-  // Valid status transitions
   const validTransitions: Record<string, string[]> = {
     placed: ["accepted", "cancelled"],
     accepted: ["preparing", "cancelled"],
@@ -744,6 +735,86 @@ app.put("/orders/:id/status", async (c) => {
     in_transit: ["delivered"],
     delivered: ["completed"],
   };
+
+  if (deviceToken && actorType === "merchant") {
+    const serviceSb = getServiceSupabase();
+    const device = await resolveEnrolledDevice(deviceToken, serviceSb);
+    if (!device) return c.json({ error: "Invalid device session" }, 401);
+
+    const { data: order, error: orderError } = await serviceSb
+      .from("orders")
+      .select("status, merchant_id")
+      .eq("id", id)
+      .single();
+
+    if (orderError) return c.json({ error: orderError.message }, 404);
+    const orderRow = order as Record<string, unknown>;
+    if (String(orderRow.merchant_id) !== device.merchantId) {
+      return c.json({ error: "Order not found" }, 404);
+    }
+
+    const allowed = validTransitions[String(orderRow.status)] || [];
+    if (!allowed.includes(status)) {
+      return c.json({ error: `Invalid status transition from ${orderRow.status} to ${status}` }, 400);
+    }
+
+    const updateData: Record<string, unknown> = { status };
+    if (status === "accepted") updateData.accepted_at = new Date().toISOString();
+    if (status === "preparing") updateData.preparing_at = new Date().toISOString();
+    if (status === "ready") updateData.ready_at = new Date().toISOString();
+    if (status === "picked_up") updateData.picked_up_at = new Date().toISOString();
+    if (status === "delivered") updateData.delivered_at = new Date().toISOString();
+    if (status === "cancelled") {
+      updateData.cancelled_at = new Date().toISOString();
+      updateData.cancelled_by = actorType;
+      updateData.cancellation_reason = notes;
+    }
+    if (estimatedPrepTimeMins != null) {
+      updateData.estimated_prep_time_mins = estimatedPrepTimeMins;
+    }
+
+    const { data: updatedOrder, error: updateError } = await serviceSb
+      .from("orders")
+      .update(updateData)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (updateError) return c.json({ error: updateError.message }, 500);
+
+    const shiftHeader = c.req.header("X-Staff-Shift-Token");
+    let teamMemberId: string | null = null;
+    if (shiftHeader) {
+      const shift = await resolveShiftTokenFromRequest(
+        shiftHeader,
+        device.merchantId,
+        serviceSb,
+      );
+      if (shift) teamMemberId = shift.teamMemberId;
+    }
+
+    await serviceSb.from("order_events").insert({
+      order_id: id,
+      status,
+      actor_type: "merchant_device",
+      actor_id: device.deviceId,
+      team_member_id: teamMemberId,
+      notes,
+    });
+
+    return c.json({ order: updatedOrder });
+  }
+
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+  
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  if (actorType === "merchant") {
+    const access = await requireResolvedMerchantWithPermission(user.id, user.email, "orders");
+    if (!access.ok) return c.json({ error: access.message }, access.status);
+  }
   
   // Get current order
   const { data: order, error: orderError } = await supabase
@@ -905,20 +976,34 @@ async function enrichOrdersWithLastHandledBy(
 }
 
 app.get("/merchant/orders", async (c) => {
+  const deviceToken = c.req.header("X-Station-Device-Token");
   const authHeader = c.req.header("Authorization");
-  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
-  
-  const supabase = getSupabase(authHeader);
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-  
-  const access = await requireResolvedMerchantWithPermission(user.id, user.email, "orders");
-  if (!access.ok) return c.json({ error: access.message }, access.status);
-
-  const merchantId = access.resolved.merchant.id as string;
   const { status, from, to, limit } = c.req.query();
-  
-  let query = supabase
+
+  let merchantId: string;
+  let queryClient: ReturnType<typeof getSupabase>;
+
+  if (deviceToken) {
+    const serviceSb = getServiceSupabase();
+    const device = await resolveEnrolledDevice(deviceToken, serviceSb);
+    if (!device) return c.json({ error: "Invalid device session" }, 401);
+    merchantId = device.merchantId;
+    queryClient = serviceSb;
+  } else {
+    if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+    const supabase = getSupabase(authHeader);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+    const access = await requireResolvedMerchantWithPermission(user.id, user.email, "orders");
+    if (!access.ok) return c.json({ error: access.message }, access.status);
+
+    merchantId = access.resolved.merchant.id as string;
+    queryClient = supabase;
+  }
+
+  let query = queryClient
     .from("orders")
     .select(`
       *,

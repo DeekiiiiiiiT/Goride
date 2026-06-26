@@ -8,9 +8,17 @@ import OrdersPage from './pages/OrdersPage';
 import CounterOrdersPage from './pages/staff-ops/CounterOrdersPage';
 import KitchenQueuePage from './pages/staff-ops/KitchenQueuePage';
 import StationKioskFlow from './components/staff-ops/station/StationKioskFlow';
-import { resolveStationKioskRoute } from './lib/station-kiosk-routing';
-import { getActingMember } from './lib/station-shift-session';
+import ActingShiftBar from './components/staff-ops/station/ActingShiftBar';
+import {
+  isStationPinEnabled,
+  resolveStationKioskRoute,
+} from './lib/station-kiosk-routing';
+import {
+  getActingMember,
+} from './lib/station-shift-session';
 import { resolveStaffOpsRoute } from './lib/staff-ops-routing';
+import { ROLE_DEFAULT_PERMISSIONS } from './types/team';
+import type { RosterMember } from './types/team';
 import MenuPage from './pages/MenuPage';
 import EarningsPage from './pages/EarningsPage';
 import SettingsPage from './pages/SettingsPage';
@@ -46,6 +54,9 @@ import {
   consumePartnerOAuthIntent,
   PARTNER_OAUTH_INTENT_KEY,
 } from './lib/partnerAuth';
+import StoreTabletApp from './components/store-tablet/StoreTabletApp';
+import { hasDeviceSession } from './lib/store-tablet-session';
+import { isTabletEntryPath } from './lib/storeTabletUrl';
 import { resetPartnerScroll } from './lib/reset-partner-scroll';
 
 const SPLASH_MIN_MS = 1800;
@@ -173,6 +184,18 @@ function DashMerchantApp() {
   };
 
   const isOwner = membership?.is_owner === true;
+  const actingMember =
+    merchant && isStationPinEnabled(merchant.id) ? getActingMember(merchant.id) : null;
+
+  const handleShiftStarted = (member: RosterMember) => {
+    setRoutingEpoch((n) => n + 1);
+    const station = member.jobStation;
+    if (station === 'manager' || (!station && member.role === 'manager')) {
+      setCurrentPage('dashboard');
+    }
+  };
+
+  const handleEndShift = () => setRoutingEpoch((n) => n + 1);
   const invitePathToken = parseTeamInviteTokenFromPath();
   const storedInviteToken = readTeamInviteToken();
   const activeInviteToken =
@@ -205,6 +228,10 @@ function DashMerchantApp() {
     return <SplashPage />;
   }
 
+  if (isTabletEntryPath() || hasDeviceSession()) {
+    return <StoreTabletApp />;
+  }
+
   if (!session) {
     return (
       <PartnerAuthFlow
@@ -214,6 +241,10 @@ function DashMerchantApp() {
           } = await supabase.auth.getSession();
           setSession(nextSession);
           setCurrentPage('dashboard');
+        }}
+        onStoreTablet={() => {
+          window.history.replaceState({}, '', '/tablet');
+          window.location.reload();
         }}
       />
     );
@@ -277,6 +308,15 @@ function DashMerchantApp() {
   }
 
   const allowedTabs: PartnerTab[] = (() => {
+    if (actingMember) {
+      const perms = ROLE_DEFAULT_PERMISSIONS[actingMember.role];
+      const tabs: PartnerTab[] = ['account'];
+      if (perms.includes('orders')) tabs.unshift('dashboard', 'orders');
+      if (perms.includes('menu')) tabs.push('menu');
+      if (perms.includes('analytics')) tabs.push('analytics');
+      if (perms.includes('payouts')) tabs.push('earnings');
+      return tabs;
+    }
     if (!membership || membership.is_owner || membership.role === 'admin') {
       return ['dashboard', 'orders', 'menu', 'analytics', 'account', 'earnings'];
     }
@@ -328,17 +368,16 @@ function DashMerchantApp() {
               <StationKioskFlow
                 merchantId={merchant.id}
                 storeName={merchant.name || 'Store'}
-                onShiftStarted={() => setRoutingEpoch((n) => n + 1)}
+                onShiftStarted={handleShiftStarted}
               />
             </div>
           );
         }
 
-        const actingMember = merchant ? getActingMember(merchant.id) : null;
+        const acting = merchant ? getActingMember(merchant.id) : null;
         const displayStaffName =
-          actingMember?.name ??
+          acting?.name ??
           (session.user.user_metadata?.name as string | undefined);
-        const handleEndShift = () => setRoutingEpoch((n) => n + 1);
 
         if (kioskRoute === 'counter' && merchant) {
           return (
@@ -347,7 +386,7 @@ function DashMerchantApp() {
               staffName={displayStaffName}
               onNavigate={handlePartnerNavigate}
               onOpenMobileNav={openMobileNav}
-              onEndShift={actingMember ? handleEndShift : undefined}
+              onEndShift={acting ? handleEndShift : undefined}
             />
           );
         }
@@ -355,10 +394,19 @@ function DashMerchantApp() {
           return (
             <KitchenQueuePage
               merchant={merchant}
-              staffName={actingMember?.name}
+              staffName={acting?.name}
               onNavigate={handlePartnerNavigate}
               onOpenMobileNav={openMobileNav}
-              onEndShift={actingMember ? handleEndShift : undefined}
+              onEndShift={acting ? handleEndShift : undefined}
+            />
+          );
+        }
+        if (kioskRoute === 'manager' && merchant) {
+          return (
+            <OrdersPage
+              merchant={merchant}
+              onNavigate={handlePartnerNavigate}
+              onOpenMobileNav={openMobileNav}
             />
           );
         }
@@ -457,6 +505,13 @@ function DashMerchantApp() {
       >
         {pendingTeamInvite && (
           <TeamInviteBanner invite={pendingTeamInvite} onResolved={() => void refetch()} />
+        )}
+        {actingMember && merchant && (
+          <ActingShiftBar
+            merchantId={merchant.id}
+            member={actingMember}
+            onEnded={handleEndShift}
+          />
         )}
         {renderPage()}
       </div>
