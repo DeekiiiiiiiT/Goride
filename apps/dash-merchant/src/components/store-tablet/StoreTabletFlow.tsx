@@ -149,6 +149,7 @@ export default function StoreTabletFlow({ onPaired, onBack }: StoreTabletFlowPro
         storeName={pairingResult.storeName}
         initialStationFilter={pairingResult.station}
         lockStationFilter
+        shiftSurface="store_tablet"
         onShiftStarted={handleShiftStarted}
       />
     );

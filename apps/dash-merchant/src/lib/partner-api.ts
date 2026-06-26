@@ -8,7 +8,8 @@ import type {
   MerchantDocument,
 } from '@roam/types';
 import type { JobStation, RosterMember } from '../types/team';
-import { readShift } from './station-shift-session';
+import { readShift, resolveShiftSurface } from './station-shift-session';
+import { isStoreTabletContext } from './store-tablet-context';
 import { readDeviceSession } from './store-tablet-session';
 
 export async function getAuthHeaders(contentType = 'application/json') {
@@ -278,7 +279,7 @@ export function saveOnboardingDraft(opts: {
 }
 
 export async function getStationAuthHeaders(contentType = 'application/json') {
-  const device = readDeviceSession();
+  const device = isStoreTabletContext() ? readDeviceSession() : null;
   if (device?.deviceToken) {
     return supabaseAnonFunctionHeaders({
       'X-Station-Device-Token': device.deviceToken,
@@ -396,7 +397,7 @@ export async function deliveryFetchWithShift(
   init?: RequestInit,
 ) {
   const headers = await getStationAuthHeaders();
-  const shift = readShift(merchantId);
+  const shift = readShift(merchantId, resolveShiftSurface());
   const merged: Record<string, string> = { ...headers, ...(init?.headers as Record<string, string>) };
   if (shift?.token) merged['X-Staff-Shift-Token'] = shift.token;
   const res = await fetch(`${API_ENDPOINTS.delivery}${path}`, {

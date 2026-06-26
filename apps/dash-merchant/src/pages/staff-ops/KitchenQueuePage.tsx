@@ -46,7 +46,9 @@ export default function KitchenQueuePage({
   const restaurantSettings = useRestaurantSettings(merchant);
   const showInStoreOnKitchen =
     showChannelBadge && Boolean(restaurantSettings.data?.showInStoreOnKitchen);
-  const ordersChannel: MerchantOrdersChannel = showInStoreOnKitchen ? 'all' : 'roam_app';
+  const ordersChannel: MerchantOrdersChannel | undefined = showInStoreOnKitchen
+    ? 'all'
+    : undefined;
 
   const { realtimeStatus } = useMerchantOrdersRealtime({
     merchantId: merchant.id,

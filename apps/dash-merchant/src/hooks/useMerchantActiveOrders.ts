@@ -6,6 +6,7 @@ import {
   merchantOrdersKeys,
   type MerchantOrdersChannel,
 } from '../lib/merchant-orders-query';
+import { isStoreTabletContext } from '../lib/store-tablet-context';
 import { readDeviceSession } from '../lib/store-tablet-session';
 import {
   logOrdersSyncDiagnostics,
@@ -17,7 +18,7 @@ interface UseMerchantActiveOrdersOptions {
   realtimeStatus: MerchantOrdersRealtimeStatus;
   isTabVisible: boolean;
   enabled?: boolean;
-  /** Default roam_app — use all when unified counter/kitchen is enabled. */
+  /** Default roam-only fetch — omit channel until DB migration is applied. */
   channel?: MerchantOrdersChannel;
 }
 
@@ -25,7 +26,7 @@ export function useMerchantActiveOrders({
   realtimeStatus,
   isTabVisible,
   enabled = true,
-  channel = 'roam_app',
+  channel,
 }: UseMerchantActiveOrdersOptions) {
   const refetchInterval = resolveOrdersRefetchInterval({ realtimeStatus, isTabVisible });
   const prevIntervalRef = useRef(refetchInterval);
@@ -45,7 +46,7 @@ export function useMerchantActiveOrders({
   const query = useQuery({
     queryKey: merchantOrdersKeys.active(channel),
     queryFn: async () => {
-      const device = readDeviceSession();
+      const device = isStoreTabletContext() ? readDeviceSession() : null;
       if (device) return fetchMerchantActiveOrders(null, channel);
       const {
         data: { session },

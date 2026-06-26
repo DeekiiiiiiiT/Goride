@@ -2,6 +2,9 @@ import {
   type JobStation,
   type RosterMember,
 } from '../types/team';
+import { isStoreTabletContext } from './store-tablet-context';
+
+export type ShiftSessionSurface = 'owner_kiosk' | 'store_tablet';
 
 export interface StationShiftSession {
   token: string;
@@ -9,22 +12,52 @@ export interface StationShiftSession {
   member: RosterMember;
 }
 
-function storageKey(merchantId: string) {
+function storageKey(merchantId: string, surface: ShiftSessionSurface) {
+  return `roam_station_shift_${surface}_${merchantId}`;
+}
+
+export function resolveShiftSurface(): ShiftSessionSurface {
+  return isStoreTabletContext() ? 'store_tablet' : 'owner_kiosk';
+}
+
+export function persistShift(
+  merchantId: string,
+  session: StationShiftSession,
+  surface: ShiftSessionSurface = resolveShiftSurface(),
+) {
+  sessionStorage.setItem(storageKey(merchantId, surface), JSON.stringify(session));
+}
+
+function legacyStorageKey(merchantId: string) {
   return `roam_station_shift_${merchantId}`;
 }
 
-export function persistShift(merchantId: string, session: StationShiftSession) {
-  sessionStorage.setItem(storageKey(merchantId), JSON.stringify(session));
+function consumeLegacyShift(merchantId: string, surface: ShiftSessionSurface): string | null {
+  const legacyKey = legacyStorageKey(merchantId);
+  const legacy = sessionStorage.getItem(legacyKey);
+  if (!legacy) return null;
+  sessionStorage.removeItem(legacyKey);
+  if (surface === 'store_tablet') {
+    sessionStorage.setItem(storageKey(merchantId, surface), legacy);
+    return legacy;
+  }
+  return null;
 }
 
-export function readShift(merchantId: string): StationShiftSession | null {
+export function readShift(
+  merchantId: string,
+  surface: ShiftSessionSurface = resolveShiftSurface(),
+): StationShiftSession | null {
   try {
-    const raw = sessionStorage.getItem(storageKey(merchantId));
-    if (!raw) return null;
+    let raw = sessionStorage.getItem(storageKey(merchantId, surface));
+    if (!raw) {
+      raw = consumeLegacyShift(merchantId, surface);
+      if (!raw) return null;
+    }
     const parsed = JSON.parse(raw) as StationShiftSession;
     if (!parsed.token || !parsed.member?.id) return null;
     if (parsed.expiresAt && new Date(parsed.expiresAt).getTime() <= Date.now()) {
-      clearShift(merchantId);
+      clearShift(merchantId, surface);
       return null;
     }
     return parsed;
@@ -33,18 +66,25 @@ export function readShift(merchantId: string): StationShiftSession | null {
   }
 }
 
-export function clearShift(merchantId: string) {
-  sessionStorage.removeItem(storageKey(merchantId));
+export function clearShift(
+  merchantId: string,
+  surface: ShiftSessionSurface = resolveShiftSurface(),
+) {
+  sessionStorage.removeItem(storageKey(merchantId, surface));
 }
 
-export function getActingMember(merchantId: string): RosterMember | null {
-  return readShift(merchantId)?.member ?? null;
+export function getActingMember(
+  merchantId: string,
+  surface: ShiftSessionSurface = resolveShiftSurface(),
+): RosterMember | null {
+  return readShift(merchantId, surface)?.member ?? null;
 }
 
 export function getActingKioskRoute(
   merchantId: string,
+  surface: ShiftSessionSurface = 'owner_kiosk',
 ): 'counter' | 'kitchen' | 'manager' | null {
-  const member = getActingMember(merchantId);
+  const member = getActingMember(merchantId, surface);
   if (!member) return null;
 
   const station = member.jobStation;
@@ -54,7 +94,10 @@ export function getActingKioskRoute(
 }
 
 /** @deprecated Use getActingKioskRoute */
-export function getActingStation(merchantId: string): JobStation | null {
-  const route = getActingKioskRoute(merchantId);
+export function getActingStation(
+  merchantId: string,
+  surface: ShiftSessionSurface = 'owner_kiosk',
+): JobStation | null {
+  const route = getActingKioskRoute(merchantId, surface);
   return route === 'counter' || route === 'kitchen' ? route : null;
 }

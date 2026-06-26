@@ -14,7 +14,7 @@ export function canUseStationKiosk(membership: MerchantMembership | null | undef
   return membership.is_owner || membership.role === 'manager' || membership.role === 'admin';
 }
 
-/** Orders-tab routing when station PIN flags are on. */
+/** Orders-tab routing when station PIN flags are on (store tablet only — not partner owner app). */
 export function resolveStationKioskRoute(
   merchantId: string,
   membership: MerchantMembership | null | undefined,
@@ -27,10 +27,10 @@ export function resolveStationKioskRoute(
     return resolveStaffOpsRoute(merchantId, membership);
   }
 
-  const activeRoute = getActingKioskRoute(merchantId);
+  const activeRoute = getActingKioskRoute(merchantId, 'owner_kiosk');
   if (activeRoute) return activeRoute;
 
-  if (readShift(merchantId)) return null;
+  if (readShift(merchantId, 'owner_kiosk')) return null;
 
   return 'kiosk';
 }

@@ -3,7 +3,8 @@ import { API_ENDPOINTS } from '@roam/api-client';
 import { toast } from 'sonner';
 import { merchantOrdersKeys } from '../lib/merchant-orders-query';
 import { getStationAuthHeaders } from '../lib/partner-api';
-import { readShift } from '../lib/station-shift-session';
+import { readShift, resolveShiftSurface } from '../lib/station-shift-session';
+import { isStoreTabletContext } from '../lib/store-tablet-context';
 import { readDeviceSession } from '../lib/store-tablet-session';
 import { supabase } from '@roam/auth-client';
 
@@ -22,7 +23,7 @@ export function useOrderStatusMutation(options?: {
 
   return useMutation({
     mutationFn: async ({ orderId, status, notes, estimatedPrepTimeMins }: OrderStatusUpdate) => {
-      const device = readDeviceSession();
+      const device = isStoreTabletContext() ? readDeviceSession() : null;
       if (!device?.deviceToken) {
         const {
           data: { session },
@@ -32,7 +33,7 @@ export function useOrderStatusMutation(options?: {
 
       const headers = await getStationAuthHeaders();
       const merchantId = options?.merchantId ?? device?.merchantId;
-      const shift = merchantId != null ? readShift(merchantId) : null;
+      const shift = merchantId != null ? readShift(merchantId, resolveShiftSurface()) : null;
       if (shift?.token) {
         headers['X-Staff-Shift-Token'] = shift.token;
       }

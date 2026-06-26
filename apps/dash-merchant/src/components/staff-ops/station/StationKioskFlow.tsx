@@ -8,7 +8,7 @@ import {
   fetchStationRoster,
   verifyStaffPin,
 } from '../../../lib/partner-api';
-import { persistShift } from '../../../lib/station-shift-session';
+import { persistShift, type ShiftSessionSurface } from '../../../lib/station-shift-session';
 
 type KioskStep = 'picker' | 'pin';
 
@@ -17,6 +17,7 @@ interface StationKioskFlowProps {
   storeName: string;
   initialStationFilter?: JobStation;
   lockStationFilter?: boolean;
+  shiftSurface?: ShiftSessionSurface;
   onShiftStarted: (member: RosterMember) => void;
 }
 
@@ -31,6 +32,7 @@ export default function StationKioskFlow({
   storeName,
   initialStationFilter,
   lockStationFilter = false,
+  shiftSurface = 'owner_kiosk',
   onShiftStarted,
 }: StationKioskFlowProps) {
   const [step, setStep] = useState<KioskStep>('picker');
@@ -84,7 +86,7 @@ export default function StationKioskFlow({
         token: response.shiftToken,
         expiresAt: response.expiresAt,
         member: response.member,
-      });
+      }, shiftSurface);
       onShiftStarted(response.member);
     } catch (error) {
       setPinError(error instanceof Error ? error.message : 'Could not sign in');

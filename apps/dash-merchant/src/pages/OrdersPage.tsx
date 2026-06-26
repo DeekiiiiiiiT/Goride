@@ -58,15 +58,15 @@ interface OrdersPageProps {
   onOpenMobileNav?: () => void;
 }
 
-type OrderFilter = 'placed' | 'preparing' | 'ready' | 'completed' | 'cancelled';
+type OrderFilter = 'placed' | 'preparing' | 'ready' | 'order_status';
+type HistoryTab = 'completed' | 'cancelled';
 type SortOrder = 'oldest' | 'newest';
 
 const FILTER_TABS: { key: OrderFilter; label: string }[] = [
   { key: 'placed', label: 'New' },
   { key: 'preparing', label: 'Preparing' },
   { key: 'ready', label: 'Ready' },
-  { key: 'completed', label: 'Completed' },
-  { key: 'cancelled', label: 'Cancelled' },
+  { key: 'order_status', label: 'Order Status' },
 ];
 
 function openOrderView(
@@ -90,6 +90,7 @@ function openOrderView(
 
 export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: OrdersPageProps) {
   const [filter, setFilter] = useState<OrderFilter>('placed');
+  const [historyTab, setHistoryTab] = useState<HistoryTab>('completed');
   const [sortOrder, setSortOrder] = useState<SortOrder>('oldest');
   const [newOrderIds, setNewOrderIds] = useState<Set<string>>(new Set());
   const [desktopSelectedOrderId, setDesktopSelectedOrderId] = useState<string | null>(null);
@@ -161,7 +162,7 @@ export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: Or
     return () => window.clearTimeout(timer);
   }, [realtimeStatus]);
 
-  const isHistoryView = filter === 'completed' || filter === 'cancelled';
+  const isHistoryView = filter === 'order_status';
 
   const {
     orders: activeOrders,
@@ -219,16 +220,16 @@ export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: Or
   const allOrders: Order[] = activeOrders;
   const completedHistoryOrders: Order[] = deliveredHistoryData?.orders || [];
   const cancelledHistoryOrders: Order[] = cancelledHistoryData?.orders || [];
-  const historyOrders = filter === 'completed' ? completedHistoryOrders : cancelledHistoryOrders;
+  const historyOrders = historyTab === 'completed' ? completedHistoryOrders : cancelledHistoryOrders;
   const historyLoading =
-    filter === 'completed' ? deliveredHistoryLoading : cancelledHistoryLoading;
+    historyTab === 'completed' ? deliveredHistoryLoading : cancelledHistoryLoading;
 
   const counts = useMemo(() => countOrdersByStatus(activeOrders), [activeOrders]);
 
-  const orders = useMemo(
-    () => sortOrders(filterOrdersByTab(allOrders, filter), sortOrder),
-    [allOrders, filter, sortOrder],
-  );
+  const orders = useMemo(() => {
+    if (isHistoryView) return [];
+    return sortOrders(filterOrdersByTab(allOrders, filter), sortOrder);
+  }, [allOrders, filter, sortOrder, isHistoryView]);
 
   const detailOrder = useMemo(() => {
     if (!detailOrderId) return null;
@@ -404,7 +405,10 @@ export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: Or
           if (tab === 'orders') setFilter('placed');
           handleNavigate(tab);
         }}
-        onHistory={() => setFilter('completed')}
+        onHistory={() => {
+          setFilter('order_status');
+          setHistoryTab('completed');
+        }}
         onSupport={() => onNavigate?.('account')}
         isAcceptingOrders={isAcceptingOrders}
         onToggleAcceptingOrders={toggleAcceptingOrders}
@@ -416,8 +420,8 @@ export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: Or
         {isHistoryView ? (
           <main className="flex flex-1 flex-col overflow-hidden bg-background p-gutter">
             <OrderHistoryView
-              tab={filter === 'completed' ? 'completed' : 'cancelled'}
-              onTabChange={(tab) => setFilter(tab)}
+              tab={historyTab}
+              onTabChange={setHistoryTab}
               orders={historyOrders}
               completedOrders={completedHistoryOrders}
               cancelledOrders={cancelledHistoryOrders}
@@ -518,7 +522,6 @@ export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: Or
             {isRefreshing || isInitialLoading ? 'Refreshing orders…' : 'Pull to refresh'}
           </div>
         )}
-        {!isHistoryView && (
         <div className="-mx-margin-mobile sticky top-16 z-40 flex flex-col justify-between gap-inset-sm bg-background/95 px-margin-mobile py-inset-xs backdrop-blur-md md:top-0 md:mx-0 md:px-0">
           <div className="hide-scroll flex gap-inset-xs overflow-x-auto pb-1">
             {FILTER_TABS.map((tab) => {
@@ -553,6 +556,7 @@ export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: Or
             })}
           </div>
 
+          {!isHistoryView && (
           <div className="flex shrink-0 items-center gap-inset-xs self-end md:self-auto">
             <span className="text-body-sm text-tertiary">Sort:</span>
             <button
@@ -564,33 +568,13 @@ export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: Or
               <MaterialIcon name="arrow_drop_down" size={16} />
             </button>
           </div>
+          )}
         </div>
-        )}
 
         {isHistoryView ? (
-          <>
-            <div className="hide-scroll flex gap-inset-xs overflow-x-auto pb-1">
-              {FILTER_TABS.map((tab) => {
-                const active = filter === tab.key;
-                return (
-                  <button
-                    key={tab.key}
-                    type="button"
-                    onClick={() => setFilter(tab.key)}
-                    className={`flex items-center gap-inset-base whitespace-nowrap rounded-full px-inset-sm py-2 text-label-md font-semibold transition-colors duration-150 active:scale-95 ${
-                      active
-                        ? 'bg-primary-container text-on-primary-container'
-                        : 'border border-outline-variant bg-surface-container text-on-surface-variant hover:bg-surface-container-high'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
             <OrderHistoryView
-              tab={filter === 'completed' ? 'completed' : 'cancelled'}
-              onTabChange={(tab) => setFilter(tab)}
+              tab={historyTab}
+              onTabChange={setHistoryTab}
               orders={historyOrders}
               completedOrders={completedHistoryOrders}
               cancelledOrders={cancelledHistoryOrders}
@@ -598,7 +582,6 @@ export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: Or
               onOrderClick={(orderId) => setViewOrderId(orderId)}
               fallbackAvgPrepMins={merchant.avg_prep_time_mins}
             />
-          </>
         ) : (
         <div className="mt-inset-xs flex flex-col gap-inset-sm">
           {isError ? (

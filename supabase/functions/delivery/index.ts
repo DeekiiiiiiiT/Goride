@@ -1010,10 +1010,13 @@ app.get("/merchant/orders", async (c) => {
     `)
     .eq("merchant_id", merchantId);
 
-  const channelFilter = channel ?? "roam_app";
-  if (channelFilter !== "all") {
-    query = query.eq("channel", channelFilter);
+  const channelFilter = channel ?? null;
+  if (channelFilter === "in_store") {
+    query = query.eq("channel", "in_store");
+  } else if (channelFilter === "roam_app") {
+    query = query.eq("channel", "roam_app");
   }
+  // channel=all or omitted: no channel filter (backward compatible pre-migration)
   
   if (status) {
     query = query.eq("status", status);

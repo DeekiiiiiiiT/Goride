@@ -2,16 +2,26 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { MaterialIcon } from '../../../signup/components/MaterialIcon';
 import { endShift } from '../../../lib/partner-api';
-import { clearShift, getActingMember } from '../../../lib/station-shift-session';
+import {
+  clearShift,
+  getActingMember,
+  resolveShiftSurface,
+  type ShiftSessionSurface,
+} from '../../../lib/station-shift-session';
 
 interface EndShiftButtonProps {
   merchantId: string;
+  shiftSurface?: ShiftSessionSurface;
   onEnded: () => void;
 }
 
-export default function EndShiftButton({ merchantId, onEnded }: EndShiftButtonProps) {
+export default function EndShiftButton({
+  merchantId,
+  shiftSurface = resolveShiftSurface(),
+  onEnded,
+}: EndShiftButtonProps) {
   const [isEnding, setIsEnding] = useState(false);
-  const acting = getActingMember(merchantId);
+  const acting = getActingMember(merchantId, shiftSurface);
 
   if (!acting) return null;
 
@@ -19,7 +29,7 @@ export default function EndShiftButton({ merchantId, onEnded }: EndShiftButtonPr
     setIsEnding(true);
     try {
       await endShift(merchantId);
-      clearShift(merchantId);
+      clearShift(merchantId, shiftSurface);
       onEnded();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not end shift');

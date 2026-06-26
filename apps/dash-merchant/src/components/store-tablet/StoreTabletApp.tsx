@@ -24,7 +24,9 @@ type TabletView = 'pairing' | 'kiosk' | 'station';
 export default function StoreTabletApp() {
   const [deviceSession, setDeviceSession] = useState(() => readDeviceSession());
   const [routingEpoch, setRoutingEpoch] = useState(0);
-  const actingMember = deviceSession ? getActingMember(deviceSession.merchantId) : null;
+  const actingMember = deviceSession
+    ? getActingMember(deviceSession.merchantId, 'store_tablet')
+    : null;
 
   const merchant = useMemo((): Merchant | null => {
     if (!deviceSession) return null;
@@ -46,7 +48,7 @@ export default function StoreTabletApp() {
     } catch {
       // still clear locally if network fails
     }
-    if (deviceSession) clearShift(deviceSession.merchantId);
+    if (deviceSession) clearShift(deviceSession.merchantId, 'store_tablet');
     clearDeviceSession();
     setDeviceSession(null);
     setRoutingEpoch((n) => n + 1);
@@ -63,7 +65,7 @@ export default function StoreTabletApp() {
   };
 
   const handleEndShift = () => {
-    if (deviceSession) clearShift(deviceSession.merchantId);
+    if (deviceSession) clearShift(deviceSession.merchantId, 'store_tablet');
     refresh();
   };
 
@@ -129,6 +131,7 @@ export default function StoreTabletApp() {
           storeName={deviceSession.storeName}
           initialStationFilter={deviceSession.station}
           lockStationFilter
+          shiftSurface="store_tablet"
           onShiftStarted={handleShiftStarted}
         />
       )}
@@ -137,6 +140,7 @@ export default function StoreTabletApp() {
           <ActingShiftBar
             merchantId={deviceSession.merchantId}
             member={actingMember}
+            shiftSurface="store_tablet"
             onEnded={handleEndShift}
           />
           {stationContent}

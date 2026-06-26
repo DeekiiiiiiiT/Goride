@@ -63,7 +63,9 @@ export default function CounterOrdersPage({
   const restaurantSettings = useRestaurantSettings(merchant);
   const showInStoreOnCounter =
     showChannelBadge && Boolean(restaurantSettings.data?.showInStoreOnCounter);
-  const ordersChannel: MerchantOrdersChannel = showInStoreOnCounter ? 'all' : 'roam_app';
+  const ordersChannel: MerchantOrdersChannel | undefined = showInStoreOnCounter
+    ? 'all'
+    : undefined;
 
   const tabs: { key: CounterTab; label: string }[] = [
     { key: 'new', label: 'New' },
