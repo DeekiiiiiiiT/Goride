@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { API_ENDPOINTS } from '@roam/api-client';
+import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
 import type {
   FulfillmentType,
   GoLiveRule,
@@ -8,6 +8,7 @@ import type {
   VerticalType,
 } from '@roam/types';
 import { Session } from '@supabase/supabase-js';
+import { supabase, ensureValidPartnerSession } from '../lib/partner-supabase';
 import type { PendingTeamInviteSummary } from '../lib/partner-api';
 import type { MerchantMembership, TeamPermission } from '../types/team';
 
@@ -71,11 +72,19 @@ export function useMerchant(session: Session | null) {
     queryFn: async () => {
       if (!session) return null;
 
-      const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/profile`, {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
+      const fetchProfile = async (accessToken: string) =>
+        fetch(`${API_ENDPOINTS.delivery}/merchant/profile`, {
+          headers: supabaseAnonFunctionHeaders({
+            Authorization: `Bearer ${accessToken}`,
+          }),
+        });
+
+      let res = await fetchProfile(session.access_token);
+      if (res.status === 401) {
+        const refreshed = await ensureValidPartnerSession();
+        if (!refreshed) throw new Error('Session expired');
+        res = await fetchProfile(refreshed.access_token);
+      }
 
       if (res.status === 404) {
         const body = await res.json().catch(() => ({}));

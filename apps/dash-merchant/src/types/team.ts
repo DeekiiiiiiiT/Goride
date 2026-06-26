@@ -2,8 +2,34 @@ export type TeamRole = 'staff' | 'manager' | 'admin';
 
 export type TeamPermission = 'orders' | 'menu' | 'analytics' | 'payouts' | 'inventory';
 
-/** Restaurant job station — separate from admin role/permissions. */
-export type JobStation = 'counter' | 'kitchen' | 'manager' | 'pos';
+/** Restaurant job station — separate from admin role/permissions. DB key `counter` = Dispatch UI. */
+export type JobStation =
+  | 'counter'
+  | 'kitchen'
+  | 'manager'
+  | 'pos'
+  | 'bar'
+  | 'expo'
+  | 'drive_thru';
+
+export type VenueStyle =
+  | 'fast_food'
+  | 'sports_bar'
+  | 'fine_dining'
+  | 'cafe'
+  | 'ghost_kitchen'
+  | 'delivery_only'
+  | 'custom';
+
+export const STATION_LABELS: Record<JobStation, string> = {
+  counter: 'Dispatch',
+  kitchen: 'Kitchen',
+  manager: 'Manager',
+  pos: 'POS Register',
+  bar: 'Bar',
+  expo: 'Expo',
+  drive_thru: 'Drive-thru',
+};
 
 /** UI value for job station picker — includes explicit unassigned option. */
 export type JobStationSelection = JobStation | 'none';
@@ -27,6 +53,7 @@ export interface TeamMember {
   permissions: TeamPermission[];
   isOwner?: boolean;
   jobStation?: JobStation | null;
+  displayTitle?: string | null;
   loginType?: LoginType;
   pinStatus?: PinStatus;
 }
@@ -69,11 +96,29 @@ export const TEAM_ROLE_OPTIONS: { value: TeamRole; label: string }[] = [
 ];
 
 export const JOB_STATION_OPTIONS: { value: JobStation; label: string; description: string }[] = [
-  { value: 'counter', label: 'Counter', description: 'Accept orders, prep time, driver handoff' },
-  { value: 'kitchen', label: 'Kitchen', description: 'Prep queue only — mark orders ready' },
-  { value: 'manager', label: 'Manager', description: 'Full dashboard access' },
-  { value: 'pos', label: 'POS Register', description: 'In-store sales and checkout' },
+  { value: 'counter', label: STATION_LABELS.counter, description: 'Roam and in-store order handoff' },
+  { value: 'kitchen', label: STATION_LABELS.kitchen, description: 'Prep queue only — mark orders ready' },
+  { value: 'manager', label: STATION_LABELS.manager, description: 'Full dashboard access' },
+  { value: 'pos', label: STATION_LABELS.pos, description: 'In-store sales and checkout' },
+  { value: 'bar', label: STATION_LABELS.bar, description: 'Drinks queue and bar fulfillment' },
+  { value: 'expo', label: STATION_LABELS.expo, description: 'Assembly, runner calls, order staging' },
+  { value: 'drive_thru', label: STATION_LABELS.drive_thru, description: 'Lane display and payment status' },
 ];
+
+/** Pre–venue-ops station set (staff ops v1). */
+export const LEGACY_JOB_STATIONS: JobStation[] = ['counter', 'kitchen', 'manager'];
+
+export function resolveAllowedJobStations(opts: {
+  venueOpsV2: boolean;
+  inStoreEnabled: boolean;
+}): JobStation[] {
+  if (opts.venueOpsV2) {
+    return JOB_STATION_OPTIONS.map((entry) => entry.value);
+  }
+  return opts.inStoreEnabled
+    ? [...LEGACY_JOB_STATIONS, 'pos']
+    : [...LEGACY_JOB_STATIONS];
+}
 
 export function defaultJobStationForRole(role: TeamRole): JobStation {
   if (role === 'staff') return 'counter';

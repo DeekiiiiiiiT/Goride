@@ -5,7 +5,9 @@ import {
   defaultJobStationForRole,
   jobStationFromApi,
   jobStationSelectionToApi,
+  resolveAllowedJobStations,
   ROLE_DEFAULT_PERMISSIONS,
+  STATION_LABELS,
   TEAM_PERMISSIONS,
   TEAM_ROLE_OPTIONS,
   type JobStation,
@@ -21,6 +23,7 @@ interface AddTeamMemberPanelProps {
     name: string;
     role: 'staff' | 'manager';
     jobStation: ReturnType<typeof jobStationSelectionToApi>;
+    displayTitle?: string | null;
   }) => void;
   onSendInvite: (payload: {
     email: string;
@@ -28,14 +31,14 @@ interface AddTeamMemberPanelProps {
     role: TeamRole;
     permissions: TeamPermission[];
     jobStation: ReturnType<typeof jobStationSelectionToApi>;
+    displayTitle?: string | null;
   }) => boolean;
   isSaving?: boolean;
+  venueOpsV2?: boolean;
 }
 
 const inputClass =
   'h-12 w-full rounded-lg border border-outline-variant bg-transparent px-4 text-body-lg text-on-background outline-none transition-colors placeholder:text-on-surface-variant/50 focus:border-primary-container focus:ring-1 focus:ring-primary-container';
-
-const BASE_STATIONS: JobStation[] = ['counter', 'kitchen', 'manager'];
 
 const ROLE_HINTS: Record<TeamRole, string> = {
   staff: 'Signs in with a PIN on the store tablet. No email needed.',
@@ -49,8 +52,10 @@ export default function AddTeamMemberPanel({
   onAddRoster,
   onSendInvite,
   isSaving = false,
+  venueOpsV2 = false,
 }: AddTeamMemberPanelProps) {
   const [name, setName] = useState('');
+  const [displayTitle, setDisplayTitle] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<TeamRole>('staff');
   const [jobStation, setJobStation] = useState<JobStationSelection>('none');
@@ -58,6 +63,7 @@ export default function AddTeamMemberPanel({
 
   const usesEmail = !pinSignInEnabled || role === 'admin';
   const usesPin = pinSignInEnabled && (role === 'staff' || role === 'manager');
+  const allowedStations = resolveAllowedJobStations({ venueOpsV2, inStoreEnabled });
   const permissionOptions = inStoreEnabled
     ? TEAM_PERMISSIONS
     : TEAM_PERMISSIONS.filter((entry) => entry.id !== 'inventory');
@@ -78,6 +84,7 @@ export default function AddTeamMemberPanel({
 
   const resetForm = () => {
     setName('');
+    setDisplayTitle('');
     setEmail('');
     setRole('staff');
     setJobStation('none');
@@ -89,12 +96,15 @@ export default function AddTeamMemberPanel({
     const trimmedName = name.trim();
     const station = jobStationSelectionToApi(jobStation);
 
+    const title = venueOpsV2 ? displayTitle.trim() || null : undefined;
+
     if (usesPin) {
       if (!trimmedName) return;
       onAddRoster({
         name: trimmedName,
         role: role as 'staff' | 'manager',
         jobStation: station,
+        displayTitle: title,
       });
       resetForm();
       return;
@@ -106,6 +116,7 @@ export default function AddTeamMemberPanel({
       role,
       permissions,
       jobStation: station,
+      displayTitle: title,
     });
     if (sent) resetForm();
   };
@@ -179,11 +190,47 @@ export default function AddTeamMemberPanel({
         </div>
       )}
 
-      <JobStationPicker
-        value={jobStation}
-        onChange={setJobStation}
-        allowedStations={inStoreEnabled ? [...BASE_STATIONS, 'pos'] : BASE_STATIONS}
-      />
+      {venueOpsV2 && (
+        <div className="space-y-inset-xs">
+          <label className="block text-label-md text-on-surface-variant" htmlFor="team-display-title">
+            Display title (optional)
+          </label>
+          <input
+            id="team-display-title"
+            value={displayTitle}
+            onChange={(event) => setDisplayTitle(event.target.value)}
+            placeholder="e.g. Line Cook"
+            className={inputClass}
+          />
+        </div>
+      )}
+
+      {venueOpsV2 ? (
+        <div className="space-y-inset-xs">
+          <label className="block text-label-md text-on-surface-variant" htmlFor="team-job-station">
+            Job station
+          </label>
+          <select
+            id="team-job-station"
+            value={jobStation}
+            onChange={(event) => setJobStation(event.target.value as JobStationSelection)}
+            className={inputClass}
+          >
+            <option value="none">No station</option>
+            {allowedStations.map((station) => (
+              <option key={station} value={station}>
+                {STATION_LABELS[station]}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : (
+        <JobStationPicker
+          value={jobStation}
+          onChange={setJobStation}
+          allowedStations={allowedStations}
+        />
+      )}
 
       {!pinSignInEnabled && (
         <div className="space-y-inset-sm border-t border-outline-variant pt-inset-md">

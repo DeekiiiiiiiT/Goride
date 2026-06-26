@@ -9,7 +9,15 @@ import {
 
 export const VALID_TEAM_ROLES = new Set(["staff", "manager", "admin"]);
 export const TEAM_INVITE_TTL_HOURS = 24;
-export const VALID_JOB_STATIONS = new Set(["counter", "kitchen", "manager"]);
+export const VALID_JOB_STATIONS = new Set([
+  "counter",
+  "kitchen",
+  "manager",
+  "pos",
+  "bar",
+  "expo",
+  "drive_thru",
+]);
 export const VALID_TEAM_PERMISSIONS = new Set<TeamPermission>([
   "orders",
   "menu",
@@ -17,10 +25,16 @@ export const VALID_TEAM_PERMISSIONS = new Set<TeamPermission>([
   "payouts",
 ]);
 
+function readJobStation(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  return VALID_JOB_STATIONS.has(value) ? value : null;
+}
+
 export function mapTeamMember(row: Record<string, unknown>) {
   const jobStation = row.job_station;
   const loginType = row.login_type === "roster" ? "roster" : "account";
   const pinStatus = row.pin_status;
+  const displayTitle = row.display_title;
   return {
     id: String(row.id),
     name: String(row.name),
@@ -33,10 +47,8 @@ export function mapTeamMember(row: Record<string, unknown>) {
       pinStatus === "unset" || pinStatus === "active" || pinStatus === "locked"
         ? String(pinStatus)
         : "unset",
-    jobStation:
-      jobStation === "counter" || jobStation === "kitchen" || jobStation === "manager"
-        ? String(jobStation)
-        : null,
+    jobStation: readJobStation(jobStation),
+    displayTitle: displayTitle ? String(displayTitle) : undefined,
   };
 }
 
@@ -72,10 +84,7 @@ export function mapTeamInvite(row: Record<string, unknown>, emailSent?: boolean)
     permissions: (row.permissions as string[]) || [],
     emailSent: emailSent ?? Boolean(row.email_sent_at),
     emailSentAt: row.email_sent_at ? String(row.email_sent_at) : undefined,
-    jobStation:
-      jobStation === "counter" || jobStation === "kitchen" || jobStation === "manager"
-        ? String(jobStation)
-        : null,
+    jobStation: readJobStation(jobStation),
   };
 }
 
@@ -301,10 +310,7 @@ export function registerMerchantTeamRoutes(app: Hono, deps: TeamDeps) {
         role: String(row.role),
         permissions: (row.permissions as string[]) || [],
         inviteeEmailMasked: maskEmail(String(row.email)),
-        jobStation:
-          row.job_station === "counter" || row.job_station === "kitchen" || row.job_station === "manager"
-            ? String(row.job_station)
-            : null,
+        jobStation: readJobStation(row.job_station),
         expiresAt: row.expires_at ? String(row.expires_at) : undefined,
         isExpired: false,
       },

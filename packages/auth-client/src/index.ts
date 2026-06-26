@@ -8,6 +8,7 @@ export {
   supabaseCourierAdmin,
   supabaseRidesAdmin,
   supabaseDashAdmin,
+  supabaseDashPartner,
   supabaseDashCustomer,
   supabaseFleetAdmin,
 } from './supabase';

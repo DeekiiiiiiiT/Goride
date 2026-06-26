@@ -1,5 +1,5 @@
 import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
-import { supabase } from '@roam/auth-client';
+import { supabase } from './partner-supabase';
 import type { MerchantDocumentType } from '@roam/types';
 import type {
   MerchantApplicationPayload,
@@ -7,21 +7,23 @@ import type {
   MerchantBankAccountMasked,
   MerchantDocument,
 } from '@roam/types';
-import type { JobStation, RosterMember } from '../types/team';
+import type { JobStation, RosterMember, VenueStyle } from '../types/team';
+import type { VenueOpsData, PrepStation } from './venue-ops-presets';
+import { isStoreTabletContext } from './storeTabletUrl';
 import { readShift, resolveShiftSurface } from './station-shift-session';
-import { isStoreTabletContext } from './store-tablet-context';
 import { readDeviceSession } from './store-tablet-session';
+import { TabletEnrollError } from './tablet-enroll-errors';
 
 export async function getAuthHeaders(contentType = 'application/json') {
   const {
     data: { session },
   } = await supabase.auth.getSession();
   if (!session) throw new Error('Not authenticated');
-  const headers: Record<string, string> = {
+  const extra: Record<string, string> = {
     Authorization: `Bearer ${session.access_token}`,
   };
-  if (contentType) headers['Content-Type'] = contentType;
-  return headers;
+  if (contentType) extra['Content-Type'] = contentType;
+  return supabaseAnonFunctionHeaders(extra);
 }
 
 export async function deliveryFetch(path: string, init?: RequestInit) {
@@ -96,7 +98,9 @@ export async function uploadMerchantDocument(
 
   const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/documents`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${session.access_token}` },
+    headers: supabaseAnonFunctionHeaders({
+      Authorization: `Bearer ${session.access_token}`,
+    }),
     body: form,
   });
   if (!res.ok) {
@@ -312,9 +316,70 @@ export async function deliveryFetchStation(path: string, init?: RequestInit) {
 export interface StoreTabletPairingResponse {
   storeName: string;
   pairingCode: string;
-  stationLinks: Record<JobStation, string>;
+  stationLinks: Partial<Record<JobStation, string>>;
   staffOperationsEnabled: boolean;
   staffStationPinEnabled: boolean;
+}
+
+export async function fetchVenueOps(): Promise<VenueOpsData> {
+  const data = await deliveryFetch('/merchant/venue-ops') as { venueOps: VenueOpsData };
+  return data.venueOps;
+}
+
+export async function patchVenueOps(payload: {
+  venueStyle?: VenueStyle | null;
+  enabledStations?: JobStation[];
+}): Promise<VenueOpsData> {
+  const data = await deliveryFetch('/merchant/venue-ops', {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  }) as { venueOps: VenueOpsData };
+  return data.venueOps;
+}
+
+export async function applyVenueOpsTemplate(
+  venueStyle: Exclude<VenueStyle, 'custom'>,
+): Promise<VenueOpsData> {
+  const data = await deliveryFetch('/merchant/venue-ops/apply-template', {
+    method: 'POST',
+    body: JSON.stringify({ venueStyle }),
+  }) as { venueOps: VenueOpsData };
+  return data.venueOps;
+}
+
+export async function fetchPrepStations(): Promise<PrepStation[]> {
+  const data = await deliveryFetch('/merchant/venue-ops/prep-stations') as {
+    prepStations: PrepStation[];
+  };
+  return data.prepStations;
+}
+
+export async function createPrepStation(payload: {
+  name: string;
+  sortOrder?: number;
+}): Promise<PrepStation> {
+  const data = await deliveryFetch('/merchant/venue-ops/prep-stations', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }) as { prepStation: PrepStation };
+  return data.prepStation;
+}
+
+export async function updatePrepStation(
+  id: string,
+  payload: { name?: string; sortOrder?: number },
+): Promise<PrepStation> {
+  const data = await deliveryFetch(`/merchant/venue-ops/prep-stations/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  }) as { prepStation: PrepStation };
+  return data.prepStation;
+}
+
+export async function deletePrepStation(id: string) {
+  return deliveryFetch(`/merchant/venue-ops/prep-stations/${id}`, {
+    method: 'DELETE',
+  });
 }
 
 export async function getStoreTabletPairing(): Promise<StoreTabletPairingResponse> {
@@ -344,13 +409,16 @@ export interface EnrollStoreTabletResponse {
   merchantId: string;
   storeName: string;
   station: JobStation;
+  prepStationId?: string | null;
   staffOperationsEnabled: boolean;
   staffStationPinEnabled: boolean;
+  inStoreOperationsEnabled: boolean;
 }
 
 export async function enrollStoreTablet(payload: {
   code: string;
   station: JobStation;
+  prepStationId?: string | null;
 }): Promise<EnrollStoreTabletResponse> {
   const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/station/device/enroll`, {
     method: 'POST',
@@ -360,11 +428,14 @@ export async function enrollStoreTablet(payload: {
     },
     body: JSON.stringify(payload),
   });
+  const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Request failed: ${res.status}`);
+    throw new TabletEnrollError(
+      body.error || `Request failed: ${res.status}`,
+      String(body.code || 'ENROLL_FAILED'),
+    );
   }
-  return res.json();
+  return body;
 }
 
 export async function pingStoreTabletDevice(): Promise<StoreTabletPairingResponse & { station: JobStation }> {
@@ -415,12 +486,14 @@ export async function createRosterMember(payload: {
   name: string;
   role: 'staff' | 'manager';
   jobStation: JobStation | null;
+  displayTitle?: string | null;
 }) {
   return deliveryFetch('/merchant/team/members/roster', {
     method: 'POST',
     body: JSON.stringify({
       ...payload,
       jobStation: payload.jobStation == null ? 'none' : payload.jobStation,
+      displayTitle: payload.displayTitle ?? undefined,
     }),
   });
 }

@@ -2,7 +2,7 @@ import {
   type JobStation,
   type RosterMember,
 } from '../types/team';
-import { isStoreTabletContext } from './store-tablet-context';
+import { isStoreTabletContext } from './storeTabletUrl';
 
 export type ShiftSessionSurface = 'owner_kiosk' | 'store_tablet';
 

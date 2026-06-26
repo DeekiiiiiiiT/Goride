@@ -158,6 +158,7 @@ export default function TeamMembersView({ merchantId, inStoreEnabled = false, on
     pairingFlagsQuery.data?.staffStationPinEnabled ??
     readFlag(merchantId, 'staffStationPinV1');
   const pinSignInEnabled = staffOpsEnabled && staffPinEnabled;
+  const venueOpsV2 = readFlag(merchantId, 'venueOpsV2');
 
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
 
@@ -245,16 +246,15 @@ export default function TeamMembersView({ merchantId, inStoreEnabled = false, on
 
               pinSignInEnabled={pinSignInEnabled}
               inStoreEnabled={inStoreEnabled}
+              venueOpsV2={venueOpsV2}
 
               isSaving={isSaving}
 
-              onAddRoster={({ name, role, jobStation }) =>
-
-                addRosterMember(name, role, jobStation)
-
+              onAddRoster={({ name, role, jobStation, displayTitle }) =>
+                addRosterMember(name, role, jobStation, displayTitle)
               }
 
-              onSendInvite={({ email, name, role, permissions, jobStation }) =>
+              onSendInvite={({ email, name, role, permissions, jobStation, displayTitle }) =>
                 sendInvite(email, role, permissions, name, jobStation)
               }
 
@@ -378,6 +378,10 @@ export default function TeamMembersView({ merchantId, inStoreEnabled = false, on
 
                       <h3 className="text-headline-md text-on-background">{member.name}</h3>
 
+                      {member.displayTitle && (
+                        <p className="text-label-sm text-on-surface-variant">{member.displayTitle}</p>
+                      )}
+
                       <p className="text-body-sm text-on-surface-variant">
 
                         {formatAccessSummary(member.permissions, member.isOwner)}
@@ -468,6 +472,7 @@ export default function TeamMembersView({ merchantId, inStoreEnabled = false, on
 
           member={editingMember}
           inStoreEnabled={inStoreEnabled}
+          venueOpsV2={venueOpsV2}
 
           isSaving={isSaving}
 

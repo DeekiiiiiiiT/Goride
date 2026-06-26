@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { API_ENDPOINTS } from '@roam/api-client';
-import { supabase } from '@roam/auth-client';
+import { supabase } from '../lib/partner-supabase';
 import { toast } from 'sonner';
 import { MaterialIcon } from '../signup/components/MaterialIcon';
 import type { Merchant, VerificationStatus } from '../hooks/useMerchant';

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { toast } from 'sonner';
-import { supabase } from '@roam/auth-client';
+import { supabase } from '../lib/partner-supabase';
 import { MaterialIcon } from '../signup/components/MaterialIcon';
 import PartnerAuthFlow from '../components/PartnerAuthFlow';
 import {

@@ -4,9 +4,9 @@ import { toast } from 'sonner';
 import { merchantOrdersKeys } from '../lib/merchant-orders-query';
 import { getStationAuthHeaders } from '../lib/partner-api';
 import { readShift, resolveShiftSurface } from '../lib/station-shift-session';
-import { isStoreTabletContext } from '../lib/store-tablet-context';
+import { isStoreTabletContext } from '../lib/storeTabletUrl';
 import { readDeviceSession } from '../lib/store-tablet-session';
-import { supabase } from '@roam/auth-client';
+import { supabase } from '../lib/partner-supabase';
 
 export interface OrderStatusUpdate {
   orderId: string;

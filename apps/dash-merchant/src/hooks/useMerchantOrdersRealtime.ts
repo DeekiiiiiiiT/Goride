@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@roam/auth-client';
+import { supabase } from '../lib/partner-supabase';
 import { merchantOrdersKeys } from '../lib/merchant-orders-query';
 import {
   logOrdersSyncDiagnostics,

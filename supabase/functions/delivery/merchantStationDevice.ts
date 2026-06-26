@@ -79,8 +79,20 @@ export function normalizePairingCode(code: string): string {
   return code.trim().toUpperCase();
 }
 
-export function isValidStation(value: string): value is "counter" | "kitchen" | "manager" {
-  return value === "counter" || value === "kitchen" || value === "manager";
+export const ALL_JOB_STATIONS = [
+  "counter",
+  "kitchen",
+  "manager",
+  "pos",
+  "bar",
+  "expo",
+  "drive_thru",
+] as const;
+
+export type JobStation = typeof ALL_JOB_STATIONS[number];
+
+export function isValidStation(value: string): value is JobStation {
+  return (ALL_JOB_STATIONS as readonly string[]).includes(value);
 }
 
 const enrollAttempts = new Map<string, { count: number; resetAt: number }>();
@@ -100,12 +112,24 @@ export function enrollRateLimitOk(clientKey: string, maxPerMinute = 5): boolean 
 export function buildStationDeepLinks(
   origin: string,
   pairingCode: string,
-): Record<string, string> {
+): Record<JobStation, string> {
   const code = encodeURIComponent(pairingCode);
   const base = `${origin.replace(/\/$/, "")}/tablet?code=${code}`;
-  return {
-    counter: `${base}&station=counter`,
-    kitchen: `${base}&station=kitchen`,
-    manager: `${base}&station=manager`,
-  };
+  const links = {} as Record<JobStation, string>;
+  for (const station of ALL_JOB_STATIONS) {
+    links[station] = `${base}&station=${station}`;
+  }
+  return links;
+}
+
+export function filterStationLinksByEnabled(
+  links: Record<JobStation, string>,
+  enabledStations: string[],
+): Partial<Record<JobStation, string>> {
+  const enabled = new Set(enabledStations);
+  const filtered = {} as Partial<Record<JobStation, string>>;
+  for (const station of ALL_JOB_STATIONS) {
+    if (enabled.has(station)) filtered[station] = links[station];
+  }
+  return filtered;
 }

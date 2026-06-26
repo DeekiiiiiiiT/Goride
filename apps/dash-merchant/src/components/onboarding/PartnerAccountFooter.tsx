@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { supabase } from '@roam/auth-client';
+import { supabase } from '../../lib/partner-supabase';
 import { toast } from 'sonner';
 import {
   clearPartnerOAuthIntent,

@@ -22,7 +22,7 @@ React implementation: `apps/dash-merchant/src/components/store-tablet/`
 
 1. Sign in as owner → **Account → Team Members**.
 2. Under **Store tablets**, enable **Enable staff stations** and **Tablet PIN sign-in**.
-3. Copy the pairing code or scan/copy the **Counter / Kitchen / Manager** QR link on each iPad.
+3. Copy the pairing code or scan/copy the **Dispatch / Kitchen / Manager** QR link on each iPad.
 4. On the iPad, open `partner.roamdash.co` → **Store tablet** (or use the QR link).
 5. Enter the code (or skip if the link includes `code` + `station`), pick station if needed, then staff pick name + PIN each shift.
 6. **Regenerate code** disconnects all tablets — use after staff turnover or a lost device.
@@ -40,5 +40,9 @@ React implementation: `apps/dash-merchant/src/components/store-tablet/`
 | Team invite URL | Unaffected |
 | Admin portal `/admin` | Unaffected |
 | Staff "No station" + PIN | Standard orders view (not counter-locked) |
+| venueOpsV2 on | Operations Hub in Account; Restaurant Mgmt hides POS tab |
+| venueOpsV2 store tablet picker | Disabled stations greyed out |
+| prepStationsV1 kitchen + prepStation param | KDS shows only matching menu items |
+| Prep station deep link `?prepStation=` | Kitchen tablet locks to prep zone |
 
-See also `apps/dash-merchant/src/lib/partner-smoke.ts`.
+See also `apps/dash-merchant/src/lib/partner-smoke.ts` (`VENUE_OPS_SMOKE`).

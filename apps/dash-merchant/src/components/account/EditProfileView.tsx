@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { supabase } from '@roam/auth-client';
+import { supabase } from '../../lib/partner-supabase';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
 import {
   MerchantSettingsFormData,

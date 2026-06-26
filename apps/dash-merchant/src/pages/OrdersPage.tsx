@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@roam/auth-client';
+import { supabase } from '../lib/partner-supabase';
 import { Merchant } from '../hooks/useMerchant';
 import { toast } from 'sonner';
 import { MaterialIcon } from '../signup/components/MaterialIcon';

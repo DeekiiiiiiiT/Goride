@@ -2,6 +2,7 @@ export interface OrderItem {
   name: string;
   quantity: number;
   price: number;
+  menuItemId?: string;
   options?: Array<{
     name: string;
     selections: Array<{ name: string; priceAdjustment: number }>;

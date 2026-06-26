@@ -458,3 +458,32 @@ export const ORDER_STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   completed: [],
   cancelled: [],
 };
+
+/** Restaurant job station — separate from admin role/permissions. DB key `counter` = Dispatch UI. */
+export type JobStation =
+  | 'counter'
+  | 'kitchen'
+  | 'manager'
+  | 'pos'
+  | 'bar'
+  | 'expo'
+  | 'drive_thru';
+
+export type VenueStyle =
+  | 'fast_food'
+  | 'sports_bar'
+  | 'fine_dining'
+  | 'cafe'
+  | 'ghost_kitchen'
+  | 'delivery_only'
+  | 'custom';
+
+export const STATION_LABELS: Record<JobStation, string> = {
+  counter: 'Dispatch',
+  kitchen: 'Kitchen',
+  manager: 'Manager',
+  pos: 'POS Register',
+  bar: 'Bar',
+  expo: 'Expo',
+  drive_thru: 'Drive-thru',
+};

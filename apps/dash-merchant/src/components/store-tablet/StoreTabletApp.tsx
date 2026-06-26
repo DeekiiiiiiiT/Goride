@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { Merchant } from '../../hooks/useMerchant';
-import type { RosterMember } from '../../types/team';
 import { ROLE_DEFAULT_PERMISSIONS } from '../../types/team';
 import { clearShift, getActingMember } from '../../lib/station-shift-session';
 import {
@@ -15,6 +14,8 @@ import ActingShiftBar from '../staff-ops/station/ActingShiftBar';
 import CounterOrdersPage from '../../pages/staff-ops/CounterOrdersPage';
 import KitchenQueuePage from '../../pages/staff-ops/KitchenQueuePage';
 import PosRegisterPage from '../../pages/restaurant-mgmt/PosRegisterPage';
+import StationPlaceholderPage from '../../pages/staff-ops/StationPlaceholderPage';
+import PosSetupPendingView from './PosSetupPendingView';
 import DashboardPage from '../../pages/DashboardPage';
 import OrdersPage from '../../pages/OrdersPage';
 import { hasCapability, CAPABILITY_IN_STORE } from '../../lib/merchant-capabilities';
@@ -54,14 +55,8 @@ export default function StoreTabletApp() {
     setRoutingEpoch((n) => n + 1);
   };
 
-  const handleShiftStarted = (member: RosterMember) => {
+  const handleShiftStarted = () => {
     setRoutingEpoch((n) => n + 1);
-    if (
-      deviceSession?.station === 'manager' ||
-      member.role === 'manager'
-    ) {
-      // manager lands on dashboard view inside station mode
-    }
   };
 
   const handleEndShift = () => {
@@ -77,6 +72,24 @@ export default function StoreTabletApp() {
           window.location.href = '/';
         }}
       />
+    );
+  }
+
+  const posPending =
+    deviceSession.station === 'pos' && deviceSession.inStoreOperationsEnabled === false;
+
+  if (posPending) {
+    return (
+      <StoreTabletChrome
+        storeName={deviceSession.storeName}
+        station={deviceSession.station}
+        onUnpair={() => void handleUnpair()}
+      >
+        <PosSetupPendingView
+          storeName={deviceSession.storeName}
+          onUnpair={() => void handleUnpair()}
+        />
+      </StoreTabletChrome>
     );
   }
 
@@ -108,6 +121,33 @@ export default function StoreTabletApp() {
         <PosRegisterPage
           merchant={merchant}
           useApi={hasCapability(merchant, CAPABILITY_IN_STORE)}
+        />
+      );
+    }
+    if (deviceSession.station === 'bar') {
+      return (
+        <StationPlaceholderPage
+          merchant={merchant}
+          staffName={actingMember.name}
+          station="bar"
+        />
+      );
+    }
+    if (deviceSession.station === 'expo') {
+      return (
+        <StationPlaceholderPage
+          merchant={merchant}
+          staffName={actingMember.name}
+          station="expo"
+        />
+      );
+    }
+    if (deviceSession.station === 'drive_thru') {
+      return (
+        <StationPlaceholderPage
+          merchant={merchant}
+          staffName={actingMember.name}
+          station="drive_thru"
         />
       );
     }

@@ -5,7 +5,7 @@ import {
   regeneratePairingCode,
   updateStoreTabletFlags,
 } from '../../lib/partner-api';
-import { setFlag } from '../../lib/partner-feature-flags';
+import { setFlag, readFlag } from '../../lib/partner-feature-flags';
 import StoreTabletSettingsPanel from './StoreTabletSettingsPanel';
 
 interface StoreTabletSettingsSectionProps {
@@ -64,6 +64,7 @@ export default function StoreTabletSettingsSection({
   }
 
   const data = pairingQuery.data;
+  const venueOpsEnabled = readFlag(merchantId, 'venueOpsV2');
 
   return (
     <StoreTabletSettingsPanel
@@ -74,6 +75,7 @@ export default function StoreTabletSettingsSection({
         staffOperationsEnabled: data.staffOperationsEnabled,
         staffStationPinEnabled: data.staffStationPinEnabled,
       }}
+      venueOpsEnabled={venueOpsEnabled}
       onRegenerate={() => regenerateMutation.mutate()}
       isRegenerating={regenerateMutation.isPending}
       onToggleStaffOps={(enabled) => {

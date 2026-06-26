@@ -101,7 +101,7 @@ export function useTeamMembers(_merchantId: string) {
       updates,
     }: {
       memberId: string;
-      updates: Partial<Pick<TeamMember, 'permissions' | 'role' | 'name' | 'jobStation'>>;
+      updates: Partial<Pick<TeamMember, 'permissions' | 'role' | 'name' | 'jobStation' | 'displayTitle'>>;
     }) =>
       deliveryFetch(`/merchant/team/members/${memberId}`, {
         method: 'PATCH',
@@ -113,6 +113,7 @@ export function useTeamMembers(_merchantId: string) {
               : updates.jobStation == null
                 ? 'none'
                 : updates.jobStation,
+          displayTitle: updates.displayTitle,
         }),
       }),
     onSuccess: () => {
@@ -137,6 +138,7 @@ export function useTeamMembers(_merchantId: string) {
       name: string;
       role: 'staff' | 'manager';
       jobStation: JobStation | null;
+      displayTitle?: string | null;
     }) => createRosterMember(payload),
     onSuccess: () => {
       invalidate();
@@ -186,7 +188,7 @@ export function useTeamMembers(_merchantId: string) {
 
   const updateMember = (
     memberId: string,
-    updates: Partial<Pick<TeamMember, 'permissions' | 'role' | 'name' | 'jobStation'>>,
+    updates: Partial<Pick<TeamMember, 'permissions' | 'role' | 'name' | 'jobStation' | 'displayTitle'>>,
   ) => {
     updateMemberMutation.mutate({ memberId, updates });
   };
@@ -199,8 +201,9 @@ export function useTeamMembers(_merchantId: string) {
     name: string,
     role: 'staff' | 'manager',
     jobStation: JobStation | null,
+    displayTitle?: string | null,
   ) => {
-    createRosterMutation.mutate({ name, role, jobStation });
+    createRosterMutation.mutate({ name, role, jobStation, displayTitle });
   };
 
   const resetMemberPinById = (memberId: string) => {

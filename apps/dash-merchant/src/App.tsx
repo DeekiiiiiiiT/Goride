@@ -1,13 +1,16 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { BrowserRouter } from 'react-router-dom';
-import { supabase, AuthRecoveryGate } from '@roam/auth-client';
+import { supabase, ensureValidPartnerSession } from './lib/partner-supabase';
+import { AuthRecoveryGate } from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 import DashboardPage from './pages/DashboardPage';
 import OrdersPage from './pages/OrdersPage';
 import CounterOrdersPage from './pages/staff-ops/CounterOrdersPage';
 import KitchenQueuePage from './pages/staff-ops/KitchenQueuePage';
+import PosRegisterPage from './pages/restaurant-mgmt/PosRegisterPage';
 import { resolveStaffOpsRoute } from './lib/staff-ops-routing';
+import { hasCapability, CAPABILITY_IN_STORE } from './lib/merchant-capabilities';
 import MenuPage from './pages/MenuPage';
 import EarningsPage from './pages/EarningsPage';
 import SettingsPage from './pages/SettingsPage';
@@ -46,6 +49,7 @@ import {
 import StoreTabletApp from './components/store-tablet/StoreTabletApp';
 import { isTabletEntryPath } from './lib/storeTabletUrl';
 import { resetPartnerScroll } from './lib/reset-partner-scroll';
+import QueryErrorState from './components/QueryErrorState';
 
 const SPLASH_MIN_MS = 1800;
 const PENDING_STATUSES = new Set(['pending', 'in_review', 'docs_requested']);
@@ -98,8 +102,9 @@ function DashMerchantApp() {
     const splashStartedAt = Date.now();
 
     supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
-      setSession(initialSession);
-      await completeOAuthReturn(initialSession);
+      const validated = initialSession ? await ensureValidPartnerSession() : null;
+      setSession(validated);
+      await completeOAuthReturn(validated);
       setAuthReady(true);
 
       const elapsed = Date.now() - splashStartedAt;
@@ -110,10 +115,15 @@ function DashMerchantApp() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
-      setSession(nextSession);
-      if (event === 'SIGNED_IN' && nextSession) {
-        await completeOAuthReturn(nextSession);
+      if (nextSession && event !== 'SIGNED_OUT') {
+        const validated = await ensureValidPartnerSession();
+        setSession(validated);
+        if (event === 'SIGNED_IN' && validated) {
+          await completeOAuthReturn(validated);
+        }
+        return;
       }
+      setSession(nextSession);
     });
 
     return () => subscription.unsubscribe();
@@ -136,13 +146,21 @@ function DashMerchantApp() {
     () => parseTeamInviteTokenFromPath(),
   );
 
-  const { merchant, membership, pendingTeamInvite, isLoading: merchantLoading, refetch } =
+  const [bootstrapSettled, setBootstrapSettled] = useState(false);
+
+  const { merchant, membership, pendingTeamInvite, isLoading: merchantLoading, error: merchantError, refetch } =
     useMerchant(session);
 
   useEffect(() => {
-    if (!session?.user) return;
-    // Never auto-create a restaurant draft while staff is accepting a team invite.
-    if (parseTeamInviteTokenFromPath() || readTeamInviteToken()) return;
+    if (!session?.user) {
+      setBootstrapSettled(false);
+      return;
+    }
+    if (parseTeamInviteTokenFromPath() || readTeamInviteToken()) {
+      setBootstrapSettled(true);
+      return;
+    }
+    setBootstrapSettled(false);
     void bootstrapPartnerMerchant()
       .then(() => refetch())
       .catch((err) => {
@@ -152,7 +170,8 @@ function DashMerchantApp() {
           return;
         }
         console.error('[partner] bootstrap failed:', err);
-      });
+      })
+      .finally(() => setBootstrapSettled(true));
   }, [session?.user?.id, refetch]);
 
   useEffect(() => {
@@ -185,7 +204,8 @@ function DashMerchantApp() {
     !!invitePathToken ||
     (!!session && !merchantLoading && !merchant && inTeamInviteFlow);
 
-  const showSplash = !splashComplete || !authReady || (!!session && merchantLoading);
+  const showSplash =
+    !splashComplete || !authReady || (!!session && (merchantLoading || !bootstrapSettled));
 
   if (shouldShowInviteLanding) {
     return (
@@ -236,7 +256,28 @@ function DashMerchantApp() {
     );
   }
 
-  if (!merchant && !inTeamInviteFlow) {
+  if (bootstrapSettled && merchantError && !merchant) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-surface p-inset-lg">
+        <div className="flex max-w-md flex-col items-center gap-4">
+          <QueryErrorState
+            title="Could not load your restaurant"
+            message="Your sign-in session expired. Sign out and sign back in to continue."
+            onRetry={() => void refetch()}
+          />
+          <button
+            type="button"
+            onClick={() => void handleSignOut()}
+            className="text-label-md font-semibold text-primary underline-offset-2 hover:underline"
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!merchant && !inTeamInviteFlow && bootstrapSettled) {
     return (
       <UnifiedOnboardingWizard
         session={session}
@@ -346,6 +387,14 @@ function DashMerchantApp() {
               merchant={merchant}
               onNavigate={handlePartnerNavigate}
               onOpenMobileNav={openMobileNav}
+            />
+          );
+        }
+        if (staffRoute === 'pos') {
+          return (
+            <PosRegisterPage
+              merchant={merchant}
+              useApi={hasCapability(merchant, CAPABILITY_IN_STORE)}
             />
           );
         }

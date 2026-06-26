@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@roam/auth-client';
+import { supabase } from '../lib/partner-supabase';
 import {
   fetchMerchantActiveOrders,
   merchantOrdersKeys,
   type MerchantOrdersChannel,
 } from '../lib/merchant-orders-query';
-import { isStoreTabletContext } from '../lib/store-tablet-context';
+import { isStoreTabletContext } from '../lib/storeTabletUrl';
 import { readDeviceSession } from '../lib/store-tablet-session';
 import {
   logOrdersSyncDiagnostics,

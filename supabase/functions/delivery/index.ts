@@ -23,6 +23,7 @@ import {
   resolveEnrolledDevice,
   resolveShiftTokenFromRequest,
 } from "./merchantStationRoutes.ts";
+import { registerMerchantVenueOpsRoutes } from "./merchantVenueOps.ts";
 import {
   inStoreStatusTransitions,
   registerMerchantRestaurantRoutes,
@@ -1982,6 +1983,7 @@ import { registerFinanceAdminRoutes } from "./admin/financeRoutes.ts";
 registerMerchantApplicationRoutes(app);
 registerMerchantTeamRoutes(app, { getSupabase, getServiceSupabase });
 registerMerchantStationRoutes(app, { getSupabase, getServiceSupabase });
+registerMerchantVenueOpsRoutes(app, { getSupabase, getServiceSupabase });
 registerMerchantRestaurantRoutes(app);
 registerPartnerBusinessTypeRoutes(app);
 registerMerchantAdminRoutes(app);

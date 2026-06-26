@@ -31,6 +31,7 @@ import {
 } from '../../lib/staff-ops-order-filters';
 import type { MerchantOrdersChannel } from '../../lib/merchant-orders-query';
 import { Order } from '../../types/order';
+import { STATION_LABELS } from '../../types/team';
 
 interface CounterOrdersPageProps {
   merchant: Merchant;
@@ -171,7 +172,7 @@ export default function CounterOrdersPage({
             Menu
           </button>
           <h1 className="truncate text-headline-md font-bold text-on-background">
-            {merchant.name || 'Counter'}
+            {merchant.name || STATION_LABELS.counter}
           </h1>
           {staffName && (
             <p className="text-label-sm text-on-surface-variant">Signed in as {staffName}</p>

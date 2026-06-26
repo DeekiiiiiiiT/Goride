@@ -3,6 +3,7 @@ import JobStationBadge from '../shared/JobStationBadge';
 import {
   formatJobStationLabel,
   formatRoleLabel,
+  STATION_LABELS,
   type JobStation,
   type RosterMember,
 } from '../../../types/team';
@@ -15,13 +16,24 @@ interface StaffPickerPageProps {
   onSelect: (member: RosterMember) => void;
   initialFilter?: StationFilter;
   lockFilter?: boolean;
+  venueOpsV2?: boolean;
 }
 
-const TABS: { key: StationFilter; label: string }[] = [
+const LEGACY_TABS: { key: StationFilter; label: string }[] = [
   { key: 'all', label: 'All' },
-  { key: 'counter', label: 'Counter' },
-  { key: 'kitchen', label: 'Kitchen' },
-  { key: 'manager', label: 'Manager' },
+  { key: 'counter', label: STATION_LABELS.counter },
+  { key: 'kitchen', label: STATION_LABELS.kitchen },
+  { key: 'manager', label: STATION_LABELS.manager },
+];
+
+const VENUE_OPS_TABS: { key: StationFilter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'pos', label: STATION_LABELS.pos },
+  { key: 'bar', label: STATION_LABELS.bar },
+  { key: 'expo', label: STATION_LABELS.expo },
+  { key: 'counter', label: STATION_LABELS.counter },
+  { key: 'kitchen', label: STATION_LABELS.kitchen },
+  { key: 'manager', label: STATION_LABELS.manager },
 ];
 
 function MemberAvatar({ name }: { name: string }) {
@@ -39,11 +51,13 @@ export default function StaffPickerPage({
   onSelect,
   initialFilter = 'all',
   lockFilter = false,
+  venueOpsV2 = false,
 }: StaffPickerPageProps) {
   const [filter, setFilter] = useState<StationFilter>(initialFilter);
   const activeFilter = lockFilter ? initialFilter : filter;
   const stationLocked = lockFilter && activeFilter !== 'all';
   const stationLabel = stationLocked ? formatJobStationLabel(activeFilter) : null;
+  const tabs = venueOpsV2 ? VENUE_OPS_TABS : LEGACY_TABS;
 
   const filtered = useMemo(() => {
     if (activeFilter === 'all') return members;
@@ -71,7 +85,7 @@ export default function StaffPickerPage({
 
       {!stationLocked && (
         <div className="flex flex-wrap justify-center gap-inset-sm">
-          {TABS.map((tab) => (
+          {tabs.map((tab) => (
             <button
               key={tab.key}
               type="button"

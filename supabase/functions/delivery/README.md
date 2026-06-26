@@ -166,6 +166,24 @@ Dual auth on station routes: `Authorization: Bearer <jwt>` **or** `X-Station-Dev
 
 `GET /merchant/orders` and `PUT /orders/:id/status` accept device token when shift token present for floor order actions.
 
-Env: `STATION_DEVICE_SECRET` (device token HMAC; 90-day TTL). `PARTNER_PORTAL_URL` used for `/tablet?code=ROAM-XXXX&station=` deep links.
+Env: `STATION_DEVICE_SECRET` (device token HMAC; 90-day TTL). `PARTNER_PORTAL_URL` used for `/tablet?code=ROAM-XXXX&station=` deep links. Optional `prepStation=<uuid>` on kitchen enroll links for prep-zone KDS routing.
 
-Client: `apps/dash-merchant/src/components/store-tablet/`, session key `roam_store_tablet_{merchantId}`.
+Client: `apps/dash-merchant/src/components/store-tablet/`, session key `roam_store_tablet_session`.
+
+## Venue operations
+
+Owner configures venue templates and enabled floor stations. Feature-flagged on the client (`venueOpsV2`, `prepStationsV1`).
+
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| GET | `/merchant/venue-ops` | Owner JWT | `venueStyle`, `enabledStations`, template presets |
+| PATCH | `/merchant/venue-ops` | Owner JWT | Update `venueStyle` and/or `enabledStations` |
+| POST | `/merchant/venue-ops/apply-template` | Owner JWT | Apply preset stations for a venue style |
+| GET | `/merchant/venue-ops/prep-stations` | Owner JWT | List kitchen prep zones |
+| POST | `/merchant/venue-ops/prep-stations` | Owner JWT | Create prep zone (`name`, optional `sortOrder`) |
+| PATCH | `/merchant/venue-ops/prep-stations/:id` | Owner JWT | Rename or reorder prep zone |
+| DELETE | `/merchant/venue-ops/prep-stations/:id` | Owner JWT | Remove prep zone; menu items unset via FK |
+
+Merchant columns: `venue_style`, `enabled_stations` (text array). Station enrollment rejects disabled stations (`STATION_NOT_ENABLED`).
+
+Prep stations: `merchant_prep_stations` table; optional `menu_items.prep_station_id` and `merchant_station_devices.prep_station_id` for kitchen tablet KDS routing. Enroll body accepts optional `prepStationId` when `station=kitchen`.

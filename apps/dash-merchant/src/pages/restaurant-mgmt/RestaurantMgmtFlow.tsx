@@ -53,9 +53,10 @@ export default function RestaurantMgmtFlow({ merchant, onBack }: RestaurantMgmtF
   const previewOnly =
     readFlag(merchant.id, 'restaurantMgmtPreviewV1') && !hasCapability(merchant, CAPABILITY_IN_STORE);
   const useApi = hasCapability(merchant, CAPABILITY_IN_STORE);
+  const hidePosTab = readFlag(merchant.id, 'venueOpsV2');
 
   const [flow, setFlow] = useState<'opt-in' | 'setup' | 'hub'>('hub');
-  const [section, setSection] = useState<RestaurantMgmtSection>('pos');
+  const [section, setSection] = useState<RestaurantMgmtSection>(hidePosTab ? 'inventory' : 'pos');
   const [inventoryView, setInventoryView] = useState<InventoryView>('overview');
 
   const [ingredients, setIngredients] = useState(FIXTURE_INGREDIENTS);
@@ -214,6 +215,7 @@ export default function RestaurantMgmtFlow({ merchant, onBack }: RestaurantMgmtF
   return (
     <RestaurantMgmtHub
       activeSection={section}
+      hidePosTab={hidePosTab}
       onSectionChange={(next) => {
         setSection(next);
         if (next === 'inventory') setInventoryView('overview');

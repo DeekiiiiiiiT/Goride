@@ -4,7 +4,9 @@ import {
   defaultJobStationForRole,
   jobStationFromApi,
   jobStationSelectionToApi,
+  resolveAllowedJobStations,
   ROLE_DEFAULT_PERMISSIONS,
+  STATION_LABELS,
   TEAM_PERMISSIONS,
   TEAM_ROLE_OPTIONS,
   TeamMember,
@@ -24,15 +26,15 @@ interface EditTeamMemberSheetProps {
     permissions: TeamPermission[];
     name?: string;
     jobStation?: JobStation | null;
+    displayTitle?: string | null;
   }) => void;
   onResetPin?: (memberId: string) => void;
   isSaving?: boolean;
   isResettingPin?: boolean;
   /** When false, POS register station is hidden from the picker. */
   inStoreEnabled?: boolean;
+  venueOpsV2?: boolean;
 }
-
-const BASE_STATIONS: JobStation[] = ['counter', 'kitchen', 'manager'];
 
 const ROSTER_ROLE_OPTIONS = TEAM_ROLE_OPTIONS.filter(
   (option) => option.value === 'staff' || option.value === 'manager',
@@ -46,14 +48,18 @@ export default function EditTeamMemberSheet({
   isSaving = false,
   isResettingPin = false,
   inStoreEnabled = false,
+  venueOpsV2 = false,
 }: EditTeamMemberSheetProps) {
   const isRoster = member.loginType === 'roster';
   const [role, setRole] = useState<TeamRole>(member.role);
   const [name, setName] = useState(member.name);
+  const [displayTitle, setDisplayTitle] = useState(member.displayTitle ?? '');
   const [permissions, setPermissions] = useState<TeamPermission[]>(member.permissions);
   const [jobStation, setJobStation] = useState<JobStationSelection>(
     jobStationFromApi(member.jobStation),
   );
+  const [confirmReset, setConfirmReset] = useState(false);
+  const allowedStations = resolveAllowedJobStations({ venueOpsV2, inStoreEnabled });
   const permissionOptions = inStoreEnabled
     ? TEAM_PERMISSIONS
     : TEAM_PERMISSIONS.filter((entry) => entry.id !== 'inventory');
@@ -104,6 +110,21 @@ export default function EditTeamMemberSheet({
             />
           </div>
 
+          {venueOpsV2 && (
+            <div>
+              <label className="text-label-md text-on-surface-variant" htmlFor="member-display-title">
+                Display title
+              </label>
+              <input
+                id="member-display-title"
+                value={displayTitle}
+                onChange={(event) => setDisplayTitle(event.target.value)}
+                placeholder="e.g. Head Bartender"
+                className="mt-inset-xs h-12 w-full rounded-lg border border-outline-variant px-4"
+              />
+            </div>
+          )}
+
           <div>
             <label className="text-label-md text-on-surface-variant" htmlFor="member-role">
               Role
@@ -122,11 +143,32 @@ export default function EditTeamMemberSheet({
             </select>
           </div>
 
-          <JobStationPicker
-            value={jobStation}
-            onChange={setJobStation}
-            allowedStations={inStoreEnabled ? [...BASE_STATIONS, 'pos'] : BASE_STATIONS}
-          />
+          {venueOpsV2 ? (
+            <div className="space-y-inset-xs">
+              <label className="text-label-md text-on-surface-variant" htmlFor="member-station">
+                Job station
+              </label>
+              <select
+                id="member-station"
+                value={jobStation}
+                onChange={(event) => setJobStation(event.target.value as JobStationSelection)}
+                className="h-12 w-full rounded-lg border border-outline-variant px-4"
+              >
+                <option value="none">No station</option>
+                {allowedStations.map((station) => (
+                  <option key={station} value={station}>
+                    {STATION_LABELS[station]}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <JobStationPicker
+              value={jobStation}
+              onChange={setJobStation}
+              allowedStations={allowedStations}
+            />
+          )}
 
           {!isRoster && (
             <div className="space-y-inset-sm">
@@ -178,6 +220,7 @@ export default function EditTeamMemberSheet({
                 permissions: isRoster ? ROLE_DEFAULT_PERMISSIONS[role] : permissions,
                 name: name.trim() || member.name,
                 jobStation: jobStationSelectionToApi(jobStation),
+                displayTitle: venueOpsV2 ? displayTitle.trim() || null : undefined,
               })
             }
             className="min-h-[48px] flex-1 rounded-lg bg-primary-container font-semibold text-on-primary"

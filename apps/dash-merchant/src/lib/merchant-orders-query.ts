@@ -2,7 +2,7 @@ import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
 import type { Session } from '@supabase/supabase-js';
 import type { Order } from '../types/order';
 import { getStationAuthHeaders } from './partner-api';
-import { isStoreTabletContext } from './store-tablet-context';
+import { isStoreTabletContext } from './storeTabletUrl';
 import { readDeviceSession } from './store-tablet-session';
 
 /**

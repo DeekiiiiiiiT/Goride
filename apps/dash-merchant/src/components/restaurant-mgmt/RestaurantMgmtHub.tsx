@@ -14,6 +14,7 @@ interface RestaurantMgmtHubProps {
   activeSection: RestaurantMgmtSection;
   onSectionChange: (section: RestaurantMgmtSection) => void;
   onBack: () => void;
+  hidePosTab?: boolean;
   children: ReactNode;
 }
 
@@ -21,8 +22,10 @@ export default function RestaurantMgmtHub({
   activeSection,
   onSectionChange,
   onBack,
+  hidePosTab = false,
   children,
 }: RestaurantMgmtHubProps) {
+  const navItems = hidePosTab ? NAV.filter((item) => item.key !== 'pos') : NAV;
   return (
     <div className="flex min-h-dvh flex-col bg-background text-on-background">
       <header className="safe-t shrink-0 border-b border-outline-variant bg-surface">
@@ -38,7 +41,7 @@ export default function RestaurantMgmtHub({
           <h1 className="text-headline-md font-bold text-on-surface">Restaurant Management</h1>
         </div>
         <nav className="flex gap-1 overflow-x-auto px-margin-mobile pb-inset-xs md:px-margin-tablet">
-          {NAV.map((item) => {
+          {navItems.map((item) => {
             const active = activeSection === item.key;
             return (
               <button

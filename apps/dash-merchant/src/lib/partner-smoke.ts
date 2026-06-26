@@ -51,6 +51,20 @@ export const PARTNER_SMOKE_CHECKLIST = [
   'Store toggle synced across Orders, Menu, Analytics, Account',
 ] as const;
 
+export const VENUE_OPS_SMOKE = [
+  'Venue ops: flag off keeps Restaurant Mgmt card and legacy station picker',
+  'Venue ops: venueOpsV2 shows Operations Hub card in Account',
+  'Venue ops: template picker applies enabled stations via API',
+  'Venue ops: station toggles persist custom layout',
+  'Venue ops: store tablet QR list hides disabled stations',
+  'Venue ops: POS tab hidden in Restaurant Mgmt when venueOpsV2 on',
+  'Venue ops: Dispatch label used for counter station in staff picker',
+  'Prep stations: prepStationsV1 filters kitchen KDS by menu item prep zone',
+  'Prep stations: unassigned menu items appear on every prep line',
+  'Prep stations: kitchen tablet deep link ?prepStation= locks KDS zone',
+  'Prep stations: owner CRUD prep stations via venue-ops API',
+] as const;
+
 export const PARTNER_PRODUCTION_SMOKE = [
   'partner.roamdash.co logged out → Welcome page',
   'Logged in without merchant → 6-step onboarding wizard',

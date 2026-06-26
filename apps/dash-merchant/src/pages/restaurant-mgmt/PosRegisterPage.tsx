@@ -11,15 +11,158 @@ import {
   FIXTURE_SETUP_DRAFT,
 } from '../../lib/restaurant-mgmt-fixtures';
 import { createPosOrder, createPosPaymentIntent, payPosOrder } from '../../lib/restaurant-mgmt-api';
-import type { InStoreFulfillmentType, PosPaymentMethod } from '../../types/restaurant-mgmt';
+import type { InStoreFulfillmentType, PosCartLine, PosPaymentMethod } from '../../types/restaurant-mgmt';
 
-type PosSheet = 'none' | 'checkout' | 'payment' | 'success';
+type PosStep = 'register' | 'checkout' | 'payment' | 'success';
 
 interface PosRegisterPageProps {
   merchant: Merchant;
   useApi: boolean;
   taxRatePercent?: number;
   onBack?: () => void;
+}
+
+function fulfillmentLabel(type: InStoreFulfillmentType) {
+  if (type === 'dine_in') return 'Dine in';
+  return type.charAt(0).toUpperCase() + type.slice(1);
+}
+
+function itemCount(lines: PosCartLine[]) {
+  return lines.reduce((sum, line) => sum + line.quantity, 0);
+}
+
+interface CartLinesProps {
+  lines: PosCartLine[];
+  onUpdateQuantity: (id: string, quantity: number) => void;
+}
+
+function CartLines({ lines, onUpdateQuantity }: CartLinesProps) {
+  if (lines.length === 0) {
+    return <p className="text-center text-body-sm text-on-surface-variant">Cart is empty</p>;
+  }
+
+  return (
+    <ul className="space-y-inset-xs">
+      {lines.map((line) => (
+        <li
+          key={line.id}
+          className="flex items-center justify-between gap-inset-sm rounded-lg bg-surface-container-low p-inset-sm"
+        >
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-body-sm font-semibold">{line.name}</p>
+            <p className="text-label-sm text-on-surface-variant">{formatJmd(line.unitPrice)}</p>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => onUpdateQuantity(line.id, line.quantity - 1)}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-variant"
+              aria-label={`Remove one ${line.name}`}
+            >
+              <MaterialIcon name="remove" size={18} />
+            </button>
+            <span className="w-6 text-center text-label-md font-semibold">{line.quantity}</span>
+            <button
+              type="button"
+              onClick={() => onUpdateQuantity(line.id, line.quantity + 1)}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-variant"
+              aria-label={`Add one ${line.name}`}
+            >
+              <MaterialIcon name="add" size={18} />
+            </button>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+interface OrderSummaryBarProps {
+  lines: PosCartLine[];
+  total: number;
+  expanded: boolean;
+  onToggle: () => void;
+}
+
+function OrderSummaryBar({ lines, total, expanded, onToggle }: OrderSummaryBarProps) {
+  const count = itemCount(lines);
+
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="flex w-full shrink-0 items-center gap-inset-sm border-b border-outline-variant bg-surface-container-lowest px-inset-md py-inset-sm text-left"
+    >
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-container/15">
+        <MaterialIcon name="shopping_bag" className="text-primary-container" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-label-sm text-on-surface-variant">Current order</p>
+        <p className="text-body-md font-semibold text-on-surface">
+          {count} {count === 1 ? 'item' : 'items'} · {formatJmd(total)}
+        </p>
+      </div>
+      <span className="text-label-sm font-semibold text-primary">
+        {expanded ? 'Hide' : 'View'}
+      </span>
+      <MaterialIcon
+        name={expanded ? 'expand_less' : 'expand_more'}
+        className="shrink-0 text-on-surface-variant"
+      />
+    </button>
+  );
+}
+
+interface StepProgressProps {
+  step: PosStep;
+}
+
+function StepProgress({ step }: StepProgressProps) {
+  const steps = [
+    { key: 'register', label: 'Items' },
+    { key: 'checkout', label: 'Order type' },
+    { key: 'payment', label: 'Payment' },
+  ] as const;
+
+  const activeIndex = step === 'payment' ? 2 : step === 'checkout' ? 1 : 0;
+
+  return (
+    <div className="flex items-center gap-2 px-inset-md py-inset-sm">
+      {steps.map((entry, index) => {
+        const done = index < activeIndex;
+        const active = index === activeIndex;
+        return (
+          <div key={entry.key} className="flex flex-1 items-center gap-2">
+            <div
+              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-label-sm font-bold ${
+                active
+                  ? 'bg-primary-container text-on-primary-container'
+                  : done
+                    ? 'bg-primary-container/20 text-primary-container'
+                    : 'bg-surface-variant text-on-surface-variant'
+              }`}
+            >
+              {done ? <MaterialIcon name="check" size={16} /> : index + 1}
+            </div>
+            <span
+              className={`hidden text-label-sm font-semibold sm:inline ${
+                active ? 'text-on-surface' : 'text-on-surface-variant'
+              }`}
+            >
+              {entry.label}
+            </span>
+            {index < steps.length - 1 && (
+              <div
+                className={`mx-1 h-0.5 flex-1 rounded ${
+                  index < activeIndex ? 'bg-primary-container' : 'bg-outline-variant'
+                }`}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export default function PosRegisterPage({
@@ -46,7 +189,8 @@ export default function PosRegisterPage({
     : FIXTURE_POS_MENU;
 
   const [activeCategory, setActiveCategory] = useState(categories[0]?.id ?? '');
-  const [sheet, setSheet] = useState<PosSheet>('none');
+  const [step, setStep] = useState<PosStep>('register');
+  const [cartExpanded, setCartExpanded] = useState(false);
   const [fulfillmentType, setFulfillmentType] = useState<InStoreFulfillmentType>('counter');
   const [guestName, setGuestName] = useState('');
   const [tableLabel, setTableLabel] = useState('');
@@ -63,15 +207,23 @@ export default function PosRegisterPage({
     [menuItems, activeCategory],
   );
 
+  const inCheckoutFlow = step === 'checkout' || step === 'payment';
+
   const openCheckout = () => {
     if (cart.isEmpty) {
       toast.error('Add items to the cart first');
       return;
     }
-    setSheet('checkout');
+    setCartExpanded(false);
+    setStep('checkout');
   };
 
-  const proceedToPayment = () => setSheet('payment');
+  const backToRegister = () => {
+    setCartExpanded(false);
+    setStep('register');
+  };
+
+  const proceedToPayment = () => setStep('payment');
 
   const completeSale = async () => {
     setSubmitting(true);
@@ -111,7 +263,7 @@ export default function PosRegisterPage({
       } else {
         setLastOrderNumber(`${Math.floor(1000 + Math.random() * 9000)}`);
       }
-      setSheet('success');
+      setStep('success');
       cart.clear();
       setGuestName('');
       setTableLabel('');
@@ -124,11 +276,15 @@ export default function PosRegisterPage({
     }
   };
 
-  const closeSheets = () => setSheet('none');
+  const startNewOrder = () => setStep('register');
 
   return (
-    <div className="flex h-full min-h-[480px] flex-col bg-background lg:flex-row">
-      <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col bg-background lg:flex-row">
+      <div
+        className={`flex min-h-0 flex-1 flex-col overflow-hidden ${
+          inCheckoutFlow ? 'hidden lg:flex lg:opacity-40' : ''
+        }`}
+      >
         <header className="flex shrink-0 items-center gap-inset-sm border-b border-outline-variant bg-surface px-inset-md py-inset-sm">
           {onBack && (
             <button
@@ -143,7 +299,7 @@ export default function PosRegisterPage({
           <h2 className="text-title-lg font-semibold">POS Register</h2>
         </header>
 
-        <div className="flex gap-1 overflow-x-auto border-b border-outline-variant px-inset-sm py-inset-xs">
+        <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-outline-variant px-inset-sm py-inset-xs">
           {categories.map((cat) => (
             <button
               key={cat.id}
@@ -160,7 +316,7 @@ export default function PosRegisterPage({
           ))}
         </div>
 
-        <div className="grid flex-1 grid-cols-2 gap-inset-sm overflow-auto p-inset-md md:grid-cols-3 lg:grid-cols-4">
+        <div className="grid min-h-0 flex-1 grid-cols-2 gap-inset-sm overflow-auto p-inset-md md:grid-cols-3 lg:grid-cols-4">
           {filteredItems.map((item) => (
             <button
               key={item.id}
@@ -175,165 +331,212 @@ export default function PosRegisterPage({
         </div>
       </div>
 
-      <aside className="flex w-full flex-col border-t border-outline-variant bg-surface lg:w-96 lg:border-l lg:border-t-0">
-        <div className="border-b border-outline-variant px-inset-md py-inset-sm">
-          <h3 className="text-title-md font-semibold">Current order</h3>
-        </div>
-        <ul className="flex-1 space-y-inset-xs overflow-auto p-inset-md">
-          {cart.lines.length === 0 ? (
-            <li className="text-center text-body-sm text-on-surface-variant">Cart is empty</li>
-          ) : (
-            cart.lines.map((line) => (
-              <li
-                key={line.id}
-                className="flex items-center justify-between gap-inset-sm rounded-lg bg-surface-container-low p-inset-sm"
+      <aside
+        className={`flex min-h-0 w-full flex-col bg-surface lg:w-96 ${
+          inCheckoutFlow
+            ? 'flex-1 border-t-0 lg:max-w-md lg:flex-none lg:border-l lg:border-outline-variant'
+            : 'border-t border-outline-variant lg:border-l lg:border-t-0'
+        }`}
+      >
+        {step === 'register' && (
+          <>
+            <div className="shrink-0 border-b border-outline-variant px-inset-md py-inset-sm">
+              <h3 className="text-title-md font-semibold">Current order</h3>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto p-inset-md">
+              <CartLines lines={cart.lines} onUpdateQuantity={cart.updateQuantity} />
+            </div>
+            <div className="shrink-0 space-y-1 border-t border-outline-variant p-inset-md pb-[max(1rem,env(safe-area-inset-bottom))] text-body-sm">
+              <div className="flex justify-between">
+                <span className="text-on-surface-variant">Subtotal</span>
+                <span>{formatJmd(cart.pricing.subtotal)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-on-surface-variant">Tax ({taxRate}%)</span>
+                <span>{formatJmd(cart.pricing.tax)}</span>
+              </div>
+              <div className="flex justify-between text-body-md font-bold">
+                <span>Total</span>
+                <span>{formatJmd(cart.pricing.total)}</span>
+              </div>
+              <button
+                type="button"
+                disabled={cart.isEmpty}
+                onClick={openCheckout}
+                className="mt-inset-sm flex min-h-[52px] w-full items-center justify-center rounded-xl bg-primary-container text-body-md font-semibold text-on-primary disabled:opacity-50"
               >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-body-sm font-semibold">{line.name}</p>
-                  <p className="text-label-sm text-on-surface-variant">{formatJmd(line.unitPrice)}</p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => cart.updateQuantity(line.id, line.quantity - 1)}
-                    className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-variant"
-                  >
-                    <MaterialIcon name="remove" size={18} />
-                  </button>
-                  <span className="w-6 text-center text-label-md font-semibold">{line.quantity}</span>
-                  <button
-                    type="button"
-                    onClick={() => cart.updateQuantity(line.id, line.quantity + 1)}
-                    className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-variant"
-                  >
-                    <MaterialIcon name="add" size={18} />
-                  </button>
-                </div>
-              </li>
-            ))
-          )}
-        </ul>
-        <div className="space-y-1 border-t border-outline-variant p-inset-md text-body-sm">
-          <div className="flex justify-between">
-            <span className="text-on-surface-variant">Subtotal</span>
-            <span>{formatJmd(cart.pricing.subtotal)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-on-surface-variant">Tax ({taxRate}%)</span>
-            <span>{formatJmd(cart.pricing.tax)}</span>
-          </div>
-          <div className="flex justify-between text-body-md font-bold">
-            <span>Total</span>
-            <span>{formatJmd(cart.pricing.total)}</span>
-          </div>
-          <button
-            type="button"
-            disabled={cart.isEmpty}
-            onClick={openCheckout}
-            className="mt-inset-sm flex min-h-[52px] w-full items-center justify-center rounded-xl bg-primary-container text-body-md font-semibold text-on-primary disabled:opacity-50"
-          >
-            Checkout
-          </button>
-        </div>
-      </aside>
+                Checkout
+              </button>
+            </div>
+          </>
+        )}
 
-      {sheet !== 'none' && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-scrim/40 lg:items-center">
-          <div className="w-full max-w-lg rounded-t-2xl bg-surface p-inset-lg shadow-xl lg:rounded-2xl">
-            {sheet === 'checkout' && (
-              <>
-                <h3 className="text-headline-md font-bold">Order type</h3>
-                <div className="mt-inset-md flex flex-wrap gap-inset-sm">
-                  {(['counter', 'pickup', 'dine_in'] as InStoreFulfillmentType[]).map((type) => (
-                    <button
-                      key={type}
-                      type="button"
-                      onClick={() => setFulfillmentType(type)}
-                      className={`rounded-full px-4 py-2 text-label-md font-semibold capitalize ${
-                        fulfillmentType === type
-                          ? 'bg-primary-container text-on-primary-container'
-                          : 'bg-surface-container-high'
-                      }`}
-                    >
-                      {type.replace('_', ' ')}
-                    </button>
-                  ))}
+        {inCheckoutFlow && (
+          <>
+            <StepProgress step={step} />
+            <OrderSummaryBar
+              lines={cart.lines}
+              total={cart.pricing.total}
+              expanded={cartExpanded}
+              onToggle={() => setCartExpanded((open) => !open)}
+            />
+
+            {cartExpanded && (
+              <div className="max-h-52 shrink-0 space-y-inset-sm overflow-auto border-b border-outline-variant px-inset-md pb-inset-md pt-inset-sm">
+                <CartLines lines={cart.lines} onUpdateQuantity={cart.updateQuantity} />
+                <button
+                  type="button"
+                  onClick={backToRegister}
+                  className="flex min-h-[44px] w-full items-center justify-center gap-1 rounded-lg border border-outline-variant text-label-md font-semibold text-primary"
+                >
+                  <MaterialIcon name="edit" size={18} />
+                  Back to menu &amp; edit order
+                </button>
+              </div>
+            )}
+
+            <div className="flex min-h-0 flex-1 flex-col overflow-auto">
+              {step === 'checkout' && (
+                <div className="flex flex-1 flex-col px-inset-md py-inset-lg">
+                  <h3 className="text-headline-md font-bold text-on-surface">How is this order served?</h3>
+                  <p className="mt-inset-xs text-body-sm text-on-surface-variant">
+                    Choose order type, then continue to payment.
+                  </p>
+
+                  <div className="mt-inset-lg grid gap-inset-sm">
+                    {(['counter', 'pickup', 'dine_in'] as InStoreFulfillmentType[]).map((type) => {
+                      const selected = fulfillmentType === type;
+                      return (
+                        <button
+                          key={type}
+                          type="button"
+                          onClick={() => setFulfillmentType(type)}
+                          className={`flex min-h-[56px] items-center gap-inset-md rounded-xl border-2 px-inset-md text-left transition-colors ${
+                            selected
+                              ? 'border-primary-container bg-primary-container/10'
+                              : 'border-outline-variant bg-surface-container-lowest hover:border-outline'
+                          }`}
+                        >
+                          <MaterialIcon
+                            name={
+                              type === 'counter'
+                                ? 'storefront'
+                                : type === 'pickup'
+                                  ? 'shopping_bag'
+                                  : 'restaurant'
+                            }
+                            className={selected ? 'text-primary-container' : 'text-on-surface-variant'}
+                          />
+                          <span className="text-body-md font-semibold">{fulfillmentLabel(type)}</span>
+                          {selected && (
+                            <MaterialIcon name="check_circle" className="ml-auto text-primary-container" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {fulfillmentType === 'dine_in' && (
+                    <label className="mt-inset-lg block">
+                      <span className="text-label-md font-semibold text-on-surface">Table number</span>
+                      <input
+                        value={tableLabel}
+                        onChange={(e) => setTableLabel(e.target.value)}
+                        placeholder="e.g. 12"
+                        className="mt-inset-xs w-full rounded-lg border border-outline-variant px-3 py-3 text-body-md"
+                      />
+                    </label>
+                  )}
+
+                  <label className="mt-inset-md block">
+                    <span className="text-label-md font-semibold text-on-surface">Guest name</span>
+                    <span className="text-label-sm text-on-surface-variant"> (optional)</span>
+                    <input
+                      value={guestName}
+                      onChange={(e) => setGuestName(e.target.value)}
+                      placeholder="For pickup or receipt"
+                      className="mt-inset-xs w-full rounded-lg border border-outline-variant px-3 py-3 text-body-md"
+                    />
+                  </label>
                 </div>
-                {fulfillmentType === 'dine_in' && (
-                  <input
-                    value={tableLabel}
-                    onChange={(e) => setTableLabel(e.target.value)}
-                    placeholder="Table number"
-                    className="mt-inset-md w-full rounded-lg border border-outline-variant px-3 py-2"
-                  />
-                )}
-                <input
-                  value={guestName}
-                  onChange={(e) => setGuestName(e.target.value)}
-                  placeholder="Guest name (optional)"
-                  className="mt-inset-sm w-full rounded-lg border border-outline-variant px-3 py-2"
-                />
-                <div className="mt-inset-lg flex gap-inset-sm">
+              )}
+
+              {step === 'payment' && (
+                <div className="flex flex-1 flex-col px-inset-md py-inset-lg">
+                  <h3 className="text-headline-md font-bold text-on-surface">Take payment</h3>
+                  <p className="mt-inset-xs text-body-sm text-on-surface-variant">
+                    {fulfillmentLabel(fulfillmentType)}
+                    {guestName ? ` · ${guestName}` : ''}
+                    {tableLabel ? ` · Table ${tableLabel}` : ''}
+                  </p>
+                  <p className="mt-inset-md text-headline-lg font-bold text-primary-container">
+                    {formatJmd(cart.pricing.total)}
+                  </p>
+
+                  <div className="mt-inset-lg grid grid-cols-2 gap-inset-sm">
+                    {(['card', 'cash'] as PosPaymentMethod[]).map((method) => (
+                      <button
+                        key={method}
+                        type="button"
+                        onClick={() => {
+                          setPaymentMethod(method);
+                          setTerminalReady(false);
+                          setPendingOrderId(null);
+                        }}
+                        className={`flex min-h-[72px] flex-col items-center justify-center gap-1 rounded-xl border-2 text-title-md font-semibold capitalize ${
+                          paymentMethod === method
+                            ? 'border-primary-container bg-primary-container/10'
+                            : 'border-outline-variant'
+                        }`}
+                      >
+                        <MaterialIcon
+                          name={method === 'card' ? 'credit_card' : 'payments'}
+                          className="text-2xl"
+                        />
+                        {method}
+                      </button>
+                    ))}
+                  </div>
+
+                  {paymentMethod === 'card' && (
+                    <div className="mt-inset-lg rounded-xl border border-dashed border-outline-variant bg-surface-container-low p-inset-md text-center">
+                      <MaterialIcon name="contactless" className="text-4xl text-primary-container" />
+                      <p className="mt-inset-sm text-body-sm font-semibold">Stripe Terminal</p>
+                      <p className="text-label-sm text-on-surface-variant">
+                        {terminalReady || !useApi
+                          ? 'Tap or insert card on the reader'
+                          : 'Tap Complete sale to connect the reader'}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="shrink-0 flex gap-inset-sm border-t border-outline-variant p-inset-md pb-[max(1rem,env(safe-area-inset-bottom))]">
+              {step === 'checkout' ? (
+                <>
                   <button
                     type="button"
-                    onClick={closeSheets}
-                    className="min-h-[48px] flex-1 rounded-lg border border-outline-variant font-semibold"
+                    onClick={backToRegister}
+                    className="flex min-h-[52px] flex-1 items-center justify-center rounded-xl border border-outline-variant text-label-md font-semibold"
                   >
-                    Cancel
+                    Back
                   </button>
                   <button
                     type="button"
                     onClick={proceedToPayment}
-                    className="min-h-[48px] flex-[2] rounded-lg bg-primary-container font-semibold text-on-primary"
+                    className="flex min-h-[52px] flex-[2] items-center justify-center rounded-xl bg-primary-container text-label-md font-semibold text-on-primary"
                   >
                     Continue to payment
                   </button>
-                </div>
-              </>
-            )}
-
-            {sheet === 'payment' && (
-              <>
-                <h3 className="text-headline-md font-bold">Payment</h3>
-                <p className="mt-1 text-headline-lg font-bold text-primary-container">
-                  {formatJmd(cart.pricing.total)}
-                </p>
-                <div className="mt-inset-md grid grid-cols-2 gap-inset-sm">
-                  {(['card', 'cash'] as PosPaymentMethod[]).map((method) => (
-                    <button
-                      key={method}
-                      type="button"
-                      onClick={() => {
-                        setPaymentMethod(method);
-                        setTerminalReady(false);
-                        setPendingOrderId(null);
-                      }}
-                      className={`min-h-[64px] rounded-xl border-2 text-title-md font-semibold capitalize ${
-                        paymentMethod === method
-                          ? 'border-primary-container bg-primary-container/10'
-                          : 'border-outline-variant'
-                      }`}
-                    >
-                      {method}
-                    </button>
-                  ))}
-                </div>
-                {paymentMethod === 'card' && (
-                  <div className="mt-inset-md rounded-xl border border-dashed border-outline-variant bg-surface-container-low p-inset-md text-center">
-                    <MaterialIcon name="contactless" className="text-4xl text-primary-container" />
-                    <p className="mt-inset-sm text-body-sm font-semibold">Stripe Terminal</p>
-                    <p className="text-label-sm text-on-surface-variant">
-                      {terminalReady || !useApi
-                        ? 'Tap or insert card on the reader'
-                        : 'Continue from checkout to connect the reader'}
-                    </p>
-                  </div>
-                )}
-                <div className="mt-inset-lg flex gap-inset-sm">
+                </>
+              ) : (
+                <>
                   <button
                     type="button"
-                    onClick={() => setSheet('checkout')}
-                    className="min-h-[48px] flex-1 rounded-lg border border-outline-variant font-semibold"
+                    onClick={() => setStep('checkout')}
+                    className="flex min-h-[52px] flex-1 items-center justify-center rounded-xl border border-outline-variant text-label-md font-semibold"
                   >
                     Back
                   </button>
@@ -341,7 +544,7 @@ export default function PosRegisterPage({
                     type="button"
                     disabled={submitting}
                     onClick={completeSale}
-                    className="min-h-[48px] flex-[2] rounded-lg bg-primary-container font-semibold text-on-primary disabled:opacity-60"
+                    className="flex min-h-[52px] flex-[2] items-center justify-center rounded-xl bg-primary-container text-label-md font-semibold text-on-primary disabled:opacity-60"
                   >
                     {submitting
                       ? 'Processing…'
@@ -349,30 +552,30 @@ export default function PosRegisterPage({
                         ? 'Connect reader'
                         : 'Complete sale'}
                   </button>
-                </div>
-              </>
-            )}
+                </>
+              )}
+            </div>
+          </>
+        )}
 
-            {sheet === 'success' && (
-              <div className="text-center">
-                <MaterialIcon name="check_circle" className="text-5xl text-primary-container" />
-                <h3 className="mt-inset-sm text-headline-md font-bold">Payment successful</h3>
-                <p className="text-body-md text-on-surface-variant">Order #{lastOrderNumber}</p>
-                <p className="mt-1 text-body-sm text-on-surface-variant">
-                  Receipt {useApi ? 'sent to printer' : 'preview mode'}
-                </p>
-                <button
-                  type="button"
-                  onClick={closeSheets}
-                  className="mt-inset-lg min-h-[48px] w-full rounded-lg bg-primary-container font-semibold text-on-primary"
-                >
-                  New order
-                </button>
-              </div>
-            )}
+        {step === 'success' && (
+          <div className="flex flex-1 flex-col items-center justify-center px-inset-lg py-inset-xl text-center">
+            <MaterialIcon name="check_circle" className="text-5xl text-primary-container" />
+            <h3 className="mt-inset-sm text-headline-md font-bold">Payment successful</h3>
+            <p className="text-body-md text-on-surface-variant">Order #{lastOrderNumber}</p>
+            <p className="mt-1 text-body-sm text-on-surface-variant">
+              Receipt {useApi ? 'sent to printer' : 'preview mode'}
+            </p>
+            <button
+              type="button"
+              onClick={startNewOrder}
+              className="mt-inset-xl min-h-[52px] w-full max-w-xs rounded-xl bg-primary-container text-label-md font-semibold text-on-primary"
+            >
+              New order
+            </button>
           </div>
-        </div>
-      )}
+        )}
+      </aside>
     </div>
   );
 }

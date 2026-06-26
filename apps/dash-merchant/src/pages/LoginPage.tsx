@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { GOOGLE_OAUTH_EMAIL_ONLY_SCOPES, supabase, useForgotPassword } from '@roam/auth-client';
+import { GOOGLE_OAUTH_EMAIL_ONLY_SCOPES, useForgotPassword } from '@roam/auth-client';
+import { supabase } from '../lib/partner-supabase';
 import { toast } from 'sonner';
 import { MaterialIcon } from '../signup/components/MaterialIcon';
 import { useVisualViewport } from '../hooks/useVisualViewport';

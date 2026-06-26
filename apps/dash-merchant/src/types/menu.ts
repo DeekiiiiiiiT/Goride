@@ -26,6 +26,7 @@ export interface MenuItem {
   calories: number | null;
   options: ModifierGroup[];
   sort_order?: number;
+  prep_station_id?: string | null;
 }
 
 export interface MenuCategory {

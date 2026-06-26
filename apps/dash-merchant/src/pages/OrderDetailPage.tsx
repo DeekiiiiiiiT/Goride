@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '@roam/api-client';
-import { supabase } from '@roam/auth-client';
+import { supabase } from '../lib/partner-supabase';
 import { toast } from 'sonner';
 import { Merchant } from '../hooks/useMerchant';
 import { usePageVisibility } from '../hooks/usePageVisibility';

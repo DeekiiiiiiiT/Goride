@@ -9,6 +9,7 @@ import {
   verifyStaffPin,
 } from '../../../lib/partner-api';
 import { persistShift, type ShiftSessionSurface } from '../../../lib/station-shift-session';
+import { readFlag } from '../../../lib/partner-feature-flags';
 
 type KioskStep = 'picker' | 'pin';
 
@@ -121,6 +122,9 @@ export default function StationKioskFlow({
       onSelect={handleSelect}
       initialFilter={initialStationFilter ?? 'all'}
       lockFilter={lockStationFilter}
+      venueOpsV2={
+        readFlag(merchantId, 'venueOpsV2') || readFlag(merchantId, 'prepStationsV1')
+      }
     />
   );
 }

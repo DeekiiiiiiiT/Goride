@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { JobStation, RosterMember } from '../../types/team';
+import type { JobStation } from '../../types/team';
 import { enrollStoreTablet } from '../../lib/partner-api';
-import { persistDeviceSession, readDeviceSession } from '../../lib/store-tablet-session';
+import { formatTabletEnrollError } from '../../lib/tablet-enroll-errors';
+import { persistDeviceSession } from '../../lib/store-tablet-session';
 import { parseTabletUrlParams } from '../../lib/storeTabletUrl';
 import StoreCodeEntryPage from './StoreCodeEntryPage';
 import TabletStationPickerPage from './TabletStationPickerPage';
 import TabletPairingSuccessPage from './TabletPairingSuccessPage';
-import StationKioskFlow from '../staff-ops/station/StationKioskFlow';
 
-type FlowStep = 'code' | 'station' | 'success' | 'kiosk';
+type FlowStep = 'code' | 'station' | 'success';
 
 interface StoreTabletFlowProps {
   onPaired: () => void;
@@ -17,10 +17,8 @@ interface StoreTabletFlowProps {
 
 export default function StoreTabletFlow({ onPaired, onBack }: StoreTabletFlowProps) {
   const urlParams = useMemo(() => parseTabletUrlParams(), []);
-  const existing = readDeviceSession();
 
   const [step, setStep] = useState<FlowStep>(() => {
-    if (existing) return 'kiosk';
     if (urlParams.code && urlParams.station) return 'station';
     if (urlParams.code) return 'station';
     return 'code';
@@ -30,14 +28,7 @@ export default function StoreTabletFlow({ onPaired, onBack }: StoreTabletFlowPro
   const [pairingResult, setPairingResult] = useState<{
     storeName: string;
     station: JobStation;
-    merchantId: string;
-  } | null>(existing
-    ? {
-        storeName: existing.storeName,
-        station: existing.station,
-        merchantId: existing.merchantId,
-      }
-    : null);
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -46,7 +37,13 @@ export default function StoreTabletFlow({ onPaired, onBack }: StoreTabletFlowPro
       setIsLoading(true);
       setError(null);
       try {
-        const result = await enrollStoreTablet({ code: pairingCode, station });
+        const prepStationId =
+          station === 'kitchen' ? urlParams.prepStationId ?? undefined : undefined;
+        const result = await enrollStoreTablet({
+          code: pairingCode,
+          station,
+          prepStationId,
+        });
         persistDeviceSession({
           deviceToken: result.deviceToken,
           merchantId: result.merchantId,
@@ -55,30 +52,30 @@ export default function StoreTabletFlow({ onPaired, onBack }: StoreTabletFlowPro
           expiresAt: result.expiresAt,
           staffOperationsEnabled: result.staffOperationsEnabled,
           staffStationPinEnabled: result.staffStationPinEnabled,
+          inStoreOperationsEnabled: result.inStoreOperationsEnabled,
+          prepStationId: result.prepStationId ?? prepStationId ?? null,
         });
         setPairingResult({
           storeName: result.storeName,
           station: result.station,
-          merchantId: result.merchantId,
         });
         setStep('success');
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Could not connect tablet');
-        setStep(urlParams.code && !urlParams.station ? 'station' : 'code');
+        setError(formatTabletEnrollError(err));
+        setStep(station ? 'station' : 'code');
       } finally {
         setIsLoading(false);
       }
     },
-    [urlParams.code, urlParams.station],
+    [urlParams.prepStationId],
   );
 
   useEffect(() => {
-    if (existing) return;
     if (urlParams.code && urlParams.station) {
       setCode(urlParams.code);
       void completeEnroll(urlParams.code, urlParams.station);
     }
-  }, [existing, urlParams.code, urlParams.station, completeEnroll]);
+  }, [urlParams.code, urlParams.station, completeEnroll]);
 
   const handleCodeContinue = (nextCode: string) => {
     setCode(nextCode);
@@ -93,10 +90,6 @@ export default function StoreTabletFlow({ onPaired, onBack }: StoreTabletFlowPro
   const handleStationSelect = (station: JobStation) => {
     setPendingStation(station);
     void completeEnroll(code, station);
-  };
-
-  const handleShiftStarted = (_member: RosterMember) => {
-    onPaired();
   };
 
   if (step === 'code') {
@@ -123,8 +116,13 @@ export default function StoreTabletFlow({ onPaired, onBack }: StoreTabletFlowPro
     return (
       <TabletStationPickerPage
         onSelect={handleStationSelect}
-        onBack={() => setStep('code')}
+        onBack={() => {
+          setError(null);
+          setStep('code');
+        }}
         isLoading={isLoading}
+        error={error}
+        venueOpsV2
       />
     );
   }
@@ -134,23 +132,7 @@ export default function StoreTabletFlow({ onPaired, onBack }: StoreTabletFlowPro
       <TabletPairingSuccessPage
         storeName={pairingResult.storeName}
         station={pairingResult.station}
-        onContinue={() => {
-          setStep('kiosk');
-          onPaired();
-        }}
-      />
-    );
-  }
-
-  if (pairingResult) {
-    return (
-      <StationKioskFlow
-        merchantId={pairingResult.merchantId}
-        storeName={pairingResult.storeName}
-        initialStationFilter={pairingResult.station}
-        lockStationFilter
-        shiftSurface="store_tablet"
-        onShiftStarted={handleShiftStarted}
+        onContinue={onPaired}
       />
     );
   }

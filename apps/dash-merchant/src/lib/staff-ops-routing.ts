@@ -1,7 +1,7 @@
 import { readFlag } from './partner-feature-flags';
 import type { MerchantMembership } from '../types/team';
 
-export type StaffOpsRoute = 'counter' | 'kitchen' | null;
+export type StaffOpsRoute = 'counter' | 'kitchen' | 'pos' | null;
 
 export function resolveStaffOpsRoute(
   merchantId: string,
@@ -11,5 +11,6 @@ export function resolveStaffOpsRoute(
   if (!readFlag(merchantId, 'staffOperationsV1')) return null;
   const station = membership.job_station;
   if (station === 'counter' || station === 'kitchen') return station;
+  if (readFlag(merchantId, 'venueOpsV2') && station === 'pos') return 'pos';
   return null;
 }

@@ -39,3 +39,67 @@ export function kitchenQueueOrders(orders: Order[]) {
 export function counterReadyTabLabel(showInStoreOnCounter: boolean) {
   return showInStoreOnCounter ? 'Ready for Pickup' : 'Ready for Driver';
 }
+
+export interface ItemPrepStationLookup {
+  byId: Map<string, string | null>;
+  byName: Map<string, string | null>;
+}
+
+export function buildItemPrepStationLookup(
+  menuItems: Array<{ id: string; name: string; prep_station_id?: string | null }>,
+): ItemPrepStationLookup {
+  const byId = new Map<string, string | null>();
+  const byName = new Map<string, string | null>();
+  for (const item of menuItems) {
+    const prepId = item.prep_station_id ?? null;
+    byId.set(item.id, prepId);
+    byName.set(item.name.toLowerCase().trim(), prepId);
+  }
+  return { byId, byName };
+}
+
+export function resolveItemPrepStationId(
+  item: { menuItemId?: string; name: string },
+  lookup: ItemPrepStationLookup,
+): string | null {
+  if (item.menuItemId && lookup.byId.has(item.menuItemId)) {
+    return lookup.byId.get(item.menuItemId) ?? null;
+  }
+  return lookup.byName.get(item.name.toLowerCase().trim()) ?? null;
+}
+
+/** Unassigned menu items appear on every prep-station KDS. */
+export function itemMatchesPrepStation(
+  item: { menuItemId?: string; name: string },
+  prepStationId: string,
+  lookup: ItemPrepStationLookup,
+): boolean {
+  const assigned = resolveItemPrepStationId(item, lookup);
+  return assigned == null || assigned === prepStationId;
+}
+
+export function filterOrderItemsForPrepStation<T extends { menuItemId?: string; name: string }>(
+  items: T[],
+  prepStationId: string,
+  lookup: ItemPrepStationLookup,
+): T[] {
+  return items.filter((item) => itemMatchesPrepStation(item, prepStationId, lookup));
+}
+
+export function orderHasPrepStationItems(
+  order: { items: Array<{ menuItemId?: string; name: string }> },
+  prepStationId: string,
+  lookup: ItemPrepStationLookup,
+): boolean {
+  return filterOrderItemsForPrepStation(order.items, prepStationId, lookup).length > 0;
+}
+
+export function kitchenQueueForPrepStation(
+  orders: Order[],
+  prepStationId: string,
+  lookup: ItemPrepStationLookup,
+) {
+  return kitchenQueueOrders(orders).filter((order) =>
+    orderHasPrepStationItems(order, prepStationId, lookup),
+  );
+}

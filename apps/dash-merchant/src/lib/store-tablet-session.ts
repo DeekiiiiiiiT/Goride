@@ -1,13 +1,20 @@
 import type { JobStation } from '../types/team';
 
+/** Station locked on a paired store tablet device. */
+export type StoreTabletStation = JobStation;
+
 export interface StoreTabletSession {
   deviceToken: string;
   merchantId: string;
   storeName: string;
-  station: JobStation;
+  station: StoreTabletStation;
   expiresAt: string;
   staffOperationsEnabled: boolean;
   staffStationPinEnabled: boolean;
+  /** False when owner has not opted into in-store / POS yet. */
+  inStoreOperationsEnabled?: boolean;
+  /** Kitchen prep zone lock when prepStationsV1 is on. */
+  prepStationId?: string | null;
 }
 
 const STORAGE_KEY = 'roam_store_tablet_session';

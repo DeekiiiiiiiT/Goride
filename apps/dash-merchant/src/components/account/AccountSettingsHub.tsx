@@ -7,7 +7,9 @@ import { getStoreStatus, PartnerTab } from '../../lib/partner-utils';
 import { formatMemberSince } from '../../hooks/useMerchantSettings';
 import SettingsMenuRow from './SettingsMenuRow';
 import RestaurantMgmtOptInCard from '../restaurant-mgmt/RestaurantMgmtOptInCard';
+import OperationsHubCard from '../venue-ops/OperationsHubCard';
 import { canAccessRestaurantMgmt } from '../../lib/merchant-capabilities';
+import { readFlag } from '../../lib/partner-feature-flags';
 
 export type AccountSection =
   | 'profile'
@@ -19,7 +21,8 @@ export type AccountSection =
   | 'help'
   | 'legal'
   | 'promotions'
-  | 'restaurant-mgmt';
+  | 'restaurant-mgmt'
+  | 'venue-ops';
 
 interface AccountSettingsHubProps {
   merchant: Merchant;
@@ -45,6 +48,9 @@ export default function AccountSettingsHub({
   const { isAcceptingOrders, toggleAcceptingOrders, isPending: togglePending } =
     useAcceptingOrdersToggle(merchant);
   const storeStatus = getStoreStatus(merchant.is_active, isAcceptingOrders);
+  const venueOpsEnabled = readFlag(merchant.id, 'venueOpsV2');
+  const showRestaurantMgmt = canAccessRestaurantMgmt(merchant.id, merchant) && !venueOpsEnabled;
+  const showOperationsHub = venueOpsEnabled || canAccessRestaurantMgmt(merchant.id, merchant);
 
   const handlePlaceholder = (label: string) => {
     toast.info(`${label} is coming soon`);
@@ -135,11 +141,15 @@ export default function AccountSettingsHub({
           </div>
         </section>
 
-        {canAccessRestaurantMgmt(merchant.id, merchant) && (
+        {showRestaurantMgmt && (
           <RestaurantMgmtOptInCard
             merchant={merchant}
             onOpenRestaurantMgmt={() => onOpenSection('restaurant-mgmt')}
           />
+        )}
+
+        {venueOpsEnabled && showOperationsHub && (
+          <OperationsHubCard onOpenOperations={() => onOpenSection('venue-ops')} />
         )}
 
         <section className="divide-y divide-outline-variant overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-sm">

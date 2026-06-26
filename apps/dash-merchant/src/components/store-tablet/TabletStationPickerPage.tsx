@@ -6,6 +6,10 @@ interface TabletStationPickerPageProps {
   onSelect: (station: JobStation) => void;
   onBack?: () => void;
   isLoading?: boolean;
+  error?: string | null;
+  /** When on, show all stations; non-enabled ones are disabled. */
+  venueOpsV2?: boolean;
+  enabledStations?: JobStation[];
 }
 
 export default function TabletStationPickerPage({
@@ -13,7 +17,12 @@ export default function TabletStationPickerPage({
   onSelect,
   onBack,
   isLoading = false,
+  error,
+  venueOpsV2 = false,
+  enabledStations,
 }: TabletStationPickerPageProps) {
+  const enabled = enabledStations ? new Set(enabledStations) : null;
+
   return (
     <div className="flex min-h-dvh flex-col bg-background">
       {onBack && (
@@ -41,19 +50,40 @@ export default function TabletStationPickerPage({
         </header>
 
         <div className="grid gap-inset-md">
-          {JOB_STATION_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              disabled={isLoading}
-              onClick={() => onSelect(option.value)}
-              className="rounded-xl border border-outline-variant bg-surface-container-lowest p-inset-md text-left transition-colors hover:border-primary-container/40 active:scale-[0.99] disabled:opacity-50"
-            >
-              <div className="text-title-md font-semibold text-on-background">{option.label}</div>
-              <div className="mt-inset-xs text-body-sm text-on-surface-variant">{option.description}</div>
-            </button>
-          ))}
+          {JOB_STATION_OPTIONS.map((option) => {
+            const stationDisabled =
+              venueOpsV2 && enabled != null && !enabled.has(option.value);
+            return (
+              <button
+                key={option.value}
+                type="button"
+                disabled={isLoading || stationDisabled}
+                onClick={() => onSelect(option.value)}
+                className={`rounded-xl border p-inset-md text-left transition-colors active:scale-[0.99] disabled:opacity-50 ${
+                  stationDisabled
+                    ? 'cursor-not-allowed border-outline-variant/50 bg-surface-container-low'
+                    : 'border-outline-variant bg-surface-container-lowest hover:border-primary-container/40'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-inset-sm">
+                  <div className="text-title-md font-semibold text-on-background">{option.label}</div>
+                  {stationDisabled && (
+                    <span className="rounded-full bg-surface-variant px-2 py-0.5 text-label-sm text-on-surface-variant">
+                      Not enabled
+                    </span>
+                  )}
+                </div>
+                <div className="mt-inset-xs text-body-sm text-on-surface-variant">{option.description}</div>
+              </button>
+            );
+          })}
         </div>
+
+        {error && (
+          <p className="rounded-lg border border-error/30 bg-error-container/20 px-inset-md py-inset-sm text-body-sm text-error">
+            {error}
+          </p>
+        )}
       </main>
     </div>
   );

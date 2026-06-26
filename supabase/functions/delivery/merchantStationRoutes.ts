@@ -8,6 +8,7 @@ import {
 import {
   buildStationDeepLinks,
   enrollRateLimitOk,
+  filterStationLinksByEnabled,
   generatePairingCode,
   hashDeviceToken,
   isValidStation,
@@ -29,6 +30,7 @@ import {
 import {
   mapTeamMember,
   parseJobStationInput,
+  VALID_JOB_STATIONS,
 } from "./merchantTeam.ts";
 
 type StationDeps = {
@@ -65,6 +67,7 @@ export type StationAccessResult =
     deviceId: string;
     merchantId: string;
     station: string;
+    prepStationId?: string | null;
     merchant: Record<string, unknown>;
   }
   | { ok: false; status: number; message: string };
@@ -85,7 +88,7 @@ async function resolveStationAccess(c: Context): Promise<StationAccessResult> {
     const tokenHash = await hashDeviceToken(deviceToken);
     const { data: device } = await sb
       .from("merchant_station_devices")
-      .select("id, merchant_id, station, revoked_at, merchants(*)")
+      .select("id, merchant_id, station, prep_station_id, revoked_at, merchants(*)")
       .eq("token_hash", tokenHash)
       .is("revoked_at", null)
       .maybeSingle();
@@ -109,6 +112,7 @@ async function resolveStationAccess(c: Context): Promise<StationAccessResult> {
       deviceId: validated.deviceId,
       merchantId: validated.merchantId,
       station: String(row.station),
+      prepStationId: row.prep_station_id ? String(row.prep_station_id) : null,
       merchant,
     };
   }
@@ -179,6 +183,21 @@ async function ensurePairingCode(sb: SupabaseClient, merchantId: string): Promis
   throw new Error("Could not generate pairing code");
 }
 
+function readEnabledStations(merchant: Record<string, unknown>): string[] {
+  const enabled = merchant.enabled_stations;
+  if (Array.isArray(enabled) && enabled.length > 0) return enabled.map(String);
+  return ["counter", "kitchen", "manager", "pos"];
+}
+
+function pairingStationLinks(
+  origin: string,
+  code: string,
+  merchant: Record<string, unknown>,
+): Record<string, string> {
+  const allLinks = buildStationDeepLinks(origin, code);
+  return filterStationLinksByEnabled(allLinks, readEnabledStations(merchant));
+}
+
 function mapRosterMember(row: Record<string, unknown>) {
   const jobStation = row.job_station;
   const role = String(row.role);
@@ -187,7 +206,7 @@ function mapRosterMember(row: Record<string, unknown>) {
     name: String(row.name),
     role: role === "manager" ? "manager" : "staff",
     jobStation:
-      jobStation === "counter" || jobStation === "kitchen" || jobStation === "manager"
+      typeof jobStation === "string" && VALID_JOB_STATIONS.has(jobStation)
         ? String(jobStation)
         : null,
     pinStatus: String(row.pin_status),
@@ -511,7 +530,7 @@ export function registerMerchantStationRoutes(app: Hono, deps: StationDeps) {
     const code = await ensurePairingCode(sb, merchantId);
 
     const origin = c.req.header("origin") || "https://partner.roamdash.co";
-    const stationLinks = buildStationDeepLinks(origin, code);
+    const stationLinks = pairingStationLinks(origin, code, merchant);
 
     return c.json({
       storeName: String(merchant.name || "Store"),
@@ -547,7 +566,7 @@ export function registerMerchantStationRoutes(app: Hono, deps: StationDeps) {
       .from("merchants")
       .update(updates)
       .eq("id", merchantId)
-      .select("name, kiosk_pairing_code, staff_operations_enabled, staff_station_pin_enabled")
+      .select("name, kiosk_pairing_code, staff_operations_enabled, staff_station_pin_enabled, enabled_stations")
       .single();
 
     if (error) return c.json({ error: error.message }, 500);
@@ -558,7 +577,7 @@ export function registerMerchantStationRoutes(app: Hono, deps: StationDeps) {
     return c.json({
       storeName: String(row.name || "Store"),
       pairingCode: code,
-      stationLinks: buildStationDeepLinks(origin, code),
+      stationLinks: pairingStationLinks(origin, code, row),
       staffOperationsEnabled: Boolean(row.staff_operations_enabled),
       staffStationPinEnabled: Boolean(row.staff_station_pin_enabled),
     });
@@ -588,7 +607,7 @@ export function registerMerchantStationRoutes(app: Hono, deps: StationDeps) {
         kiosk_pairing_rotated_at: new Date().toISOString(),
       })
       .eq("id", merchantId)
-      .select("name, staff_operations_enabled, staff_station_pin_enabled")
+      .select("name, staff_operations_enabled, staff_station_pin_enabled, enabled_stations")
       .single();
 
     if (error) return c.json({ error: error.message }, 500);
@@ -598,7 +617,7 @@ export function registerMerchantStationRoutes(app: Hono, deps: StationDeps) {
     return c.json({
       storeName: String(row.name || "Store"),
       pairingCode: code,
-      stationLinks: buildStationDeepLinks(origin, code),
+      stationLinks: pairingStationLinks(origin, code, row),
       staffOperationsEnabled: Boolean(row.staff_operations_enabled),
       staffStationPinEnabled: Boolean(row.staff_station_pin_enabled),
     });
@@ -615,23 +634,71 @@ export function registerMerchantStationRoutes(app: Hono, deps: StationDeps) {
     const body = await c.req.json();
     const code = normalizePairingCode(String(body.code || ""));
     const station = String(body.station || "");
-    if (!code) return c.json({ error: "Store code is required" }, 400);
-    if (!isValidStation(station)) return c.json({ error: "Invalid station" }, 400);
+    const prepStationId = body.prepStationId ? String(body.prepStationId) : null;
+    if (!code) return c.json({ error: "Store code is required", code: "CODE_REQUIRED" }, 400);
+    if (!isValidStation(station)) {
+      return c.json({ error: "Choose a valid station type", code: "INVALID_STATION" }, 400);
+    }
 
     const sb = getServiceSb();
     const { data: merchant } = await sb
       .from("merchants")
-      .select("id, name, verification_status, staff_station_pin_enabled, staff_operations_enabled")
+      .select(
+        "id, name, verification_status, staff_station_pin_enabled, staff_operations_enabled, capabilities, enabled_stations",
+      )
       .eq("kiosk_pairing_code", code)
       .maybeSingle();
 
-    if (!merchant) return c.json({ error: "Invalid store code" }, 404);
+    if (!merchant) {
+      return c.json({
+        error: "That store code wasn't recognized. Check with your manager.",
+        code: "INVALID_STORE_CODE",
+      }, 404);
+    }
     const row = merchant as Record<string, unknown>;
     if (String(row.verification_status) !== "approved") {
-      return c.json({ error: "Store is not active yet" }, 403);
+      return c.json({
+        error: "This store isn't live on Roam yet.",
+        code: "STORE_NOT_ACTIVE",
+      }, 403);
     }
     if (!row.staff_station_pin_enabled) {
-      return c.json({ error: "Tablet sign-in is not enabled for this store" }, 403);
+      return c.json({
+        error: "Your manager hasn't enabled tablet sign-in yet. Ask them to turn it on in Team settings.",
+        code: "TABLET_SIGNIN_DISABLED",
+      }, 403);
+    }
+
+    const enabledStations = readEnabledStations(row);
+    if (!enabledStations.includes(station)) {
+      return c.json({
+        error: "This station isn't enabled for your store. Ask your manager to turn it on in Operations settings.",
+        code: "STATION_NOT_ENABLED",
+      }, 403);
+    }
+
+    const capabilities = Array.isArray(row.capabilities) ? row.capabilities as string[] : [];
+    const inStoreOperationsEnabled = capabilities.includes("in_store_operations");
+
+    if (prepStationId) {
+      if (station !== "kitchen") {
+        return c.json({
+          error: "Prep stations apply to kitchen tablets only",
+          code: "PREP_STATION_KITCHEN_ONLY",
+        }, 400);
+      }
+      const { data: prepStation } = await sb
+        .from("merchant_prep_stations")
+        .select("id")
+        .eq("id", prepStationId)
+        .eq("merchant_id", String(row.id))
+        .maybeSingle();
+      if (!prepStation) {
+        return c.json({
+          error: "Prep station not found for this store",
+          code: "INVALID_PREP_STATION",
+        }, 400);
+      }
     }
 
     const merchantId = String(row.id);
@@ -640,6 +707,7 @@ export function registerMerchantStationRoutes(app: Hono, deps: StationDeps) {
       .insert({
         merchant_id: merchantId,
         station,
+        prep_station_id: prepStationId,
         token_hash: "pending",
       })
       .select("id")
@@ -664,8 +732,11 @@ export function registerMerchantStationRoutes(app: Hono, deps: StationDeps) {
       merchantId,
       storeName: String(row.name || "Store"),
       station,
+      prepStationId,
       staffOperationsEnabled: Boolean(row.staff_operations_enabled),
       staffStationPinEnabled: Boolean(row.staff_station_pin_enabled),
+      inStoreOperationsEnabled,
+      stationEnabled: true,
     });
   });
 
@@ -680,6 +751,7 @@ export function registerMerchantStationRoutes(app: Hono, deps: StationDeps) {
       ok: true,
       merchantId: access.merchantId,
       station: access.station,
+      prepStationId: access.prepStationId ?? null,
       storeName: String(access.merchant.name || "Store"),
       staffOperationsEnabled: Boolean(access.merchant.staff_operations_enabled),
       staffStationPinEnabled: Boolean(access.merchant.staff_station_pin_enabled),

@@ -9,6 +9,7 @@ import { useMerchantActiveOrders } from '../../hooks/useMerchantActiveOrders';
 import { useMerchantOrdersRealtime } from '../../hooks/useMerchantOrdersRealtime';
 import { usePageVisibility } from '../../hooks/usePageVisibility';
 import { useOrderStatusMutation } from '../../hooks/useOrderStatusMutation';
+import { useMerchantMenu } from '../../hooks/useMerchantMenu';
 import QueryErrorState from '../../components/QueryErrorState';
 import KitchenTicketCard, {
   KitchenTicketDetail,
@@ -16,25 +17,41 @@ import KitchenTicketCard, {
 import EndShiftButton from '../../components/staff-ops/station/EndShiftButton';
 import { CAPABILITY_IN_STORE, hasCapability } from '../../lib/merchant-capabilities';
 import { useRestaurantSettings } from '../../hooks/useRestaurantSettings';
-import { kitchenQueueOrders } from '../../lib/staff-ops-order-filters';
+import {
+  buildItemPrepStationLookup,
+  filterOrderItemsForPrepStation,
+  kitchenQueueForPrepStation,
+  kitchenQueueOrders,
+} from '../../lib/staff-ops-order-filters';
+import { readFlag } from '../../lib/partner-feature-flags';
+import { readDeviceSession } from '../../lib/store-tablet-session';
+import { usePrepStations } from '../../hooks/usePrepStations';
 import type { MerchantOrdersChannel } from '../../lib/merchant-orders-query';
 import { Order } from '../../types/order';
 
 interface KitchenQueuePageProps {
   merchant: Merchant;
   staffName?: string;
+  prepStationId?: string | null;
   onNavigate?: (tab: PartnerTab) => void;
   onOpenMobileNav?: () => void;
   onEndShift?: () => void;
 }
 
-function kitchenQueue(orders: Order[]) {
-  return kitchenQueueOrders(orders);
+function kitchenQueue(
+  orders: Order[],
+  prepStationId: string | null | undefined,
+  prepStationsEnabled: boolean,
+  lookup: ReturnType<typeof buildItemPrepStationLookup>,
+) {
+  if (!prepStationsEnabled || !prepStationId) return kitchenQueueOrders(orders);
+  return kitchenQueueForPrepStation(orders, prepStationId, lookup);
 }
 
 export default function KitchenQueuePage({
   merchant,
   staffName,
+  prepStationId: prepStationIdProp,
   onNavigate,
   onOpenMobileNav,
   onEndShift,
@@ -44,6 +61,19 @@ export default function KitchenQueuePage({
   const { isAcceptingOrders, toggleAcceptingOrders } = useAcceptingOrdersToggle(merchant);
   const showChannelBadge = hasCapability(merchant, CAPABILITY_IN_STORE);
   const restaurantSettings = useRestaurantSettings(merchant);
+  const prepStationsEnabled = readFlag(merchant.id, 'prepStationsV1');
+  const deviceSession = readDeviceSession();
+  const prepStationId =
+    prepStationIdProp ?? deviceSession?.prepStationId ?? null;
+  const { prepStations } = usePrepStations(merchant.id);
+  const prepStationName = prepStationId
+    ? prepStations.find((station) => station.id === prepStationId)?.name
+    : null;
+  const menuQuery = useMerchantMenu(prepStationsEnabled && prepStationId ? merchant.id : '');
+  const itemPrepLookup = useMemo(
+    () => buildItemPrepStationLookup(menuQuery.data?.items ?? []),
+    [menuQuery.data?.items],
+  );
   const showInStoreOnKitchen =
     showChannelBadge && Boolean(restaurantSettings.data?.showInStoreOnKitchen);
   const ordersChannel: MerchantOrdersChannel | undefined = showInStoreOnKitchen
@@ -61,10 +91,21 @@ export default function KitchenQueuePage({
     channel: ordersChannel,
   });
 
-  const queue = useMemo(() => kitchenQueue(orders), [orders]);
-  const selectedOrder = selectedOrderId
+  const queue = useMemo(
+    () => kitchenQueue(orders, prepStationId, prepStationsEnabled, itemPrepLookup),
+    [orders, prepStationId, prepStationsEnabled, itemPrepLookup],
+  );
+  const displayOrder = (order: Order | null) => {
+    if (!order || !prepStationsEnabled || !prepStationId) return order;
+    return {
+      ...order,
+      items: filterOrderItemsForPrepStation(order.items, prepStationId, itemPrepLookup),
+    };
+  };
+  const selectedOrderRaw = selectedOrderId
     ? queue.find((order) => order.id === selectedOrderId) ?? null
     : queue[0] ?? null;
+  const selectedOrder = displayOrder(selectedOrderRaw);
 
   const updateStatusMutation = useOrderStatusMutation({ merchantId: merchant.id });
 
@@ -79,9 +120,12 @@ export default function KitchenQueuePage({
           <MaterialIcon name="menu" />
           Menu
         </button>
-        <h1 className="text-headline-md font-bold">Kitchen Queue</h1>
+        <h1 className="text-headline-md font-bold">
+          {prepStationName ? `${prepStationName} Queue` : 'Kitchen Queue'}
+        </h1>
         <p className="text-label-sm text-white/70">
           {staffName ? `Signed in as ${staffName}` : merchant.name}
+          {prepStationName ? ` · ${prepStationName} prep station` : ''}
         </p>
       </div>
       <div className="flex items-center gap-inset-sm">
@@ -110,8 +154,8 @@ export default function KitchenQueuePage({
       {queue.map((order) => (
         <KitchenTicketCard
           key={order.id}
-          order={order}
-          selected={selectedOrder?.id === order.id}
+          order={displayOrder(order)!}
+          selected={selectedOrderRaw?.id === order.id}
           showChannelBadge={showChannelBadge && Boolean(order.channel)}
           onSelect={() => setSelectedOrderId(order.id)}
         />
@@ -137,16 +181,16 @@ export default function KitchenQueuePage({
             order={selectedOrder}
             isSubmitting={updateStatusMutation.isPending}
             onStartPreparing={() => {
-              if (!selectedOrder) return;
+              if (!selectedOrderRaw) return;
               updateStatusMutation.mutate(
-                { orderId: selectedOrder.id, status: 'preparing' },
+                { orderId: selectedOrderRaw.id, status: 'preparing' },
                 { onSuccess: () => toast.success('Started preparing') },
               );
             }}
             onMarkReady={() => {
-              if (!selectedOrder) return;
+              if (!selectedOrderRaw) return;
               updateStatusMutation.mutate(
-                { orderId: selectedOrder.id, status: 'ready' },
+                { orderId: selectedOrderRaw.id, status: 'ready' },
                 { onSuccess: () => toast.success('Order ready for pickup') },
               );
             }}
@@ -163,14 +207,16 @@ export default function KitchenQueuePage({
               order={selectedOrder}
               isSubmitting={updateStatusMutation.isPending}
               onStartPreparing={() => {
+                if (!selectedOrderRaw) return;
                 updateStatusMutation.mutate(
-                  { orderId: selectedOrder.id, status: 'preparing' },
+                  { orderId: selectedOrderRaw.id, status: 'preparing' },
                   { onSuccess: () => toast.success('Started preparing') },
                 );
               }}
               onMarkReady={() => {
+                if (!selectedOrderRaw) return;
                 updateStatusMutation.mutate(
-                  { orderId: selectedOrder.id, status: 'ready' },
+                  { orderId: selectedOrderRaw.id, status: 'ready' },
                   { onSuccess: () => toast.success('Order ready') },
                 );
               }}

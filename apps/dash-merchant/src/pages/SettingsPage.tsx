@@ -12,6 +12,7 @@ import NotificationSettingsView from '../components/account/NotificationSettings
 import HelpSupportView from '../components/account/HelpSupportView';
 import PromotionsView from '../components/account/PromotionsView';
 import RestaurantMgmtFlow from './restaurant-mgmt/RestaurantMgmtFlow';
+import OperationsHub from '../components/venue-ops/OperationsHub';
 import { CAPABILITY_IN_STORE, hasCapability } from '../lib/merchant-capabilities';
 
 interface SettingsPageProps {
@@ -162,6 +163,15 @@ export default function SettingsPage({
     return (
       <RestaurantMgmtFlow
         merchant={merchant}
+        onBack={() => setActiveSection(null)}
+      />
+    );
+  }
+
+  if (activeSection === 'venue-ops') {
+    return (
+      <OperationsHub
+        merchantId={merchant.id}
         onBack={() => setActiveSection(null)}
       />
     );
