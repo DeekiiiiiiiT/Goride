@@ -30,4 +30,6 @@ Generate screens via Stitch MCP `generate_screen_from_text` then `apply_design_s
 
 **React implementation:** `apps/dash-merchant/src/components/enterprise-inventory/` · `pages/enterprise-inventory/EnterpriseInventoryFlow.tsx`
 
+**Gating:** Admin portal **Enable Restaurant Management** → `in_store_operations` + `inventory_mode = enterprise`
+
 **Flow map:** [FLOW.md](./FLOW.md) · **Briefs:** [SCREEN_BRIEFS.md](./SCREEN_BRIEFS.md)

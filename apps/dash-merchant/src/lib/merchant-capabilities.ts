@@ -1,6 +1,5 @@
 import type { Merchant } from '../hooks/useMerchant';
 import type { MerchantCapability } from '../types/restaurant-mgmt';
-import { readFlag } from './partner-feature-flags';
 
 export const CAPABILITY_IN_STORE = 'in_store_operations' as const;
 export const CAPABILITY_ROAM = 'roam_delivery' as const;
@@ -24,11 +23,10 @@ export function isRoamOnly(merchant: Merchant | null | undefined): boolean {
   return !hasCapability(merchant, CAPABILITY_IN_STORE);
 }
 
-/** Preview flag OR DB capability — never shows for Roam-only production merchants without opt-in. */
+/** Restaurant Management (POS, inventory, reports, settings) — enabled by Roam admin only. */
 export function canAccessRestaurantMgmt(
-  merchantId: string,
+  _merchantId: string,
   merchant: Merchant | null | undefined,
 ): boolean {
-  if (hasCapability(merchant, CAPABILITY_IN_STORE)) return true;
-  return readFlag(merchantId, 'restaurantMgmtPreviewV1');
+  return hasCapability(merchant, CAPABILITY_IN_STORE);
 }

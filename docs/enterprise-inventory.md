@@ -1,12 +1,23 @@
 # Enterprise Inventory
 
-Additive enterprise inventory for Roam Dash Partner merchants.
+Enterprise inventory for Roam Dash Partner merchants with Restaurant Management enabled.
 
 ## Architecture
 
 - **SSOT:** `delivery.inventory_ledger` (append-only; triggers maintain `inventory_balances`)
-- **Legacy:** `ingredients` + `ingredient_stock` remain until `merchants.inventory_mode = 'enterprise'`
-- **Shadow mode:** `merchants.enterprise_inventory_shadow = true` runs ledger depletion after legacy depletion for validation
+- **Hierarchy:** `inventory_companies` → `regions` → `groups` → `nodes` (storefront linked to `merchants`)
+- **Item master:** `item_master` + `uom_definitions` + `uom_conversions`
+- **POS depletion:** `depleteForPosSale` writes ledger entries when `merchants.inventory_mode = 'enterprise'`
+- **Legacy tables** (`ingredients`, `ingredient_stock`, `menu_item_recipes`) remain in DB for historical data only — no partner UI or REST routes
+
+## Enablement
+
+| Control | Where | Effect |
+|---------|-------|--------|
+| Restaurant Management | Roam Dash Admin Portal → merchant → **Enable Restaurant Management** | Adds `in_store_operations` capability; sets `inventory_mode = enterprise` |
+| Partner UI | Account → Restaurant Management → module picker → **Inventory** | `EnterpriseInventoryFlow` (live API when capability on) |
+
+Merchants cannot self-enable. `POST /merchant/capabilities/enable` returns 403.
 
 ## Migrations
 
@@ -17,29 +28,30 @@ Additive enterprise inventory for Roam Dash Partner merchants.
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/sql/enterprise_inventory_bootstrap.sql` | Company + node per merchant; migrate ingredients → item_master |
-| `scripts/sql/enterprise_inventory_backfill_ledger.sql` | Replay `stock_movements` into ledger before cutover |
+| `scripts/sql/enterprise_inventory_bootstrap.sql` | Company + node per merchant; migrate legacy ingredients → `item_master` |
+| `scripts/sql/enterprise_inventory_backfill_ledger.sql` | Replay `stock_movements` into ledger (one-time migration aid) |
 
-## API prefix
+Run migrations first, then bootstrap.
 
-`/delivery/merchant/enterprise-inventory/*` — see `merchantInventoryRoutes.ts`
+## API
+
+Prefix: `/delivery/merchant/enterprise-inventory/*` — see `merchantInventoryRoutes.ts`
+
+Key surfaces: nodes, hub KPIs, item master, vendors/POs/receiving, transfers, physical counts, recipes v2, variance report, ledger audit.
 
 ## UI
 
-- Flag: `enterpriseInventoryV1` in partner feature flags
-- Flow: `pages/enterprise-inventory/EnterpriseInventoryFlow.tsx`
-- Stitch refs: `design/stitch/enterprise-inventory/`
+- Flow: `apps/dash-merchant/src/pages/enterprise-inventory/EnterpriseInventoryFlow.tsx`
+- Components: `apps/dash-merchant/src/components/enterprise-inventory/`
+- Design briefs: `apps/dash-merchant/design/stitch/enterprise-inventory/`
 
-## Cutover checklist
+## Restaurant Management navigation
 
-1. Run bootstrap + backfill on staging
-2. Enable `enterprise_inventory_shadow` for pilot merchant
-3. Compare shadow ledger vs `ingredient_stock` for 1 week
-4. `PATCH /merchant/enterprise-inventory/settings` with `inventoryMode: enterprise`
-5. Legacy POS depletion skipped automatically when `inventory_mode = enterprise`
-
-## Deprecated (post-cutover)
-
-- `decrementStockForOrder` direct path (kept for `legacy` mode)
-- `ingredient_stock` writes
-- Restaurant Management inventory screens (superseded by Enterprise Inventory hub)
+```
+Account / Operations Hub
+  └─ Restaurant Management (module picker)
+       ├─ POS Register (hidden when venueOpsV2 — tablet only)
+       ├─ Inventory → Enterprise Inventory hub
+       ├─ Reports → in-store sales
+       └─ Store settings → printer / receipts
+```

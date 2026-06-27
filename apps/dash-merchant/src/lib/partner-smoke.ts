@@ -80,19 +80,15 @@ export const PARTNER_PRODUCTION_SMOKE = [
 ] as const;
 
 export const RESTAURANT_MGMT_UI_SMOKE = [
-  'Restaurant mgmt: flag off hides opt-in card and keeps Roam-only path',
-  'Restaurant mgmt: preview flag shows opt-in card with fixture data',
-  'Restaurant mgmt: enable in-store ops adds capability via API',
+  'Restaurant mgmt: hidden until admin enables Restaurant Management on merchant',
+  'Restaurant mgmt: module picker shows POS, Inventory, Reports, Settings',
   'Restaurant mgmt: 3-step setup wizard saves tax, printer, receipt footer',
-  'Restaurant mgmt: hub sub-nav POS, Inventory, Reports, Settings',
-  'POS: menu grid, cart, checkout order type, card/cash payment, success sheet',
-  'POS: preview uses fixtures; live uses menu API + createPosOrder',
-  'Inventory: ingredients list, stock adjust, recipe editor',
+  'POS: menu grid, cart, checkout, card/cash payment (tablet when venueOpsV2)',
+  'Inventory: enterprise hub — location picker, KPIs, receiving, counts, transfers',
+  'Inventory: item master, vendors, recipes v2, ledger audit',
   'Reports: in-store sales today/week totals',
   'Print: settings panel + test print queues job',
-  'Counter/Kitchen: OrderChannelChip when in_store capability + order.channel',
-  'Counter/Kitchen: channel=all fetch when show in-store setting enabled',
-  'Team: POS station + inventory permission when in-store enabled',
+  'Admin portal: Enable/Disable Restaurant Management toggles capability + inventory_mode',
 ] as const;
 
 export function logPartnerSmokeChecklist() {

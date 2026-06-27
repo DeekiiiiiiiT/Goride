@@ -20,34 +20,6 @@ export interface PosCartLine {
   modifiers?: PosCartModifier[];
 }
 
-export interface Ingredient {
-  id: string;
-  name: string;
-  unit: string;
-  quantityOnHand: number;
-  reorderLevel: number;
-  costPerUnit: number;
-}
-
-export interface RecipeLine {
-  id: string;
-  menuItemId: string;
-  menuItemName: string;
-  ingredientId: string;
-  ingredientName: string;
-  quantityPerServing: number;
-  unit: string;
-}
-
-export interface StockMovement {
-  id: string;
-  ingredientId: string;
-  delta: number;
-  reason: string;
-  orderId?: string | null;
-  createdAt: string;
-}
-
 export type PrintJobStatus = 'queued' | 'sent' | 'printed' | 'failed';
 
 export interface PrintJobFixture {

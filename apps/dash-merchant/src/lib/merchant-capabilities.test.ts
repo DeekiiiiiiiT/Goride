@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canAccessRestaurantMgmt,
   getMerchantCapabilities,
   hasCapability,
   isRoamOnly,
@@ -12,11 +13,13 @@ describe('merchant-capabilities', () => {
   it('defaults to roam only', () => {
     expect(getMerchantCapabilities(baseMerchant)).toEqual(['roam_delivery']);
     expect(isRoamOnly(baseMerchant)).toBe(true);
+    expect(canAccessRestaurantMgmt('m1', baseMerchant)).toBe(false);
   });
 
   it('detects in_store_operations', () => {
     const hybrid = { ...baseMerchant, capabilities: ['roam_delivery', 'in_store_operations'] };
     expect(hasCapability(hybrid, 'in_store_operations')).toBe(true);
     expect(isRoamOnly(hybrid)).toBe(false);
+    expect(canAccessRestaurantMgmt('m1', hybrid)).toBe(true);
   });
 });

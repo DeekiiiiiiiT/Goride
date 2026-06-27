@@ -5,7 +5,6 @@ import type { ResolvedMerchantAccess } from "./merchantAuth.ts";
 import { requireResolvedMerchantWithPermission } from "./merchantAuth.ts";
 import {
   depleteForPosSale,
-  merchantShadowInventory,
   merchantUsesEnterpriseInventory,
   resolveNodeIdForMerchant,
 } from "./inventory/depletionService.ts";
@@ -73,101 +72,30 @@ function receiptPayload(order: Record<string, unknown>, merchant: Record<string,
   };
 }
 
-async function decrementStockForOrder(
-  sb: SupabaseClient,
-  merchantId: string,
-  orderId: string,
-  items: Array<{ menuItemId?: string; name: string; quantity: number }>,
-  memberId?: string | null,
-) {
-  for (const item of items) {
-    if (!item.menuItemId) continue;
-    const { data: recipes } = await sb
-      .from("menu_item_recipes")
-      .select("ingredient_id, quantity_per_serving")
-      .eq("menu_item_id", item.menuItemId);
-
-    for (const recipe of recipes ?? []) {
-      const row = recipe as Record<string, unknown>;
-      const ingredientId = String(row.ingredient_id);
-      const delta = -Number(row.quantity_per_serving) * item.quantity;
-
-      const { data: stock } = await sb
-        .from("ingredient_stock")
-        .select("quantity_on_hand")
-        .eq("ingredient_id", ingredientId)
-        .maybeSingle();
-
-      const onHand = Number((stock as Record<string, unknown> | null)?.quantity_on_hand ?? 0);
-      if (onHand + delta < 0) {
-        throw new Error(`Insufficient stock for ingredient linked to ${item.name}`);
-      }
-
-      await sb.from("ingredient_stock").upsert({
-        ingredient_id: ingredientId,
-        quantity_on_hand: onHand + delta,
-        updated_at: new Date().toISOString(),
-      });
-
-      await sb.from("stock_movements").insert({
-        ingredient_id: ingredientId,
-        merchant_id: merchantId,
-        delta,
-        reason: "order_paid",
-        order_id: orderId,
-        member_id: memberId ?? null,
-      });
-    }
-  }
-}
-
 async function processOrderInventoryDepletion(
   sb: SupabaseClient,
   merchant: Record<string, unknown>,
   merchantId: string,
   orderId: string,
   items: Array<{ menuItemId?: string; name: string; quantity: number }>,
-  memberId?: string | null,
+  _memberId?: string | null,
 ) {
-  const enterprise = merchantUsesEnterpriseInventory(merchant);
-  const shadow = merchantShadowInventory(merchant);
-
-  if (!enterprise && !shadow) {
-    await decrementStockForOrder(sb, merchantId, orderId, items, memberId);
-    return;
-  }
+  if (!merchantUsesEnterpriseInventory(merchant)) return;
 
   const nodeId = await resolveNodeIdForMerchant(sb, merchantId);
-  if (!nodeId) {
-    if (enterprise) throw new Error("No inventory node linked to this store");
-    await decrementStockForOrder(sb, merchantId, orderId, items, memberId);
-    return;
-  }
+  if (!nodeId) throw new Error("No inventory node linked to this store");
 
-  if (enterprise) {
-    await depleteForPosSale(sb, {
-      nodeId,
-      orderId,
-      items,
-      idempotencyPrefix: `order:${orderId}`,
-    });
-    return;
-  }
-
-  await decrementStockForOrder(sb, merchantId, orderId, items, memberId);
-  try {
-    await depleteForPosSale(sb, {
-      nodeId,
-      orderId,
-      items,
-      idempotencyPrefix: `shadow:${orderId}`,
-    });
-  } catch (shadowErr) {
-    console.warn(`[inventory shadow] order=${orderId}`, shadowErr);
-  }
+  await depleteForPosSale(sb, {
+    nodeId,
+    orderId,
+    items: items.filter((i): i is { menuItemId: string; name: string; quantity: number } =>
+      Boolean(i.menuItemId)
+    ),
+    idempotencyPrefix: `order:${orderId}`,
+  });
 }
 
-// Legacy BOM inventory routes — superseded by /merchant/enterprise-inventory/* when inventory_mode = enterprise.
+// Legacy BOM inventory routes removed — use /merchant/enterprise-inventory/*
 export function registerMerchantRestaurantRoutes(app: {
   post: (path: string, handler: (c: Context) => Promise<Response> | Response) => void;
   get: (path: string, handler: (c: Context) => Promise<Response> | Response) => void;
@@ -176,27 +104,10 @@ export function registerMerchantRestaurantRoutes(app: {
   delete: (path: string, handler: (c: Context) => Promise<Response> | Response) => void;
 }) {
   app.post("/merchant/capabilities/enable", async (c) => {
-    const resolved = await resolveOwnerAccess(c);
-    if (!resolved.ok) return c.json({ error: resolved.message }, resolved.status);
-
-    const ownerCheck = requireOwner(resolved.access);
-    if (!ownerCheck.ok) return c.json({ error: ownerCheck.message }, ownerCheck.status);
-
-    const sb = getServiceDb();
-    const merchant = resolved.access.merchant;
-    const caps = new Set(merchantCapabilities(merchant));
-    caps.add("roam_delivery");
-    caps.add(IN_STORE_CAPABILITY);
-
-    const { data, error } = await sb
-      .from("merchants")
-      .update({ capabilities: [...caps] })
-      .eq("id", merchant.id)
-      .select("id, capabilities")
-      .single();
-
-    if (error) return c.json({ error: error.message }, 500);
-    return c.json({ merchant: data });
+    return c.json(
+      { error: "Restaurant Management must be enabled by a Roam admin in the partner portal" },
+      403,
+    );
   });
 
   app.get("/merchant/restaurant/settings", async (c) => {
@@ -473,181 +384,6 @@ export function registerMerchantRestaurantRoutes(app: {
     }
 
     return c.json({ order: updated });
-  });
-
-  app.get("/merchant/inventory/ingredients", async (c) => {
-    const resolved = await resolveOwnerAccess(c);
-    if (!resolved.ok) return c.json({ error: resolved.message }, resolved.status);
-    if (!hasInStoreCapability(resolved.access.merchant)) {
-      return c.json({ error: "Restaurant management not enabled" }, 403);
-    }
-
-    const sb = getServiceDb();
-    const merchantId = String(resolved.access.merchant.id);
-    const { data: ingredients, error } = await sb
-      .from("ingredients")
-      .select("*, ingredient_stock(quantity_on_hand)")
-      .eq("merchant_id", merchantId)
-      .order("name");
-
-    if (error) return c.json({ error: error.message }, 500);
-    return c.json({ ingredients: ingredients ?? [] });
-  });
-
-  app.post("/merchant/inventory/ingredients", async (c) => {
-    const resolved = await resolveOwnerAccess(c);
-    if (!resolved.ok) return c.json({ error: resolved.message }, resolved.status);
-    if (!hasInStoreCapability(resolved.access.merchant)) {
-      return c.json({ error: "Restaurant management not enabled" }, 403);
-    }
-
-    const body = await c.req.json();
-    const sb = getServiceDb();
-    const merchantId = String(resolved.access.merchant.id);
-
-    const { data: ingredient, error } = await sb
-      .from("ingredients")
-      .insert({
-        merchant_id: merchantId,
-        name: body.name,
-        unit: body.unit ?? "each",
-        reorder_level: body.reorderLevel ?? 0,
-        cost_per_unit: body.costPerUnit ?? 0,
-      })
-      .select()
-      .single();
-
-    if (error) return c.json({ error: error.message }, 500);
-
-    await sb.from("ingredient_stock").insert({
-      ingredient_id: ingredient.id,
-      quantity_on_hand: body.quantityOnHand ?? 0,
-    });
-
-    return c.json({ ingredient });
-  });
-
-  app.patch("/merchant/inventory/ingredients/:id/stock", async (c) => {
-    const resolved = await resolveOwnerAccess(c);
-    if (!resolved.ok) return c.json({ error: resolved.message }, resolved.status);
-    if (!hasInStoreCapability(resolved.access.merchant)) {
-      return c.json({ error: "Restaurant management not enabled" }, 403);
-    }
-
-    const { id } = c.req.param();
-    const body = await c.req.json();
-    const sb = getServiceDb();
-    const merchantId = String(resolved.access.merchant.id);
-
-    const { data: ingredient } = await sb
-      .from("ingredients")
-      .select("id")
-      .eq("id", id)
-      .eq("merchant_id", merchantId)
-      .maybeSingle();
-
-    if (!ingredient) return c.json({ error: "Ingredient not found" }, 404);
-
-    const delta = Number(body.delta ?? 0);
-    const { data: stock } = await sb
-      .from("ingredient_stock")
-      .select("quantity_on_hand")
-      .eq("ingredient_id", id)
-      .maybeSingle();
-
-    const onHand = Number((stock as Record<string, unknown> | null)?.quantity_on_hand ?? 0);
-    const next = onHand + delta;
-    if (next < 0) return c.json({ error: "Stock cannot be negative" }, 400);
-
-    await sb.from("ingredient_stock").upsert({
-      ingredient_id: id,
-      quantity_on_hand: next,
-      updated_at: new Date().toISOString(),
-    });
-
-    await sb.from("stock_movements").insert({
-      ingredient_id: id,
-      merchant_id: merchantId,
-      delta,
-      reason: body.reason ?? "manual_adjustment",
-    });
-
-    return c.json({ quantityOnHand: next });
-  });
-
-  app.delete("/merchant/inventory/ingredients/:id", async (c) => {
-    const resolved = await resolveOwnerAccess(c);
-    if (!resolved.ok) return c.json({ error: resolved.message }, resolved.status);
-    if (!hasInStoreCapability(resolved.access.merchant)) {
-      return c.json({ error: "Restaurant management not enabled" }, 403);
-    }
-
-    const { id } = c.req.param();
-    const sb = getServiceDb();
-    const merchantId = String(resolved.access.merchant.id);
-
-    const { data: ingredient } = await sb
-      .from("ingredients")
-      .select("id")
-      .eq("id", id)
-      .eq("merchant_id", merchantId)
-      .maybeSingle();
-
-    if (!ingredient) return c.json({ error: "Ingredient not found" }, 404);
-
-    const { error } = await sb.from("ingredients").delete().eq("id", id);
-    if (error) return c.json({ error: error.message }, 500);
-
-    return c.json({ ok: true });
-  });
-
-  app.get("/merchant/inventory/recipes", async (c) => {
-    const resolved = await resolveOwnerAccess(c);
-    if (!resolved.ok) return c.json({ error: resolved.message }, resolved.status);
-    if (!hasInStoreCapability(resolved.access.merchant)) {
-      return c.json({ error: "Restaurant management not enabled" }, 403);
-    }
-
-    const sb = getServiceDb();
-    const merchantId = String(resolved.access.merchant.id);
-    const { data: items } = await sb.from("menu_items").select("id, name").eq("merchant_id", merchantId);
-    const itemIds = (items ?? []).map((i) => (i as Record<string, unknown>).id);
-
-    const { data: recipes, error } = await sb
-      .from("menu_item_recipes")
-      .select("*, ingredients(name, unit), menu_items(name)")
-      .in("menu_item_id", itemIds.length ? itemIds : ["00000000-0000-0000-0000-000000000000"]);
-
-    if (error) return c.json({ error: error.message }, 500);
-    return c.json({ recipes: recipes ?? [] });
-  });
-
-  app.put("/merchant/inventory/recipes/:menuItemId", async (c) => {
-    const resolved = await resolveOwnerAccess(c);
-    if (!resolved.ok) return c.json({ error: resolved.message }, resolved.status);
-    if (!hasInStoreCapability(resolved.access.merchant)) {
-      return c.json({ error: "Restaurant management not enabled" }, 403);
-    }
-
-    const { menuItemId } = c.req.param();
-    const body = await c.req.json();
-    const sb = getServiceDb();
-
-    await sb.from("menu_item_recipes").delete().eq("menu_item_id", menuItemId);
-
-    const lines = (body.lines ?? []) as Array<Record<string, unknown>>;
-    if (lines.length > 0) {
-      const { error } = await sb.from("menu_item_recipes").insert(
-        lines.map((line) => ({
-          menu_item_id: menuItemId,
-          ingredient_id: line.ingredientId,
-          quantity_per_serving: line.quantityPerServing ?? 1,
-        })),
-      );
-      if (error) return c.json({ error: error.message }, 500);
-    }
-
-    return c.json({ ok: true });
   });
 
   app.get("/merchant/print-jobs", async (c) => {

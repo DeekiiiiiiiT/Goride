@@ -1,11 +1,9 @@
 import { deliveryFetch } from './partner-api';
 import type {
-  Ingredient,
   InStoreFulfillmentType,
   PosCartLine,
   PosPaymentMethod,
   PrintJobFixture,
-  RecipeLine,
   RestaurantMgmtSetupDraft,
 } from '../types/restaurant-mgmt';
 
@@ -25,33 +23,6 @@ export interface InStoreSalesReport {
   avgTicket: number;
 }
 
-function mapIngredient(row: Record<string, unknown>): Ingredient {
-  const stock = row.ingredient_stock as Record<string, unknown> | Record<string, unknown>[] | null;
-  const stockRow = Array.isArray(stock) ? stock[0] : stock;
-  return {
-    id: String(row.id),
-    name: String(row.name),
-    unit: String(row.unit ?? 'each'),
-    quantityOnHand: Number(stockRow?.quantity_on_hand ?? 0),
-    reorderLevel: Number(row.reorder_level ?? 0),
-    costPerUnit: Number(row.cost_per_unit ?? 0),
-  };
-}
-
-function mapRecipe(row: Record<string, unknown>): RecipeLine {
-  const ingredient = row.ingredients as Record<string, unknown> | null;
-  const menuItem = row.menu_items as Record<string, unknown> | null;
-  return {
-    id: String(row.id),
-    menuItemId: String(row.menu_item_id),
-    menuItemName: String(menuItem?.name ?? ''),
-    ingredientId: String(row.ingredient_id),
-    ingredientName: String(ingredient?.name ?? ''),
-    quantityPerServing: Number(row.quantity_per_serving ?? 1),
-    unit: String(ingredient?.unit ?? 'each'),
-  };
-}
-
 function mapPrintJob(row: Record<string, unknown>): PrintJobFixture {
   return {
     id: String(row.id),
@@ -61,10 +32,6 @@ function mapPrintJob(row: Record<string, unknown>): PrintJobFixture {
     printerId: row.printer_id ? String(row.printer_id) : null,
     createdAt: String(row.created_at ?? new Date().toISOString()),
   };
-}
-
-export async function enableCapability(): Promise<{ merchant: { id: string; capabilities: string[] } }> {
-  return deliveryFetch('/merchant/capabilities/enable', { method: 'POST' });
 }
 
 export async function fetchSettings(): Promise<RestaurantSettings> {
@@ -158,57 +125,6 @@ export interface PosPaymentIntentResult {
 
 export async function createPosPaymentIntent(orderId: string): Promise<PosPaymentIntentResult> {
   return deliveryFetch(`/merchant/pos/orders/${orderId}/payment-intent`, { method: 'POST' });
-}
-
-export async function fetchIngredients(): Promise<Ingredient[]> {
-  const data = await deliveryFetch('/merchant/inventory/ingredients');
-  return ((data.ingredients as Record<string, unknown>[]) ?? []).map(mapIngredient);
-}
-
-export async function createIngredient(input: {
-  name: string;
-  unit?: string;
-  reorderLevel?: number;
-  costPerUnit?: number;
-  quantityOnHand?: number;
-}): Promise<Ingredient> {
-  const data = await deliveryFetch('/merchant/inventory/ingredients', {
-    method: 'POST',
-    body: JSON.stringify(input),
-  });
-  return mapIngredient(data.ingredient as Record<string, unknown>);
-}
-
-export async function adjustStock(
-  ingredientId: string,
-  delta: number,
-  reason?: string,
-): Promise<{ quantityOnHand: number }> {
-  return deliveryFetch(`/merchant/inventory/ingredients/${ingredientId}/stock`, {
-    method: 'PATCH',
-    body: JSON.stringify({ delta, reason }),
-  });
-}
-
-export async function deleteIngredient(ingredientId: string): Promise<void> {
-  await deliveryFetch(`/merchant/inventory/ingredients/${ingredientId}`, {
-    method: 'DELETE',
-  });
-}
-
-export async function fetchRecipes(): Promise<RecipeLine[]> {
-  const data = await deliveryFetch('/merchant/inventory/recipes');
-  return ((data.recipes as Record<string, unknown>[]) ?? []).map(mapRecipe);
-}
-
-export async function saveRecipes(
-  menuItemId: string,
-  lines: Array<{ ingredientId: string; quantityPerServing: number }>,
-) {
-  return deliveryFetch(`/merchant/inventory/recipes/${menuItemId}`, {
-    method: 'PUT',
-    body: JSON.stringify({ lines }),
-  });
 }
 
 export async function fetchPrintJobs(): Promise<PrintJobFixture[]> {

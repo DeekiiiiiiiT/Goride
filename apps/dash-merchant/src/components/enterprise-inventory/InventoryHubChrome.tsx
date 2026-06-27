@@ -13,6 +13,8 @@ interface InventoryHubChromeProps {
   activeView: EnterpriseInventoryView;
   onViewChange: (view: EnterpriseInventoryView) => void;
   onBack: () => void;
+  parentLabel?: string;
+  title?: string;
   children: React.ReactNode;
 }
 
@@ -20,6 +22,8 @@ export default function InventoryHubChrome({
   activeView,
   onViewChange,
   onBack,
+  parentLabel = 'Enterprise Inventory',
+  title = 'Enterprise Inventory',
   children,
 }: InventoryHubChromeProps) {
   const navKey = NAV.some((n) => n.key === activeView) ? activeView : 'hub';
@@ -37,8 +41,8 @@ export default function InventoryHubChrome({
             <MaterialIcon name="arrow_back" />
           </button>
           <div className="min-w-0 flex-1">
-            <h1 className="text-headline-md font-bold text-on-surface">Enterprise Inventory</h1>
-            <p className="truncate text-label-sm text-on-surface-variant">Multi-location stock control</p>
+            <p className="text-label-sm text-on-surface-variant">Restaurant Management · {parentLabel}</p>
+            <h1 className="truncate text-headline-md font-bold text-on-surface">{title}</h1>
           </div>
           <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-label-sm font-semibold text-amber-900">
             Admin

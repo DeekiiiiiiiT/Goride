@@ -5,32 +5,38 @@ How owners manage multi-location stock, receiving, counts, and variance in the R
 ## Owner swimlane
 
 ```
-Account
-  └─ Operations Hub
-       └─ Enterprise Inventory (flag: enterpriseInventoryV1)
-            ├─ Hub — location picker, KPIs, quick actions
-            ├─ Item Master — SKU, UOM chain, zones
-            ├─ Vendors & Catalog — pack sizes, contract pricing
-            ├─ Purchase Orders → Receiving → variance log
-            ├─ Transfers — commissary ↔ storefront
-            ├─ Physical Counts — blind count (mobile) → manager post
-            ├─ Recipes v2 — yield % per ingredient
-            ├─ Variance Report — theoretical vs actual $
-            ├─ Location hierarchy — company / region / group / node
-            └─ Ledger audit — immutable transaction history
+Account / Operations Hub
+  └─ Restaurant Management (requires admin enable)
+       └─ Module picker
+            ├─ POS Register (tablet when venueOpsV2)
+            ├─ Inventory
+            │    ├─ Hub — location picker, KPIs, quick actions
+            │    ├─ Item Master — SKU, UOM chain, zones
+            │    ├─ Vendors & Catalog — pack sizes, contract pricing
+            │    ├─ Purchase Orders → Receiving → variance log
+            │    ├─ Transfers — commissary ↔ storefront
+            │    ├─ Physical Counts — blind count (mobile) → manager post
+            │    ├─ Recipes v2 — yield % per ingredient
+            │    ├─ Variance Report — theoretical vs actual $
+            │    ├─ Location hierarchy — company / region / group / node
+            │    └─ Ledger audit — immutable transaction history
+            ├─ Reports — in-store sales
+            └─ Store settings — printer / receipts
 ```
-
-Legacy **Restaurant Management → Inventory** remains available when `enterpriseInventoryV1` is off.
 
 ## React implementation
 
 | Area | Path |
 |------|------|
-| Flow router | `src/pages/enterprise-inventory/EnterpriseInventoryFlow.tsx` |
+| RM flow router | `src/pages/restaurant-mgmt/RestaurantMgmtFlow.tsx` |
+| Module picker | `src/components/restaurant-mgmt/RestaurantMgmtModulePicker.tsx` |
+| Inventory flow | `src/pages/enterprise-inventory/EnterpriseInventoryFlow.tsx` |
 | Screens | `src/components/enterprise-inventory/` |
 | Fixtures | `src/lib/enterprise-inventory-fixtures.ts` |
-| API | `src/lib/enterprise-inventory-api.ts` |
+| API client | `src/lib/enterprise-inventory-api.ts` |
 
-## Feature flag
+## Gating
 
-`localStorage` key `roam_partner_flags_{merchantId}` → `enterpriseInventoryV1` (default `false`).
+- **Server:** `merchants.capabilities` includes `in_store_operations` (admin portal toggle)
+- **Inventory mode:** `merchants.inventory_mode = 'enterprise'` set automatically when capability enabled
+- No localStorage feature flags for inventory

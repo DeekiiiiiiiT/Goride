@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Merchant } from '../../hooks/useMerchant';
 import { CAPABILITY_IN_STORE, hasCapability } from '../../lib/merchant-capabilities';
-import { readFlag } from '../../lib/partner-feature-flags';
 import {
   FIXTURE_COUNT,
   FIXTURE_ITEMS,
@@ -41,10 +40,15 @@ import {
 interface EnterpriseInventoryFlowProps {
   merchant: Merchant;
   onBack: () => void;
+  sectionTitle?: string;
 }
 
-export default function EnterpriseInventoryFlow({ merchant, onBack }: EnterpriseInventoryFlowProps) {
-  const useApi = hasCapability(merchant, CAPABILITY_IN_STORE) && readFlag(merchant.id, 'enterpriseInventoryV1');
+export default function EnterpriseInventoryFlow({
+  merchant,
+  onBack,
+  sectionTitle = 'Enterprise inventory',
+}: EnterpriseInventoryFlowProps) {
+  const useApi = hasCapability(merchant, CAPABILITY_IN_STORE);
   const [view, setView] = useState<EnterpriseInventoryView>('hub');
   const [selectedNodeId, setSelectedNodeId] = useState(FIXTURE_NODES[0]?.id ?? '');
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -237,10 +241,16 @@ export default function EnterpriseInventoryFlow({ merchant, onBack }: Enterprise
   };
 
   return (
-    <InventoryHubChrome activeView={view} onViewChange={setView} onBack={onBack}>
+    <InventoryHubChrome
+      activeView={view}
+      onViewChange={setView}
+      onBack={onBack}
+      title={sectionTitle}
+      parentLabel="Inventory"
+    >
       {!useApi && (
         <p className="mx-auto max-w-5xl px-margin-mobile py-inset-sm text-body-sm text-on-surface-variant md:px-margin-tablet">
-          Preview mode — enable in-store operations and enterprise inventory flag for live data.
+          Restaurant Management is not enabled for this store.
         </p>
       )}
       {content()}

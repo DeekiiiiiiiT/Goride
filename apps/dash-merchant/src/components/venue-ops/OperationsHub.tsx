@@ -5,7 +5,6 @@ import { useVenueOps } from '../../hooks/useVenueOps';
 import { useTeamMembers } from '../../hooks/useTeamMembers';
 import { canAccessRestaurantMgmt } from '../../lib/merchant-capabilities';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
-import type { RestaurantMgmtSection } from '../restaurant-mgmt/RestaurantMgmtHub';
 import BusinessTypeSummary from './BusinessTypeSummary';
 import StationToggles from './StationToggles';
 import OperationsHubAdminLinks from './OperationsHubAdminLinks';
@@ -16,8 +15,7 @@ interface OperationsHubProps {
   merchantId: string;
   merchant?: Merchant | null;
   onBack?: () => void;
-  onOpenRestaurantMgmt?: (section: RestaurantMgmtSection) => void;
-  onOpenEnterpriseInventory?: () => void;
+  onOpenRestaurantMgmt?: () => void;
   onOpenTeam?: (tab?: 'devices' | 'add' | 'team') => void;
 }
 
@@ -26,7 +24,6 @@ export default function OperationsHub({
   merchant,
   onBack,
   onOpenRestaurantMgmt,
-  onOpenEnterpriseInventory,
   onOpenTeam,
 }: OperationsHubProps) {
   const { venueOps, updateVenueOps, isSaving, useApi } = useVenueOps(merchantId, merchant);
@@ -82,11 +79,7 @@ export default function OperationsHub({
               disabled={isSaving}
             />
             {showAdminModules && (
-              <OperationsHubAdminLinks
-                merchantId={merchantId}
-                onOpenSection={(section) => onOpenRestaurantMgmt?.(section)}
-                onOpenEnterpriseInventory={onOpenEnterpriseInventory}
-              />
+              <OperationsHubAdminLinks onOpenRestaurantMgmt={() => onOpenRestaurantMgmt?.()} />
             )}
           </div>
 

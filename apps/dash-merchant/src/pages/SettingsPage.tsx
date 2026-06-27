@@ -12,9 +12,8 @@ import NotificationSettingsView from '../components/account/NotificationSettings
 import HelpSupportView from '../components/account/HelpSupportView';
 import PromotionsView from '../components/account/PromotionsView';
 import RestaurantMgmtFlow from './restaurant-mgmt/RestaurantMgmtFlow';
-import EnterpriseInventoryFlow from './enterprise-inventory/EnterpriseInventoryFlow';
 import OperationsHub from '../components/venue-ops/OperationsHub';
-import type { RestaurantMgmtSection } from '../components/restaurant-mgmt/RestaurantMgmtHub';
+import type { RestaurantMgmtModule } from '../components/restaurant-mgmt/RestaurantMgmtHub';
 import { CAPABILITY_IN_STORE, hasCapability } from '../lib/merchant-capabilities';
 
 interface SettingsPageProps {
@@ -35,7 +34,7 @@ export default function SettingsPage({
   notificationCount = 0,
 }: SettingsPageProps) {
   const [activeSection, setActiveSection] = useState<AccountSection | null>(null);
-  const [restaurantMgmtSection, setRestaurantMgmtSection] = useState<RestaurantMgmtSection | undefined>();
+  const [restaurantMgmtSection, setRestaurantMgmtSection] = useState<RestaurantMgmtModule | undefined>();
   const [teamInitialTab, setTeamInitialTab] = useState<'devices' | 'add' | 'team'>('devices');
 
   useEffect(() => {
@@ -186,24 +185,14 @@ export default function SettingsPage({
         merchantId={merchant.id}
         merchant={merchant}
         onBack={() => setActiveSection(null)}
-        onOpenRestaurantMgmt={(section) => {
-          setRestaurantMgmtSection(section);
+        onOpenRestaurantMgmt={() => {
+          setRestaurantMgmtSection(undefined);
           setActiveSection('restaurant-mgmt');
         }}
-        onOpenEnterpriseInventory={() => setActiveSection('enterprise-inventory')}
         onOpenTeam={(tab) => {
           setTeamInitialTab(tab ?? 'devices');
           setActiveSection('team');
         }}
-      />
-    );
-  }
-
-  if (activeSection === 'enterprise-inventory') {
-    return (
-      <EnterpriseInventoryFlow
-        merchant={merchant}
-        onBack={() => setActiveSection(null)}
       />
     );
   }

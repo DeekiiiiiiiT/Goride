@@ -15,7 +15,7 @@ BEGIN
     SELECT id INTO co_id FROM delivery.inventory_companies WHERE slug = 'co-' || m.slug;
     IF co_id IS NULL THEN
       INSERT INTO delivery.inventory_companies (name, slug)
-      VALUES (m.name || ' Inventory', 'co-' || m.slug)
+      VALUES (COALESCE(NULLIF(trim(m.name), ''), 'Store') || ' Inventory', 'co-' || m.slug)
       RETURNING id INTO co_id;
 
       INSERT INTO delivery.inventory_regions (company_id, name, code)
@@ -27,7 +27,7 @@ BEGIN
       RETURNING id INTO grp_id;
 
       INSERT INTO delivery.inventory_nodes (group_id, merchant_id, name, node_type)
-      VALUES (grp_id, m.id, m.name, 'storefront')
+      VALUES (grp_id, m.id, COALESCE(NULLIF(trim(m.name), ''), 'Store'), 'storefront')
       RETURNING id INTO node_id;
 
       INSERT INTO delivery.uom_definitions (company_id, code, name, dimension, is_base)

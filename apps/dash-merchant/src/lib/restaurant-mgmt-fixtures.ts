@@ -1,9 +1,7 @@
 import type {
-  Ingredient,
   InStoreOrderFixture,
   PosCartLine,
   PrintJobFixture,
-  RecipeLine,
   RestaurantMgmtSetupDraft,
 } from '../types/restaurant-mgmt';
 
@@ -30,54 +28,6 @@ export const FIXTURE_CART_LINES: PosCartLine[] = [
     modifiers: [{ name: 'Extra cheese', priceAdjustment: 150 }],
   },
   { id: 'line-2', menuItemId: 'item-fries', name: 'Fries', unitPrice: 400, quantity: 1 },
-];
-
-export const FIXTURE_INGREDIENTS: Ingredient[] = [
-  {
-    id: 'ing-patty',
-    name: 'Beef patty',
-    unit: 'each',
-    quantityOnHand: 42,
-    reorderLevel: 20,
-    costPerUnit: 180,
-  },
-  {
-    id: 'ing-bun',
-    name: 'Burger bun',
-    unit: 'each',
-    quantityOnHand: 8,
-    reorderLevel: 24,
-    costPerUnit: 45,
-  },
-  {
-    id: 'ing-lettuce',
-    name: 'Lettuce',
-    unit: 'oz',
-    quantityOnHand: 120,
-    reorderLevel: 40,
-    costPerUnit: 12,
-  },
-];
-
-export const FIXTURE_RECIPES: RecipeLine[] = [
-  {
-    id: 'rec-1',
-    menuItemId: 'item-burger',
-    menuItemName: 'Classic Burger',
-    ingredientId: 'ing-patty',
-    ingredientName: 'Beef patty',
-    quantityPerServing: 1,
-    unit: 'each',
-  },
-  {
-    id: 'rec-2',
-    menuItemId: 'item-burger',
-    menuItemName: 'Classic Burger',
-    ingredientId: 'ing-bun',
-    ingredientName: 'Burger bun',
-    quantityPerServing: 1,
-    unit: 'each',
-  },
 ];
 
 export const FIXTURE_IN_STORE_ORDERS: InStoreOrderFixture[] = [

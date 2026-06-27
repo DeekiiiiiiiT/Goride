@@ -152,19 +152,21 @@ export function MerchantDetailPage() {
     }
   };
 
-  const runInStoreToggle = async () => {
+  const runRestaurantMgmtToggle = async () => {
     if (!merchant || !canWrite) return;
     const caps = merchant.capabilities ?? ['roam_delivery'];
-    const hasInStore = caps.includes('in_store_operations');
-    const next = hasInStore
+    const hasRestaurantMgmt = caps.includes('in_store_operations');
+    const next = hasRestaurantMgmt
       ? caps.filter((c) => c !== 'in_store_operations')
       : [...caps, 'in_store_operations'];
     try {
       await patchMerchantOps(token, merchant.id, { capabilities: next });
-      toast.success(hasInStore ? 'In-store ops disabled' : 'In-store ops enabled');
+      toast.success(
+        hasRestaurantMgmt ? 'Restaurant Management disabled' : 'Restaurant Management enabled',
+      );
       void load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Capability update failed');
+      toast.error(e instanceof Error ? e.message : 'Restaurant Management update failed');
     }
   };
 
@@ -270,7 +272,7 @@ export function MerchantDetailPage() {
             )}
             {(merchant.capabilities ?? ['roam_delivery']).includes('in_store_operations') && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300">
-                In-store POS
+                Restaurant Management
               </span>
             )}
             {(merchant.vertical_type === 'pharmacy' || merchant.vertical_type === 'alcohol') && (
@@ -290,12 +292,12 @@ export function MerchantDetailPage() {
             </button>
             <button
               type="button"
-              onClick={() => void runInStoreToggle()}
+              onClick={() => void runRestaurantMgmtToggle()}
               className="px-3 py-1.5 text-sm rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
             >
               {(merchant.capabilities ?? ['roam_delivery']).includes('in_store_operations')
-                ? 'Disable in-store POS'
-                : 'Enable in-store POS'}
+                ? 'Disable Restaurant Management'
+                : 'Enable Restaurant Management'}
             </button>
             {opStatus === 'active' && merchant.verification_status === 'approved' && (
               <button type="button" onClick={() => void runSuspend()} className="px-3 py-1.5 text-sm rounded-lg bg-red-600/20 text-red-300 border border-red-500/30">

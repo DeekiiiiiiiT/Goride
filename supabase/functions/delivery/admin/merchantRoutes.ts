@@ -654,6 +654,7 @@ export function registerMerchantAdminRoutes(app: Hono) {
     if (body.capabilities != null && Array.isArray(body.capabilities)) {
       const caps = [...new Set(["roam_delivery", ...body.capabilities.map(String)])];
       updates.capabilities = caps;
+      updates.inventory_mode = caps.includes("in_store_operations") ? "enterprise" : "legacy";
     }
     const sb = getDb();
     const { data, error } = await sb.from("merchants").update(updates).eq("id", id).select().single();

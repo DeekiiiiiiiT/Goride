@@ -95,6 +95,5 @@ export function merchantUsesEnterpriseInventory(merchant: Record<string, unknown
 }
 
 export function merchantShadowInventory(merchant: Record<string, unknown>): boolean {
-  if (Boolean(merchant.enterprise_inventory_shadow)) return true;
-  return String(merchant.inventory_mode ?? "legacy") === "enterprise";
+  return Boolean(merchant.enterprise_inventory_shadow);
 }
