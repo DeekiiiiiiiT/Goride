@@ -89,20 +89,20 @@ export default function HelpSupportView({
 
   return (
     <div className="fixed inset-0 z-[60] min-h-dvh overflow-y-auto bg-background pb-24 text-on-background md:pb-0">
-      <header className="sticky top-0 z-50 flex h-14 w-full items-center justify-between border-b border-outline-variant bg-surface/85 px-margin-mobile backdrop-blur-md md:hidden">
+      <header className="sticky top-0 z-50 flex h-16 w-full items-center gap-inset-sm border-b border-outline-variant bg-surface/85 px-margin-mobile backdrop-blur-md md:px-margin-tablet">
         <button
           type="button"
           onClick={onBack}
-          className="-ml-2 rounded-full p-2 text-primary transition-colors hover:bg-surface-container-low active:scale-95"
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-low active:scale-95"
           aria-label="Back"
         >
           <MaterialIcon name="arrow_back" />
         </button>
-        <h1 className="text-headline-md font-bold text-primary">Help &amp; Support</h1>
+        <h1 className="flex-1 text-headline-md font-bold text-primary">Help &amp; Support</h1>
         <button
           type="button"
           onClick={() => toast.info('Roam Dash Partner Support', { description: SUPPORT_EMAIL })}
-          className="-mr-2 rounded-full p-2 text-primary transition-colors hover:bg-surface-container-low active:scale-95"
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-low active:scale-95"
           aria-label="Support"
         >
           <MaterialIcon name="contact_support" />
@@ -110,11 +110,6 @@ export default function HelpSupportView({
       </header>
 
       <main className="mx-auto max-w-screen-md px-margin-mobile py-inset-md md:px-margin-tablet">
-        <div className="mb-inset-lg hidden items-center justify-between md:flex">
-          <h1 className="text-headline-lg font-bold text-primary">Help &amp; Support</h1>
-          <MaterialIcon name="contact_support" size={32} className="text-primary" />
-        </div>
-
         <div className="relative mb-inset-lg">
           <MaterialIcon
             name="search"

@@ -10,10 +10,9 @@ import PartnerSkeleton from '../components/PartnerSkeleton';
 
 interface EarningsPageProps {
   onNavigate: (page: PartnerTab) => void;
-  onOpenMobileNav?: () => void;
 }
 
-export default function EarningsPage({ onNavigate, onOpenMobileNav }: EarningsPageProps) {
+export default function EarningsPage({ onNavigate }: EarningsPageProps) {
   const [selectedPayoutId, setSelectedPayoutId] = useState<string | null>(null);
   const { data, isLoading, isError, refetch } = useMerchantEarnings();
   const payoutQuery = useMerchantPayoutDetail(selectedPayoutId);
@@ -51,8 +50,17 @@ export default function EarningsPage({ onNavigate, onOpenMobileNav }: EarningsPa
   if (isLoading) {
     return (
       <div className="flex min-h-dvh flex-col bg-surface text-on-surface antialiased">
-        <header className="fixed top-0 z-50 flex h-16 w-full items-center justify-center border-b border-outline-variant bg-surface/80 px-margin-mobile backdrop-blur-md">
+        <header className="fixed top-0 z-50 flex h-16 w-full items-center justify-between border-b border-outline-variant bg-surface/80 px-margin-mobile backdrop-blur-md">
+          <button
+            type="button"
+            onClick={() => onNavigate('account')}
+            className="flex h-12 w-12 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container active:scale-95"
+            aria-label="Back"
+          >
+            <MaterialIcon name="arrow_back" />
+          </button>
           <h1 className="text-headline-md font-bold text-primary">Earnings</h1>
+          <div className="h-12 w-12" />
         </header>
         <main className="mx-auto flex w-full max-w-3xl flex-grow flex-col gap-inset-lg px-margin-mobile pb-[100px] pt-16 md:px-margin-tablet">
           <PartnerSkeleton variant="card" count={3} />
@@ -84,11 +92,11 @@ export default function EarningsPage({ onNavigate, onOpenMobileNav }: EarningsPa
       <header className="safe-t fixed top-0 z-50 flex h-16 w-full items-center justify-between border-b border-outline-variant bg-surface/80 px-margin-mobile backdrop-blur-md md:px-margin-tablet">
         <button
           type="button"
-          onClick={onOpenMobileNav ?? (() => onNavigate('dashboard'))}
+          onClick={() => onNavigate('account')}
           className="flex h-12 w-12 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container active:scale-95"
-          aria-label="Menu"
+          aria-label="Back"
         >
-          <MaterialIcon name="menu" />
+          <MaterialIcon name="arrow_back" />
         </button>
         <h1 className="text-headline-md font-bold text-primary">Earnings</h1>
         <button

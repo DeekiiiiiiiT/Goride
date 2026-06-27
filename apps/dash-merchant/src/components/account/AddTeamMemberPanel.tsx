@@ -46,6 +46,10 @@ const ROLE_HINTS: Record<TeamRole, string> = {
   admin: 'Receives an email invite for full back-office access on any device.',
 };
 
+const FLOOR_STAFF_ROLES = TEAM_ROLE_OPTIONS.filter(
+  (option) => option.value === 'staff' || option.value === 'manager',
+);
+
 export default function AddTeamMemberPanel({
   pinSignInEnabled,
   inStoreEnabled = false,
@@ -63,10 +67,12 @@ export default function AddTeamMemberPanel({
 
   const usesEmail = !pinSignInEnabled || role === 'admin';
   const usesPin = pinSignInEnabled && (role === 'staff' || role === 'manager');
+  const showDisplayTitle = usesPin || venueOpsV2;
   const allowedStations = resolveAllowedJobStations({ venueOpsV2, inStoreEnabled });
   const permissionOptions = inStoreEnabled
     ? TEAM_PERMISSIONS
     : TEAM_PERMISSIONS.filter((entry) => entry.id !== 'inventory');
+  const roleOptions = usesPin ? FLOOR_STAFF_ROLES : TEAM_ROLE_OPTIONS;
 
   const handleRoleChange = (nextRole: TeamRole) => {
     setRole(nextRole);
@@ -95,8 +101,7 @@ export default function AddTeamMemberPanel({
     event.preventDefault();
     const trimmedName = name.trim();
     const station = jobStationSelectionToApi(jobStation);
-
-    const title = venueOpsV2 ? displayTitle.trim() || null : undefined;
+    const title = showDisplayTitle ? displayTitle.trim() || null : undefined;
 
     if (usesPin) {
       if (!trimmedName) return;
@@ -129,9 +134,13 @@ export default function AddTeamMemberPanel({
       className="space-y-inset-md rounded-xl border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm"
     >
       <div>
-        <h2 className="text-headline-md font-bold text-on-background">Add team member</h2>
+        <h2 className="text-headline-md font-bold text-on-background">
+          {usesPin ? 'Add floor staff' : 'Add team member'}
+        </h2>
         <p className="mt-inset-xs text-body-sm text-on-surface-variant">
-          Choose a role, optionally assign a station, then add them in one step.
+          {usesPin
+            ? 'Add someone who signs in with a PIN on the store tablet.'
+            : 'Choose a role, optionally assign a station, then add them in one step.'}
         </p>
       </div>
 
@@ -149,10 +158,31 @@ export default function AddTeamMemberPanel({
         />
       </div>
 
+      {showDisplayTitle && (
+        <div className="space-y-inset-xs">
+          <label className="block text-label-md text-on-surface-variant" htmlFor="team-display-title">
+            Display title on roster
+          </label>
+          <input
+            id="team-display-title"
+            value={displayTitle}
+            onChange={(event) => setDisplayTitle(event.target.value)}
+            placeholder="e.g. Line Cook"
+            className={inputClass}
+          />
+          <p className="text-body-sm text-on-surface-variant">
+            Shown on staff PIN picker — not used for login
+          </p>
+        </div>
+      )}
+
       <div className="space-y-inset-sm">
         <p className="text-label-md text-on-surface-variant">Role</p>
-        <div className="grid grid-cols-3 gap-inset-xs">
-          {TEAM_ROLE_OPTIONS.map((option) => {
+        <p className="text-body-sm text-on-surface-variant">
+          Controls permissions after PIN sign-in — separate from default station below.
+        </p>
+        <div className={`grid gap-inset-xs ${roleOptions.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+          {roleOptions.map((option) => {
             const selected = role === option.value;
             return (
               <button
@@ -190,26 +220,14 @@ export default function AddTeamMemberPanel({
         </div>
       )}
 
-      {venueOpsV2 && (
-        <div className="space-y-inset-xs">
-          <label className="block text-label-md text-on-surface-variant" htmlFor="team-display-title">
-            Display title (optional)
-          </label>
-          <input
-            id="team-display-title"
-            value={displayTitle}
-            onChange={(event) => setDisplayTitle(event.target.value)}
-            placeholder="e.g. Line Cook"
-            className={inputClass}
-          />
-        </div>
-      )}
-
-      {venueOpsV2 ? (
+      {venueOpsV2 || usesPin ? (
         <div className="space-y-inset-xs">
           <label className="block text-label-md text-on-surface-variant" htmlFor="team-job-station">
-            Job station
+            Default station
           </label>
+          <p className="text-body-sm text-on-surface-variant">
+            Pre-selects their tile on the tablet staff picker — they can still pick another station.
+          </p>
           <select
             id="team-job-station"
             value={jobStation}
@@ -263,8 +281,8 @@ export default function AddTeamMemberPanel({
           'Saving…'
         ) : usesPin ? (
           <>
-            <MaterialIcon name="pin" size={20} />
-            Add team member
+            <MaterialIcon name="person_add" size={20} />
+            Add staff
           </>
         ) : (
           <>

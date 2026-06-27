@@ -16,6 +16,7 @@ import {
 import {
   adjustStock,
   createIngredient,
+  deleteIngredient,
   fetchIngredients,
   fetchInStoreSales,
   fetchPrintJobs,
@@ -47,16 +48,23 @@ function isSetupDone(merchantId: string) {
 interface RestaurantMgmtFlowProps {
   merchant: Merchant;
   onBack: () => void;
+  initialSection?: RestaurantMgmtSection;
 }
 
-export default function RestaurantMgmtFlow({ merchant, onBack }: RestaurantMgmtFlowProps) {
+export default function RestaurantMgmtFlow({
+  merchant,
+  onBack,
+  initialSection,
+}: RestaurantMgmtFlowProps) {
   const previewOnly =
     readFlag(merchant.id, 'restaurantMgmtPreviewV1') && !hasCapability(merchant, CAPABILITY_IN_STORE);
   const useApi = hasCapability(merchant, CAPABILITY_IN_STORE);
   const hidePosTab = readFlag(merchant.id, 'venueOpsV2');
 
   const [flow, setFlow] = useState<'opt-in' | 'setup' | 'hub'>('hub');
-  const [section, setSection] = useState<RestaurantMgmtSection>(hidePosTab ? 'inventory' : 'pos');
+  const [section, setSection] = useState<RestaurantMgmtSection>(
+    initialSection ?? (hidePosTab ? 'inventory' : 'pos'),
+  );
   const [inventoryView, setInventoryView] = useState<InventoryView>('overview');
 
   const [ingredients, setIngredients] = useState(FIXTURE_INGREDIENTS);
@@ -185,6 +193,13 @@ export default function RestaurantMgmtFlow({ merchant, onBack }: RestaurantMgmtF
           }}
           onAdjustStock={async (id, delta, reason) => {
             if (useApi) await adjustStock(id, delta, reason);
+          }}
+          onDeleteIngredient={async (id) => {
+            if (useApi) {
+              await deleteIngredient(id);
+            } else {
+              setIngredients((prev) => prev.filter((item) => item.id !== id));
+            }
           }}
         />
       );

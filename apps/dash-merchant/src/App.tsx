@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { BrowserRouter } from 'react-router-dom';
-import { supabase, ensureValidPartnerSession } from './lib/partner-supabase';
+import { supabase, ensureValidPartnerSession, migrateLegacyPartnerSession } from './lib/partner-supabase';
 import { AuthRecoveryGate } from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
 import { toast } from 'sonner';
@@ -16,6 +16,7 @@ import EarningsPage from './pages/EarningsPage';
 import SettingsPage from './pages/SettingsPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import SplashPage from './pages/SplashPage';
+import PartnerBootLoadingPage from './pages/PartnerBootLoadingPage';
 import PartnerAuthFlow from './components/PartnerAuthFlow';
 import PartnerBottomNav from './components/PartnerBottomNav';
 import PartnerMobileNavDrawer from './components/layout/PartnerMobileNavDrawer';
@@ -47,11 +48,13 @@ import {
   PARTNER_OAUTH_INTENT_KEY,
 } from './lib/partnerAuth';
 import StoreTabletApp from './components/store-tablet/StoreTabletApp';
-import { isTabletEntryPath } from './lib/storeTabletUrl';
+import { isTabletEntryPath, captureTabletReturnUrl, clearTabletReturnUrl } from './lib/storeTabletUrl';
 import { resetPartnerScroll } from './lib/reset-partner-scroll';
 import QueryErrorState from './components/QueryErrorState';
 
 const SPLASH_MIN_MS = 1800;
+const AUTH_READY_MAX_MS = 6_000;
+const MERCHANT_WAIT_MAX_MS = 12_000;
 const PENDING_STATUSES = new Set(['pending', 'in_review', 'docs_requested']);
 
 export default function App() {
@@ -99,34 +102,59 @@ function DashMerchantApp() {
   }, []);
 
   useEffect(() => {
+    migrateLegacyPartnerSession();
     const splashStartedAt = Date.now();
-
-    supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
-      const validated = initialSession ? await ensureValidPartnerSession() : null;
-      setSession(validated);
-      await completeOAuthReturn(validated);
+    let splashTimer: number | undefined;
+    const authFailSafe = window.setTimeout(() => {
       setAuthReady(true);
+      setSplashComplete(true);
+    }, AUTH_READY_MAX_MS);
 
-      const elapsed = Date.now() - splashStartedAt;
-      const remaining = Math.max(0, SPLASH_MIN_MS - elapsed);
-      window.setTimeout(() => setSplashComplete(true), remaining);
-    });
+    void supabase.auth
+      .getSession()
+      .then(({ data: { session: initialSession } }) => {
+        window.clearTimeout(authFailSafe);
+        setSession(initialSession);
+        setAuthReady(true);
+
+        if (initialSession) {
+          // Validate outside the auth lock — async work inside onAuthStateChange can deadlock getSession.
+          void ensureValidPartnerSession().then((validated) => {
+            setSession(validated);
+            if (validated) void completeOAuthReturn(validated);
+          });
+        }
+
+        const elapsed = Date.now() - splashStartedAt;
+        splashTimer = window.setTimeout(
+          () => setSplashComplete(true),
+          Math.max(0, SPLASH_MIN_MS - elapsed),
+        );
+      })
+      .catch(() => {
+        window.clearTimeout(authFailSafe);
+        setAuthReady(true);
+        setSplashComplete(true);
+      });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
-      if (nextSession && event !== 'SIGNED_OUT') {
-        const validated = await ensureValidPartnerSession();
-        setSession(validated);
-        if (event === 'SIGNED_IN' && validated) {
-          await completeOAuthReturn(validated);
-        }
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (event === 'SIGNED_OUT') {
+        setSession(null);
         return;
       }
-      setSession(nextSession);
+      if (nextSession) setSession(nextSession);
+      if (event === 'SIGNED_IN' && nextSession) {
+        void completeOAuthReturn(nextSession);
+      }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      window.clearTimeout(authFailSafe);
+      if (splashTimer) window.clearTimeout(splashTimer);
+    };
   }, [completeOAuthReturn]);
 
   useEffect(() => {
@@ -147,6 +175,8 @@ function DashMerchantApp() {
   );
 
   const [bootstrapSettled, setBootstrapSettled] = useState(false);
+  const [merchantWaitExpired, setMerchantWaitExpired] = useState(false);
+  const bootstrappedUserRef = useRef<string | null>(null);
 
   const { merchant, membership, pendingTeamInvite, isLoading: merchantLoading, error: merchantError, refetch } =
     useMerchant(session);
@@ -154,13 +184,18 @@ function DashMerchantApp() {
   useEffect(() => {
     if (!session?.user) {
       setBootstrapSettled(false);
+      bootstrappedUserRef.current = null;
       return;
     }
     if (parseTeamInviteTokenFromPath() || readTeamInviteToken()) {
       setBootstrapSettled(true);
+      bootstrappedUserRef.current = session.user.id;
       return;
     }
+    if (bootstrappedUserRef.current === session.user.id) return;
+
     setBootstrapSettled(false);
+
     void bootstrapPartnerMerchant()
       .then(() => refetch())
       .catch((err) => {
@@ -171,8 +206,25 @@ function DashMerchantApp() {
         }
         console.error('[partner] bootstrap failed:', err);
       })
-      .finally(() => setBootstrapSettled(true));
-  }, [session?.user?.id, refetch]);
+      .finally(() => {
+        bootstrappedUserRef.current = session.user.id;
+        setBootstrapSettled(true);
+      });
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (!session?.user || merchant || merchantError) {
+      setMerchantWaitExpired(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setMerchantWaitExpired(true), MERCHANT_WAIT_MAX_MS);
+    return () => window.clearTimeout(timer);
+  }, [session?.user?.id, merchant, merchantError]);
+
+  useEffect(() => {
+    if (!session?.user || isTabletEntryPath()) return;
+    captureTabletReturnUrl();
+  }, [session?.user?.id, currentPage]);
 
   useEffect(() => {
     if (!merchant?.id) return;
@@ -204,8 +256,14 @@ function DashMerchantApp() {
     !!invitePathToken ||
     (!!session && !merchantLoading && !merchant && inTeamInviteFlow);
 
-  const showSplash =
-    !splashComplete || !authReady || (!!session && (merchantLoading || !bootstrapSettled));
+  const showSplash = !splashComplete || !authReady;
+
+  const waitingForMerchant =
+    !!session &&
+    !merchant &&
+    !merchantError &&
+    !merchantWaitExpired &&
+    (merchantLoading || !bootstrapSettled);
 
   if (shouldShowInviteLanding) {
     return (
@@ -224,6 +282,10 @@ function DashMerchantApp() {
     return <SplashPage />;
   }
 
+  if (waitingForMerchant) {
+    return <PartnerBootLoadingPage />;
+  }
+
   if (isTabletEntryPath()) {
     return <StoreTabletApp />;
   }
@@ -239,6 +301,7 @@ function DashMerchantApp() {
           setCurrentPage('dashboard');
         }}
         onStoreTablet={() => {
+          clearTabletReturnUrl();
           window.history.replaceState({}, '', '/tablet');
           window.location.reload();
         }}
@@ -256,7 +319,7 @@ function DashMerchantApp() {
     );
   }
 
-  if (bootstrapSettled && merchantError && !merchant) {
+  if (bootstrapSettled && (merchantError || merchantWaitExpired) && !merchant) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-surface p-inset-lg">
         <div className="flex max-w-md flex-col items-center gap-4">
@@ -433,7 +496,7 @@ function DashMerchantApp() {
           />
         );
       case 'earnings':
-        return <EarningsPage onNavigate={handlePartnerNavigate} onOpenMobileNav={openMobileNav} />;
+        return <EarningsPage onNavigate={handlePartnerNavigate} />;
       case 'account':
         return (
           <SettingsPage

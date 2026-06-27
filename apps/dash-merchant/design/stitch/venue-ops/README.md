@@ -38,7 +38,9 @@
 
 **Tablet kiosk swimlane:** `dcb9bec5` → `8b85b35b` → `c2c29c92` → `70023b5b` → station (`f67dbdca` · `8e756584` · `b146a0c0` · `63439743` · `e208e9b2` · `9bdfe3cc` · `5d88f634`) · `9c31f8bc` if POS disabled · `5d88f634` → `1a76c0f5` Operations Hub
 
-React implementation: `apps/dash-merchant/src/components/venue-ops/`, `hooks/useVenueOps.ts`, `pages/staff-ops/StationPlaceholderPage.tsx`, `lib/venue-ops-presets.ts`.
+**React implementation:** `apps/dash-merchant/src/components/venue-ops/`, `hooks/useVenueOps.ts`, `pages/staff-ops/`, `lib/venue-ops-presets.ts`.
+
+**Flow map:** [FLOW.md](./FLOW.md) — owner setup → tablet → station navigation.
 
 **Station label contract:** DB value `counter` displays as **Dispatch** in all UI.
 

@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
-  applyVenueOpsTemplate,
   fetchVenueOps,
   patchVenueOps,
 } from '../lib/partner-api';
+import type { Merchant } from '../hooks/useMerchant';
 import { readFlag } from '../lib/partner-feature-flags';
+import { canAccessRestaurantMgmt } from '../lib/merchant-capabilities';
 import { FIXTURE_VENUE_OPS, type VenueOpsData } from '../lib/venue-ops-presets';
 import type { JobStation, VenueStyle } from '../types/team';
 
@@ -14,8 +15,11 @@ export const venueOpsKeys = {
   merchant: (merchantId: string) => ['venue-ops', merchantId] as const,
 };
 
-export function useVenueOps(merchantId: string) {
-  const useApi = readFlag(merchantId, 'venueOpsV2');
+export function useVenueOps(merchantId: string, merchant?: Merchant | null) {
+  const useApi =
+    readFlag(merchantId, 'venueOpsV2') ||
+    readFlag(merchantId, 'staffOperationsV1') ||
+    canAccessRestaurantMgmt(merchantId, merchant);
   const queryClient = useQueryClient();
 
   const query = useQuery({
@@ -30,15 +34,6 @@ export function useVenueOps(merchantId: string) {
     onSuccess: (data) => {
       queryClient.setQueryData(venueOpsKeys.merchant(merchantId), data);
       toast.success('Operations settings saved');
-    },
-    onError: (error: Error) => toast.error(error.message),
-  });
-
-  const templateMutation = useMutation({
-    mutationFn: applyVenueOpsTemplate,
-    onSuccess: (data) => {
-      queryClient.setQueryData(venueOpsKeys.merchant(merchantId), data);
-      toast.success('Venue template applied');
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -58,14 +53,6 @@ export function useVenueOps(merchantId: string) {
     patchMutation.mutate(patch);
   };
 
-  const applyTemplate = (venueStyle: Exclude<VenueStyle, 'custom'>) => {
-    if (!useApi) {
-      toast.info('Enable venue operations preview to apply templates');
-      return;
-    }
-    templateMutation.mutate(venueStyle);
-  };
-
   return {
     venueOps,
     useApi,
@@ -73,7 +60,6 @@ export function useVenueOps(merchantId: string) {
     isError: useApi && query.isError,
     refetch: query.refetch,
     updateVenueOps,
-    applyTemplate,
-    isSaving: patchMutation.isPending || templateMutation.isPending,
+    isSaving: patchMutation.isPending,
   };
 }

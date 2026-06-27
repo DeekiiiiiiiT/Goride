@@ -9,7 +9,7 @@ export class TabletEnrollError extends Error {
 }
 
 const STATION_NOT_ENABLED_MESSAGE =
-  "This station isn't enabled for your store. Ask your manager to turn it on in Operations settings.";
+  "This station isn't enabled for your store. In Account, open Operations Hub and turn on this station under Active stations.";
 
 export function formatTabletEnrollError(error: unknown): string {
   if (error instanceof TabletEnrollError) {

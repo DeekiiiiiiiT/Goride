@@ -31,8 +31,8 @@ interface EditTeamMemberSheetProps {
   onResetPin?: (memberId: string) => void;
   isSaving?: boolean;
   isResettingPin?: boolean;
-  /** When false, POS register station is hidden from the picker. */
   inStoreEnabled?: boolean;
+  pinSignInEnabled?: boolean;
   venueOpsV2?: boolean;
 }
 
@@ -48,9 +48,11 @@ export default function EditTeamMemberSheet({
   isSaving = false,
   isResettingPin = false,
   inStoreEnabled = false,
+  pinSignInEnabled = false,
   venueOpsV2 = false,
 }: EditTeamMemberSheetProps) {
   const isRoster = member.loginType === 'roster';
+  const showDisplayTitle = (isRoster && pinSignInEnabled) || venueOpsV2;
   const [role, setRole] = useState<TeamRole>(member.role);
   const [name, setName] = useState(member.name);
   const [displayTitle, setDisplayTitle] = useState(member.displayTitle ?? '');
@@ -110,18 +112,21 @@ export default function EditTeamMemberSheet({
             />
           </div>
 
-          {venueOpsV2 && (
+          {showDisplayTitle && (
             <div>
               <label className="text-label-md text-on-surface-variant" htmlFor="member-display-title">
-                Display title
+                Display title on roster
               </label>
               <input
                 id="member-display-title"
                 value={displayTitle}
                 onChange={(event) => setDisplayTitle(event.target.value)}
-                placeholder="e.g. Head Bartender"
+                placeholder="e.g. Line Cook"
                 className="mt-inset-xs h-12 w-full rounded-lg border border-outline-variant px-4"
               />
+              <p className="mt-inset-xs text-body-sm text-on-surface-variant">
+                Shown on staff PIN picker — not used for login
+              </p>
             </div>
           )}
 
@@ -129,6 +134,11 @@ export default function EditTeamMemberSheet({
             <label className="text-label-md text-on-surface-variant" htmlFor="member-role">
               Role
             </label>
+            <p className="mt-inset-xs text-body-sm text-on-surface-variant">
+              {isRoster
+                ? 'Staff or manager — controls what they can do after PIN sign-in.'
+                : 'Back-office access level for email sign-in.'}
+            </p>
             <select
               id="member-role"
               value={role}
@@ -143,11 +153,14 @@ export default function EditTeamMemberSheet({
             </select>
           </div>
 
-          {venueOpsV2 ? (
+          {venueOpsV2 || isRoster ? (
             <div className="space-y-inset-xs">
               <label className="text-label-md text-on-surface-variant" htmlFor="member-station">
-                Job station
+                Default station
               </label>
+              <p className="text-body-sm text-on-surface-variant">
+                Where they appear first on the tablet staff picker — not the same as role.
+              </p>
               <select
                 id="member-station"
                 value={jobStation}
@@ -220,7 +233,7 @@ export default function EditTeamMemberSheet({
                 permissions: isRoster ? ROLE_DEFAULT_PERMISSIONS[role] : permissions,
                 name: name.trim() || member.name,
                 jobStation: jobStationSelectionToApi(jobStation),
-                displayTitle: venueOpsV2 ? displayTitle.trim() || null : undefined,
+                displayTitle: showDisplayTitle ? displayTitle.trim() || null : undefined,
               })
             }
             className="min-h-[48px] flex-1 rounded-lg bg-primary-container font-semibold text-on-primary"

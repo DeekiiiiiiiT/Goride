@@ -15,6 +15,7 @@ interface IngredientsListProps {
     costPerUnit: number;
   }) => Promise<void>;
   onAdjustStock: (ingredientId: string, delta: number, reason: string) => Promise<void>;
+  onDeleteIngredient: (ingredientId: string) => Promise<void>;
 }
 
 export default function IngredientsList({
@@ -23,6 +24,7 @@ export default function IngredientsList({
   onRefresh,
   onCreateIngredient,
   onAdjustStock,
+  onDeleteIngredient,
 }: IngredientsListProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -128,6 +130,12 @@ export default function IngredientsList({
           onAdjustStock={async (delta, reason) => {
             if (!selected) return;
             await onAdjustStock(selected.id, delta, reason);
+            onRefresh();
+          }}
+          onDelete={async () => {
+            if (!selected) return;
+            await onDeleteIngredient(selected.id);
+            setSelectedId(null);
             onRefresh();
           }}
         />

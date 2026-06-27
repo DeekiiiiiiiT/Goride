@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
+import { partnerFetch } from '../lib/partner-fetch';
 import type {
   FulfillmentType,
   GoLiveRule,
@@ -8,7 +9,7 @@ import type {
   VerticalType,
 } from '@roam/types';
 import { Session } from '@supabase/supabase-js';
-import { supabase, ensureValidPartnerSession } from '../lib/partner-supabase';
+import { supabase, ensureValidPartnerSession, refreshPartnerSessionIfNeeded } from '../lib/partner-supabase';
 import type { PendingTeamInviteSummary } from '../lib/partner-api';
 import type { MerchantMembership, TeamPermission } from '../types/team';
 
@@ -58,6 +59,7 @@ export interface Merchant {
   fulfillment_type?: FulfillmentType | null;
   go_live_rule?: GoLiveRule | null;
   capabilities?: string[];
+  business_type?: string | null;
 }
 
 export interface MerchantProfileResponse {
@@ -73,17 +75,23 @@ export function useMerchant(session: Session | null) {
       if (!session) return null;
 
       const fetchProfile = async (accessToken: string) =>
-        fetch(`${API_ENDPOINTS.delivery}/merchant/profile`, {
+        partnerFetch(`${API_ENDPOINTS.delivery}/merchant/profile`, {
           headers: supabaseAnonFunctionHeaders({
             Authorization: `Bearer ${accessToken}`,
           }),
         });
 
-      let res = await fetchProfile(session.access_token);
+      let token = session.access_token;
+      let res = await fetchProfile(token);
       if (res.status === 401) {
-        const refreshed = await ensureValidPartnerSession();
-        if (!refreshed) throw new Error('Session expired');
-        res = await fetchProfile(refreshed.access_token);
+        const refreshed = await refreshPartnerSessionIfNeeded();
+        token = refreshed.access_token;
+        res = await fetchProfile(token);
+      }
+      if (res.status === 401) {
+        const validated = await ensureValidPartnerSession();
+        if (!validated) throw new Error('Session expired');
+        res = await fetchProfile(validated.access_token);
       }
 
       if (res.status === 404) {
@@ -103,6 +111,7 @@ export function useMerchant(session: Session | null) {
       return profile;
     },
     enabled: !!session,
+    retry: 1,
   });
 
   return {

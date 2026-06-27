@@ -1,5 +1,5 @@
 import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
-import { supabase } from './partner-supabase';
+import { supabase, refreshPartnerSessionIfNeeded } from './partner-supabase';
 import type { MerchantDocumentType } from '@roam/types';
 import type {
   MerchantApplicationPayload,
@@ -13,12 +13,10 @@ import { isStoreTabletContext } from './storeTabletUrl';
 import { readShift, resolveShiftSurface } from './station-shift-session';
 import { readDeviceSession } from './store-tablet-session';
 import { TabletEnrollError } from './tablet-enroll-errors';
+import { partnerFetch } from './partner-fetch';
 
 export async function getAuthHeaders(contentType = 'application/json') {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
+  const session = await refreshPartnerSessionIfNeeded();
   const extra: Record<string, string> = {
     Authorization: `Bearer ${session.access_token}`,
   };
@@ -27,14 +25,24 @@ export async function getAuthHeaders(contentType = 'application/json') {
 }
 
 export async function deliveryFetch(path: string, init?: RequestInit) {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`${API_ENDPOINTS.delivery}${path}`, {
-    ...init,
-    headers: {
-      ...headers,
-      ...(init?.headers || {}),
-    },
-  });
+  const request = async () => {
+    const headers = await getAuthHeaders();
+    return partnerFetch(`${API_ENDPOINTS.delivery}${path}`, {
+      ...init,
+      headers: {
+        ...headers,
+        ...(init?.headers || {}),
+      },
+    });
+  };
+
+  let res = await request();
+  if (res.status === 401) {
+    const { data: { session } } = await supabase.auth.refreshSession();
+    if (!session) throw new Error('Session expired');
+    res = await request();
+  }
+
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || `Request failed: ${res.status}`);
@@ -161,7 +169,7 @@ export class PendingTeamInviteError extends Error {
 
 export async function bootstrapPartnerMerchant(): Promise<BootstrapMerchantResponse> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_ENDPOINTS.delivery}/partner/bootstrap`, {
+  const res = await partnerFetch(`${API_ENDPOINTS.delivery}/partner/bootstrap`, {
     method: 'POST',
     headers,
     body: '{}',

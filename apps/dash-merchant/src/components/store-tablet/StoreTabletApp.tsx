@@ -5,6 +5,7 @@ import { clearShift, getActingMember } from '../../lib/station-shift-session';
 import {
   clearDeviceSession,
   readDeviceSession,
+  readTabletPairingCode,
 } from '../../lib/store-tablet-session';
 import { revokeStoreTabletDevice } from '../../lib/partner-api';
 import StoreTabletChrome from './StoreTabletChrome';
@@ -14,10 +15,19 @@ import ActingShiftBar from '../staff-ops/station/ActingShiftBar';
 import CounterOrdersPage from '../../pages/staff-ops/CounterOrdersPage';
 import KitchenQueuePage from '../../pages/staff-ops/KitchenQueuePage';
 import PosRegisterPage from '../../pages/restaurant-mgmt/PosRegisterPage';
-import StationPlaceholderPage from '../../pages/staff-ops/StationPlaceholderPage';
+import BarQueuePage from '../../pages/staff-ops/BarQueuePage';
+import ExpoRunnerPage from '../../pages/staff-ops/ExpoRunnerPage';
+import DriveThruLanePage from '../../pages/staff-ops/DriveThruLanePage';
 import PosSetupPendingView from './PosSetupPendingView';
 import DashboardPage from '../../pages/DashboardPage';
 import OrdersPage from '../../pages/OrdersPage';
+import {
+  canNavigateTabletBack,
+  clearTabletStationFromUrl,
+  navigateTabletBack,
+  parseTabletUrlParams,
+  syncTabletPairingCodeInUrl,
+} from '../../lib/storeTabletUrl';
 import { hasCapability, CAPABILITY_IN_STORE } from '../../lib/merchant-capabilities';
 
 type TabletView = 'pairing' | 'kiosk' | 'station';
@@ -64,13 +74,25 @@ export default function StoreTabletApp() {
     refresh();
   };
 
+  const returnToStationPicker = useCallback(() => {
+    if (deviceSession) clearShift(deviceSession.merchantId, 'store_tablet');
+    const pairingCode = readTabletPairingCode() ?? parseTabletUrlParams().code;
+    clearDeviceSession();
+    if (pairingCode) {
+      syncTabletPairingCodeInUrl(pairingCode);
+    } else {
+      clearTabletStationFromUrl();
+    }
+    setDeviceSession(null);
+    setRoutingEpoch((n) => n + 1);
+  }, [deviceSession]);
+
   if (!deviceSession) {
     return (
       <StoreTabletFlow
+        key={`pairing-${routingEpoch}`}
         onPaired={refresh}
-        onBack={() => {
-          window.location.href = '/';
-        }}
+        onBack={canNavigateTabletBack() ? navigateTabletBack : undefined}
       />
     );
   }
@@ -83,6 +105,7 @@ export default function StoreTabletApp() {
       <StoreTabletChrome
         storeName={deviceSession.storeName}
         station={deviceSession.station}
+        onBack={returnToStationPicker}
         onUnpair={() => void handleUnpair()}
       >
         <PosSetupPendingView
@@ -126,28 +149,25 @@ export default function StoreTabletApp() {
     }
     if (deviceSession.station === 'bar') {
       return (
-        <StationPlaceholderPage
+        <BarQueuePage
           merchant={merchant}
           staffName={actingMember.name}
-          station="bar"
         />
       );
     }
     if (deviceSession.station === 'expo') {
       return (
-        <StationPlaceholderPage
+        <ExpoRunnerPage
           merchant={merchant}
           staffName={actingMember.name}
-          station="expo"
         />
       );
     }
     if (deviceSession.station === 'drive_thru') {
       return (
-        <StationPlaceholderPage
+        <DriveThruLanePage
           merchant={merchant}
           staffName={actingMember.name}
-          station="drive_thru"
         />
       );
     }
@@ -162,6 +182,7 @@ export default function StoreTabletApp() {
     <StoreTabletChrome
       storeName={deviceSession.storeName}
       station={deviceSession.station}
+      onBack={view === 'station' ? handleEndShift : returnToStationPicker}
       onUnpair={() => void handleUnpair()}
     >
       {view === 'kiosk' && (

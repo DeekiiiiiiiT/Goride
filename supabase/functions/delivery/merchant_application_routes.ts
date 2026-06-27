@@ -25,6 +25,7 @@ import {
 } from "./admin/merchantSetupProgress.ts";
 import { resolveMerchantAccess, requireResolvedMerchantWithPermission } from "./merchantAuth.ts";
 import { findPendingInviteForEmail } from "./merchantTeam.ts";
+import { seedVenueOpsFromBusinessType } from "./merchantVenueOps.ts";
 
 type SupabaseClient = ReturnType<typeof createDeliveryClient>;
 
@@ -419,6 +420,15 @@ export function registerMerchantApplicationRoutes(app: Hono) {
       } catch {
         // Hours sync is best-effort; draft still holds the schedule.
       }
+    }
+
+    if (businessTypeId) {
+      await seedVenueOpsFromBusinessType(
+        sb,
+        merchant.id as string,
+        businessTypeId,
+        typeRow?.label ? String(typeRow.label) : null,
+      );
     }
 
     return c.json({ merchant }, created ? 201 : 200);

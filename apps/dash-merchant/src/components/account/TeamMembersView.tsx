@@ -35,6 +35,7 @@ import { readFlag } from '../../lib/partner-feature-flags';
 interface TeamMembersViewProps {
   merchantId: string;
   inStoreEnabled?: boolean;
+  initialTab?: 'devices' | 'add' | 'team';
   onBack: () => void;
 }
 
@@ -112,7 +113,12 @@ function RoleBadge({ role, filled = false }: { role: TeamRole; filled?: boolean 
 
 
 
-export default function TeamMembersView({ merchantId, inStoreEnabled = false, onBack }: TeamMembersViewProps) {
+export default function TeamMembersView({
+  merchantId,
+  inStoreEnabled = false,
+  initialTab = 'devices',
+  onBack,
+}: TeamMembersViewProps) {
 
   const {
 
@@ -161,6 +167,13 @@ export default function TeamMembersView({ merchantId, inStoreEnabled = false, on
   const venueOpsV2 = readFlag(merchantId, 'venueOpsV2');
 
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
+  const [activeTab, setActiveTab] = useState<'devices' | 'add' | 'team'>(initialTab);
+
+  const teamTabs = [
+    { key: 'devices' as const, label: 'Devices', icon: 'tablet' },
+    { key: 'add' as const, label: 'Add team member', icon: 'person_add' },
+    { key: 'team' as const, label: 'Current team', icon: 'groups' },
+  ];
 
 
 
@@ -208,27 +221,71 @@ export default function TeamMembersView({ merchantId, inStoreEnabled = false, on
 
   return (
 
-    <div className="app-fullscreen-screen safe-x safe-t z-[60] bg-background text-on-background">
+    <div className="app-fullscreen-screen safe-x safe-t z-[60] flex min-h-dvh flex-col bg-background text-on-background">
 
-      <header className="flex h-16 w-full shrink-0 items-center gap-inset-sm border-b border-outline-variant bg-surface/80 px-margin-mobile backdrop-blur-md md:px-margin-tablet">
+      <header className="shrink-0 border-b border-outline-variant bg-surface/80 backdrop-blur-md">
 
-        <button
+        <div className="flex h-16 w-full items-center gap-inset-sm px-margin-mobile md:px-margin-tablet">
 
-          type="button"
+          <button
 
-          onClick={onBack}
+            type="button"
 
-          className="flex h-12 w-12 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-low active:scale-95"
+            onClick={onBack}
 
-          aria-label="Back"
+            className="flex h-12 w-12 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-low active:scale-95"
 
-        >
+            aria-label="Back"
 
-          <MaterialIcon name="arrow_back" />
+          >
 
-        </button>
+            <MaterialIcon name="arrow_back" />
 
-        <h1 className="text-headline-md font-bold text-primary">Team Members</h1>
+          </button>
+
+          <h1 className="text-headline-md font-bold text-primary">Team Members</h1>
+
+        </div>
+
+        <nav className="flex gap-1 overflow-x-auto px-margin-mobile pb-inset-xs md:px-margin-tablet">
+
+          {teamTabs.map((tab) => {
+
+            const active = activeTab === tab.key;
+
+            return (
+
+              <button
+
+                key={tab.key}
+
+                type="button"
+
+                onClick={() => setActiveTab(tab.key)}
+
+                className={`flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-label-md font-semibold transition-colors ${
+
+                  active
+
+                    ? 'bg-primary-container text-on-primary-container'
+
+                    : 'text-on-surface-variant hover:bg-surface-container-high'
+
+                }`}
+
+              >
+
+                <MaterialIcon name={tab.icon} className="text-[18px]" />
+
+                {tab.label}
+
+              </button>
+
+            );
+
+          })}
+
+        </nav>
 
       </header>
 
@@ -236,37 +293,43 @@ export default function TeamMembersView({ merchantId, inStoreEnabled = false, on
 
       <main className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-inset-lg overflow-y-auto p-margin-mobile pb-[var(--app-bottom-nav-total)] md:p-margin-tablet">
 
-        <StoreTabletSettingsSection merchantId={merchantId} />
+        {activeTab === 'devices' && <StoreTabletSettingsSection merchantId={merchantId} />}
 
-        <div className="grid grid-cols-1 gap-inset-lg lg:grid-cols-12">
+        {activeTab === 'add' && (
 
-          <section className="lg:col-span-7">
+          <AddTeamMemberPanel
 
-            <AddTeamMemberPanel
+            pinSignInEnabled={pinSignInEnabled}
 
-              pinSignInEnabled={pinSignInEnabled}
-              inStoreEnabled={inStoreEnabled}
-              venueOpsV2={venueOpsV2}
+            inStoreEnabled={inStoreEnabled}
 
-              isSaving={isSaving}
+            venueOpsV2={venueOpsV2}
 
-              onAddRoster={({ name, role, jobStation, displayTitle }) =>
-                addRosterMember(name, role, jobStation, displayTitle)
-              }
+            isSaving={isSaving}
 
-              onSendInvite={({ email, name, role, permissions, jobStation, displayTitle }) =>
-                sendInvite(email, role, permissions, name, jobStation)
-              }
+            onAddRoster={({ name, role, jobStation, displayTitle }) =>
 
-            />
+              addRosterMember(name, role, jobStation, displayTitle)
 
-          </section>
+            }
 
+            onSendInvite={({ email, name, role, permissions, jobStation, displayTitle }) =>
 
+              sendInvite(email, role, permissions, name, jobStation)
 
-          <section className="space-y-inset-md lg:col-span-5">
+            }
 
-            <h2 className="text-headline-md text-on-background">Pending invites</h2>
+          />
+
+        )}
+
+        {activeTab === 'team' && (
+
+          <>
+
+            <section className="space-y-inset-md">
+
+              <h2 className="text-headline-md text-on-background">Pending invites</h2>
 
             <div className="space-y-inset-md rounded-xl border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm">
 
@@ -346,15 +409,11 @@ export default function TeamMembersView({ merchantId, inStoreEnabled = false, on
 
             </div>
 
-          </section>
+            </section>
 
-        </div>
+            <section className="space-y-inset-md">
 
-
-
-        <section className="space-y-inset-md">
-
-          <h2 className="text-headline-md text-on-background">Current team</h2>
+              <h2 className="text-headline-md text-on-background">Current team</h2>
 
           <div className="grid grid-cols-1 gap-inset-md md:grid-cols-2 lg:grid-cols-3">
 
@@ -462,7 +521,11 @@ export default function TeamMembersView({ merchantId, inStoreEnabled = false, on
 
           </div>
 
-        </section>
+            </section>
+
+          </>
+
+        )}
 
       </main>
 
@@ -472,6 +535,7 @@ export default function TeamMembersView({ merchantId, inStoreEnabled = false, on
 
           member={editingMember}
           inStoreEnabled={inStoreEnabled}
+          pinSignInEnabled={pinSignInEnabled}
           venueOpsV2={venueOpsV2}
 
           isSaving={isSaving}

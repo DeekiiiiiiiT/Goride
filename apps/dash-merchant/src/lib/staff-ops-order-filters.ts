@@ -103,3 +103,75 @@ export function kitchenQueueForPrepStation(
     orderHasPrepStationItems(order, prepStationId, lookup),
   );
 }
+
+const BAR_ITEM_HINT = /drink|beverage|bar|cocktail|beer|wine|coffee|tea|soda|juice|spirit|mocktail|latte|espresso/i;
+
+export type BarItemLookup = Map<string, boolean>;
+
+export function buildBarItemLookup(
+  categories: Array<{ id: string; name: string }>,
+  items: Array<{ id: string; name: string; category_id: string }>,
+): BarItemLookup {
+  const categoryIsBar = new Map<string, boolean>();
+  for (const category of categories) {
+    categoryIsBar.set(category.id, BAR_ITEM_HINT.test(category.name));
+  }
+  const lookup: BarItemLookup = new Map();
+  for (const item of items) {
+    lookup.set(
+      item.id,
+      categoryIsBar.get(item.category_id) ?? BAR_ITEM_HINT.test(item.name),
+    );
+  }
+  return lookup;
+}
+
+export function itemLooksLikeBarItem(
+  item: { menuItemId?: string; name: string },
+  lookup: BarItemLookup,
+): boolean {
+  if (item.menuItemId && lookup.has(item.menuItemId)) {
+    return lookup.get(item.menuItemId) ?? false;
+  }
+  return BAR_ITEM_HINT.test(item.name);
+}
+
+export function filterBarOrderItems<T extends { menuItemId?: string; name: string }>(
+  items: T[],
+  lookup: BarItemLookup,
+): T[] {
+  return items.filter((item) => itemLooksLikeBarItem(item, lookup));
+}
+
+export function barQueueOrders(orders: Order[], lookup: BarItemLookup) {
+  return kitchenQueueOrders(orders).filter((order) =>
+    order.items.some((item) => itemLooksLikeBarItem(item, lookup)),
+  );
+}
+
+export function expoReadyOrders(orders: Order[]) {
+  return orders
+    .filter((order) => order.status === 'ready')
+    .sort(
+      (a, b) =>
+        new Date(b.ready_at || b.created_at).getTime() -
+        new Date(a.ready_at || a.created_at).getTime(),
+    );
+}
+
+export function driveThruLaneOrders(orders: Order[]) {
+  return orders
+    .filter((order) => {
+      if (order.channel !== 'in_store') return false;
+      const fulfillment = (order.fulfillment_type ?? 'counter').toLowerCase();
+      const laneOrder =
+        fulfillment === 'drive_thru' || fulfillment === 'pickup' || fulfillment === 'counter';
+      const active = order.status === 'paid' || order.status === 'preparing' || order.status === 'ready';
+      return laneOrder && active;
+    })
+    .sort(
+      (a, b) =>
+        new Date(a.placed_at || a.created_at).getTime() -
+        new Date(b.placed_at || b.created_at).getTime(),
+    );
+}

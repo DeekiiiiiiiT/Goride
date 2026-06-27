@@ -64,6 +64,7 @@ export interface RosterMember {
   role: Extract<TeamRole, 'staff' | 'manager'>;
   jobStation: JobStation | null;
   pinStatus: PinStatus;
+  displayTitle?: string | null;
 }
 
 export interface PendingInvite {

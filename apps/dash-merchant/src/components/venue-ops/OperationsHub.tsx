@@ -1,24 +1,42 @@
 import { useState } from 'react';
-import type { JobStation, VenueStyle } from '../../types/team';
+import type { JobStation } from '../../types/team';
+import type { Merchant } from '../../hooks/useMerchant';
 import { useVenueOps } from '../../hooks/useVenueOps';
+import { useTeamMembers } from '../../hooks/useTeamMembers';
+import { canAccessRestaurantMgmt } from '../../lib/merchant-capabilities';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
-import VenueTemplatePicker from './VenueTemplatePicker';
+import type { RestaurantMgmtSection } from '../restaurant-mgmt/RestaurantMgmtHub';
+import BusinessTypeSummary from './BusinessTypeSummary';
 import StationToggles from './StationToggles';
+import OperationsHubAdminLinks from './OperationsHubAdminLinks';
+import OperationsHubTabletPairing from './OperationsHubTabletPairing';
+import OperationsHubTeamSummary from './OperationsHubTeamSummary';
 
 interface OperationsHubProps {
   merchantId: string;
+  merchant?: Merchant | null;
   onBack?: () => void;
+  onOpenRestaurantMgmt?: (section: RestaurantMgmtSection) => void;
+  onOpenTeam?: (tab?: 'devices' | 'add' | 'team') => void;
 }
 
-export default function OperationsHub({ merchantId, onBack }: OperationsHubProps) {
-  const { venueOps, updateVenueOps, applyTemplate, isSaving, useApi } = useVenueOps(merchantId);
+export default function OperationsHub({
+  merchantId,
+  merchant,
+  onBack,
+  onOpenRestaurantMgmt,
+  onOpenTeam,
+}: OperationsHubProps) {
+  const { venueOps, updateVenueOps, isSaving, useApi } = useVenueOps(merchantId, merchant);
+  const { members } = useTeamMembers(merchantId);
   const [localStations, setLocalStations] = useState<JobStation[] | null>(null);
   const enabledStations = localStations ?? venueOps.enabledStations;
+  const showAdminModules =
+    Boolean(onOpenRestaurantMgmt) && canAccessRestaurantMgmt(merchantId, merchant);
 
-  const handleTemplateSelect = (style: Exclude<VenueStyle, 'custom'>) => {
-    applyTemplate(style);
-    setLocalStations(null);
-  };
+  const rosterCount = members.filter(
+    (member) => member.loginType === 'roster' || member.role === 'staff' || member.role === 'manager',
+  ).length;
 
   const handleStationsChange = (stations: JobStation[]) => {
     setLocalStations(stations);
@@ -38,27 +56,45 @@ export default function OperationsHub({ merchantId, onBack }: OperationsHubProps
             >
               <MaterialIcon name="arrow_back" />
             </button>
-            <h1 className="text-headline-md font-bold text-on-surface">Operations Hub</h1>
+            <div>
+              <h1 className="text-headline-md font-bold text-on-surface">Operations Hub</h1>
+              <p className="text-label-sm text-on-surface-variant">
+                Set up in-store operations and staff tablets
+              </p>
+            </div>
           </div>
         </header>
       )}
       <main className={`flex-1 overflow-auto ${onBack ? 'pb-[var(--app-bottom-nav-total)]' : ''}`}>
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-inset-lg p-margin-mobile md:p-margin-tablet">
-      {!useApi && (
-        <p className="rounded-lg border border-outline-variant bg-surface-container-low px-inset-md py-inset-sm text-body-sm text-on-surface-variant">
-          Preview mode — turn on the venue operations flag in dev settings to save to your store.
-        </p>
-      )}
-      <VenueTemplatePicker
-        selectedStyle={venueOps.venueStyle}
-        onSelect={handleTemplateSelect}
-        disabled={isSaving}
-      />
-      <StationToggles
-        enabledStations={enabledStations}
-        onChange={handleStationsChange}
-        disabled={isSaving}
-      />
+        <div className="mx-auto grid w-full max-w-5xl gap-inset-lg p-margin-mobile md:p-margin-tablet lg:grid-cols-2">
+          <div className="flex flex-col gap-inset-lg">
+            {!useApi && (
+              <p className="rounded-lg border border-outline-variant bg-surface-container-low px-inset-md py-inset-sm text-body-sm text-on-surface-variant">
+                Preview mode — turn on the venue operations flag in dev settings to save to your store.
+              </p>
+            )}
+            <BusinessTypeSummary businessTypeId={merchant?.business_type} />
+            <StationToggles
+              enabledStations={enabledStations}
+              onChange={handleStationsChange}
+              disabled={isSaving}
+            />
+            {showAdminModules && (
+              <OperationsHubAdminLinks onOpenSection={(section) => onOpenRestaurantMgmt?.(section)} />
+            )}
+          </div>
+
+          <div className="flex flex-col gap-inset-lg">
+            <OperationsHubTabletPairing
+              merchantId={merchantId}
+              enabledStations={enabledStations}
+              onOpenDevices={() => onOpenTeam?.('devices')}
+            />
+            <OperationsHubTeamSummary
+              activeCount={rosterCount}
+              onViewRoster={() => onOpenTeam?.('team')}
+            />
+          </div>
         </div>
       </main>
     </div>

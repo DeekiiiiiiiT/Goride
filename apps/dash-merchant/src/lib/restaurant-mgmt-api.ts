@@ -190,6 +190,12 @@ export async function adjustStock(
   });
 }
 
+export async function deleteIngredient(ingredientId: string): Promise<void> {
+  await deliveryFetch(`/merchant/inventory/ingredients/${ingredientId}`, {
+    method: 'DELETE',
+  });
+}
+
 export async function fetchRecipes(): Promise<RecipeLine[]> {
   const data = await deliveryFetch('/merchant/inventory/recipes');
   return ((data.recipes as Record<string, unknown>[]) ?? []).map(mapRecipe);

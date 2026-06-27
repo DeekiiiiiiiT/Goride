@@ -14,8 +14,7 @@ export default function OperationsHubCard({ onOpenOperations }: OperationsHubCar
         <div className="min-w-0 flex-1">
           <h3 className="text-title-md font-semibold text-on-surface">Operations Hub</h3>
           <p className="mt-1 text-body-sm text-on-surface-variant">
-            Set your venue type, turn stations on or off, and pair tablets for POS, kitchen, bar,
-            expo, and more.
+            Turn floor stations on or off and pair tablets for POS, kitchen, bar, expo, and more.
           </p>
           <button
             type="button"

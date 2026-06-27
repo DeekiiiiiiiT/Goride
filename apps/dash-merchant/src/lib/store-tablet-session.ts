@@ -18,6 +18,23 @@ export interface StoreTabletSession {
 }
 
 const STORAGE_KEY = 'roam_store_tablet_session';
+const PAIRING_CODE_KEY = 'roam_tablet_pairing_code';
+
+export function persistTabletPairingCode(code: string) {
+  try {
+    localStorage.setItem(PAIRING_CODE_KEY, code.trim().toUpperCase());
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+export function readTabletPairingCode(): string | null {
+  try {
+    return localStorage.getItem(PAIRING_CODE_KEY);
+  } catch {
+    return null;
+  }
+}
 
 export function persistDeviceSession(session: StoreTabletSession) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(session));

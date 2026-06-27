@@ -8,6 +8,7 @@ import {
   assertOwnerAccess,
 } from "./merchantTeam.ts";
 import { resolveMerchantAccess, type ResolvedMerchantAccess } from "./merchantAuth.ts";
+import { resolveVenueStyleFromBusinessType } from "./businessTypeVenueStyle.ts";
 
 export type VenueStyle =
   | "fast_food"
@@ -113,6 +114,35 @@ function mapVenueOpsRow(row: Record<string, unknown>) {
       enabledStations: stations,
     })),
   };
+}
+
+/** Apply station preset from sign-up business type when venue ops not configured yet. */
+export async function seedVenueOpsFromBusinessType(
+  sb: SupabaseClient,
+  merchantId: string,
+  businessTypeId: string,
+  businessTypeLabel?: string | null,
+): Promise<void> {
+  if (!businessTypeId) return;
+
+  const { data: row } = await sb
+    .from("merchants")
+    .select("venue_style")
+    .eq("id", merchantId)
+    .maybeSingle();
+  if (!row || row.venue_style) return;
+
+  const venueStyle = resolveVenueStyleFromBusinessType(businessTypeId, businessTypeLabel);
+  const preset = VENUE_TEMPLATE_PRESETS[venueStyle];
+
+  await sb
+    .from("merchants")
+    .update({
+      venue_style: venueStyle,
+      enabled_stations: preset,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", merchantId);
 }
 
 function mapPrepStationRow(row: Record<string, unknown>) {
@@ -254,13 +284,30 @@ export function registerMerchantVenueOpsRoutes(app: Hono, deps: VenueOpsDeps) {
 
     const merchantId = access.resolved.merchant.id as string;
     const sb = getServiceSb();
-    const { data, error } = await sb
+    let { data, error } = await sb
       .from("merchants")
-      .select("venue_style, enabled_stations")
+      .select("venue_style, enabled_stations, business_type")
       .eq("id", merchantId)
       .single();
 
     if (error) return c.json({ error: error.message }, 500);
+
+    const row = data as Record<string, unknown>;
+    if (!row.venue_style && row.business_type) {
+      await seedVenueOpsFromBusinessType(
+        sb,
+        merchantId,
+        String(row.business_type),
+        null,
+      );
+      const refetch = await sb
+        .from("merchants")
+        .select("venue_style, enabled_stations")
+        .eq("id", merchantId)
+        .single();
+      if (!refetch.error && refetch.data) data = refetch.data;
+    }
+
     return c.json({ venueOps: mapVenueOpsRow(data as Record<string, unknown>) });
   });
 

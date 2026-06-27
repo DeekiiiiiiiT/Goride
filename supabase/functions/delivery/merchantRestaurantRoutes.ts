@@ -120,6 +120,7 @@ export function registerMerchantRestaurantRoutes(app: {
   get: (path: string, handler: (c: Context) => Promise<Response> | Response) => void;
   put: (path: string, handler: (c: Context) => Promise<Response> | Response) => void;
   patch: (path: string, handler: (c: Context) => Promise<Response> | Response) => void;
+  delete: (path: string, handler: (c: Context) => Promise<Response> | Response) => void;
 }) {
   app.post("/merchant/capabilities/enable", async (c) => {
     const resolved = await resolveOwnerAccess(c);
@@ -518,6 +519,32 @@ export function registerMerchantRestaurantRoutes(app: {
     });
 
     return c.json({ quantityOnHand: next });
+  });
+
+  app.delete("/merchant/inventory/ingredients/:id", async (c) => {
+    const resolved = await resolveOwnerAccess(c);
+    if (!resolved.ok) return c.json({ error: resolved.message }, resolved.status);
+    if (!hasInStoreCapability(resolved.access.merchant)) {
+      return c.json({ error: "Restaurant management not enabled" }, 403);
+    }
+
+    const { id } = c.req.param();
+    const sb = getServiceDb();
+    const merchantId = String(resolved.access.merchant.id);
+
+    const { data: ingredient } = await sb
+      .from("ingredients")
+      .select("id")
+      .eq("id", id)
+      .eq("merchant_id", merchantId)
+      .maybeSingle();
+
+    if (!ingredient) return c.json({ error: "Ingredient not found" }, 404);
+
+    const { error } = await sb.from("ingredients").delete().eq("id", id);
+    if (error) return c.json({ error: error.message }, 500);
+
+    return c.json({ ok: true });
   });
 
   app.get("/merchant/inventory/recipes", async (c) => {

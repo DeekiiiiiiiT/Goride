@@ -13,6 +13,7 @@ import HelpSupportView from '../components/account/HelpSupportView';
 import PromotionsView from '../components/account/PromotionsView';
 import RestaurantMgmtFlow from './restaurant-mgmt/RestaurantMgmtFlow';
 import OperationsHub from '../components/venue-ops/OperationsHub';
+import type { RestaurantMgmtSection } from '../components/restaurant-mgmt/RestaurantMgmtHub';
 import { CAPABILITY_IN_STORE, hasCapability } from '../lib/merchant-capabilities';
 
 interface SettingsPageProps {
@@ -33,6 +34,8 @@ export default function SettingsPage({
   notificationCount = 0,
 }: SettingsPageProps) {
   const [activeSection, setActiveSection] = useState<AccountSection | null>(null);
+  const [restaurantMgmtSection, setRestaurantMgmtSection] = useState<RestaurantMgmtSection | undefined>();
+  const [teamInitialTab, setTeamInitialTab] = useState<'devices' | 'add' | 'team'>('devices');
 
   useEffect(() => {
     if (activeSection === 'team' && !isOwner) {
@@ -126,7 +129,11 @@ export default function SettingsPage({
       <TeamMembersView
         merchantId={merchant.id}
         inStoreEnabled={hasCapability(merchant, CAPABILITY_IN_STORE)}
-        onBack={() => setActiveSection(null)}
+        initialTab={teamInitialTab}
+        onBack={() => {
+          setTeamInitialTab('devices');
+          setActiveSection(null);
+        }}
       />
     );
   }
@@ -163,7 +170,11 @@ export default function SettingsPage({
     return (
       <RestaurantMgmtFlow
         merchant={merchant}
-        onBack={() => setActiveSection(null)}
+        initialSection={restaurantMgmtSection}
+        onBack={() => {
+          setRestaurantMgmtSection(undefined);
+          setActiveSection(null);
+        }}
       />
     );
   }
@@ -172,7 +183,16 @@ export default function SettingsPage({
     return (
       <OperationsHub
         merchantId={merchant.id}
+        merchant={merchant}
         onBack={() => setActiveSection(null)}
+        onOpenRestaurantMgmt={(section) => {
+          setRestaurantMgmtSection(section);
+          setActiveSection('restaurant-mgmt');
+        }}
+        onOpenTeam={(tab) => {
+          setTeamInitialTab(tab ?? 'devices');
+          setActiveSection('team');
+        }}
       />
     );
   }

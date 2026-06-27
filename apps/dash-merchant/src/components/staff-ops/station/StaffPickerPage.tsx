@@ -112,6 +112,9 @@ export default function StaffPickerPage({
           >
             <MemberAvatar name={member.name} />
             <span className="text-title-md font-semibold text-on-background">{member.name}</span>
+            {member.displayTitle && (
+              <span className="text-label-md text-on-surface-variant">{member.displayTitle}</span>
+            )}
             <div className="flex flex-wrap items-center justify-center gap-1">
               <span className="rounded-full bg-surface-variant px-2 py-0.5 text-label-sm text-on-surface-variant">
                 {formatRoleLabel(member.role)}

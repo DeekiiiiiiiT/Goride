@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { JobStation } from '../../types/team';
 import { enrollStoreTablet } from '../../lib/partner-api';
 import { formatTabletEnrollError } from '../../lib/tablet-enroll-errors';
-import { persistDeviceSession } from '../../lib/store-tablet-session';
+import { persistDeviceSession, persistTabletPairingCode, readTabletPairingCode } from '../../lib/store-tablet-session';
 import { parseTabletUrlParams } from '../../lib/storeTabletUrl';
 import StoreCodeEntryPage from './StoreCodeEntryPage';
 import TabletStationPickerPage from './TabletStationPickerPage';
@@ -20,10 +20,10 @@ export default function StoreTabletFlow({ onPaired, onBack }: StoreTabletFlowPro
 
   const [step, setStep] = useState<FlowStep>(() => {
     if (urlParams.code && urlParams.station) return 'station';
-    if (urlParams.code) return 'station';
+    if (urlParams.code || readTabletPairingCode()) return 'station';
     return 'code';
   });
-  const [code, setCode] = useState(urlParams.code || '');
+  const [code, setCode] = useState(urlParams.code || readTabletPairingCode() || '');
   const [pendingStation, setPendingStation] = useState<JobStation | null>(urlParams.station);
   const [pairingResult, setPairingResult] = useState<{
     storeName: string;
@@ -36,6 +36,7 @@ export default function StoreTabletFlow({ onPaired, onBack }: StoreTabletFlowPro
     async (pairingCode: string, station: JobStation) => {
       setIsLoading(true);
       setError(null);
+      persistTabletPairingCode(pairingCode);
       try {
         const prepStationId =
           station === 'kitchen' ? urlParams.prepStationId ?? undefined : undefined;
@@ -80,6 +81,7 @@ export default function StoreTabletFlow({ onPaired, onBack }: StoreTabletFlowPro
   const handleCodeContinue = (nextCode: string) => {
     setCode(nextCode);
     setError(null);
+    persistTabletPairingCode(nextCode);
     if (urlParams.station || pendingStation) {
       void completeEnroll(nextCode, urlParams.station || pendingStation!);
       return;
@@ -92,12 +94,23 @@ export default function StoreTabletFlow({ onPaired, onBack }: StoreTabletFlowPro
     void completeEnroll(code, station);
   };
 
+  const handleCodeEntryBack = () => {
+    const savedCode = readTabletPairingCode() || code.trim();
+    if (savedCode) {
+      if (!code) setCode(savedCode);
+      setError(null);
+      setStep('station');
+      return;
+    }
+    onBack?.();
+  };
+
   if (step === 'code') {
     return (
       <StoreCodeEntryPage
         initialCode={code}
         onContinue={handleCodeContinue}
-        onBack={onBack}
+        onBack={onBack ? handleCodeEntryBack : undefined}
         isLoading={isLoading}
         error={error}
       />

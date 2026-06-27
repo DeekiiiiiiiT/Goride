@@ -49,8 +49,10 @@ export default function AccountSettingsHub({
     useAcceptingOrdersToggle(merchant);
   const storeStatus = getStoreStatus(merchant.is_active, isAcceptingOrders);
   const venueOpsEnabled = readFlag(merchant.id, 'venueOpsV2');
-  const showRestaurantMgmt = canAccessRestaurantMgmt(merchant.id, merchant) && !venueOpsEnabled;
-  const showOperationsHub = venueOpsEnabled || canAccessRestaurantMgmt(merchant.id, merchant);
+  const canRestaurantMgmt = canAccessRestaurantMgmt(merchant.id, merchant);
+  const showRestaurantMgmt = canRestaurantMgmt && !venueOpsEnabled;
+  const showRestaurantMgmtAdmin = canRestaurantMgmt && venueOpsEnabled;
+  const showOperationsHub = venueOpsEnabled || canRestaurantMgmt;
 
   const handlePlaceholder = (label: string) => {
     toast.info(`${label} is coming soon`);
@@ -148,8 +150,29 @@ export default function AccountSettingsHub({
           />
         )}
 
-        {venueOpsEnabled && showOperationsHub && (
+        {showOperationsHub && isOwner && (
           <OperationsHubCard onOpenOperations={() => onOpenSection('venue-ops')} />
+        )}
+
+        {showRestaurantMgmtAdmin && isOwner && (
+          <section className="overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-sm">
+            <button
+              type="button"
+              onClick={() => onOpenSection('restaurant-mgmt')}
+              className="flex w-full items-center gap-inset-md p-inset-md text-left transition-colors hover:bg-surface-container-low"
+            >
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-container/15 text-primary-container">
+                <MaterialIcon name="inventory_2" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-title-md font-semibold text-on-surface">Restaurant Management</h3>
+                <p className="mt-1 text-body-sm text-on-surface-variant">
+                  Inventory, reports, and store settings — POS runs on tablets.
+                </p>
+              </div>
+              <MaterialIcon name="chevron_right" className="text-on-surface-variant" />
+            </button>
+          </section>
         )}
 
         <section className="divide-y divide-outline-variant overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-sm">
@@ -173,6 +196,20 @@ export default function AccountSettingsHub({
             label="Bank & Payouts"
             onClick={() => onNavigate('earnings')}
           />
+          {isOwner && showOperationsHub && (
+            <SettingsMenuRow
+              icon="hub"
+              label="Operations Hub"
+              onClick={() => onOpenSection('venue-ops')}
+            />
+          )}
+          {isOwner && showRestaurantMgmtAdmin && (
+            <SettingsMenuRow
+              icon="inventory_2"
+              label="Restaurant Management"
+              onClick={() => onOpenSection('restaurant-mgmt')}
+            />
+          )}
           {isOwner && (
             <SettingsMenuRow
               icon="people"

@@ -4,6 +4,7 @@ import { MaterialIcon } from '../../signup/components/MaterialIcon';
 interface StoreTabletChromeProps {
   storeName: string;
   station: JobStation;
+  onBack?: () => void;
   onUnpair?: () => void;
   children?: React.ReactNode;
 }
@@ -11,13 +12,24 @@ interface StoreTabletChromeProps {
 export default function StoreTabletChrome({
   storeName,
   station,
+  onBack,
   onUnpair,
   children,
 }: StoreTabletChromeProps) {
   return (
     <div className="flex min-h-dvh flex-col bg-background">
-      <header className="safe-t flex items-center justify-between gap-inset-sm border-b border-outline-variant bg-surface px-margin-mobile py-2 md:px-margin-tablet">
-        <div className="min-w-0">
+      <header className="safe-t flex items-center gap-inset-sm border-b border-outline-variant bg-surface px-margin-mobile py-2 md:px-margin-tablet">
+        {onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-low active:scale-95"
+            aria-label="Back"
+          >
+            <MaterialIcon name="arrow_back" />
+          </button>
+        ) : null}
+        <div className="min-w-0 flex-1">
           <p className="truncate text-label-md font-semibold text-on-background">{storeName}</p>
           <p className="text-label-sm text-on-surface-variant">{formatJobStationLabel(station)} tablet</p>
         </div>

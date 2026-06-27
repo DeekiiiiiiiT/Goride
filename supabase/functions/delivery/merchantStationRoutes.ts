@@ -201,6 +201,7 @@ function pairingStationLinks(
 function mapRosterMember(row: Record<string, unknown>) {
   const jobStation = row.job_station;
   const role = String(row.role);
+  const displayTitle = row.display_title;
   return {
     id: String(row.id),
     name: String(row.name),
@@ -210,6 +211,10 @@ function mapRosterMember(row: Record<string, unknown>) {
         ? String(jobStation)
         : null,
     pinStatus: String(row.pin_status),
+    displayTitle:
+      typeof displayTitle === "string" && displayTitle.trim()
+        ? displayTitle.trim()
+        : null,
   };
 }
 
@@ -334,7 +339,7 @@ export function registerMerchantStationRoutes(app: Hono, deps: StationDeps) {
 
     const { data, error } = await sb
       .from("merchant_team_members")
-      .select("id, name, role, job_station, pin_status")
+      .select("id, name, role, job_station, pin_status, display_title")
       .eq("merchant_id", merchantId)
       .eq("login_type", "roster")
       .order("name");

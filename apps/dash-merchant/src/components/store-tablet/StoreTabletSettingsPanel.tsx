@@ -57,9 +57,9 @@ export default function StoreTabletSettingsPanel({
   return (
     <section className="space-y-inset-md rounded-xl border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm">
       <div>
-        <h2 className="text-headline-md font-bold text-on-background">Store tablets</h2>
+        <h2 className="text-headline-md font-bold text-on-background">Devices</h2>
         <p className="mt-inset-xs text-body-sm text-on-surface-variant">
-          Pair Dispatch, kitchen, and manager iPads without logging in as the owner.
+          Pair floor tablets for Dispatch, kitchen, POS, and more — without logging in as the owner.
         </p>
       </div>
 
