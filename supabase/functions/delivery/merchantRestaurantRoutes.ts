@@ -3,6 +3,12 @@ import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supa
 import { calculateOrderPricing } from "../_shared/orderPricing.ts";
 import type { ResolvedMerchantAccess } from "./merchantAuth.ts";
 import { requireResolvedMerchantWithPermission } from "./merchantAuth.ts";
+import {
+  depleteForPosSale,
+  merchantShadowInventory,
+  merchantUsesEnterpriseInventory,
+  resolveNodeIdForMerchant,
+} from "./inventory/depletionService.ts";
 
 const IN_STORE_CAPABILITY = "in_store_operations";
 
@@ -115,6 +121,53 @@ async function decrementStockForOrder(
   }
 }
 
+async function processOrderInventoryDepletion(
+  sb: SupabaseClient,
+  merchant: Record<string, unknown>,
+  merchantId: string,
+  orderId: string,
+  items: Array<{ menuItemId?: string; name: string; quantity: number }>,
+  memberId?: string | null,
+) {
+  const enterprise = merchantUsesEnterpriseInventory(merchant);
+  const shadow = merchantShadowInventory(merchant);
+
+  if (!enterprise && !shadow) {
+    await decrementStockForOrder(sb, merchantId, orderId, items, memberId);
+    return;
+  }
+
+  const nodeId = await resolveNodeIdForMerchant(sb, merchantId);
+  if (!nodeId) {
+    if (enterprise) throw new Error("No inventory node linked to this store");
+    await decrementStockForOrder(sb, merchantId, orderId, items, memberId);
+    return;
+  }
+
+  if (enterprise) {
+    await depleteForPosSale(sb, {
+      nodeId,
+      orderId,
+      items,
+      idempotencyPrefix: `order:${orderId}`,
+    });
+    return;
+  }
+
+  await decrementStockForOrder(sb, merchantId, orderId, items, memberId);
+  try {
+    await depleteForPosSale(sb, {
+      nodeId,
+      orderId,
+      items,
+      idempotencyPrefix: `shadow:${orderId}`,
+    });
+  } catch (shadowErr) {
+    console.warn(`[inventory shadow] order=${orderId}`, shadowErr);
+  }
+}
+
+// Legacy BOM inventory routes — superseded by /merchant/enterprise-inventory/* when inventory_mode = enterprise.
 export function registerMerchantRestaurantRoutes(app: {
   post: (path: string, handler: (c: Context) => Promise<Response> | Response) => void;
   get: (path: string, handler: (c: Context) => Promise<Response> | Response) => void;
@@ -261,8 +314,9 @@ export function registerMerchantRestaurantRoutes(app: {
 
     if (body.markPaid) {
       try {
-        await decrementStockForOrder(
+        await processOrderInventoryDepletion(
           sb,
+          merchant,
           merchantId,
           String(order.id),
           (body.lines ?? []) as Array<{ menuItemId?: string; name: string; quantity: number }>,
@@ -402,7 +456,7 @@ export function registerMerchantRestaurantRoutes(app: {
     }>;
 
     try {
-      await decrementStockForOrder(sb, merchantId, id, items, body.cashierMemberId ?? null);
+      await processOrderInventoryDepletion(sb, merchant, merchantId, id, items, body.cashierMemberId ?? null);
     } catch (stockError) {
       return c.json({ error: String(stockError) }, 409);
     }

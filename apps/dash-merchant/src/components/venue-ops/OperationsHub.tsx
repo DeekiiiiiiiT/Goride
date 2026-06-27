@@ -17,6 +17,7 @@ interface OperationsHubProps {
   merchant?: Merchant | null;
   onBack?: () => void;
   onOpenRestaurantMgmt?: (section: RestaurantMgmtSection) => void;
+  onOpenEnterpriseInventory?: () => void;
   onOpenTeam?: (tab?: 'devices' | 'add' | 'team') => void;
 }
 
@@ -25,6 +26,7 @@ export default function OperationsHub({
   merchant,
   onBack,
   onOpenRestaurantMgmt,
+  onOpenEnterpriseInventory,
   onOpenTeam,
 }: OperationsHubProps) {
   const { venueOps, updateVenueOps, isSaving, useApi } = useVenueOps(merchantId, merchant);
@@ -80,7 +82,11 @@ export default function OperationsHub({
               disabled={isSaving}
             />
             {showAdminModules && (
-              <OperationsHubAdminLinks onOpenSection={(section) => onOpenRestaurantMgmt?.(section)} />
+              <OperationsHubAdminLinks
+                merchantId={merchantId}
+                onOpenSection={(section) => onOpenRestaurantMgmt?.(section)}
+                onOpenEnterpriseInventory={onOpenEnterpriseInventory}
+              />
             )}
           </div>
 

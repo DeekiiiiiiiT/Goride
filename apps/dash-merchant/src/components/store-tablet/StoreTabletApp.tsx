@@ -117,6 +117,7 @@ export default function StoreTabletApp() {
   }
 
   const view: TabletView = actingMember ? 'station' : 'kiosk';
+  const isPosStation = deviceSession.station === 'pos' && view === 'station';
 
   const stationContent = (() => {
     if (!merchant || !actingMember) return null;
@@ -144,6 +145,10 @@ export default function StoreTabletApp() {
         <PosRegisterPage
           merchant={merchant}
           useApi={hasCapability(merchant, CAPABILITY_IN_STORE)}
+          storeName={deviceSession.storeName}
+          staffName={actingMember.name}
+          onUnpair={() => void handleUnpair()}
+          onEndShift={handleEndShift}
         />
       );
     }
@@ -177,6 +182,14 @@ export default function StoreTabletApp() {
     }
     return <OrdersPage merchant={merchant} onNavigate={noop} />;
   })();
+
+  if (isPosStation && actingMember && merchant) {
+    return (
+      <div className="flex h-dvh flex-col overflow-hidden">
+        {stationContent}
+      </div>
+    );
+  }
 
   return (
     <StoreTabletChrome

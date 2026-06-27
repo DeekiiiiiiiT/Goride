@@ -29,6 +29,7 @@ import {
   registerMerchantRestaurantRoutes,
   roamStatusTransitions,
 } from "./merchantRestaurantRoutes.ts";
+import { registerMerchantInventoryRoutes } from "./merchantInventoryRoutes.ts";
 
 const app = new Hono().basePath("/delivery");
 
@@ -1985,6 +1986,7 @@ registerMerchantTeamRoutes(app, { getSupabase, getServiceSupabase });
 registerMerchantStationRoutes(app, { getSupabase, getServiceSupabase });
 registerMerchantVenueOpsRoutes(app, { getSupabase, getServiceSupabase });
 registerMerchantRestaurantRoutes(app);
+registerMerchantInventoryRoutes(app);
 registerPartnerBusinessTypeRoutes(app);
 registerMerchantAdminRoutes(app);
 registerOrderAdminRoutes(app);

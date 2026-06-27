@@ -12,6 +12,7 @@ import NotificationSettingsView from '../components/account/NotificationSettings
 import HelpSupportView from '../components/account/HelpSupportView';
 import PromotionsView from '../components/account/PromotionsView';
 import RestaurantMgmtFlow from './restaurant-mgmt/RestaurantMgmtFlow';
+import EnterpriseInventoryFlow from './enterprise-inventory/EnterpriseInventoryFlow';
 import OperationsHub from '../components/venue-ops/OperationsHub';
 import type { RestaurantMgmtSection } from '../components/restaurant-mgmt/RestaurantMgmtHub';
 import { CAPABILITY_IN_STORE, hasCapability } from '../lib/merchant-capabilities';
@@ -189,10 +190,20 @@ export default function SettingsPage({
           setRestaurantMgmtSection(section);
           setActiveSection('restaurant-mgmt');
         }}
+        onOpenEnterpriseInventory={() => setActiveSection('enterprise-inventory')}
         onOpenTeam={(tab) => {
           setTeamInitialTab(tab ?? 'devices');
           setActiveSection('team');
         }}
+      />
+    );
+  }
+
+  if (activeSection === 'enterprise-inventory') {
+    return (
+      <EnterpriseInventoryFlow
+        merchant={merchant}
+        onBack={() => setActiveSection(null)}
       />
     );
   }

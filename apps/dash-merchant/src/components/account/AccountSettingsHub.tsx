@@ -22,7 +22,8 @@ export type AccountSection =
   | 'legal'
   | 'promotions'
   | 'restaurant-mgmt'
-  | 'venue-ops';
+  | 'venue-ops'
+  | 'enterprise-inventory';
 
 interface AccountSettingsHubProps {
   merchant: Merchant;

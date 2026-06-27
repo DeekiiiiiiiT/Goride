@@ -13,10 +13,10 @@
 | 6 | POS Checkout — order type | — | Tablet landscape | React (`PosCheckoutSheet`) |
 | 7 | POS Payment — card / cash | — | Tablet landscape | React (`PosPaymentSheet`) |
 | 8 | POS Payment success + receipt | — | Tablet landscape | React (`PosSuccessSheet`) |
-| 9 | Inventory overview | — | Desktop | React (`InventoryOverview`) |
-| 10 | Ingredients list | — | Desktop | React (`IngredientsList`) |
-| 11 | Ingredient detail + stock adjust | — | Desktop | React (`IngredientDetail`) |
-| 12 | Recipe editor (BOM) | — | Desktop | React (`RecipeEditor`) |
+| 9 | Inventory overview | — | Desktop | Superseded by Enterprise Inventory hub |
+| 10 | Ingredients list | — | Desktop | Legacy; use Enterprise Items |
+| 11 | Ingredient detail + stock adjust | — | Desktop | Legacy; use ledger adjustments |
+| 12 | Recipe editor (BOM) | — | Desktop | Legacy; use Recipe v2 in Enterprise |
 | 13 | Print settings | — | Desktop | React (`PrintSettings`) |
 | 14 | In-store sales report | — | Desktop | React (`InStoreSalesReport`) |
 | 15 | Counter/Kitchen channel badge | — | Tablet | React (`OrderChannelChip`) |
