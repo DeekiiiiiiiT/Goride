@@ -1,7 +1,7 @@
 import type { Context } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import type { ResolvedMerchantAccess } from "../merchantAuth.ts";
-import { requireResolvedMerchantWithPermission } from "../merchantAuth.ts";
+import type { ResolvedMerchantAccess } from "./merchantAuth.ts";
+import { requireResolvedMerchantWithPermission } from "./merchantAuth.ts";
 import { appendLedgerEntry } from "./inventory/ledgerService.ts";
 import { toBaseQty, resolveUomIdByCode } from "./inventory/uomService.ts";
 
