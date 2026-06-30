@@ -160,6 +160,7 @@ import { getTripPhysicalCashCollected, sumTripPhysicalCashCollected } from '../.
 import { expandDriverTransactionIds } from '../../utils/expandDriverTransactionIds';
 import { isDriverCashPaymentTransaction } from '../../utils/driverCashPayment';
 import { isUberCashEligibleMetricPeriod, isValidDriverMetricPeriod } from '../../utils/driverMetricPeriod';
+import { resolveUberPeriodCashCollected } from '../../utils/resolveUberPeriodCash';
 import { calculateAverageEnroute, estimateEnrouteFallback } from '../../utils/enrouteStrategy';
 import { Tooltip as UiTooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { Checkbox } from "../ui/checkbox";
@@ -1473,19 +1474,6 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         return mStart <= end && mEnd >= start;
      }) : [];
 
-     // Uber CSV cash override: only use driver_metric rows whose **period overlaps** the selected range
-     // and has a real span (periodEnd > periodStart). Same-timestamp rows are ignored.
-     // Uber CSV cash: metric period **start** must fall inside the selected range (avoids
-     // attributing a full prior-week statement to a future/partial week that only touches one day).
-     const relevantCsvMetricsForUberCash = (isAllPlatforms && csvMetrics)
-       ? csvMetrics.filter(m => {
-           if (!isUberCashEligibleMetricPeriod(m)) return false;
-           const mStart = new Date(m.periodStart);
-           const mEnd = new Date(m.periodEnd);
-           return mStart >= start && mStart <= end && mEnd >= start;
-         })
-       : [];
-
      /** Sum of `payments_driver`-sourced rows overlapping the period (CSV visual template / statement totals). */
      const uberPaymentCsvRollup = (() => {
        const rows = relevantCsvMetrics.filter(
@@ -1840,6 +1828,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      // DEAD CODE (Phase 5): csvPeriodCash / cashCollected override — only fed dead periodNetChange
      // Calculate cash from CSV only if the selected range covers the CSV period
      const csvPeriodCash = relevantCsvMetrics.reduce((sum, m) => {
+        // Uber payment statement cash is applied only via resolveUberPeriodCashCollected.
+        if (isUberCashEligibleMetricPeriod(m) && m.dataSources?.includes('payment')) {
+          return sum;
+        }
         const mStart = new Date(m.periodStart);
         const mEnd = new Date(m.periodEnd);
         
@@ -2024,32 +2016,15 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
      
      // Note: totalDistance is currently left as "Revenue Distance" (Trip Only).
 
-     // Uber: statement cash = Excel SUM(payments_transaction Cash Collected) or payments_driver line (matches Uber app).
-     let uberCsvCashCollectedMagnitude: number | null = null;
-     if (isAllPlatforms && relevantCsvMetricsForUberCash.length > 0) {
-       let sumTx = 0;
-       let hasTx = false;
-       for (const m of relevantCsvMetricsForUberCash) {
-         const v = m.uberPaymentsTransactionCashColumnSum;
-         if (v != null && v !== 0) {
-           sumTx += v;
-           hasTx = true;
-         }
-       }
-       if (hasTx) {
-         uberCsvCashCollectedMagnitude = Math.abs(sumTx);
-       } else {
-         let sumDriver = 0;
-         let hasDriver = false;
-         for (const m of relevantCsvMetricsForUberCash) {
-           if (m.dataSources?.includes('payment') && m.cashCollected != null) {
-             sumDriver += m.cashCollected;
-             hasDriver = true;
-           }
-         }
-         if (hasDriver) uberCsvCashCollectedMagnitude = Math.abs(sumDriver);
-       }
-     }
+     const { magnitude: uberCsvCashCollectedMagnitude } = resolveUberPeriodCashCollected({
+       csvMetrics,
+       rangeFrom: start,
+       rangeTo: end,
+       trips: allTrips,
+       isAllPlatforms,
+       uberPlatformStats: platformStats.Uber,
+       uberDistanceKm: perPlatformDistance.Uber?.onTrip,
+     });
 
      return {
         periodEarnings,
@@ -2205,7 +2180,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         delete metrics.platformStats['Dispute Recoveries'];
       }
 
-      // Replace trip Uber cash with CSV statement total when a week-sized import overlaps this period.
+      // Replace trip Uber cash with CSV statement total when import + operational signal corroborate.
       const uberCsvCash = metrics.uberCsvCashCollectedMagnitude;
       if (uberCsvCash != null) {
         if (platformStats.Uber) {
@@ -2213,6 +2188,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         } else if (metrics.platformStats?.Uber) {
           platformStats.Uber = { ...metrics.platformStats.Uber, cashCollected: uberCsvCash };
         }
+      } else if (platformStats.Uber) {
+        platformStats.Uber.cashCollected = metrics.platformStats?.Uber?.cashCollected ?? 0;
       }
 
       // Ledger may count every Roam/InDrive fare as cash — use trip evidence for wallet/risk display.
