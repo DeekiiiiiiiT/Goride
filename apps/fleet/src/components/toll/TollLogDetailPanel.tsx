@@ -33,6 +33,7 @@ import { format, parseISO, isValid } from 'date-fns';
 import { TollLogEntry } from '../../types/tollLog';
 import { Trip } from '../../types/data';
 import { api } from '../../services/api';
+import { TollSourceBadge, deriveTollSource } from '../toll-tags/reconciliation/TollSourceBadge';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -287,6 +288,9 @@ export function TollLogDetailPanel({
               </Badge>
             } />
             <DetailRow label="Category" value={raw.category || '—'} />
+            {deriveTollSource(log) !== 'unknown' && (
+              <DetailRow label="Source" value={<TollSourceBadge source={deriveTollSource(log)} />} />
+            )}
             <DetailRow label="Description" value={log.description || '—'} />
             {log.referenceNumber && (
               <DetailRow label="Reference #" value={log.referenceNumber} mono />

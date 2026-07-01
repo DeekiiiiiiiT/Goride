@@ -974,8 +974,11 @@ app.get(`${BASE}/summary`, async (c) => {
         .filter((tx: any) => tx.tripId)
         .map((tx: any) => tx.tripId),
     );
-    const unclaimedRefunds = trips.filter(
-      (t: any) => (t.tollCharges && t.tollCharges > 0) && !linkedTripIds.has(t.id),
+    // Unresolved refunds only (resolved cash_wash/phantom/expense_logged drop off).
+    const unclaimedRefunds = trips.filter((t: any) => isUnresolvedRefund(t, linkedTripIds));
+    // Resolved refunds (any non-pending resolution) — surfaced separately.
+    const resolvedRefunds = trips.filter(
+      (t: any) => t.tollRefundResolution && t.tollRefundResolution.status !== "pending",
     );
 
     // Amounts
@@ -988,6 +991,10 @@ app.get(`${BASE}/summary`, async (c) => {
       0,
     );
     const unclaimedRefundsAmount = unclaimedRefunds.reduce(
+      (sum: number, t: any) => sum + (Number(t.tollCharges) || 0),
+      0,
+    );
+    const resolvedRefundsAmount = resolvedRefunds.reduce(
       (sum: number, t: any) => sum + (Number(t.tollCharges) || 0),
       0,
     );
@@ -1005,9 +1012,11 @@ app.get(`${BASE}/summary`, async (c) => {
         driverLiability: Math.round(driverLiability * 100) / 100,
         unclaimedRefundsAmount:
           Math.round(unclaimedRefundsAmount * 100) / 100,
+        resolvedRefundsAmount: Math.round(resolvedRefundsAmount * 100) / 100,
         unreconciledCount: unreconciled.length,
         reconciledCount: reconciled.length,
         unclaimedRefundsCount: unclaimedRefunds.length,
+        resolvedRefundsCount: resolvedRefunds.length,
         totalTollTransactions: tollTx.length,
       },
     });
@@ -1051,42 +1060,38 @@ app.get(`${BASE}/unreconciled`, async (c) => {
         new Date(b.date).getTime() - new Date(a.date).getTime(),
     );
 
-    const total = unreconciled.length;
-
-    // Compute match suggestions for the current page
-    const page = unreconciled.slice(offset, offset + limit);
-
     const timezone = await getFleetTimezone();
-    const suggestionsMap: Record<string, MatchResult[]> = {};
-    for (const tx of page) {
-      const matches = findTollMatchesServer(tx, trips, timezone);
-      if (matches.length > 0) {
-        suggestionsMap[tx.id] = matches;
-      }
-    }
 
-    // ── Phase 1: Auto-confirm PERFECT_MATCH suggestions ──────────────
+    // ── Auto-confirm PERFECT_MATCH across the FULL unreconciled set ──────
     // Tolls where the amount matches within 5 cents AND the toll occurred
-    // during an active trip are automatically reconciled server-side.
-    // They never appear in the Unmatched list — they go straight to
-    // Matched History tagged as "system-auto" so the admin can distinguish
-    // them from manual confirmations.
+    // during an active trip are automatically reconciled server-side and go
+    // straight to Matched History tagged "system-auto".
+    // Phase 5 fix: scan the entire unreconciled set (previously only the
+    // current page, so perfect matches beyond page 1 never auto-confirmed).
+    // Capped for performance; the cap is logged so coverage is never silently
+    // truncated.
+    const AUTO_MATCH_SCAN_CAP = 3000;
+    const scanSet = unreconciled.slice(0, AUTO_MATCH_SCAN_CAP);
+    if (unreconciled.length > AUTO_MATCH_SCAN_CAP) {
+      console.log(
+        `[TollReconciliation] Auto-match scan capped at ${AUTO_MATCH_SCAN_CAP} of ${unreconciled.length} unreconciled tolls`,
+      );
+    }
     let autoReconciled = 0;
     const autoReconciledIds = new Set<string>();
 
-    for (const [txId, matches] of Object.entries(suggestionsMap)) {
-      const best = matches[0];
-      if (best?.matchType !== "PERFECT_MATCH") continue;
-
-      // Find the tx object in the page array
-      const tx = page.find((t: any) => t.id === txId);
-      if (!tx) continue;
+    for (const tx of scanSet) {
+      const txId = tx.id;
 
       // Guard: skip if already reconciled (race condition protection)
       if (tx.isReconciled && tx.tripId) continue;
 
       // Guard: skip if admin previously un-matched this auto-match
       if (tx.metadata?.autoMatchOverridden) continue;
+
+      const matches = findTollMatchesServer(tx, trips, timezone);
+      const best = matches[0];
+      if (best?.matchType !== "PERFECT_MATCH") continue;
 
       const tripId = best.tripId;
       const trip = trips.find((t: any) => t.id === tripId);
@@ -1157,20 +1162,25 @@ app.get(`${BASE}/unreconciled`, async (c) => {
       );
     }
 
-    // Remove auto-reconciled items from page & suggestions before returning
-    const finalPage = page.filter(
-      (tx: any) => !autoReconciledIds.has(tx.id),
-    );
-    for (const id of autoReconciledIds) {
-      delete suggestionsMap[id];
+    // Paginate the REMAINING unreconciled tolls (after auto-confirm).
+    const remaining = unreconciled.filter((tx: any) => !autoReconciledIds.has(tx.id));
+    const total = remaining.length;
+    const page = remaining.slice(offset, offset + limit);
+
+    // Compute match suggestions for the current page (display only).
+    const suggestionsMap: Record<string, MatchResult[]> = {};
+    for (const tx of page) {
+      const matches = findTollMatchesServer(tx, trips, timezone);
+      if (matches.length > 0) {
+        suggestionsMap[tx.id] = matches;
+      }
     }
-    const adjustedTotal = total - autoReconciled;
 
     return c.json({
       success: true,
-      data: finalPage,
+      data: page,
       suggestions: suggestionsMap,
-      total: adjustedTotal,
+      total,
       limit,
       offset,
       autoReconciled,
@@ -1201,11 +1211,47 @@ app.get(`${BASE}/unclaimed-refunds`, async (c) => {
         .map((tx: any) => tx.tripId),
     );
 
-    // Unclaimed: trips with tollCharges > 0 but no linked toll tx
-    const unclaimed = trips.filter(
-      (t: any) =>
-        t.tollCharges && t.tollCharges > 0 && !linkedTripIds.has(t.id),
-    );
+    // Candidates: trips with a toll refund, no linked toll tx, and not already
+    // resolved (cash_wash/phantom/expense_logged drop off; pending stays).
+    const candidates = trips.filter((t: any) => isUnresolvedRefund(t, linkedTripIds));
+
+    // ── Automation (flagged, default OFF): auto-apply integrity-safe cash washes ──
+    const automation = await getRefundAutomationSettings();
+    let autoResolved = 0;
+    const autoResolvedIds = new Set<string>();
+    if (automation.refundAutomationEnabled && candidates.length > 0) {
+      const plazas = await loadActivePlazaPoints();
+      for (const t of candidates) {
+        const nearest = nearestPlazaMetersForTrip(t, plazas);
+        const cls = classifyRefundServer({
+          tollCharges: Number(t.tollCharges) || 0,
+          platform: t.platform,
+          paymentMethod: t.paymentMethod,
+          nearestPlazaMeters: nearest,
+        });
+        if (isSafeAutoApplyServer(cls, automation.refundAutoMinConfidence)) {
+          try {
+            await applyRefundResolution({
+              tripId: t.id,
+              resolution: cls.status,
+              auto: true,
+              confidence: cls.confidence,
+              notes: "Auto-resolved: " + cls.reason,
+            });
+            autoResolvedIds.add(t.id);
+            autoResolved++;
+          } catch (err: any) {
+            console.log(`[TollReconciliation] Auto-resolve failed for trip ${t.id}: ${err.message}`);
+          }
+        }
+      }
+      if (autoResolved > 0) {
+        console.log(`[TollReconciliation] Auto-resolved ${autoResolved} refund(s) as cash wash`);
+      }
+    }
+
+    // Remaining unresolved after any automation pass.
+    const unclaimed = candidates.filter((t: any) => !autoResolvedIds.has(t.id));
 
     // Sort by date descending
     unclaimed.sort(
@@ -1222,6 +1268,7 @@ app.get(`${BASE}/unclaimed-refunds`, async (c) => {
       total,
       limit,
       offset,
+      autoResolved,
     });
   } catch (e: any) {
     console.log(
@@ -3178,6 +3225,544 @@ app.post(`${BASE}/resolve`, async (c) => {
     });
   } catch (e: any) {
     console.log(`[TollReconciliation] POST /resolve error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// UNLINKED-REFUND RESOLUTION + AUTOMATION (Phase 2)
+// ═══════════════════════════════════════════════════════════════════════
+// An "unlinked refund" is a trip where the platform reimbursed a toll in the
+// fare but no toll expense is linked. These endpoints classify and resolve
+// them. All writes are additive (trip.tollRefundResolution) and audited; the
+// automation only auto-applies integrity-safe, high-confidence cash washes.
+
+type RefundResolutionStatus = "cash_wash" | "phantom" | "expense_logged" | "pending";
+
+const REFUND_SETTINGS_KEY = "toll_reconciliation:settings";
+const DEFAULT_PLAZA_RADIUS_M = 500;
+const REFUND_AUTO_APPLY_MIN_CONFIDENCE = 85;
+
+interface RefundAutomationSettings {
+  refundAutomationEnabled: boolean;
+  refundAutoMinConfidence: number;
+}
+
+async function getRefundAutomationSettings(): Promise<RefundAutomationSettings> {
+  const rec = (await kv.get(REFUND_SETTINGS_KEY)) as Partial<RefundAutomationSettings> | null;
+  return {
+    refundAutomationEnabled: rec?.refundAutomationEnabled === true, // default OFF
+    refundAutoMinConfidence:
+      typeof rec?.refundAutoMinConfidence === "number"
+        ? rec.refundAutoMinConfidence
+        : REFUND_AUTO_APPLY_MIN_CONFIDENCE,
+  };
+}
+
+// ── Geo helper: nearest active toll plaza to a trip's endpoints ──────────
+function haversineMeters(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(bLat - aLat);
+  const dLng = toRad(bLng - aLng);
+  const lat1 = toRad(aLat);
+  const lat2 = toRad(bLat);
+  const h =
+    Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+interface ActivePlaza { lat: number; lng: number; }
+
+async function loadActivePlazaPoints(): Promise<ActivePlaza[]> {
+  const raw = await kv.getByPrefix("toll_plaza:");
+  const points: ActivePlaza[] = [];
+  for (const v of raw || []) {
+    if (!v || typeof v !== "object") continue;
+    if (v.status && v.status !== "active") continue;
+    const loc = v.location;
+    if (loc && typeof loc.lat === "number" && typeof loc.lng === "number") {
+      points.push({ lat: loc.lat, lng: loc.lng });
+    }
+  }
+  return points;
+}
+
+/** Min meters from a trip's pickup/dropoff coords to any active plaza, or null. */
+function nearestPlazaMetersForTrip(trip: any, plazas: ActivePlaza[]): number | null {
+  if (plazas.length === 0) return null;
+  const coords: Array<[number, number]> = [];
+  if (typeof trip.startLat === "number" && typeof trip.startLng === "number") {
+    coords.push([trip.startLat, trip.startLng]);
+  }
+  if (typeof trip.endLat === "number" && typeof trip.endLng === "number") {
+    coords.push([trip.endLat, trip.endLng]);
+  }
+  if (coords.length === 0) return null;
+  let min = Infinity;
+  for (const [lat, lng] of coords) {
+    for (const p of plazas) {
+      const d = haversineMeters(lat, lng, p.lat, p.lng);
+      if (d < min) min = d;
+    }
+  }
+  return isFinite(min) ? min : null;
+}
+
+// ── Ported classifier (mirrors src/utils/refundClassifier.ts) ────────────
+function isCashSettledServer(platform?: string, paymentMethod?: string): boolean {
+  const pm = (paymentMethod || "").toLowerCase();
+  const pf = (platform || "").toLowerCase();
+  return pm === "cash" || pf === "cash";
+}
+
+interface RefundClassification { status: RefundResolutionStatus; confidence: number; reason: string; }
+
+function classifyRefundServer(params: {
+  tollCharges: number;
+  platform?: string;
+  paymentMethod?: string;
+  nearestPlazaMeters: number | null;
+  plazaRadiusMeters?: number;
+  pendingTagImport?: boolean;
+}): RefundClassification {
+  const {
+    tollCharges,
+    platform,
+    paymentMethod,
+    nearestPlazaMeters,
+    plazaRadiusMeters = DEFAULT_PLAZA_RADIUS_M,
+    pendingTagImport = false,
+  } = params;
+
+  if (!(tollCharges > 0)) {
+    return { status: "pending", confidence: 0, reason: "No positive toll refund on this trip." };
+  }
+  if (pendingTagImport) {
+    return { status: "pending", confidence: 60, reason: "A tag statement for this period is expected; will auto-match on import." };
+  }
+  const cashSettled = isCashSettledServer(platform, paymentMethod);
+  const hasGeo = typeof nearestPlazaMeters === "number" && nearestPlazaMeters >= 0;
+  const nearPlaza = hasGeo && (nearestPlazaMeters as number) <= plazaRadiusMeters;
+
+  if (cashSettled && nearPlaza) {
+    return { status: "cash_wash", confidence: 92, reason: "Cash-settled fare and a toll plaza on-route — driver paid cash. No leakage." };
+  }
+  if (cashSettled && !hasGeo) {
+    return { status: "cash_wash", confidence: 80, reason: "Cash-settled fare reimbursed the toll — driver most likely paid cash." };
+  }
+  if (!cashSettled && nearPlaza) {
+    return { status: "cash_wash", confidence: 70, reason: "A toll plaza sits on this route; likely paid in cash and reimbursed." };
+  }
+  if (hasGeo && !nearPlaza) {
+    return { status: "phantom", confidence: 64, reason: "No toll plaza near this route — likely a platform fare estimate." };
+  }
+  return { status: "pending", confidence: 40, reason: "Insufficient signal; leaving pending for tag-statement import." };
+}
+
+function isSafeAutoApplyServer(c: RefundClassification, minConfidence: number): boolean {
+  return c.status === "cash_wash" && c.confidence >= minConfidence;
+}
+
+/** A trip is still "unlinked" only if it has no linked toll AND is unresolved/pending. */
+function isUnresolvedRefund(trip: any, linkedTripIds: Set<string>): boolean {
+  if (!(trip.tollCharges && trip.tollCharges > 0)) return false;
+  if (linkedTripIds.has(trip.id)) return false;
+  const res = trip.tollRefundResolution;
+  if (res && res.status && res.status !== "pending") return false; // resolved → hidden
+  return true;
+}
+
+// ── Core: apply a resolution to a trip (shared by single + bulk) ─────────
+async function applyRefundResolution(params: {
+  tripId: string;
+  resolution: RefundResolutionStatus;
+  notes?: string;
+  driverId?: string;
+  auto: boolean;
+  confidence?: number;
+}): Promise<{ tripId: string; resolution: RefundResolutionStatus; linkedTollLedgerId?: string }> {
+  const { tripId, resolution, notes, auto } = params;
+  const trip = await kv.get(`trip:${tripId}`);
+  if (!trip) throw new Error(`Trip ${tripId} not found`);
+
+  const amount = Math.abs(Number(trip.tollCharges) || 0);
+  const driverId = params.driverId || trip.driverId || undefined;
+  const now = new Date().toISOString();
+  let linkedTollLedgerId: string | undefined;
+
+  // "expense_logged" creates a real cash toll expense and links it to the trip.
+  if (resolution === "expense_logged") {
+    if (!driverId) throw new Error("driverId is required to log a cash toll expense");
+    const ledgerId = crypto.randomUUID();
+    const entry: TollLedgerRecord = {
+      id: ledgerId,
+      createdAt: now,
+      updatedAt: now,
+      vehicleId: trip.vehicleId || null,
+      vehiclePlate: null,
+      driverId: driverId || null,
+      driverName: trip.driverName || null,
+      tollTagId: null,
+      tagNumber: null,
+      plaza: null,
+      highway: null,
+      location: `${trip.pickupLocation || "?"} → ${trip.dropoffLocation || "?"}`.substring(0, 120),
+      date: String(trip.date || now).split("T")[0],
+      time: null,
+      type: "usage",
+      amount: -amount, // usage is negative
+      paymentMethod: "cash",
+      status: "reconciled",
+      resolution: null,
+      isReconciled: true,
+      tripId,
+      matchConfidence: null,
+      matchedAt: now,
+      matchedBy: auto ? "system-auto" : "admin",
+      batchId: null,
+      batchName: null,
+      importedAt: null,
+      sourceFile: null,
+      receiptUrl: null,
+      referenceNumber: null,
+      description: "Cash toll (logged from unlinked refund)",
+      notes: notes || null,
+      auditTrail: [],
+      metadata: { source: "refund_resolution" },
+    };
+    await saveTollLedgerEntry(entry);
+    linkedTollLedgerId = ledgerId;
+  }
+
+  // Persist the resolution on the trip (additive field only).
+  trip.tollRefundResolution = {
+    status: resolution,
+    resolvedBy: auto ? "system-auto" : "admin",
+    resolvedAt: now,
+    notes: notes || undefined,
+    auto,
+    confidence: params.confidence,
+    linkedTollLedgerId,
+  };
+  await kv.set(`trip:${tripId}`, trip);
+
+  // Audit trail (canonical, net-zero — no double counting of financials).
+  await writeTollLedgerEntry({
+    eventType: `refund_resolved_${resolution}`,
+    category: "Toll Reconciliation",
+    description: `Unlinked refund resolved as ${resolution}: ${(trip.pickupLocation || "").substring(0, 30)} → ${(trip.dropoffLocation || "").substring(0, 30)}`,
+    grossAmount: amount,
+    netAmount: 0,
+    direction: "neutral",
+    sourceType: "refund_resolution",
+    sourceId: tripId,
+    driverId: driverId || "unknown",
+    driverName: trip.driverName || "Unknown",
+    vehicleId: trip.vehicleId,
+    date: String(trip.date || now),
+    metadata: { resolution, auto, notes, linkedTollLedgerId, confidence: params.confidence },
+  });
+
+  console.log(`[TollReconciliation] Refund resolved: trip ${tripId} → ${resolution} (auto=${auto})`);
+  return { tripId, resolution, linkedTollLedgerId };
+}
+
+// ─── GET /refund-suggestions ─────────────────────────────────────────────
+app.get(`${BASE}/refund-suggestions`, async (c) => {
+  try {
+    const { driverId } = parseQueryParams(c);
+    const loaded = await loadAllTollLedgerWithTrips();
+    const tollTx = filterByDriver(loaded.tollTx, driverId);
+    let trips = filterByDriver(loaded.trips, driverId);
+
+    const linkedTripIds = new Set(
+      tollTx.filter((tx: any) => tx.tripId).map((tx: any) => tx.tripId),
+    );
+    const unresolved = trips.filter((t: any) => isUnresolvedRefund(t, linkedTripIds));
+    const plazas = await loadActivePlazaPoints();
+
+    const suggestions: Record<string, RefundClassification> = {};
+    for (const t of unresolved) {
+      const nearest = nearestPlazaMetersForTrip(t, plazas);
+      suggestions[t.id] = classifyRefundServer({
+        tollCharges: Number(t.tollCharges) || 0,
+        platform: t.platform,
+        paymentMethod: t.paymentMethod,
+        nearestPlazaMeters: nearest,
+      });
+    }
+
+    return c.json({ success: true, suggestions });
+  } catch (e: any) {
+    console.log(`[TollReconciliation] GET /refund-suggestions error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── POST /resolve-refund ────────────────────────────────────────────────
+app.post(`${BASE}/resolve-refund`, async (c) => {
+  try {
+    const { tripId, resolution, notes, driverId } = await c.req.json();
+    const valid: RefundResolutionStatus[] = ["cash_wash", "phantom", "expense_logged", "pending"];
+    if (!tripId || !resolution || !valid.includes(resolution)) {
+      return c.json({ error: `tripId and a valid resolution (${valid.join(", ")}) are required` }, 400);
+    }
+    const result = await applyRefundResolution({ tripId, resolution, notes, driverId, auto: false });
+    return c.json({ success: true, data: result });
+  } catch (e: any) {
+    console.log(`[TollReconciliation] POST /resolve-refund error: ${e.message}`);
+    return c.json({ error: e.message }, e.message?.includes("not found") ? 404 : 500);
+  }
+});
+
+// ─── POST /resolve-refund/bulk ───────────────────────────────────────────
+app.post(`${BASE}/resolve-refund/bulk`, async (c) => {
+  try {
+    const body = await c.req.json();
+    const items: Array<{ tripId: string; resolution: RefundResolutionStatus; notes?: string; driverId?: string }> =
+      Array.isArray(body?.items) ? body.items : [];
+    if (items.length === 0) return c.json({ error: "items[] is required" }, 400);
+
+    const valid: RefundResolutionStatus[] = ["cash_wash", "phantom", "expense_logged", "pending"];
+    let resolved = 0;
+    const errors: Array<{ tripId: string; error: string }> = [];
+    for (const it of items) {
+      if (!it.tripId || !valid.includes(it.resolution)) {
+        errors.push({ tripId: it.tripId, error: "invalid item" });
+        continue;
+      }
+      try {
+        await applyRefundResolution({ ...it, auto: false });
+        resolved++;
+      } catch (err: any) {
+        errors.push({ tripId: it.tripId, error: err.message });
+      }
+    }
+    return c.json({ success: true, resolved, failed: errors.length, errors });
+  } catch (e: any) {
+    console.log(`[TollReconciliation] POST /resolve-refund/bulk error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── GET /resolved-refunds ───────────────────────────────────────────────
+// Trips whose unlinked refund has been resolved (any non-pending status).
+app.get(`${BASE}/resolved-refunds`, async (c) => {
+  try {
+    const { driverId, limit, offset } = parseQueryParams(c);
+    const loaded = await loadAllTollLedgerWithTrips();
+    const trips = filterByDriver(loaded.trips, driverId);
+
+    const resolved = trips.filter(
+      (t: any) => t.tollRefundResolution && t.tollRefundResolution.status !== "pending",
+    );
+    resolved.sort((a: any, b: any) => {
+      const ra = a.tollRefundResolution?.resolvedAt || a.date;
+      const rb = b.tollRefundResolution?.resolvedAt || b.date;
+      return new Date(rb).getTime() - new Date(ra).getTime();
+    });
+
+    const total = resolved.length;
+    const page = resolved.slice(offset, offset + limit);
+    return c.json({ success: true, data: page, total, limit, offset });
+  } catch (e: any) {
+    console.log(`[TollReconciliation] GET /resolved-refunds error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── GET/PUT /automation-settings ────────────────────────────────────────
+app.get(`${BASE}/automation-settings`, async (c) => {
+  try {
+    const settings = await getRefundAutomationSettings();
+    return c.json({ success: true, data: settings });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.put(`${BASE}/automation-settings`, async (c) => {
+  try {
+    const body = await c.req.json();
+    const current = await getRefundAutomationSettings();
+    const next: RefundAutomationSettings = {
+      refundAutomationEnabled:
+        typeof body?.refundAutomationEnabled === "boolean"
+          ? body.refundAutomationEnabled
+          : current.refundAutomationEnabled,
+      refundAutoMinConfidence:
+        typeof body?.refundAutoMinConfidence === "number"
+          ? Math.max(50, Math.min(100, body.refundAutoMinConfidence))
+          : current.refundAutoMinConfidence,
+    };
+    await kv.set(REFUND_SETTINGS_KEY, next);
+    return c.json({ success: true, data: next });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// NATIVE RIDES → FLEET TOLL LEDGER BRIDGE (Phase 4)
+// ═══════════════════════════════════════════════════════════════════════
+// Geofence-detected toll crossings on native "Roam Driver" rides live in the
+// Postgres table rides.ride_toll_crossings and are invisible to fleet
+// reconciliation. This bridge mirrors each crossing into a toll_ledger:*
+// expense (source = roam_geofence) so it flows through the same matcher.
+//
+// Safety: idempotent (keyed on the crossing id via a toll_bridge:crossing:*
+// dedup marker → re-runs never double-insert), additive (creates new ledger
+// rows only; never mutates rides data), and dry-run capable.
+
+const TOLL_BRIDGE_DEDUP_PREFIX = "toll_bridge:crossing:";
+
+async function loadRideTollCrossings(limit: number): Promise<any[]> {
+  try {
+    const { data, error } = await supabase
+      .schema("rides")
+      .from("ride_toll_crossings")
+      .select(
+        "id, ride_request_id, toll_plaza_id, toll_plaza_name, toll_amount_minor, currency, crossed_at, driver_lat, driver_lng",
+      )
+      .order("crossed_at", { ascending: false })
+      .limit(limit);
+    if (error) {
+      console.error("[TollBridge] Failed to load ride_toll_crossings:", error.message);
+      return [];
+    }
+    return data || [];
+  } catch (e: any) {
+    console.error("[TollBridge] loadRideTollCrossings error:", e.message);
+    return [];
+  }
+}
+
+/** Fetch ride context (driver/completion) for a set of ride_request ids. */
+async function loadRideContext(rideIds: string[]): Promise<Map<string, any>> {
+  const map = new Map<string, any>();
+  if (rideIds.length === 0) return map;
+  try {
+    const { data, error } = await supabase
+      .schema("rides")
+      .from("ride_requests")
+      .select("id, assigned_driver_user_id, completed_at, status")
+      .in("id", rideIds);
+    if (error) {
+      console.error("[TollBridge] Failed to load ride context:", error.message);
+      return map;
+    }
+    for (const r of data || []) map.set(r.id, r);
+  } catch (e: any) {
+    console.error("[TollBridge] loadRideContext error:", e.message);
+  }
+  return map;
+}
+
+async function bridgeRideTollCrossings(opts: { dryRun: boolean; limit: number }): Promise<{
+  scanned: number;
+  bridged: number;
+  skipped: number;
+  dryRun: boolean;
+}> {
+  const crossings = await loadRideTollCrossings(opts.limit);
+  const rideIds = [...new Set(crossings.map((x) => x.ride_request_id).filter(Boolean))];
+  const rideCtx = await loadRideContext(rideIds);
+
+  let bridged = 0;
+  let skipped = 0;
+  const now = new Date().toISOString();
+
+  for (const x of crossings) {
+    const dedupKey = `${TOLL_BRIDGE_DEDUP_PREFIX}${x.id}`;
+    const existing = await kv.get(dedupKey);
+    if (existing) {
+      skipped++;
+      continue;
+    }
+    if (opts.dryRun) {
+      bridged++; // would-bridge count
+      continue;
+    }
+
+    const ride = rideCtx.get(x.ride_request_id);
+    const amountMajor = Number(x.toll_amount_minor || 0) / 100;
+    const ledgerId = crypto.randomUUID();
+    const entry: TollLedgerRecord = {
+      id: ledgerId,
+      createdAt: now,
+      updatedAt: now,
+      vehicleId: null,
+      vehiclePlate: null,
+      // Do NOT fabricate a fleet driver identity — keep the rides-side id in
+      // metadata and leave driverId unassigned for admin/matcher to resolve.
+      driverId: null,
+      driverName: null,
+      tollTagId: null,
+      tagNumber: null,
+      plaza: x.toll_plaza_name || null,
+      highway: null,
+      location: x.toll_plaza_name || null,
+      date: String(x.crossed_at || now).split("T")[0],
+      time: null,
+      type: "usage",
+      amount: -Math.abs(amountMajor),
+      paymentMethod: "fleet_account",
+      status: "pending",
+      resolution: null,
+      isReconciled: false,
+      tripId: null,
+      matchConfidence: null,
+      matchedAt: null,
+      matchedBy: null,
+      batchId: null,
+      batchName: null,
+      importedAt: now,
+      sourceFile: null,
+      receiptUrl: null,
+      referenceNumber: x.id || null,
+      description: `Toll crossing (Roam geofence): ${x.toll_plaza_name || "Toll"}`,
+      notes: null,
+      auditTrail: [],
+      metadata: {
+        source: "roam_geofence",
+        rideTollCrossingId: x.id,
+        rideRequestId: x.ride_request_id,
+        tollPlazaId: x.toll_plaza_id,
+        currency: x.currency || "JMD",
+        driverLat: x.driver_lat,
+        driverLng: x.driver_lng,
+        crossedAt: x.crossed_at,
+        driverUserId: ride?.assigned_driver_user_id || null,
+        rideStatus: ride?.status || null,
+      },
+    };
+
+    try {
+      await saveTollLedgerEntry(entry);
+      await kv.set(dedupKey, { ledgerId, bridgedAt: now });
+      bridged++;
+    } catch (err: any) {
+      console.error(`[TollBridge] Failed to bridge crossing ${x.id}: ${err.message}`);
+    }
+  }
+
+  console.log(
+    `[TollBridge] ${opts.dryRun ? "DRY-RUN " : ""}scanned=${crossings.length} bridged=${bridged} skipped=${skipped}`,
+  );
+  return { scanned: crossings.length, bridged, skipped, dryRun: opts.dryRun };
+}
+
+// ─── POST /bridge-rides ──────────────────────────────────────────────────
+app.post(`${BASE}/bridge-rides`, async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body?.dryRun === true;
+    const limit = Math.max(1, Math.min(5000, Number(body?.limit) || 1000));
+    const result = await bridgeRideTollCrossings({ dryRun, limit });
+    return c.json({ success: true, ...result });
+  } catch (e: any) {
+    console.log(`[TollReconciliation] POST /bridge-rides error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
 });

@@ -23,6 +23,22 @@ export interface TollCrossingState {
   crossedTolls: Set<string>;
 }
 
+/** Default cooldown before the SAME plaza can be re-counted (enables round trips). */
+export const ROUND_TRIP_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+
+export interface EvaluateTollOptions {
+  /**
+   * Last crossing time (epoch ms) per plaza id. When provided, a plaza is
+   * re-counted only if the last crossing was longer ago than `cooldownMs`,
+   * which allows genuine round trips while preventing dwell double-counting.
+   * When omitted, the legacy once-per-ride `alreadyCrossed` set is used.
+   */
+  recentByPlaza?: Map<string, number>;
+  cooldownMs?: number;
+  /** Current time (epoch ms). Passed in for testability. */
+  nowMs?: number;
+}
+
 /**
  * Evaluate driver location against toll plaza geofences.
  * Returns any new toll crossings detected.
@@ -33,21 +49,44 @@ export async function evaluateTollCrossings(
   driverLng: number,
   geofenceRadiusM: number,
   alreadyCrossed: Set<string>,
+  options?: EvaluateTollOptions,
 ): Promise<TollEvaluationResult> {
   const plazas = await loadTollPlazas(db);
   const tollsCrossed: TollCrossingRecord[] = [];
   let totalTollsMinor = 0;
 
+  const cooldownMode = !!options?.recentByPlaza;
+  const cooldownMs = options?.cooldownMs ?? ROUND_TRIP_COOLDOWN_MS;
+  const nowMs = options?.nowMs ?? Date.now();
+
   for (const plaza of plazas) {
-    if (alreadyCrossed.has(plaza.id)) continue;
+    // Skip misconfigured plazas with no rate — recording a $0 crossing is noise.
+    if (!(plaza.defaultRateMinor > 0)) {
+      console.warn(
+        `[tollGeofence] Skipping plaza ${plaza.id} (${plaza.name}) — no positive rate configured`,
+      );
+      continue;
+    }
+
+    // De-dup: cooldown mode allows re-crossing after leaving; legacy mode is
+    // once-per-ride via the alreadyCrossed set.
+    if (cooldownMode) {
+      const last = options!.recentByPlaza!.get(plaza.id);
+      if (last !== undefined && nowMs - last < cooldownMs) continue;
+    } else if (alreadyCrossed.has(plaza.id)) {
+      continue;
+    }
 
     const dist = distanceMeters(
       { lat: driverLat, lng: driverLng },
       plaza.location,
     );
 
-    const effectiveRadius = Math.max(geofenceRadiusM, plaza.geofenceRadius);
-    
+    // Prefer the plaza's own radius when set; fall back to the global radius.
+    // (Previously Math.max inflated the radius and caused false positives on
+    // highways running parallel to a toll road.)
+    const effectiveRadius = plaza.geofenceRadius > 0 ? plaza.geofenceRadius : geofenceRadiusM;
+
     if (dist <= effectiveRadius) {
       tollsCrossed.push({
         toll_plaza_id: plaza.id,
@@ -148,4 +187,31 @@ export async function loadCrossedTollIds(
   }
 
   return new Set(data.map((row) => row.toll_plaza_id));
+}
+
+/**
+ * Load the most recent crossing time (epoch ms) per plaza for a ride.
+ * Used for cooldown-based de-dup so genuine round trips are counted while
+ * dwell within a geofence is not double-counted.
+ */
+export async function loadRecentlyCrossedAt(
+  db: SupabaseClient,
+  rideId: string,
+): Promise<Map<string, number>> {
+  const { data, error } = await db
+    .from("ride_toll_crossings")
+    .select("toll_plaza_id, crossed_at")
+    .eq("ride_request_id", rideId);
+
+  const map = new Map<string, number>();
+  if (error || !data) return map;
+
+  for (const row of data) {
+    const t = row.crossed_at ? Date.parse(String(row.crossed_at)) : NaN;
+    if (!isNaN(t)) {
+      const prev = map.get(row.toll_plaza_id);
+      if (prev === undefined || t > prev) map.set(row.toll_plaza_id, t);
+    }
+  }
+  return map;
 }

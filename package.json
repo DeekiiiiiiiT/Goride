@@ -3,6 +3,7 @@
   "private": true,
   "packageManager": "pnpm@11.1.0",
   "scripts": {
+    "test:e2e:toll": "node scripts/e2e/toll-reconciliation-smoke.mjs",
     "dev": "pnpm --filter @roam/fleet dev",
     "dev:enterprise": "pnpm --filter @roam/enterprise dev",
     "build:enterprise": "pnpm --filter @roam/enterprise build",

@@ -1,0 +1,81 @@
+<!-- @dsCard group="Foundations" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Roam Fleet — Foundations</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { font-family: 'Inter', system-ui, sans-serif; }
+  body { font-family: 'Inter', system-ui, sans-serif; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-900 p-6 md:p-10">
+  <div class="max-w-5xl mx-auto space-y-10">
+    <header>
+      <h1 class="text-2xl font-bold tracking-tight text-slate-900">Roam Fleet — Toll Reconciliation Design Tokens</h1>
+      <p class="text-slate-500 mt-1">Fleet-dashboard visual language. Slate surfaces, indigo primary, semantic status accents. Font: Inter.</p>
+    </header>
+
+    <!-- Colors -->
+    <section class="space-y-3">
+      <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500">Colors</h2>
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div class="rounded-lg border border-slate-200 bg-white overflow-hidden shadow-sm">
+          <div class="h-16 bg-indigo-600"></div><div class="p-2 text-xs"><div class="font-semibold">Primary</div><div class="text-slate-500">indigo-600</div></div>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-white overflow-hidden shadow-sm">
+          <div class="h-16 bg-slate-900"></div><div class="p-2 text-xs"><div class="font-semibold">Heading</div><div class="text-slate-500">slate-900</div></div>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-white overflow-hidden shadow-sm">
+          <div class="h-16 bg-orange-400"></div><div class="p-2 text-xs"><div class="font-semibold">Claimable</div><div class="text-slate-500">orange-400</div></div>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-white overflow-hidden shadow-sm">
+          <div class="h-16 bg-emerald-400"></div><div class="p-2 text-xs"><div class="font-semibold">Recovered</div><div class="text-slate-500">emerald-400</div></div>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-white overflow-hidden shadow-sm">
+          <div class="h-16 bg-purple-400"></div><div class="p-2 text-xs"><div class="font-semibold">Liability</div><div class="text-slate-500">purple-400</div></div>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-white overflow-hidden shadow-sm">
+          <div class="h-16 bg-yellow-400"></div><div class="p-2 text-xs"><div class="font-semibold">Refunds</div><div class="text-slate-500">yellow-400</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Typography -->
+    <section class="space-y-3">
+      <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500">Typography — Inter</h2>
+      <div class="rounded-lg border border-slate-200 bg-white p-5 space-y-3 shadow-sm">
+        <div class="text-2xl font-bold tracking-tight text-slate-900">Page title · 2xl / bold</div>
+        <div class="text-lg font-medium text-slate-900">Section header · lg / medium</div>
+        <div class="text-sm text-slate-600">Body copy · sm / regular — used for descriptions and table cells.</div>
+        <div class="text-xs font-medium uppercase tracking-wider text-slate-500">Overline · xs / medium / uppercase</div>
+      </div>
+    </section>
+
+    <!-- Status chips -->
+    <section class="space-y-3">
+      <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500">Resolution Status Chips</h2>
+      <div class="flex flex-wrap gap-2">
+        <span class="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">Cash wash</span>
+        <span class="inline-flex items-center rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">Phantom / estimate</span>
+        <span class="inline-flex items-center rounded-md border border-indigo-200 bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800">Expense logged</span>
+        <span class="inline-flex items-center rounded-md border border-yellow-200 bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800">Pending import</span>
+      </div>
+    </section>
+
+    <!-- Buttons -->
+    <section class="space-y-3">
+      <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500">Buttons</h2>
+      <div class="flex flex-wrap items-center gap-3">
+        <button class="h-9 rounded-md bg-indigo-600 px-4 text-sm font-medium text-white hover:bg-indigo-700">Primary</button>
+        <button class="h-9 rounded-md border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50">Outline</button>
+        <button class="h-9 rounded-md px-4 text-sm font-medium text-slate-500 hover:text-slate-700">Ghost</button>
+      </div>
+    </section>
+  </div>
+</body>
+</html>

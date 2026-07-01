@@ -1870,6 +1870,100 @@ export const api = {
     return response.json();
   },
 
+  async getResolvedRefunds(params?: { driverId?: string; limit?: number; offset?: number }) {
+    const qs = new URLSearchParams();
+    if (params?.driverId) qs.set('driverId', params.driverId);
+    if (params?.limit !== undefined) qs.set('limit', params.limit.toString());
+    if (params?.offset !== undefined) qs.set('offset', params.offset.toString());
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/resolved-refunds?${qs.toString()}`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch resolved refunds");
+    return response.json();
+  },
+
+  async getRefundSuggestions(params?: { driverId?: string }): Promise<{ success: boolean; suggestions: Record<string, { status: string; confidence: number; reason: string }> }> {
+    const qs = new URLSearchParams();
+    if (params?.driverId) qs.set('driverId', params.driverId);
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/refund-suggestions?${qs.toString()}`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch refund suggestions");
+    return response.json();
+  },
+
+  async resolveRefund(payload: { tripId: string; resolution: 'cash_wash' | 'phantom' | 'expense_logged' | 'pending'; notes?: string; driverId?: string }) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/resolve-refund`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to resolve refund");
+    }
+    return response.json();
+  },
+
+  async bulkResolveRefunds(items: Array<{ tripId: string; resolution: 'cash_wash' | 'phantom' | 'expense_logged' | 'pending'; notes?: string; driverId?: string }>) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/resolve-refund/bulk`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify({ items })
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to bulk resolve refunds");
+    }
+    return response.json();
+  },
+
+  async bridgeRidesTolls(opts?: { dryRun?: boolean; limit?: number }): Promise<{ success: boolean; scanned: number; bridged: number; skipped: number; dryRun: boolean }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/bridge-rides`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify({ dryRun: opts?.dryRun ?? false, limit: opts?.limit })
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to bridge ride tolls");
+    }
+    return response.json();
+  },
+
+  async getTollAutomationSettings(): Promise<{ success: boolean; data: { refundAutomationEnabled: boolean; refundAutoMinConfidence: number } }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/automation-settings`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch toll automation settings");
+    return response.json();
+  },
+
+  async updateTollAutomationSettings(payload: { refundAutomationEnabled?: boolean; refundAutoMinConfidence?: number }) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/automation-settings`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to update toll automation settings");
+    }
+    return response.json();
+  },
+
   async serverReconcileToll(transactionId: string, tripId: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/reconcile`, {
       method: 'POST',

@@ -758,6 +758,7 @@ export interface DispatchSettingsDto {
   pin_verification_required_for_start: boolean;
   toll_detection_enabled: boolean;
   toll_geofence_radius_m: number;
+  toll_detect_enroute?: boolean;
   updated_at?: string;
   updated_by?: string | null;
 }

@@ -4,6 +4,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../
 import { UnmatchedTollsList } from "./UnmatchedTollsList";
 import { UnclaimedRefundsList } from "./UnclaimedRefundsList";
 import { ReconciledTollsList } from "./ReconciledTollsList";
+import { ResolvedRefundsList, ResolvedRefundRow } from "./ResolvedRefundsList";
 import { useTollReconciliation } from "../../../hooks/useTollReconciliation";
 import { useClaims } from "../../../hooks/useClaims";
 import { Loader2, RefreshCw, Wand2, AlertTriangle, TrendingDown, TrendingUp, DollarSign, Wallet, HelpCircle, Filter, Bot } from "lucide-react";
@@ -16,6 +17,9 @@ import { MatchResult, calculateTollFinancials } from "../../../utils/tollReconci
 import { toast } from "sonner@2.0.3";
 import { Trip as TripType } from "../../../types/data";
 import { api } from "../../../services/api";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../../ui/dialog";
+import { DriverPicker } from "../../ui/DriverPicker";
+import { TollAutomationSettings } from "./TollAutomationSettings";
 
 export function ReconciliationDashboard() {
   const handleRunTest = () => {
@@ -32,27 +36,35 @@ export function ReconciliationDashboard() {
     api.getDrivers().then(setDrivers).catch(console.error);
   }, []);
 
-  const { 
-    loading: tollsLoading, 
-    unreconciledTolls, 
+  const {
+    loading: tollsLoading,
+    unreconciledTolls,
     reconciledTolls,
-    unclaimedRefunds, 
+    unclaimedRefunds,
+    resolvedRefunds,
+    refundSuggestions,
     disputeRefunds,
-    trips, 
-    suggestions, 
-    reconcile, 
+    trips,
+    suggestions,
+    reconcile,
     unreconcile,
     approve,
     reject,
     autoMatchAll,
     autoReconciledCount,
-    refresh 
+    resolveRefund,
+    bulkResolveRefunds,
+    undoRefund,
+    refresh
   } = useTollReconciliation(selectedDriverId || undefined);
 
   const { claims, loading: claimsLoading, refresh: refreshClaims, createClaim } = useClaims();
 
   const [isDisputeOpen, setIsDisputeOpen] = React.useState(false);
   const [disputeTarget, setDisputeTarget] = React.useState<{ transaction: FinancialTransaction, match: MatchResult } | null>(null);
+  // Phase 5: driver assignment required before charging a driver
+  const [pendingPersonalTx, setPendingPersonalTx] = React.useState<FinancialTransaction | null>(null);
+  const [pendingDriverId, setPendingDriverId] = React.useState<string>('');
 
   // Create Trip Map for O(1) lookup. MOVED UP before early return to obey Rules of Hooks.
   const tripMap = useMemo(() => new Map(trips.map(t => [t.id, t])), [trips]);
@@ -108,7 +120,19 @@ export function ReconciliationDashboard() {
       }
   };
 
-  const handleManualResolve = async (tx: FinancialTransaction, type: 'Personal' | 'WriteOff' | 'Business') => {
+  const handleManualResolve = async (
+      tx: FinancialTransaction,
+      type: 'Personal' | 'WriteOff' | 'Business',
+      driverIdOverride?: string,
+  ) => {
+      // Integrity guard: charging a driver requires a real driver. Never write a
+      // "Charge Driver" claim against 'unknown'. Open the Driver Picker instead.
+      const resolvedDriverId = driverIdOverride || tx.driverId;
+      if (type === 'Personal' && !resolvedDriverId) {
+          setPendingPersonalTx(tx);
+          setPendingDriverId('');
+          return;
+      }
       try {
           const commonData = {
               transactionId: tx.id,
@@ -122,7 +146,7 @@ export function ReconciliationDashboard() {
           if (type === 'Personal') {
               await createClaim({
                   ...commonData,
-                  driverId: tx.driverId || 'unknown',
+                  driverId: resolvedDriverId as string,
                   resolutionReason: 'Charge Driver',
                   subject: 'Unmatched Toll - Personal Use',
                   message: 'This toll was identified as personal usage and charged to your account.'
@@ -250,10 +274,23 @@ export function ReconciliationDashboard() {
       reconciledLiability += financials.netLoss;
   });
 
+  // ── Driver Liability (locked definition, Phase 5) ────────────────────────
+  // Driver Liability = toll cost the fleet expects to recover FROM a driver but
+  // has not yet recovered. It is the sum of three unrecovered buckets:
+  //   1. unreconciledPersonal — post-trip/personal-use tolls not yet charged
+  //   2. reconciledLiability   — net deficits on reconciled tolls (fleet paid
+  //                              more than the platform reimbursed)
+  //   3. unknownAmount         — unmatched tolls with no trip (potential personal)
+  // Once a toll is recovered via a "Charge Driver" claim it leaves this bucket
+  // and counts as Recovered instead. This client card is authoritative (it uses
+  // per-match classification); GET /summary.driverLiability is a coarse
+  // server-side approximation used only for lightweight summary callers.
   const totalDriverLiability = unreconciledPersonal + reconciledLiability + unknownAmount;
 
   // Yellow: Unclaimed Refunds (Money Uber paid you, but you haven't matched to an expense)
   const refundsAmount = unclaimedRefunds.reduce((sum, t) => sum + (t.tollCharges || 0), 0);
+  // Phase 3: Amount cleared via refund resolution (cash wash / phantom / expense logged)
+  const resolvedRefundsAmount = resolvedRefunds.reduce((sum, t) => sum + (t.tollCharges || 0), 0);
 
   // Phase 6: Dispute refund recovery amount (matched/auto-resolved refunds)
   const matchedDisputeRefundAmount = (disputeRefunds || [])
@@ -337,6 +374,7 @@ export function ReconciliationDashboard() {
                     Auto-match {highConfidenceCount}
                 </Button>
             )}
+            <TollAutomationSettings onChanged={refresh} />
             <Button variant="outline" size="sm" onClick={refresh}>
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Refresh Data
@@ -439,7 +477,14 @@ export function ReconciliationDashboard() {
                         </Tooltip>
                     </div>
                     <div className="text-2xl font-bold text-slate-900 mt-1">${refundsAmount.toFixed(2)}</div>
-                    <div className="text-xs text-slate-500 mt-1">Missing expense records</div>
+                    <div className="text-xs text-slate-500 mt-1">
+                        Missing expense records
+                        {resolvedRefundsAmount > 0 && (
+                            <span className="block text-emerald-600 mt-0.5">
+                                ${resolvedRefundsAmount.toFixed(2)} resolved
+                            </span>
+                        )}
+                    </div>
                 </div>
                 <DollarSign className="h-5 w-5 text-yellow-400" />
             </div>
@@ -458,7 +503,7 @@ export function ReconciliationDashboard() {
       )}
 
       <Tabs defaultValue="unmatched" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 gap-1 sm:grid-cols-4 lg:max-w-4xl">
+        <TabsList className="grid w-full grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-5 lg:max-w-5xl">
           <TabsTrigger value="unmatched">
             Unmatched Tolls
             {filteredUnreconciledTolls.length > 0 && (
@@ -472,6 +517,14 @@ export function ReconciliationDashboard() {
             {unclaimedRefunds.length > 0 && (
                 <span className="ml-2 bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded-full text-xs font-bold">
                     {unclaimedRefunds.length}
+                </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="resolved">
+            Resolved
+            {resolvedRefunds.length > 0 && (
+                <span className="ml-2 bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full text-xs font-bold">
+                    {resolvedRefunds.length}
                 </span>
             )}
           </TabsTrigger>
@@ -504,7 +557,33 @@ export function ReconciliationDashboard() {
         </TabsContent>
         
         <TabsContent value="unclaimed" className="mt-4">
-            <UnclaimedRefundsList trips={unclaimedRefunds} />
+            <UnclaimedRefundsList
+                trips={unclaimedRefunds}
+                suggestions={refundSuggestions}
+                drivers={drivers}
+                onResolve={resolveRefund}
+                onBulkResolve={bulkResolveRefunds}
+            />
+        </TabsContent>
+
+        <TabsContent value="resolved" className="mt-4">
+            <ResolvedRefundsList
+                rows={resolvedRefunds.map((t): ResolvedRefundRow => ({
+                    id: t.id,
+                    date: t.date,
+                    platform: t.platform,
+                    driverId: t.driverId,
+                    driverName: t.driverName,
+                    tollCharges: t.tollCharges,
+                    pickupLocation: t.pickupLocation,
+                    dropoffLocation: t.dropoffLocation,
+                    resolution: (t.tollRefundResolution?.status as ResolvedRefundRow['resolution']) || 'cash_wash',
+                    resolvedBy: t.tollRefundResolution?.resolvedBy,
+                    resolvedAt: t.tollRefundResolution?.resolvedAt,
+                    auto: t.tollRefundResolution?.auto,
+                }))}
+                onUndo={undoRefund}
+            />
         </TabsContent>
 
         <TabsContent value="history" className="mt-4">
@@ -526,6 +605,40 @@ export function ReconciliationDashboard() {
           <UnifiedTollActivityTable driverId={selectedDriverId || undefined} />
         </TabsContent>
       </Tabs>
+
+      {/* Phase 5: Assign a driver before charging (prevents 'unknown' liability) */}
+      <Dialog open={!!pendingPersonalTx} onOpenChange={(o) => { if (!o) setPendingPersonalTx(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign a driver</DialogTitle>
+            <DialogDescription>
+              Charging a toll to a driver requires a real driver. Select who is responsible for this toll.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <DriverPicker
+              drivers={drivers.map((d) => ({ id: d.id, name: d.name }))}
+              value={pendingDriverId}
+              onChange={setPendingDriverId}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingPersonalTx(null)}>Cancel</Button>
+            <Button
+              className="bg-indigo-600 hover:bg-indigo-700"
+              disabled={!pendingDriverId}
+              onClick={async () => {
+                const tx = pendingPersonalTx;
+                const driverId = pendingDriverId;
+                setPendingPersonalTx(null);
+                if (tx && driverId) await handleManualResolve(tx, 'Personal', driverId);
+              }}
+            >
+              Charge driver
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <DisputeModal
         isOpen={isDisputeOpen}

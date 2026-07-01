@@ -99,6 +99,7 @@ const SECTION_KEYS: Record<SectionId, (keyof DispatchSettingsDto)[]> = {
   tollDetection: [
     'toll_detection_enabled',
     'toll_geofence_radius_m',
+    'toll_detect_enroute',
   ],
   quotes: ['quote_driver_radius_km'],
 };
@@ -164,6 +165,8 @@ const TOOLTIPS = {
     'Enable real-time toll detection during trips. Tolls are detected via geofence and added to the final fare.',
   toll_geofence_radius_m:
     'Radius around toll plazas for geofence detection. Driver must pass within this distance for toll to be recorded.',
+  toll_detect_enroute:
+    'Also detect tolls crossed while en route to pickup (deadhead), not only during the trip.',
 } as const;
 
 interface DispatchSettingsFormProps {
@@ -1055,6 +1058,27 @@ export function DispatchSettingsForm({ accessToken, role }: DispatchSettingsForm
               }
               className={inputClass}
             />
+          </label>
+
+          <label
+            className={`flex items-start gap-3 ${sectionDisabled(canEdit, editing.tollDetection) || !form.toll_detection_enabled ? 'cursor-default' : 'cursor-pointer'}`}
+          >
+            <input
+              type="checkbox"
+              disabled={sectionDisabled(canEdit, editing.tollDetection) || !form.toll_detection_enabled}
+              checked={form.toll_detect_enroute ?? false}
+              onChange={(e) =>
+                setForm({ ...form, toll_detect_enroute: e.target.checked })
+              }
+              className="mt-1 rounded border-slate-600"
+            />
+            <span className="text-sm text-slate-300">
+              <SettingLabel
+                variant="inline"
+                label="Detect tolls en route to pickup"
+                tip={TOOLTIPS.toll_detect_enroute}
+              />
+            </span>
           </label>
         </SettingsSection>
 

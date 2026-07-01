@@ -37,6 +37,8 @@ export type DispatchSettings = {
   pin_verification_required_for_start: boolean;
   toll_detection_enabled: boolean;
   toll_geofence_radius_m: number;
+  /** When true, also detect tolls crossed while en route to pickup (deadhead). */
+  toll_detect_enroute: boolean;
   updated_at?: string;
   updated_by?: string | null;
 };
@@ -72,6 +74,7 @@ export const DEFAULT_DISPATCH_SETTINGS: DispatchSettings = {
   pin_verification_required_for_start: false,
   toll_detection_enabled: false,
   toll_geofence_radius_m: 100,
+  toll_detect_enroute: false,
 };
 
 const CACHE_TTL_MS = 30_000;
@@ -213,6 +216,7 @@ export function rowToDispatchSettings(row: Record<string, unknown>): DispatchSet
         Number(row.toll_geofence_radius_m ?? DEFAULT_DISPATCH_SETTINGS.toll_geofence_radius_m),
       ),
     ),
+    toll_detect_enroute: row.toll_detect_enroute === true,
     updated_at: typeof row.updated_at === "string" ? row.updated_at : undefined,
     updated_by: typeof row.updated_by === "string" ? row.updated_by : null,
   };

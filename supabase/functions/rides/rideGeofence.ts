@@ -13,6 +13,7 @@ import {
   evaluateTollCrossings,
   recordTollCrossings,
   loadCrossedTollIds,
+  loadRecentlyCrossedAt,
   type TollCrossingRecord,
 } from "./fare/tollGeofence.ts";
 
@@ -239,14 +240,24 @@ export async function evaluateGeofenceTransitions(
     }
   }
 
-  if (settings.toll_detection_enabled && status === "on_trip") {
-    const crossedTollIds = await loadCrossedTollIds(db, rideId);
+  // Detect on-trip always; en route to pickup only when enabled (deadhead tolls).
+  const tollDetectStatus =
+    status === "on_trip" ||
+    (settings.toll_detect_enroute && status === "driver_en_route_pickup");
+  if (settings.toll_detection_enabled && tollDetectStatus) {
+    // Cooldown-based de-dup lets genuine round trips through while preventing
+    // dwell double-counting. Falls back to nothing new when within cooldown.
+    const [crossedTollIds, recentByPlaza] = await Promise.all([
+      loadCrossedTollIds(db, rideId),
+      loadRecentlyCrossedAt(db, rideId),
+    ]);
     const tollResult = await evaluateTollCrossings(
       db,
       fix.lat,
       fix.lng,
       settings.toll_geofence_radius_m,
       crossedTollIds,
+      { recentByPlaza },
     );
     if (tollResult.tollsCrossed.length > 0) {
       const { recorded, total } = await recordTollCrossings(db, rideId, tollResult.tollsCrossed);

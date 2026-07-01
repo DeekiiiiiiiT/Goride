@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
 import { TollLogEntry, tollLogNeedsReconciliationReset } from '../../types/tollLog';
+import { TollSourceBadge, deriveTollSource } from '../toll-tags/reconciliation/TollSourceBadge';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -408,6 +409,7 @@ export function TollLogTable({
                         </Badge>
                       </span>
                     )}
+                    <TollSourceBadge source={deriveTollSource(log)} className="mt-1" />
                   </TableCell>
 
                   {/* Highway */}

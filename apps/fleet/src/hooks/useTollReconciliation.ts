@@ -96,11 +96,20 @@ function convertServerSuggestions(
   return result;
 }
 
+export interface RefundSuggestion {
+  status: 'cash_wash' | 'phantom' | 'expense_logged' | 'pending';
+  confidence: number;
+  reason: string;
+}
+
 export function useTollReconciliation(driverId?: string) {
   const [loading, setLoading] = useState(true);
   const [unreconciledTolls, setUnreconciledTolls] = useState<FinancialTransaction[]>([]);
   const [reconciledTolls, setReconciledTolls] = useState<FinancialTransaction[]>([]);
   const [unclaimedRefunds, setUnclaimedRefunds] = useState<Trip[]>([]);
+  // Phase 3: refund resolution
+  const [resolvedRefunds, setResolvedRefunds] = useState<Trip[]>([]);
+  const [refundSuggestions, setRefundSuggestions] = useState<Map<string, RefundSuggestion>>(new Map());
   const [trips, setTrips] = useState<Trip[]>([]);
   const [suggestions, setSuggestions] = useState<Map<string, MatchResult[]>>(new Map());
   // Phase 6: Track auto-reconciled count for dashboard banner
@@ -158,6 +167,25 @@ export function useTollReconciliation(driverId?: string) {
       } catch (drErr) {
         console.error('[Reconciliation] Failed to fetch dispute refunds:', drErr);
         setDisputeRefunds([]);
+      }
+
+      // Phase 3: Fetch refund suggestions + resolved refunds (independent, non-fatal)
+      try {
+        const [sugRes, resolvedRes] = await Promise.all([
+          api.getRefundSuggestions(driverId ? { driverId } : undefined),
+          api.getResolvedRefunds(filterParams),
+        ]);
+        const sugMap = new Map<string, RefundSuggestion>();
+        const rawSug = sugRes?.suggestions || {};
+        for (const [tripId, s] of Object.entries(rawSug)) {
+          sugMap.set(tripId, s as RefundSuggestion);
+        }
+        setRefundSuggestions(sugMap);
+        setResolvedRefunds(resolvedRes?.data || []);
+      } catch (refErr) {
+        console.error('[Reconciliation] Failed to fetch refund suggestions/resolved:', refErr);
+        setRefundSuggestions(new Map());
+        setResolvedRefunds([]);
       }
 
     } catch (error) {
@@ -330,11 +358,45 @@ export function useTollReconciliation(driverId?: string) {
     }
   };
 
+  // ── Phase 3: Refund resolution actions ──
+  type RefundResolution = 'cash_wash' | 'phantom' | 'expense_logged' | 'pending';
+
+  const resolveRefund = async (
+    tripId: string,
+    resolution: RefundResolution,
+    opts?: { notes?: string; driverId?: string },
+  ) => {
+    await api.resolveRefund({ tripId, resolution, notes: opts?.notes, driverId: opts?.driverId });
+    // Optimistic: move the trip out of unclaimed and refresh authoritative state.
+    setUnclaimedRefunds(prev => prev.filter(t => t.id !== tripId));
+    await fetchData();
+  };
+
+  const bulkResolveRefunds = async (
+    items: Array<{ tripId: string; resolution: RefundResolution; notes?: string; driverId?: string }>,
+  ) => {
+    if (items.length === 0) return { resolved: 0, failed: 0 };
+    const result = await api.bulkResolveRefunds(items);
+    const ids = new Set(items.map(i => i.tripId));
+    setUnclaimedRefunds(prev => prev.filter(t => !ids.has(t.id)));
+    await fetchData();
+    return result;
+  };
+
+  // Undo re-opens a resolved refund by setting it back to pending.
+  const undoRefund = async (tripId: string) => {
+    await api.resolveRefund({ tripId, resolution: 'pending' });
+    setResolvedRefunds(prev => prev.filter(t => t.id !== tripId));
+    await fetchData();
+  };
+
   return {
     loading,
     unreconciledTolls,
     reconciledTolls,
     unclaimedRefunds,
+    resolvedRefunds,
+    refundSuggestions,
     disputeRefunds,
     trips,
     suggestions,
@@ -344,6 +406,9 @@ export function useTollReconciliation(driverId?: string) {
     reject,
     autoMatchAll,
     autoReconciledCount,
+    resolveRefund,
+    bulkResolveRefunds,
+    undoRefund,
     refresh: fetchData
   };
 }

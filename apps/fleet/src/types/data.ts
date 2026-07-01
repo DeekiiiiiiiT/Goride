@@ -145,7 +145,31 @@ export interface Trip {
   /** When true, fare canonical events come from payment lines (not trip rollup). */
   usesPaymentLineSsot?: boolean;
 
+  /**
+   * Resolution of an "unlinked refund" — a trip where the platform reimbursed a
+   * toll in the fare but no toll expense is linked. Absent = unresolved (legacy
+   * behavior unchanged). See TollRefundResolution.
+   */
+  tollRefundResolution?: TollRefundResolution;
+
   [key: string]: any; // Allow dynamic properties
+}
+
+/** Status for resolving an unlinked toll refund on a trip. */
+export type TollRefundResolutionStatus =
+  | 'cash_wash'      // Fare reimbursed driver, driver paid cash — no leakage/liability
+  | 'phantom'        // No real toll crossed (platform estimate) — dismissed
+  | 'expense_logged' // A matching cash toll expense was created + linked
+  | 'pending';       // Awaiting tag-statement import (will auto-match)
+
+export interface TollRefundResolution {
+  status: TollRefundResolutionStatus;
+  resolvedBy?: string;
+  resolvedAt?: string; // ISO
+  notes?: string;
+  auto: boolean;       // true = applied by the automation classifier
+  confidence?: number; // 0-100, when auto/suggested
+  linkedTollLedgerId?: string; // set for expense_logged
 }
 
 export interface CancellationMetrics {

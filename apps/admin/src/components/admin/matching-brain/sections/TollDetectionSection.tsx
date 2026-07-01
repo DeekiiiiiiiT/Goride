@@ -83,7 +83,7 @@ export function TollDetectionSection({ policy, canEdit, onSave }: TollDetectionS
           max={500}
           disabled={disabled || !formData.toll_detection_enabled}
           value={formData.toll_geofence_radius_m}
-          onChange={(e) => updateField('toll_geofence_radius_m', parseInt(e.target.value, 10) || 180)}
+          onChange={(e) => updateField('toll_geofence_radius_m', parseInt(e.target.value, 10) || 100)}
           className={settingsInputClass}
         />
       </label>
