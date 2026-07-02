@@ -288,11 +288,11 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
     const otherTolls = activeTabTolls.filter(tx => !smartMatches.includes(tx));
 
     const smartWeekGroups = useMemo(
-        () => groupTollsByWeek(smartMatches.slice(0, visibleSmartMatches)),
-        [smartMatches, visibleSmartMatches]
+        () => groupTollsByWeek(smartMatches.slice(0, visibleSmartMatches), fleetTz),
+        [smartMatches, visibleSmartMatches, fleetTz]
     );
 
-    const otherWeekGroups = useMemo(() => groupTollsByWeek(otherTolls), [otherTolls]);
+    const otherWeekGroups = useMemo(() => groupTollsByWeek(otherTolls, fleetTz), [otherTolls, fleetTz]);
     const visibleOtherWeekGroups = otherWeekGroups.slice(0, visibleWeekCount);
 
     if (tolls.length === 0) {

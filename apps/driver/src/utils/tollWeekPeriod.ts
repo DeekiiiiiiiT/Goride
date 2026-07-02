@@ -1,5 +1,29 @@
 import { startOfWeek, endOfWeek, format, parseISO } from 'date-fns';
 import type { DisputeRefund, FinancialTransaction, Trip } from '../types/data';
+import { fleetTzDateKey } from './timezoneDisplay';
+
+/**
+ * Monday-start week key + bounds for a row's date.
+ *
+ * When `timezone` is supplied the row is first collapsed to its fleet-tz
+ * calendar day (the day it is displayed under), so week buckets always align
+ * with the dates shown on each row. Without a timezone it falls back to the
+ * browser-local week (legacy behavior).
+ */
+function weekBucketForDate(
+  d: Date,
+  timezone?: string,
+): { key: string; weekStart: Date; weekEnd: Date } {
+  let dayDate = d;
+  if (timezone) {
+    const ymd = fleetTzDateKey(d, timezone);
+    const parsed = ymd ? parseISO(ymd) : d;
+    dayDate = isNaN(parsed.getTime()) ? d : parsed;
+  }
+  const weekStart = startOfWeek(dayDate, { weekStartsOn: 1 });
+  const weekEnd = endOfWeek(dayDate, { weekStartsOn: 1 });
+  return { key: format(weekStart, 'yyyy-MM-dd'), weekStart, weekEnd };
+}
 
 /** Parse toll charge date/time (same rules as reconciliation tables). */
 export function getTollTransactionDate(tx: FinancialTransaction): Date {
@@ -38,12 +62,11 @@ export interface TollWeekGroup {
 }
 
 /** Group toll transactions by Monday–Sunday week; newest weeks first. */
-export function groupTollsByWeek(tolls: FinancialTransaction[]): TollWeekGroup[] {
+export function groupTollsByWeek(tolls: FinancialTransaction[], timezone?: string): TollWeekGroup[] {
   const map = new Map<string, FinancialTransaction[]>();
   for (const tx of tolls) {
     const d = getTollTransactionDate(tx);
-    const { start } = getMondaySundayForDate(d);
-    const key = format(start, 'yyyy-MM-dd');
+    const { key } = weekBucketForDate(d, timezone);
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(tx);
   }
@@ -80,12 +103,11 @@ export interface TripWeekGroup {
 }
 
 /** Group trips by Monday–Sunday week (by `trip.date`); newest weeks first. */
-export function groupTripsByWeek(trips: Trip[]): TripWeekGroup[] {
+export function groupTripsByWeek(trips: Trip[], timezone?: string): TripWeekGroup[] {
   const map = new Map<string, Trip[]>();
   for (const trip of trips) {
     const d = getTripWeekDate(trip);
-    const { start } = getMondaySundayForDate(d);
-    const key = format(start, 'yyyy-MM-dd');
+    const { key } = weekBucketForDate(d, timezone);
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(trip);
   }
@@ -122,12 +144,11 @@ export interface DisputeRefundWeekGroup {
 }
 
 /** Group dispute refunds by Monday–Sunday week (`refund.date`); newest weeks first. */
-export function groupDisputeRefundsByWeek(refunds: DisputeRefund[]): DisputeRefundWeekGroup[] {
+export function groupDisputeRefundsByWeek(refunds: DisputeRefund[], timezone?: string): DisputeRefundWeekGroup[] {
   const map = new Map<string, DisputeRefund[]>();
   for (const r of refunds) {
     const d = getDisputeRefundWeekDate(r);
-    const { start } = getMondaySundayForDate(d);
-    const key = format(start, 'yyyy-MM-dd');
+    const { key } = weekBucketForDate(d, timezone);
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(r);
   }

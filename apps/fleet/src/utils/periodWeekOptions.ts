@@ -1,4 +1,5 @@
-import { format, startOfWeek, endOfWeek, subWeeks, eachWeekOfInterval } from 'date-fns';
+import { format, startOfWeek, endOfWeek, subWeeks, eachWeekOfInterval, parseISO } from 'date-fns';
+import { fleetTzDateKey } from './timezoneDisplay';
 
 export interface PeriodWeekOption {
   id: string;
@@ -28,9 +29,16 @@ export function generateWeekOptionsForDateRange(rangeStart: Date, rangeEnd: Date
   });
 }
 
-/** Monday-start weeks, same as Statement Summary / Uber-style reporting weeks. */
-export function generatePeriodWeekOptions(weekCount = 12): PeriodWeekOption[] {
-  const today = new Date();
+/**
+ * Monday-start weeks, same as Statement Summary / Uber-style reporting weeks.
+ *
+ * When `timezone` is supplied, "today" is anchored to the fleet-tz calendar day
+ * so the generated week boundaries match the days rows are displayed/grouped
+ * under (avoids the current week slipping across a midnight tz gap). Falls back
+ * to browser-local when omitted.
+ */
+export function generatePeriodWeekOptions(weekCount = 12, timezone?: string): PeriodWeekOption[] {
+  const today = timezone ? parseISO(fleetTzDateKey(new Date(), timezone)) : new Date();
   const periods: PeriodWeekOption[] = [];
 
   for (let i = 0; i < weekCount; i++) {

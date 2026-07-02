@@ -186,6 +186,7 @@ export function DisputeMatchModal({ open, onOpenChange, refund, onMatched }: Dis
                 selectedStart={periodStart || undefined}
                 selectedEnd={periodEnd || undefined}
                 onSelect={onPeriodSelect}
+                timezone={fleetTz}
                 weekCount={16}
                 prependEntireOption
                 placeholder="All periods"

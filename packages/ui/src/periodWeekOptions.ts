@@ -1,10 +1,29 @@
-import { format, startOfWeek, endOfWeek, subWeeks, eachWeekOfInterval } from 'date-fns';
+import { format, startOfWeek, endOfWeek, subWeeks, eachWeekOfInterval, parseISO } from 'date-fns';
 
 export interface PeriodWeekOption {
   id: string;
   label: string;
   startDate: string;
   endDate: string;
+}
+
+/** Calendar day (yyyy-MM-dd) of `date` in the given IANA timezone. */
+function fleetTzYmd(date: Date, timezone: string): string {
+  try {
+    // en-CA formats as yyyy-MM-dd.
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(date);
+    const y = parts.find((p) => p.type === 'year')?.value;
+    const m = parts.find((p) => p.type === 'month')?.value;
+    const d = parts.find((p) => p.type === 'day')?.value;
+    return y && m && d ? `${y}-${m}-${d}` : '';
+  } catch {
+    return '';
+  }
 }
 
 /**
@@ -28,9 +47,20 @@ export function generateWeekOptionsForDateRange(rangeStart: Date, rangeEnd: Date
   });
 }
 
-/** Monday-start weeks, same as Statement Summary / Uber-style reporting weeks. */
-export function generatePeriodWeekOptions(weekCount = 12): PeriodWeekOption[] {
-  const today = new Date();
+/**
+ * Monday-start weeks, same as Statement Summary / Uber-style reporting weeks.
+ *
+ * When `timezone` is supplied, "today" is anchored to that timezone's calendar
+ * day so the generated week boundaries match the days rows are displayed/grouped
+ * under. Falls back to browser-local when omitted.
+ */
+export function generatePeriodWeekOptions(weekCount = 12, timezone?: string): PeriodWeekOption[] {
+  let today = new Date();
+  if (timezone) {
+    const ymd = fleetTzYmd(today, timezone);
+    const parsed = ymd ? parseISO(ymd) : today;
+    if (!isNaN(parsed.getTime())) today = parsed;
+  }
   const periods: PeriodWeekOption[] = [];
 
   for (let i = 0; i < weekCount; i++) {

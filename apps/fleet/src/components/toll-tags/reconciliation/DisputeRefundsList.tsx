@@ -30,7 +30,7 @@ export function DisputeRefundsList({ refunds, onMatchComplete }: DisputeRefundsL
     return refunds.filter(r => r.status === statusFilter);
   }, [refunds, statusFilter]);
 
-  const weekGroups = useMemo(() => groupDisputeRefundsByWeek(filtered), [filtered]);
+  const weekGroups = useMemo(() => groupDisputeRefundsByWeek(filtered, fleetTz), [filtered, fleetTz]);
   const visibleWeekGroups = weekGroups.slice(0, visibleWeekCount);
 
   useEffect(() => {

@@ -28,7 +28,7 @@ export function ReconciledTollsList({ tolls, trips, claims, onUnmatch }: Reconci
     const [detailTx, setDetailTx] = useState<FinancialTransaction | null>(null);
     const fleetTz = useFleetTimezone();
 
-    const weekGroups = useMemo(() => groupTollsByWeek(tolls), [tolls]);
+    const weekGroups = useMemo(() => groupTollsByWeek(tolls, fleetTz), [tolls, fleetTz]);
     const visibleWeekGroups = weekGroups.slice(0, visibleWeekCount);
 
     const toggleSelectAll = (checked: boolean) => {

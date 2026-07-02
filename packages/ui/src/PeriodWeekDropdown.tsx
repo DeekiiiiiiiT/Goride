@@ -23,6 +23,8 @@ export interface PeriodWeekDropdownProps {
   weekCount?: number;
   /** When set, these options replace rolling week presets (e.g. weeks for a chosen date range). */
   optionsOverride?: PeriodWeekOption[];
+  /** IANA fleet timezone — anchors the rolling week presets to that timezone's calendar day. */
+  timezone?: string;
   /** Context label on the trigger when no specific week is highlighted (e.g. overall range). Must not be set when a week row is selected, or it hides the selected week label. */
   headerLabel?: string;
   /** Prepends “Entire selected period” to clear a week drill-down. */
@@ -42,6 +44,7 @@ export function PeriodWeekDropdown({
   onSelect,
   weekCount = 12,
   optionsOverride,
+  timezone,
   headerLabel,
   prependEntireOption = false,
   className,
@@ -52,7 +55,7 @@ export function PeriodWeekDropdown({
 }: PeriodWeekDropdownProps) {
   const [open, setOpen] = useState(false);
   const options = useMemo(() => {
-    const base = optionsOverride ?? generatePeriodWeekOptions(weekCount);
+    const base = optionsOverride ?? generatePeriodWeekOptions(weekCount, timezone);
     if (prependEntireOption) {
       const entire: PeriodWeekOption = {
         id: ENTIRE_PERIOD_OPTION_ID,
@@ -63,7 +66,7 @@ export function PeriodWeekDropdown({
       return [entire, ...base];
     }
     return base;
-  }, [optionsOverride, weekCount, prependEntireOption]);
+  }, [optionsOverride, weekCount, prependEntireOption, timezone]);
   const matched = useMemo(() => {
     if (prependEntireOption && !selectedStart && !selectedEnd) {
       return options[0];

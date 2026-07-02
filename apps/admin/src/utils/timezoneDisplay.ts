@@ -48,6 +48,35 @@ export function formatInFleetTz(
   }
 }
 
+/**
+ * Returns the calendar day (yyyy-MM-dd) of a date in the fleet timezone.
+ *
+ * This is the day the row is *displayed* under (it uses the same `new Date()`
+ * parsing as {@link formatInFleetTz}), so grouping by this key guarantees a row
+ * always lands in a week whose label contains its own displayed date.
+ */
+export function fleetTzDateKey(input: string | Date, timezone: string): string {
+  const date = typeof input === 'string' ? new Date(input) : input;
+  if (isNaN(date.getTime())) {
+    return typeof input === 'string' ? input.slice(0, 10) : '';
+  }
+  try {
+    // en-CA formats as yyyy-MM-dd.
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(date);
+    const y = parts.find((p) => p.type === 'year')?.value;
+    const m = parts.find((p) => p.type === 'month')?.value;
+    const d = parts.find((p) => p.type === 'day')?.value;
+    return y && m && d ? `${y}-${m}-${d}` : '';
+  } catch {
+    return typeof input === 'string' ? input.slice(0, 10) : '';
+  }
+}
+
 // ── useFleetTimezone hook ────────────────────────────────────────────────────
 
 /** Module-level cache so repeated hook calls don't each fire a network request. */

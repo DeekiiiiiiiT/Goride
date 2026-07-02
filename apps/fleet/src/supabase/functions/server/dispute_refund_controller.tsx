@@ -19,10 +19,44 @@
 import { Hono } from "npm:hono";
 import * as kv from "./kv_store.tsx";
 import { isTollCategory } from "./toll_category_flags.ts";
+import { getFleetTimezone, hasTzSuffix } from "./timezone_helper.tsx";
 
 const app = new Hono();
 
 const BASE = "/make-server-37f42386/dispute-refunds";
+
+/**
+ * Resolve a stored date value to its calendar day (yyyy-MM-dd) in the fleet
+ * timezone — the same frame the UI displays and groups by.
+ *
+ * Two stored forms exist and are handled distinctly:
+ *   • Date-only ("2026-06-18") or fleet-local naive timestamp
+ *     ("2026-06-18T06:55:00", no suffix) → the date part IS already the fleet
+ *     calendar day, so no shift is applied.
+ *   • UTC / offset-suffixed timestamp ("2026-06-18T02:00:00Z") → converted to
+ *     the fleet-tz calendar day (may roll to the previous/next day).
+ */
+function fleetTzDay(dateStr: string | null | undefined, tz: string): string {
+  if (!dateStr) return "";
+  const s = String(dateStr);
+  if (!hasTzSuffix(s)) return s.slice(0, 10);
+  const instant = new Date(s);
+  if (isNaN(instant.getTime())) return s.slice(0, 10);
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(instant);
+    const y = parts.find((p) => p.type === "year")?.value;
+    const m = parts.find((p) => p.type === "month")?.value;
+    const d = parts.find((p) => p.type === "day")?.value;
+    return y && m && d ? `${y}-${m}-${d}` : s.slice(0, 10);
+  } catch {
+    return s.slice(0, 10);
+  }
+}
 
 // ─── Helper: Load all KV entries by prefix with 1000-row pagination ────
 async function loadAllByPrefix(prefix: string): Promise<any[]> {
@@ -105,7 +139,8 @@ async function computeDisputeSuggestions(refund: any): Promise<any[]> {
       claimAmount,                    // the shortfall we're matching against
       uberRefund: refundAmount,
       variance: claimAmount - refundAmount, // ~0 when the refund covers the loss
-      date: claim.createdAt || toll?.date || refund.date,
+      date: toll?.date || claim.createdAt || refund.date, // toll date = the frame the UI groups by
+
       confidence: scoreClaimForRefund(claim, refundAmount, refundDate),
       claimId: claim.id,
       claimStatus: claim.status,
@@ -285,18 +320,19 @@ app.get(`${BASE}`, async (c) => {
     if (driverId) {
       refunds = refunds.filter((r: any) => r.driverId === driverId);
     }
-    if (dateFrom) {
-      const from = new Date(dateFrom).getTime();
+    // Date range is an inclusive fleet-tz calendar-day window (yyyy-MM-dd). Each
+    // refund's date is resolved to its fleet-tz day so the boundaries line up
+    // with what the UI shows/groups by, and the end day is fully inclusive.
+    if (dateFrom || dateTo) {
+      const fleetTz = await getFleetTimezone();
+      const from = dateFrom ? String(dateFrom).slice(0, 10) : "";
+      const to = dateTo ? String(dateTo).slice(0, 10) : "";
       refunds = refunds.filter((r: any) => {
-        const d = new Date(r.date).getTime();
-        return !isNaN(d) && d >= from;
-      });
-    }
-    if (dateTo) {
-      const to = new Date(dateTo).getTime();
-      refunds = refunds.filter((r: any) => {
-        const d = new Date(r.date).getTime();
-        return !isNaN(d) && d <= to;
+        const d = fleetTzDay(r.date, fleetTz);
+        if (!d) return false;
+        if (from && d < from) return false;
+        if (to && d > to) return false;
+        return true;
       });
     }
 
@@ -483,6 +519,9 @@ app.get(`${BASE}/match-candidates`, async (c) => {
     const from = (c.req.query("from") || "").slice(0, 10); // yyyy-MM-dd
     const to = (c.req.query("to") || "").slice(0, 10);
     const LIMIT = 25;
+    // Period boundaries arrive as fleet-tz calendar days; normalize each
+    // candidate's date into the same frame before comparing (see fleetTzDay).
+    const fleetTz = await getFleetTimezone();
 
     // Tolls already linked to a matched refund (exclude from candidates).
     const allRefunds = await loadAllByPrefix("dispute-refund:");
@@ -512,7 +551,9 @@ app.get(`${BASE}/match-candidates`, async (c) => {
         driverName: toll?.driverName || cl.driverName || "Unknown",
         claimAmount: Math.abs(cl.amount || 0),
         tollAmount: Math.abs(cl.expectedAmount ?? toll?.amount ?? 0),
-        date: cl.createdAt || toll?.date || null,
+        // Align to the toll date (what the period filters on), not the claim's
+        // creation date — createdAt is often days/weeks after the trip.
+        date: toll?.date || cl.createdAt || null,
         status: cl.status,
       });
     }
@@ -543,11 +584,12 @@ app.get(`${BASE}/match-candidates`, async (c) => {
       const hay = `${cand.driverName} ${cand.tollAmount} ${cand.claimAmount ?? ""} ${cand.date ?? ""}`.toLowerCase();
       return hay.includes(q);
     };
-    // Period filter (yyyy-MM-dd inclusive range). Candidate dates are compared on
-    // their date-only prefix so ISO timestamps and date-only strings both work.
+    // Period filter (yyyy-MM-dd inclusive range). Each candidate's date is
+    // resolved to its fleet-tz calendar day so it matches the day the UI shows
+    // and the day the tab groups by (see fleetTzDay).
     const inRange = (cand: any) => {
       if (!from && !to) return true;
-      const d = cand.date ? String(cand.date).slice(0, 10) : "";
+      const d = fleetTzDay(cand.date, fleetTz);
       if (!d) return false;
       if (from && d < from) return false;
       if (to && d > to) return false;

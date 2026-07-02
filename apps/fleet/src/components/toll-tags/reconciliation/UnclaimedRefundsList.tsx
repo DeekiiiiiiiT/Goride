@@ -38,7 +38,7 @@ export function UnclaimedRefundsList({
   const [busy, setBusy] = useState(false);
   const fleetTz = useFleetTimezone();
 
-  const weekGroups = useMemo(() => groupTripsByWeek(trips), [trips]);
+  const weekGroups = useMemo(() => groupTripsByWeek(trips, fleetTz), [trips, fleetTz]);
   const visibleWeekGroups = weekGroups.slice(0, visibleWeekCount);
 
   const interactive = !!onResolve;
