@@ -77,6 +77,47 @@ export function fleetTzDateKey(input: string | Date, timezone: string): string {
   }
 }
 
+/** yyyy-MM-dd → local calendar Date (avoids parseISO UTC-midnight shifting the day). */
+export function ymdToLocalDate(ymd: string): Date {
+  const [y, m, d] = ymd.split('-').map(Number);
+  if (!y || !m || !d) return new Date(NaN);
+  return new Date(y, m - 1, d);
+}
+
+/** Date-only or naive datetime stored without a TZ suffix (toll ledger `date` field). */
+export function isNaiveStoredDate(s: string): boolean {
+  if (!s) return false;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return true;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s) && !/[zZ]|[+-]\d{2}:\d{2}$/.test(s)) return true;
+  return false;
+}
+
+/**
+ * Display a stored date the same way period filters group it.
+ * Date-only / naive values keep their calendar day; UTC timestamps convert in fleet tz.
+ */
+export function formatStoredDateInFleetTz(
+  dateStr: string | null | undefined,
+  timezone: string,
+  options?: Intl.DateTimeFormatOptions,
+): string {
+  if (!dateStr) return '';
+  const s = String(dateStr);
+  if (isNaiveStoredDate(s)) {
+    const ymd = s.slice(0, 10);
+    const local = ymdToLocalDate(ymd);
+    if (!isNaN(local.getTime())) {
+      return new Intl.DateTimeFormat('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        ...options,
+      }).format(local);
+    }
+  }
+  return formatInFleetTz(dateStr, timezone, options);
+}
+
 // ── useFleetTimezone hook ────────────────────────────────────────────────────
 
 /** Module-level cache so repeated hook calls don't each fire a network request. */

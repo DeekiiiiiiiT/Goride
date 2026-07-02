@@ -4,11 +4,11 @@ import { Button } from "../../ui/button";
 import { Card, CardContent } from "../../ui/card";
 import { Loader2, Search, LinkIcon, Sparkles } from "lucide-react";
 import { DisputeRefund } from "../../../types/data";
-import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
+import { formatStoredDateInFleetTz, fleetTzDateKey, useFleetTimezone } from '../../../utils/timezoneDisplay';
 import { api } from '../../../services/api';
 import { toast } from 'sonner@2.0.3';
 import { PeriodWeekDropdown } from "../../ui/PeriodWeekDropdown";
-import { ENTIRE_PERIOD_OPTION_ID, type PeriodWeekOption } from "../../../utils/periodWeekOptions";
+import { ENTIRE_PERIOD_OPTION_ID, generatePeriodWeekOptions, type PeriodWeekOption } from "../../../utils/periodWeekOptions";
 
 interface SuggestionRow {
   tollId: string;
@@ -53,14 +53,22 @@ export function DisputeMatchModal({ open, onOpenChange, refund, onMatched }: Dis
   const [periodStart, setPeriodStart] = useState<string>('');
   const [periodEnd, setPeriodEnd] = useState<string>('');
 
-  // Load suggestions + an initial candidate list whenever a refund is opened.
+  // Load suggestions + default period = the refund's Mon–Sun week.
   useEffect(() => {
     if (!open || !refund) return;
     setQuery('');
-    setPeriodStart('');
-    setPeriodEnd('');
     setSuggestions([]);
     setCandidates({ claims: [], tolls: [] });
+
+    const refundYmd = fleetTzDateKey(refund.date, fleetTz);
+    const weekOptions = generatePeriodWeekOptions(16, fleetTz);
+    const refundWeek = weekOptions.find(
+      (w) => refundYmd && w.startDate <= refundYmd && w.endDate >= refundYmd,
+    );
+    const start = refundWeek?.startDate ?? '';
+    const end = refundWeek?.endDate ?? '';
+    setPeriodStart(start);
+    setPeriodEnd(end);
 
     setLoadingSuggestions(true);
     api.getDisputeRefundSuggestions(refund.id)
@@ -68,9 +76,9 @@ export function DisputeMatchModal({ open, onOpenChange, refund, onMatched }: Dis
       .catch(() => setSuggestions([]))
       .finally(() => setLoadingSuggestions(false));
 
-    loadCandidates('', '', '');
+    loadCandidates('', start, end);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, refund?.id]);
+  }, [open, refund?.id, fleetTz]);
 
   const loadCandidates = async (q: string, from: string, to: string) => {
     setLoadingCandidates(true);
@@ -116,7 +124,7 @@ export function DisputeMatchModal({ open, onOpenChange, refund, onMatched }: Dis
   if (!refund) return null;
 
   const fmtDate = (d?: string | null) =>
-    d ? formatInFleetTz(d, fleetTz, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+    d ? formatStoredDateInFleetTz(d, fleetTz, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
 
   const confidenceClass = (c: number) =>
     c >= 80 ? 'bg-emerald-100 text-emerald-700' : c >= 50 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600';
@@ -129,7 +137,7 @@ export function DisputeMatchModal({ open, onOpenChange, refund, onMatched }: Dis
           <DialogDescription>
             <span className="font-semibold text-emerald-600">${refund.amount.toFixed(2)}</span> won back
             {refund.driverName ? <> · {refund.driverName}</> : null}
-            {refund.date ? <> · {fmtDate(refund.date)}</> : null}
+            {refund.date ? <> · {formatStoredDateInFleetTz(refund.date, fleetTz, { month: 'short', day: 'numeric', year: 'numeric' })}</> : null}
             {refund.platform ? <> · {refund.platform}</> : null}
           </DialogDescription>
         </DialogHeader>

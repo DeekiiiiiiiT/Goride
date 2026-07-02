@@ -60,7 +60,6 @@ export function TollTagList({ tags, isLoading, onDelete, onAssign, onUnassign, o
             <TableHead>Status</TableHead>
             <TableHead>Assigned Vehicle</TableHead>
             <TableHead>Added On</TableHead>
-            <TableHead>Utilization</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -120,26 +119,6 @@ export function TollTagList({ tags, isLoading, onDelete, onAssign, onUnassign, o
               </TableCell>
               <TableCell className="text-slate-500 text-sm">
                 {tag.dateAdded ? new Date(tag.dateAdded).toLocaleDateString() : "-"}
-              </TableCell>
-              <TableCell className="text-slate-500 text-sm">
-                {tag.assignedVehicleId && tag.lastUtilizationPercent !== undefined ? (
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <Badge variant="outline" className={`border-0 text-[10px] px-1.5 ${
-                        tag.lastUtilizationPercent > 70 ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100' :
-                        tag.lastUtilizationPercent >= 30 ? 'bg-amber-100 text-amber-700 hover:bg-amber-100' :
-                        'bg-red-100 text-red-700 hover:bg-red-100'
-                      }`}>
-                        {tag.lastUtilizationPercent}% tag
-                      </Badge>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>{tag.lastUtilizationPercent}% of tolls paid via tag, {100 - tag.lastUtilizationPercent}% paid with cash</p>
-                    </TooltipContent>
-                  </Tooltip>
-                ) : (
-                  <span className="text-slate-300">—</span>
-                )}
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex items-center justify-end gap-2">

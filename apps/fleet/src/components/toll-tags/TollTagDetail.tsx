@@ -10,8 +10,9 @@ import { TollTopupHistory } from "../vehicles/TollTopupHistory";
 import { api } from "../../services/api";
 import { toast } from "sonner@2.0.3";
 import { calculateTollFinancials } from "../../utils/tollReconciliation";
+import { isTagLedgerTx, isTagUsage, isTagCredit, isOffTagToll } from "../../utils/tollTagLedger";
 import { SafeResponsiveContainer } from "../ui/SafeResponsiveContainer";
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip } from 'recharts';
 import { Clock, History } from "lucide-react";
 
 interface TollTagDetailProps {
@@ -75,16 +76,15 @@ export function TollTagDetail({ tag, onBack, onNavigateToReconciliation }: TollT
   const [stats, setStats] = useState({
     balance: 0,
     tagSpent: 0,
-    cashSpent: 0,
     totalTopUp: 0,
     totalRecovered: 0,
     netLoss: 0,
     calculatedBalance: 0,
     tagTollCount: 0,
-    cashTollCount: 0,
-    avgTollAmount: 0,
-    tagUtilizationPercent: 0,
-    monthlySpend: [] as { month: string; tagAmount: number; cashAmount: number }[],
+    // Count of this vehicle's tolls that were paid off-tag (cash/card/fleet) —
+    // used only for the "view in Reconciliation" pointer, never shown as tag data.
+    offTagCount: 0,
+    monthlySpend: [] as { month: string; tagAmount: number }[],
     loading: true,
     claims: [] as Claim[]
   });
@@ -110,32 +110,33 @@ export function TollTagDetail({ tag, onBack, onNavigateToReconciliation }: TollT
 
       const vehicle = vehicles.find((v: any) => v.id === tag.assignedVehicleId);
 
-      // Server returns pre-filtered, pre-sorted toll transactions for this vehicle+tag
+      // Server returns all toll transactions for this vehicle+tag. Scope strictly
+      // to the prepaid tag ledger (tag-balance usage + top-ups/refunds); cash/card/
+      // fleet-account tolls never touched the tag and are excluded here.
       const filteredVehicleTx: any[] = tollResponse?.data || [];
+      const tagLedgerAll = filteredVehicleTx.filter(isTagLedgerTx);
+      // How many of this vehicle's tolls were paid off-tag (for the pointer only).
+      const offTagCount = filteredVehicleTx.filter(isOffTagToll).length;
 
       // Apply date filter for period-specific stats (balance always uses all-time data)
-      const dateFilteredTx = filterByDate(filteredVehicleTx);
+      const dateFilteredTx = filterByDate(tagLedgerAll);
 
-      // Calculate totals (using date-filtered transactions for period stats)
+      // Calculate totals (using date-filtered tag-ledger transactions for period stats)
       const tagSpent = dateFilteredTx
-        .filter((tx: any) => tx.category === 'Toll Usage')
-        .reduce((sum: number, tx: any) => sum + Math.abs(tx.amount), 0);
-
-      const cashSpent = dateFilteredTx
-        .filter((tx: any) => tx.category === 'Tolls' && tx.amount < 0)
+        .filter(isTagUsage)
         .reduce((sum: number, tx: any) => sum + Math.abs(tx.amount), 0);
 
       const totalTopUp = dateFilteredTx
-        .filter((tx: any) => tx.amount > 0)
+        .filter(isTagCredit)
         .reduce((sum: number, tx: any) => sum + tx.amount, 0);
 
-      // Calculate Recovered & Net Loss
+      // Calculate Recovered & Net Loss over tag-usage tolls only
       // Phase 6: Use tx.linkedTrip (pre-embedded by server) instead of trips.find()
       let totalRecovered = 0;
       let totalNetLoss = 0;
 
       dateFilteredTx.forEach((tx: any) => {
-          if (tx.amount < 0) {
+          if (isTagUsage(tx)) {
               const trip = tx.linkedTrip || undefined;
               const claim = claims.find((c: any) => c.transactionId === tx.id);
               const financials = calculateTollFinancials(tx, trip, claim);
@@ -143,11 +144,11 @@ export function TollTagDetail({ tag, onBack, onNavigateToReconciliation }: TollT
               totalNetLoss += financials.netLoss;
           }
       });
-      
-      // Only include Top-ups and Tag Usage (exclude cash receipts) for the Tag Balance
-      // Balance ALWAYS uses all-time data (not date-filtered) since it's a running total
-      const calculatedBalance = filteredVehicleTx
-        .filter((tx: any) => tx.category === 'Toll Usage' || tx.category === 'Toll Top-up')
+
+      // Tag Balance = signed sum of all-time tag-ledger rows (top-ups − tag usage).
+      // Cash/off-tag tolls are already excluded, fixing the prior latent bug where
+      // ledger cash tolls (category "Toll Usage") wrongly reduced the balance.
+      const calculatedBalance = tagLedgerAll
         .reduce((sum: number, tx: any) => sum + tx.amount, 0);
       const currentBalance = vehicle?.tollBalance || 0;
 
@@ -173,66 +174,40 @@ export function TollTagDetail({ tag, onBack, onNavigateToReconciliation }: TollT
           }
       }
 
-      // Phase 7: Compute utilization stats (uses date-filtered data)
-      const tagTollCount = dateFilteredTx.filter((tx: any) => tx.category === 'Toll Usage').length;
-      const cashTollCount = dateFilteredTx.filter((tx: any) => tx.category === 'Tolls' && tx.amount < 0).length;
-      const totalTollCount = tagTollCount + cashTollCount;
-      const tagUtilizationPercent = totalTollCount > 0 ? (tagTollCount / totalTollCount) * 100 : 0;
-      const avgTollAmount = totalTollCount > 0 ? (tagSpent + cashSpent) / totalTollCount : 0;
+      // Count of tag-usage tolls in the period (for the monthly-chart gate + stats)
+      const tagTollCount = dateFilteredTx.filter(isTagUsage).length;
 
-      // Phase 7: Monthly spend (last 6 months)
-      const monthlyMap = new Map<string, { tagAmount: number; cashAmount: number }>();
+      // Monthly tag-usage spend (last 6 months)
+      const monthlyMap = new Map<string, { tagAmount: number }>();
       const now = new Date();
       for (let i = 5; i >= 0; i--) {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
         const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-        monthlyMap.set(key, { tagAmount: 0, cashAmount: 0 });
+        monthlyMap.set(key, { tagAmount: 0 });
       }
       dateFilteredTx.forEach((tx: any) => {
-        if (tx.amount >= 0) return; // Skip top-ups (positive amounts)
+        if (!isTagUsage(tx)) return; // Only tag-balance deductions
         const txDate = new Date(tx.date || tx.createdAt);
         const key = `${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}`;
         const entry = monthlyMap.get(key);
         if (!entry) return; // Outside 6-month window
-        if (tx.category === 'Toll Usage') {
-          entry.tagAmount += Math.abs(tx.amount);
-        } else if (tx.category === 'Tolls') {
-          entry.cashAmount += Math.abs(tx.amount);
-        }
+        entry.tagAmount += Math.abs(tx.amount);
       });
       const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       const monthlySpend = Array.from(monthlyMap.entries()).map(([key, val]) => ({
         month: monthNames[parseInt(key.split('-')[1]) - 1],
         tagAmount: Math.round(val.tagAmount * 100) / 100,
-        cashAmount: Math.round(val.cashAmount * 100) / 100,
       }));
-
-      // Phase 7: Cache utilization percent on tag for list-view badges
-      if (tag.lastUtilizationPercent === undefined || Math.abs((tag.lastUtilizationPercent || 0) - tagUtilizationPercent) > 1) {
-          try {
-              await api.saveTollTag({
-                  ...tag,
-                  lastCalculatedBalance: calculatedBalance,
-                  lastUtilizationPercent: Math.round(tagUtilizationPercent),
-                  updatedAt: new Date().toISOString(),
-              });
-          } catch (e) {
-              console.error("Failed to cache utilization on tag:", e);
-          }
-      }
 
       setStats({
         balance: calculatedBalance,
         tagSpent,
-        cashSpent,
         totalTopUp,
         totalRecovered,
         netLoss: totalNetLoss,
         calculatedBalance,
         tagTollCount,
-        cashTollCount,
-        avgTollAmount,
-        tagUtilizationPercent,
+        offTagCount,
         monthlySpend,
         loading: false,
         claims: claims
@@ -472,7 +447,7 @@ export function TollTagDetail({ tag, onBack, onNavigateToReconciliation }: TollT
       )}
 
       {tag.assignedVehicleId && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4">
           {/* Tag Account Balance Card */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -491,7 +466,7 @@ export function TollTagDetail({ tag, onBack, onNavigateToReconciliation }: TollT
                             </div>
                         </TooltipTrigger>
                         <TooltipContent className="max-w-xs">
-                            <p>Calculated balance on your prepaid toll tag. Reflects top-ups minus tag-deducted tolls. Cash toll payments are tracked separately.</p>
+                            <p>Calculated balance on your prepaid toll tag. Reflects top-ups minus tag-deducted tolls. Tolls paid off-tag (cash, card, fleet account) are not part of this balance.</p>
                         </TooltipContent>
                     </Tooltip>
                     <p className="text-xs text-muted-foreground">Prepaid tag balance</p>
@@ -673,36 +648,24 @@ export function TollTagDetail({ tag, onBack, onNavigateToReconciliation }: TollT
               )}
             </CardContent>
           </Card>
-          
-          {/* Cash Toll Expenses Card */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Cash Toll Expenses</CardTitle>
-              <Receipt className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              {stats.loading ? (
-                <div className="h-8 w-24 bg-slate-100 animate-pulse rounded" />
-              ) : (
-                <div className="flex flex-col gap-2">
-                    <Tooltip>
-                        <TooltipTrigger>
-                            <div className={`text-2xl font-bold text-left ${stats.cashSpent > 0 ? 'text-rose-600' : 'text-slate-400'}`}>
-                            ${stats.cashSpent.toFixed(2)}
-                            </div>
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-xs">
-                            <p>Total tolls paid manually with cash receipts. These are separate from your prepaid tag balance.</p>
-                        </TooltipContent>
-                    </Tooltip>
-                    <p className="text-xs text-muted-foreground">Manual cash payments</p>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
-                        <span>{stats.cashTollCount} cash receipt{stats.cashTollCount !== 1 ? 's' : ''}</span>
-                    </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        </div>
+      )}
+
+      {/* Off-tag pointer — cash/card/fleet tolls on this vehicle live in Reconciliation */}
+      {tag.assignedVehicleId && !stats.loading && stats.offTagCount > 0 && (
+        <div className="flex items-center gap-2 text-xs text-slate-500 px-1">
+          <Receipt className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+          <span>
+            {stats.offTagCount} toll{stats.offTagCount !== 1 ? 's' : ''} on this vehicle {stats.offTagCount !== 1 ? 'were' : 'was'} paid off-tag (cash, card, or fleet account) and {stats.offTagCount !== 1 ? 'are' : 'is'} not counted here.
+          </span>
+          {onNavigateToReconciliation && tag.assignedVehicleId && (
+            <button
+              onClick={() => onNavigateToReconciliation(tag.assignedVehicleId!)}
+              className="text-indigo-600 hover:text-indigo-800 underline underline-offset-2 shrink-0"
+            >
+              View in Reconciliation
+            </button>
+          )}
         </div>
       )}
 
@@ -737,20 +700,6 @@ export function TollTagDetail({ tag, onBack, onNavigateToReconciliation }: TollT
                       <div>
                           <Tooltip>
                               <TooltipTrigger>
-                                  <div className="text-xl font-bold text-slate-900">
-                                  ${stats.cashSpent.toFixed(2)}
-                                  </div>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                  <p>Total manual cash payments (receipts)</p>
-                              </TooltipContent>
-                          </Tooltip>
-                          <p className="text-xs text-muted-foreground mt-0.5">Cash (Receipts)</p>
-                      </div>
-                      <div className="w-px h-10 bg-slate-200" />
-                      <div>
-                          <Tooltip>
-                              <TooltipTrigger>
                                   <div className="text-xl font-bold text-emerald-600">
                                   ${stats.totalTopUp.toFixed(2)}
                                   </div>
@@ -760,20 +709,6 @@ export function TollTagDetail({ tag, onBack, onNavigateToReconciliation }: TollT
                               </TooltipContent>
                           </Tooltip>
                           <p className="text-xs text-muted-foreground mt-0.5">Total Top Up</p>
-                      </div>
-                      <div className="w-px h-10 bg-slate-200" />
-                      <div>
-                          <Tooltip>
-                              <TooltipTrigger>
-                                  <div className="text-xl font-bold text-indigo-600">
-                                  ${(stats.tagSpent + stats.cashSpent).toFixed(2)}
-                                  </div>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                  <p>Combined total: tag deductions + cash toll payments</p>
-                              </TooltipContent>
-                          </Tooltip>
-                          <p className="text-xs text-muted-foreground mt-0.5">Total Toll Expense</p>
                       </div>
                   </div>
                   
@@ -819,107 +754,31 @@ export function TollTagDetail({ tag, onBack, onNavigateToReconciliation }: TollT
         </Card>
       )}
 
-      {/* Phase 7: Tag Utilization Analytics */}
-      {tag.assignedVehicleId && !stats.loading && (stats.tagTollCount > 0 || stats.cashTollCount > 0) && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Utilization Pie Chart Card */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Tag Utilization</CardTitle>
-              <Tag className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              {(() => {
-                const PIE_COLORS = ['#6366f1', '#a855f7'];
-                const pieData = [
-                  { name: 'Tag', value: stats.tagTollCount },
-                  { name: 'Cash', value: stats.cashTollCount },
-                ].filter(d => d.value > 0);
-                const pct = Math.round(stats.tagUtilizationPercent);
-                return (
-                  <div className="flex flex-col items-center gap-3">
-                    <SafeResponsiveContainer width="100%" height={160} minHeight={160}>
-                      <PieChart>
-                        <Pie
-                          data={pieData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={45}
-                          outerRadius={65}
-                          paddingAngle={3}
-                          dataKey="value"
-                        >
-                          {pieData.map((_, idx) => (
-                            <Cell key={`cell-${idx}`} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <RechartsTooltip
-                          formatter={(value: number, name: string) => [`${value} transaction${value !== 1 ? 's' : ''}`, name]}
-                        />
-                      </PieChart>
-                    </SafeResponsiveContainer>
-                    <div className="text-center">
-                      <div className="text-lg font-bold text-slate-900">
-                        {pct}% tag <span className="text-slate-300 mx-1">·</span> {100 - pct}% cash
-                      </div>
-                      <div className="flex items-center justify-center gap-4 mt-1.5 text-xs text-slate-500">
-                        <span className="flex items-center gap-1">
-                          <span className="h-2 w-2 rounded-full bg-indigo-500" /> {stats.tagTollCount} tag
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <span className="h-2 w-2 rounded-full bg-purple-500" /> {stats.cashTollCount} cash
-                        </span>
-                      </div>
-                      <div className="text-xs text-slate-400 mt-1">
-                        Avg toll: ${stats.avgTollAmount.toFixed(2)}
-                      </div>
-                      {pct === 0 && (
-                        <p className="text-xs text-amber-600 mt-2">
-                          This tag hasn't been used for toll deductions. All tolls are being paid with cash.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                );
-              })()}
-            </CardContent>
-          </Card>
-
-          {/* Monthly Spending Trend Card */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Monthly Toll Spend</CardTitle>
-              <CreditCard className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              {stats.monthlySpend.some(m => m.tagAmount > 0 || m.cashAmount > 0) ? (
-                <SafeResponsiveContainer width="100%" height={200} minHeight={200}>
-                  <BarChart data={stats.monthlySpend} margin={{ top: 5, right: 5, bottom: 5, left: -10 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `$${v}`} />
-                    <RechartsTooltip
-                      formatter={(value: number, name: string) => [
-                        `$${value.toFixed(2)}`,
-                        name === 'tagAmount' ? 'Tag Usage' : 'Cash Tolls'
-                      ]}
-                    />
-                    <Legend
-                      formatter={(value: string) => value === 'tagAmount' ? 'Tag Usage' : 'Cash Tolls'}
-                      wrapperStyle={{ fontSize: '11px' }}
-                    />
-                    <Bar dataKey="tagAmount" stackId="toll" fill="#6366f1" radius={[0, 0, 0, 0]} />
-                    <Bar dataKey="cashAmount" stackId="toll" fill="#a855f7" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </SafeResponsiveContainer>
-              ) : (
-                <div className="py-8 text-center text-sm text-slate-400">
-                  No toll spending data in the last 6 months.
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+      {/* Monthly tag-usage spend */}
+      {tag.assignedVehicleId && !stats.loading && stats.tagTollCount > 0 && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Monthly Tag Spend</CardTitle>
+            <CreditCard className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            {stats.monthlySpend.some(m => m.tagAmount > 0) ? (
+              <SafeResponsiveContainer width="100%" height={200} minHeight={200}>
+                <BarChart data={stats.monthlySpend} margin={{ top: 5, right: 5, bottom: 5, left: -10 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `$${v}`} />
+                  <RechartsTooltip formatter={(value: any) => [`$${Number(value).toFixed(2)}`, 'Tag Usage']} />
+                  <Bar dataKey="tagAmount" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </SafeResponsiveContainer>
+            ) : (
+              <div className="py-8 text-center text-sm text-slate-400">
+                No tag spending data in the last 6 months.
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       <div className="grid grid-cols-1 gap-6">
@@ -929,16 +788,17 @@ export function TollTagDetail({ tag, onBack, onNavigateToReconciliation }: TollT
               <CardHeader>
                   <CardTitle>Transaction History</CardTitle>
                   <CardDescription>
-                    {tag.assignedVehicleId 
-                        ? `Showing transactions for tag ${tag.tagNumber} on vehicle ${tag.assignedVehicleName}. Legacy transactions without tag metadata are also included.`
+                    {tag.assignedVehicleId
+                        ? `Prepaid tag activity for tag ${tag.tagNumber} on vehicle ${tag.assignedVehicleName} — top-ups and tag-deducted tolls. Off-tag (cash/card/fleet) tolls are shown in Reconciliation.`
                         : "This tag is not currently assigned to a vehicle. History is tracked by vehicle."}
                   </CardDescription>
               </CardHeader>
               <CardContent>
                   {tag.assignedVehicleId ? (
-                      <TollTopupHistory 
+                      <TollTopupHistory
                         vehicleId={tag.assignedVehicleId}
                         tagNumber={tag.tagNumber}
+                        scope="tag"
                         onTransactionChange={fetchStats}
                       />
                   ) : (

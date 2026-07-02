@@ -77,6 +77,13 @@ export function fleetTzDateKey(input: string | Date, timezone: string): string {
   }
 }
 
+/** yyyy-MM-dd → local calendar Date (avoids parseISO UTC-midnight shifting the day). */
+export function ymdToLocalDate(ymd: string): Date {
+  const [y, m, d] = ymd.split('-').map(Number);
+  if (!y || !m || !d) return new Date(NaN);
+  return new Date(y, m - 1, d);
+}
+
 // ── useFleetTimezone hook ────────────────────────────────────────────────────
 
 /** Module-level cache so repeated hook calls don't each fire a network request. */

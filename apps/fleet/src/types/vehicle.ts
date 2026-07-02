@@ -31,6 +31,7 @@ export interface TollTag {
   providerBalanceDate?: string;   // Phase 5: When the provider balance was last checked
   lowBalanceThreshold?: number;   // Phase 6: Alert when balance drops below this (default: 500)
   lastCalculatedBalance?: number; // Phase 6: Cached calculated balance for list-view badges
+  /** @deprecated Tag view is now tag-only (Option A); tag-vs-cash utilization is no longer computed or shown. Retained for backward compat with stored records. */
   lastUtilizationPercent?: number; // Phase 7: Cached tag utilization % for list-view badges
   assignmentHistory?: Array<{     // Phase 8: Tag assignment audit trail
     vehicleId: string;

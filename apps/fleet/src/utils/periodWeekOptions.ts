@@ -1,5 +1,5 @@
-import { format, startOfWeek, endOfWeek, subWeeks, eachWeekOfInterval, parseISO } from 'date-fns';
-import { fleetTzDateKey } from './timezoneDisplay';
+import { format, startOfWeek, endOfWeek, subWeeks, eachWeekOfInterval } from 'date-fns';
+import { fleetTzDateKey, ymdToLocalDate } from './timezoneDisplay';
 
 export interface PeriodWeekOption {
   id: string;
@@ -38,7 +38,7 @@ export function generateWeekOptionsForDateRange(rangeStart: Date, rangeEnd: Date
  * to browser-local when omitted.
  */
 export function generatePeriodWeekOptions(weekCount = 12, timezone?: string): PeriodWeekOption[] {
-  const today = timezone ? parseISO(fleetTzDateKey(new Date(), timezone)) : new Date();
+  const today = timezone ? ymdToLocalDate(fleetTzDateKey(new Date(), timezone)) : new Date();
   const periods: PeriodWeekOption[] = [];
 
   for (let i = 0; i < weekCount; i++) {

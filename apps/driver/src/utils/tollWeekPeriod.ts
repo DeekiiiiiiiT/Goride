@@ -1,6 +1,6 @@
 import { startOfWeek, endOfWeek, format, parseISO } from 'date-fns';
 import type { DisputeRefund, FinancialTransaction, Trip } from '../types/data';
-import { fleetTzDateKey } from './timezoneDisplay';
+import { fleetTzDateKey, ymdToLocalDate } from './timezoneDisplay';
 
 /**
  * Monday-start week key + bounds for a row's date.
@@ -17,7 +17,7 @@ function weekBucketForDate(
   let dayDate = d;
   if (timezone) {
     const ymd = fleetTzDateKey(d, timezone);
-    const parsed = ymd ? parseISO(ymd) : d;
+    const parsed = ymd ? ymdToLocalDate(ymd) : d;
     dayDate = isNaN(parsed.getTime()) ? d : parsed;
   }
   const weekStart = startOfWeek(dayDate, { weekStartsOn: 1 });

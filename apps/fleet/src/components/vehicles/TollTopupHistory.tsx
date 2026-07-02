@@ -8,6 +8,7 @@ import { format } from 'date-fns';
 import { api } from '../../services/api';
 import { FinancialTransaction, Claim } from '../../types/data';
 import { calculateTollFinancials } from '../../utils/tollReconciliation';
+import { isTagLedgerTx, isTagUsage, isTagCredit } from '../../utils/tollTagLedger';
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { toast } from "sonner@2.0.3";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
@@ -28,9 +29,15 @@ interface TollTopupHistoryProps {
   tagNumber?: string; // Phase 4: Filter transactions to this specific tag
   refreshTrigger?: number; // Prop to force refresh when a new top-up is added
   onTransactionChange?: () => void;
+  /**
+   * 'tag' restricts the view to prepaid tag-ledger activity (tag-balance usage +
+   * top-ups/refunds), hiding cash/off-tag tolls. Default 'all' preserves the
+   * legacy behavior for any non-tag reuse.
+   */
+  scope?: 'all' | 'tag';
 }
 
-export function TollTopupHistory({ vehicleId, tagNumber, refreshTrigger, onTransactionChange }: TollTopupHistoryProps) {
+export function TollTopupHistory({ vehicleId, tagNumber, refreshTrigger, onTransactionChange, scope = 'all' }: TollTopupHistoryProps) {
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
   const [claims, setClaims] = useState<Record<string, Claim>>({});
   const [loading, setLoading] = useState(true);
@@ -273,8 +280,16 @@ export function TollTopupHistory({ vehicleId, tagNumber, refreshTrigger, onTrans
     </Table>
   );
 
-  const topUps = transactions.filter(t => t.amount > 0 || t.category === 'Toll Top-up' || t.description?.toLowerCase().includes('top-up') || t.description?.toLowerCase().includes('top up'));
-  const usage = transactions.filter(t => t.amount < 0 && t.category !== 'Toll Top-up');
+  // In 'tag' scope, hide cash/off-tag tolls so the tag view shows only prepaid
+  // tag-ledger activity (tag-balance usage + top-ups/refunds).
+  const visible = scope === 'tag' ? transactions.filter(isTagLedgerTx) : transactions;
+
+  const topUps = scope === 'tag'
+    ? visible.filter(isTagCredit)
+    : visible.filter(t => t.amount > 0 || t.category === 'Toll Top-up' || t.description?.toLowerCase().includes('top-up') || t.description?.toLowerCase().includes('top up'));
+  const usage = scope === 'tag'
+    ? visible.filter(isTagUsage)
+    : visible.filter(t => t.amount < 0 && t.category !== 'Toll Top-up');
 
   return (
     <>
@@ -286,7 +301,7 @@ export function TollTopupHistory({ vehicleId, tagNumber, refreshTrigger, onTrans
         </div>
       </CardHeader>
       <CardContent>
-        {transactions.length === 0 ? (
+        {visible.length === 0 ? (
            <div className="text-center py-8 text-slate-500 text-sm">
                No toll transactions recorded yet.
            </div>
@@ -296,7 +311,7 @@ export function TollTopupHistory({ vehicleId, tagNumber, refreshTrigger, onTrans
                 <TabsTrigger value="all">
                     All Transactions
                     <span className="ml-2 bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full text-xs font-bold">
-                        {transactions.length}
+                        {visible.length}
                     </span>
                 </TabsTrigger>
                 <TabsTrigger value="usage">
@@ -314,7 +329,7 @@ export function TollTopupHistory({ vehicleId, tagNumber, refreshTrigger, onTrans
             </TabsList>
             
             <TabsContent value="all">
-                {renderTable(transactions, true)}
+                {renderTable(visible, true)}
             </TabsContent>
             
             <TabsContent value="usage">
