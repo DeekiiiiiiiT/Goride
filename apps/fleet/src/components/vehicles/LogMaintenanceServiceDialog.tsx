@@ -22,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Checkbox } from "../ui/checkbox";
 import { toast } from "sonner@2.0.3";
 import { api } from "../../services/api";
+import { uploadEvidenceFile } from "../../services/uploadEvidence";
 import { publicAnonKey } from "../../utils/supabase/info";
 import { API_ENDPOINTS } from "../../services/apiConfig";
 import type { CatalogMaintenanceTaskOption, MaintenanceLog } from "../../types/maintenance";
@@ -148,22 +149,15 @@ export function LogMaintenanceServiceDialog({
     }
   }, [selectedScheduleId, scheduleChoices]);
 
+  const [pendingInvoiceFile, setPendingInvoiceFile] = useState<File | null>(null);
+
   const handleServiceScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setScanLoading(true);
+    setPendingInvoiceFile(file);
     try {
-      let uploadedUrl = "";
-      try {
-        const uploadRes = await api.uploadFile(file);
-        if (uploadRes && uploadRes.url) {
-          uploadedUrl = uploadRes.url;
-        }
-      } catch (err) {
-        console.warn("Upload failed, proceeding with parsing only", err);
-      }
-
       const scanFormData = new FormData();
       scanFormData.append("file", file);
 
@@ -184,7 +178,7 @@ export function LogMaintenanceServiceDialog({
           odo: result.data.odometer ? Number(result.data.odometer) : prev.odo,
           notes: result.data.notes || prev.notes,
           provider: result.data.vendor || prev.provider,
-          invoiceUrl: uploadedUrl || prev.invoiceUrl,
+          invoiceUrl: URL.createObjectURL(file),
         }));
         toast.success("Invoice scanned successfully!");
       } else {
@@ -206,11 +200,25 @@ export function LogMaintenanceServiceDialog({
 
     setIsLoading(true);
     try {
+      const logId = formData.id || crypto.randomUUID();
+      let invoiceUrl = formData.invoiceUrl;
+      if (pendingInvoiceFile) {
+        const uploadRes = await uploadEvidenceFile(pendingInvoiceFile, {
+          evidenceType: 'maintenance_invoice',
+          sourceType: 'maintenance_log',
+          sourceId: logId,
+          retentionClass: 'ephemeral',
+          parentStatus: 'Pending',
+        });
+        invoiceUrl = uploadRes.url;
+      }
+
       const choice = scheduleChoices.find((s) => s.id === selectedScheduleId);
       const payload = {
         ...formData,
         vehicleId,
-        id: formData.id || crypto.randomUUID(),
+        id: logId,
+        invoiceUrl,
         cost: Number(formData.cost) || 0,
         odo: Number(formData.odo) || 0,
         ...(choice?.templateId ? { templateId: choice.templateId, type: choice.label } : {}),

@@ -8,6 +8,7 @@ import { API_ENDPOINTS } from './apiConfig';
 import type { CompatiblePartsResponse } from '../types/partSourcing';
 import { compressImage } from '../utils/compressImage';
 import { isTollCategory } from '../utils/tollCategoryHelper';
+import { appendUploadEvidenceMeta, type UploadEvidenceMeta } from '@roam/types/evidence';
 
 // Helper to get authorization headers (JWT if logged in, else anon key)
 async function getHeaders(contentType: string | null = 'application/json') {
@@ -854,12 +855,13 @@ export const api = {
     }
   },
 
-  async uploadFile(file: File) {
+  async uploadFile(file: File, evidenceMeta?: UploadEvidenceMeta) {
     // Compress images client-side before upload to stay within Supabase Storage 5MB limit
     const processedFile = await compressImage(file);
 
     const formData = new FormData();
     formData.append('file', processedFile);
+    appendUploadEvidenceMeta(formData, evidenceMeta);
     
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/upload`, {
         method: 'POST',

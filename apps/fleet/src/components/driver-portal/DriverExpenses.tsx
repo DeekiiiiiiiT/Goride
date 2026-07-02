@@ -35,6 +35,8 @@ import { toast } from "sonner@2.0.3";
 import { useAuth } from '../auth/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { api } from '../../services/api';
+import { uploadEvidenceFile } from '../../services/uploadEvidence';
+import { EvidenceRetentionNotice } from '../evidence/EvidenceRetentionNotice';
 import { resolveVehicleIdForDriver } from '../../utils/resolveDriverVehicleId';
 import { FinancialTransaction, TransactionCategory } from '../../types/data';
 import { StationProfile } from '../../types/station';
@@ -449,15 +451,28 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
     setSubmitError(null);
     setIsSubmitting(true);
     try {
+      const txId = crypto.randomUUID();
       let receiptUrl = '';
       if (receiptFile) {
-        const uploadRes = await api.uploadFile(receiptFile);
+        const uploadRes = await uploadEvidenceFile(receiptFile, {
+          evidenceType: 'fuel_receipt',
+          sourceType: 'transaction',
+          sourceId: txId,
+          retentionClass: 'ephemeral',
+          parentStatus: 'Pending',
+        });
         receiptUrl = uploadRes.url;
       }
 
       let odometerProofUrl = '';
       if (fuelEntry.odometerProof) {
-        const uploadRes = await api.uploadFile(fuelEntry.odometerProof);
+        const uploadRes = await uploadEvidenceFile(fuelEntry.odometerProof, {
+          evidenceType: 'odometer_proof',
+          sourceType: 'transaction',
+          sourceId: txId,
+          retentionClass: 'ephemeral',
+          parentStatus: 'Pending',
+        });
         odometerProofUrl = uploadRes.url;
       }
 
@@ -465,7 +480,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
       const resolvedVehicleId = resolveVehicleIdForDriver(driverRecord, vehicles, user?.id);
 
       const baseTx: Partial<FinancialTransaction> = {
-        id: crypto.randomUUID(),
+        id: txId,
         driverId: driverRecord?.id || user?.id,
         driverName: driverRecord?.driverName || driverRecord?.name || user?.email,
         vehicleId: resolvedVehicleId,
@@ -918,6 +933,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                 </div>
             ) : (
             <form onSubmit={handleSubmit} className="p-6 space-y-6" id="expense-form" ref={formRef} noValidate>
+              <EvidenceRetentionNotice />
               <div className="space-y-4">
                 {fuelNoGpsManualVerifyNotice}
                 {category !== 'Fuel' && (

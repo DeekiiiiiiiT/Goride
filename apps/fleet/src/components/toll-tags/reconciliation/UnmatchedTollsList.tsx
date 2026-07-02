@@ -13,7 +13,8 @@ import { SuggestedMatchCard } from "./SuggestedMatchCard";
 import { ManualMatchModal } from "./ManualMatchModal";
 import { TollDetailOverlay } from "./TollDetailOverlay";
 import { DisputeRefundsList } from "./DisputeRefundsList";
-import { Search, CheckCircle2, Sparkles, Camera, Tag, User, MoreHorizontal, FileText, Briefcase, UserMinus, ChevronDown, AlertTriangle, Gauge, Pencil, HelpCircle, DollarSign, Route, CarFront, ShieldCheck, CalendarRange } from "lucide-react";
+import { EvidenceExpiryBadge } from '../../evidence/EvidenceExpiryBadge';
+import { resolveEvidenceMediaState } from '../../evidence/evidenceState';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../ui/collapsible";
 import { groupTollsByWeek } from "../../../utils/tollWeekPeriod";
 
@@ -545,11 +546,15 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
                                                                                     <span>{vehicleId || <span className="text-slate-400">Unknown</span>}</span>
                                                                                 </div>
                                                                                 {tx.receiptUrl && (
-                                                                                    <a href={tx.receiptUrl} target="_blank" rel="noopener noreferrer" className="cursor-pointer hover:opacity-80 transition-opacity">
-                                                                                        <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition-colors">
-                                                                                            <Camera className="w-3 h-3 mr-1" /> Receipt
-                                                                                        </Badge>
-                                                                                    </a>
+                                                                                    <EvidenceExpiryBadge
+                                                                                      state={resolveEvidenceMediaState({
+                                                                                        imageUrl: tx.receiptUrl,
+                                                                                        evidenceExpired: tx.metadata?.evidenceExpired,
+                                                                                        evidenceDeleteAfter: tx.metadata?.evidenceDeleteAfter,
+                                                                                        parentStatus: tx.status,
+                                                                                      })}
+                                                                                      deleteAfter={tx.metadata?.evidenceDeleteAfter}
+                                                                                    />
                                                                                 )}
                                                                                 <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-slate-400 hover:text-indigo-600" onClick={(e) => { e.stopPropagation(); openEdit(tx); }}>
                                                                                     <Pencil className="h-3.5 w-3.5" />

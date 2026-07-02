@@ -120,6 +120,21 @@ import * as unverifiedVendor from './unverified_vendor_controller.tsx';
 import { suggestStationMatches } from './vendor_matcher.ts';
 import { checkRateLimit, recordFailedAttempt, clearRateLimit, getClientIp, getRateLimitStats } from './rate_limiter.ts';
 import { registerMaintenanceRoutes } from "./maintenance_routes.ts";
+import {
+  registerEvidenceRoutes,
+  applyEvidenceResolution,
+  cleanupEphemeralPathsOnDelete,
+} from "./evidence_routes.ts";
+import {
+  buildEphemeralStoragePath,
+  EPHEMERAL_EVIDENCE_BUCKET,
+  extractEvidenceUrlsFromRecord,
+  isEvidenceTtlEnabled,
+  registerEvidenceFile,
+  collectStoragePathsFromRecord,
+  markEvidenceFilesDeleted,
+  type EvidenceType,
+} from "./evidence_storage.ts";
 import { registerPendingVehicleCatalogRoutes } from "./pending_vehicle_catalog_routes.ts";
 import { registerPartSourcingRoutes } from "./part_sourcing_routes.ts";
 import {
@@ -312,6 +327,7 @@ function getProvisionDeps() {
 }
 
 registerMaintenanceRoutes(app, supabase);
+registerEvidenceRoutes(app, supabase, kv, requireAuth, requirePermission);
 registerPendingVehicleCatalogRoutes(app, supabase);
 registerPartSourcingRoutes(app, supabase);
 
@@ -3446,6 +3462,12 @@ app.delete("/make-server-37f42386/transactions/:id", requireAuth(), requireDelet
       return c.json({ success: true });
     }
     
+    const tx = await kv.get(`transaction:${id}`);
+    if (tx && isEvidenceTtlEnabled()) {
+      const urls = extractEvidenceUrlsFromRecord(tx);
+      await cleanupEphemeralPathsOnDelete(supabase, urls);
+    }
+
     // Not a toll, delete from transaction:*
     await kv.del(`transaction:${id}`);
     try {
@@ -6619,6 +6641,12 @@ app.post("/make-server-37f42386/expenses/approve", requireAuth(), requirePermiss
     }
 
     await kv.set(`transaction:${id}`, stampOrg(tx, c));
+    const resolvedAt = new Date();
+    const deleteAfter = await applyEvidenceResolution(supabase, "transaction", id, resolvedAt);
+    if (deleteAfter) {
+      tx.metadata = { ...tx.metadata, evidenceDeleteAfter: deleteAfter };
+      await kv.set(`transaction:${id}`, stampOrg(tx, c));
+    }
     return c.json({ success: true, data: tx });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
@@ -6646,10 +6674,13 @@ app.post("/make-server-37f42386/expenses/reject", requireAuth(), requirePermissi
     }
 
     tx.status = 'Rejected';
+    const resolvedAt = new Date();
+    const deleteAfter = await applyEvidenceResolution(supabase, "transaction", id, resolvedAt);
     tx.metadata = { 
         ...tx.metadata, 
-        rejectedAt: new Date().toISOString(), 
-        rejectionReason: reason 
+        rejectedAt: resolvedAt.toISOString(), 
+        rejectionReason: reason,
+        ...(deleteAfter ? { evidenceDeleteAfter: deleteAfter } : {}),
     };
 
     await kv.set(`transaction:${id}`, stampOrg(tx, c));
@@ -7277,7 +7308,21 @@ app.post("/make-server-37f42386/upload", async (c) => {
       }, 413);
     }
 
-    const bucketName = "make-37f42386-docs";
+    const retentionClass = String(body['retentionClass'] || 'permanent');
+    const evidenceType = body['evidenceType'] ? String(body['evidenceType']) : '';
+    const sourceType = body['sourceType'] ? String(body['sourceType']) : '';
+    const sourceId = body['sourceId'] ? String(body['sourceId']) : '';
+    const orgId = body['orgId'] ? String(body['orgId']) : '';
+    const parentStatus = body['parentStatus'] ? String(body['parentStatus']) : 'Pending';
+
+    const useEphemeral =
+      isEvidenceTtlEnabled() &&
+      retentionClass === 'ephemeral' &&
+      evidenceType &&
+      sourceType &&
+      sourceId;
+
+    const bucketName = useEphemeral ? EPHEMERAL_EVIDENCE_BUCKET : "make-37f42386-docs";
     
     // Ensure bucket exists and has adequate file size limit
     const { data: buckets } = await supabase.storage.listBuckets();
@@ -7285,20 +7330,20 @@ app.post("/make-server-37f42386/upload", async (c) => {
     if (!existingBucket) {
         await supabase.storage.createBucket(bucketName, {
             public: false,
-            fileSizeLimit: 10485760, // 10MB
+            fileSizeLimit: useEphemeral ? 5242880 : 10485760,
         });
-    } else {
-        // Update existing bucket to increase file size limit if it was too low
+    } else if (!useEphemeral) {
         await supabase.storage.updateBucket(bucketName, {
-            fileSizeLimit: 10485760, // 10MB
+            fileSizeLimit: 10485760,
         });
     }
 
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${crypto.randomUUID()}.${fileExt}`;
-    const filePath = `driver-docs/${fileName}`;
+    const fileExt = file.name.split('.').pop() || 'jpg';
+    const filePath = useEphemeral
+      ? buildEphemeralStoragePath(orgId || getOrgId(c) || 'unknown', evidenceType as EvidenceType, fileExt)
+      : `driver-docs/${crypto.randomUUID()}.${fileExt}`;
 
-    const { data, error } = await supabase.storage
+    const { error } = await supabase.storage
         .from(bucketName)
         .upload(filePath, file, {
             contentType: file.type,
@@ -7309,9 +7354,25 @@ app.post("/make-server-37f42386/upload", async (c) => {
 
     const { data: signedData } = await supabase.storage
         .from(bucketName)
-        .createSignedUrl(filePath, 60 * 60 * 24 * 365); // 1 year
+        .createSignedUrl(filePath, 60 * 60 * 24 * 365);
 
-    return c.json({ url: signedData?.signedUrl });
+    const signedUrl = signedData?.signedUrl;
+
+    if (useEphemeral && signedUrl) {
+      await registerEvidenceFile(supabase, {
+        bucketId: bucketName,
+        storagePath: filePath,
+        evidenceType: evidenceType as EvidenceType,
+        sourceType: sourceType as "transaction" | "fuel_entry" | "maintenance_log",
+        sourceId,
+        orgId: orgId || getOrgId(c) || null,
+        publicUrl: signedUrl,
+        parentStatus,
+        retentionClass: 'ephemeral',
+      });
+    }
+
+    return c.json({ url: signedUrl });
   } catch (e: any) {
     console.error("Upload error:", e);
     const status = e.statusCode === '413' || e.status === 413 ? 413 : 500;
@@ -8654,7 +8715,7 @@ app.post("/make-server-37f42386/reset-by-date", requireAuth(), requirePermission
     
     // Mode 1: Direct Deletion by Keys
     if (keys && Array.isArray(keys) && keys.length > 0) {
-        const filesToDelete: string[] = [];
+        const filesByBucket = new Map<string, string[]>();
         const chunkSize = 100;
         
         for (let i = 0; i < keys.length; i += chunkSize) {
@@ -8662,30 +8723,28 @@ app.post("/make-server-37f42386/reset-by-date", requireAuth(), requirePermission
             const chunkValues = await kv.mget(chunkKeys);
             
             (chunkValues || []).forEach((item: any) => {
-                if (item && item.receiptUrl && typeof item.receiptUrl === 'string') {
-                     if (item.receiptUrl.includes('make-37f42386-docs')) {
-                         const parts = item.receiptUrl.split('make-37f42386-docs/');
-                         if (parts.length > 1) {
-                             const path = parts[1].split('?')[0];
-                             filesToDelete.push(path);
-                         }
-                     }
+                if (!item) return;
+                for (const { bucket, path } of collectStoragePathsFromRecord(item)) {
+                    if (!path) return;
+                    if (!filesByBucket.has(bucket)) filesByBucket.set(bucket, []);
+                    filesByBucket.get(bucket)!.push(path);
                 }
             });
             
             await kv.mdel(chunkKeys);
         }
 
-        if (filesToDelete.length > 0) {
-            const bucketName = "make-37f42386-docs";
-            const fileChunkSize = 50;
-            for (let i = 0; i < filesToDelete.length; i += fileChunkSize) {
-                const chunk = filesToDelete.slice(i, i + fileChunkSize);
+        let filesDeletedCount = 0;
+        const fileChunkSize = 50;
+        for (const [bucketName, paths] of filesByBucket) {
+            for (let i = 0; i < paths.length; i += fileChunkSize) {
+                const chunk = paths.slice(i, i + fileChunkSize);
                 await supabase.storage.from(bucketName).remove(chunk);
+                filesDeletedCount += chunk.length;
             }
         }
         
-        return c.json({ success: true, deletedCount: keys.length, filesDeletedCount: filesToDelete.length });
+        return c.json({ success: true, deletedCount: keys.length, filesDeletedCount });
     }
 
     // Mode 2: Search (Preview or Bulk Delete)
@@ -16283,8 +16342,7 @@ app.post("/make-server-37f42386/bulk-delete-execute", requireAuth(), requirePerm
 
     const CHUNK_SIZE = 100;
     const FILE_CHUNK_SIZE = 50;
-    const BUCKET_NAME = "make-37f42386-docs";
-    const filesToDelete: string[] = [];
+    const filesByBucket = new Map<string, string[]>();
 
     for (let i = 0; i < keys.length; i += CHUNK_SIZE) {
       const chunk = keys.slice(i, i + CHUNK_SIZE);
@@ -16295,15 +16353,10 @@ app.post("/make-server-37f42386/bulk-delete-execute", requireAuth(), requirePerm
           const values = await kv.mget(chunk);
           (values || []).forEach((item: any) => {
             if (!item) return;
-            const urlFields = ["receiptUrl", "invoiceUrl", "photoUrl", "imageUrl", "fileUrl"];
-            for (const field of urlFields) {
-              const url = item[field];
-              if (url && typeof url === "string" && url.includes(BUCKET_NAME)) {
-                const parts = url.split(`${BUCKET_NAME}/`);
-                if (parts.length > 1) {
-                  const path = parts[1].split("?")[0];
-                  if (path) filesToDelete.push(path);
-                }
+            for (const { bucket, path } of collectStoragePathsFromRecord(item)) {
+              if (path) {
+                if (!filesByBucket.has(bucket)) filesByBucket.set(bucket, []);
+                filesByBucket.get(bucket)!.push(path);
               }
             }
           });
@@ -16318,15 +16371,26 @@ app.post("/make-server-37f42386/bulk-delete-execute", requireAuth(), requirePerm
 
     // Cleanup storage files if any were found
     let filesDeletedCount = 0;
-    if (filesToDelete.length > 0) {
-      for (let i = 0; i < filesToDelete.length; i += FILE_CHUNK_SIZE) {
-        const fileChunk = filesToDelete.slice(i, i + FILE_CHUNK_SIZE);
+    const allPaths: string[] = [];
+    for (const [, paths] of filesByBucket) {
+      allPaths.push(...paths);
+    }
+    for (const [bucket, paths] of filesByBucket) {
+      for (let i = 0; i < paths.length; i += FILE_CHUNK_SIZE) {
+        const fileChunk = paths.slice(i, i + FILE_CHUNK_SIZE);
         try {
-          await supabase.storage.from(BUCKET_NAME).remove(fileChunk);
+          await supabase.storage.from(bucket).remove(fileChunk);
           filesDeletedCount += fileChunk.length;
         } catch (storageErr: any) {
           console.log(`bulk-delete-execute: storage cleanup warning (non-fatal): ${storageErr.message}`);
         }
+      }
+    }
+    if (cleanupStorage && allPaths.length) {
+      try {
+        await markEvidenceFilesDeleted(supabase, allPaths);
+      } catch (evErr: any) {
+        console.log(`bulk-delete-execute: evidence_files update warning (non-fatal): ${evErr?.message}`);
       }
     }
 

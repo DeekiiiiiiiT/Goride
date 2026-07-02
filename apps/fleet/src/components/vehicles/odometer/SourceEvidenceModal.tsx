@@ -10,7 +10,6 @@ import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { 
     FileText, 
-    ExternalLink, 
     ShieldCheck, 
     AlertTriangle, 
     Calendar, 
@@ -24,7 +23,7 @@ import {
 import { format } from 'date-fns';
 import { cn } from "../../ui/utils";
 
-import { ImageWithFallback } from '../../figma/ImageWithFallback';
+import { EvidenceMediaPanel } from '../../evidence/EvidenceMediaPanel';
 import realOdometerScan from "figma:asset/d634a1f92df5341866fd1b5612457b3002467263.png";
 
 // Forensic Evidence System - No demo pictures permitted
@@ -184,26 +183,14 @@ export function SourceEvidenceModal({ isOpen, onClose, evidence }: SourceEvidenc
                     </div>
 
                     {displayImage ? (
-                        <div className="space-y-3">
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Original Document Image</p>
-                            <div className="relative group border rounded-xl overflow-hidden bg-slate-50 shadow-inner">
-                                <ImageWithFallback 
-                                    src={displayImage} 
-                                    alt="Source Evidence" 
-                                    className="w-full h-auto max-h-[400px] object-contain transition-transform duration-500 group-hover:scale-[1.02]" 
-                                />
-                                <div className="absolute inset-0 bg-indigo-500/0 group-hover:bg-indigo-500/5 transition-colors pointer-events-none"></div>
-                                <Button 
-                                    size="sm" 
-                                    variant="secondary" 
-                                    className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-md shadow-lg"
-                                    onClick={() => window.open(displayImage, '_blank')}
-                                >
-                                    <ExternalLink className="h-3 w-3 mr-2" />
-                                    View Full Resolution
-                                </Button>
-                            </div>
-                        </div>
+                        <EvidenceMediaPanel
+                            label="Original document"
+                            imageUrl={displayImage}
+                            evidenceExpired={evidence.metadata?.evidenceExpired}
+                            evidenceDeleteAfter={evidence.metadata?.evidenceDeleteAfter}
+                            parentStatus={evidence.isVerified ? 'Approved' : 'Pending'}
+                            maxHeightClass="max-h-[400px]"
+                        />
                     ) : (
                         <div className="p-8 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-slate-400 bg-slate-50">
                             <FileText className="h-12 w-12 mb-2 opacity-20" />
@@ -213,26 +200,14 @@ export function SourceEvidenceModal({ isOpen, onClose, evidence }: SourceEvidenc
                     )}
 
                     {secondaryImage && (
-                        <div className="space-y-3">
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Receipt Image</p>
-                            <div className="relative group border rounded-xl overflow-hidden bg-slate-50 shadow-inner">
-                                <ImageWithFallback 
-                                    src={secondaryImage} 
-                                    alt="Receipt Evidence" 
-                                    className="w-full h-auto max-h-[400px] object-contain transition-transform duration-500 group-hover:scale-[1.02]" 
-                                />
-                                <div className="absolute inset-0 bg-indigo-500/0 group-hover:bg-indigo-500/5 transition-colors pointer-events-none"></div>
-                                <Button 
-                                    size="sm" 
-                                    variant="secondary" 
-                                    className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-md shadow-lg"
-                                    onClick={() => window.open(secondaryImage, '_blank')}
-                                >
-                                    <ExternalLink className="h-3 w-3 mr-2" />
-                                    View Full Resolution
-                                </Button>
-                            </div>
-                        </div>
+                        <EvidenceMediaPanel
+                            label="Receipt"
+                            imageUrl={secondaryImage}
+                            evidenceExpired={evidence.metadata?.evidenceExpired}
+                            evidenceDeleteAfter={evidence.metadata?.evidenceDeleteAfter}
+                            parentStatus={evidence.isVerified ? 'Approved' : 'Pending'}
+                            maxHeightClass="max-h-[400px]"
+                        />
                     )}
 
                     {evidence.notes && (

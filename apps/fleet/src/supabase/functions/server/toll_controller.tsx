@@ -22,6 +22,7 @@ import * as kv from "./kv_store.tsx";
 import { isTollCategory } from "./toll_category_flags.ts";
 import { appendCanonicalTollReconciledBatch, type TollReconcileAuditEntry } from "./canonical_from_ops.ts";
 import { deleteCanonicalLedgerBySource } from "./ledger_canonical.ts";
+import { applyEvidenceResolution } from "./evidence_routes.ts";
 import { getFleetTimezone, naiveToUtc, hasTzSuffix } from "./timezone_helper.tsx";
 import {
   parseISO,
@@ -2996,6 +2997,16 @@ app.post(`${BASE}/approve`, async (c) => {
     // Update local tx object for response
     tx.status = "Approved";
     tx.isReconciled = true;
+    const resolvedAt = new Date();
+    const deleteAfter = await applyEvidenceResolution(supabase, "transaction", transactionId, resolvedAt);
+    if (deleteAfter) {
+      tx.metadata = { ...(tx.metadata || {}), evidenceDeleteAfter: deleteAfter };
+      const legacyTx = await kv.get(`transaction:${transactionId}`);
+      if (legacyTx) {
+        legacyTx.metadata = { ...(legacyTx.metadata || {}), evidenceDeleteAfter: deleteAfter };
+        await kv.set(`transaction:${transactionId}`, legacyTx);
+      }
+    }
 
     // Write ledger entry for the approval
     await writeTollLedgerEntry({
@@ -3059,6 +3070,16 @@ app.post(`${BASE}/reject`, async (c) => {
     // Update local tx object for response
     tx.status = "Rejected";
     tx.isReconciled = true;
+    const resolvedAt = new Date();
+    const deleteAfter = await applyEvidenceResolution(supabase, "transaction", transactionId, resolvedAt);
+    if (deleteAfter) {
+      tx.metadata = { ...(tx.metadata || {}), evidenceDeleteAfter: deleteAfter };
+      const legacyTx = await kv.get(`transaction:${transactionId}`);
+      if (legacyTx) {
+        legacyTx.metadata = { ...(legacyTx.metadata || {}), evidenceDeleteAfter: deleteAfter };
+        await kv.set(`transaction:${transactionId}`, legacyTx);
+      }
+    }
 
     // Write ledger entry for the rejection
     await writeTollLedgerEntry({

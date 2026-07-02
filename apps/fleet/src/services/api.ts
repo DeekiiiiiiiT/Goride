@@ -9,6 +9,7 @@ import type { CompatiblePartsResponse } from '../types/partSourcing';
 import { compressImage } from '../utils/compressImage';
 import { isTollCategory } from '../utils/tollCategoryHelper';
 import { getProductLineHeaders } from '../config/productLine';
+import { appendUploadEvidenceMeta, type UploadEvidenceMeta } from '@roam/types/evidence';
 
 /**
  * Helper to get authorization headers (JWT if logged in, else anon key).
@@ -841,12 +842,13 @@ export const api = {
     }
   },
 
-  async uploadFile(file: File) {
+  async uploadFile(file: File, evidenceMeta?: UploadEvidenceMeta) {
     // Compress images client-side before upload to stay within Supabase Storage 5MB limit
     const processedFile = await compressImage(file);
 
     const formData = new FormData();
     formData.append('file', processedFile);
+    appendUploadEvidenceMeta(formData, evidenceMeta);
     
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/upload`, {
         method: 'POST',
@@ -2206,14 +2208,14 @@ export const api = {
     return response.json();
   },
 
-  async matchDisputeRefund(refundId: string, tollTransactionId: string, claimId?: string): Promise<{ data: DisputeRefund }> {
+  async matchDisputeRefund(refundId: string, tollTransactionId: string, claimId?: string, opts?: { createClaim?: boolean }): Promise<{ data: DisputeRefund }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/dispute-refunds/${refundId}/match`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${publicAnonKey}`
       },
-      body: JSON.stringify({ tollTransactionId, claimId })
+      body: JSON.stringify({ tollTransactionId, claimId, createClaim: opts?.createClaim })
     });
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
@@ -2238,13 +2240,26 @@ export const api = {
     return response.json();
   },
 
-  async getDisputeRefundSuggestions(refundId: string): Promise<{ suggestions: Array<{ tollId: string; tripId: string | null; tollAmount: number; uberRefund: number; variance: number; date: string; confidence: number; claimId: string | null; claimStatus: string | null }> }> {
+  async getDisputeRefundSuggestions(refundId: string): Promise<{ suggestions: Array<{ tollId: string; tripId: string | null; tollAmount: number; claimAmount?: number; uberRefund: number; variance: number; date: string; confidence: number; claimId: string | null; claimStatus: string | null; matchType?: 'claim' | 'toll' }> }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/dispute-refunds/suggestions/${refundId}`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
       throw new Error(err.error || "Failed to fetch dispute refund suggestions");
+    }
+    return response.json();
+  },
+
+  async getDisputeMatchCandidates(query?: string): Promise<{ claims: any[]; tolls: any[] }> {
+    const qs = new URLSearchParams();
+    if (query) qs.set('q', query);
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/dispute-refunds/match-candidates?${qs.toString()}`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to load match candidates");
     }
     return response.json();
   },
@@ -3006,6 +3021,57 @@ export const api = {
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
       throw new Error((err as { error?: string }).error || 'Orphan cleanup failed');
+    }
+    return response.json();
+  },
+
+  async getEvidenceStorageSummary(): Promise<import('@roam/types/evidence').EvidenceStorageSummary> {
+    const headers = await getHeaders(null);
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/admin/evidence-storage/summary`, {
+      headers,
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || 'Evidence storage summary failed');
+    }
+    return response.json();
+  },
+
+  async auditLegacyEvidenceStorage(): Promise<{
+    success: boolean;
+    bucket: string;
+    scanned: number;
+    linkedCount: number;
+    orphanCount: number;
+    orphans: string[];
+  }> {
+    const headers = await getHeaders('application/json');
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/admin/evidence-storage/audit-legacy`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({}),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || 'Legacy evidence audit failed');
+    }
+    return response.json();
+  },
+
+  async purgeLegacyEvidenceStorage(payload?: { paths?: string[]; orphanOnly?: boolean }): Promise<{
+    success: boolean;
+    deleted: number;
+    pathsProcessed: number;
+  }> {
+    const headers = await getHeaders('application/json');
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/admin/evidence-storage/purge-legacy`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload ?? { orphanOnly: true }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || 'Legacy evidence purge failed');
     }
     return response.json();
   },

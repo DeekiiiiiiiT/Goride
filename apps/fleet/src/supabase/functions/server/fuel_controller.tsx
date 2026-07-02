@@ -17,6 +17,7 @@ import {
 import {
   syncLinkedExpenseTransaction,
 } from "./fuel_transaction_sync.ts";
+import { applyEvidenceResolution } from "./evidence_routes.ts";
 
 const app = new Hono();
 
@@ -624,6 +625,11 @@ async function releaseHeldTransaction(learnt: any, resolvedStationId: string, st
     fuelEntry.signature = await signRecord(fuelEntry);
 
     await kv.set(`fuel_entry:${fuelEntry.id}`, fuelEntry);
+    const resolvedAt = new Date();
+    const deleteAfter = await applyEvidenceResolution(supabase, "transaction", tx.id, resolvedAt);
+    if (deleteAfter) {
+        tx.metadata = { ...tx.metadata, evidenceDeleteAfter: deleteAfter };
+    }
     await kv.set(`transaction:${tx.id}`, tx);
     await syncLinkedExpenseTransaction(fuelEntry);
     console.log(`[StationGate-Release] Transaction ${txId} released → fuel_entry ${fuelEntry.id} created, station ${stationName} (${resolvedStationId}).`);

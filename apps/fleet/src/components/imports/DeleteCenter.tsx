@@ -15,6 +15,8 @@ import {
   FileText, Calendar, Loader2, RefreshCw, CheckSquare, Square, CheckCircle2,
 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
+import { useQuery } from '@tanstack/react-query';
+import { StorageHealthPanel } from '../evidence/StorageHealthPanel';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '../ui/dialog';
@@ -622,6 +624,13 @@ export function DeleteCenter() {
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   const [batchDateFrom, setBatchDateFrom] = useState('');
   const [batchDateTo, setBatchDateTo] = useState('');
+
+  const { data: evidenceSummary, isLoading: evidenceSummaryLoading } = useQuery({
+    queryKey: ['evidenceStorageSummary'],
+    queryFn: () => api.getEvidenceStorageSummary(),
+    staleTime: 60_000,
+    retry: false,
+  });
 
   // ─── Bulk batch delete state ───────────────────────────────────────────
   const [selectedBatchIds, setSelectedBatchIds] = useState<Set<string>>(new Set());
@@ -1352,6 +1361,8 @@ export function DeleteCenter() {
           </p>
         </div>
       </div>
+
+      <StorageHealthPanel summary={evidenceSummary ?? undefined} loading={evidenceSummaryLoading} />
 
       {/* Database Record Counts — Diagnostic */}
       <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-4">

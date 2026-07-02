@@ -85,7 +85,10 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
           <div className="space-y-5">
             <div>
               <h4 className="text-sm font-semibold text-slate-900">Refund auto-resolution</h4>
-              <p className="text-xs text-slate-500">Only integrity-safe cash washes are applied automatically.</p>
+              <p className="text-xs text-slate-500">
+                Auto-clears integrity-safe cash washes, and auto-links high-confidence dispute
+                refunds to their underpaid claim. Everything else waits for review.
+              </p>
             </div>
 
             <label className="flex items-center justify-between">

@@ -20,6 +20,10 @@ import { api } from "../../../services/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../../ui/dialog";
 import { DriverPicker } from "../../ui/DriverPicker";
 import { TollAutomationSettings } from "./TollAutomationSettings";
+import { normalizePlatform } from "../../../utils/normalizePlatform";
+
+type PlatformFilter = 'all' | 'Uber' | 'InDrive' | 'Roam';
+const PLATFORM_OPTIONS: PlatformFilter[] = ['all', 'Uber', 'InDrive', 'Roam'];
 
 export function ReconciliationDashboard() {
   const handleRunTest = () => {
@@ -31,6 +35,8 @@ export function ReconciliationDashboard() {
   // Phase 5: Driver filter
   const [drivers, setDrivers] = useState<any[]>([]);
   const [selectedDriverId, setSelectedDriverId] = useState<string>('');
+  // Platform filter (Uber / InDrive / Roam) — re-scopes tiles + tabs
+  const [platformFilter, setPlatformFilter] = useState<PlatformFilter>('all');
 
   useEffect(() => {
     api.getDrivers().then(setDrivers).catch(console.error);
@@ -197,10 +203,32 @@ export function ReconciliationDashboard() {
       }
   };
 
+  // ── Platform scoping (Uber / InDrive / Roam) ─────────────────────────────
+  // Trips carry their platform; a toll only knows its platform once matched to a
+  // trip (or if it came from a Roam geofence crossing). When a specific platform
+  // is selected, unmatched tolls (platform unknown) fall out — which is honest.
+  const normPlat = (p?: string | null) => normalizePlatform(p || undefined);
+  const platformOfToll = (tx: FinancialTransaction): string | null => {
+    const trip = tripMap.get(tx.tripId || '');
+    if (trip?.platform) return normPlat(trip.platform);
+    if ((tx as any).metadata?.source === 'roam_geofence') return 'Roam';
+    return null;
+  };
+  const tripInPlatform = (t: TripType) => platformFilter === 'all' || normPlat(t.platform) === platformFilter;
+  const tollInPlatform = (tx: FinancialTransaction) => platformFilter === 'all' || platformOfToll(tx) === platformFilter;
+  const claimInPlatform = (c: any) => platformFilter === 'all' || normPlat(tripMap.get(c.tripId || '')?.platform) === platformFilter;
+
+  const pTrips = platformFilter === 'all' ? trips : trips.filter(tripInPlatform);
+  const pReconciled = platformFilter === 'all' ? reconciledTolls : reconciledTolls.filter(tollInPlatform);
+  const pUnreconciled = platformFilter === 'all' ? unreconciledTolls : unreconciledTolls.filter(tollInPlatform);
+  const pUnclaimed = platformFilter === 'all' ? unclaimedRefunds : unclaimedRefunds.filter(tripInPlatform);
+  const pResolved = platformFilter === 'all' ? resolvedRefunds : resolvedRefunds.filter(tripInPlatform);
+  const pClaims = platformFilter === 'all' ? claims : claims.filter(claimInPlatform);
+
   // Filter out tolls that have an existing claim
   // This ensures we don't double-process a toll or see items we've already handled.
   const claimedTransactionIds = new Set(claims.map(c => c.transactionId));
-  const filteredUnreconciledTolls = unreconciledTolls.filter(tx => !claimedTransactionIds.has(tx.id));
+  const filteredUnreconciledTolls = pUnreconciled.filter(tx => !claimedTransactionIds.has(tx.id));
 
   const isLoading = tollsLoading || claimsLoading;
 
@@ -290,13 +318,34 @@ export function ReconciliationDashboard() {
   // Yellow: Unclaimed Refunds (Money Uber paid you, but you haven't matched to an expense)
   const refundsAmount = unclaimedRefunds.reduce((sum, t) => sum + (t.tollCharges || 0), 0);
   // Phase 3: Amount cleared via refund resolution (cash wash / phantom / expense logged)
-  const resolvedRefundsAmount = resolvedRefunds.reduce((sum, t) => sum + (t.tollCharges || 0), 0);
+  const resolvedRefundsAmount = pResolved.reduce((sum, t) => sum + (t.tollCharges || 0), 0);
 
   // Phase 6: Dispute refund recovery amount (matched/auto-resolved refunds)
   const matchedDisputeRefundAmount = (disputeRefunds || [])
     .filter(r => r.status === 'matched' || r.status === 'auto_resolved')
     .reduce((sum, r) => sum + (r.amount || 0), 0);
   const totalRecovered = recoveredAmount + matchedDisputeRefundAmount;
+
+  // ── Balancing KPI tiles (admin money-flow view) ──────────────────────────
+  // Reads as one equation: Spend − Reimbursed − Charged = Net Loss.
+  // All values respect the active platform filter (Uber / InDrive / Roam / all).
+  // Dispute refunds are Uber support adjustments, so only count them for Uber/all.
+  const scopedDisputeRefund = (platformFilter === 'all' || platformFilter === 'Uber') ? matchedDisputeRefundAmount : 0;
+  // 1. Toll Spend — everything the fleet paid out on tolls (usage debits).
+  const tollSpend = [...pUnreconciled, ...pReconciled]
+    .reduce((sum, tx) => sum + (tx.amount < 0 ? Math.abs(tx.amount) : 0), 0);
+  // 2. Reimbursed — toll money the platform paid back across trips, plus matched
+  //    Uber support adjustments. (Cash-washes included — the trip refund exists.)
+  const reimbursedByUber =
+    pTrips.reduce((sum, t) => sum + (t.tollCharges || 0), 0) + scopedDisputeRefund;
+  // 3. Charged to Drivers — recovered by billing the driver (resolved claims).
+  const chargedToDrivers = pClaims
+    .filter(c => c.status === 'Resolved' && c.resolutionReason === 'Charge Driver')
+    .reduce((sum, c) => sum + Math.abs(c.amount || 0), 0);
+  // 4. Net Toll Loss — unrecovered toll cost (floored at 0).
+  const netTollLoss = Math.max(0, tollSpend - reimbursedByUber - chargedToDrivers);
+  // 5. Needs Review — open work: unmatched tolls + unresolved unlinked refunds.
+  const needsReviewCount = filteredUnreconciledTolls.length + pUnclaimed.length;
 
   // Count high confidence matches for auto-button
   // Phase 5: Scope to filteredUnreconciledTolls only (excludes claimed items)
@@ -350,7 +399,23 @@ export function ReconciliationDashboard() {
             <h2 className="text-2xl font-bold tracking-tight text-slate-900">Toll Reconciliation</h2>
             <p className="text-slate-500">Match toll expenses with trip refunds to identify leakage.</p>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
+            {/* Platform filter (Uber / InDrive / Roam) */}
+            <div className="flex items-center rounded-md border border-slate-200 bg-white p-0.5 shadow-sm">
+                {PLATFORM_OPTIONS.map(p => (
+                    <button
+                        key={p}
+                        onClick={() => setPlatformFilter(p)}
+                        className={`h-8 rounded px-2.5 text-xs font-medium transition-colors ${
+                            platformFilter === p
+                                ? 'bg-indigo-600 text-white'
+                                : 'text-slate-600 hover:bg-slate-100'
+                        }`}
+                    >
+                        {p === 'all' ? 'All' : p}
+                    </button>
+                ))}
+            </div>
             {/* Phase 5: Driver filter */}
             <div className="flex items-center gap-1.5">
                 <Filter className="h-4 w-4 text-slate-400" />
@@ -382,53 +447,55 @@ export function ReconciliationDashboard() {
         </div>
       </div>
 
-      {/* Financial Overview Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Claimable (Amber) */}
-        <div className="bg-white p-4 rounded-lg border border-orange-200 shadow-sm relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-2 h-full bg-orange-400" />
+      {/* Financial Overview Cards — one balancing story: Spend − Reimbursed − Charged = Net Loss */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        {/* Tile 1: Toll Spend (slate) — money out */}
+        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-2 h-full bg-slate-400" />
             <div className="flex justify-between items-start">
                 <div>
                     <div className="flex items-center gap-1.5">
-                        <h3 className="text-xs font-medium text-orange-600 uppercase tracking-wider">Claimable Loss</h3>
+                        <h3 className="text-xs font-medium text-slate-600 uppercase tracking-wider">Toll Spend</h3>
                         <Tooltip>
                             <TooltipTrigger>
-                                <HelpCircle className="h-3.5 w-3.5 text-orange-400 hover:text-orange-600 transition-colors" />
+                                <HelpCircle className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600 transition-colors" />
                             </TooltipTrigger>
                             <TooltipContent>
-                                <p className="max-w-[200px] text-xs">Tolls paid during an active trip that were not fully reimbursed. This represents money owed to you by Uber.</p>
+                                <p className="max-w-[200px] text-xs">Total tolls the fleet paid (tag charges, cash, and geofence-detected). This is the money that went out.</p>
                             </TooltipContent>
                         </Tooltip>
                     </div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">${claimableAmount.toFixed(2)}</div>
-                    <div className="text-xs text-slate-500 mt-1">Uber underpayments</div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">${tollSpend.toFixed(2)}</div>
+                    <div className="text-xs text-slate-500 mt-1">Money out</div>
                 </div>
-                <TrendingDown className="h-5 w-5 text-orange-400" />
+                <DollarSign className="h-5 w-5 text-slate-400" />
             </div>
         </div>
 
-        {/* Card 2: Recovered (Green) - Replaces Deadhead */}
+        {/* Tile 2: Reimbursed by Uber (green) — money in */}
         <div className="bg-white p-4 rounded-lg border border-emerald-200 shadow-sm relative overflow-hidden">
             <div className="absolute top-0 right-0 w-2 h-full bg-emerald-400" />
             <div className="flex justify-between items-start">
                 <div>
                     <div className="flex items-center gap-1.5">
-                        <h3 className="text-xs font-medium text-emerald-600 uppercase tracking-wider">Recovered</h3>
+                        <h3 className="text-xs font-medium text-emerald-600 uppercase tracking-wider">
+                            Reimbursed{platformFilter !== 'all' ? ` · ${platformFilter}` : ''}
+                        </h3>
                         <Tooltip>
                             <TooltipTrigger>
                                 <HelpCircle className="h-3.5 w-3.5 text-emerald-400 hover:text-emerald-600 transition-colors" />
                             </TooltipTrigger>
                             <TooltipContent>
-                                <p className="max-w-[200px] text-xs">Total toll expenses successfully covered by Uber reimbursements.</p>
+                                <p className="max-w-[200px] text-xs">Toll money the rideshare platform (Uber / InDrive / Roam) paid back on trips through the fare, plus matched Uber support adjustments.</p>
                             </TooltipContent>
                         </Tooltip>
                     </div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">${totalRecovered.toFixed(2)}</div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">${reimbursedByUber.toFixed(2)}</div>
                     <div className="text-xs text-slate-500 mt-1">
-                        Paid by Uber
-                        {matchedDisputeRefundAmount > 0 && (
+                        Paid back on trips
+                        {scopedDisputeRefund > 0 && (
                             <span className="block text-teal-600 mt-0.5">
-                                Incl. ${matchedDisputeRefundAmount.toFixed(2)} from dispute refunds
+                                Incl. ${scopedDisputeRefund.toFixed(2)} from dispute refunds
                             </span>
                         )}
                     </div>
@@ -437,48 +504,71 @@ export function ReconciliationDashboard() {
             </div>
         </div>
 
-        {/* Card 3: Personal/Liability (Purple) */}
+        {/* Tile 3: Charged to Drivers (purple) — money in */}
         <div className="bg-white p-4 rounded-lg border border-purple-200 shadow-sm relative overflow-hidden">
             <div className="absolute top-0 right-0 w-2 h-full bg-purple-400" />
             <div className="flex justify-between items-start">
                 <div>
                     <div className="flex items-center gap-1.5">
-                        <h3 className="text-xs font-medium text-purple-600 uppercase tracking-wider">Driver Liability</h3>
+                        <h3 className="text-xs font-medium text-purple-600 uppercase tracking-wider">Charged to Drivers</h3>
                         <Tooltip>
                             <TooltipTrigger>
                                 <HelpCircle className="h-3.5 w-3.5 text-purple-400 hover:text-purple-600 transition-colors" />
                             </TooltipTrigger>
                             <TooltipContent>
-                                <p className="max-w-[200px] text-xs">Total liability to be charged to the driver (Unreconciled Personal + Reconciled Deficits).</p>
+                                <p className="max-w-[200px] text-xs">Toll cost recovered by billing the driver via resolved "Charge Driver" claims.</p>
                             </TooltipContent>
                         </Tooltip>
                     </div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">${totalDriverLiability.toFixed(2)}</div>
-                    <div className="text-xs text-slate-500 mt-1">Charge to driver</div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">${chargedToDrivers.toFixed(2)}</div>
+                    <div className="text-xs text-slate-500 mt-1">Recovered from drivers</div>
                 </div>
                 <Wallet className="h-5 w-5 text-purple-400" />
             </div>
         </div>
 
-        {/* Card 4: Refunds (Yellow) */}
-        <div className="bg-white p-4 rounded-lg border border-yellow-200 shadow-sm relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-2 h-full bg-yellow-400" />
+        {/* Tile 4: Net Toll Loss (rose) — the headline */}
+        <div className="bg-white p-4 rounded-lg border border-rose-200 shadow-sm relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-2 h-full bg-rose-400" />
             <div className="flex justify-between items-start">
                 <div>
                     <div className="flex items-center gap-1.5">
-                        <h3 className="text-xs font-medium text-yellow-600 uppercase tracking-wider">Unlinked Refunds</h3>
+                        <h3 className="text-xs font-medium text-rose-600 uppercase tracking-wider">Net Toll Loss</h3>
                         <Tooltip>
                             <TooltipTrigger>
-                                <HelpCircle className="h-3.5 w-3.5 text-yellow-400 hover:text-yellow-600 transition-colors" />
+                                <HelpCircle className="h-3.5 w-3.5 text-rose-400 hover:text-rose-600 transition-colors" />
                             </TooltipTrigger>
                             <TooltipContent>
-                                <p className="max-w-[200px] text-xs">Trips where the platform reimbursed a toll through the fare, but no matching toll expense record exists. This usually means the toll tag charge hasn't been imported yet.</p>
+                                <p className="max-w-[200px] text-xs">What the fleet is actually out of pocket: Toll Spend − Reimbursed by Uber − Charged to Drivers.</p>
                             </TooltipContent>
                         </Tooltip>
                     </div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">${refundsAmount.toFixed(2)}</div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">${netTollLoss.toFixed(2)}</div>
+                    <div className="text-xs text-slate-500 mt-1">Unrecovered toll cost</div>
+                </div>
+                <TrendingDown className="h-5 w-5 text-rose-400" />
+            </div>
+        </div>
+
+        {/* Tile 5: Needs Review (amber) — the to-do */}
+        <div className="bg-white p-4 rounded-lg border border-amber-200 shadow-sm relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-2 h-full bg-amber-400" />
+            <div className="flex justify-between items-start">
+                <div>
+                    <div className="flex items-center gap-1.5">
+                        <h3 className="text-xs font-medium text-amber-600 uppercase tracking-wider">Needs Review</h3>
+                        <Tooltip>
+                            <TooltipTrigger>
+                                <HelpCircle className="h-3.5 w-3.5 text-amber-400 hover:text-amber-600 transition-colors" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p className="max-w-[200px] text-xs">Open items still to sort: unmatched tolls plus unlinked refunds awaiting a decision.</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">{needsReviewCount}</div>
                     <div className="text-xs text-slate-500 mt-1">
-                        Missing expense records
+                        {filteredUnreconciledTolls.length} tolls · {pUnclaimed.length} refunds
                         {resolvedRefundsAmount > 0 && (
                             <span className="block text-emerald-600 mt-0.5">
                                 ${resolvedRefundsAmount.toFixed(2)} resolved
@@ -486,7 +576,7 @@ export function ReconciliationDashboard() {
                         )}
                     </div>
                 </div>
-                <DollarSign className="h-5 w-5 text-yellow-400" />
+                <AlertTriangle className="h-5 w-5 text-amber-400" />
             </div>
         </div>
       </div>
@@ -514,24 +604,24 @@ export function ReconciliationDashboard() {
           </TabsTrigger>
           <TabsTrigger value="unclaimed">
             Unlinked Refunds
-            {unclaimedRefunds.length > 0 && (
+            {pUnclaimed.length > 0 && (
                 <span className="ml-2 bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded-full text-xs font-bold">
-                    {unclaimedRefunds.length}
+                    {pUnclaimed.length}
                 </span>
             )}
           </TabsTrigger>
           <TabsTrigger value="resolved">
             Resolved
-            {resolvedRefunds.length > 0 && (
+            {pResolved.length > 0 && (
                 <span className="ml-2 bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full text-xs font-bold">
-                    {resolvedRefunds.length}
+                    {pResolved.length}
                 </span>
             )}
           </TabsTrigger>
           <TabsTrigger value="history">
             Matched History
             <span className="ml-2 bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full text-xs font-bold">
-                    {reconciledTolls.length}
+                    {pReconciled.length}
             </span>
           </TabsTrigger>
           <TabsTrigger value="activity">
@@ -558,7 +648,7 @@ export function ReconciliationDashboard() {
         
         <TabsContent value="unclaimed" className="mt-4">
             <UnclaimedRefundsList
-                trips={unclaimedRefunds}
+                trips={pUnclaimed}
                 suggestions={refundSuggestions}
                 drivers={drivers}
                 onResolve={resolveRefund}
@@ -568,7 +658,7 @@ export function ReconciliationDashboard() {
 
         <TabsContent value="resolved" className="mt-4">
             <ResolvedRefundsList
-                rows={resolvedRefunds.map((t): ResolvedRefundRow => ({
+                rows={pResolved.map((t): ResolvedRefundRow => ({
                     id: t.id,
                     date: t.date,
                     platform: t.platform,
@@ -587,10 +677,10 @@ export function ReconciliationDashboard() {
         </TabsContent>
 
         <TabsContent value="history" className="mt-4">
-            <ReconciledTollsList 
-                tolls={reconciledTolls} 
+            <ReconciledTollsList
+                tolls={pReconciled}
                 trips={trips}
-                claims={claims}
+                claims={pClaims}
                 onUnmatch={unreconcile}
             />
         </TabsContent>

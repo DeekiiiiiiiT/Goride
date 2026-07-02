@@ -10,6 +10,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/
 import { Upload, X, Loader2, MapPin, Plus, Trash2, ListFilter, FileText, Copy, AlertTriangle, Clock, Sparkles, Wand2, Building2, Camera } from 'lucide-react';
 import { toast } from "sonner@2.0.3";
 import { api } from '../../services/api';
+import { uploadEvidenceFile } from '../../services/uploadEvidence';
+import { EvidenceRetentionNotice } from '../evidence/EvidenceRetentionNotice';
 import { aiVerificationService, AIReceiptResult } from '../../services/aiVerificationService';
 import { AIExtractionReview } from './AIExtractionReview';
 import { searchAddress, AddressResult, debounce } from '../../utils/locationService';
@@ -298,9 +300,9 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
 
         setIsUploading(true);
         try {
-            const { url } = await api.uploadFile(file);
-            updateEntry(index, { receiptUrl: url });
-            toast.success("Receipt uploaded");
+            const previewUrl = URL.createObjectURL(file);
+            updateEntry(index, { receiptUrl: previewUrl, pendingReceiptFile: file });
+            toast.success("Receipt ready — will upload on submit");
 
             const reader = new FileReader();
             reader.onloadend = async () => {
@@ -318,24 +320,24 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
             };
             reader.readAsDataURL(file);
         } catch (error) {
-            toast.error("Failed to upload receipt");
+            toast.error("Failed to process receipt");
         } finally {
             setIsUploading(false);
         }
     };
 
-    // Odometer photo upload — separate from receipt, no AI scan
+    // Odometer photo — deferred upload until submit (no orphan files from abandoned scans)
     const handleOdometerPhotoUpload = async (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
         setIsUploadingOdoPhoto(true);
         try {
-            const { url } = await api.uploadFile(file);
-            updateEntry(index, { odometerImageUrl: url });
-            toast.success("Odometer photo uploaded");
+            const previewUrl = URL.createObjectURL(file);
+            updateEntry(index, { odometerImageUrl: previewUrl, pendingOdometerFile: file });
+            toast.success("Odometer photo ready — will upload on submit");
         } catch (error) {
-            toast.error("Failed to upload odometer photo");
+            toast.error("Failed to process odometer photo");
         } finally {
             setIsUploadingOdoPhoto(false);
         }
@@ -462,6 +464,30 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                 const amountVal = parseFloat(entry.amount);
                 const isLast = i === validEntries.length - 1;
 
+                let receiptUrl = entry.receiptUrl || '';
+                if (entry.pendingReceiptFile) {
+                    const { url } = await uploadEvidenceFile(entry.pendingReceiptFile, {
+                        evidenceType: 'fuel_receipt',
+                        sourceType: 'transaction',
+                        sourceId: entry.id,
+                        retentionClass: 'ephemeral',
+                        parentStatus: initialData?.status || 'Pending',
+                    });
+                    receiptUrl = url;
+                }
+
+                let odometerImageUrl = entry.odometerImageUrl || '';
+                if (entry.pendingOdometerFile) {
+                    const { url } = await uploadEvidenceFile(entry.pendingOdometerFile, {
+                        evidenceType: 'odometer_proof',
+                        sourceType: 'transaction',
+                        sourceId: entry.id,
+                        retentionClass: 'ephemeral',
+                        parentStatus: initialData?.status || 'Pending',
+                    });
+                    odometerImageUrl = url;
+                }
+
                 const transactionData = {
                     id: entry.id,
                     date: commonData.date || entry.date || getLocalDateString(),
@@ -482,9 +508,9 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                     amount: amountVal, 
                     paymentMethod: pSource === 'company_card' ? 'Gas Card' : (pSource === 'petty_cash' ? 'Other' : (pSource === 'rideshare_cash' ? 'RideShare Cash' : 'Cash')),
                     status: initialData?.status || 'Pending',
-                    receiptUrl: entry.receiptUrl,
+                    receiptUrl,
                     odometer: entry.odometer ? parseFloat(entry.odometer) : 0,
-                    odometerImageUrl: entry.odometerImageUrl || undefined,
+                    odometerImageUrl: odometerImageUrl || undefined,
                     quantity: entry.liters ? parseFloat(entry.liters) : undefined,
                     vendor: entry.stationName,
                     matchedStationId: entry.matchedStationId || undefined,
@@ -507,7 +533,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                         flagReason: entry.flagReason,
                         matchedStationId: entry.matchedStationId || undefined,
                         // Odometer photo stored as odometerProofUrl for evidence modal
-                        odometerProofUrl: entry.odometerImageUrl || undefined,
+                        odometerProofUrl: odometerImageUrl || undefined,
                         odometerMethod: entry.odometerImageUrl ? 'Admin Photo Upload' : 'Direct Entry',
                         // Preserve previous payment source so the parent can detect changes
                         previousPaymentSource: initialData?.metadata?.paymentSource || undefined,
@@ -546,6 +572,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                         )}
                     </div>
                 </DialogHeader>
+                {!initialData && !aiReviewData && <EvidenceRetentionNotice className="mt-2" />}
 
                 {aiReviewData ? (
                     <AIExtractionReview 

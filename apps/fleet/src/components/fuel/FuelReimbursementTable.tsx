@@ -12,6 +12,7 @@ import { Badge } from "../ui/badge";
 import { FinancialTransaction } from '../../types/data';
 import { Check, X, Eye, FileText, Calendar, User, Truck, DollarSign, Plus, Pencil, Trash2, Loader2, Camera, AlertTriangle, MapPin } from "lucide-react";
 import { ImageWithFallback } from '../figma/ImageWithFallback';
+import { EvidenceFromRecord } from '../evidence/EvidenceFromRecord';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -719,22 +720,17 @@ export function FuelReimbursementTable({
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        {tx.receiptUrl ? (
-                                            <div className="relative h-10 w-10 overflow-hidden rounded border border-slate-200 group cursor-pointer" onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); }}>
-                                                <ImageWithFallback src={tx.receiptUrl} alt="Receipt" className="h-full w-full object-cover" />
-                                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
-                                            </div>
-                                        ) : (
-                                            <div className="flex flex-col gap-0.5">
-                                                <span className="text-xs text-slate-400 italic">No receipt</span>
-                                                {pendingQueueMode && resolveOdometerProofUrl(tx) && (
-                                                    <span className="text-[10px] text-sky-700 flex items-center gap-0.5 font-medium">
-                                                        <Camera className="h-3 w-3 shrink-0" />
-                                                        Odometer photo (details)
-                                                    </span>
-                                                )}
-                                            </div>
-                                        )}
+                                        <div
+                                            className="cursor-pointer"
+                                            onClick={() => { setSelectedTx(tx); setIsDetailsOpen(true); }}
+                                        >
+                                            <EvidenceFromRecord
+                                                record={tx}
+                                                label="Fuel receipt"
+                                                compact
+                                                className="w-24"
+                                            />
+                                        </div>
                                     </TableCell>
                                     <TableCell>
                                         {pendingQueueMode && tx.status === 'Pending'
@@ -1344,50 +1340,17 @@ export function FuelReimbursementTable({
 
                             <div className="space-y-5">
                                 <div className="space-y-2">
-                                    <Label className="text-slate-500 text-xs uppercase tracking-wider">Receipt proof</Label>
-                                    <div className="aspect-[3/4] max-h-[280px] w-full bg-slate-100 rounded-lg border border-slate-200 overflow-hidden relative">
-                                        {selectedTx.receiptUrl ? (
-                                            <a href={selectedTx.receiptUrl} target="_blank" rel="noopener noreferrer" className="block h-full w-full">
-                                                <ImageWithFallback
-                                                    src={selectedTx.receiptUrl}
-                                                    alt="Receipt"
-                                                    className="h-full w-full object-contain bg-black/5"
-                                                />
-                                            </a>
-                                        ) : (
-                                            <div className="flex flex-col items-center justify-center h-full min-h-[160px] text-slate-400">
-                                                <FileText className="h-12 w-12 mb-2 opacity-50" />
-                                                <span className="text-sm">No receipt uploaded</span>
-                                            </div>
-                                        )}
-                                    </div>
+                                    <EvidenceFromRecord
+                                        record={selectedTx}
+                                        label="Fuel receipt"
+                                    />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label className="text-slate-500 text-xs uppercase tracking-wider flex items-center gap-1.5">
-                                        <Camera className="h-3.5 w-3.5" />
-                                        Odometer photo
-                                    </Label>
-                                    <div className="aspect-[3/4] max-h-[280px] w-full bg-slate-100 rounded-lg border border-slate-200 overflow-hidden relative">
-                                        {odometerPhotoUrl ? (
-                                            <a
-                                                href={odometerPhotoUrl}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="block h-full w-full"
-                                            >
-                                                <ImageWithFallback
-                                                    src={odometerPhotoUrl}
-                                                    alt="Odometer"
-                                                    className="h-full w-full object-contain bg-black/5"
-                                                />
-                                            </a>
-                                        ) : (
-                                            <div className="flex flex-col items-center justify-center h-full min-h-[160px] text-slate-400">
-                                                <Camera className="h-12 w-12 mb-2 opacity-50" />
-                                                <span className="text-sm">No odometer photo</span>
-                                            </div>
-                                        )}
-                                    </div>
+                                    <EvidenceFromRecord
+                                        record={{ ...selectedTx, odometerProofUrl: odometerPhotoUrl }}
+                                        urlField="odometerProofUrl"
+                                        label="Odometer photo"
+                                    />
                                 </div>
                             </div>
                         </div>

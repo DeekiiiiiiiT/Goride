@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from "../ui/card";
 import { Button } from "../ui/button";
-import { Check, X, Fuel, Wrench, Receipt, Split } from "lucide-react";
+import { EvidenceFromRecord } from '../evidence/EvidenceFromRecord';
 import { FinancialTransaction, ExpenseSplitRule } from "../../types/data";
 import { api } from "../../services/api";
 import { tierService } from "../../services/tierService";
@@ -208,17 +208,8 @@ export function ExpenseApprovals({ transactions, onUpdate }: ExpenseApprovalsPro
                     </div>
                 )}
                 
-                <div className="flex items-center gap-4 mt-3">
-                    {tx.receiptUrl && (
-                        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => window.open(tx.receiptUrl, '_blank')}>
-                            <Receipt className="h-3 w-3 mr-1" /> View Receipt
-                        </Button>
-                    )}
-                    {tx.odometer && (
-                        <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">
-                            Odometer: {tx.odometer} km
-                        </span>
-                    )}
+                <div className="mt-3 max-w-xs">
+                    <EvidenceFromRecord record={tx} label="Receipt" compact />
                 </div>
               </div>
               <div className="flex flex-col gap-2 shrink-0 ml-2">
