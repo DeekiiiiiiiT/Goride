@@ -1379,17 +1379,61 @@ app.get(`${BASE}/reconciled`, async (c) => {
   }
 });
 
+// ─── Tag-ledger scoping helpers (mirror of client src/utils/tollTagLedger.ts) ──
+// Keep in lockstep with the client classifier so the "Paid Via: Tag" column and
+// the tag detail agree on what counts as tag activity.
+
+/** Normalize a tag number for comparison (trim + strip leading zeros). */
+function normTagServer(t: unknown): string {
+  return (t ?? "").toString().trim().replace(/^0+/, "");
+}
+
+/**
+ * True when a toll was paid OFF the tag (cash / card / fleet-account / legacy
+ * cash category / receipt-backed) and is therefore NOT part of the tag ledger.
+ * Operates on the merged tx shape (paymentMethod display strings + category).
+ */
+function serverIsOffTagToll(tx: any): boolean {
+  const cat = (tx.category || "").toLowerCase();
+  if (cat === "tolls" || cat === "toll") return true; // legacy cash category
+  if (tx.receiptUrl) return true;
+  const pm = (tx.paymentMethod || "").toLowerCase();
+  if (pm.includes("cash") || pm.includes("card") || pm.includes("fleet") || pm.includes("account")) {
+    return true;
+  }
+  return false;
+}
+
+/** True when a merged tx is linked to the given tag (by tollTagId UUID or tagNumber). */
+function rowTagMatchesServer(tx: any, tagNumberNorm: string, tagId?: string): boolean {
+  const meta = tx.metadata || {};
+  if (tagId && meta.tollTagId && meta.tollTagId === tagId) return true;
+  if (tagNumberNorm) {
+    const txNum = normTagServer(meta.tagNumber || meta.tollTagId || "");
+    if (txNum && txNum === tagNumberNorm) return true;
+  }
+  return false;
+}
+
 // ─── GET /toll-logs ────────────────────────────────────────────────────
 // Canonical toll data endpoint. Returns ALL toll-category transactions
 // with linked trip data pre-embedded. Supports filtering by vehicleId,
 // tagNumber, driverId, and category. Used by useTollLogs, TollTagDetail,
 // and TollTopupHistory.
+//
+// scope=tag (opt-in): returns the prepaid TAG LEDGER for a tag — tag-balance
+// usage + top-ups/refunds — across every vehicle the tag was ever on (via the
+// backfilled tollTagId/tagNumber), UNION the current vehicle's tag-ledger tolls
+// (so un-backfilled data still shows — strictly a superset of the legacy view,
+// no regression). Cash/card/fleet-account tolls are excluded.
 
 app.get(`${BASE}/toll-logs`, async (c) => {
   try {
     // ── Parse query filters ──
     const vehicleId = c.req.query("vehicleId") || undefined;
     const tagNumber = c.req.query("tagNumber") || undefined;
+    const tagId = c.req.query("tagId") || undefined;
+    const scope = c.req.query("scope") || undefined;
     const driverId = c.req.query("driverId") || undefined;
     const category = c.req.query("category") || undefined;
     const limit = c.req.query("limit") ? parseInt(c.req.query("limit"), 10) : undefined;
@@ -1399,20 +1443,39 @@ app.get(`${BASE}/toll-logs`, async (c) => {
     let tollTx = await loadMergedTollTxArray();
 
     // ── Apply filters ──
-    if (vehicleId) {
-      tollTx = tollTx.filter((tx: any) => tx.vehicleId === vehicleId);
-    }
-
-    if (tagNumber) {
-      const normalizedFilter = tagNumber.trim().replace(/^0+/, "");
+    // For scope=tag, count this vehicle's off-tag tolls BEFORE they're filtered
+    // out, so the tag detail can show its "paid off-tag" pointer.
+    let offTagCount = 0;
+    if (scope === "tag") {
+      // Per-tag ledger scoping: tag-ledger rows linked to this tag (any vehicle)
+      // UNION this vehicle's tag-ledger rows (covers not-yet-backfilled data).
+      const tagNumberNorm = normTagServer(tagNumber);
+      if (vehicleId) {
+        offTagCount = tollTx.filter((tx: any) => tx.vehicleId === vehicleId && serverIsOffTagToll(tx)).length;
+      }
       tollTx = tollTx.filter((tx: any) => {
-        const txTag = (tx.metadata?.tollTagId || tx.metadata?.tagNumber || "")
-          .toString()
-          .trim()
-          .replace(/^0+/, "");
-        // Include if tag matches OR if no tag metadata (backwards compat)
-        return txTag === normalizedFilter || !txTag;
+        if (serverIsOffTagToll(tx)) return false;
+        if (rowTagMatchesServer(tx, tagNumberNorm, tagId)) return true;
+        if (vehicleId && tx.vehicleId === vehicleId) return true;
+        return false;
       });
+    } else {
+      // Legacy behavior (unchanged): vehicle scope + tag filter with no-tag fallback.
+      if (vehicleId) {
+        tollTx = tollTx.filter((tx: any) => tx.vehicleId === vehicleId);
+      }
+
+      if (tagNumber) {
+        const normalizedFilter = tagNumber.trim().replace(/^0+/, "");
+        tollTx = tollTx.filter((tx: any) => {
+          const txTag = (tx.metadata?.tollTagId || tx.metadata?.tagNumber || "")
+            .toString()
+            .trim()
+            .replace(/^0+/, "");
+          // Include if tag matches OR if no tag metadata (backwards compat)
+          return txTag === normalizedFilter || !txTag;
+        });
+      }
     }
 
     if (driverId) {
@@ -1493,7 +1556,9 @@ app.get(`${BASE}/toll-logs`, async (c) => {
       success: true,
       data: enriched,
       total,
-      filters: { vehicleId: vehicleId || null, tagNumber: tagNumber || null, driverId: driverId || null, category: category || null },
+      // scope=tag: how many of the vehicle's tolls were paid off-tag (excluded above).
+      offTagCount,
+      filters: { vehicleId: vehicleId || null, tagNumber: tagNumber || null, tagId: tagId || null, scope: scope || null, driverId: driverId || null, category: category || null },
     });
   } catch (e: any) {
     console.log(`[TollLogs] GET /toll-logs error: ${e.message}`);
@@ -2441,6 +2506,197 @@ app.get(`${BASE}/toll-ledger/backfill/status`, async (c) => {
     });
   } catch (e: any) {
     console.log(`[TollLedgerBackfill] GET /status error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// TAG IDENTITY BACKFILL (Phase 6) — link tag-ledger records to their tag
+// ═══════════════════════════════════════════════════════════════════════
+// Stamps tollTagId / tagNumber onto existing tag-ledger records from the tag's
+// assignment history (date-aware), so scope=tag can show a tag's true lifetime
+// activity across vehicle reassignments. Idempotent (only fills records missing
+// tollTagId unless force); dry-run by default.
+
+interface TagAssignmentWindow {
+  tagId: string;
+  tagNumber: string | null;
+  vehicleId: string;
+  start: number; // ms, inclusive
+  end: number;   // ms, exclusive (Infinity = still assigned)
+}
+
+/** Build per-tag [assignedAt, unassignedAt) windows from assignment history. */
+function buildTagAssignmentWindows(tags: any[]): TagAssignmentWindow[] {
+  const windows: TagAssignmentWindow[] = [];
+  for (const tag of tags) {
+    if (!tag || typeof tag !== "object" || !tag.id) continue;
+    const history = Array.isArray(tag.assignmentHistory) ? tag.assignmentHistory : [];
+    if (history.length > 0) {
+      for (const h of history) {
+        if (!h || !h.vehicleId) continue;
+        const start = h.assignedAt ? new Date(h.assignedAt).getTime() : 0;
+        const end = h.unassignedAt ? new Date(h.unassignedAt).getTime() : Infinity;
+        windows.push({
+          tagId: tag.id,
+          tagNumber: tag.tagNumber ?? null,
+          vehicleId: h.vehicleId,
+          start: isNaN(start) ? 0 : start,
+          end: isNaN(end) ? Infinity : end,
+        });
+      }
+    } else if (tag.assignedVehicleId) {
+      // No history recorded — treat the current assignment as open-ended.
+      const start = tag.createdAt ? new Date(tag.createdAt).getTime() : 0;
+      windows.push({
+        tagId: tag.id,
+        tagNumber: tag.tagNumber ?? null,
+        vehicleId: tag.assignedVehicleId,
+        start: isNaN(start) ? 0 : start,
+        end: Infinity,
+      });
+    }
+  }
+  return windows;
+}
+
+/** Canonical "belongs to the tag ledger" test on a RAW TollLedgerRecord. */
+function rawIsTagLedger(entry: any): boolean {
+  const type = entry?.type;
+  if (type === "top_up" || type === "refund" || type === "adjustment" || type === "balance_transfer") {
+    return true; // credits / adjustments to the tag balance
+  }
+  return entry?.paymentMethod === "tag_balance"; // usage drawn from the tag
+}
+
+/** Find the tag whose assignment window contains this entry (date-aware). */
+function resolveTagForEntry(
+  entry: any,
+  windows: TagAssignmentWindow[],
+): { window: TagAssignmentWindow | null; ambiguous: boolean } {
+  if (!entry.vehicleId) return { window: null, ambiguous: false };
+  const candidates = windows.filter((w) => w.vehicleId === entry.vehicleId);
+  if (candidates.length === 0) return { window: null, ambiguous: false };
+  const t = entry.date ? new Date(entry.date).getTime() : NaN;
+  if (isNaN(t)) {
+    // No usable date — only safe if the vehicle ever had exactly one tag.
+    const uniqueTags = new Set(candidates.map((w) => w.tagId));
+    return uniqueTags.size === 1 ? { window: candidates[0], ambiguous: false } : { window: null, ambiguous: true };
+  }
+  const inWindow = candidates.filter((w) => t >= w.start && t < w.end);
+  if (inWindow.length === 0) return { window: null, ambiguous: false };
+  const uniqueTags = new Set(inWindow.map((w) => w.tagId));
+  return uniqueTags.size === 1 ? { window: inWindow[0], ambiguous: false } : { window: inWindow[0], ambiguous: true };
+}
+
+/** Compute what a tag backfill would do (shared by dry-run status + apply). */
+async function computeTagBackfillPlan(force: boolean) {
+  const tags = ((await kv.getByPrefix("toll_tag:")) || []).filter(Boolean);
+  const windows = buildTagAssignmentWindows(tags);
+  const entries = await getAllTollLedgerEntries();
+
+  const plan = {
+    totalLedger: entries.length,
+    considered: 0, // tag-ledger records
+    alreadyTagged: 0,
+    toStamp: [] as Array<{ id: string; tollTagId: string; tagNumber: string | null }>,
+    skippedNotTagLedger: 0,
+    skippedNoVehicle: 0,
+    unmatched: [] as string[], // tag-ledger + has vehicle, but no window matched
+    ambiguous: [] as string[],
+  };
+
+  for (const e of entries) {
+    if (!e || typeof e !== "object" || !e.id) continue;
+    if (!rawIsTagLedger(e)) { plan.skippedNotTagLedger++; continue; }
+    plan.considered++;
+    if (!force && e.tollTagId) { plan.alreadyTagged++; continue; }
+    if (!e.vehicleId) { plan.skippedNoVehicle++; continue; }
+    const { window, ambiguous } = resolveTagForEntry(e, windows);
+    if (ambiguous) { plan.ambiguous.push(e.id); continue; }
+    if (!window) { plan.unmatched.push(e.id); continue; }
+    plan.toStamp.push({ id: e.id, tollTagId: window.tagId, tagNumber: window.tagNumber });
+  }
+  return plan;
+}
+
+// ─── GET /toll-ledger/tag-backfill/status ─── read-only integrity report ──
+app.get(`${BASE}/toll-ledger/tag-backfill/status`, async (c) => {
+  try {
+    const force = c.req.query("force") === "true";
+    const plan = await computeTagBackfillPlan(force);
+    return c.json({
+      success: true,
+      summary: {
+        totalLedger: plan.totalLedger,
+        tagLedgerRecords: plan.considered,
+        alreadyLinked: plan.alreadyTagged,
+        willLink: plan.toStamp.length,
+        unresolvedNoWindow: plan.unmatched.length,
+        unresolvedNoVehicle: plan.skippedNoVehicle,
+        ambiguous: plan.ambiguous.length,
+      },
+      unmatchedSample: plan.unmatched.slice(0, 50),
+      ambiguousSample: plan.ambiguous.slice(0, 50),
+      message:
+        `${plan.toStamp.length} tag-ledger record(s) can be linked; ` +
+        `${plan.unmatched.length} unresolved (no assignment window), ` +
+        `${plan.skippedNoVehicle} missing vehicleId, ${plan.ambiguous.length} ambiguous.`,
+    });
+  } catch (e: any) {
+    console.log(`[TagBackfill] status error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── POST /toll-ledger/tag-backfill ─── apply (dry-run by default) ────────
+app.post(`${BASE}/toll-ledger/tag-backfill`, async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body.dryRun !== false; // default to dry-run for safety
+    const force = body.force === true;    // re-stamp even if already linked
+    const plan = await computeTagBackfillPlan(force);
+
+    let linked = 0;
+    const errors: string[] = [];
+    if (!dryRun) {
+      for (const item of plan.toStamp) {
+        try {
+          await updateTollLedgerEntry(
+            item.id,
+            { tollTagId: item.tollTagId, tagNumber: item.tagNumber ?? null },
+            "updated",
+            "system",
+            "Tag Backfill",
+          );
+          linked++;
+        } catch (err: any) {
+          errors.push(`${item.id}: ${err.message}`);
+          if (errors.length > 50) break;
+        }
+      }
+    }
+
+    console.log(`[TagBackfill] dryRun=${dryRun} force=${force} willLink=${plan.toStamp.length} linked=${linked} errors=${errors.length}`);
+    return c.json({
+      success: true,
+      dryRun,
+      summary: {
+        tagLedgerRecords: plan.considered,
+        alreadyLinked: plan.alreadyTagged,
+        willLink: plan.toStamp.length,
+        linked: dryRun ? 0 : linked,
+        unresolvedNoWindow: plan.unmatched.length,
+        unresolvedNoVehicle: plan.skippedNoVehicle,
+        ambiguous: plan.ambiguous.length,
+      },
+      errors: errors.slice(0, 50),
+      message: dryRun
+        ? `Dry run: ${plan.toStamp.length} record(s) would be linked. Re-run with dryRun=false to apply.`
+        : `Linked ${linked} record(s) to their tag.`,
+    });
+  } catch (e: any) {
+    console.log(`[TagBackfill] error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
 });

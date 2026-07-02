@@ -104,7 +104,11 @@ export function TollTagDetail({ tag, onBack, onNavigateToReconciliation }: TollT
       // and pre-embeds linkedTrip on each transaction.
       const [vehicles, tollResponse, claims] = await Promise.all([
         api.getVehicles(),
-        api.getTollLogs({ vehicleId: tag.assignedVehicleId, tagNumber: tag.tagNumber }),
+        // Per-tag scoping (Phase 6): the tag's lifetime ledger across every
+        // vehicle it was assigned to, unioned with the current vehicle's tag
+        // tolls. Server already excludes cash/off-tag; the client tag-ledger
+        // filter below stays as defense-in-depth.
+        api.getTollLogs({ vehicleId: tag.assignedVehicleId, tagNumber: tag.tagNumber, tagId: tag.id, scope: 'tag' }),
         api.getClaims(),
       ]);
 
@@ -114,9 +118,14 @@ export function TollTagDetail({ tag, onBack, onNavigateToReconciliation }: TollT
       // to the prepaid tag ledger (tag-balance usage + top-ups/refunds); cash/card/
       // fleet-account tolls never touched the tag and are excluded here.
       const filteredVehicleTx: any[] = tollResponse?.data || [];
+      // Server (scope=tag) already excludes off-tag rows; the client filter stays
+      // as defense-in-depth in case an older/un-scoped response comes back.
       const tagLedgerAll = filteredVehicleTx.filter(isTagLedgerTx);
-      // How many of this vehicle's tolls were paid off-tag (for the pointer only).
-      const offTagCount = filteredVehicleTx.filter(isOffTagToll).length;
+      // Off-tag count for this vehicle comes from the server (those rows were
+      // filtered out of `data`), falling back to a client count if absent.
+      const offTagCount = typeof tollResponse?.offTagCount === 'number'
+        ? tollResponse.offTagCount
+        : filteredVehicleTx.filter(isOffTagToll).length;
 
       // Apply date filter for period-specific stats (balance always uses all-time data)
       const dateFilteredTx = filterByDate(tagLedgerAll);
@@ -798,6 +807,7 @@ export function TollTagDetail({ tag, onBack, onNavigateToReconciliation }: TollT
                       <TollTopupHistory
                         vehicleId={tag.assignedVehicleId}
                         tagNumber={tag.tagNumber}
+                        tagId={tag.id}
                         scope="tag"
                         onTransactionChange={fetchStats}
                       />

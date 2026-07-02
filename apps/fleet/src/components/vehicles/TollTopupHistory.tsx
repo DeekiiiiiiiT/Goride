@@ -27,17 +27,18 @@ import {
 interface TollTopupHistoryProps {
   vehicleId: string;
   tagNumber?: string; // Phase 4: Filter transactions to this specific tag
+  tagId?: string; // Phase 6: tag UUID for per-tag (cross-vehicle) scoping
   refreshTrigger?: number; // Prop to force refresh when a new top-up is added
   onTransactionChange?: () => void;
   /**
    * 'tag' restricts the view to prepaid tag-ledger activity (tag-balance usage +
-   * top-ups/refunds), hiding cash/off-tag tolls. Default 'all' preserves the
-   * legacy behavior for any non-tag reuse.
+   * top-ups/refunds), hiding cash/off-tag tolls, and requests per-tag scoping
+   * from the server. Default 'all' preserves the legacy behavior.
    */
   scope?: 'all' | 'tag';
 }
 
-export function TollTopupHistory({ vehicleId, tagNumber, refreshTrigger, onTransactionChange, scope = 'all' }: TollTopupHistoryProps) {
+export function TollTopupHistory({ vehicleId, tagNumber, tagId, refreshTrigger, onTransactionChange, scope = 'all' }: TollTopupHistoryProps) {
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
   const [claims, setClaims] = useState<Record<string, Claim>>({});
   const [loading, setLoading] = useState(true);
@@ -54,7 +55,9 @@ export function TollTopupHistory({ vehicleId, tagNumber, refreshTrigger, onTrans
         // The server already filters by vehicleId, tagNumber, and toll categories,
         // sorts by date desc, and pre-embeds linkedTrip on each transaction.
         const [tollResponse, allClaims] = await Promise.all([
-            api.getTollLogs({ vehicleId, tagNumber }),
+            api.getTollLogs(scope === 'tag'
+              ? { vehicleId, tagNumber, tagId, scope: 'tag' }
+              : { vehicleId, tagNumber }),
             api.getClaims()
         ]);
 
@@ -81,7 +84,7 @@ export function TollTopupHistory({ vehicleId, tagNumber, refreshTrigger, onTrans
     if (vehicleId) {
         fetchHistory();
     }
-  }, [vehicleId, tagNumber, refreshTrigger, internalRefresh]);
+  }, [vehicleId, tagNumber, tagId, scope, refreshTrigger, internalRefresh]);
 
   const handleDeleteClick = (id: string) => {
     setTransactionToDelete(id);

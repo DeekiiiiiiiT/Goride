@@ -1817,6 +1817,8 @@ export const api = {
   async getTollLogs(params?: {
     vehicleId?: string;
     tagNumber?: string;
+    tagId?: string;
+    scope?: 'tag';
     driverId?: string;
     category?: string;
     limit?: number;
@@ -1825,6 +1827,8 @@ export const api = {
     const qs = new URLSearchParams();
     if (params?.vehicleId) qs.set('vehicleId', params.vehicleId);
     if (params?.tagNumber) qs.set('tagNumber', params.tagNumber);
+    if (params?.tagId) qs.set('tagId', params.tagId);
+    if (params?.scope) qs.set('scope', params.scope);
     if (params?.driverId) qs.set('driverId', params.driverId);
     if (params?.category) qs.set('category', params.category);
     if (params?.limit !== undefined) qs.set('limit', params.limit.toString());
@@ -1833,6 +1837,29 @@ export const api = {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch toll logs");
+    return response.json();
+  },
+
+  // Preview how many tag-ledger records can be linked to their tag (read-only).
+  async getTollTagBackfillStatus() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/toll-ledger/tag-backfill/status`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to load tag history status");
+    return response.json();
+  },
+
+  // Link existing tolls to their tag. dryRun=true previews without writing.
+  async runTollTagBackfill(dryRun: boolean) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/toll-ledger/tag-backfill`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify({ dryRun })
+    });
+    if (!response.ok) throw new Error("Failed to sync tag history");
     return response.json();
   },
 
