@@ -2,49 +2,28 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "../../ui/table";
-import { Card, CardContent } from "../../ui/card";
-import { Loader2, ShieldCheck, Copy, Check, LinkIcon, Unlink, Search, ChevronDown, Sparkles, CalendarRange } from "lucide-react";
+import { Loader2, ShieldCheck, Copy, Check, Unlink, ChevronDown, Sparkles, CalendarRange } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../ui/collapsible";
 import { groupDisputeRefundsByWeek } from "../../../utils/tollWeekPeriod";
 import { DisputeRefund } from "../../../types/data";
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
 import { api } from '../../../services/api';
 import { toast } from 'sonner@2.0.3';
+import { DisputeMatchModal } from "./DisputeMatchModal";
 
 interface DisputeRefundsListProps {
   refunds: DisputeRefund[];
   onMatchComplete: () => void; // Trigger refresh after match/unmatch
 }
 
-interface SuggestionRow {
-  tollId: string;
-  tripId: string | null;
-  tollAmount: number;
-  claimAmount?: number;
-  uberRefund: number;
-  variance: number;
-  date: string;
-  confidence: number;
-  claimId: string | null;
-  claimStatus: string | null;
-  matchType?: 'claim' | 'toll';
-}
-
 export function DisputeRefundsList({ refunds, onMatchComplete }: DisputeRefundsListProps) {
   const fleetTz = useFleetTimezone();
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [expandedRefundId, setExpandedRefundId] = useState<string | null>(null);
-  const [suggestions, setSuggestions] = useState<SuggestionRow[]>([]);
-  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
-  const [matchingId, setMatchingId] = useState<string | null>(null);
   const [unmatchingId, setUnmatchingId] = useState<string | null>(null);
   const [visibleWeekCount, setVisibleWeekCount] = useState(12);
   const [statusFilter, setStatusFilter] = useState<'all' | 'unmatched' | 'matched'>('all');
-  // Manual search (when smart suggestions miss)
-  const [manualMode, setManualMode] = useState(false);
-  const [manualQuery, setManualQuery] = useState('');
-  const [manualCandidates, setManualCandidates] = useState<{ claims: any[]; tolls: any[] }>({ claims: [], tolls: [] });
-  const [loadingManual, setLoadingManual] = useState(false);
+  // Match overlay (smart suggestions + manual search live inside the modal)
+  const [matchModalRefund, setMatchModalRefund] = useState<DisputeRefund | null>(null);
 
   const filtered = useMemo(() => {
     if (statusFilter === 'all') return refunds;
@@ -69,69 +48,6 @@ export function DisputeRefundsList({ refunds, onMatchComplete }: DisputeRefundsL
       setTimeout(() => setCopiedId(null), 2000);
     } catch {
       toast.error('Failed to copy');
-    }
-  };
-
-  const loadSuggestions = async (refundId: string) => {
-    if (expandedRefundId === refundId) {
-      setExpandedRefundId(null);
-      setSuggestions([]);
-      setManualMode(false);
-      setManualCandidates({ claims: [], tolls: [] });
-      setManualQuery('');
-      return;
-    }
-    setExpandedRefundId(refundId);
-    setManualMode(false);
-    setManualCandidates({ claims: [], tolls: [] });
-    setManualQuery('');
-    setLoadingSuggestions(true);
-    try {
-      const res = await api.getDisputeRefundSuggestions(refundId);
-      setSuggestions(res.suggestions || []);
-    } catch (err: any) {
-      console.error('[DisputeRefunds] Failed to load suggestions:', err);
-      toast.error('Failed to load match suggestions');
-      setSuggestions([]);
-    } finally {
-      setLoadingSuggestions(false);
-    }
-  };
-
-  const loadManualCandidates = async (query: string) => {
-    setLoadingManual(true);
-    try {
-      const res = await api.getDisputeMatchCandidates(query.trim() || undefined);
-      setManualCandidates({ claims: res.claims || [], tolls: res.tolls || [] });
-    } catch (err: any) {
-      console.error('[DisputeRefunds] Failed to load candidates:', err);
-      toast.error('Failed to load match candidates');
-      setManualCandidates({ claims: [], tolls: [] });
-    } finally {
-      setLoadingManual(false);
-    }
-  };
-
-  const openManual = (refundId: string) => {
-    setManualMode(true);
-    loadManualCandidates('');
-  };
-
-  const handleMatch = async (refundId: string, tollId: string, claimId?: string | null, createClaim?: boolean) => {
-    setMatchingId(tollId);
-    try {
-      await api.matchDisputeRefund(refundId, tollId, claimId || undefined, createClaim ? { createClaim: true } : undefined);
-      toast.success('Refund matched — claim marked Reimbursed');
-      setExpandedRefundId(null);
-      setSuggestions([]);
-      setManualMode(false);
-      setManualCandidates({ claims: [], tolls: [] });
-      onMatchComplete();
-    } catch (err: any) {
-      console.error('[DisputeRefunds] Match failed:', err);
-      toast.error(`Match failed: ${err.message}`);
-    } finally {
-      setMatchingId(null);
     }
   };
 
@@ -275,13 +191,9 @@ export function DisputeRefundsList({ refunds, onMatchComplete }: DisputeRefundsL
                                           variant="ghost"
                                           size="sm"
                                           className="h-7 px-2 text-xs text-teal-600 hover:text-teal-700 hover:bg-teal-50"
-                                          onClick={() => loadSuggestions(refund.id)}
+                                          onClick={() => setMatchModalRefund(refund)}
                                         >
-                                          {expandedRefundId === refund.id ? (
-                                            <><ChevronDown className="h-3 w-3 mr-1 rotate-180" /> Close</>
-                                          ) : (
-                                            <><Sparkles className="h-3 w-3 mr-1" /> Match</>
-                                          )}
+                                          <Sparkles className="h-3 w-3 mr-1" /> Match
                                         </Button>
                                       ) : (
                                         <Button
@@ -302,178 +214,6 @@ export function DisputeRefundsList({ refunds, onMatchComplete }: DisputeRefundsL
                                   </TableCell>
                                 </TableRow>
 
-                                {expandedRefundId === refund.id && (
-                                  <TableRow>
-                                    <TableCell colSpan={7} className="p-0 bg-teal-50/30">
-                                      <div className="px-4 py-3 space-y-2">
-                                        <div className="flex items-center justify-between gap-2">
-                                          <div className="flex items-center gap-2 text-xs font-medium text-teal-700">
-                                            <Search className="h-3.5 w-3.5" />
-                                            Smart Match Suggestions for ${refund.amount.toFixed(2)} refund
-                                          </div>
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-6 px-2 text-[11px] text-slate-500 hover:text-teal-700"
-                                            onClick={() => (manualMode ? setManualMode(false) : openManual(refund.id))}
-                                          >
-                                            {manualMode ? 'Hide manual search' : 'Search manually'}
-                                          </Button>
-                                        </div>
-
-                                        {loadingSuggestions ? (
-                                          <div className="flex items-center justify-center py-4">
-                                            <Loader2 className="h-5 w-5 animate-spin text-teal-500" />
-                                            <span className="ml-2 text-xs text-slate-500">Finding matching tolls...</span>
-                                          </div>
-                                        ) : suggestions.length === 0 ? (
-                                          <div className="text-xs text-slate-500 py-3 text-center">
-                                            No confident auto-match found.{' '}
-                                            <button className="text-teal-600 font-medium hover:underline" onClick={() => openManual(refund.id)}>
-                                              Search manually
-                                            </button>{' '}
-                                            to pick the underpaid item yourself.
-                                          </div>
-                                        ) : (
-                                          <div className="space-y-1.5">
-                                            {suggestions.map((s) => (
-                                              <Card key={s.tollId} className="border-slate-200 shadow-none">
-                                                <CardContent className="p-3 flex items-center justify-between gap-3">
-                                                  <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center gap-2 text-xs flex-wrap">
-                                                      <span className="text-slate-600">
-                                                        {s.matchType === 'claim' ? 'Underpaid loss' : 'Toll'}:{' '}
-                                                        <span className="font-semibold text-slate-800">
-                                                          ${Math.abs(s.claimAmount ?? s.tollAmount).toFixed(2)}
-                                                        </span>
-                                                      </span>
-                                                      <span className="text-slate-400">|</span>
-                                                      <span className="text-slate-600">
-                                                        Won back: <span className="font-semibold text-emerald-600">${s.uberRefund.toFixed(2)}</span>
-                                                      </span>
-                                                      <span className="text-slate-400">|</span>
-                                                      <span className={`font-medium ${Math.abs(s.variance) < 0.01 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                                                        {Math.abs(s.variance) < 0.01 ? 'Exact match' : `$${Math.abs(s.variance).toFixed(2)} off`}
-                                                      </span>
-                                                    </div>
-                                                    <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-500">
-                                                      <span>{formatInFleetTz(s.date, fleetTz, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}</span>
-                                                      {s.matchType === 'claim' && (
-                                                        <span className="text-slate-400">on ${Math.abs(s.tollAmount).toFixed(2)} toll</span>
-                                                      )}
-                                                      {s.claimId && (
-                                                        <Badge variant="outline" className="text-[9px] border-purple-200 text-purple-600">
-                                                          Claim: {s.claimStatus || 'Pending'}
-                                                        </Badge>
-                                                      )}
-                                                    </div>
-                                                  </div>
-                                                  <div className="flex items-center gap-2">
-                                                    <div className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                                                      s.confidence >= 80 ? 'bg-emerald-100 text-emerald-700' :
-                                                      s.confidence >= 50 ? 'bg-amber-100 text-amber-700' :
-                                                      'bg-slate-100 text-slate-600'
-                                                    }`}>
-                                                      {s.confidence}%
-                                                    </div>
-                                                    <Button
-                                                      size="sm"
-                                                      className="h-7 px-3 text-xs bg-teal-600 hover:bg-teal-700"
-                                                      onClick={() => handleMatch(refund.id, s.tollId, s.claimId)}
-                                                      disabled={matchingId === s.tollId}
-                                                    >
-                                                      {matchingId === s.tollId ? (
-                                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                                      ) : (
-                                                        <><LinkIcon className="h-3 w-3 mr-1" /> Link</>
-                                                      )}
-                                                    </Button>
-                                                  </div>
-                                                </CardContent>
-                                              </Card>
-                                            ))}
-                                          </div>
-                                        )}
-
-                                        {/* Manual search — pick any open underpaid claim or bare toll */}
-                                        {manualMode && (
-                                          <div className="mt-2 border-t border-teal-100 pt-3 space-y-2">
-                                            <div className="flex items-center gap-2">
-                                              <input
-                                                value={manualQuery}
-                                                onChange={(e) => setManualQuery(e.target.value)}
-                                                onKeyDown={(e) => { if (e.key === 'Enter') loadManualCandidates(manualQuery); }}
-                                                placeholder="Search by driver, amount, or date…"
-                                                className="flex-1 h-8 rounded-md border border-slate-200 px-2.5 text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
-                                              />
-                                              <Button size="sm" className="h-8 px-3 text-xs bg-teal-600 hover:bg-teal-700" onClick={() => loadManualCandidates(manualQuery)}>
-                                                <Search className="h-3 w-3 mr-1" /> Search
-                                              </Button>
-                                            </div>
-
-                                            {loadingManual ? (
-                                              <div className="flex items-center justify-center py-3">
-                                                <Loader2 className="h-4 w-4 animate-spin text-teal-500" />
-                                                <span className="ml-2 text-xs text-slate-500">Searching…</span>
-                                              </div>
-                                            ) : (manualCandidates.claims.length === 0 && manualCandidates.tolls.length === 0) ? (
-                                              <div className="text-xs text-slate-500 py-2 text-center">No open claims or tolls match that search.</div>
-                                            ) : (
-                                              <div className="space-y-2">
-                                                {manualCandidates.claims.length > 0 && (
-                                                  <div className="space-y-1">
-                                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Open underpaid claims</div>
-                                                    {manualCandidates.claims.map((cand) => (
-                                                      <Card key={`c-${cand.claimId}`} className="border-slate-200 shadow-none">
-                                                        <CardContent className="p-2.5 flex items-center justify-between gap-3">
-                                                          <div className="min-w-0 text-xs">
-                                                            <div className="font-medium text-slate-800 truncate">{cand.driverName}</div>
-                                                            <div className="text-[10px] text-slate-500">
-                                                              Loss ${Math.abs(cand.claimAmount || 0).toFixed(2)} · on ${Math.abs(cand.tollAmount || 0).toFixed(2)} toll
-                                                              {cand.date && <> · {formatInFleetTz(cand.date, fleetTz, { month: 'short', day: 'numeric', year: 'numeric' })}</>}
-                                                            </div>
-                                                          </div>
-                                                          <Button size="sm" className="h-7 px-3 text-xs bg-teal-600 hover:bg-teal-700"
-                                                            onClick={() => handleMatch(refund.id, cand.tollId, cand.claimId)}
-                                                            disabled={matchingId === cand.tollId}>
-                                                            {matchingId === cand.tollId ? <Loader2 className="h-3 w-3 animate-spin" /> : <><LinkIcon className="h-3 w-3 mr-1" /> Link</>}
-                                                          </Button>
-                                                        </CardContent>
-                                                      </Card>
-                                                    ))}
-                                                  </div>
-                                                )}
-                                                {manualCandidates.tolls.length > 0 && (
-                                                  <div className="space-y-1">
-                                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Tolls with no claim yet</div>
-                                                    {manualCandidates.tolls.map((cand) => (
-                                                      <Card key={`t-${cand.tollId}`} className="border-slate-200 shadow-none">
-                                                        <CardContent className="p-2.5 flex items-center justify-between gap-3">
-                                                          <div className="min-w-0 text-xs">
-                                                            <div className="font-medium text-slate-800 truncate">{cand.driverName}</div>
-                                                            <div className="text-[10px] text-slate-500">
-                                                              Toll ${Math.abs(cand.tollAmount || 0).toFixed(2)}
-                                                              {cand.date && <> · {formatInFleetTz(cand.date, fleetTz, { month: 'short', day: 'numeric', year: 'numeric' })}</>}
-                                                            </div>
-                                                          </div>
-                                                          <Button size="sm" variant="outline" className="h-7 px-3 text-xs"
-                                                            onClick={() => handleMatch(refund.id, cand.tollId, null, true)}
-                                                            disabled={matchingId === cand.tollId}>
-                                                            {matchingId === cand.tollId ? <Loader2 className="h-3 w-3 animate-spin" /> : <><LinkIcon className="h-3 w-3 mr-1" /> Link + create claim</>}
-                                                          </Button>
-                                                        </CardContent>
-                                                      </Card>
-                                                    ))}
-                                                  </div>
-                                                )}
-                                              </div>
-                                            )}
-                                          </div>
-                                        )}
-                                      </div>
-                                    </TableCell>
-                                  </TableRow>
-                                )}
                               </React.Fragment>
                             ))}
                           </tbody>
@@ -501,6 +241,13 @@ export function DisputeRefundsList({ refunds, onMatchComplete }: DisputeRefundsL
           </Button>
         </div>
       )}
+
+      <DisputeMatchModal
+        open={!!matchModalRefund}
+        onOpenChange={(o) => { if (!o) setMatchModalRefund(null); }}
+        refund={matchModalRefund}
+        onMatched={onMatchComplete}
+      />
     </div>
   );
 }

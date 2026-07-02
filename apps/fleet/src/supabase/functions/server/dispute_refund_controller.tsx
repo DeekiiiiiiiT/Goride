@@ -480,6 +480,8 @@ app.get(`${BASE}/suggestions/:id`, async (c) => {
 app.get(`${BASE}/match-candidates`, async (c) => {
   try {
     const q = (c.req.query("q") || "").trim().toLowerCase();
+    const from = (c.req.query("from") || "").slice(0, 10); // yyyy-MM-dd
+    const to = (c.req.query("to") || "").slice(0, 10);
     const LIMIT = 25;
 
     // Tolls already linked to a matched refund (exclude from candidates).
@@ -541,10 +543,21 @@ app.get(`${BASE}/match-candidates`, async (c) => {
       const hay = `${cand.driverName} ${cand.tollAmount} ${cand.claimAmount ?? ""} ${cand.date ?? ""}`.toLowerCase();
       return hay.includes(q);
     };
+    // Period filter (yyyy-MM-dd inclusive range). Candidate dates are compared on
+    // their date-only prefix so ISO timestamps and date-only strings both work.
+    const inRange = (cand: any) => {
+      if (!from && !to) return true;
+      const d = cand.date ? String(cand.date).slice(0, 10) : "";
+      if (!d) return false;
+      if (from && d < from) return false;
+      if (to && d > to) return false;
+      return true;
+    };
+    const keep = (cand: any) => matchQ(cand) && inRange(cand);
     const byDate = (a: any, b: any) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime();
 
-    const claims = claimCandidates.filter(matchQ).sort(byDate).slice(0, LIMIT);
-    const tolls = tollCandidates.filter(matchQ).sort(byDate).slice(0, LIMIT);
+    const claims = claimCandidates.filter(keep).sort(byDate).slice(0, LIMIT);
+    const tolls = tollCandidates.filter(keep).sort(byDate).slice(0, LIMIT);
     return c.json({ claims, tolls });
   } catch (err: any) {
     console.log(`[DisputeRefund] Match-candidates error: ${err.message}`);

@@ -1,4 +1,25 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import {
+  AlertTriangle,
+  Briefcase,
+  CalendarRange,
+  CarFront,
+  CheckCircle2,
+  ChevronDown,
+  DollarSign,
+  FileText,
+  Gauge,
+  HelpCircle,
+  MoreHorizontal,
+  Pencil,
+  Route,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  Tag,
+  User,
+  UserMinus,
+} from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../../ui/card";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";

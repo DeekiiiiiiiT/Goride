@@ -2251,9 +2251,11 @@ export const api = {
     return response.json();
   },
 
-  async getDisputeMatchCandidates(query?: string): Promise<{ claims: any[]; tolls: any[] }> {
+  async getDisputeMatchCandidates(opts?: { query?: string; from?: string; to?: string }): Promise<{ claims: any[]; tolls: any[] }> {
     const qs = new URLSearchParams();
-    if (query) qs.set('q', query);
+    if (opts?.query) qs.set('q', opts.query);
+    if (opts?.from) qs.set('from', opts.from);
+    if (opts?.to) qs.set('to', opts.to);
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/dispute-refunds/match-candidates?${qs.toString()}`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
