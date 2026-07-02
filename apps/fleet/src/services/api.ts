@@ -1836,11 +1836,12 @@ export const api = {
     return response.json();
   },
 
-  async getTollUnreconciled(params?: { driverId?: string; limit?: number; offset?: number }) {
+  async getTollUnreconciled(params?: { driverId?: string; limit?: number; offset?: number; autoMatch?: boolean }) {
     const qs = new URLSearchParams();
     if (params?.driverId) qs.set('driverId', params.driverId);
     if (params?.limit !== undefined) qs.set('limit', params.limit.toString());
     if (params?.offset !== undefined) qs.set('offset', params.offset.toString());
+    if (params?.autoMatch) qs.set('autoMatch', '1');
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/unreconciled?${qs.toString()}`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });

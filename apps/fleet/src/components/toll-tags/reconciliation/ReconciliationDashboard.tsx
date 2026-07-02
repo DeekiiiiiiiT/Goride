@@ -440,7 +440,7 @@ export function ReconciliationDashboard() {
                 </Button>
             )}
             <TollAutomationSettings onChanged={refresh} />
-            <Button variant="outline" size="sm" onClick={refresh}>
+            <Button variant="outline" size="sm" onClick={() => refresh({ autoMatch: true })}>
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Refresh Data
             </Button>

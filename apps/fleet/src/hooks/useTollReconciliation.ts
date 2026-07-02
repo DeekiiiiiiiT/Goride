@@ -40,6 +40,37 @@ async function fetchAllTrips(): Promise<Trip[]> {
   return all;
 }
 
+/** Paginate through all unreconciled tolls (server caps each page at 100). */
+async function fetchAllUnreconciled(
+  params: { driverId?: string; autoMatch?: boolean },
+): Promise<{ data: FinancialTransaction[]; suggestions: Record<string, any[]>; autoReconciled: number; total: number }> {
+  const PAGE_SIZE = 100;
+  let offset = 0;
+  const all: FinancialTransaction[] = [];
+  const suggestions: Record<string, any[]> = {};
+  let autoReconciled = 0;
+  let total = 0;
+
+  while (true) {
+    const res = await api.getTollUnreconciled({
+      ...params,
+      limit: PAGE_SIZE,
+      offset,
+    });
+    const batch: FinancialTransaction[] = res.data || [];
+    all.push(...batch);
+    if (res.suggestions) {
+      Object.assign(suggestions, res.suggestions);
+    }
+    autoReconciled += res.autoReconciled || 0;
+    total = res.total ?? all.length;
+    if (batch.length < PAGE_SIZE || all.length >= total) break;
+    offset += PAGE_SIZE;
+  }
+
+  return { data: all, suggestions, autoReconciled, total };
+}
+
 /**
  * Convert server-side suggestion format (flat trip fields) into the
  * client-side MatchResult shape expected by SuggestedMatchCard et al.
@@ -117,20 +148,18 @@ export function useTollReconciliation(driverId?: string) {
   // Phase 6 (Dispute Refunds): Imported Support Adjustment refunds
   const [disputeRefunds, setDisputeRefunds] = useState<DisputeRefund[]>([]);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (opts?: { autoMatch?: boolean }) => {
     setLoading(true);
     try {
-      // Phase 4: Fetch from server endpoints (no more fetchAllTransactions!)
-      // Still fetch trips for ManualMatchModal + driver inference in UnmatchedTollsList
-      const filterParams = { limit: 1000, ...(driverId ? { driverId } : {}) };
+      const filterParams = { ...(driverId ? { driverId } : {}), autoMatch: opts?.autoMatch };
       
-      // Step 1: Fetch unreconciled FIRST (it performs auto-reconciliation server-side)
-      const unreconciledRes = await api.getTollUnreconciled(filterParams);
+      // Step 1: Fetch unreconciled in pages (server caps page size; avoids edge timeout)
+      const unreconciledRes = await fetchAllUnreconciled(filterParams);
       
       // Step 2: Now fetch reconciled + refunds + trips (after auto-reconciliation writes have persisted)
       const [reconciledRes, refundsRes, allTrips] = await Promise.all([
-        api.getTollReconciled(filterParams),
-        api.getTollUnclaimedRefunds(filterParams),
+        api.getTollReconciled({ limit: 1000, ...(driverId ? { driverId } : {}) }),
+        api.getTollUnclaimedRefunds({ limit: 1000, ...(driverId ? { driverId } : {}) }),
         fetchAllTrips()
       ]);
 

@@ -863,6 +863,19 @@ function parseQueryParams(c: any) {
   return { driverId, limit, offset };
 }
 
+const UNRECONCILED_MAX_PAGE_LIMIT = 100;
+
+function parseUnreconciledQueryParams(c: any) {
+  const driverId = c.req.query("driverId") || undefined;
+  const rawLimit = parseInt(c.req.query("limit") || "50", 10);
+  const limit = isNaN(rawLimit) || rawLimit < 1
+    ? 50
+    : Math.min(rawLimit, UNRECONCILED_MAX_PAGE_LIMIT);
+  const offset = parseInt(c.req.query("offset") || "0", 10);
+  const autoMatch = c.req.query("autoMatch") === "1";
+  return { driverId, limit, offset, autoMatch };
+}
+
 function parseUnifiedQueryParams(c: any) {
   const driverId = c.req.query("driverId") || undefined;
   const from = c.req.query("from") || undefined;
@@ -1032,8 +1045,9 @@ app.get(`${BASE}/summary`, async (c) => {
 // ─── GET /unreconciled ─────────────────────────────────────────────────
 
 app.get(`${BASE}/unreconciled`, async (c) => {
+  const t0 = Date.now();
   try {
-    const { driverId, limit, offset } = parseQueryParams(c);
+    const { driverId, limit, offset, autoMatch } = parseUnreconciledQueryParams(c);
 
     // Phase 5: Read from toll_ledger:* (single source of truth)
     const loaded = await loadAllTollLedgerWithTrips();
@@ -1063,23 +1077,22 @@ app.get(`${BASE}/unreconciled`, async (c) => {
 
     const timezone = await getFleetTimezone();
 
-    // ── Auto-confirm PERFECT_MATCH across the FULL unreconciled set ──────
-    // Tolls where the amount matches within 5 cents AND the toll occurred
-    // during an active trip are automatically reconciled server-side and go
-    // straight to Matched History tagged "system-auto".
-    // Phase 5 fix: scan the entire unreconciled set (previously only the
-    // current page, so perfect matches beyond page 1 never auto-confirmed).
-    // Capped for performance; the cap is logged so coverage is never silently
-    // truncated.
+    // ── Auto-confirm PERFECT_MATCH (opt-in only) ───────────────────────────
+    // Default GET must stay fast: scanning every unreconciled toll against all
+    // trips on each page load exceeded edge CPU limits (HTTP 546) and blanked
+    // the dashboard even though /toll-logs still returned data.
+    // Pass ?autoMatch=1 (Refresh Data button) to run server-side auto-match.
     const AUTO_MATCH_SCAN_CAP = 3000;
+    let autoReconciled = 0;
+    const autoReconciledIds = new Set<string>();
+
+    if (autoMatch) {
     const scanSet = unreconciled.slice(0, AUTO_MATCH_SCAN_CAP);
     if (unreconciled.length > AUTO_MATCH_SCAN_CAP) {
       console.log(
         `[TollReconciliation] Auto-match scan capped at ${AUTO_MATCH_SCAN_CAP} of ${unreconciled.length} unreconciled tolls`,
       );
     }
-    let autoReconciled = 0;
-    const autoReconciledIds = new Set<string>();
 
     for (const tx of scanSet) {
       const txId = tx.id;
@@ -1162,6 +1175,7 @@ app.get(`${BASE}/unreconciled`, async (c) => {
         `[TollReconciliation] Auto-confirmed ${autoReconciled} perfect match(es)`,
       );
     }
+    } // end autoMatch opt-in
 
     // Paginate the REMAINING unreconciled tolls (after auto-confirm).
     const remaining = unreconciled.filter((tx: any) => !autoReconciledIds.has(tx.id));
@@ -1176,6 +1190,11 @@ app.get(`${BASE}/unreconciled`, async (c) => {
         suggestionsMap[tx.id] = matches;
       }
     }
+
+    const durationMs = Date.now() - t0;
+    console.log(
+      `[TollReconciliation] GET /unreconciled: total=${total} page=${page.length} autoMatch=${autoMatch} autoReconciled=${autoReconciled} durationMs=${durationMs}`,
+    );
 
     return c.json({
       success: true,
