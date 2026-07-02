@@ -1,6 +1,5 @@
 import { Clock, ShieldAlert, Timer } from 'lucide-react';
-import { Badge } from '../ui/badge';
-import { cn } from '../ui/utils';
+import { Badge, cn } from '@roam/ui';
 import type { EvidenceMediaState } from './types';
 import { daysUntilDelete } from './evidenceState';
 

@@ -1,6 +1,6 @@
 import { Info, X } from 'lucide-react';
 import { useState } from 'react';
-import { cn } from '../ui/utils';
+import { cn } from '@roam/ui';
 
 const DISMISS_KEY = 'roam_evidence_retention_notice_dismissed';
 

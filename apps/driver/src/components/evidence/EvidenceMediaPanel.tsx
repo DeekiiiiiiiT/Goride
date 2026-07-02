@@ -1,7 +1,6 @@
 import { Camera, Clock, ExternalLink, ImageOff, ShieldAlert } from 'lucide-react';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
-import { Button } from '../ui/button';
-import { cn } from '../ui/utils';
+import { Button, cn } from '@roam/ui';
 import { EvidenceExpiryBadge } from './EvidenceExpiryBadge';
 import { resolveEvidenceMediaState } from './evidenceState';
 import type { EvidenceLabel, EvidenceMediaState } from './types';
