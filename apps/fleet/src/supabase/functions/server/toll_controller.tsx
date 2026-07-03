@@ -22,6 +22,7 @@ import * as kv from "./kv_store.tsx";
 import { isTollCategory } from "./toll_category_flags.ts";
 import { classifyOrphanToll } from "./orphanTollClassifier.ts";
 import { emitDriverTollCharge } from "./driver_toll_charge.ts";
+import { mapResolutionReasonToTollResolution } from "./claim_resolution_sync.ts";
 import { appendCanonicalTollReconciledBatch, type TollReconcileAuditEntry } from "./canonical_from_ops.ts";
 import { deleteCanonicalLedgerBySource } from "./ledger_canonical.ts";
 import { applyEvidenceResolution } from "./evidence_routes.ts";
@@ -3745,6 +3746,185 @@ app.get(`${BASE}/driver-toll-charges`, async (c) => {
     });
   } catch (e: any) {
     console.log(`[TollReconciliation] GET /driver-toll-charges error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// CLAIMS ↔ TOLL_LEDGER REPAIR (one-time, dry-run-first, admin-triggered)
+// ═══════════════════════════════════════════════════════════════════════
+// Historically, Claimable Loss resolutions (Charge Driver / Write Off /
+// Reimbursed) never synced toll_ledger.resolution, and Charge Driver claims
+// were dated on the resolution click date (today) instead of the toll's
+// actual date — misplacing the charge in the wrong financial period. This
+// repair scans already-resolved claims and corrects both, WITHOUT ever
+// auto-creating a new charge: a Charge Driver claim whose charge never
+// actually fired (the pre-fix reclassify bug) is flagged for manual review,
+// not batch-charged. Mirrors the dry-run/force pattern of
+// computeTagBackfillPlan / GET .../tag-backfill/status above.
+
+interface ClaimsTollSyncCandidate {
+  claimId: string;
+  transactionId: string;
+  resolutionReason: string;
+  expectedResolution: "personal" | "business" | "write_off" | "refunded" | null;
+  currentResolution: string | null;
+  kind: "label_only" | "date_and_label" | "needs_manual_review";
+}
+
+async function computeClaimsTollSyncPlan(): Promise<{
+  totalResolvedClaims: number;
+  candidates: ClaimsTollSyncCandidate[];
+}> {
+  const allClaims = ((await kv.getByPrefix("claim:")) || []).filter(
+    (x: any) => x && typeof x === "object" && x.id,
+  );
+  const resolvedClaims = allClaims.filter(
+    (cl: any) =>
+      cl.status === "Resolved" &&
+      ["Charge Driver", "Write Off", "Reimbursed"].includes(cl.resolutionReason) &&
+      !!cl.transactionId,
+  );
+
+  const candidates: ClaimsTollSyncCandidate[] = [];
+  for (const claim of resolvedClaims) {
+    const expected = mapResolutionReasonToTollResolution(claim.resolutionReason);
+    const tollEntry = await getTollLedgerEntry(claim.transactionId);
+    if (!tollEntry) continue; // linked toll no longer exists — nothing to repair
+    const current = tollEntry.resolution ?? null;
+    if (current === expected) continue; // already correct — not a candidate
+
+    let kind: ClaimsTollSyncCandidate["kind"];
+    if (claim.resolutionReason === "Charge Driver") {
+      kind = claim.resolutionTransactionId ? "date_and_label" : "needs_manual_review";
+    } else {
+      kind = "label_only";
+    }
+
+    candidates.push({
+      claimId: claim.id,
+      transactionId: claim.transactionId,
+      resolutionReason: claim.resolutionReason,
+      expectedResolution: expected,
+      currentResolution: current,
+      kind,
+    });
+  }
+
+  return { totalResolvedClaims: resolvedClaims.length, candidates };
+}
+
+// ─── GET /claims-toll-sync/status ─── read-only dry-run report ────────────
+app.get(`${BASE}/claims-toll-sync/status`, async (c) => {
+  try {
+    const plan = await computeClaimsTollSyncPlan();
+    const labelsToFix = plan.candidates.filter((x) => x.kind === "label_only").length;
+    const transactionDatesToFix = plan.candidates.filter((x) => x.kind === "date_and_label").length;
+    const needsManualReview = plan.candidates.filter((x) => x.kind === "needs_manual_review");
+
+    return c.json({
+      success: true,
+      summary: {
+        totalResolvedClaims: plan.totalResolvedClaims,
+        candidates: plan.candidates.length,
+        labelsToFix,
+        transactionDatesToFix,
+        needsManualReviewCount: needsManualReview.length,
+      },
+      needsManualReview: needsManualReview.map((x) => ({
+        claimId: x.claimId,
+        transactionId: x.transactionId,
+      })),
+      message:
+        `${labelsToFix} label-only fix(es), ${transactionDatesToFix} date+label fix(es), ` +
+        `${needsManualReview.length} claim(s) need manual re-resolution (charge never fired). ` +
+        `Re-run with POST /claims-toll-sync/repair (dryRun:false) to apply the safe fixes.`,
+    });
+  } catch (e: any) {
+    console.log(`[ClaimsTollSync] GET /status error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── POST /claims-toll-sync/repair ─── apply (dry-run by default) ─────────
+app.post(`${BASE}/claims-toll-sync/repair`, async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body.dryRun !== false; // default to dry-run for safety
+    const plan = await computeClaimsTollSyncPlan();
+
+    let labelsFixed = 0;
+    let datesFixed = 0;
+    const errors: string[] = [];
+    const needsManualReview = plan.candidates.filter((x) => x.kind === "needs_manual_review");
+
+    if (!dryRun) {
+      for (const cand of plan.candidates) {
+        if (cand.kind === "needs_manual_review") continue; // never auto-charge
+        try {
+          if (cand.kind === "date_and_label") {
+            const tollEntry = await getTollLedgerEntry(cand.transactionId);
+            const claim = (await kv.get(`claim:${cand.claimId}`)) as any | null;
+            if (tollEntry && claim?.resolutionTransactionId) {
+              const txKey = `transaction:${claim.resolutionTransactionId}`;
+              const tx = (await kv.get(txKey)) as Record<string, any> | null;
+              if (tx && tollEntry.date && tx.date !== tollEntry.date) {
+                await kv.set(txKey, {
+                  ...tx,
+                  date: tollEntry.date,
+                  vehicleId: tx.vehicleId || tollEntry.vehicleId || undefined,
+                  metadata: {
+                    ...(tx.metadata || {}),
+                    dateCorrected: true,
+                    originalDate: tx.date,
+                    dateCorrectedAt: new Date().toISOString(),
+                  },
+                });
+                datesFixed++;
+              }
+            }
+          }
+
+          await updateTollLedgerEntry(
+            cand.transactionId,
+            { resolution: cand.expectedResolution },
+            "resolved",
+            "system-repair",
+          );
+          if (cand.kind === "label_only") labelsFixed++;
+        } catch (err: any) {
+          errors.push(`${cand.claimId}: ${err.message}`);
+          if (errors.length > 50) break;
+        }
+      }
+    }
+
+    console.log(
+      `[ClaimsTollSync] dryRun=${dryRun} candidates=${plan.candidates.length} ` +
+        `labelsFixed=${labelsFixed} datesFixed=${datesFixed} needsManualReview=${needsManualReview.length} errors=${errors.length}`,
+    );
+
+    return c.json({
+      success: true,
+      dryRun,
+      summary: {
+        totalResolvedClaims: plan.totalResolvedClaims,
+        candidates: plan.candidates.length,
+        labelsFixed: dryRun ? 0 : labelsFixed,
+        datesFixed: dryRun ? 0 : datesFixed,
+        needsManualReviewCount: needsManualReview.length,
+      },
+      needsManualReview: needsManualReview.map((x) => ({
+        claimId: x.claimId,
+        transactionId: x.transactionId,
+      })),
+      errors: errors.slice(0, 50),
+      message: dryRun
+        ? `Dry run: ${plan.candidates.length - needsManualReview.length} record(s) would be repaired. Re-run with dryRun:false to apply.`
+        : `Repaired ${labelsFixed} label(s) and ${datesFixed} date(s).`,
+    });
+  } catch (e: any) {
+    console.log(`[ClaimsTollSync] POST /repair error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
 });

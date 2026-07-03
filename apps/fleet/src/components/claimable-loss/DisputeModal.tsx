@@ -103,7 +103,15 @@ Please adjust the fare to include the missing $${missingAmount.toFixed(2)}.`;
            message: message,
            tripDate: trip.requestTime || trip.date,
            pickup: trip.pickupLocation,
-           dropoff: trip.dropoffLocation
+           dropoff: trip.dropoffLocation,
+           // Captured now so a later "Charge Driver" resolution charges the
+           // driver dated on the toll's ACTUAL date (not the resolution click
+           // date) and is properly vehicle/driver-attributed. The server also
+           // falls back to the linked toll_ledger entry if these are ever
+           // missing, but capturing them here avoids the extra lookup.
+           date: transaction.date,
+           vehicleId: transaction.vehicleId,
+           driverName: trip.driverName,
         });
         toast.success("Claim sent to driver successfully");
         if (onClaimSuccess) onClaimSuccess();

@@ -68,7 +68,8 @@ import {
   deleteAllCanonicalLedgerBySourceType,
   deleteCanonicalLedgerBySource,
 } from "./ledger_canonical.ts";
-import { emitDriverTollCharge, isDriverTollChargeSyncEnabled, isUnifiedTollSettlementEnabled } from "./driver_toll_charge.ts";
+import { emitDriverTollCharge, reverseDriverTollCharge, isDriverTollChargeSyncEnabled, isUnifiedTollSettlementEnabled } from "./driver_toll_charge.ts";
+import { decideClaimResolutionSync } from "./claim_resolution_sync.ts";
 import { addToTollDisposition, emptyTollDisposition, roundTollDisposition } from "./driver_toll_disposition.ts";
 import {
   appendCanonicalFuelExpenseIfEligible,
@@ -6185,51 +6186,17 @@ app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), a
 // END OF LEDGER ENDPOINTS
 // ═══════════════════════════════════════════════════════════════════════
 
-// Claims Endpoints
-app.get("/make-server-37f42386/claims", requireAuth(), async (c) => {
-  try {
-    const limitParam = c.req.query("limit");
-    const offsetParam = c.req.query("offset");
-    const limit = limitParam ? parseInt(limitParam) : 100;
-    const offset = offsetParam ? parseInt(offsetParam) : 0;
-
-    const { data, error } = await supabase
-        .from("kv_store_37f42386")
-        .select("value")
-        .like("key", "claim:%")
-        .range(offset, offset + limit - 1);
-
-    if (error) throw error;
-    
-    const claims = filterByOrg(data?.map((d: any) => d.value) || [], c);
-    return c.json(claims);
-  } catch (e: any) {
-    return c.json({ error: e.message }, 500);
-  }
-});
-
-app.post("/make-server-37f42386/claims", async (c) => {
-  try {
-    const claim = await c.req.json();
-    if (!claim.id) {
-        claim.id = crypto.randomUUID();
-    }
-    await kv.set(`claim:${claim.id}`, stampOrg(claim, c));
-    return c.json({ success: true, data: claim });
-  } catch (e: any) {
-    return c.json({ error: e.message }, 500);
-  }
-});
-
-app.delete("/make-server-37f42386/claims/:id", async (c) => {
-  const id = c.req.param("id");
-  try {
-    await kv.del(`claim:${id}`);
-    return c.json({ success: true });
-  } catch (e: any) {
-    return c.json({ error: e.message }, 500);
-  }
-});
+// Claims Endpoints — see the consolidated GET/POST/DELETE block further below
+// (search "Claims Endpoints (consolidated)"). A duplicate, more primitive copy
+// of these three routes used to live here; since Hono dispatches to the FIRST
+// registered handler for an identical method+path (neither handler here nor
+// there ever called next()), this earlier copy was silently SHADOWING the
+// more feature-complete block below for every real request — meaning the
+// later block's org-scoped driverId filter (GET) and driver-toll-charge
+// auto-create logic (POST) never actually executed. Removed as a correctness
+// fix, not a behavior change: the surviving block already contains a superset
+// of this one's behavior (see filterByOrg/requireAuth parity check performed
+// before removal).
 
 // Expense Management Endpoints (Phase 5)
 app.post("/make-server-37f42386/scan-receipt", async (c) => {
@@ -10299,7 +10266,7 @@ app.patch("/make-server-37f42386/anchors/:id", async (c) => {
     }
 });
 
-// Claims Endpoints
+// Claims Endpoints (consolidated — see the removal note further above)
 app.get("/make-server-37f42386/claims", requireAuth(), async (c) => {
   try {
     const claims = filterByOrg(await kv.getByPrefix("claim:"), c);
@@ -10326,30 +10293,97 @@ app.post("/make-server-37f42386/claims", async (c) => {
         claim.createdAt = new Date().toISOString();
     }
     claim.updatedAt = new Date().toISOString();
-    
-    // Auto-create the driver-facing charge for a "Charge Driver" resolution.
-    if (claim.status === 'Resolved' && claim.resolutionReason === 'Charge Driver' && !claim.resolutionTransactionId) {
-        if (await isDriverTollChargeSyncEnabled()) {
-            // Flag ON: route through the single consolidated emitter — canonical
-            // SSOT event + ONE correctly-signed (negative) projection txn, idempotent.
-            const result = await emitDriverTollCharge(
-                {
-                    tollId: claim.transactionId || claim.id,
-                    claimId: claim.id,
-                    driverId: claim.driverId,
-                    driverName: claim.driverName,
-                    vehicleId: claim.vehicleId,
-                    tripId: claim.tripId ?? null,
-                    amount: claim.amount || 0,
-                    date: claim.date || new Date().toISOString(),
-                    description: `Toll Charge - ${claim.subject || 'Personal Use'}`,
-                    source: 'claim_resolution',
-                },
-                c,
-            );
-            if (result.projectionTxId) claim.resolutionTransactionId = result.projectionTxId;
-        } else {
-            // Flag OFF: preserve legacy behavior byte-for-byte (positive Adjustment txn).
+
+    if (await isDriverTollChargeSyncEnabled()) {
+        // ── Reversible resolution sync ──────────────────────────────────────
+        // Read the PRIOR persisted claim (if any) so a resolution CHANGE (e.g.
+        // Charge Driver -> Write Off, or a flip-flop back to Charge Driver) is
+        // detected and correctly reverses/re-applies the driver charge, instead
+        // of the legacy behavior where `resolutionTransactionId` being set
+        // forever blocked any future re-sync (silently stale charge on
+        // reclassify-away; silent no-op on reclassify-back).
+        const existingClaim = (await kv.get(`claim:${claim.id}`)) as
+          | { status?: string; resolutionReason?: string }
+          | null;
+        const prevReason = existingClaim?.status === "Resolved" ? existingClaim.resolutionReason : undefined;
+        const nextReason = claim.status === "Resolved" ? claim.resolutionReason : undefined;
+
+        const decision = decideClaimResolutionSync({
+          prevReason: prevReason as any,
+          nextReason: nextReason as any,
+        });
+
+        if (!decision.isNoop) {
+            // tollId used for the charge/reverse: falls back to claim.id for
+            // non-toll claim types (Wait_Time/Cleaning_Fee) that carry no
+            // transactionId, preserving the pre-existing fallback behavior.
+            const effectiveTollId = claim.transactionId || claim.id;
+
+            if (decision.shouldReverse) {
+                const reverseResult = await reverseDriverTollCharge(
+                    { tollId: effectiveTollId, claimId: claim.id, source: "claim_resolution" },
+                    c,
+                );
+                if (reverseResult.reversed) {
+                    // The active charge was unwound — clear the link so a future
+                    // charge (if any) is issued a fresh txId, not a stale one.
+                    claim.resolutionTransactionId = undefined;
+                }
+            }
+
+            if (decision.shouldCharge) {
+                // Fall back to the linked toll_ledger entry for date/vehicleId/
+                // driverName when the claim doesn't carry them (old claims, or
+                // any future caller that forgets to pass them) — this keeps the
+                // charge dated on the toll's ACTUAL date, not "today", correctly
+                // regardless of which client version created the claim.
+                const tollEntry = claim.transactionId && (!claim.date || !claim.vehicleId || !claim.driverName)
+                    ? await getTollLedgerEntry(claim.transactionId).catch(() => null)
+                    : null;
+                const result = await emitDriverTollCharge(
+                    {
+                        tollId: effectiveTollId,
+                        claimId: claim.id,
+                        driverId: claim.driverId,
+                        driverName: claim.driverName || tollEntry?.driverName || undefined,
+                        vehicleId: claim.vehicleId || tollEntry?.vehicleId || undefined,
+                        tripId: claim.tripId ?? null,
+                        amount: claim.amount || 0,
+                        date: claim.date || tollEntry?.date || new Date().toISOString(),
+                        description: `Toll Charge - ${claim.subject || "Personal Use"}`,
+                        source: "claim_resolution",
+                    },
+                    c,
+                );
+                if (result.projectionTxId) claim.resolutionTransactionId = result.projectionTxId;
+            }
+
+            // Keep toll_ledger's resolution label accurate for ALL three outcomes
+            // (Charge Driver / Write Off / Reimbursed), not just charges, so the
+            // Reconciliation tab and unified settlement engine reflect the true
+            // disposition. Only meaningful when this claim actually links a real
+            // toll_ledger record (non-toll claim types have nothing to sync).
+            if (claim.transactionId) {
+                try {
+                    await updateTollLedgerEntry(
+                        claim.transactionId,
+                        { resolution: decision.nextLedgerResolution },
+                        "resolved",
+                        "admin",
+                    );
+                } catch (err: any) {
+                    console.error(
+                        `[Claims] toll_ledger resolution sync failed for ${claim.transactionId}:`,
+                        err.message,
+                    );
+                }
+            }
+        }
+    } else {
+        // Flag OFF: preserve legacy behavior byte-for-byte — first-charge-only,
+        // positive Adjustment txn (legacy sign), no reversal/reclassify support,
+        // no toll_ledger sync. Identical to the pre-existing code path.
+        if (claim.status === 'Resolved' && claim.resolutionReason === 'Charge Driver' && !claim.resolutionTransactionId) {
             const txId = crypto.randomUUID();
             const transaction = {
                 id: txId,
@@ -10373,7 +10407,7 @@ app.post("/make-server-37f42386/claims", async (c) => {
             claim.resolutionTransactionId = txId; // Link it to prevent duplicates
         }
     }
-    
+
     await kv.set(`claim:${claim.id}`, stampOrg(claim, c));
     return c.json({ success: true, data: claim });
   } catch (e: any) {
