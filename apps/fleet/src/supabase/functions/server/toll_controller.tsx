@@ -3775,6 +3775,9 @@ interface RefundAutomationSettings {
   // Sync "charge driver" toll resolutions into the driver financial section
   // (materializes the projection txn) — additive, default OFF.
   driverTollChargeSyncEnabled: boolean;
+  // Unified toll-settlement rework: one reconciliation-aware calc across all four
+  // driver financial tabs (payout stops deducting tolls) — additive, default OFF.
+  unifiedTollSettlementEnabled: boolean;
 }
 
 async function getRefundAutomationSettings(): Promise<RefundAutomationSettings> {
@@ -3791,6 +3794,7 @@ async function getRefundAutomationSettings(): Promise<RefundAutomationSettings> 
         ? rec.orphanProximityMinutes
         : DEFAULT_ORPHAN_PROXIMITY_MINUTES,
     driverTollChargeSyncEnabled: rec?.driverTollChargeSyncEnabled === true, // default OFF
+    unifiedTollSettlementEnabled: rec?.unifiedTollSettlementEnabled === true, // default OFF
   };
 }
 
@@ -4142,6 +4146,10 @@ app.put(`${BASE}/automation-settings`, async (c) => {
         typeof body?.driverTollChargeSyncEnabled === "boolean"
           ? body.driverTollChargeSyncEnabled
           : current.driverTollChargeSyncEnabled,
+      unifiedTollSettlementEnabled:
+        typeof body?.unifiedTollSettlementEnabled === "boolean"
+          ? body.unifiedTollSettlementEnabled
+          : current.unifiedTollSettlementEnabled,
     };
     await kv.set(REFUND_SETTINGS_KEY, next);
     return c.json({ success: true, data: next });

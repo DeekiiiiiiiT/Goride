@@ -21,6 +21,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
   const [personalUseEnabled, setPersonalUseEnabled] = useState(false);
   const [orphanProximity, setOrphanProximity] = useState(180);
   const [driverChargeSync, setDriverChargeSync] = useState(false);
+  const [unifiedSettlement, setUnifiedSettlement] = useState(false);
   const [bridging, setBridging] = useState(false);
 
   const applySettings = (data: {
@@ -29,12 +30,14 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
     personalUseDetectionEnabled: boolean;
     orphanProximityMinutes: number;
     driverTollChargeSyncEnabled?: boolean;
+    unifiedTollSettlementEnabled?: boolean;
   }) => {
     setEnabled(data.refundAutomationEnabled);
     setMinConfidence(data.refundAutoMinConfidence);
     setPersonalUseEnabled(data.personalUseDetectionEnabled);
     setOrphanProximity(data.orphanProximityMinutes);
     setDriverChargeSync(data.driverTollChargeSyncEnabled === true);
+    setUnifiedSettlement(data.unifiedTollSettlementEnabled === true);
   };
 
   useEffect(() => {
@@ -58,6 +61,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
     personalUseDetectionEnabled?: boolean;
     orphanProximityMinutes?: number;
     driverTollChargeSyncEnabled?: boolean;
+    unifiedTollSettlementEnabled?: boolean;
   }) => {
     setSaving(true);
     try {
@@ -195,6 +199,22 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
                   When a toll is resolved as “Charge Driver”, post it to the driver's Expenses,
                   Settlement and Cash Wallet. Classify-only stays intact; this only controls
                   whether the confirmed charge appears in the driver's financials.
+                </p>
+              </div>
+
+              <div className="border-t border-slate-100 pt-3">
+                <label className="flex items-center justify-between">
+                  <span className="text-sm text-slate-700">Unified toll settlement</span>
+                  <Switch
+                    checked={unifiedSettlement}
+                    disabled={saving}
+                    onCheckedChange={(v) => save({ unifiedTollSettlementEnabled: v })}
+                  />
+                </label>
+                <p className="text-xs text-slate-500 mt-1">
+                  One reconciliation-aware toll calc across all driver financial tabs: cash tolls
+                  wash, only personal tag tolls are billed, and payout stops double-counting tolls.
+                  Requires “Sync charges to driver financials”.
                 </p>
               </div>
             </div>

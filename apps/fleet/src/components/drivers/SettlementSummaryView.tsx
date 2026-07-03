@@ -19,6 +19,7 @@ import { toast } from "sonner@2.0.3";
 import { Trip, FinancialTransaction, DriverMetrics } from '../../types/data';
 import { api } from '../../services/api';
 import { computeWeeklyCashSettlement, CashWeekData } from '../../utils/cashSettlementCalc';
+import { computePeriodSettlement } from '../../utils/driverPeriodSettlement';
 import { exportToCSV } from '../../utils/csvHelpers';
 import { differenceInCalendarDays, format } from 'date-fns';
 import { SettlementPeriodDetail } from './SettlementPeriodDetail';
@@ -74,6 +75,16 @@ export function SettlementSummaryView({
   transactions = [],
   csvMetrics = [],
 }: SettlementSummaryViewProps) {
+
+  // ── Unified toll settlement flag (default OFF → legacy behavior) ──
+  const [unifiedToll, setUnifiedToll] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    api.getTollAutomationSettings()
+      .then(res => { if (!cancelled) setUnifiedToll(res.data.unifiedTollSettlementEnabled === true); })
+      .catch(() => { /* default OFF */ });
+    return () => { cancelled = true; };
+  }, []);
 
   // ── Step 4.1: Ledger payout data ──
   const [ledgerRows, setLedgerRows] = useState<any[]>([]);
@@ -150,9 +161,11 @@ export function SettlementSummaryView({
   }, [driverId]);
 
   // ── Step 4.2: Cash data from shared utility ──
+  // Unified mode makes the cash calc toll-NEUTRAL so the shared settlement calc
+  // applies the server's reconciliation-aware toll disposition exactly once.
   const cashWeeks: CashWeekData[] = useMemo(() => {
-    return computeWeeklyCashSettlement({ trips, transactions, csvMetrics });
-  }, [trips, transactions, csvMetrics]);
+    return computeWeeklyCashSettlement({ trips, transactions, csvMetrics, excludeTollEffects: unifiedToll });
+  }, [trips, transactions, csvMetrics, unifiedToll]);
 
   // ── Loading gate ──
   const isReady = ledgerLoaded && !fuelDataLoading;
@@ -262,19 +275,47 @@ export function SettlementSummaryView({
       const grossRevenue = lr?.grossRevenue || 0;
       const driverShare = lr?.driverShare || 0;
       const tripCount = lr?.tripCount || 0;
-      const tollExpenses = getTollsForPeriod(pStartTime, pEndTime);
+      const tollExpensesLegacy = getTollsForPeriod(pStartTime, pEndTime);
       const { deduction: fuelDeduction, finalized: isFinalized } = getDeductionForPeriod(periodStart, periodEnd);
-      const totalDeductions = tollExpenses.amount + fuelDeduction;
-      const netPayout = driverShare - totalDeductions;
-
-      // ── Cash side ──
-      const cashOwed = cw?.amountOwed || 0;
-      const cashPaid = cw?.amountPaid || 0;
-      const cashBalance = cw?.balance || 0;
       const cashStatus = cw?.status || 'No Activity';
 
-      // ── Combined ──
-      const settlement = netPayout - cashBalance;
+      let tollExpenses = tollExpensesLegacy;
+      let totalDeductions: number;
+      let netPayout: number;
+      let cashOwed: number;
+      let cashPaid: number;
+      let cashBalance: number;
+      let settlement: number;
+
+      if (unifiedToll) {
+        // Unified model: tolls are NOT deducted from payout; they're settled on
+        // the cash side per the server's reconciliation-aware disposition.
+        const disp = lr?.tollDisposition || { cashWash: 0, personal: 0 };
+        const r = computePeriodSettlement({
+          driverShare,
+          fuelDeduction,
+          baseCashOwed: cw?.amountOwed || 0,   // toll-neutral (excludeTollEffects)
+          baseCashPaid: cw?.amountPaid || 0,
+          tollCashWash: disp.cashWash || 0,
+          tollPersonal: disp.personal || 0,
+        });
+        totalDeductions = fuelDeduction;       // fuel only
+        netPayout = r.netPayout;
+        cashOwed = r.cashOwed;
+        cashPaid = r.cashPaid;
+        cashBalance = r.cashBalance;
+        settlement = r.settlement;
+        // Display the toll figure that actually hit the driver this period.
+        tollExpenses = { amount: r.tollChargedToDriver, reconciled: tollExpensesLegacy.reconciled, unreconciled: tollExpensesLegacy.unreconciled };
+      } else {
+        // Legacy behavior (unchanged).
+        totalDeductions = tollExpensesLegacy.amount + fuelDeduction;
+        netPayout = driverShare - totalDeductions;
+        cashOwed = cw?.amountOwed || 0;
+        cashPaid = cw?.amountPaid || 0;
+        cashBalance = cw?.balance || 0;
+        settlement = netPayout - cashBalance;
+      }
 
       // ── Status logic ──
       let settlementStatus: SettlementStatus;
@@ -327,7 +368,7 @@ export function SettlementSummaryView({
     console.log(`[SettlementSummaryView] Merged ${trimmedRows.length} settlement rows (${ledgerRows.length} ledger, ${cashWeeks.length} cash weeks)`);
 
     return trimmedRows;
-  }, [isReady, ledgerRows, cashWeeks, transactions, finalizedReports]);
+  }, [isReady, ledgerRows, cashWeeks, transactions, finalizedReports, unifiedToll]);
 
   // ── Step 5.4: Summary totals ──
   const summaryTotals = useMemo(() => {

@@ -8,6 +8,7 @@ import type { FinancialTransaction, DriverMetrics } from '../types/data';
 import type { CashPaidBreakdown, PayoutPeriodRow, PayoutStatus } from '../types/driverPayoutPeriod';
 import type { CashWeekData } from './cashSettlementCalc';
 import { isTollCategory } from './tollCategoryHelper';
+import { computePeriodSettlement } from './driverPeriodSettlement';
 
 type PeriodType = 'daily' | 'weekly' | 'monthly';
 
@@ -19,6 +20,8 @@ export function buildLedgerPayoutPeriodRows(params: {
   transactions: FinancialTransaction[];
   finalizedReports: any[];
   periodType: PeriodType;
+  /** Unified toll settlement: tolls leave the payout deduction, settled on cash side. */
+  unifiedToll?: boolean;
 }): PayoutPeriodRow[] {
   const {
     ledgerLoaded,
@@ -28,6 +31,7 @@ export function buildLedgerPayoutPeriodRows(params: {
     transactions,
     finalizedReports,
     periodType,
+    unifiedToll = false,
   } = params;
 
   const getDeductionForPeriod = (
@@ -205,13 +209,10 @@ export function buildLedgerPayoutPeriodRows(params: {
         finalized: isFinalized,
       } = getDeductionForPeriod(periodStart, periodEnd);
 
-      const totalDeductions = tollExpenses + fuelDeduction;
-      const netPayout = driverShare - totalDeductions;
-
       const {
-        cashOwed,
-        cashPaid,
-        cashBalance,
+        cashOwed: baseCashOwed,
+        cashPaid: baseCashPaid,
+        cashBalance: legacyCashBalance,
         fuelCredits: txFuelCredits,
         cashPaidBreakdown,
       } = getCashForPeriod(periodStart, periodEnd);
@@ -219,13 +220,43 @@ export function buildLedgerPayoutPeriodRows(params: {
       const effectiveFuelCredits =
         txFuelCredits > 0 ? txFuelCredits : isFinalized ? fleetShare : 0;
 
+      let displayTollExpenses = tollExpenses;
+      let totalDeductions: number;
+      let netPayout: number;
+      let cashOwed = baseCashOwed;
+      let cashPaid = baseCashPaid;
+      let cashBalance = legacyCashBalance;
+
+      if (unifiedToll) {
+        // Tolls leave the payout deduction; settled once on the cash side per the
+        // server's reconciliation-aware disposition (cashWeeks are toll-neutral).
+        const disp = (lr as any).tollDisposition || { cashWash: 0, personal: 0 };
+        const r = computePeriodSettlement({
+          driverShare,
+          fuelDeduction,
+          baseCashOwed,
+          baseCashPaid,
+          tollCashWash: disp.cashWash || 0,
+          tollPersonal: disp.personal || 0,
+        });
+        totalDeductions = fuelDeduction;
+        netPayout = r.netPayout;
+        cashOwed = r.cashOwed;
+        cashPaid = r.cashPaid;
+        cashBalance = r.cashBalance;
+        displayTollExpenses = r.tollChargedToDriver;
+      } else {
+        totalDeductions = tollExpenses + fuelDeduction;
+        netPayout = driverShare - totalDeductions;
+      }
+
       return {
         periodStart,
         periodEnd,
         grossRevenue,
         driverSharePercent,
         driverShare,
-        tollExpenses,
+        tollExpenses: displayTollExpenses,
         tollReconciled,
         tollUnreconciled,
         fuelDeduction,

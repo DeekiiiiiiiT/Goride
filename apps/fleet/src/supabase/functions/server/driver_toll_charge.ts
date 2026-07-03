@@ -33,6 +33,16 @@ export async function isDriverTollChargeSyncEnabled(): Promise<boolean> {
   return rec?.driverTollChargeSyncEnabled === true;
 }
 
+/**
+ * Master flag for the unified toll-settlement rework (one source of truth across
+ * all four driver financial tabs). Default OFF. Depends operationally on
+ * driverTollChargeSyncEnabled (the personal charge must reach the cash side).
+ */
+export async function isUnifiedTollSettlementEnabled(): Promise<boolean> {
+  const rec = (await kv.get(SETTINGS_KEY)) as { unifiedTollSettlementEnabled?: boolean } | null;
+  return rec?.unifiedTollSettlementEnabled === true;
+}
+
 export interface EmitDriverTollChargeParams {
   /** The toll ledger / transaction id being charged. */
   tollId: string;

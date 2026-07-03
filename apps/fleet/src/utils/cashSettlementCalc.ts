@@ -25,6 +25,13 @@ export interface CashSettlementInput {
     trips: Trip[];
     transactions: FinancialTransaction[];
     csvMetrics: DriverMetrics[];
+    /**
+     * Unified toll settlement: when true, the cash calc is toll-NEUTRAL — it
+     * omits the cash-toll credit and the personal-toll debit so the shared
+     * driverPeriodSettlement calc can apply the server's reconciliation-aware
+     * disposition exactly once. Default false = legacy behavior.
+     */
+    excludeTollEffects?: boolean;
 }
 
 // ── Output ──
@@ -59,6 +66,7 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
     const safeTrips = Array.isArray(input.trips) ? input.trips.filter(Boolean) : [];
     const safeTransactions = Array.isArray(input.transactions) ? input.transactions.filter(Boolean) : [];
     const safeCsvMetrics = Array.isArray(input.csvMetrics) ? input.csvMetrics.filter(Boolean) : [];
+    const excludeToll = input.excludeTollEffects === true;
 
     // If we have CSV metrics but no trips, we should still show something
     if (safeTrips.length === 0 && safeCsvMetrics.length === 0) return [];
@@ -119,7 +127,7 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
 
         // Personal-use tolls billed to the driver (the negative 'Toll Charge'
         // projection). A DEBIT — increases what the driver owes the fleet.
-        const weeklyTollCharges = safeTransactions
+        const weeklyTollCharges = excludeToll ? 0 : safeTransactions
             .filter(t => {
                 if (!t || !t.date) return false;
                 const isCharge = t.category === 'Toll Charge' || (t.metadata as any)?.projection === 'driver_toll_charge';
@@ -147,7 +155,7 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
         });
 
         // 2. Approved Cash Toll Expenses (Treated as Credit/Payment)
-        const weeklyExpenses = safeTransactions
+        const weeklyExpenses = excludeToll ? 0 : safeTransactions
             .filter(t => {
                 if (!t || !t.date) return false;
                 const tDate = new Date(t.date);

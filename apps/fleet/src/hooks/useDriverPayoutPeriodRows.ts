@@ -30,9 +30,18 @@ export function useDriverPayoutPeriodRows(opts: {
   const [ledgerRows, setLedgerRows] = useState<any[]>([]);
   const [ledgerLoaded, setLedgerLoaded] = useState(false);
   const [ledgerError, setLedgerError] = useState(false);
+  const [unifiedToll, setUnifiedToll] = useState(false);
 
   useEffect(() => {
     tierService.getTiers().then(setTiers);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getTollAutomationSettings()
+      .then((res) => { if (!cancelled) setUnifiedToll(res.data.unifiedTollSettlementEnabled === true); })
+      .catch(() => { /* default OFF */ });
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -101,8 +110,8 @@ export function useDriverPayoutPeriodRows(opts: {
   }, [driverId, periodType]);
 
   const cashWeeks: CashWeekData[] = useMemo(
-    () => computeWeeklyCashSettlement({ trips, transactions, csvMetrics }),
-    [trips, transactions, csvMetrics]
+    () => computeWeeklyCashSettlement({ trips, transactions, csvMetrics, excludeTollEffects: unifiedToll }),
+    [trips, transactions, csvMetrics, unifiedToll]
   );
 
   const periodData: PayoutPeriodRow[] = useMemo(
@@ -115,6 +124,7 @@ export function useDriverPayoutPeriodRows(opts: {
         transactions,
         finalizedReports,
         periodType,
+        unifiedToll,
       }),
     [
       ledgerLoaded,
@@ -124,6 +134,7 @@ export function useDriverPayoutPeriodRows(opts: {
       transactions,
       finalizedReports,
       periodType,
+      unifiedToll,
     ]
   );
 
