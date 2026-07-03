@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "../../ui/popover";
 import { Button } from "../../ui/button";
 import { Switch } from "../../ui/switch";
-import { Settings2, Loader2, Bot } from "lucide-react";
+import { Settings2, Loader2, Bot, Wrench } from "lucide-react";
 import { api } from "../../../services/api";
 import { toast } from "sonner@2.0.3";
 
@@ -23,6 +23,13 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
   const [driverChargeSync, setDriverChargeSync] = useState(false);
   const [unifiedSettlement, setUnifiedSettlement] = useState(false);
   const [bridging, setBridging] = useState(false);
+  const [claimsSyncChecking, setClaimsSyncChecking] = useState(false);
+  const [claimsSyncApplying, setClaimsSyncApplying] = useState(false);
+  const [claimsSyncReport, setClaimsSyncReport] = useState<{
+    labelsToFix: number;
+    transactionDatesToFix: number;
+    needsManualReview: Array<{ claimId: string; transactionId: string }>;
+  } | null>(null);
 
   const applySettings = (data: {
     refundAutomationEnabled: boolean;
@@ -73,6 +80,41 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
       toast.error(e.message || "Failed to save settings");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const checkClaimsSync = async () => {
+    setClaimsSyncChecking(true);
+    try {
+      const res = await api.getClaimsTollSyncStatus();
+      setClaimsSyncReport({
+        labelsToFix: res.summary.labelsToFix,
+        transactionDatesToFix: res.summary.transactionDatesToFix,
+        needsManualReview: res.needsManualReview,
+      });
+      toast.info(res.message);
+    } catch (e: any) {
+      toast.error(e.message || "Status check failed");
+    } finally {
+      setClaimsSyncChecking(false);
+    }
+  };
+
+  const applyClaimsSyncRepair = async () => {
+    setClaimsSyncApplying(true);
+    try {
+      const res = await api.repairClaimsTollSync(false);
+      setClaimsSyncReport({
+        labelsToFix: 0,
+        transactionDatesToFix: 0,
+        needsManualReview: res.needsManualReview,
+      });
+      toast.success(res.message);
+      onChanged?.();
+    } catch (e: any) {
+      toast.error(e.message || "Repair failed");
+    } finally {
+      setClaimsSyncApplying(false);
     }
   };
 
@@ -234,6 +276,52 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
                     double-counting tolls. Requires “Sync charges to driver financials”.
                   </p>
                 </div>
+              </div>
+
+              {/* Claims ↔ Toll Ledger repair */}
+              <div className="rounded-lg border border-slate-200 p-4 space-y-3">
+                <div className="flex items-center gap-1.5">
+                  <Wrench className="h-4 w-4 text-slate-500" />
+                  <h4 className="text-sm font-semibold text-slate-900">Claims ↔ Toll Ledger repair</h4>
+                </div>
+                <p className="text-xs text-slate-500">
+                  One-time fix for claims resolved before this system existed: corrects labels
+                  and dates. Never auto-charges — flags anything that needs a manual re-resolve.
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" disabled={claimsSyncChecking} onClick={checkClaimsSync}>
+                    {claimsSyncChecking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Check status"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="bg-indigo-600 hover:bg-indigo-700"
+                    disabled={claimsSyncApplying}
+                    onClick={applyClaimsSyncRepair}
+                  >
+                    {claimsSyncApplying ? <Loader2 className="h-4 w-4 animate-spin" /> : "Apply repair"}
+                  </Button>
+                </div>
+                {claimsSyncReport && (
+                  <div className="text-xs text-slate-600 space-y-1 border-t border-slate-100 pt-2">
+                    <p>Labels to fix: <span className="font-semibold">{claimsSyncReport.labelsToFix}</span></p>
+                    <p>Dates to fix: <span className="font-semibold">{claimsSyncReport.transactionDatesToFix}</span></p>
+                    {claimsSyncReport.needsManualReview.length > 0 ? (
+                      <div>
+                        <p className="text-amber-700 font-medium">
+                          Needs manual re-resolve ({claimsSyncReport.needsManualReview.length}) — flip to Write
+                          Off then back to Charge Driver in Resolved History:
+                        </p>
+                        <ul className="mt-1 space-y-0.5 max-h-24 overflow-y-auto font-mono text-[10px] text-slate-500">
+                          {claimsSyncReport.needsManualReview.map((r: { claimId: string; transactionId: string }) => (
+                            <li key={r.claimId} title={r.transactionId}>{r.claimId}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : (
+                      <p className="text-emerald-700">Nothing needs manual review.</p>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Native ride tolls */}

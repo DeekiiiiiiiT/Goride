@@ -2004,6 +2004,56 @@ export const api = {
     return response.json();
   },
 
+  /** Read-only dry-run report: which resolved claims need their toll_ledger label/date repaired. */
+  async getClaimsTollSyncStatus(): Promise<{
+    success: boolean;
+    summary: {
+      totalResolvedClaims: number;
+      candidates: number;
+      labelsToFix: number;
+      transactionDatesToFix: number;
+      needsManualReviewCount: number;
+    };
+    needsManualReview: Array<{ claimId: string; transactionId: string }>;
+    message: string;
+  }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/claims-toll-sync/status`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch claims toll-sync status");
+    return response.json();
+  },
+
+  /** Apply the safe (label/date only, never auto-charges) claims↔toll_ledger repair. dryRun defaults true. */
+  async repairClaimsTollSync(dryRun: boolean = true): Promise<{
+    success: boolean;
+    dryRun: boolean;
+    summary: {
+      totalResolvedClaims: number;
+      candidates: number;
+      labelsFixed: number;
+      datesFixed: number;
+      needsManualReviewCount: number;
+    };
+    needsManualReview: Array<{ claimId: string; transactionId: string }>;
+    errors: string[];
+    message: string;
+  }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/claims-toll-sync/repair`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify({ dryRun })
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to repair claims toll-sync");
+    }
+    return response.json();
+  },
+
   async bridgeRidesTolls(opts?: { dryRun?: boolean; limit?: number }): Promise<{ success: boolean; scanned: number; bridged: number; skipped: number; dryRun: boolean }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/bridge-rides`, {
       method: 'POST',
