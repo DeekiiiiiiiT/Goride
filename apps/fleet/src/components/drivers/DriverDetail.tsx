@@ -727,22 +727,39 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
               driver?.inDriveDriverId,
           ]);
 
-          const [driverTx, allClaims] = await Promise.all([
+          const [driverTx, allClaims, tollLogsResponses] = await Promise.all([
               api.getAllTransactionsForDrivers(driverIds),
               api.getClaims(), // Fetch ALL claims to ensure we find links even if driverId filter is tricky
+              // Toll Logs already merges toll_ledger + legacy transaction:* toll
+              // rows (dedup by id, ledger wins) — the same view Toll Reconciliation
+              // uses. Tolls created after the toll_ledger migration only live there,
+              // never in transaction:*, so without this merge they're invisible to
+              // Expenses / Settlement / Cash Wallet even though they're fully
+              // reconciled. Per-driverId-variant + fail-soft (falls back to legacy
+              // transactions only if a call errors).
+              Promise.all(driverIds.map((id: string) => api.getTollLogs({ driverId: id }).catch(() => ({ data: [] as any[] })))),
           ]);
 
           // Server-side filtering is now enabled for getTransactions(driverIds)
           const validTx = Array.isArray(driverTx) ? driverTx.filter(Boolean) : [];
-          
+
+          // Merge in the full toll picture. Ledger-shaped rows win over any legacy
+          // transaction:* row sharing the same id (server dedups this way already);
+          // rows with a toll_ledger-only id simply fill a previously-invisible gap.
+          const tollLogRows = (tollLogsResponses || []).flatMap((r: any) => (r && Array.isArray(r.data)) ? r.data : []);
+          const mergedById = new Map<string, any>();
+          for (const tx of validTx) if (tx?.id) mergedById.set(tx.id, tx);
+          for (const tx of tollLogRows) if (tx?.id) mergedById.set(tx.id, tx);
+          const mergedTx = Array.from(mergedById.values());
+
           // Diagnostic: Log transaction breakdown to verify data completeness
-          const paymentCount = validTx.filter(isDriverCashPaymentTransaction).length;
-          const tollCount = validTx.filter((t: any) => ['Toll Usage', 'Toll', 'Tolls'].includes(t.category)).length;
-          const fuelCount = validTx.filter((t: any) => (t.category || '').toLowerCase().includes('fuel')).length;
-          const floatCount = validTx.filter((t: any) => t.category === 'Float Issue').length;
-          console.log(`[DriverDetail] Transactions loaded: ${validTx.length} total | ${paymentCount} payments | ${tollCount} tolls | ${fuelCount} fuel | ${floatCount} floats`);
-          
-          setTransactions(validTx);
+          const paymentCount = mergedTx.filter(isDriverCashPaymentTransaction).length;
+          const tollCount = mergedTx.filter((t: any) => ['Toll Usage', 'Toll', 'Tolls'].includes(t.category)).length;
+          const fuelCount = mergedTx.filter((t: any) => (t.category || '').toLowerCase().includes('fuel')).length;
+          const floatCount = mergedTx.filter((t: any) => t.category === 'Float Issue').length;
+          console.log(`[DriverDetail] Transactions loaded: ${mergedTx.length} total (${validTx.length} legacy + ${tollLogRows.length} toll-log rows merged) | ${paymentCount} payments | ${tollCount} tolls | ${fuelCount} fuel | ${floatCount} floats`);
+
+          setTransactions(mergedTx);
           
           // Filter claims locally if needed, or just use all for linking (safer)
           setClaims(Array.isArray(allClaims) ? allClaims : []);
