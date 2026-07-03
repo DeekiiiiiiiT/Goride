@@ -41,6 +41,10 @@ export interface MatchResult {
   dataQuality?: 'PRECISE' | 'TIMED' | 'DATE_ONLY';  // Trip timing data quality tier
   windowHit?: 'ON_TRIP' | 'ENROUTE' | 'POST_TRIP' | 'NONE';  // Which time window the toll fell in
   isAmbiguous?: boolean;          // true if multiple trips compete with similar scores
+  // Structured bucket driver (replaces brittle reason.includes('Approach') checks).
+  // Optional/additive — undefined for legacy payloads, in which case the UI falls
+  // back to the old string check so behavior is byte-identical.
+  reasonCode?: 'ON_TRIP' | 'ENROUTE_APPROACH' | 'POST_TRIP_GAP' | 'ORPHAN_NO_TRIP' | 'ORPHAN_OUT_OF_WINDOW';
 }
 
 /**

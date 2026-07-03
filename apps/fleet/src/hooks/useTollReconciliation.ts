@@ -119,6 +119,7 @@ function convertServerSuggestions(
       dataQuality: m.dataQuality,
       windowHit: m.windowHit,
       isAmbiguous: m.isAmbiguous,
+      reasonCode: m.reasonCode,
     }));
 
     result.set(txId, converted);

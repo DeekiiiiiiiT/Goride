@@ -355,9 +355,18 @@ export function ReconciliationDashboard() {
     .length;
 
   const handleSmartReconcile = async (tx: FinancialTransaction, trip: TripType) => {
+      // Orphan personal-use suggestion: there is no trip to link (tripId is empty).
+      // Route to the integrity-guarded manual personal resolution (opens the driver
+      // picker if no driver), never a trip link. Only reachable when the
+      // personal-use detection flag is ON.
+      if (!trip?.id) {
+          await handleManualResolve(tx, 'Personal');
+          return;
+      }
+
       // Check if this is a personal match
       const match = suggestions.get(tx.id)?.find(m => m.trip.id === trip.id);
-      
+
       if (match?.matchType === 'PERSONAL_MATCH') {
           try {
               // 1. Link the trip (Reconcile)

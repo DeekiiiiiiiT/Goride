@@ -30,6 +30,7 @@ import { FinancialTransaction, Trip, DisputeRefund } from "../../../types/data";
 import { EditTollModal } from "./EditTollModal";
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
 import { MatchResult } from "../../../utils/tollReconciliation";
+import { bucketForBestMatch } from "../../../utils/tollBucket";
 import { SuggestedMatchCard } from "./SuggestedMatchCard";
 import { ManualMatchModal } from "./ManualMatchModal";
 import { TollDetailOverlay } from "./TollDetailOverlay";
@@ -135,29 +136,9 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
         };
         filteredTolls.forEach(tx => {
             const best = suggestions.get(tx.id)?.[0];
-            if (!best) {
-                buckets['needs-review'].push(tx);
-                return;
-            }
-            switch (best.matchType) {
-                case 'AMOUNT_VARIANCE':
-                    buckets['underpaid'].push(tx);
-                    break;
-                case 'DEADHEAD_MATCH':
-                    buckets['deadhead'].push(tx);
-                    break;
-                case 'PERSONAL_MATCH':
-                    if (best.reason?.includes('Approach')) {
-                        buckets['deadhead'].push(tx);
-                    } else {
-                        buckets['personal-use'].push(tx);
-                    }
-                    break;
-                case 'POSSIBLE_MATCH':
-                default:
-                    buckets['needs-review'].push(tx);
-                    break;
-            }
+            // Structured reasonCode drives the bucket (legacy string-check fallback
+            // lives inside bucketForBestMatch so OFF-state behavior is unchanged).
+            buckets[bucketForBestMatch(best)].push(tx);
         });
         return buckets;
     }, [filteredTolls, suggestions]);
@@ -209,8 +190,11 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
 
     const renderActionButtons = (tx: FinancialTransaction, match?: MatchResult) => {
         const isClaim = tx.paymentMethod === 'Cash' || !!tx.receiptUrl;
-        
-        if (!match) {
+        // Orphan personal-use suggestions have no trip to link (empty trip id).
+        // Treat them like unmatched items: offer manual resolution, never a Link.
+        const isOrphan = !!match && !match.trip?.id;
+
+        if (!match || isOrphan) {
              // Custom dropdown for Unmatched items (Radix DropdownMenu crashes in Figma Make iframe)
              const isOpen = openDropdownId === tx.id;
              return (
@@ -276,13 +260,17 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
     const smartMatches = activeTabTolls.filter(tx => {
         const matches = suggestions.get(tx.id);
         const best = matches?.[0];
+        // Orphan personal-use suggestions have no trip to confirm — keep them out
+        // of the "Smart Suggestions" (trip-confirm) section so they render in the
+        // standard list, which offers manual resolution instead of a bad Link.
+        const isOrphan = best && !best.trip?.id;
         // Phase 3: Use confidenceScore >= 50 when available, fall back to old logic
         const hasHighScore = best?.confidenceScore != null ? best.confidenceScore >= 50 : (
-            best?.confidence === 'high' || 
-            best?.matchType === 'DEADHEAD_MATCH' || 
+            best?.confidence === 'high' ||
+            best?.matchType === 'DEADHEAD_MATCH' ||
             best?.matchType === 'PERSONAL_MATCH'
         );
-        return best && hasHighScore && !hiddenSuggestions.has(tx.id);
+        return best && hasHighScore && !isOrphan && !hiddenSuggestions.has(tx.id);
     });
 
     const otherTolls = activeTabTolls.filter(tx => !smartMatches.includes(tx));
@@ -313,11 +301,15 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
                 return <Badge className="bg-blue-500 hover:bg-blue-600">Deadhead</Badge>;
             case 'AMOUNT_VARIANCE':
                 return <Badge className="bg-orange-500 hover:bg-orange-600">Underpaid</Badge>;
-            case 'PERSONAL_MATCH':
-                if (match.reason?.includes('Approach')) {
+            case 'PERSONAL_MATCH': {
+                const isApproach = match.reasonCode
+                    ? match.reasonCode === 'ENROUTE_APPROACH'
+                    : match.reason?.includes('Approach');
+                if (isApproach) {
                     return <Badge className="bg-purple-600 hover:bg-purple-700">Unreimbursed</Badge>;
                 }
                 return <Badge className="bg-purple-500 hover:bg-purple-600">Personal</Badge>;
+            }
             default:
                 return <Badge variant="secondary">{match.confidence === 'medium' ? 'Possible Match' : 'Low Confidence'}</Badge>;
         }

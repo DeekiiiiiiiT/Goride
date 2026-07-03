@@ -1938,6 +1938,33 @@ export const api = {
     return response.json();
   },
 
+  /**
+   * Durably resolve an unmatched toll (personal/business/write-off) via the
+   * server ledger. `source` distinguishes a system suggestion (classify-only,
+   * no driver charge) from a human confirmation (charges/writes off as today).
+   */
+  async resolveToll(payload: {
+    transactionId: string;
+    resolution: 'Personal' | 'Business' | 'WriteOff';
+    notes?: string;
+    source?: 'system_suggested' | 'human_confirmed';
+    driverId?: string;
+  }) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/resolve`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to resolve toll");
+    }
+    return response.json();
+  },
+
   async bulkResolveRefunds(items: Array<{ tripId: string; resolution: 'cash_wash' | 'phantom' | 'expense_logged' | 'pending'; notes?: string; driverId?: string }>) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/resolve-refund/bulk`, {
       method: 'POST',
@@ -1970,7 +1997,7 @@ export const api = {
     return response.json();
   },
 
-  async getTollAutomationSettings(): Promise<{ success: boolean; data: { refundAutomationEnabled: boolean; refundAutoMinConfidence: number } }> {
+  async getTollAutomationSettings(): Promise<{ success: boolean; data: { refundAutomationEnabled: boolean; refundAutoMinConfidence: number; personalUseDetectionEnabled: boolean; orphanProximityMinutes: number } }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/automation-settings`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
@@ -1978,7 +2005,7 @@ export const api = {
     return response.json();
   },
 
-  async updateTollAutomationSettings(payload: { refundAutomationEnabled?: boolean; refundAutoMinConfidence?: number }) {
+  async updateTollAutomationSettings(payload: { refundAutomationEnabled?: boolean; refundAutoMinConfidence?: number; personalUseDetectionEnabled?: boolean; orphanProximityMinutes?: number }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/automation-settings`, {
       method: 'PUT',
       headers: {

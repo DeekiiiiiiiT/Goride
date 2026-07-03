@@ -20,6 +20,7 @@ import { Hono } from "npm:hono";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 import { isTollCategory } from "./toll_category_flags.ts";
+import { classifyOrphanToll } from "./orphanTollClassifier.ts";
 import { appendCanonicalTollReconciledBatch, type TollReconcileAuditEntry } from "./canonical_from_ops.ts";
 import { deleteCanonicalLedgerBySource } from "./ledger_canonical.ts";
 import { applyEvidenceResolution } from "./evidence_routes.ts";
@@ -468,6 +469,9 @@ interface MatchResult {
   dataQuality?: DataQuality; // Trip's timing data quality tier
   windowHit?: "ON_TRIP" | "ENROUTE" | "POST_TRIP" | "NONE"; // Which time window the toll fell in
   isAmbiguous?: boolean; // true if multiple trips compete with similar scores
+  // Structured bucket driver (replaces brittle reason.includes('Approach') on the client).
+  // Additive/optional — undefined leaves the client on its legacy string-check fallback.
+  reasonCode?: "ON_TRIP" | "ENROUTE_APPROACH" | "POST_TRIP_GAP" | "ORPHAN_NO_TRIP" | "ORPHAN_OUT_OF_WINDOW";
   // Include minimal trip info so the frontend doesn't need a separate lookup
   tripDate: string;
   tripAmount: number;
@@ -569,6 +573,12 @@ function findTollMatchesServer(
       varianceAmount,
     });
 
+    // Structured reason code derived from the window hit (drives client buckets).
+    const reasonCode: MatchResult["reasonCode"] =
+      scoreResult.windowHit === "ON_TRIP" ? "ON_TRIP" :
+      scoreResult.windowHit === "ENROUTE" ? "ENROUTE_APPROACH" :
+      scoreResult.windowHit === "POST_TRIP" ? "POST_TRIP_GAP" : undefined;
+
     matches.push({
       tripId: trip.id,
       confidence: scoreResult.confidence,
@@ -583,6 +593,7 @@ function findTollMatchesServer(
       driverMatch: scoreResult.driverMatch,
       dataQuality: scoreResult.dataQuality,
       windowHit: scoreResult.windowHit,
+      reasonCode,
       // Existing trip info fields (unchanged)
       tripDate: trip.date,
       tripAmount: trip.amount,
@@ -623,6 +634,51 @@ function findTollMatchesServer(
 
   // Cap at top 5 matches to prevent UI overload
   return matches.slice(0, 5);
+}
+
+/**
+ * Build a synthetic PERSONAL_MATCH suggestion for a toll that produced ZERO
+ * real trip matches ("orphan" toll). Returns null when the toll is not an
+ * orphan (a same-day trip sits within proximity → stays ambiguous).
+ *
+ * NON-BREAKAGE: callers must gate this on settings.personalUseDetectionEnabled.
+ * The synthetic result carries tripId:'' so it can never auto-link or auto-charge.
+ */
+function buildOrphanSuggestion(
+  tx: any,
+  trips: any[],
+  timezone: string,
+  orphanProximityMinutes: number,
+): MatchResult | null {
+  const txDate = getTransactionDateTime(tx, timezone);
+  if (!txDate) return null;
+
+  const candidateTrips = sameDayPreFilter(txDate, trips).map((t: any) => ({
+    requestTime: t.requestTime,
+    dropoffTime: t.dropoffTime,
+    date: t.date,
+  }));
+
+  const cls = classifyOrphanToll({ txDate, candidateTrips, orphanProximityMinutes });
+  if (!cls.isOrphan) return null;
+
+  return {
+    tripId: "", // no trip — prevents any auto-link / auto-charge downstream
+    confidence: cls.confidence,
+    reason: "No trip explains this toll (personal use)",
+    timeDifferenceMinutes: cls.nearestTripDiffMinutes ?? 0,
+    matchType: "PERSONAL_MATCH",
+    reasonCode: cls.reasonCode,
+    // Minimal trip info fields (required by the interface) — empty for an orphan.
+    tripDate: "",
+    tripAmount: 0,
+    tripTollCharges: 0,
+    tripPickup: "",
+    tripDropoff: "",
+    tripPlatform: "",
+    tripDriverId: "",
+    tripDriverName: "",
+  };
 }
 
 // ─── Data Loaders ──────────────────────────────────────────────────────
@@ -1182,12 +1238,24 @@ app.get(`${BASE}/unreconciled`, async (c) => {
     const total = remaining.length;
     const page = remaining.slice(offset, offset + limit);
 
+    // Personal-use (orphan) detection settings — flag default OFF.
+    const puSettings = await getRefundAutomationSettings();
+
     // Compute match suggestions for the current page (display only).
     const suggestionsMap: Record<string, MatchResult[]> = {};
     for (const tx of page) {
       const matches = findTollMatchesServer(tx, trips, timezone);
       if (matches.length > 0) {
         suggestionsMap[tx.id] = matches;
+      } else if (puSettings.personalUseDetectionEnabled) {
+        // No real trip match → classify as orphan (personal use) when enabled.
+        const orphan = buildOrphanSuggestion(
+          tx,
+          trips,
+          timezone,
+          puSettings.orphanProximityMinutes,
+        );
+        if (orphan) suggestionsMap[tx.id] = [orphan];
       }
     }
 
@@ -3390,7 +3458,8 @@ app.post(`${BASE}/reject`, async (c) => {
 
 app.post(`${BASE}/resolve`, async (c) => {
   try {
-    const { transactionId, resolution, notes } = await c.req.json();
+    const { transactionId, resolution, notes, source, driverId: driverIdOverride } =
+      await c.req.json();
     if (!transactionId || !resolution) {
       return c.json(
         { error: "transactionId and resolution are required" },
@@ -3406,6 +3475,12 @@ app.post(`${BASE}/resolve`, async (c) => {
       );
     }
 
+    // Provenance of this resolution. Absent → treat as a human confirmation
+    // (preserves the endpoint's prior behavior). "system_suggested" is a
+    // classify-only path that never charges a driver.
+    const isSystemSuggested = source === "system_suggested";
+    const resolutionSource = isSystemSuggested ? "system_suggested" : "human_confirmed";
+
     // Phase 6: Read from toll_ledger (single source of truth)
     const tollEntry = await getTollLedgerEntry(transactionId);
     if (!tollEntry) return c.json({ error: `Toll ${transactionId} not found` }, 404);
@@ -3413,7 +3488,55 @@ app.post(`${BASE}/resolve`, async (c) => {
     // Convert to tx shape for response compatibility
     const tx = tollLedgerToTxShape(tollEntry);
 
+    // Optional driver override (integrity: charging a driver needs a real driver).
+    if (driverIdOverride) {
+      tx.driverId = driverIdOverride;
+    }
+
     const amount = Math.abs(Number(tollEntry.amount) || 0);
+
+    // Map resolution → durable ledger enum (shared by both paths below).
+    const ledgerResolution: "personal" | "business" | "write_off" | null =
+      resolution === "Personal" ? "personal" :
+      resolution === "Business" ? "business" :
+      resolution === "WriteOff" ? "write_off" : null;
+
+    // ── Classify-only path (system suggestion) ──────────────────────────────
+    // Persist the resolution label for review WITHOUT charging the driver or
+    // changing the toll's workflow status. A human confirmation (below) is
+    // what actually moves money. Reached only when source === "system_suggested".
+    if (isSystemSuggested) {
+      await updateTollLedgerEntry(
+        transactionId,
+        { resolution: ledgerResolution, notes: notes || undefined },
+        "updated",
+        "system-suggested",
+      );
+      await writeTollLedgerEntry({
+        eventType: "toll_personal_suggested",
+        category: "Toll Reconciliation",
+        description: `Toll suggested as ${resolution.toLowerCase()} (awaiting confirmation): ${tx.description || tx.vendor || "Toll"}`,
+        grossAmount: amount,
+        netAmount: 0, // classify-only — no financial impact yet
+        direction: "neutral",
+        sourceType: "toll_resolution",
+        sourceId: transactionId,
+        driverId: tx.driverId || "unknown",
+        driverName: tx.driverName || "Unknown",
+        vehicleId: tx.vehicleId,
+        date: tx.date,
+        metadata: {
+          resolution,
+          source: resolutionSource,
+          suggestedAt: new Date().toISOString(),
+          notes,
+        },
+      });
+      console.log(
+        `[TollReconciliation] System-suggested tx ${transactionId} as ${resolution} (classify-only, no charge)`,
+      );
+      return c.json({ success: true, data: { transaction: tx, claim: null, source: resolutionSource } });
+    }
 
     // Determine status and claim creation based on resolution type
     let claimResolutionReason: string;
@@ -3452,11 +3575,6 @@ app.post(`${BASE}/resolve`, async (c) => {
     }
 
     // Phase 6: Write ONLY to toll_ledger (single source of truth)
-    const ledgerResolution: "personal" | "business" | "write_off" | null =
-      resolution === "Personal" ? "personal" :
-      resolution === "Business" ? "business" :
-      resolution === "WriteOff" ? "write_off" : null;
-    
     await updateTollLedgerEntry(
       transactionId,
       {
@@ -3504,6 +3622,7 @@ app.post(`${BASE}/resolve`, async (c) => {
       date: tx.date,
       metadata: {
         resolution,
+        source: resolutionSource,
         claimId,
         claimResolutionReason,
         notes,
@@ -3512,7 +3631,7 @@ app.post(`${BASE}/resolve`, async (c) => {
     });
 
     console.log(
-      `[TollReconciliation] Resolved tx ${transactionId} as ${resolution} (claim ${claimId})`,
+      `[TollReconciliation] Resolved tx ${transactionId} as ${resolution} (claim ${claimId}, source ${resolutionSource})`,
     );
 
     return c.json({
@@ -3538,10 +3657,16 @@ type RefundResolutionStatus = "cash_wash" | "phantom" | "expense_logged" | "pend
 const REFUND_SETTINGS_KEY = "toll_reconciliation:settings";
 const DEFAULT_PLAZA_RADIUS_M = 500;
 const REFUND_AUTO_APPLY_MIN_CONFIDENCE = 85;
+// Default proximity (minutes) that qualifies a toll as "orphan" (personal use).
+// A tighter nested window inside the ±1-day sameDayPreFilter.
+const DEFAULT_ORPHAN_PROXIMITY_MINUTES = 180;
 
 interface RefundAutomationSettings {
   refundAutomationEnabled: boolean;
   refundAutoMinConfidence: number;
+  // Personal-use (orphan) toll detection — additive, default OFF.
+  personalUseDetectionEnabled: boolean;
+  orphanProximityMinutes: number;
 }
 
 async function getRefundAutomationSettings(): Promise<RefundAutomationSettings> {
@@ -3552,6 +3677,11 @@ async function getRefundAutomationSettings(): Promise<RefundAutomationSettings> 
       typeof rec?.refundAutoMinConfidence === "number"
         ? rec.refundAutoMinConfidence
         : REFUND_AUTO_APPLY_MIN_CONFIDENCE,
+    personalUseDetectionEnabled: rec?.personalUseDetectionEnabled === true, // default OFF
+    orphanProximityMinutes:
+      typeof rec?.orphanProximityMinutes === "number" && rec.orphanProximityMinutes > 0
+        ? rec.orphanProximityMinutes
+        : DEFAULT_ORPHAN_PROXIMITY_MINUTES,
   };
 }
 
@@ -3891,6 +4021,14 @@ app.put(`${BASE}/automation-settings`, async (c) => {
         typeof body?.refundAutoMinConfidence === "number"
           ? Math.max(50, Math.min(100, body.refundAutoMinConfidence))
           : current.refundAutoMinConfidence,
+      personalUseDetectionEnabled:
+        typeof body?.personalUseDetectionEnabled === "boolean"
+          ? body.personalUseDetectionEnabled
+          : current.personalUseDetectionEnabled,
+      orphanProximityMinutes:
+        typeof body?.orphanProximityMinutes === "number" && body.orphanProximityMinutes > 0
+          ? Math.max(15, Math.min(1440, body.orphanProximityMinutes))
+          : current.orphanProximityMinutes,
     };
     await kv.set(REFUND_SETTINGS_KEY, next);
     return c.json({ success: true, data: next });
@@ -4116,10 +4254,19 @@ app.get(`${BASE}/export`, async (c) => {
     const suggestionsMap: Record<string, MatchResult[]> = {};
     if (unmatched.length > 0) {
       const timezone = await getFleetTimezone();
+      const puSettings = await getRefundAutomationSettings();
       for (const tx of unmatched) {
         const matches = findTollMatchesServer(tx, allTrips, timezone);
         if (matches.length > 0) {
           suggestionsMap[tx.id] = matches;
+        } else if (puSettings.personalUseDetectionEnabled) {
+          const orphan = buildOrphanSuggestion(
+            tx,
+            allTrips,
+            timezone,
+            puSettings.orphanProximityMinutes,
+          );
+          if (orphan) suggestionsMap[tx.id] = [orphan];
         }
       }
     }

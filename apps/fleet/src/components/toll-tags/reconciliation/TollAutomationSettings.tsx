@@ -18,7 +18,21 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
   const [saving, setSaving] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [minConfidence, setMinConfidence] = useState(85);
+  const [personalUseEnabled, setPersonalUseEnabled] = useState(false);
+  const [orphanProximity, setOrphanProximity] = useState(180);
   const [bridging, setBridging] = useState(false);
+
+  const applySettings = (data: {
+    refundAutomationEnabled: boolean;
+    refundAutoMinConfidence: number;
+    personalUseDetectionEnabled: boolean;
+    orphanProximityMinutes: number;
+  }) => {
+    setEnabled(data.refundAutomationEnabled);
+    setMinConfidence(data.refundAutoMinConfidence);
+    setPersonalUseEnabled(data.personalUseDetectionEnabled);
+    setOrphanProximity(data.orphanProximityMinutes);
+  };
 
   useEffect(() => {
     let active = true;
@@ -26,8 +40,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
       .getTollAutomationSettings()
       .then((res) => {
         if (!active) return;
-        setEnabled(res.data.refundAutomationEnabled);
-        setMinConfidence(res.data.refundAutoMinConfidence);
+        applySettings(res.data);
       })
       .catch((e) => console.error("[TollAutomation] load failed", e))
       .finally(() => active && setLoading(false));
@@ -36,12 +49,16 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
     };
   }, []);
 
-  const save = async (next: { refundAutomationEnabled?: boolean; refundAutoMinConfidence?: number }) => {
+  const save = async (next: {
+    refundAutomationEnabled?: boolean;
+    refundAutoMinConfidence?: number;
+    personalUseDetectionEnabled?: boolean;
+    orphanProximityMinutes?: number;
+  }) => {
     setSaving(true);
     try {
       const res = await api.updateTollAutomationSettings(next);
-      setEnabled(res.data.refundAutomationEnabled);
-      setMinConfidence(res.data.refundAutoMinConfidence);
+      applySettings(res.data);
       toast.success("Automation settings saved");
       onChanged?.();
     } catch (e: any) {
@@ -117,6 +134,49 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
                 className="w-full mt-2 accent-indigo-600"
               />
               <p className="text-xs text-slate-500 mt-1">Suggestions below this score require manual review.</p>
+            </div>
+
+            <div className="border-t border-slate-100 pt-4 space-y-3">
+              <div>
+                <h4 className="text-sm font-semibold text-slate-900">Personal-use detection</h4>
+                <p className="text-xs text-slate-500">
+                  Classifies tolls that no trip explains as likely personal use, moving them out
+                  of “Needs Review” into “Personal Use”. Classify-only — a human still confirms
+                  any driver charge.
+                </p>
+              </div>
+
+              <label className="flex items-center justify-between">
+                <span className="text-sm text-slate-700">Detect personal-use (orphan) tolls</span>
+                <Switch
+                  checked={personalUseEnabled}
+                  disabled={saving}
+                  onCheckedChange={(v) => save({ personalUseDetectionEnabled: v })}
+                />
+              </label>
+
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="text-sm text-slate-700">Trip proximity window</label>
+                  <span className="text-sm font-semibold text-indigo-700">{orphanProximity} min</span>
+                </div>
+                <input
+                  type="range"
+                  min={15}
+                  max={480}
+                  step={15}
+                  value={orphanProximity}
+                  disabled={saving || !personalUseEnabled}
+                  onChange={(e) => setOrphanProximity(parseInt(e.target.value, 10))}
+                  onMouseUp={() => save({ orphanProximityMinutes: orphanProximity })}
+                  onTouchEnd={() => save({ orphanProximityMinutes: orphanProximity })}
+                  className="w-full mt-2 accent-indigo-600"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  A same-day trip within this window keeps a toll under review; beyond it (or no
+                  trip that day) the toll is flagged personal.
+                </p>
+              </div>
             </div>
 
             <div className="border-t border-slate-100 pt-4">
