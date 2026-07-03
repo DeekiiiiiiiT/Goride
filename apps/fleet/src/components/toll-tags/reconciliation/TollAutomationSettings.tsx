@@ -101,139 +101,158 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
           Automation
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80">
+      <PopoverContent align="end" className="w-[min(920px,95vw)] p-5">
         {loading ? (
-          <div className="flex items-center justify-center py-6 text-slate-400">
+          <div className="flex items-center justify-center py-10 text-slate-400">
             <Loader2 className="h-5 w-5 animate-spin" />
           </div>
         ) : (
-          <div className="space-y-5">
+          <div className="space-y-4">
             <div>
-              <h4 className="text-sm font-semibold text-slate-900">Refund auto-resolution</h4>
+              <h3 className="text-sm font-semibold text-slate-900">Toll Automation</h3>
               <p className="text-xs text-slate-500">
-                Auto-clears integrity-safe cash washes, and auto-links high-confidence dispute
-                refunds to their underpaid claim. Everything else waits for review.
+                Controls how tolls are auto-resolved, detected, and synced to driver financials.
               </p>
             </div>
 
-            <label className="flex items-center justify-between">
-              <span className="text-sm text-slate-700">Enable auto-resolution</span>
-              <Switch
-                checked={enabled}
-                disabled={saving}
-                onCheckedChange={(v) => save({ refundAutomationEnabled: v })}
-              />
-            </label>
-
-            <div>
-              <div className="flex items-center justify-between">
-                <label className="text-sm text-slate-700">Confidence threshold</label>
-                <span className="text-sm font-semibold text-indigo-700">{minConfidence}%</span>
-              </div>
-              <input
-                type="range"
-                min={50}
-                max={100}
-                value={minConfidence}
-                disabled={saving}
-                onChange={(e) => setMinConfidence(parseInt(e.target.value, 10))}
-                onMouseUp={() => save({ refundAutoMinConfidence: minConfidence })}
-                onTouchEnd={() => save({ refundAutoMinConfidence: minConfidence })}
-                className="w-full mt-2 accent-indigo-600"
-              />
-              <p className="text-xs text-slate-500 mt-1">Suggestions below this score require manual review.</p>
-            </div>
-
-            <div className="border-t border-slate-100 pt-4 space-y-3">
-              <div>
-                <h4 className="text-sm font-semibold text-slate-900">Personal-use detection</h4>
-                <p className="text-xs text-slate-500">
-                  Classifies tolls that no trip explains as likely personal use, moving them out
-                  of “Needs Review” into “Personal Use”. Classify-only — a human still confirms
-                  any driver charge.
-                </p>
-              </div>
-
-              <label className="flex items-center justify-between">
-                <span className="text-sm text-slate-700">Detect personal-use (orphan) tolls</span>
-                <Switch
-                  checked={personalUseEnabled}
-                  disabled={saving}
-                  onCheckedChange={(v) => save({ personalUseDetectionEnabled: v })}
-                />
-              </label>
-
-              <div>
-                <div className="flex items-center justify-between">
-                  <label className="text-sm text-slate-700">Trip proximity window</label>
-                  <span className="text-sm font-semibold text-indigo-700">{orphanProximity} min</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Refund auto-resolution */}
+              <div className="rounded-lg border border-slate-200 p-4 space-y-3">
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-900">Refund auto-resolution</h4>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Auto-clears integrity-safe cash washes, and auto-links high-confidence dispute
+                    refunds to their underpaid claim. Everything else waits for review.
+                  </p>
                 </div>
-                <input
-                  type="range"
-                  min={15}
-                  max={480}
-                  step={15}
-                  value={orphanProximity}
-                  disabled={saving || !personalUseEnabled}
-                  onChange={(e) => setOrphanProximity(parseInt(e.target.value, 10))}
-                  onMouseUp={() => save({ orphanProximityMinutes: orphanProximity })}
-                  onTouchEnd={() => save({ orphanProximityMinutes: orphanProximity })}
-                  className="w-full mt-2 accent-indigo-600"
-                />
-                <p className="text-xs text-slate-500 mt-1">
-                  A same-day trip within this window keeps a toll under review; beyond it (or no
-                  trip that day) the toll is flagged personal.
-                </p>
-              </div>
 
-              <div className="border-t border-slate-100 pt-3">
                 <label className="flex items-center justify-between">
-                  <span className="text-sm text-slate-700">Sync charges to driver financials</span>
+                  <span className="text-sm text-slate-700">Enable auto-resolution</span>
                   <Switch
-                    checked={driverChargeSync}
+                    checked={enabled}
                     disabled={saving}
-                    onCheckedChange={(v) => save({ driverTollChargeSyncEnabled: v })}
+                    onCheckedChange={(v) => save({ refundAutomationEnabled: v })}
                   />
                 </label>
-                <p className="text-xs text-slate-500 mt-1">
-                  When a toll is resolved as “Charge Driver”, post it to the driver's Expenses,
-                  Settlement and Cash Wallet. Classify-only stays intact; this only controls
-                  whether the confirmed charge appears in the driver's financials.
-                </p>
+
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm text-slate-700">Confidence threshold</label>
+                    <span className="text-sm font-semibold text-indigo-700">{minConfidence}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={50}
+                    max={100}
+                    value={minConfidence}
+                    disabled={saving}
+                    onChange={(e) => setMinConfidence(parseInt(e.target.value, 10))}
+                    onMouseUp={() => save({ refundAutoMinConfidence: minConfidence })}
+                    onTouchEnd={() => save({ refundAutoMinConfidence: minConfidence })}
+                    className="w-full mt-2 accent-indigo-600"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">Suggestions below this score require manual review.</p>
+                </div>
               </div>
 
-              <div className="border-t border-slate-100 pt-3">
+              {/* Personal-use detection */}
+              <div className="rounded-lg border border-slate-200 p-4 space-y-3">
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-900">Personal-use detection</h4>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Classifies tolls that no trip explains as likely personal use, moving them out
+                    of “Needs Review” into “Personal Use”. Classify-only — a human still confirms
+                    any driver charge.
+                  </p>
+                </div>
+
                 <label className="flex items-center justify-between">
-                  <span className="text-sm text-slate-700">Unified toll settlement</span>
+                  <span className="text-sm text-slate-700">Detect personal-use (orphan) tolls</span>
                   <Switch
-                    checked={unifiedSettlement}
+                    checked={personalUseEnabled}
                     disabled={saving}
-                    onCheckedChange={(v) => save({ unifiedTollSettlementEnabled: v })}
+                    onCheckedChange={(v) => save({ personalUseDetectionEnabled: v })}
                   />
                 </label>
-                <p className="text-xs text-slate-500 mt-1">
-                  One reconciliation-aware toll calc across all driver financial tabs: cash tolls
-                  wash, only personal tag tolls are billed, and payout stops double-counting tolls.
-                  Requires “Sync charges to driver financials”.
-                </p>
-              </div>
-            </div>
 
-            <div className="border-t border-slate-100 pt-4">
-              <div className="flex items-center gap-1.5">
-                <Bot className="h-4 w-4 text-slate-500" />
-                <h4 className="text-sm font-semibold text-slate-900">Native ride tolls</h4>
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm text-slate-700">Trip proximity window</label>
+                    <span className="text-sm font-semibold text-indigo-700">{orphanProximity} min</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={15}
+                    max={480}
+                    step={15}
+                    value={orphanProximity}
+                    disabled={saving || !personalUseEnabled}
+                    onChange={(e) => setOrphanProximity(parseInt(e.target.value, 10))}
+                    onMouseUp={() => save({ orphanProximityMinutes: orphanProximity })}
+                    onTouchEnd={() => save({ orphanProximityMinutes: orphanProximity })}
+                    className="w-full mt-2 accent-indigo-600"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">
+                    A same-day trip within this window keeps a toll under review; beyond it (or no
+                    trip that day) the toll is flagged personal.
+                  </p>
+                </div>
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Import geofence-detected tolls from Roam Driver rides into the ledger.
-              </p>
-              <div className="flex items-center gap-2 mt-2">
-                <Button size="sm" variant="outline" disabled={bridging} onClick={() => runBridge(true)}>
-                  Dry run
-                </Button>
-                <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700" disabled={bridging} onClick={() => runBridge(false)}>
-                  {bridging ? <Loader2 className="h-4 w-4 animate-spin" /> : "Bridge now"}
-                </Button>
+
+              {/* Driver financial sync */}
+              <div className="rounded-lg border border-slate-200 p-4 space-y-3">
+                <h4 className="text-sm font-semibold text-slate-900">Driver financial sync</h4>
+
+                <div>
+                  <label className="flex items-center justify-between">
+                    <span className="text-sm text-slate-700">Sync charges to driver financials</span>
+                    <Switch
+                      checked={driverChargeSync}
+                      disabled={saving}
+                      onCheckedChange={(v) => save({ driverTollChargeSyncEnabled: v })}
+                    />
+                  </label>
+                  <p className="text-xs text-slate-500 mt-1">
+                    When a toll is resolved as “Charge Driver”, post it to the driver's Expenses,
+                    Settlement and Cash Wallet. Classify-only stays intact; this only controls
+                    whether the confirmed charge appears in the driver's financials.
+                  </p>
+                </div>
+
+                <div className="border-t border-slate-100 pt-3">
+                  <label className="flex items-center justify-between">
+                    <span className="text-sm text-slate-700">Unified toll settlement</span>
+                    <Switch
+                      checked={unifiedSettlement}
+                      disabled={saving}
+                      onCheckedChange={(v) => save({ unifiedTollSettlementEnabled: v })}
+                    />
+                  </label>
+                  <p className="text-xs text-slate-500 mt-1">
+                    One reconciliation-aware toll calc across all driver financial tabs: cash
+                    tolls wash, only personal tag tolls are billed, and payout stops
+                    double-counting tolls. Requires “Sync charges to driver financials”.
+                  </p>
+                </div>
+              </div>
+
+              {/* Native ride tolls */}
+              <div className="rounded-lg border border-slate-200 p-4 space-y-3">
+                <div className="flex items-center gap-1.5">
+                  <Bot className="h-4 w-4 text-slate-500" />
+                  <h4 className="text-sm font-semibold text-slate-900">Native ride tolls</h4>
+                </div>
+                <p className="text-xs text-slate-500">
+                  Import geofence-detected tolls from Roam Driver rides into the ledger.
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" disabled={bridging} onClick={() => runBridge(true)}>
+                    Dry run
+                  </Button>
+                  <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700" disabled={bridging} onClick={() => runBridge(false)}>
+                    {bridging ? <Loader2 className="h-4 w-4 animate-spin" /> : "Bridge now"}
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
