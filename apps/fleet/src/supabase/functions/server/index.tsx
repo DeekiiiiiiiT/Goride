@@ -68,6 +68,7 @@ import {
   deleteAllCanonicalLedgerBySourceType,
   deleteCanonicalLedgerBySource,
 } from "./ledger_canonical.ts";
+import { emitDriverTollCharge, isDriverTollChargeSyncEnabled } from "./driver_toll_charge.ts";
 import {
   appendCanonicalFuelExpenseIfEligible,
   appendCanonicalTollIfEligible,
@@ -10297,30 +10298,51 @@ app.post("/make-server-37f42386/claims", async (c) => {
     }
     claim.updatedAt = new Date().toISOString();
     
-    // Auto-create Financial Transaction for "Charge Driver" resolution
-    // This ensures the $10 charge appears in the driver's transaction ledger
+    // Auto-create the driver-facing charge for a "Charge Driver" resolution.
     if (claim.status === 'Resolved' && claim.resolutionReason === 'Charge Driver' && !claim.resolutionTransactionId) {
-        const txId = crypto.randomUUID();
-        const transaction = {
-            id: txId,
-            driverId: claim.driverId,
-            date: new Date().toISOString(),
-            // Ensure description contains 'Toll' so it's picked up by DriverDetail filter
-            description: `Toll Dispute Charge - ${claim.subject || 'Resolution'}`, 
-            category: 'Adjustment',
-            tripId: claim.tripId, // Link to the Trip so it appears nested in the ledger
-            type: 'Adjustment',
-            amount: Math.abs(claim.amount || 0), // Positive magnitude; ledger logic subtracts it
-            status: 'Completed',
-            paymentMethod: 'Cash', // Affects Cash Wallet
-            metadata: {
-                claimId: claim.id,
-                source: 'claim_resolution'
-            }
-        };
-        
-        await kv.set(`transaction:${txId}`, stampOrg(transaction, c));
-        claim.resolutionTransactionId = txId; // Link it to prevent duplicates
+        if (await isDriverTollChargeSyncEnabled()) {
+            // Flag ON: route through the single consolidated emitter — canonical
+            // SSOT event + ONE correctly-signed (negative) projection txn, idempotent.
+            const result = await emitDriverTollCharge(
+                {
+                    tollId: claim.transactionId || claim.id,
+                    claimId: claim.id,
+                    driverId: claim.driverId,
+                    driverName: claim.driverName,
+                    vehicleId: claim.vehicleId,
+                    tripId: claim.tripId ?? null,
+                    amount: claim.amount || 0,
+                    date: claim.date || new Date().toISOString(),
+                    description: `Toll Charge - ${claim.subject || 'Personal Use'}`,
+                    source: 'claim_resolution',
+                },
+                c,
+            );
+            if (result.projectionTxId) claim.resolutionTransactionId = result.projectionTxId;
+        } else {
+            // Flag OFF: preserve legacy behavior byte-for-byte (positive Adjustment txn).
+            const txId = crypto.randomUUID();
+            const transaction = {
+                id: txId,
+                driverId: claim.driverId,
+                date: new Date().toISOString(),
+                // Ensure description contains 'Toll' so it's picked up by DriverDetail filter
+                description: `Toll Dispute Charge - ${claim.subject || 'Resolution'}`,
+                category: 'Adjustment',
+                tripId: claim.tripId, // Link to the Trip so it appears nested in the ledger
+                type: 'Adjustment',
+                amount: Math.abs(claim.amount || 0), // Positive magnitude; ledger logic subtracts it
+                status: 'Completed',
+                paymentMethod: 'Cash', // Affects Cash Wallet
+                metadata: {
+                    claimId: claim.id,
+                    source: 'claim_resolution'
+                }
+            };
+
+            await kv.set(`transaction:${txId}`, stampOrg(transaction, c));
+            claim.resolutionTransactionId = txId; // Link it to prevent duplicates
+        }
     }
     
     await kv.set(`claim:${claim.id}`, stampOrg(claim, c));

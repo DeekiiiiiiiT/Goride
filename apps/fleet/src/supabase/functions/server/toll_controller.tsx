@@ -21,6 +21,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 import { isTollCategory } from "./toll_category_flags.ts";
 import { classifyOrphanToll } from "./orphanTollClassifier.ts";
+import { emitDriverTollCharge } from "./driver_toll_charge.ts";
 import { appendCanonicalTollReconciledBatch, type TollReconcileAuditEntry } from "./canonical_from_ops.ts";
 import { deleteCanonicalLedgerBySource } from "./ledger_canonical.ts";
 import { applyEvidenceResolution } from "./evidence_routes.ts";
@@ -780,7 +781,16 @@ function tollLedgerToTxShape(entry: TollLedgerRecord): any {
                    entry.paymentMethod === "card" ? "Card" :
                    entry.paymentMethod === "fleet_account" ? "Fleet Account" : "Tag Balance",
     status,
-    isReconciled: entry.status === "reconciled" || !!entry.tripId,
+    // A toll is "handled" (out of the Unmatched queue) when it's matched to a
+    // trip, reconciled/resolved, OR carries a terminal resolution
+    // (personal/business/write_off/refunded). Without the `resolution` check a
+    // resolved-personal tag toll (status 'rejected', no tripId) wrongly
+    // reappeared as "Unmatched".
+    isReconciled:
+      entry.status === "reconciled" ||
+      entry.status === "resolved" ||
+      !!entry.resolution ||
+      !!entry.tripId,
     tripId: entry.tripId,
     receiptUrl: entry.receiptUrl,
     notes: entry.notes,
@@ -3606,29 +3616,50 @@ app.post(`${BASE}/resolve`, async (c) => {
     };
     await kv.set(`claim:${claimId}`, claim);
 
-    // Write ledger entry
-    await writeTollLedgerEntry({
-      eventType: ledgerEventType,
-      category: "Toll Reconciliation",
-      description: ledgerDescription,
-      grossAmount: amount,
-      netAmount: ledgerNetAmount,
-      direction: ledgerDirection,
-      sourceType: "toll_resolution",
-      sourceId: transactionId,
-      driverId: tx.driverId || "unknown",
-      driverName: tx.driverName || "Unknown",
-      vehicleId: tx.vehicleId,
-      date: tx.date,
-      metadata: {
-        resolution,
-        source: resolutionSource,
-        claimId,
-        claimResolutionReason,
-        notes,
-        resolvedAt: new Date().toISOString(),
-      },
-    });
+    if (resolution === "Personal") {
+      // Personal = charge the driver. Route through the single consolidated
+      // emitter so the canonical event AND the (flag-gated) driver-visible
+      // projection txn are written idempotently, keyed on the claim.
+      await emitDriverTollCharge(
+        {
+          tollId: transactionId,
+          claimId,
+          driverId: tx.driverId || "unknown",
+          driverName: tx.driverName || "Unknown",
+          vehicleId: tx.vehicleId,
+          tripId: tx.tripId ?? null,
+          amount,
+          date: tx.date,
+          description: ledgerDescription,
+          source: resolutionSource,
+        },
+        c,
+      );
+    } else {
+      // WriteOff / Business = fleet absorbs the cost. No driver charge.
+      await writeTollLedgerEntry({
+        eventType: ledgerEventType,
+        category: "Toll Reconciliation",
+        description: ledgerDescription,
+        grossAmount: amount,
+        netAmount: ledgerNetAmount,
+        direction: ledgerDirection,
+        sourceType: "toll_resolution",
+        sourceId: transactionId,
+        driverId: tx.driverId || "unknown",
+        driverName: tx.driverName || "Unknown",
+        vehicleId: tx.vehicleId,
+        date: tx.date,
+        metadata: {
+          resolution,
+          source: resolutionSource,
+          claimId,
+          claimResolutionReason,
+          notes,
+          resolvedAt: new Date().toISOString(),
+        },
+      });
+    }
 
     console.log(
       `[TollReconciliation] Resolved tx ${transactionId} as ${resolution} (claim ${claimId}, source ${resolutionSource})`,
@@ -3640,6 +3671,80 @@ app.post(`${BASE}/resolve`, async (c) => {
     });
   } catch (e: any) {
     console.log(`[TollReconciliation] POST /resolve error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── GET /driver-toll-charges ──────────────────────────────────────────
+// Driver-scoped toll disposition summary, read from toll_ledger:* (SSOT for
+// toll resolution). Powers the driver's Reconciliation sub-tab toll section.
+// Buckets by resolution: personal (charged to driver) / business / write_off /
+// refunded, plus reconciled-to-trip (platform reimbursed). Server-computed and
+// driver-scoped so it scales to hundreds of drivers.
+app.get(`${BASE}/driver-toll-charges`, async (c) => {
+  try {
+    const driverId = c.req.query("driverId");
+    if (!driverId) return c.json({ error: "driverId is required" }, 400);
+    const from = c.req.query("from") || undefined; // YYYY-MM-DD inclusive
+    const to = c.req.query("to") || undefined;
+
+    const all = await getAllTollLedgerEntries();
+    const forDriver = filterByDriver(all, driverId).filter((e: any) => {
+      if (!from && !to) return true;
+      const d = (e.date || "").slice(0, 10);
+      if (from && d < from) return false;
+      if (to && d > to) return false;
+      return true;
+    });
+
+    const bucket = {
+      chargedToDriver: 0, // resolution === 'personal'
+      writtenOff: 0, // resolution === 'write_off'
+      business: 0, // resolution === 'business'
+      refunded: 0, // resolution === 'refunded'
+      reconciled: 0, // matched to a trip (platform reimbursed)
+      unresolved: 0, // still pending
+    };
+    const counts = { chargedToDriver: 0, writtenOff: 0, business: 0, refunded: 0, reconciled: 0, unresolved: 0 };
+    const charges: any[] = [];
+
+    for (const e of forDriver) {
+      const amt = Math.abs(Number(e.amount) || 0);
+      const res = e.resolution as string | null;
+      if (res === "personal") {
+        bucket.chargedToDriver += amt; counts.chargedToDriver++;
+        charges.push({ id: e.id, date: e.date, amount: amt, plaza: e.plaza || e.location || null, tripId: e.tripId || null });
+      } else if (res === "write_off") {
+        bucket.writtenOff += amt; counts.writtenOff++;
+      } else if (res === "business") {
+        bucket.business += amt; counts.business++;
+      } else if (res === "refunded") {
+        bucket.refunded += amt; counts.refunded++;
+      } else if (e.isReconciled || e.tripId) {
+        bucket.reconciled += amt; counts.reconciled++;
+      } else {
+        bucket.unresolved += amt; counts.unresolved++;
+      }
+    }
+
+    const round = (n: number) => Math.round(n * 100) / 100;
+    return c.json({
+      success: true,
+      data: {
+        totals: {
+          chargedToDriver: round(bucket.chargedToDriver),
+          writtenOff: round(bucket.writtenOff),
+          business: round(bucket.business),
+          refunded: round(bucket.refunded),
+          reconciled: round(bucket.reconciled),
+          unresolved: round(bucket.unresolved),
+        },
+        counts,
+        charges: charges.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 100),
+      },
+    });
+  } catch (e: any) {
+    console.log(`[TollReconciliation] GET /driver-toll-charges error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
 });
@@ -3667,6 +3772,9 @@ interface RefundAutomationSettings {
   // Personal-use (orphan) toll detection — additive, default OFF.
   personalUseDetectionEnabled: boolean;
   orphanProximityMinutes: number;
+  // Sync "charge driver" toll resolutions into the driver financial section
+  // (materializes the projection txn) — additive, default OFF.
+  driverTollChargeSyncEnabled: boolean;
 }
 
 async function getRefundAutomationSettings(): Promise<RefundAutomationSettings> {
@@ -3682,6 +3790,7 @@ async function getRefundAutomationSettings(): Promise<RefundAutomationSettings> 
       typeof rec?.orphanProximityMinutes === "number" && rec.orphanProximityMinutes > 0
         ? rec.orphanProximityMinutes
         : DEFAULT_ORPHAN_PROXIMITY_MINUTES,
+    driverTollChargeSyncEnabled: rec?.driverTollChargeSyncEnabled === true, // default OFF
   };
 }
 
@@ -4029,6 +4138,10 @@ app.put(`${BASE}/automation-settings`, async (c) => {
         typeof body?.orphanProximityMinutes === "number" && body.orphanProximityMinutes > 0
           ? Math.max(15, Math.min(1440, body.orphanProximityMinutes))
           : current.orphanProximityMinutes,
+      driverTollChargeSyncEnabled:
+        typeof body?.driverTollChargeSyncEnabled === "boolean"
+          ? body.driverTollChargeSyncEnabled
+          : current.driverTollChargeSyncEnabled,
     };
     await kv.set(REFUND_SETTINGS_KEY, next);
     return c.json({ success: true, data: next });

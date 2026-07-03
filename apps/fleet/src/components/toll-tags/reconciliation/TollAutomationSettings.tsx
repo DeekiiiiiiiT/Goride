@@ -20,6 +20,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
   const [minConfidence, setMinConfidence] = useState(85);
   const [personalUseEnabled, setPersonalUseEnabled] = useState(false);
   const [orphanProximity, setOrphanProximity] = useState(180);
+  const [driverChargeSync, setDriverChargeSync] = useState(false);
   const [bridging, setBridging] = useState(false);
 
   const applySettings = (data: {
@@ -27,11 +28,13 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
     refundAutoMinConfidence: number;
     personalUseDetectionEnabled: boolean;
     orphanProximityMinutes: number;
+    driverTollChargeSyncEnabled?: boolean;
   }) => {
     setEnabled(data.refundAutomationEnabled);
     setMinConfidence(data.refundAutoMinConfidence);
     setPersonalUseEnabled(data.personalUseDetectionEnabled);
     setOrphanProximity(data.orphanProximityMinutes);
+    setDriverChargeSync(data.driverTollChargeSyncEnabled === true);
   };
 
   useEffect(() => {
@@ -54,6 +57,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
     refundAutoMinConfidence?: number;
     personalUseDetectionEnabled?: boolean;
     orphanProximityMinutes?: number;
+    driverTollChargeSyncEnabled?: boolean;
   }) => {
     setSaving(true);
     try {
@@ -175,6 +179,22 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
                 <p className="text-xs text-slate-500 mt-1">
                   A same-day trip within this window keeps a toll under review; beyond it (or no
                   trip that day) the toll is flagged personal.
+                </p>
+              </div>
+
+              <div className="border-t border-slate-100 pt-3">
+                <label className="flex items-center justify-between">
+                  <span className="text-sm text-slate-700">Sync charges to driver financials</span>
+                  <Switch
+                    checked={driverChargeSync}
+                    disabled={saving}
+                    onCheckedChange={(v) => save({ driverTollChargeSyncEnabled: v })}
+                  />
+                </label>
+                <p className="text-xs text-slate-500 mt-1">
+                  When a toll is resolved as “Charge Driver”, post it to the driver's Expenses,
+                  Settlement and Cash Wallet. Classify-only stays intact; this only controls
+                  whether the confirmed charge appears in the driver's financials.
                 </p>
               </div>
             </div>

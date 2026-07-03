@@ -48,6 +48,7 @@ export interface CashWeekData {
         surplusPayments: number;
         tollExpenses: number;
         fuelCredits: number;
+        tollCharges: number;   // personal-use tolls billed to the driver (debit → increases owed)
     };
 }
 
@@ -116,7 +117,17 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
             })
             .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
 
-        const amountOwed = Math.max(csvCash, tripCalculatedCash) + weeklyFloat;
+        // Personal-use tolls billed to the driver (the negative 'Toll Charge'
+        // projection). A DEBIT — increases what the driver owes the fleet.
+        const weeklyTollCharges = safeTransactions
+            .filter(t => {
+                if (!t || !t.date) return false;
+                const isCharge = t.category === 'Toll Charge' || (t.metadata as any)?.projection === 'driver_toll_charge';
+                return isCharge && isWithinInterval(new Date(t.date), { start: weekStart, end: weekEnd });
+            })
+            .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
+
+        const amountOwed = Math.max(csvCash, tripCalculatedCash) + weeklyFloat + weeklyTollCharges;
         const isFromCsv = csvCash > tripCalculatedCash;
 
         // --- Calculate Credits (Allocated Payments + Approved Cash Tolls) ---
@@ -216,6 +227,7 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
             _allocatedPaymentsOnly: allocatedPayments.reduce((sum, t) => sum + (t.amount || 0), 0),
             _tollExpenses: weeklyExpenses,
             _fuelCredits: weeklyFuelCredits,
+            _tollCharges: weeklyTollCharges,
         };
     });
 
@@ -314,6 +326,7 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
                 surplusPayments: week.surplusPaid,
                 tollExpenses: week._tollExpenses,
                 fuelCredits: week._fuelCredits,
+                tollCharges: week._tollCharges,
             },
         };
     }).reverse(); // Most recent first

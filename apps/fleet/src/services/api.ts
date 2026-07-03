@@ -1965,6 +1965,29 @@ export const api = {
     return response.json();
   },
 
+  /**
+   * Driver-scoped toll disposition summary (charged / written-off / business /
+   * refunded / reconciled), read server-side from toll_ledger. Powers the
+   * driver Reconciliation sub-tab toll section.
+   */
+  async getDriverTollCharges(driverId: string, opts?: { from?: string; to?: string }): Promise<{
+    success: boolean;
+    data: {
+      totals: { chargedToDriver: number; writtenOff: number; business: number; refunded: number; reconciled: number; unresolved: number };
+      counts: { chargedToDriver: number; writtenOff: number; business: number; refunded: number; reconciled: number; unresolved: number };
+      charges: Array<{ id: string; date: string; amount: number; plaza: string | null; tripId: string | null }>;
+    };
+  }> {
+    const qs = new URLSearchParams({ driverId });
+    if (opts?.from) qs.set('from', opts.from);
+    if (opts?.to) qs.set('to', opts.to);
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/driver-toll-charges?${qs.toString()}`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch driver toll charges");
+    return response.json();
+  },
+
   async bulkResolveRefunds(items: Array<{ tripId: string; resolution: 'cash_wash' | 'phantom' | 'expense_logged' | 'pending'; notes?: string; driverId?: string }>) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/resolve-refund/bulk`, {
       method: 'POST',
@@ -1997,7 +2020,7 @@ export const api = {
     return response.json();
   },
 
-  async getTollAutomationSettings(): Promise<{ success: boolean; data: { refundAutomationEnabled: boolean; refundAutoMinConfidence: number; personalUseDetectionEnabled: boolean; orphanProximityMinutes: number } }> {
+  async getTollAutomationSettings(): Promise<{ success: boolean; data: { refundAutomationEnabled: boolean; refundAutoMinConfidence: number; personalUseDetectionEnabled: boolean; orphanProximityMinutes: number; driverTollChargeSyncEnabled: boolean } }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/automation-settings`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
@@ -2005,7 +2028,7 @@ export const api = {
     return response.json();
   },
 
-  async updateTollAutomationSettings(payload: { refundAutomationEnabled?: boolean; refundAutoMinConfidence?: number; personalUseDetectionEnabled?: boolean; orphanProximityMinutes?: number }) {
+  async updateTollAutomationSettings(payload: { refundAutomationEnabled?: boolean; refundAutoMinConfidence?: number; personalUseDetectionEnabled?: boolean; orphanProximityMinutes?: number; driverTollChargeSyncEnabled?: boolean }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/automation-settings`, {
       method: 'PUT',
       headers: {

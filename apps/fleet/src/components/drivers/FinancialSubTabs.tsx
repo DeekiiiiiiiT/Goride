@@ -13,6 +13,16 @@ import { DriverEarningsHistory } from './DriverEarningsHistory';
 import { DriverExpensesHistory } from './DriverExpensesHistory';
 import { DriverPayoutHistory } from './DriverPayoutHistory';
 import { SettlementSummaryView } from './SettlementSummaryView';
+import { api } from '../../services/api';
+
+interface DriverTollChargeTotals {
+  chargedToDriver: number;
+  writtenOff: number;
+  business: number;
+  refunded: number;
+  reconciled: number;
+  unresolved: number;
+}
 
 // ────────────────────────────────────────────────────────────
 // Props
@@ -43,6 +53,18 @@ export function FinancialSubTabs({
   csvMetrics = [],
   uberLedgerReconciliation = null,
 }: FinancialSubTabsProps) {
+  // Driver toll disposition (charged / written-off / business / refunded /
+  // reconciled) — server-computed from toll_ledger for the Reconciliation tab.
+  const [tollTotals, setTollTotals] = React.useState<DriverTollChargeTotals | null>(null);
+  React.useEffect(() => {
+    let active = true;
+    if (!driverId) return;
+    api.getDriverTollCharges(driverId)
+      .then(res => { if (active) setTollTotals(res.data.totals); })
+      .catch(err => console.error('[FinancialSubTabs] driver toll charges load failed', err));
+    return () => { active = false; };
+  }, [driverId]);
+
   const uberSsotReconciliation = React.useMemo(() => {
     let fareComponents = 0;
     let tips = 0;
@@ -213,6 +235,40 @@ export function FinancialSubTabs({
 
       {/* ── Reconciliation Sub-Tab ── */}
       <TabsContent value="reconciliation" className="space-y-6">
+        {/* Toll disposition — how this driver's tolls were resolved. */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Toll Reconciliation</CardTitle>
+            <CardDescription className="text-xs text-slate-500">
+              How this driver's tolls were resolved by the admin.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {!tollTotals ? (
+              <div className="text-sm text-slate-400 py-4">Loading toll disposition…</div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {([
+                  { label: 'Charged to Driver', value: tollTotals.chargedToDriver, tone: 'text-rose-600', hint: 'Personal-use tolls billed to this driver.' },
+                  { label: 'Reconciled', value: tollTotals.reconciled, tone: 'text-emerald-600', hint: 'Matched to a trip (platform reimbursed).' },
+                  { label: 'Refunded', value: tollTotals.refunded, tone: 'text-emerald-600', hint: 'Refunded by the provider.' },
+                  { label: 'Business Expense', value: tollTotals.business, tone: 'text-slate-700', hint: 'Absorbed by the fleet as a business cost.' },
+                  { label: 'Written Off', value: tollTotals.writtenOff, tone: 'text-slate-700', hint: 'Written off as a loss.' },
+                  { label: 'Unresolved', value: tollTotals.unresolved, tone: 'text-amber-600', hint: 'Still pending reconciliation.' },
+                ] as const).map(item => (
+                  <div key={item.label} className="rounded-lg border border-slate-200 p-3">
+                    <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">{item.label}</p>
+                    <p className={`text-lg font-bold mt-1 ${item.tone}`}>
+                      ${item.value.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">{item.hint}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>Uber Reconciliation (SSOT vs Ledger)</CardTitle>

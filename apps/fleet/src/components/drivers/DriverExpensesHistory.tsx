@@ -22,6 +22,7 @@ interface ExpensePeriodRow {
   periodStart: Date;
   periodEnd: Date;
   tollExpenses: number;
+  tollCharged: number;         // personal-use tolls billed to this driver (Charge Driver)
   fuelDeduction: number;       // Deduction (driverShare) from finalized reports only
   isFinalized: boolean;        // true if this period has finalized fuel data
   totalExpenses: number;
@@ -181,6 +182,7 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
 
       // ── Tolls: from transaction category (Phase 6) ──
       let tollExpenses = 0;
+      let tollCharged = 0;
       let tollReconciled = 0;
       let tollUnreconciled = 0;
 
@@ -190,6 +192,9 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
           tollExpenses += amt;
           if (tx.isReconciled) tollReconciled++;
           else tollUnreconciled++;
+        } else if (tx.category === 'Toll Charge' || (tx.metadata as any)?.projection === 'driver_toll_charge') {
+          // Personal-use toll billed to this driver (the negative projection).
+          tollCharged += amt;
         }
       });
 
@@ -198,12 +203,13 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
       const fuelDeduction = deduction;
       const isFinalized = finalized;
 
-      const totalExpenses = tollExpenses + fuelDeduction;
+      const totalExpenses = tollExpenses + fuelDeduction + tollCharged;
 
       return {
         periodStart,
         periodEnd,
         tollExpenses,
+        tollCharged,
         fuelDeduction,
         isFinalized,
         totalExpenses,
@@ -225,13 +231,14 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
     const base = periodData.reduce(
       (acc, r) => ({
         toll: acc.toll + r.tollExpenses,
+        tollCharged: acc.tollCharged + r.tollCharged,
         fuel: acc.fuel + r.fuelDeduction,
         total: acc.total + r.totalExpenses,
         txCount: acc.txCount + r.transactionCount,
         tollReconciled: acc.tollReconciled + r.tollReconciled,
         tollUnreconciled: acc.tollUnreconciled + r.tollUnreconciled,
       }),
-      { toll: 0, fuel: 0, total: 0, txCount: 0, tollReconciled: 0, tollUnreconciled: 0 }
+      { toll: 0, tollCharged: 0, fuel: 0, total: 0, txCount: 0, tollReconciled: 0, tollUnreconciled: 0 }
     );
 
     const finalizedPeriods = periodData.filter(r => r.isFinalized).length;
@@ -271,6 +278,7 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
           : row.tollUnreconciled === 0
             ? `Reconciled (${row.tollReconciled})`
             : `${row.tollUnreconciled} Unmatched`,
+        'Charged to You': row.tollCharged.toFixed(2),
         'Fuel Deduction': row.fuelDeduction.toFixed(2),
         'Status': row.isFinalized ? 'Finalized' : 'Pending',
         'Total Expenses': row.totalExpenses.toFixed(2),
@@ -344,6 +352,11 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
                   </span>
                 )}
               </div>
+            )}
+            {totals.tollCharged > 0 && (
+              <p className="text-[10px] text-rose-600 mt-1 font-medium">
+                Charged to you: ${totals.tollCharged.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              </p>
             )}
           </CardContent>
         </Card>
@@ -441,6 +454,7 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
                         </Tooltip>
                       </TooltipProvider>
                     </TableHead>
+                    <TableHead className="text-right">Charged to You</TableHead>
                     <TableHead className="text-right">Fuel (Deduction)</TableHead>
                     <TableHead className="text-right">Total Expenses</TableHead>
                     <TableHead className="text-xs text-center">
@@ -488,6 +502,11 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
                             <Unlink className="h-3 w-3" /> {row.tollUnreconciled} Unmatched
                           </span>
                         )}
+                      </TableCell>
+                      <TableCell className="text-right text-rose-600">
+                        {row.tollCharged > 0
+                          ? `$${row.tollCharged.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                          : '-'}
                       </TableCell>
                       <TableCell className={`text-right ${row.isFinalized ? 'text-red-600' : 'text-slate-300'}`}>
                         {row.isFinalized && row.fuelDeduction > 0
