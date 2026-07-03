@@ -139,8 +139,12 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
     if (timeBuckets.length === 0) return [];
 
     // Only look at expense-type transactions (for Tolls — NOT fuel)
+    // Include toll-category rows regardless of `type` — toll_ledger-sourced
+    // rows (merged in from GET /toll-logs) carry type:'Usage', which the plain
+    // Expense/Adjustment gate below silently drops, making post-migration
+    // tolls invisible even though they're present in `transactions`.
     const expenseTx = transactions.filter(
-      t => t.type === 'Expense' || (t.type === 'Adjustment' && t.amount < 0)
+      t => t.type === 'Expense' || (t.type === 'Adjustment' && t.amount < 0) || isTollCategory(t.category)
     );
 
     // ── Phase 3: Helper to look up finalized deduction for a period ──

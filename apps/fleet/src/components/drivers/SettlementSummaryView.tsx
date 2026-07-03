@@ -175,8 +175,12 @@ export function SettlementSummaryView({
     if (!isReady) return [];
 
     // Pre-filter expense transactions for toll keyword matching
+    // Include toll-category rows regardless of `type` — toll_ledger-sourced
+    // rows (merged in from GET /toll-logs) carry type:'Usage', which the plain
+    // Expense/Adjustment gate below silently drops, making post-migration
+    // tolls invisible even though they're present in `transactions`.
     const expenseTx = transactions.filter(
-      t => t.type === 'Expense' || (t.type === 'Adjustment' && t.amount < 0)
+      t => t.type === 'Expense' || (t.type === 'Adjustment' && t.amount < 0) || isTollCategory(t.category)
     );
 
     // Helper: toll expenses for a date range
