@@ -1,7 +1,7 @@
 /**
  * MOI-2: Indexed lookup helpers for match-on-ingest.
  *
- * These replace "load the entire toll_ledger:*/trip:* prefix into memory"
+ * These replace loading the entire toll_ledger org/trip KV prefix into memory
  * with real PostgREST `value->>field` filters, backed by the partial
  * expression indexes added in the MOI-1 migration
  * (supabase/migrations/20260804120000_toll_match_on_ingest_indexes.sql).
