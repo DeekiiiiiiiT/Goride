@@ -4,6 +4,7 @@ import { PendingReimbursementList } from "../components/claimable-loss/PendingRe
 import { DisputeLostList } from "../components/claimable-loss/DisputeLostList";
 import { ResolvedHistoryList } from "../components/claimable-loss/ResolvedHistoryList";
 import { DisputeModal } from "../components/claimable-loss/DisputeModal";
+import { ClaimDetailOverlay } from "../components/claimable-loss/ClaimDetailOverlay";
 import { useTollReconciliation } from "../hooks/useTollReconciliation";
 import { useClaims } from "../hooks/useClaims";
 import { api } from "../services/api";
@@ -57,6 +58,8 @@ export function ClaimableLoss() {
 
   const [selectedLoss, setSelectedLoss] = useState<{ transaction: FinancialTransaction, match: MatchResult } | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedClaimDetail, setSelectedClaimDetail] = useState<Claim | null>(null);
+  const [isClaimDetailOpen, setIsClaimDetailOpen] = useState(false);
   const [itemsToDelete, setItemsToDelete] = useState<string[]>([]);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
   
@@ -570,17 +573,29 @@ export function ClaimableLoss() {
         </TabsContent>
 
         <TabsContent value="resolved" className="mt-6">
-            <ResolvedHistoryList 
+            <ResolvedHistoryList
                 claims={resolvedClaims}
                 isLoading={loadingClaims}
                 getDriverName={getDriverName}
                 onDelete={handleDeleteClaims}
                 onUpdateStatus={handleUpdateStatus}
+                onSelectClaim={(claim) => {
+                    setSelectedClaimDetail(claim);
+                    setIsClaimDetailOpen(true);
+                }}
             />
         </TabsContent>
       </Tabs>
 
-      <DisputeModal 
+      <ClaimDetailOverlay
+        isOpen={isClaimDetailOpen}
+        onClose={() => setIsClaimDetailOpen(false)}
+        claim={selectedClaimDetail}
+        trip={selectedClaimDetail?.tripId ? tripMap.get(selectedClaimDetail.tripId) : null}
+        getDriverName={getDriverName}
+      />
+
+      <DisputeModal
         isOpen={isModalOpen}
         onClose={() => {
             setIsModalOpen(false);

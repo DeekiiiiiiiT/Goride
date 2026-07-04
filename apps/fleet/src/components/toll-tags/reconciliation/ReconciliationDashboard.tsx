@@ -140,9 +140,13 @@ export function ReconciliationDashboard() {
           return;
       }
       try {
+          // Full-toll resolutions have no platform pay — always persist financial fields.
+          const tollCost = Math.abs(tx.amount);
           const commonData = {
               transactionId: tx.id,
-              amount: Math.abs(tx.amount),
+              amount: tollCost,
+              expectedAmount: tollCost,
+              paidAmount: 0,
               status: 'Resolved' as const,
               type: 'Toll_Refund' as const,
               createdAt: new Date().toISOString(),
@@ -373,10 +377,13 @@ export function ReconciliationDashboard() {
               await reconcile(tx, trip);
               
               // 2. Create the "Charge Driver" claim automatically
+              const tollCost = Math.abs(tx.amount);
               await createClaim({
                   transactionId: tx.id,
                   driverId: trip.driverId || tx.driverId || 'unknown',
-                  amount: Math.abs(tx.amount),
+                  amount: tollCost,
+                  expectedAmount: tollCost,
+                  paidAmount: 0,
                   status: 'Resolved',
                   type: 'Toll_Refund',
                   resolutionReason: 'Charge Driver',

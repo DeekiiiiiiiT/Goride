@@ -20,6 +20,23 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
+import { getMondaySundayForDate, formatWeekPeriodLabel } from "../../utils/tollWeekPeriod";
+
+/**
+ * The toll's actual period should follow the toll's real date (claim.date,
+ * captured at creation from the underlying transaction), falling back to the
+ * matched trip's date, then to when the claim was created — in that order of
+ * reliability. Never the resolution date (that's a separate "Date Resolved"
+ * column) — this is what previously caused a charge to look like it belonged
+ * to the wrong week.
+ */
+export function getClaimPeriodLabel(claim: Claim): string {
+  const raw = claim.date || claim.tripDate || claim.createdAt;
+  const d = raw ? new Date(raw) : null;
+  if (!d || isNaN(d.getTime())) return "Unknown";
+  const { start, end } = getMondaySundayForDate(d);
+  return formatWeekPeriodLabel(start, end);
+}
 
 interface ResolutionStyle {
   badgeClass: string;
@@ -57,9 +74,11 @@ interface ResolvedHistoryListProps {
   getDriverName?: (id: string) => string;
   onDelete?: (ids: string[]) => void;
   onUpdateStatus?: (claim: Claim, newReason: 'Charge Driver' | 'Write Off' | 'Reimbursed') => void;
+  /** Opens the admin detail overlay for a row. */
+  onSelectClaim?: (claim: Claim) => void;
 }
 
-export function ResolvedHistoryList({ claims, isLoading, getDriverName, onDelete, onUpdateStatus }: ResolvedHistoryListProps) {
+export function ResolvedHistoryList({ claims, isLoading, getDriverName, onDelete, onUpdateStatus, onSelectClaim }: ResolvedHistoryListProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   if (isLoading) {
@@ -134,6 +153,7 @@ export function ResolvedHistoryList({ claims, isLoading, getDriverName, onDelete
                 />
             </TableHead>
             <TableHead>Date Resolved</TableHead>
+            <TableHead>Period</TableHead>
             <TableHead>Driver</TableHead>
             <TableHead>Location</TableHead>
             <TableHead className="text-right">Amount</TableHead>
@@ -144,9 +164,13 @@ export function ResolvedHistoryList({ claims, isLoading, getDriverName, onDelete
           {claims.map((claim) => {
             const styles = getResolutionStyle(claim.resolutionReason);
             return (
-              <TableRow key={claim.id} className={selectedIds.has(claim.id) ? "bg-slate-50/50" : ""}>
-                <TableCell>
-                    <Checkbox 
+              <TableRow
+                key={claim.id}
+                className={`${selectedIds.has(claim.id) ? "bg-slate-50/50" : ""} ${onSelectClaim ? "cursor-pointer hover:bg-slate-50" : ""}`}
+                onClick={() => onSelectClaim?.(claim)}
+              >
+                <TableCell onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                    <Checkbox
                         checked={selectedIds.has(claim.id)}
                         onCheckedChange={() => toggleSelect(claim.id)}
                         aria-label={`Select claim`}
@@ -157,6 +181,9 @@ export function ResolvedHistoryList({ claims, isLoading, getDriverName, onDelete
                   <div className="text-xs text-slate-400">
                       {new Date(claim.updatedAt || claim.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                   </div>
+                </TableCell>
+                <TableCell className="text-sm text-slate-600 whitespace-nowrap">
+                  {getClaimPeriodLabel(claim)}
                 </TableCell>
                 <TableCell>
                     <div className="font-medium text-sm">
@@ -171,9 +198,9 @@ export function ResolvedHistoryList({ claims, isLoading, getDriverName, onDelete
                 <TableCell className={`text-right font-bold ${
                     claim.resolutionReason === 'Write Off' ? 'text-red-600' : 'text-emerald-600'
                 }`}>
-                  {claim.resolutionReason === 'Write Off' ? '-' : '+'}${claim.amount.toFixed(2)}
+                  {claim.resolutionReason === 'Write Off' ? '-' : '+'}${(Number(claim.amount) || 0).toFixed(2)}
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-right" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
                   <div className="flex flex-col items-end gap-1 group relative">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
