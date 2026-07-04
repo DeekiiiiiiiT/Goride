@@ -613,7 +613,7 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
                                                                                     )}
                                                                                 </div>
                                                                             ) : (
-                                                                                <Badge variant="outline" className="text-purple-600 border-purple-200 bg-purple-50">Likely Personal</Badge>
+                                                                                <Badge variant="outline" className="text-slate-600 border-slate-300 bg-slate-50">Unclassified</Badge>
                                                                             )}
                                                                         </TableCell>
                                                                         <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>

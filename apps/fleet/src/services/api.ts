@@ -2004,6 +2004,114 @@ export const api = {
     return response.json();
   },
 
+  /** Read-only report (MOI-0): resolved cash toll claims that would now match a real trip if the permanent-exclusion filter didn't drop them once resolved. Changes nothing. */
+  async getResolvedCashClaimsAudit(driverId?: string): Promise<{
+    success: boolean;
+    totalResolvedCashClaims: number;
+    rematchCandidateCount: number;
+    rematchCandidates: Array<{
+      tollId: string;
+      date: string;
+      amount: number;
+      status: string;
+      driverId?: string;
+      driverName?: string;
+      vehicleId?: string;
+      matchedTripId: string;
+      matchType: string;
+      confidenceScore?: number;
+      reason: string;
+    }>;
+  }> {
+    const qs = driverId ? `?driverId=${encodeURIComponent(driverId)}` : '';
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/resolved-cash-claims-audit${qs}`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch resolved cash claims audit");
+    return response.json();
+  },
+
+  /** MOI-5: tolls flagged for human review because a newly-imported trip now looks like a better match than their original resolution. Never moves money. */
+  async getRematchCandidates(driverId?: string): Promise<{
+    success: boolean;
+    count: number;
+    candidates: Array<{
+      tollId: string;
+      date: string;
+      amount: number;
+      status: string;
+      resolution?: string | null;
+      driverId?: string;
+      driverName?: string;
+      vehicleId?: string;
+      rematchCandidate: { tripId: string | null; confidenceScore?: number | null; reason?: string; detectedAt: string };
+    }>;
+  }> {
+    const qs = driverId ? `?driverId=${encodeURIComponent(driverId)}` : '';
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/rematch-candidates${qs}`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch rematch candidates");
+    return response.json();
+  },
+
+  /** MOI-5: clears the review flag only — never touches status/resolution/matchedTripId or any financial record. */
+  async dismissRematchCandidate(tollId: string): Promise<{ success: boolean }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/rematch-candidates/${encodeURIComponent(tollId)}/dismiss`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify({})
+    });
+    if (!response.ok) throw new Error("Failed to dismiss rematch candidate");
+    return response.json();
+  },
+
+  /** MOI-7: read-only preview of how many historical tolls are missing a matchStatus. */
+  async getMatchIndexBackfillStatus(): Promise<{
+    success: boolean;
+    totalTolls: number;
+    missingMatchStatus: number;
+    sampleIds: string[];
+    message: string;
+  }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/match-index/status`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch match-index backfill status");
+    return response.json();
+  },
+
+  /** MOI-7: computes+persists matchStatus for historical tolls missing it. dryRun defaults true. Never auto-charges anything. */
+  async runMatchIndexBackfill(dryRun: boolean = true, batchSize: number = 100): Promise<{
+    success: boolean;
+    dryRun: boolean;
+    totalTolls?: number;
+    missingMatchStatus?: number;
+    wouldProcess?: number;
+    processed?: number;
+    remaining?: number;
+    errors?: string[];
+    manifestKey?: string;
+    message: string;
+  }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/match-index/backfill`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify({ dryRun, batchSize })
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to run match-index backfill");
+    }
+    return response.json();
+  },
+
   /** Read-only dry-run report: which resolved claims need their toll_ledger label/date repaired. */
   async getClaimsTollSyncStatus(): Promise<{
     success: boolean;
@@ -2070,7 +2178,7 @@ export const api = {
     return response.json();
   },
 
-  async getTollAutomationSettings(): Promise<{ success: boolean; data: { refundAutomationEnabled: boolean; refundAutoMinConfidence: number; personalUseDetectionEnabled: boolean; orphanProximityMinutes: number; driverTollChargeSyncEnabled: boolean; unifiedTollSettlementEnabled: boolean } }> {
+  async getTollAutomationSettings(): Promise<{ success: boolean; data: { refundAutomationEnabled: boolean; refundAutoMinConfidence: number; personalUseDetectionEnabled: boolean; orphanProximityMinutes: number; driverTollChargeSyncEnabled: boolean; unifiedTollSettlementEnabled: boolean; matchOnIngestEnabled: boolean } }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/automation-settings`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
@@ -2078,7 +2186,7 @@ export const api = {
     return response.json();
   },
 
-  async updateTollAutomationSettings(payload: { refundAutomationEnabled?: boolean; refundAutoMinConfidence?: number; personalUseDetectionEnabled?: boolean; orphanProximityMinutes?: number; driverTollChargeSyncEnabled?: boolean; unifiedTollSettlementEnabled?: boolean }) {
+  async updateTollAutomationSettings(payload: { refundAutomationEnabled?: boolean; refundAutoMinConfidence?: number; personalUseDetectionEnabled?: boolean; orphanProximityMinutes?: number; driverTollChargeSyncEnabled?: boolean; unifiedTollSettlementEnabled?: boolean; matchOnIngestEnabled?: boolean }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/automation-settings`, {
       method: 'PUT',
       headers: {

@@ -20,6 +20,7 @@ import { api } from "../../../services/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../../ui/dialog";
 import { DriverPicker } from "../../ui/DriverPicker";
 import { TollAutomationSettings } from "./TollAutomationSettings";
+import { RematchCandidatesQueue } from "./RematchCandidatesQueue";
 import { normalizePlatform } from "../../../utils/normalizePlatform";
 
 type PlatformFilter = 'all' | 'Uber' | 'InDrive' | 'Roam';
@@ -607,6 +608,9 @@ export function ReconciliationDashboard() {
           </span>
         </div>
       )}
+
+      {/* MOI-5: already-resolved tolls flagged for a second look */}
+      <RematchCandidatesQueue driverId={selectedDriverId || undefined} />
 
       <Tabs defaultValue="unmatched" className="w-full">
         <TabsList className="grid w-full grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-5 lg:max-w-5xl">

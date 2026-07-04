@@ -114,6 +114,9 @@ import tollApp, {
   buildTollLedgerFullBackupPayload,
   executeTollLedgerRepairDates,
   executeTollResetForReconciliation,
+  computeAndPersistTollMatchOnIngest,
+  reconsiderTollsForNewTrips,
+  invalidateStaleTollMatchesForTrip,
 } from "./toll_controller.tsx";
 import disputeRefundApp from "./dispute_refund_controller.tsx";
 import paymentLedgerLineApp from "./payment_ledger_line_controller.tsx";
@@ -340,11 +343,15 @@ registerPartSourcingRoutes(app, supabase);
 // ───────────────────────────────────────────────────────────────────────
 async function writeTollToLedger(transaction: any, c: Context): Promise<void> {
   if (!isTollCategoryServer(transaction.category)) return;
-  
+
   const tollRecord = transactionToTollLedgerServer(transaction);
   await saveTollLedgerEntry(tollRecord);
   console.log(`[TollLedger] Saved toll_ledger:${tollRecord.id}`);
   await appendCanonicalTollIfEligible(tollRecord, c);
+  // MOI-3: compute+persist a match-on-ingest suggestion (no-ops unless the
+  // matchOnIngestEnabled flag is on; never throws — failures here must never
+  // break toll creation itself).
+  await computeAndPersistTollMatchOnIngest(tollRecord);
 }
 
 // ─── Driver ID Resolution ─────────────────────────────────────────────
@@ -2183,13 +2190,37 @@ app.post(
       console.error("[CanonicalOps] trip fare append after trip save failed:", canonErr);
     }
 
+    // MOI-4a: log-only reverse re-match — finds tolls uploaded before this
+    // trip existed (the "receipt uploaded weeks before the trip was logged"
+    // case) and logs what it WOULD update, without writing anything yet.
+    // No-ops unless matchOnIngestEnabled is on; never throws.
+    try {
+      await reconsiderTollsForNewTrips(processedTrips, { persist: false });
+    } catch (rematchErr) {
+      console.warn("[MatchOnIngest] reconsiderTollsForNewTrips (POST /trips) failed:", rematchErr);
+    }
+
+    // MOI-4b (edit case): if any of these trips already had a toll pointing
+    // at them (from an earlier match) and this re-sync moved the trip's
+    // date/time, that match may no longer hold — re-validate and log/clear.
+    // Log-only for now (persist:false), same as above.
+    try {
+      for (const trip of processedTrips) {
+        if (trip?.id) {
+          await invalidateStaleTollMatchesForTrip(String(trip.id), { persist: false, currentTrip: trip });
+        }
+      }
+    } catch (invalidateErr) {
+      console.warn("[MatchOnIngest] invalidateStaleTollMatchesForTrip (POST /trips) failed:", invalidateErr);
+    }
+
     // Invalidate stats cache since data has changed
     await cache.invalidateCacheVersion("stats");
     await cache.invalidateCacheVersion("performance");
-    
+
     // Invalidate dashboard cache (new trips affect dashboard data)
     await invalidateDashboardCache();
-    
+
     return c.json({ success: true, count: processedTrips.length });
   } catch (e: any) {
     console.error("Error saving trips:", e);
@@ -2313,7 +2344,16 @@ app.delete("/make-server-37f42386/trips/:id", requireAuth(), requirePermission('
     } catch (ledgerErr: any) {
       console.warn(`[DELETE /trips/:id] Ledger cleanup failed (non-fatal) trip=${id}:`, ledgerErr?.message);
     }
-    
+
+    // MOI-4b: clear/flag any toll whose match suggestion pointed at this now-
+    // deleted trip. Log-only for now (persist:false) — see reconsiderTollsForNewTrips
+    // doc comment for why this stays inert until a live volume/behavior check.
+    try {
+      await invalidateStaleTollMatchesForTrip(id, { persist: false, currentTrip: undefined });
+    } catch (invalidateErr) {
+      console.warn(`[MatchOnIngest] invalidateStaleTollMatchesForTrip (DELETE /trips/:id) failed:`, invalidateErr);
+    }
+
     // Invalidate stats cache since data has changed
     await cache.invalidateCacheVersion("stats");
     await cache.invalidateCacheVersion("performance");
@@ -9649,6 +9689,25 @@ app.post("/make-server-37f42386/fleet/sync", async (c) => {
             await appendCanonicalTripFaresIfEligible(uniqueTrips as Record<string, unknown>[], c);
         } catch (canonErr) {
             console.error("[FleetSync] Canonical trip fare append failed:", canonErr);
+        }
+
+        // MOI-4a: same log-only reverse re-match as POST /trips (see there for
+        // details). No-ops unless matchOnIngestEnabled is on; never throws.
+        try {
+            await reconsiderTollsForNewTrips(uniqueTrips, { persist: false });
+        } catch (rematchErr) {
+            console.warn("[MatchOnIngest] reconsiderTollsForNewTrips (fleet/sync) failed:", rematchErr);
+        }
+
+        // MOI-4b (edit case): same stale-match re-validation as POST /trips.
+        try {
+            for (const trip of uniqueTrips) {
+                if (trip?.id) {
+                    await invalidateStaleTollMatchesForTrip(String(trip.id), { persist: false, currentTrip: trip });
+                }
+            }
+        } catch (invalidateErr) {
+            console.warn("[MatchOnIngest] invalidateStaleTollMatchesForTrip (fleet/sync) failed:", invalidateErr);
         }
     }
 

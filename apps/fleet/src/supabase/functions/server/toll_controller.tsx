@@ -23,6 +23,7 @@ import { isTollCategory } from "./toll_category_flags.ts";
 import { classifyOrphanToll } from "./orphanTollClassifier.ts";
 import { emitDriverTollCharge } from "./driver_toll_charge.ts";
 import { mapResolutionReasonToTollResolution } from "./claim_resolution_sync.ts";
+import { findTripsInDateRange, findTollsInDateRange, findTollsByMatchedTripId } from "./toll_match_index.ts";
 import { appendCanonicalTollReconciledBatch, type TollReconcileAuditEntry } from "./canonical_from_ops.ts";
 import { deleteCanonicalLedgerBySource } from "./ledger_canonical.ts";
 import { applyEvidenceResolution } from "./evidence_routes.ts";
@@ -1109,6 +1110,135 @@ app.get(`${BASE}/summary`, async (c) => {
   }
 });
 
+// ─── GET /resolved-cash-claims-audit (MOI-0, read-only diagnostic) ─────
+// Cash toll claims are excluded from /unreconciled forever once their status
+// moves off "Pending" (Approved/Rejected/Resolved) — even if a matching trip
+// is imported afterward. This endpoint does NOT change that behavior or touch
+// any stored data; it only reports which already-resolved cash claims would
+// now match a real trip, using the same pure matching logic as /unreconciled,
+// so the size of the gap is visible before the full match-on-ingest work lands.
+app.get(`${BASE}/resolved-cash-claims-audit`, async (c) => {
+  try {
+    const { driverId } = parseQueryParams(c);
+
+    const loaded = await loadAllTollLedgerWithTrips();
+    let tollTx = loaded.tollTx;
+    let trips = loaded.trips;
+
+    if (driverId) {
+      tollTx = filterByDriver(tollTx, driverId);
+      trips = filterByDriver(trips, driverId);
+    }
+
+    // Resolved cash claims: same "isCashClaim" test as the live filter, but
+    // looking at the ones that filter now EXCLUDES (status moved off Pending).
+    const resolvedCashClaims = tollTx.filter((tx: any) => {
+      const isCashClaim = tx.paymentMethod === "Cash" || !!tx.receiptUrl;
+      return isCashClaim && tx.status !== "Pending";
+    });
+
+    const timezone = await getFleetTimezone();
+
+    const rematchCandidates: any[] = [];
+    for (const tx of resolvedCashClaims) {
+      if (tx.tripId) continue; // already linked — nothing to find
+      const matches = findTollMatchesServer(tx, trips, timezone);
+      const best = matches[0];
+      if (best && (best.matchType === "PERFECT_MATCH" || best.matchType === "AMOUNT_VARIANCE")) {
+        rematchCandidates.push({
+          tollId: tx.id,
+          date: tx.date,
+          amount: tx.amount,
+          status: tx.status,
+          driverId: tx.driverId,
+          driverName: tx.driverName,
+          vehicleId: tx.vehicleId,
+          matchedTripId: best.tripId,
+          matchType: best.matchType,
+          confidenceScore: best.confidenceScore,
+          reason: best.reason,
+        });
+      }
+    }
+
+    return c.json({
+      success: true,
+      totalResolvedCashClaims: resolvedCashClaims.length,
+      rematchCandidateCount: rematchCandidates.length,
+      rematchCandidates,
+    });
+  } catch (e: any) {
+    console.log(
+      `[TollReconciliation] GET /resolved-cash-claims-audit error: ${e.message}`,
+    );
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── GET /rematch-candidates (MOI-5) ────────────────────────────────────
+// Deliberately its OWN query, independent of the /unreconciled filter — a
+// resolved cash claim (the exact case that motivated this project) is
+// permanently excluded from /unreconciled, so a queue built on that filter
+// would never surface it. This never moves money — it only lists tolls that
+// MOI-4b flagged (metadata.rematchCandidate) because a newly-imported trip
+// now looks like a better match than whatever they were originally resolved
+// as. A human decides what to do via the existing edit/claim UI.
+app.get(`${BASE}/rematch-candidates`, async (c) => {
+  try {
+    const { driverId } = parseQueryParams(c);
+    const all = (await loadAllByPrefix(TOLL_LEDGER_PREFIX)) as TollLedgerRecord[];
+    let flagged = all.filter((tx) => !!tx?.metadata?.rematchCandidate);
+    if (driverId) flagged = flagged.filter((tx) => tx.driverId === driverId);
+
+    flagged.sort((a, b) => {
+      const aAt = String((a.metadata?.rematchCandidate as any)?.detectedAt || "");
+      const bAt = String((b.metadata?.rematchCandidate as any)?.detectedAt || "");
+      return bAt.localeCompare(aAt);
+    });
+
+    return c.json({
+      success: true,
+      count: flagged.length,
+      candidates: flagged.map((tx) => ({
+        tollId: tx.id,
+        date: tx.date,
+        amount: tx.amount,
+        status: tx.status,
+        resolution: tx.resolution,
+        driverId: tx.driverId,
+        driverName: tx.driverName,
+        vehicleId: tx.vehiclePlate || tx.vehicleId,
+        rematchCandidate: tx.metadata?.rematchCandidate,
+      })),
+    });
+  } catch (e: any) {
+    console.log(`[TollReconciliation] GET /rematch-candidates error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── POST /rematch-candidates/:id/dismiss (MOI-5) ───────────────────────
+// Clears the review flag only — never touches status/resolution/matchedTripId
+// or any financial record. Use this once an admin has looked at a flagged
+// toll and decided the original resolution is correct (or has already fixed
+// it manually via the existing Edit/Claim flows).
+app.post(`${BASE}/rematch-candidates/:id/dismiss`, async (c) => {
+  try {
+    const id = c.req.param("id");
+    const existing = await getTollLedgerEntry(id);
+    if (!existing) return c.json({ error: "Toll not found" }, 404);
+
+    const nextMetadata = { ...(existing.metadata || {}) };
+    delete (nextMetadata as any).rematchCandidate;
+
+    await updateTollLedgerEntry(id, { metadata: nextMetadata }, "updated", "admin", "Rematch review dismissed");
+    return c.json({ success: true });
+  } catch (e: any) {
+    console.log(`[TollReconciliation] POST /rematch-candidates/:id/dismiss error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 // ─── GET /unreconciled ─────────────────────────────────────────────────
 
 app.get(`${BASE}/unreconciled`, async (c) => {
@@ -1267,6 +1397,26 @@ app.get(`${BASE}/unreconciled`, async (c) => {
           puSettings.orphanProximityMinutes,
         );
         if (orphan) suggestionsMap[tx.id] = [orphan];
+      }
+    }
+
+    // MOI-6: shadow-diff verification. Response below is UNCHANGED — this
+    // only logs a mismatch between the live-computed suggestion (above) and
+    // whatever match-on-ingest already persisted onto the row (MOI-3/MOI-4b),
+    // for tolls that carry a matchStatus. This is the evidence gate before
+    // the read path is ever switched to trust the stored fields instead of
+    // recomputing: only once this log is empty across real traffic for a
+    // full week does it become safe to flip the actual response over.
+    if (puSettings.matchOnIngestEnabled) {
+      for (const tx of page) {
+        if (!tx.matchStatus) continue;
+        const liveTripId = suggestionsMap[tx.id]?.[0]?.tripId || null;
+        const storedTripId = tx.matchedTripId || null;
+        if (liveTripId !== storedTripId) {
+          console.warn(
+            `[MatchOnIngest][ShadowDiff] toll ${tx.id}: live=${liveTripId || "none"} stored=${storedTripId || "none"} (matchStatus=${tx.matchStatus})`,
+          );
+        }
       }
     }
 
@@ -1705,6 +1855,15 @@ interface TollLedgerRecord {
   auditTrail: TollAuditEntry[];
   metadata: Record<string, unknown>;
   _legacyTransactionId?: string;
+  // MOI-1: additive match-on-ingest fields. Optional/unset on every existing
+  // row and every row written while matchOnIngestEnabled is off — nothing
+  // reads these until the MOI-6 read-path switch, so populating them early
+  // (MOI-3/MOI-4) is inert with respect to today's behavior.
+  matchStatus?: "unmatched" | "matched" | "orphan_personal" | "ambiguous";
+  matchedTripId?: string | null;
+  matchConfidenceScore?: number | null;
+  matchReasonCode?: string | null;
+  lastMatchedAt?: string | null;
 }
 
 interface TollLedgerFilters {
@@ -1807,6 +1966,375 @@ async function updateTollLedgerEntry(
 
   await saveTollLedgerEntry(updated);
   return updated;
+}
+
+/**
+ * MOI-3: compute a toll's match at ingest time (right after it's created) and
+ * persist the result onto the SAME row, instead of the read path recomputing
+ * this from scratch on every GET /unreconciled call.
+ *
+ * NON-BREAKAGE: no-ops entirely unless `matchOnIngestEnabled` is on. Never
+ * throws — a failure here must never break toll creation itself, it just
+ * leaves the new match fields unset (today's status quo).
+ *
+ * Reuses the existing, unchanged `findTollMatchesServer` / `buildOrphanSuggestion`
+ * logic — only the candidate-trip fetch changes (indexed ±2-day date range via
+ * `findTripsInDateRange`, never driver/vehicle-gated — see toll_match_index.ts).
+ * `matchedTripId` is only ever set for a real trip match (never for an
+ * orphan-personal guess), preserving the existing "orphan never auto-links"
+ * contract used throughout this file.
+ */
+async function computeTollMatchPatch(
+  tollRecord: TollLedgerRecord,
+  timezone: string,
+  settings: RefundAutomationSettings,
+): Promise<Partial<TollLedgerRecord>> {
+  const now = new Date().toISOString();
+  const txDate = getTransactionDateTime(tollRecord, timezone);
+  if (!txDate) {
+    return {
+      matchStatus: "unmatched",
+      matchedTripId: null,
+      matchConfidenceScore: null,
+      matchReasonCode: null,
+      lastMatchedAt: now,
+    };
+  }
+
+  const windowStart = new Date(txDate);
+  windowStart.setUTCDate(windowStart.getUTCDate() - 2);
+  const windowEnd = new Date(txDate);
+  windowEnd.setUTCDate(windowEnd.getUTCDate() + 2);
+  const startDateStr = windowStart.toISOString().slice(0, 10);
+  const endDateStr = windowEnd.toISOString().slice(0, 10);
+
+  const trips = await findTripsInDateRange(startDateStr, endDateStr, {
+    vehicleId: tollRecord.vehicleId || undefined,
+  });
+
+  const matches = findTollMatchesServer(tollRecord, trips, timezone);
+  const best = matches[0];
+
+  if (best) {
+    return {
+      matchStatus: "matched",
+      matchedTripId: best.tripId || null,
+      matchConfidenceScore: best.confidenceScore ?? null,
+      matchReasonCode: best.reasonCode ?? null,
+      lastMatchedAt: now,
+    };
+  }
+  if (settings.personalUseDetectionEnabled) {
+    const orphan = buildOrphanSuggestion(tollRecord, trips, timezone, settings.orphanProximityMinutes);
+    if (orphan) {
+      return {
+        matchStatus: "orphan_personal",
+        matchedTripId: null,
+        matchConfidenceScore: null,
+        matchReasonCode: orphan.reasonCode,
+        lastMatchedAt: now,
+      };
+    }
+    return {
+      matchStatus: "ambiguous",
+      matchedTripId: null,
+      matchConfidenceScore: null,
+      matchReasonCode: null,
+      lastMatchedAt: now,
+    };
+  }
+  return {
+    matchStatus: "unmatched",
+    matchedTripId: null,
+    matchConfidenceScore: null,
+    matchReasonCode: null,
+    lastMatchedAt: now,
+  };
+}
+
+export async function computeAndPersistTollMatchOnIngest(
+  tollRecord: TollLedgerRecord,
+): Promise<void> {
+  try {
+    const settings = await getRefundAutomationSettings();
+    if (!settings.matchOnIngestEnabled) return;
+
+    const timezone = await getFleetTimezone();
+    const patch = await computeTollMatchPatch(tollRecord, timezone, settings);
+
+    // updateTollLedgerEntry re-reads the current row fresh before merging, so
+    // passing only these 5 fields keeps this a scoped merge rather than a
+    // whole-row overwrite — safe even if something else touched the row
+    // in between.
+    await updateTollLedgerEntry(tollRecord.id, patch, "updated", "system-match-on-ingest");
+  } catch (err: any) {
+    console.warn(
+      `[MatchOnIngest] Failed to compute match for toll ${tollRecord.id}: ${err?.message}`,
+    );
+  }
+}
+
+/**
+ * MOI-4: the late-trip fix. Called right after new/updated trips are saved.
+ * Finds tolls in a narrow indexed date window around this trip batch that are
+ * still just a suggestion (never formally resolved) and re-matches them now
+ * that this trip exists — this is what catches "toll receipt uploaded weeks
+ * before the matching trip was imported," triggered by the trip import
+ * itself rather than a poll or a clock.
+ *
+ * `opts.persist` gates whether anything is actually written:
+ *  - false (MOI-4a): compute + log only. Lets a real bulk backdated-import
+ *    batch be sanity-checked for compute volume/CPU cost before any write
+ *    path is live (this endpoint already hit Supabase's edge CPU limit once
+ *    from an unbounded scan — see the /unreconciled auto-match comment).
+ *  - true (MOI-4b): actually persist. A toll that was never formally
+ *    resolved gets its match fields updated in place. A toll that WAS
+ *    already formally resolved (approved/rejected/resolved, or has a
+ *    `resolution`) is never silently touched — it only gets a
+ *    `metadata.rematchCandidate` flag for a human to review (MOI-5).
+ *
+ * NON-BREAKAGE: no-ops entirely unless `matchOnIngestEnabled` is on. Never
+ * throws — a failure here must never break trip creation itself.
+ */
+export async function reconsiderTollsForNewTrips(
+  newTrips: any[],
+  opts: { persist: boolean },
+): Promise<{ scanned: number; wouldUpdate: number; wouldFlag: number }> {
+  let scanned = 0;
+  let wouldUpdate = 0;
+  let wouldFlag = 0;
+
+  try {
+    const settings = await getRefundAutomationSettings();
+    if (!settings.matchOnIngestEnabled) return { scanned, wouldUpdate, wouldFlag };
+    if (!Array.isArray(newTrips) || newTrips.length === 0) return { scanned, wouldUpdate, wouldFlag };
+
+    const timezone = await getFleetTimezone();
+
+    // Bucket trips by calendar week rather than taking one min→max window for
+    // the whole batch — a single bulk/historical import call can legitimately
+    // contain trips spanning many months (confirmed: trip.date is client-
+    // supplied and unbounded), and one giant window would pull in nearly the
+    // entire toll_ledger table, reintroducing the exact unbounded-scan
+    // problem (HTTP 546) this project exists to fix. Each week's tolls are
+    // still fetched with one indexed query per bucket, so a normal weekly
+    // import (the common case) is still just one or two queries total.
+    const MAX_WEEK_BUCKETS = 20; // ~5 months of weekly batches per call
+    const tripsByWeek = new Map<string, any[]>();
+    for (const trip of newTrips) {
+      const d = getTransactionDateTime(trip, timezone);
+      if (!d) continue;
+      // Monday-anchored week key (UTC), consistent regardless of which day
+      // within the week a given trip falls on.
+      const dow = (d.getUTCDay() + 6) % 7; // 0=Mon .. 6=Sun
+      const monday = new Date(d);
+      monday.setUTCDate(monday.getUTCDate() - dow);
+      const weekKey = monday.toISOString().slice(0, 10);
+      const bucket = tripsByWeek.get(weekKey);
+      if (bucket) bucket.push(trip);
+      else tripsByWeek.set(weekKey, [trip]);
+    }
+
+    const weekKeys = [...tripsByWeek.keys()];
+    if (weekKeys.length > MAX_WEEK_BUCKETS) {
+      console.warn(
+        `[MatchOnIngest] Trip batch spans ${weekKeys.length} weeks (cap ${MAX_WEEK_BUCKETS}) — ` +
+          `skipping reverse re-match for this call to avoid an unbounded scan. A large historical ` +
+          `backfill like this is better handled by the dedicated backfill job.`,
+      );
+      return { scanned, wouldUpdate, wouldFlag };
+    }
+
+    for (const [weekKey, weekTrips] of tripsByWeek) {
+      const monday = new Date(`${weekKey}T00:00:00.000Z`);
+      const windowStart = new Date(monday);
+      windowStart.setUTCDate(windowStart.getUTCDate() - 2);
+      const windowEnd = new Date(monday);
+      windowEnd.setUTCDate(windowEnd.getUTCDate() + 9); // week (7d) + 2d trailing buffer
+      const startDateStr = windowStart.toISOString().slice(0, 10);
+      const endDateStr = windowEnd.toISOString().slice(0, 10);
+
+      // Only tolls still just a suggestion — a formally resolved toll is
+      // handled in the branch below (flagged, never silently rewritten).
+      const candidateTolls = await findTollsInDateRange(startDateStr, endDateStr, {
+        matchStatuses: ["unmatched", "orphan_personal", "ambiguous"],
+      });
+
+      for (const toll of candidateTolls) {
+        scanned++;
+        const matches = findTollMatchesServer(toll, weekTrips, timezone);
+        const best = matches[0];
+        if (!best) continue;
+
+        const isFormallyResolved =
+          toll.status === "approved" ||
+          toll.status === "rejected" ||
+          toll.status === "resolved" ||
+          !!toll.resolution;
+
+        if (isFormallyResolved) {
+          wouldFlag++;
+          if (opts.persist) {
+            // Re-fetch fresh right before writing — metadata is a shared
+            // object other flows also write to, so merging onto the
+            // batch-scanned (possibly stale) copy risks clobbering an
+            // unrelated concurrent change.
+            const fresh = await getTollLedgerEntry(toll.id);
+            if (fresh) {
+              await updateTollLedgerEntry(
+                toll.id,
+                {
+                  metadata: {
+                    ...(fresh.metadata || {}),
+                    rematchCandidate: {
+                      tripId: best.tripId,
+                      confidenceScore: best.confidenceScore ?? null,
+                      detectedAt: new Date().toISOString(),
+                    },
+                  },
+                },
+                "updated",
+                "system-match-on-ingest",
+              );
+            }
+          } else {
+            console.log(
+              `[MatchOnIngest] Would flag resolved toll ${toll.id} as rematch candidate (trip ${best.tripId}, score ${best.confidenceScore})`,
+            );
+          }
+        } else {
+          wouldUpdate++;
+          if (opts.persist) {
+            await updateTollLedgerEntry(
+              toll.id,
+              {
+                matchStatus: "matched",
+                matchedTripId: best.tripId || null,
+                matchConfidenceScore: best.confidenceScore ?? null,
+                matchReasonCode: best.reasonCode ?? null,
+                lastMatchedAt: new Date().toISOString(),
+              },
+              "updated",
+              "system-match-on-ingest",
+            );
+          } else {
+            console.log(
+              `[MatchOnIngest] Would update unresolved toll ${toll.id} to matched (trip ${best.tripId}, score ${best.confidenceScore})`,
+            );
+          }
+        }
+      }
+    }
+  } catch (err: any) {
+    console.warn(`[MatchOnIngest] reconsiderTollsForNewTrips failed: ${err?.message}`);
+  }
+
+  console.log(
+    `[MatchOnIngest] reconsiderTollsForNewTrips: scanned=${scanned} wouldUpdate=${wouldUpdate} wouldFlag=${wouldFlag} persist=${opts.persist}`,
+  );
+  return { scanned, wouldUpdate, wouldFlag };
+}
+
+/**
+ * MOI-4 (trip deleted/edited): keep the NEW `matchedTripId` suggestion field
+ * consistent when the trip it points to disappears or is re-synced with a
+ * different date. Scope note: this only touches the additive suggestion
+ * fields introduced by this project (`matchStatus`/`matchedTripId`/etc) — it
+ * never touches the pre-existing `tripId` reconciliation field, which has
+ * its own established lifecycle via /reconcile and /unreconcile and is
+ * completely untouched by this project. So the worst case of NOT running
+ * this is a stale suggestion badge, never a financial inconsistency.
+ *
+ * Pass `currentTrip: undefined` for a delete (nothing can still match).
+ * Pass the freshly-saved trip for an edit (re-validates the existing match
+ * against the trip's current date/time).
+ */
+export async function invalidateStaleTollMatchesForTrip(
+  tripId: string,
+  opts: { persist: boolean; currentTrip?: any },
+): Promise<{ scanned: number; invalidated: number; flagged: number }> {
+  let scanned = 0;
+  let invalidated = 0;
+  let flagged = 0;
+
+  try {
+    const settings = await getRefundAutomationSettings();
+    if (!settings.matchOnIngestEnabled) return { scanned, invalidated, flagged };
+
+    const pointingTolls = await findTollsByMatchedTripId(tripId);
+    if (pointingTolls.length === 0) return { scanned, invalidated, flagged };
+
+    const timezone = await getFleetTimezone();
+
+    for (const toll of pointingTolls) {
+      scanned++;
+
+      const stillValid =
+        !!opts.currentTrip &&
+        findTollMatchesServer(toll, [opts.currentTrip], timezone).some((m) => m.tripId === tripId);
+      if (stillValid) continue;
+
+      const isFormallyResolved =
+        toll.status === "approved" ||
+        toll.status === "rejected" ||
+        toll.status === "resolved" ||
+        !!toll.resolution;
+
+      if (isFormallyResolved) {
+        flagged++;
+        if (opts.persist) {
+          const fresh = await getTollLedgerEntry(toll.id);
+          if (fresh) {
+            await updateTollLedgerEntry(
+              toll.id,
+              {
+                metadata: {
+                  ...(fresh.metadata || {}),
+                  rematchCandidate: {
+                    tripId: null,
+                    reason: "matched_trip_deleted_or_moved",
+                    detectedAt: new Date().toISOString(),
+                  },
+                },
+              },
+              "updated",
+              "system-match-on-ingest",
+            );
+          }
+        } else {
+          console.log(
+            `[MatchOnIngest] Would flag resolved toll ${toll.id} — its matched trip ${tripId} was deleted/moved`,
+          );
+        }
+      } else {
+        invalidated++;
+        if (opts.persist) {
+          await updateTollLedgerEntry(
+            toll.id,
+            {
+              matchStatus: "unmatched",
+              matchedTripId: null,
+              matchConfidenceScore: null,
+              matchReasonCode: null,
+              lastMatchedAt: new Date().toISOString(),
+            },
+            "updated",
+            "system-match-on-ingest",
+          );
+        } else {
+          console.log(
+            `[MatchOnIngest] Would clear unresolved toll ${toll.id} — its matched trip ${tripId} was deleted/moved`,
+          );
+        }
+      }
+    }
+  } catch (err: any) {
+    console.warn(
+      `[MatchOnIngest] invalidateStaleTollMatchesForTrip failed for trip ${tripId}: ${err?.message}`,
+    );
+  }
+
+  return { scanned, invalidated, flagged };
 }
 
 /**
@@ -2776,6 +3304,99 @@ app.post(`${BASE}/toll-ledger/tag-backfill`, async (c) => {
     });
   } catch (e: any) {
     console.log(`[TagBackfill] error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── GET /match-index/status (MOI-7) ─── read-only backfill preview ───────
+// Historical tolls created before match-on-ingest existed have no
+// matchStatus. This reports how many, without touching anything.
+app.get(`${BASE}/match-index/status`, async (c) => {
+  try {
+    const all = (await loadAllByPrefix(TOLL_LEDGER_PREFIX)) as TollLedgerRecord[];
+    const missing = all.filter((tx) => !tx.matchStatus);
+    return c.json({
+      success: true,
+      totalTolls: all.length,
+      missingMatchStatus: missing.length,
+      sampleIds: missing.slice(0, 20).map((tx) => tx.id),
+      message:
+        missing.length > 0
+          ? `${missing.length} of ${all.length} tolls have no matchStatus yet. POST /match-index/backfill (dryRun defaults true) to compute it.`
+          : "Every toll already has a matchStatus — nothing to backfill.",
+    });
+  } catch (e: any) {
+    console.log(`[MatchIndexBackfill] status error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── POST /match-index/backfill (MOI-7) ─── apply (dry-run by default) ────
+// Mirrors the tag-backfill convention exactly: dryRun defaults true,
+// batched, capped error samples, and — since additive fields are only
+// "harmless" if you can prove it — writes a small manifest of every id it
+// touched so a bad run has a concrete undo path.
+app.post(`${BASE}/match-index/backfill`, async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body?.dryRun !== false; // default to dry-run for safety
+    const batchSize = Math.max(1, Math.min(500, Number(body?.batchSize) || 100));
+
+    const all = (await loadAllByPrefix(TOLL_LEDGER_PREFIX)) as TollLedgerRecord[];
+    const missing = all.filter((tx) => !tx.matchStatus);
+    const batch = missing.slice(0, batchSize);
+
+    if (dryRun) {
+      return c.json({
+        success: true,
+        dryRun: true,
+        totalTolls: all.length,
+        missingMatchStatus: missing.length,
+        wouldProcess: batch.length,
+        message:
+          missing.length > 0
+            ? `Dry run: would compute matchStatus for ${batch.length} of ${missing.length} missing tolls (batchSize=${batchSize}). Re-run with dryRun=false to apply.`
+            : "Nothing to backfill — every toll already has a matchStatus.",
+      });
+    }
+
+    const timezone = await getFleetTimezone();
+    const settings = await getRefundAutomationSettings();
+    const touchedIds: string[] = [];
+    const errors: string[] = [];
+
+    for (const tx of batch) {
+      try {
+        const patch = await computeTollMatchPatch(tx, timezone, settings);
+        await updateTollLedgerEntry(tx.id, patch, "updated", "system", "Match-Index Backfill");
+        touchedIds.push(tx.id);
+      } catch (err: any) {
+        errors.push(`${tx.id}: ${err.message}`);
+        if (errors.length > 50) break;
+      }
+    }
+
+    const manifestKey = `toll_backfill_run:${new Date().toISOString()}`;
+    await kv.set(manifestKey, { touchedIds, at: new Date().toISOString(), errors });
+
+    const remaining = missing.length - touchedIds.length;
+    console.log(
+      `[MatchIndexBackfill] processed=${touchedIds.length} remaining=${remaining} errors=${errors.length} manifest=${manifestKey}`,
+    );
+    return c.json({
+      success: true,
+      dryRun: false,
+      processed: touchedIds.length,
+      remaining,
+      errors: errors.slice(0, 50),
+      manifestKey,
+      message:
+        remaining > 0
+          ? `Processed ${touchedIds.length}. Re-run to continue with the remaining ${remaining}.`
+          : `Processed ${touchedIds.length}. Every toll now has a matchStatus.`,
+    });
+  } catch (e: any) {
+    console.log(`[MatchIndexBackfill] backfill error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
 });
@@ -3958,6 +4579,9 @@ interface RefundAutomationSettings {
   // Unified toll-settlement rework: one reconciliation-aware calc across all four
   // driver financial tabs (payout stops deducting tolls) — additive, default OFF.
   unifiedTollSettlementEnabled: boolean;
+  // MOI: match-on-ingest — compute+persist toll↔trip matches at write time
+  // instead of recomputing on every GET /unreconciled read — additive, default OFF.
+  matchOnIngestEnabled: boolean;
 }
 
 async function getRefundAutomationSettings(): Promise<RefundAutomationSettings> {
@@ -3975,6 +4599,7 @@ async function getRefundAutomationSettings(): Promise<RefundAutomationSettings> 
         : DEFAULT_ORPHAN_PROXIMITY_MINUTES,
     driverTollChargeSyncEnabled: rec?.driverTollChargeSyncEnabled === true, // default OFF
     unifiedTollSettlementEnabled: rec?.unifiedTollSettlementEnabled === true, // default OFF
+    matchOnIngestEnabled: rec?.matchOnIngestEnabled === true, // default OFF
   };
 }
 
@@ -4330,6 +4955,10 @@ app.put(`${BASE}/automation-settings`, async (c) => {
         typeof body?.unifiedTollSettlementEnabled === "boolean"
           ? body.unifiedTollSettlementEnabled
           : current.unifiedTollSettlementEnabled,
+      matchOnIngestEnabled:
+        typeof body?.matchOnIngestEnabled === "boolean"
+          ? body.matchOnIngestEnabled
+          : current.matchOnIngestEnabled,
     };
     await kv.set(REFUND_SETTINGS_KEY, next);
     return c.json({ success: true, data: next });
@@ -4477,6 +5106,8 @@ async function bridgeRideTollCrossings(opts: { dryRun: boolean; limit: number })
       await saveTollLedgerEntry(entry);
       await kv.set(dedupKey, { ledgerId, bridgedAt: now });
       bridged++;
+      // MOI-3: same ingest-time match computation as the /transactions path.
+      await computeAndPersistTollMatchOnIngest(entry);
     } catch (err: any) {
       console.error(`[TollBridge] Failed to bridge crossing ${x.id}: ${err.message}`);
     }

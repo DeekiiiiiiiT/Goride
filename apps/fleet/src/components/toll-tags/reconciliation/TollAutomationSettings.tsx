@@ -22,6 +22,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
   const [orphanProximity, setOrphanProximity] = useState(180);
   const [driverChargeSync, setDriverChargeSync] = useState(false);
   const [unifiedSettlement, setUnifiedSettlement] = useState(false);
+  const [matchOnIngest, setMatchOnIngest] = useState(false);
   const [bridging, setBridging] = useState(false);
   const [claimsSyncChecking, setClaimsSyncChecking] = useState(false);
   const [claimsSyncApplying, setClaimsSyncApplying] = useState(false);
@@ -29,6 +30,13 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
     labelsToFix: number;
     transactionDatesToFix: number;
     needsManualReview: Array<{ claimId: string; transactionId: string }>;
+  } | null>(null);
+  const [matchIndexChecking, setMatchIndexChecking] = useState(false);
+  const [matchIndexApplying, setMatchIndexApplying] = useState(false);
+  const [matchIndexReport, setMatchIndexReport] = useState<{
+    totalTolls: number;
+    missingMatchStatus: number;
+    message: string;
   } | null>(null);
 
   const applySettings = (data: {
@@ -38,6 +46,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
     orphanProximityMinutes: number;
     driverTollChargeSyncEnabled?: boolean;
     unifiedTollSettlementEnabled?: boolean;
+    matchOnIngestEnabled?: boolean;
   }) => {
     setEnabled(data.refundAutomationEnabled);
     setMinConfidence(data.refundAutoMinConfidence);
@@ -45,6 +54,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
     setOrphanProximity(data.orphanProximityMinutes);
     setDriverChargeSync(data.driverTollChargeSyncEnabled === true);
     setUnifiedSettlement(data.unifiedTollSettlementEnabled === true);
+    setMatchOnIngest(data.matchOnIngestEnabled === true);
   };
 
   useEffect(() => {
@@ -69,6 +79,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
     orphanProximityMinutes?: number;
     driverTollChargeSyncEnabled?: boolean;
     unifiedTollSettlementEnabled?: boolean;
+    matchOnIngestEnabled?: boolean;
   }) => {
     setSaving(true);
     try {
@@ -115,6 +126,40 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
       toast.error(e.message || "Repair failed");
     } finally {
       setClaimsSyncApplying(false);
+    }
+  };
+
+  const checkMatchIndex = async () => {
+    setMatchIndexChecking(true);
+    try {
+      const res = await api.getMatchIndexBackfillStatus();
+      setMatchIndexReport({
+        totalTolls: res.totalTolls,
+        missingMatchStatus: res.missingMatchStatus,
+        message: res.message,
+      });
+      toast.info(res.message);
+    } catch (e: any) {
+      toast.error(e.message || "Status check failed");
+    } finally {
+      setMatchIndexChecking(false);
+    }
+  };
+
+  const applyMatchIndexBackfill = async () => {
+    setMatchIndexApplying(true);
+    try {
+      const res = await api.runMatchIndexBackfill(false, 100);
+      setMatchIndexReport({
+        totalTolls: res.totalTolls ?? 0,
+        missingMatchStatus: res.remaining ?? 0,
+        message: res.message,
+      });
+      toast.success(res.message);
+    } catch (e: any) {
+      toast.error(e.message || "Backfill failed");
+    } finally {
+      setMatchIndexApplying(false);
     }
   };
 
@@ -276,6 +321,22 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
                     double-counting tolls. Requires “Sync charges to driver financials”.
                   </p>
                 </div>
+
+                <div className="border-t border-slate-100 pt-3">
+                  <label className="flex items-center justify-between">
+                    <span className="text-sm text-slate-700">Match-on-ingest (beta)</span>
+                    <Switch
+                      checked={matchOnIngest}
+                      disabled={saving}
+                      onCheckedChange={(v) => save({ matchOnIngestEnabled: v })}
+                    />
+                  </label>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Computes each toll's trip match once, when it's created, instead of every time
+                    this dashboard loads — and re-checks it when a trip is imported later, even
+                    weeks after. Purely additive: never resolves or charges anything by itself.
+                  </p>
+                </div>
               </div>
 
               {/* Claims ↔ Toll Ledger repair */}
@@ -341,6 +402,38 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
                     {bridging ? <Loader2 className="h-4 w-4 animate-spin" /> : "Bridge now"}
                   </Button>
                 </div>
+              </div>
+
+              {/* Match-Index backfill */}
+              <div className="rounded-lg border border-slate-200 p-4 space-y-3">
+                <div className="flex items-center gap-1.5">
+                  <Wrench className="h-4 w-4 text-slate-500" />
+                  <h4 className="text-sm font-semibold text-slate-900">Match-Index backfill</h4>
+                </div>
+                <p className="text-xs text-slate-500">
+                  One-time fix for tolls created before Match-on-ingest existed: computes their
+                  trip match once so the fast read path can use it. Never auto-charges anything.
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" disabled={matchIndexChecking} onClick={checkMatchIndex}>
+                    {matchIndexChecking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Check status"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="bg-indigo-600 hover:bg-indigo-700"
+                    disabled={matchIndexApplying}
+                    onClick={applyMatchIndexBackfill}
+                  >
+                    {matchIndexApplying ? <Loader2 className="h-4 w-4 animate-spin" /> : "Apply backfill (100)"}
+                  </Button>
+                </div>
+                {matchIndexReport && (
+                  <div className="text-xs text-slate-600 space-y-1 border-t border-slate-100 pt-2">
+                    <p>Total tolls: <span className="font-semibold">{matchIndexReport.totalTolls}</span></p>
+                    <p>Still missing matchStatus: <span className="font-semibold">{matchIndexReport.missingMatchStatus}</span></p>
+                    <p className="text-slate-500">{matchIndexReport.message}</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
