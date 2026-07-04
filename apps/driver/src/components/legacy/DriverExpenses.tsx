@@ -672,13 +672,27 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
 
       const vehicles = await api.getVehicles().catch(() => []);
       const resolvedVehicleId = resolveVehicleIdForDriver(driverRecord, vehicles, user?.id);
+      // Defense in depth: look up the real plate/name directly from the vehicles
+      // list already fetched above, rather than relying solely on driverRecord's
+      // cached assignedVehiclePlate/assignedVehicleName (which can be stale or
+      // never populated — see useCurrentDriver.ts). Removes the old hardcoded
+      // "Assigned Vehicle" placeholder string entirely.
+      const resolvedVehicle = resolvedVehicleId
+        ? (vehicles as any[]).find((v: any) => v.id === resolvedVehicleId)
+        : undefined;
 
       const baseTx: Partial<FinancialTransaction> = {
         id: txId,
         driverId: driverRecord?.id || user?.id,
         driverName: driverRecord?.driverName || driverRecord?.name || user?.email,
         vehicleId: resolvedVehicleId,
-        vehiclePlate: driverRecord?.assignedVehiclePlate || driverRecord?.assignedVehicleName || (resolvedVehicleId ? 'Assigned Vehicle' : undefined),
+        vehiclePlate:
+          driverRecord?.assignedVehiclePlate ||
+          resolvedVehicle?.plateNumber ||
+          resolvedVehicle?.licensePlate ||
+          driverRecord?.assignedVehicleName ||
+          resolvedVehicle?.vehicleName ||
+          undefined,
         date: isValid(date) ? format(date, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
         time: time ? `${time}:00` : undefined,
         type: 'Expense',

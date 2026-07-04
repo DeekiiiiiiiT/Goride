@@ -56,20 +56,32 @@ export function useCurrentDriver() {
                 console.log(`[DriverSync] Resolved Identity: ${user.email} -> ${match.driverName || match.name} (${match.id})`);
                 match.name = match.driverName || match.name;
                 
-                // Enhanced Vehicle Resolution: If driver record doesn't have assignedVehicleId, try to find it in vehicles list
-                if (!match.assignedVehicleId) {
+                // Enhanced Vehicle Resolution: backfill whenever EITHER the vehicle id
+                // OR its display plate/name is missing. Previously this only ran when
+                // assignedVehicleId was absent — but a driver record can already carry
+                // assignedVehicleId (the mirrored cache field, per driver_vehicle_assignment.ts)
+                // while assignedVehiclePlate/assignedVehicleName were never populated,
+                // silently skipping this block and leaving the plate/name blank. That
+                // caused toll/expense submissions to fall back to a generic
+                // "Assigned Vehicle" placeholder string instead of the real plate,
+                // even though the underlying vehicleId was correct all along.
+                if (!match.assignedVehicleId || !match.assignedVehiclePlate) {
                     try {
                         const vehicles = await api.getVehicles();
-                        const assignedVehicle = vehicles.find((v: any) => 
-                            v.currentDriverId === match.id || 
-                            v.currentDriverId === match.driverId
-                        );
+                        // If we already know the vehicle id, look it up directly —
+                        // more precise than reverse-matching by currentDriverId.
+                        const assignedVehicle = match.assignedVehicleId
+                            ? vehicles.find((v: any) => v.id === match.assignedVehicleId)
+                            : vehicles.find((v: any) =>
+                                v.currentDriverId === match.id ||
+                                v.currentDriverId === match.driverId
+                              );
                         if (assignedVehicle) {
                             match.assignedVehicleId = assignedVehicle.id;
                             match.assignedVehiclePlate = assignedVehicle.plateNumber || assignedVehicle.licensePlate || 'Unknown Plate';
                             match.assignedVehicleName = assignedVehicle.vehicleName || `${assignedVehicle.make || ''} ${assignedVehicle.model || ''}`.trim();
                             // Also map 'vehicle' property just in case legacy code uses it
-                            match.vehicle = assignedVehicle.id; 
+                            match.vehicle = assignedVehicle.id;
                         }
                     } catch (err) {
                         console.warn("[DriverSync] Failed to check vehicles for assignment", err);
