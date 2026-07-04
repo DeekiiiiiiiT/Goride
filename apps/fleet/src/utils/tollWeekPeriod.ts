@@ -129,6 +129,36 @@ export function groupTripsByWeek(trips: Trip[], timezone?: string): TripWeekGrou
   return groups;
 }
 
+export interface WeekGroup<T> {
+  key: string;
+  weekStart: Date;
+  weekEnd: Date;
+  label: string;
+  items: T[];
+}
+
+/** Group any date-bearing rows by Monday–Sunday week; newest weeks first. */
+export function groupByWeek<T extends { date: string }>(rows: T[], timezone?: string): WeekGroup<T>[] {
+  const map = new Map<string, T[]>();
+  for (const row of rows) {
+    const d = new Date(row.date);
+    const validDate = !isNaN(d.getTime()) ? d : new Date(0);
+    const { key } = weekBucketForDate(validDate, timezone);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(row);
+  }
+
+  const groups: WeekGroup<T>[] = [];
+  for (const [key, items] of map) {
+    const weekStart = parseISO(key);
+    const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
+    items.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    groups.push({ key, weekStart, weekEnd, label: formatWeekPeriodLabel(weekStart, weekEnd), items });
+  }
+  groups.sort((a, b) => b.weekStart.getTime() - a.weekStart.getTime());
+  return groups;
+}
+
 /** ISO timestamp on refund — matches Dispute Refunds table column. */
 export function getDisputeRefundWeekDate(r: DisputeRefund): Date {
   const d = new Date(r.date);

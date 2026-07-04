@@ -20,6 +20,8 @@ export type TollEventWorkflowState =
   | "approved"
   | "rejected"
   | "unlinked_refund"
+  | "refund_cash_wash"
+  | "refund_phantom"
   | "dispute_matched"
   | "dispute_unmatched";
 
@@ -149,6 +151,22 @@ export function mapMergedTollTxToEvent(tx: any, ledgerIds: Set<string>): TollFin
   };
 }
 
+/**
+ * Mirrors `deriveTollWorkflowState` and the dispute-refund status ternary
+ * above: derive the state live from the trip's actual resolution instead of
+ * assuming it's still unresolved. `expense_logged` resolutions create a real
+ * linked toll_ledger row, so they're excluded upstream (by the caller's
+ * `linkedTripIds` check) before this function ever runs on them — the
+ * fallback below only ever needs to distinguish "still needs a decision"
+ * from "cash wash" / "phantom".
+ */
+function deriveTripRefundWorkflowState(trip: any): TollEventWorkflowState {
+  const status = trip?.tollRefundResolution?.status;
+  if (status === "cash_wash") return "refund_cash_wash";
+  if (status === "phantom") return "refund_phantom";
+  return "unlinked_refund";
+}
+
 export function mapTripUnclaimedToEvent(trip: any): TollFinancialEvent | null {
   if (!trip || typeof trip !== "object") return null;
   const id = trip.id != null ? String(trip.id) : "";
@@ -177,7 +195,7 @@ export function mapTripUnclaimedToEvent(trip: any): TollFinancialEvent | null {
     occurredAt,
     batchId: typeof trip.batchId === "string" ? trip.batchId : undefined,
     tripId: id,
-    workflowState: "unlinked_refund",
+    workflowState: deriveTripRefundWorkflowState(trip),
     description: [trip.pickupLocation, trip.dropoffLocation].filter(Boolean).join(" → ") || undefined,
     rawRef: { store: "trip", id },
   };
