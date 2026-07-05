@@ -199,3 +199,38 @@ export function groupDisputeRefundsByWeek(refunds: DisputeRefund[], timezone?: s
   groups.sort((a, b) => b.weekStart.getTime() - a.weekStart.getTime());
   return groups;
 }
+
+/**
+ * Single source of truth for "is this dispute refund matched" — mirrors
+ * `DisputeRefundsList.tsx`'s own status check exactly. Every driver-financial
+ * surface (Payout, Settlement, Expenses) must use this, not a hand-copied
+ * re-implementation, so the counting rule can never silently drift between
+ * views the way the toll-reconciliation counts already have.
+ */
+export function isDisputeRefundMatched(r: Pick<DisputeRefund, 'status'>): boolean {
+  return r.status === 'matched' || r.status === 'auto_resolved';
+}
+
+/**
+ * Matched/unmatched dispute-refund counts for a single period, bucketed by
+ * the refund's OWN `date` — never its matched toll's date — so this always
+ * agrees with the Dispute Refunds tab's own week grouping (`groupDisputeRefundsByWeek`,
+ * above) about which period a given refund belongs to.
+ */
+export function computeDisputeRefundCounts(
+  disputeRefunds: DisputeRefund[],
+  periodStart: Date,
+  periodEnd: Date,
+): { matched: number; unmatched: number } {
+  const startTime = periodStart.getTime();
+  const endTime = periodEnd.getTime();
+  let matched = 0;
+  let unmatched = 0;
+  for (const r of disputeRefunds) {
+    const d = getDisputeRefundWeekDate(r).getTime();
+    if (d < startTime || d > endTime) continue;
+    if (isDisputeRefundMatched(r)) matched++;
+    else unmatched++;
+  }
+  return { matched, unmatched };
+}

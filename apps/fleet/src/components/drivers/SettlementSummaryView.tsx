@@ -16,7 +16,7 @@ import { Button } from "../ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "../ui/tooltip";
 import { Loader2, CheckCircle, DollarSign, Wallet, ArrowUpCircle, ArrowDownCircle, ChevronDown, Clock, MinusCircle, Download, Info } from "lucide-react";
 import { toast } from "sonner@2.0.3";
-import { Trip, FinancialTransaction, DriverMetrics } from '../../types/data';
+import { Trip, FinancialTransaction, DriverMetrics, DisputeRefund } from '../../types/data';
 import { api } from '../../services/api';
 import { computeWeeklyCashSettlement, CashWeekData } from '../../utils/cashSettlementCalc';
 import { computePeriodSettlement } from '../../utils/driverPeriodSettlement';
@@ -24,6 +24,8 @@ import { exportToCSV } from '../../utils/csvHelpers';
 import { differenceInCalendarDays, format } from 'date-fns';
 import { SettlementPeriodDetail } from './SettlementPeriodDetail';
 import { isTollCategory } from '../../utils/tollCategoryHelper';
+import { computeDisputeRefundCounts, groupDisputeRefundsByWeek } from '../../utils/tollWeekPeriod';
+import { expandDriverTransactionIds } from '../../utils/expandDriverTransactionIds';
 // ────────────────────────────────────────────────────────────
 // Types
 // ────────────────────────────────────────────────────────────
@@ -39,6 +41,8 @@ export interface SettlementRow {
   tollExpenses: number;
   tollReconciled: number;      // Phase 7: count of reconciled toll txns
   tollUnreconciled: number;    // Phase 7: count of unreconciled toll txns
+  disputeRefundMatched: number;   // Uber support-case adjustments already linked to a toll
+  disputeRefundUnmatched: number; // Uber support-case adjustments still needing a manual match
   fuelDeduction: number;
   totalDeductions: number;   // tolls + fuel
   netPayout: number;         // driverShare - totalDeductions
@@ -122,16 +126,23 @@ export function SettlementSummaryView({
   // ── Step 4.3: Finalized fuel reports ──
   const [finalizedReports, setFinalizedReports] = useState<any[]>([]);
   const [fuelDataLoading, setFuelDataLoading] = useState(true);
+  const [disputeRefunds, setDisputeRefunds] = useState<DisputeRefund[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     const loadFinalizedData = async () => {
       setFuelDataLoading(true);
       try {
-        const [drivers, vehicles, allReports] = await Promise.all([
+        const [drivers, vehicles, allReports, disputeRefundsRes] = await Promise.all([
           api.getDrivers().catch(() => []),
           api.getVehicles().catch(() => []),
           api.getFinalizedReports().catch(() => []),
+          // Unscoped fetch — DisputeRefund.driverId comes from the raw Uber CSV
+          // "Driver UUID" column with no server-side normalization, so it may
+          // not match this driver's native id. Filter client-side below by the
+          // same expanded ID set used elsewhere, rather than trusting a
+          // single-ID server-side match.
+          api.getDisputeRefunds().catch(() => ({ data: [] as DisputeRefund[], total: 0 })),
         ]);
         if (cancelled) return;
 
@@ -150,6 +161,11 @@ export function SettlementSummaryView({
           (r: any) => r.status === 'Finalized' && vehicleIdSet.has(r.vehicleId)
         );
         setFinalizedReports(myReports);
+
+        const expandedIdSet = new Set(
+          expandDriverTransactionIds([driverId, driverRecord?.driverId, driverRecord?.uberDriverId, driverRecord?.inDriveDriverId])
+        );
+        setDisputeRefunds((disputeRefundsRes.data || []).filter((r) => expandedIdSet.has(r.driverId)));
       } catch (e) {
         console.error('[SettlementSummaryView] Failed to load finalized reports:', e);
       } finally {
@@ -236,10 +252,16 @@ export function SettlementSummaryView({
       cashMap.set(key, cw);
     }
 
-    // Collect all unique Monday keys from both sides
+    // Collect all unique Monday keys from all three sides — a period whose
+    // ONLY activity is a dispute refund must still get a row, otherwise the
+    // Dispute Status column added below is unreachable for exactly the
+    // periods most in need of it.
     const allKeys = new Set<string>();
     ledgerMap.forEach((_, k) => allKeys.add(k));
     cashMap.forEach((_, k) => allKeys.add(k));
+    for (const week of groupDisputeRefundsByWeek(disputeRefunds)) {
+      allKeys.add(week.key);
+    }
 
     // Merge
     const rows: SettlementRow[] = [];
@@ -269,7 +291,11 @@ export function SettlementSummaryView({
         periodStart = cw.start;
         periodEnd = cw.end;
       } else {
-        continue; // shouldn't happen
+        // Dispute-refund-only period — key is itself a Monday "YYYY-MM-DD".
+        periodStart = new Date(key + 'T00:00:00');
+        periodEnd = new Date(periodStart);
+        periodEnd.setDate(periodEnd.getDate() + 6);
+        periodEnd.setHours(23, 59, 59, 999);
       }
 
       const pStartTime = periodStart.getTime();
@@ -281,6 +307,8 @@ export function SettlementSummaryView({
       const tripCount = lr?.tripCount || 0;
       const tollExpensesLegacy = getTollsForPeriod(pStartTime, pEndTime);
       const { deduction: fuelDeduction, finalized: isFinalized } = getDeductionForPeriod(periodStart, periodEnd);
+      const { matched: disputeRefundMatched, unmatched: disputeRefundUnmatched } =
+        computeDisputeRefundCounts(disputeRefunds, periodStart, periodEnd);
       const cashStatus = cw?.status || 'No Activity';
 
       let tollExpenses = tollExpensesLegacy;
@@ -323,7 +351,12 @@ export function SettlementSummaryView({
 
       // ── Status logic ──
       let settlementStatus: SettlementStatus;
-      const bothSidesZero = grossRevenue === 0 && driverShare === 0 && cashOwed === 0;
+      // A period with no payout/cash activity but a real dispute refund still
+      // needs to surface — otherwise the very periods most in need of the new
+      // Dispute Status column get trimmed off the visible range below.
+      const bothSidesZero =
+        grossRevenue === 0 && driverShare === 0 && cashOwed === 0 &&
+        disputeRefundMatched === 0 && disputeRefundUnmatched === 0;
       if (bothSidesZero) {
         settlementStatus = 'No Activity';
       } else if (!isFinalized && grossRevenue > 0) {
@@ -344,6 +377,8 @@ export function SettlementSummaryView({
         tollExpenses: tollExpenses.amount,
         tollReconciled: tollExpenses.reconciled,
         tollUnreconciled: tollExpenses.unreconciled,
+        disputeRefundMatched,
+        disputeRefundUnmatched,
         fuelDeduction,
         totalDeductions,
         netPayout,
@@ -372,7 +407,7 @@ export function SettlementSummaryView({
     console.log(`[SettlementSummaryView] Merged ${trimmedRows.length} settlement rows (${ledgerRows.length} ledger, ${cashWeeks.length} cash weeks)`);
 
     return trimmedRows;
-  }, [isReady, ledgerRows, cashWeeks, transactions, finalizedReports, unifiedToll]);
+  }, [isReady, ledgerRows, cashWeeks, transactions, finalizedReports, disputeRefunds, unifiedToll]);
 
   // ── Step 5.4: Summary totals ──
   const summaryTotals = useMemo(() => {
@@ -450,6 +485,16 @@ export function SettlementSummaryView({
       'Gross Revenue': row.grossRevenue,
       'Driver Share': row.driverShare,
       'Toll Expenses': row.tollExpenses,
+      'Toll Status': (row.tollReconciled + row.tollUnreconciled) === 0
+        ? 'N/A'
+        : row.tollUnreconciled === 0
+          ? `Reconciled (${row.tollReconciled})`
+          : `${row.tollUnreconciled} Unmatched`,
+      'Dispute Status': (row.disputeRefundMatched + row.disputeRefundUnmatched) === 0
+        ? 'N/A'
+        : row.disputeRefundUnmatched === 0
+          ? `Matched (${row.disputeRefundMatched})`
+          : `${row.disputeRefundUnmatched} Unmatched`,
       'Fuel Deduction': row.fuelDeduction,
       'Total Deductions': row.totalDeductions,
       'Net Payout': row.netPayout,
@@ -633,6 +678,36 @@ export function SettlementSummaryView({
                         </Tooltip>
                       </TooltipProvider>
                     </TableHead>
+                    <TableHead className="text-xs text-center">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 cursor-help">
+                              Toll Status
+                              <Info className="h-3 w-3 text-slate-400" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[250px] text-xs">
+                            Whether toll expenses for this period have been matched to a trip in the Toll Reconciliation system. "Reconciled" = all tolls linked; "X Unmatched" = some tolls still need matching.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </TableHead>
+                    <TableHead className="text-xs text-center">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 cursor-help">
+                              Dispute Status
+                              <Info className="h-3 w-3 text-slate-400" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[250px] text-xs">
+                            Whether Uber support-case refunds for this period have been matched to a toll in the Dispute Refunds tab. "Matched" = all linked; "X Unmatched" = some still need a manual match.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </TableHead>
                     <TableHead className="text-xs text-right">
                       <TooltipProvider>
                         <Tooltip>
@@ -746,6 +821,36 @@ export function SettlementSummaryView({
                             <span className="text-emerald-700 font-medium">{fmtCurrency(row.netPayout)}</span>
                           ) : (
                             <span className="text-amber-700 font-medium">Pending</span>
+                          )}
+                        </TableCell>
+
+                        {/* Toll Status */}
+                        <TableCell className="text-xs text-center" onClick={(e) => e.stopPropagation()}>
+                          {(row.tollReconciled + row.tollUnreconciled) === 0 ? (
+                            <span className="text-slate-300">-</span>
+                          ) : row.tollUnreconciled === 0 ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                              <CheckCircle className="h-3 w-3" /> Reconciled
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                              {row.tollUnreconciled} Unmatched
+                            </span>
+                          )}
+                        </TableCell>
+
+                        {/* Dispute Status */}
+                        <TableCell className="text-xs text-center" onClick={(e) => e.stopPropagation()}>
+                          {(row.disputeRefundMatched + row.disputeRefundUnmatched) === 0 ? (
+                            <span className="text-slate-300">-</span>
+                          ) : row.disputeRefundUnmatched === 0 ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                              <CheckCircle className="h-3 w-3" /> Matched
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                              {row.disputeRefundUnmatched} Unmatched
+                            </span>
                           )}
                         </TableCell>
 

@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
-import type { FinancialTransaction, Trip, DriverMetrics, TierConfig } from '../types/data';
+import type { FinancialTransaction, Trip, DriverMetrics, TierConfig, DisputeRefund } from '../types/data';
 import type { PayoutPeriodRow } from '../types/driverPayoutPeriod';
 import { api } from '../services/api';
 import { tierService } from '../services/tierService';
 import { computeWeeklyCashSettlement, CashWeekData } from '../utils/cashSettlementCalc';
 import { buildLedgerPayoutPeriodRows } from '../utils/buildLedgerPayoutPeriodRows';
+import { expandDriverTransactionIds } from '../utils/expandDriverTransactionIds';
 export type PeriodType = 'daily' | 'weekly' | 'monthly';
 
 export function useDriverPayoutPeriodRows(opts: {
@@ -26,6 +27,7 @@ export function useDriverPayoutPeriodRows(opts: {
 
   const [tiers, setTiers] = useState<TierConfig[]>([]);
   const [finalizedReports, setFinalizedReports] = useState<any[]>([]);
+  const [disputeRefunds, setDisputeRefunds] = useState<DisputeRefund[]>([]);
   const [fuelDataLoading, setFuelDataLoading] = useState(true);
   const [ledgerRows, setLedgerRows] = useState<any[]>([]);
   const [ledgerLoaded, setLedgerLoaded] = useState(false);
@@ -49,10 +51,16 @@ export function useDriverPayoutPeriodRows(opts: {
     const loadFinalizedData = async () => {
       setFuelDataLoading(true);
       try {
-        const [drivers, vehicles, allReports] = await Promise.all([
+        const [drivers, vehicles, allReports, disputeRefundsRes] = await Promise.all([
           api.getDrivers().catch(() => []),
           api.getVehicles().catch(() => []),
           api.getFinalizedReports().catch(() => []),
+          // Unscoped fetch — DisputeRefund.driverId is populated from the raw
+          // Uber CSV "Driver UUID" column at import time with no server-side
+          // normalization, so it may not match this driver's native id. Fetch
+          // everything and filter client-side by the same expanded ID set
+          // used below, rather than trusting a single-ID server-side match.
+          api.getDisputeRefunds().catch(() => ({ data: [] as DisputeRefund[], total: 0 })),
         ]);
         if (cancelled) return;
 
@@ -69,6 +77,12 @@ export function useDriverPayoutPeriodRows(opts: {
           (r: any) => r.status === 'Finalized' && vehicleIdSet.has(r.vehicleId)
         );
         setFinalizedReports(myReports);
+
+        const expandedIdSet = new Set(
+          expandDriverTransactionIds([driverId, driverRecord?.driverId, driverRecord?.uberDriverId, driverRecord?.inDriveDriverId])
+        );
+        const myDisputeRefunds = (disputeRefundsRes.data || []).filter((r) => expandedIdSet.has(r.driverId));
+        setDisputeRefunds(myDisputeRefunds);
       } catch (e) {
         console.error('[useDriverPayoutPeriodRows] Failed to load finalized reports:', e);
       } finally {
@@ -123,6 +137,7 @@ export function useDriverPayoutPeriodRows(opts: {
         cashWeeks,
         transactions,
         finalizedReports,
+        disputeRefunds,
         periodType,
         unifiedToll,
       }),
@@ -133,6 +148,7 @@ export function useDriverPayoutPeriodRows(opts: {
       cashWeeks,
       transactions,
       finalizedReports,
+      disputeRefunds,
       periodType,
       unifiedToll,
     ]

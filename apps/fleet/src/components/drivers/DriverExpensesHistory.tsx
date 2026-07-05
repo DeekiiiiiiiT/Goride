@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Button } from "../ui/button";
 import { Download, ChevronDown, TrendingDown, Fuel, Navigation, Loader2, CheckCircle, Clock, Info, LinkIcon, Unlink } from "lucide-react";
-import { FinancialTransaction, Trip } from "../../types/data";
+import { FinancialTransaction, Trip, DisputeRefund } from "../../types/data";
 import { api } from "../../services/api";
 import {
   startOfWeek, endOfWeek, format,
@@ -15,6 +15,8 @@ import { exportToCSV } from "../../utils/csvHelpers";
 import { toast } from "sonner@2.0.3";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "../ui/tooltip";
 import { isTollCategory } from '../../utils/tollCategoryHelper';
+import { computeDisputeRefundCounts, getDisputeRefundWeekDate } from '../../utils/tollWeekPeriod';
+import { expandDriverTransactionIds } from '../../utils/expandDriverTransactionIds';
 
 type PeriodType = 'daily' | 'weekly' | 'monthly';
 
@@ -29,6 +31,8 @@ interface ExpensePeriodRow {
   transactionCount: number;
   tollReconciled: number;      // Phase 6: count of reconciled toll txns in this period
   tollUnreconciled: number;    // Phase 6: count of unreconciled toll txns in this period
+  disputeRefundMatched: number;   // Uber support-case adjustments already linked to a toll
+  disputeRefundUnmatched: number; // Uber support-case adjustments still needing a manual match
 }
 
 interface DriverExpensesHistoryProps {
@@ -47,16 +51,23 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
   // ── Phase 2: Finalized reports data source ──────────────────
   const [finalizedReports, setFinalizedReports] = useState<any[]>([]);
   const [driverVehicleIds, setDriverVehicleIds] = useState<Set<string>>(new Set());
+  const [disputeRefunds, setDisputeRefunds] = useState<DisputeRefund[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     const loadFinalizedData = async () => {
       setFuelDataLoading(true);
       try {
-        const [drivers, vehicles, allReports] = await Promise.all([
+        const [drivers, vehicles, allReports, disputeRefundsRes] = await Promise.all([
           api.getDrivers().catch(() => []),
           api.getVehicles().catch(() => []),
           api.getFinalizedReports().catch(() => []),
+          // Unscoped fetch — DisputeRefund.driverId comes from the raw Uber CSV
+          // "Driver UUID" column with no server-side normalization, so it may
+          // not match this driver's native id. Filter client-side below by the
+          // same expanded ID set used elsewhere, rather than trusting a
+          // single-ID server-side match.
+          api.getDisputeRefunds().catch(() => ({ data: [] as DisputeRefund[], total: 0 })),
         ]);
         if (cancelled) return;
 
@@ -79,6 +90,13 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
           (r: any) => r.status === 'Finalized' && vehicleIdSet.has(r.vehicleId)
         );
         setFinalizedReports(myReports);
+
+        // Dispute refunds carry the platform-side driver id, so match against
+        // the full expanded set (native + Uber + InDrive), not driverIdSet above.
+        const expandedIdSet = new Set(
+          expandDriverTransactionIds([driverId, driverRecord?.driverId, driverRecord?.uberDriverId, driverRecord?.inDriveDriverId])
+        );
+        setDisputeRefunds((disputeRefundsRes.data || []).filter((r) => expandedIdSet.has(r.driverId)));
 
         // Step 2.3: Diagnostic logging
         console.log(
@@ -105,6 +123,10 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
     const allDates: number[] = [];
     trips.forEach(t => { if (t.date) allDates.push(new Date(t.date).getTime()); });
     transactions.forEach(t => { if (t.date) allDates.push(new Date(t.date).getTime()); });
+    // A period whose ONLY activity is a dispute refund must still get a
+    // bucket — otherwise the Dispute Status column below is unreachable for
+    // exactly the periods most in need of it.
+    disputeRefunds.forEach(r => { allDates.push(getDisputeRefundWeekDate(r).getTime()); });
     if (allDates.length === 0) return [];
 
     const minDate = new Date(Math.min(...allDates));
@@ -123,7 +145,7 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
       );
       return weeks.map(w => ({ start: w, end: endOfWeek(w, { weekStartsOn: 1 }) }));
     }
-  }, [trips, transactions, periodType]);
+  }, [trips, transactions, disputeRefunds, periodType]);
 
   const defaultPageSize = (pt: PeriodType) => pt === 'daily' ? 14 : pt === 'monthly' ? 6 : 12;
 
@@ -209,6 +231,9 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
 
       const totalExpenses = tollExpenses + fuelDeduction + tollCharged;
 
+      const { matched: disputeRefundMatched, unmatched: disputeRefundUnmatched } =
+        computeDisputeRefundCounts(disputeRefunds, periodStart, periodEnd);
+
       return {
         periodStart,
         periodEnd,
@@ -220,13 +245,15 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
         transactionCount: periodTx.length,
         tollReconciled,
         tollUnreconciled,
+        disputeRefundMatched,
+        disputeRefundUnmatched,
       };
     });
 
     return rows
-      .filter(r => r.transactionCount > 0 || r.fuelDeduction > 0)
+      .filter(r => r.transactionCount > 0 || r.fuelDeduction > 0 || r.disputeRefundMatched + r.disputeRefundUnmatched > 0)
       .reverse();
-  }, [transactions, trips, timeBuckets, finalizedReports]);
+  }, [transactions, trips, timeBuckets, finalizedReports, disputeRefunds]);
 
   // ────────────────────────────────────────────────────────────
   // Summary totals
@@ -241,15 +268,18 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
         txCount: acc.txCount + r.transactionCount,
         tollReconciled: acc.tollReconciled + r.tollReconciled,
         tollUnreconciled: acc.tollUnreconciled + r.tollUnreconciled,
+        disputeRefundMatched: acc.disputeRefundMatched + r.disputeRefundMatched,
+        disputeRefundUnmatched: acc.disputeRefundUnmatched + r.disputeRefundUnmatched,
       }),
-      { toll: 0, tollCharged: 0, fuel: 0, total: 0, txCount: 0, tollReconciled: 0, tollUnreconciled: 0 }
+      { toll: 0, tollCharged: 0, fuel: 0, total: 0, txCount: 0, tollReconciled: 0, tollUnreconciled: 0, disputeRefundMatched: 0, disputeRefundUnmatched: 0 }
     );
 
     const finalizedPeriods = periodData.filter(r => r.isFinalized).length;
     const unfinalizedPeriods = periodData.length - finalizedPeriods;
     const tollTotal = base.tollReconciled + base.tollUnreconciled;
+    const disputeRefundTotal = base.disputeRefundMatched + base.disputeRefundUnmatched;
 
-    return { ...base, totalPeriods: periodData.length, finalizedPeriods, unfinalizedPeriods, tollTotal };
+    return { ...base, totalPeriods: periodData.length, finalizedPeriods, unfinalizedPeriods, tollTotal, disputeRefundTotal };
   }, [periodData]);
 
   // ────────────────────────────────────────────────────────────
@@ -282,6 +312,11 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
           : row.tollUnreconciled === 0
             ? `Reconciled (${row.tollReconciled})`
             : `${row.tollUnreconciled} Unmatched`,
+        'Dispute Status': (row.disputeRefundMatched + row.disputeRefundUnmatched) === 0
+          ? 'N/A'
+          : row.disputeRefundUnmatched === 0
+            ? `Matched (${row.disputeRefundMatched})`
+            : `${row.disputeRefundUnmatched} Unmatched`,
         'Charged to You': row.tollCharged.toFixed(2),
         'Fuel Deduction': row.fuelDeduction.toFixed(2),
         'Status': row.isFinalized ? 'Finalized' : 'Pending',
@@ -361,6 +396,22 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
               <p className="text-[10px] text-rose-600 mt-1 font-medium">
                 Charged to you: ${totals.tollCharged.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </p>
+            )}
+            {totals.disputeRefundTotal > 0 && (
+              <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t border-slate-100">
+                {totals.disputeRefundMatched > 0 && (
+                  <span className="inline-flex items-center gap-0.5 text-[10px] text-emerald-600">
+                    <LinkIcon className="h-2.5 w-2.5" />
+                    {totals.disputeRefundMatched} dispute{totals.disputeRefundMatched !== 1 ? 's' : ''} matched
+                  </span>
+                )}
+                {totals.disputeRefundUnmatched > 0 && (
+                  <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-600">
+                    <Unlink className="h-2.5 w-2.5" />
+                    {totals.disputeRefundUnmatched} dispute{totals.disputeRefundUnmatched !== 1 ? 's' : ''} unmatched
+                  </span>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>
@@ -458,6 +509,21 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
                         </Tooltip>
                       </TooltipProvider>
                     </TableHead>
+                    <TableHead className="text-xs text-center">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 cursor-help">
+                              Dispute Status
+                              <Info className="h-3 w-3 text-slate-400" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[250px] text-xs">
+                            Whether Uber support-case refunds for this period have been matched to a toll in the Dispute Refunds tab. "Matched" = all linked; "X Unmatched" = some still need a manual match.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </TableHead>
                     <TableHead className="text-right">Charged to You</TableHead>
                     <TableHead className="text-right">Fuel (Deduction)</TableHead>
                     <TableHead className="text-right">Total Expenses</TableHead>
@@ -504,6 +570,19 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
                         ) : (
                           <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
                             <Unlink className="h-3 w-3" /> {row.tollUnreconciled} Unmatched
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs text-center">
+                        {(row.disputeRefundMatched + row.disputeRefundUnmatched) === 0 ? (
+                          <span className="text-slate-300">-</span>
+                        ) : row.disputeRefundUnmatched === 0 ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                            <CheckCircle className="h-3 w-3" /> Matched
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                            <Unlink className="h-3 w-3" /> {row.disputeRefundUnmatched} Unmatched
                           </span>
                         )}
                       </TableCell>

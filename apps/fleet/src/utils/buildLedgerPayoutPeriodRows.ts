@@ -4,11 +4,12 @@ import {
   startOfMonth,
   endOfMonth,
 } from 'date-fns';
-import type { FinancialTransaction, DriverMetrics } from '../types/data';
+import type { FinancialTransaction, DriverMetrics, DisputeRefund } from '../types/data';
 import type { CashPaidBreakdown, PayoutPeriodRow, PayoutStatus } from '../types/driverPayoutPeriod';
 import type { CashWeekData } from './cashSettlementCalc';
 import { isTollCategory } from './tollCategoryHelper';
 import { computePeriodSettlement } from './driverPeriodSettlement';
+import { computeDisputeRefundCounts } from './tollWeekPeriod';
 
 type PeriodType = 'daily' | 'weekly' | 'monthly';
 
@@ -19,6 +20,7 @@ export function buildLedgerPayoutPeriodRows(params: {
   cashWeeks: CashWeekData[];
   transactions: FinancialTransaction[];
   finalizedReports: any[];
+  disputeRefunds?: DisputeRefund[];
   periodType: PeriodType;
   /** Unified toll settlement: tolls leave the payout deduction, settled on cash side. */
   unifiedToll?: boolean;
@@ -30,6 +32,7 @@ export function buildLedgerPayoutPeriodRows(params: {
     cashWeeks,
     transactions,
     finalizedReports,
+    disputeRefunds = [],
     periodType,
     unifiedToll = false,
   } = params;
@@ -208,6 +211,11 @@ export function buildLedgerPayoutPeriodRows(params: {
       } = getTollsForPeriod(pStartTime, pEndTime);
 
       const {
+        matched: disputeRefundMatched,
+        unmatched: disputeRefundUnmatched,
+      } = computeDisputeRefundCounts(disputeRefunds, periodStart, periodEnd);
+
+      const {
         deduction: fuelDeduction,
         fleetShare,
         finalized: isFinalized,
@@ -263,6 +271,8 @@ export function buildLedgerPayoutPeriodRows(params: {
         tollExpenses: displayTollExpenses,
         tollReconciled,
         tollUnreconciled,
+        disputeRefundMatched,
+        disputeRefundUnmatched,
         fuelDeduction,
         fuelCredits: effectiveFuelCredits,
         totalDeductions,

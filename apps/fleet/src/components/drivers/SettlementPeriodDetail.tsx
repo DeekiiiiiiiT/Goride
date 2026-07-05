@@ -27,6 +27,7 @@ import {
   TrendingDown,
   LinkIcon,
   Unlink,
+  ShieldCheck,
 } from 'lucide-react';
 import type { SettlementRow, SettlementStatus } from './SettlementSummaryView';
 
@@ -179,6 +180,23 @@ export function SettlementPeriodDetail({ row, open, onOpenChange }: SettlementPe
                 : undefined
             }
           />
+          {row.disputeRefundMatched + row.disputeRefundUnmatched > 0 && (
+            <LineItem
+              icon={<ShieldCheck className="h-4 w-4" />}
+              label="Dispute Refunds"
+              value={
+                row.disputeRefundUnmatched === 0
+                  ? `${row.disputeRefundMatched}/${row.disputeRefundMatched} matched`
+                  : `${row.disputeRefundMatched}/${row.disputeRefundMatched + row.disputeRefundUnmatched} matched`
+              }
+              valueColor={row.disputeRefundUnmatched === 0 ? 'text-emerald-600' : 'text-amber-600'}
+              sub={
+                row.disputeRefundUnmatched > 0
+                  ? `${row.disputeRefundUnmatched} still need a manual match`
+                  : undefined
+              }
+            />
+          )}
           <LineItem
             icon={<Fuel className="h-4 w-4" />}
             label="Fuel Deduction"

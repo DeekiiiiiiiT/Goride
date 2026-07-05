@@ -129,7 +129,12 @@ export function DisputeRefundsList({ refunds, onMatchComplete }: DisputeRefundsL
                 </TableCell>
               </TableRow>
             ) : (
-              visibleWeekGroups.map((week) => (
+              visibleWeekGroups.map((week) => {
+                const matchedInWeek = week.items.filter(
+                  (r) => r.status === 'matched' || r.status === 'auto_resolved'
+                ).length;
+                const fullyMatched = matchedInWeek === week.items.length;
+                return (
                 <TableRow key={week.key} className="border-0 hover:bg-transparent">
                   <TableCell colSpan={7} className="p-0 align-top">
                     <Collapsible defaultOpen={false} className="group border-b border-slate-200 last:border-b-0">
@@ -138,7 +143,15 @@ export function DisputeRefundsList({ refunds, onMatchComplete }: DisputeRefundsL
                           <CalendarRange className="h-4 w-4 text-slate-500 shrink-0" />
                           <span className="font-semibold text-slate-800 dark:text-slate-100">{week.label}</span>
                           <span className="text-[10px] uppercase tracking-wide text-slate-500">Mon–Sun</span>
-                          <Badge variant="secondary" className="text-[11px]">{week.items.length} refund{week.items.length !== 1 ? 's' : ''}</Badge>
+                          <Badge
+                            className={
+                              fullyMatched
+                                ? 'bg-emerald-100 text-emerald-700 border-emerald-200 text-[11px]'
+                                : 'bg-amber-100 text-amber-700 border-amber-200 text-[11px]'
+                            }
+                          >
+                            {matchedInWeek} of {week.items.length} matched
+                          </Badge>
                         </div>
                         <ChevronDown className="h-4 w-4 text-slate-500 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-0 group-data-[state=closed]:-rotate-90" />
                       </CollapsibleTrigger>
@@ -222,7 +235,8 @@ export function DisputeRefundsList({ refunds, onMatchComplete }: DisputeRefundsL
                     </Collapsible>
                   </TableCell>
                 </TableRow>
-              ))
+                );
+              })
             )}
           </TableBody>
         </Table>

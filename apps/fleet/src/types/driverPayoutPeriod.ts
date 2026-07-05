@@ -20,6 +20,10 @@ export interface PayoutPeriodRow {
   tollExpenses: number;
   tollReconciled: number;
   tollUnreconciled: number;
+  /** Uber support-case adjustments already linked to a real toll for this period. */
+  disputeRefundMatched: number;
+  /** Uber support-case adjustments still needing a manual match for this period. */
+  disputeRefundUnmatched: number;
   fuelDeduction: number;
   fuelCredits: number;
   totalDeductions: number;
