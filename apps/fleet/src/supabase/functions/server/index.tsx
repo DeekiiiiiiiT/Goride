@@ -10362,7 +10362,7 @@ app.post("/make-server-37f42386/claims", async (c) => {
         // forever blocked any future re-sync (silently stale charge on
         // reclassify-away; silent no-op on reclassify-back).
         const existingClaim = (await kv.get(`claim:${claim.id}`)) as
-          | { status?: string; resolutionReason?: string }
+          | { status?: string; resolutionReason?: string; preIsReconciled?: boolean }
           | null;
         const prevReason = existingClaim?.status === "Resolved" ? existingClaim.resolutionReason : undefined;
         const nextReason = claim.status === "Resolved" ? claim.resolutionReason : undefined;
@@ -10381,11 +10381,20 @@ app.post("/make-server-37f42386/claims", async (c) => {
             prevReason: prevReason as any,
             nextReason: nextReason as any,
             source: "claim_resolution",
+            priorIsReconciled: existingClaim?.preIsReconciled,
           },
           c,
         );
         if (sync.resolutionTransactionId !== undefined) {
           claim.resolutionTransactionId = sync.resolutionTransactionId ?? undefined;
+        }
+        // Track isReconciled's pre-claim baseline across the whole
+        // resolved-lifetime so the eventual full revert restores it exactly
+        // (see syncClaimTollResolution's priorIsReconciled contract).
+        if (sync.priorIsReconciled !== undefined) {
+          claim.preIsReconciled = sync.priorIsReconciled;
+        } else if (nextReason === undefined) {
+          claim.preIsReconciled = undefined;
         }
     } else {
         // Flag OFF: preserve legacy behavior byte-for-byte — first-charge-only,

@@ -33,6 +33,14 @@ export interface SyncClaimTollResolutionParams {
   nextReason: ClaimResolutionReason;
   /** Provenance passed straight through to emit/reverseDriverTollCharge. */
   source: string;
+  /**
+   * The toll's `isReconciled` value from BEFORE this claim ever resolved it
+   * (stashed by the caller on first resolve, from this function's
+   * `priorIsReconciled` result). Required to fully revert on a final
+   * unresolve (`nextReason: undefined`) — without it, isReconciled is left
+   * untouched rather than guessed at.
+   */
+  priorIsReconciled?: boolean;
 }
 
 export interface SyncClaimTollResolutionResult {
@@ -40,6 +48,13 @@ export interface SyncClaimTollResolutionResult {
   /** undefined = don't touch claim.resolutionTransactionId; null = clear it; string = set it. */
   resolutionTransactionId: string | null | undefined;
   nextLedgerResolution: TollLedgerResolution;
+  /**
+   * Set only on a claim's FIRST resolve (prevReason was undefined) — the
+   * toll's isReconciled value observed just before this sync flipped it to
+   * true. Callers should stash this on the claim (e.g. `claim.preIsReconciled`)
+   * and pass it back as `priorIsReconciled` on the eventual full revert.
+   */
+  priorIsReconciled: boolean | undefined;
 }
 
 export async function syncClaimTollResolution(
@@ -52,11 +67,17 @@ export async function syncClaimTollResolution(
   });
 
   if (decision.isNoop) {
-    return { isNoop: true, resolutionTransactionId: undefined, nextLedgerResolution: decision.nextLedgerResolution };
+    return {
+      isNoop: true,
+      resolutionTransactionId: undefined,
+      nextLedgerResolution: decision.nextLedgerResolution,
+      priorIsReconciled: undefined,
+    };
   }
 
   const effectiveTollId = params.transactionId || params.claimId;
   let resolutionTransactionId: string | null | undefined;
+  let priorIsReconciled: boolean | undefined;
 
   if (decision.shouldReverse) {
     const reverseResult = await reverseDriverTollCharge(
@@ -76,7 +97,7 @@ export async function syncClaimTollResolution(
       {
         tollId: effectiveTollId,
         claimId: params.claimId,
-        driverId: params.driverId,
+        driverId: params.driverId || "unknown",
         driverName: params.driverName || tollEntry?.driverName || undefined,
         vehicleId: params.vehicleId || tollEntry?.vehicleId || undefined,
         tripId: params.tripId ?? null,
@@ -92,16 +113,35 @@ export async function syncClaimTollResolution(
 
   if (params.transactionId) {
     try {
-      await updateTollLedgerEntry(
-        params.transactionId,
-        { resolution: decision.nextLedgerResolution },
-        "resolved",
-        "admin",
-      );
+      const ledgerUpdates: { resolution: TollLedgerResolution; isReconciled?: boolean } = {
+        resolution: decision.nextLedgerResolution,
+      };
+      // A non-null resolution means the toll has genuinely been dealt with
+      // (charged/written off/refunded) — reflect that in isReconciled too, so
+      // driver-financial views that read this flag (e.g. Expense History's
+      // Toll Status column) agree with the Reconciliation tab instead of
+      // still showing it as unmatched. Fully reversible: on FIRST resolve
+      // (prevReason undefined) we capture whatever isReconciled already was
+      // (e.g. an "Underpaid" claim's toll may already be true from an
+      // unrelated trip match) and report it back as `priorIsReconciled` so
+      // the caller can stash it on the claim; on the eventual full revert
+      // (nextReason undefined) we restore exactly that captured value
+      // instead of guessing, so we never wrongly un-reconcile an unrelated
+      // match or leave a stale `true` behind.
+      if (decision.nextLedgerResolution !== null) {
+        if (params.prevReason === undefined) {
+          const existing = await getTollLedgerEntry(params.transactionId).catch(() => null);
+          priorIsReconciled = existing?.isReconciled ?? false;
+        }
+        ledgerUpdates.isReconciled = true;
+      } else if (typeof params.priorIsReconciled === "boolean") {
+        ledgerUpdates.isReconciled = params.priorIsReconciled;
+      }
+      await updateTollLedgerEntry(params.transactionId, ledgerUpdates, "resolved", "admin");
     } catch (err: any) {
       console.error(`[ClaimTollSync] toll_ledger resolution sync failed for ${params.transactionId}:`, err.message);
     }
   }
 
-  return { isNoop: false, resolutionTransactionId, nextLedgerResolution: decision.nextLedgerResolution };
+  return { isNoop: false, resolutionTransactionId, nextLedgerResolution: decision.nextLedgerResolution, priorIsReconciled };
 }

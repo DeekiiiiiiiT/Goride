@@ -231,6 +231,7 @@ async function matchRefundToClaim(
       } else {
         const prevReason = cs === "Resolved" ? (claim as any).resolutionReason : undefined;
         let resolutionTransactionIdPatch: any = (claim as any).resolutionTransactionId;
+        let preIsReconciledPatch: any = (claim as any).preIsReconciled;
 
         if (settings.disputeRefundTripSyncEnabled) {
           const sync = await syncClaimTollResolution(
@@ -247,11 +248,17 @@ async function matchRefundToClaim(
               prevReason,
               nextReason: "Reimbursed",
               source: "dispute_refund_sync",
+              priorIsReconciled: (claim as any).preIsReconciled,
             },
             c,
           );
           if (sync.resolutionTransactionId !== undefined) {
             resolutionTransactionIdPatch = sync.resolutionTransactionId ?? undefined;
+          }
+          // Baseline isReconciled from before this claim was ever resolved —
+          // captured on first resolve only, so unmatch can restore it exactly.
+          if (sync.priorIsReconciled !== undefined) {
+            preIsReconciledPatch = sync.priorIsReconciled;
           }
         }
 
@@ -266,6 +273,7 @@ async function matchRefundToClaim(
           // once cs === "Resolved" was reachable here at all.
           preDisputeResolutionReason: cs === "Resolved" ? (claim as any).resolutionReason : null,
           resolutionTransactionId: resolutionTransactionIdPatch,
+          preIsReconciled: preIsReconciledPatch,
           updatedAt: new Date().toISOString(),
         });
         updated = { ...updated, status: "auto_resolved", matchedClaimId: claimId };
@@ -552,6 +560,7 @@ app.patch(`${BASE}/:id/unmatch`, async (c) => {
                 prevReason: "Reimbursed",
                 nextReason: undefined,
                 source: "dispute_refund_sync",
+                priorIsReconciled: claim.preIsReconciled,
               },
               c,
             );
@@ -577,6 +586,7 @@ app.patch(`${BASE}/:id/unmatch`, async (c) => {
               prevReason: "Reimbursed",
               nextReason: revertReason,
               source: "dispute_refund_sync",
+              priorIsReconciled: claim.preIsReconciled,
             },
             c,
           );
@@ -587,6 +597,10 @@ app.patch(`${BASE}/:id/unmatch`, async (c) => {
             disputeRefundId: null,
             preDisputeStatus: null,
             preDisputeResolutionReason: null,
+            // Only clear once fully back to unresolved — restoring to a still-
+            // Resolved reason (e.g. "Charge Driver") means a later claims-side
+            // revert must still be able to restore this same baseline.
+            preIsReconciled: revertReason === undefined ? undefined : claim.preIsReconciled,
             resolutionTransactionId:
               sync.resolutionTransactionId !== undefined
                 ? (sync.resolutionTransactionId ?? undefined)
