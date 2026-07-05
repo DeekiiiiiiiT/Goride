@@ -1,7 +1,8 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../ui/tooltip";
 import { UnmatchedTollsList } from "./UnmatchedTollsList";
+import { DisputeMatchEvent } from "./DisputeRefundsList";
 import { UnclaimedRefundsList } from "./UnclaimedRefundsList";
 import { ReconciledTollsList } from "./ReconciledTollsList";
 import { ResolvedRefundsList, ResolvedRefundRow } from "./ResolvedRefundsList";
@@ -62,10 +63,22 @@ export function ReconciliationDashboard() {
     resolveRefund,
     bulkResolveRefunds,
     undoRefund,
+    applyDisputeMatch,
+    applyDisputeUnmatch,
     refresh
   } = useTollReconciliation(selectedDriverId || undefined);
 
   const { claims, loading: claimsLoading, refresh: refreshClaims, createClaim } = useClaims();
+
+  // Optimistic list update, then silent background sync (no full-page spinner)
+  const handleRefundMatchComplete = useCallback((event: DisputeMatchEvent) => {
+    if (event.type === 'match') {
+      applyDisputeMatch(event.refundId, event.tollId);
+    } else {
+      applyDisputeUnmatch(event.refundId);
+    }
+    void Promise.all([refresh(), refreshClaims()]);
+  }, [applyDisputeMatch, applyDisputeUnmatch, refresh, refreshClaims]);
 
   const [isDisputeOpen, setIsDisputeOpen] = React.useState(false);
   const [disputeTarget, setDisputeTarget] = React.useState<{ transaction: FinancialTransaction, match: MatchResult } | null>(null);
@@ -662,7 +675,7 @@ export function ReconciliationDashboard() {
                 onManualResolve={handleManualResolve}
                 onEdit={handleEditToll}
                 disputeRefunds={disputeRefunds}
-                onRefundMatchComplete={refresh}
+                onRefundMatchComplete={handleRefundMatchComplete}
             />
         </TabsContent>
         

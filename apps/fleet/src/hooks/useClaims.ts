@@ -1,13 +1,16 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../services/api';
 import { Claim } from '../types/data';
 
 export function useClaims(driverId?: string) {
   const [claims, setClaims] = useState<Claim[]>([]);
   const [loading, setLoading] = useState(true);
+  // Only blank the UI on first load — action refreshes stay silent
+  const isInitialLoad = useRef(true);
 
   const fetchClaims = useCallback(async () => {
-    setLoading(true);
+    const blockUi = isInitialLoad.current;
+    if (blockUi) setLoading(true);
     try {
       const data = await api.getClaims(driverId);
       // Sort by updatedAt desc
@@ -16,11 +19,14 @@ export function useClaims(driverId?: string) {
     } catch (error) {
       console.error("Failed to fetch claims", error);
     } finally {
-      setLoading(false);
+      isInitialLoad.current = false;
+      if (blockUi) setLoading(false);
     }
   }, [driverId]);
 
   useEffect(() => {
+    isInitialLoad.current = true;
+    setLoading(true);
     fetchClaims();
   }, [fetchClaims]);
 

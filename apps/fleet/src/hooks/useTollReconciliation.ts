@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../services/api';
 import { FinancialTransaction, Trip, DisputeRefund } from '../types/data';
 import { findTollMatches, MatchResult } from '../utils/tollReconciliation';
@@ -148,9 +148,12 @@ export function useTollReconciliation(driverId?: string) {
   const [autoReconciledCount, setAutoReconciledCount] = useState(0);
   // Phase 6 (Dispute Refunds): Imported Support Adjustment refunds
   const [disputeRefunds, setDisputeRefunds] = useState<DisputeRefund[]>([]);
+  // Only blank the UI on first load (or driver filter change) — action refreshes stay silent
+  const isInitialLoad = useRef(true);
 
   const fetchData = useCallback(async (opts?: { autoMatch?: boolean }) => {
-    setLoading(true);
+    const blockUi = isInitialLoad.current;
+    if (blockUi) setLoading(true);
     try {
       const filterParams = { ...(driverId ? { driverId } : {}), autoMatch: opts?.autoMatch };
       
@@ -221,11 +224,14 @@ export function useTollReconciliation(driverId?: string) {
     } catch (error) {
       console.error("Failed to fetch reconciliation data", error);
     } finally {
-      setLoading(false);
+      isInitialLoad.current = false;
+      if (blockUi) setLoading(false);
     }
   }, [driverId]);
 
   useEffect(() => {
+    isInitialLoad.current = true;
+    setLoading(true);
     fetchData();
   }, [fetchData]);
 
@@ -371,7 +377,6 @@ export function useTollReconciliation(driverId?: string) {
     if (highConfidenceMatches.length === 0) return;
 
     try {
-        setLoading(true);
         // Phase 4: Use bulk endpoint (1 call instead of N sequential calls)
         const result = await api.bulkReconcileTolls(highConfidenceMatches);
         console.log(`[AutoMatch] Bulk result: ${result.matched} matched, ${result.skipped} skipped, ${result.failed} failed`);
@@ -379,14 +384,49 @@ export function useTollReconciliation(driverId?: string) {
             console.warn('[AutoMatch] Errors:', result.errors);
         }
 
-        // Refresh all data to reflect server state
+        // Silent refresh — keep the dashboard mounted while data syncs
         await fetchData();
     } catch (e) {
         console.error("Auto-match failed", e);
-    } finally {
-        setLoading(false);
     }
   };
+
+  /** Instant UI update after linking a dispute refund to a toll (before silent refresh). */
+  const applyDisputeMatch = useCallback((refundId: string, tollId: string) => {
+    const now = new Date().toISOString();
+    setDisputeRefunds(prev =>
+      prev.map(r =>
+        r.id === refundId
+          ? { ...r, status: 'matched' as const, matchedTollId: tollId, resolvedAt: now }
+          : r,
+      ),
+    );
+    // Drop the toll from the open queue immediately; silent refresh reconciles history.
+    setUnreconciledTolls(prev => prev.filter(t => t.id !== tollId));
+    setSuggestions(prev => {
+      const next = new Map(prev);
+      next.delete(tollId);
+      return next;
+    });
+  }, []);
+
+  /** Instant UI update after unlinking a dispute refund (before silent refresh). */
+  const applyDisputeUnmatch = useCallback((refundId: string) => {
+    setDisputeRefunds(prev =>
+      prev.map(r =>
+        r.id === refundId
+          ? {
+              ...r,
+              status: 'unmatched' as const,
+              matchedTollId: null,
+              matchedClaimId: null,
+              resolvedAt: null,
+              resolvedBy: null,
+            }
+          : r,
+      ),
+    );
+  }, []);
 
   // ── Phase 3: Refund resolution actions ──
   type RefundResolution = 'cash_wash' | 'phantom' | 'expense_logged' | 'pending';
@@ -439,6 +479,8 @@ export function useTollReconciliation(driverId?: string) {
     resolveRefund,
     bulkResolveRefunds,
     undoRefund,
+    applyDisputeMatch,
+    applyDisputeUnmatch,
     refresh: fetchData
   };
 }

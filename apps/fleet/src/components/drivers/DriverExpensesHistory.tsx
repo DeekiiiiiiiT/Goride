@@ -317,7 +317,7 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
           : row.disputeRefundUnmatched === 0
             ? `Matched (${row.disputeRefundMatched})`
             : `${row.disputeRefundUnmatched} Unmatched`,
-        'Charged to You': row.tollCharged.toFixed(2),
+        'Charged to driver': row.tollCharged.toFixed(2),
         'Fuel Deduction': row.fuelDeduction.toFixed(2),
         'Status': row.isFinalized ? 'Finalized' : 'Pending',
         'Total Expenses': row.totalExpenses.toFixed(2),
@@ -394,7 +394,7 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
             )}
             {totals.tollCharged > 0 && (
               <p className="text-[10px] text-rose-600 mt-1 font-medium">
-                Charged to you: ${totals.tollCharged.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                Charged to driver: ${totals.tollCharged.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </p>
             )}
             {totals.disputeRefundTotal > 0 && (
@@ -524,7 +524,7 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
                         </Tooltip>
                       </TooltipProvider>
                     </TableHead>
-                    <TableHead className="text-right">Charged to You</TableHead>
+                    <TableHead className="text-right">Charged to driver</TableHead>
                     <TableHead className="text-right">Fuel (Deduction)</TableHead>
                     <TableHead className="text-right">Total Expenses</TableHead>
                     <TableHead className="text-xs text-center">

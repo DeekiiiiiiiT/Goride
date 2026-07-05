@@ -34,7 +34,7 @@ import { bucketForBestMatch } from "../../../utils/tollBucket";
 import { SuggestedMatchCard } from "./SuggestedMatchCard";
 import { ManualMatchModal } from "./ManualMatchModal";
 import { TollDetailOverlay } from "./TollDetailOverlay";
-import { DisputeRefundsList } from "./DisputeRefundsList";
+import { DisputeRefundsList, DisputeMatchEvent } from "./DisputeRefundsList";
 import { EvidenceExpiryBadge } from '../../evidence/EvidenceExpiryBadge';
 import { resolveEvidenceMediaState } from '../../evidence/evidenceState';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../ui/collapsible";
@@ -56,7 +56,7 @@ interface UnmatchedTollsListProps {
   onEdit?: (transactionId: string, updates: Record<string, any>) => Promise<void>;
   // Phase 6: Dispute refunds
   disputeRefunds?: DisputeRefund[];
-  onRefundMatchComplete?: () => void;
+  onRefundMatchComplete?: (event: DisputeMatchEvent) => void;
 }
 
 export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, onOpenDispute, onApprove, onReject, onFlag, onManualResolve, onEdit, disputeRefunds = [], onRefundMatchComplete }: UnmatchedTollsListProps) {
@@ -368,7 +368,7 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
             {activeSubTab === 'dispute-refunds' ? (
                 <DisputeRefundsList 
                     refunds={disputeRefunds} 
-                    onMatchComplete={onRefundMatchComplete || (() => {})} 
+                    onMatchComplete={onRefundMatchComplete || (() => undefined)} 
                 />
             ) : activeTabTolls.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-10 text-slate-500">

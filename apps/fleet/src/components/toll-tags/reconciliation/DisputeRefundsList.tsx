@@ -11,9 +11,13 @@ import { api } from '../../../services/api';
 import { toast } from 'sonner@2.0.3';
 import { DisputeMatchModal } from "./DisputeMatchModal";
 
+export type DisputeMatchEvent =
+  | { type: 'match'; refundId: string; tollId: string }
+  | { type: 'unmatch'; refundId: string };
+
 interface DisputeRefundsListProps {
   refunds: DisputeRefund[];
-  onMatchComplete: () => void; // Trigger refresh after match/unmatch
+  onMatchComplete: (event: DisputeMatchEvent) => void;
 }
 
 export function DisputeRefundsList({ refunds, onMatchComplete }: DisputeRefundsListProps) {
@@ -56,7 +60,7 @@ export function DisputeRefundsList({ refunds, onMatchComplete }: DisputeRefundsL
     try {
       await api.unmatchDisputeRefund(refundId);
       toast.success('Refund unlinked from toll transaction');
-      onMatchComplete();
+      onMatchComplete({ type: 'unmatch', refundId });
     } catch (err: any) {
       console.error('[DisputeRefunds] Unmatch failed:', err);
       toast.error(`Unmatch failed: ${err.message}`);
@@ -260,7 +264,10 @@ export function DisputeRefundsList({ refunds, onMatchComplete }: DisputeRefundsL
         open={!!matchModalRefund}
         onOpenChange={(o) => { if (!o) setMatchModalRefund(null); }}
         refund={matchModalRefund}
-        onMatched={onMatchComplete}
+        onMatched={(tollId) => {
+          if (!matchModalRefund) return;
+          onMatchComplete({ type: 'match', refundId: matchModalRefund.id, tollId });
+        }}
       />
     </div>
   );

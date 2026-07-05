@@ -38,7 +38,7 @@ interface DisputeMatchModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   refund: DisputeRefund | null;
-  onMatched: () => void;
+  onMatched: (tollId: string) => void;
 }
 
 export function DisputeMatchModal({ open, onOpenChange, refund, onMatched }: DisputeMatchModalProps) {
@@ -112,7 +112,7 @@ export function DisputeMatchModal({ open, onOpenChange, refund, onMatched }: Dis
     try {
       await api.matchDisputeRefund(refund.id, tollId, claimId || undefined, createClaim ? { createClaim: true } : undefined);
       toast.success('Refund matched — claim marked Reimbursed');
-      onMatched();
+      onMatched(tollId);
       onOpenChange(false);
     } catch (err: any) {
       toast.error(`Match failed: ${err.message}`);
