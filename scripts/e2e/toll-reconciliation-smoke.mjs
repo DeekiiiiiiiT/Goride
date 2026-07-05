@@ -8,7 +8,9 @@
  *
  * Flow: auto-match → refund suggestions → resolve each of the 4 types →
  * undo/revert → rides→ledger bridge (dry-run, apply, idempotent re-run) →
- * automation flag off→on→off revert → teardown.
+ * automation flag off→on→off revert → dispute-refund→claim/trip cascade
+ * (flag off baseline, flag on match, already-resolved "Charge Driver"
+ * reimbursement reversal, unmatch round trip) → teardown.
  *
  * Required env:
  *   SUPABASE_URL                e.g. https://csfllzzastacofsvcdsc.supabase.co
@@ -51,6 +53,8 @@ for (const [k, v] of Object.entries({ SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY: S
 }
 
 const FN_BASE = `${SUPABASE_URL}/functions/v1/make-server-37f42386/toll-reconciliation`;
+const DISPUTE_BASE = `${SUPABASE_URL}/functions/v1/make-server-37f42386/dispute-refunds`;
+const CLAIMS_BASE = `${SUPABASE_URL}/functions/v1/make-server-37f42386/claims`;
 const KV = 'kv_store_37f42386';
 
 const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
@@ -72,9 +76,9 @@ let originalSettings = null;
 const log = (...a) => VERBOSE && console.log(...a);
 
 // ── Endpoint helper (calls the deployed function with the anon key) ─────────
-async function callApi(method, route, { body, query } = {}) {
+async function callApi(method, route, { body, query, base = FN_BASE } = {}) {
   const qs = query ? '?' + new URLSearchParams(query).toString() : '';
-  const res = await fetch(`${FN_BASE}${route}${qs}`, {
+  const res = await fetch(`${base}${route}${qs}`, {
     method,
     headers: {
       'Content-Type': 'application/json',
@@ -192,6 +196,49 @@ async function seed() {
   });
   if (crossErr) throw new Error(`insert ride_toll_crossings: ${crossErr.message}`);
 
+  // ── Dispute-refund → claim/trip cascade fixtures ──────────────────────────
+  // Case A: an open (never-resolved) claim linked to a trip, matched via a
+  // bare toll (no createClaim) — the common "Review a dispute" path.
+  await kvSet(`toll_ledger:${ns}_disputetoll`, tollLedger('disputetoll', { amount: -10, tripId: null }));
+  await kvSet(`trip:${ns}_disputetrip`, trip('disputetrip', { tollCharges: 10 }));
+  await kvSet(`claim:${ns}_disputeclaim`, {
+    id: `${ns}_disputeclaim`, type: 'Toll_Refund', status: 'Sent_to_Driver',
+    driverId, driverName: 'E2E Driver', transactionId: `${ns}_disputetoll`, tripId: `${ns}_disputetrip`,
+    amount: 10, expectedAmount: 10, subject: 'E2E dispute claim',
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  });
+  await kvSet(`dispute-refund:${ns}_disputerefund`, {
+    id: `${ns}_disputerefund`, supportCaseId: `${ns}-case-1`, amount: 10, date: D,
+    driverId, driverName: 'E2E Driver', platform: 'Uber', source: 'csv',
+    status: 'unmatched', matchedTollId: null, matchedClaimId: null,
+    importedAt: new Date().toISOString(), resolvedAt: null, resolvedBy: null,
+  });
+
+  // Case B: a claim ALREADY resolved "Charge Driver" (driver previously
+  // charged) with an active driver-charge projection — matching a dispute
+  // refund to it must reverse that charge, not silently skip it.
+  await kvSet(`toll_ledger:${ns}_disputetoll2`, tollLedger('disputetoll2', { amount: -12, tripId: null }));
+  await kvSet(`trip:${ns}_disputetrip2`, trip('disputetrip2', { tollCharges: 12 }));
+  const chargeTxId = `${ns}_chargetx`;
+  await kvSet(`transaction:${chargeTxId}`, {
+    id: chargeTxId, driverId, date: `${D}T00:00:00Z`, description: 'E2E prior charge',
+    category: 'Toll Charge', type: 'Adjustment', amount: -12, status: 'Completed',
+    paymentMethod: 'Cash', metadata: { tollId: `${ns}_disputetoll2`, source: 'claim_resolution', version: 1 },
+  });
+  await kvSet(`toll_charge_projection:${ns}_disputetoll2`, { active: true, txId: chargeTxId, version: 1 });
+  await kvSet(`claim:${ns}_disputeclaim2`, {
+    id: `${ns}_disputeclaim2`, type: 'Toll_Refund', status: 'Resolved', resolutionReason: 'Charge Driver',
+    driverId, driverName: 'E2E Driver', transactionId: `${ns}_disputetoll2`, tripId: `${ns}_disputetrip2`,
+    amount: 12, expectedAmount: 12, subject: 'E2E prior-charge claim', resolutionTransactionId: chargeTxId,
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  });
+  await kvSet(`dispute-refund:${ns}_disputerefund2`, {
+    id: `${ns}_disputerefund2`, supportCaseId: `${ns}-case-2`, amount: 12, date: D,
+    driverId, driverName: 'E2E Driver', platform: 'Uber', source: 'csv',
+    status: 'unmatched', matchedTollId: null, matchedClaimId: null,
+    importedAt: new Date().toISOString(), resolvedAt: null, resolvedBy: null,
+  });
+
   originalSettings = await kvGet('toll_reconciliation:settings');
   log(`Seeded ns=${ns} rider=${riderUserId} ride=${rideId} crossing=${crossingId}`);
 }
@@ -306,6 +353,101 @@ async function run() {
     const uids = new Set((off.data || []).map((t) => t.id));
     assert.ok(uids.has(`${ns}_auto2`), 'auto2 remains unresolved with flag off');
   });
+
+  await step('7. dispute-refund match: flag OFF baseline (no cascade)', async () => {
+    const res = await callApi('PATCH', `/${ns}_disputerefund/match`, {
+      base: DISPUTE_BASE,
+      body: { tollTransactionId: `${ns}_disputetoll`, claimId: `${ns}_disputeclaim` },
+    });
+    assert.equal(res.data?.status, 'auto_resolved', 'refund marked auto_resolved (claim path taken)');
+
+    const claim = await kvGet(`claim:${ns}_disputeclaim`);
+    assert.equal(claim.status, 'Resolved', 'claim resolved (unconditional today)');
+    assert.equal(claim.resolutionReason, 'Reimbursed', 'claim resolutionReason set (unconditional today)');
+
+    const toll = await kvGet(`toll_ledger:${ns}_disputetoll`);
+    assert.equal(toll.resolution ?? null, null, 'flag OFF: toll_ledger.resolution untouched');
+
+    const trip = await kvGet(`trip:${ns}_disputetrip`);
+    assert.equal(trip.tollRefundResolution ?? null, null, 'flag OFF: trip cascade did not fire');
+
+    await callApi('PATCH', `/${ns}_disputerefund/unmatch`, { base: DISPUTE_BASE });
+    const refundAfter = await kvGet(`dispute-refund:${ns}_disputerefund`);
+    assert.equal(refundAfter.status, 'unmatched', 'refund reset to unmatched');
+    const claimAfter = await kvGet(`claim:${ns}_disputeclaim`);
+    assert.equal(claimAfter.status, 'Sent_to_Driver', 'claim restored to pre-match status');
+  });
+
+  await step('8. dispute-refund match: flag ON cascades to claim + trip + toll_ledger', async () => {
+    await callApi('PUT', '/automation-settings', { body: { disputeRefundTripSyncEnabled: true } });
+
+    await callApi('PATCH', `/${ns}_disputerefund/match`, {
+      base: DISPUTE_BASE,
+      body: { tollTransactionId: `${ns}_disputetoll`, claimId: `${ns}_disputeclaim` },
+    });
+
+    const claim = await kvGet(`claim:${ns}_disputeclaim`);
+    assert.equal(claim.resolutionReason, 'Reimbursed', 'claim reimbursed');
+    assert.equal(claim.preDisputeStatus, 'Sent_to_Driver', 'preDisputeStatus stashed');
+
+    const toll = await kvGet(`toll_ledger:${ns}_disputetoll`);
+    assert.equal(toll.resolution, 'refunded', 'toll_ledger.resolution synced to refunded');
+
+    const trip = await kvGet(`trip:${ns}_disputetrip`);
+    assert.equal(trip.tollRefundResolution?.status, 'expense_logged', 'trip cascaded to expense_logged');
+    assert.equal(
+      trip.tollRefundResolution?.source, `system:dispute_refund_sync:${ns}_disputerefund`,
+      'trip resolution stamped with cascade ownership marker',
+    );
+    assert.equal(trip.tollRefundResolution?.linkedTollLedgerId, `${ns}_disputetoll`, 'reuses the matched toll, no duplicate ledger row');
+
+    const unclaimed = await callApi('GET', '/unclaimed-refunds', { query: { driverId, limit: '100' } });
+    const uids = new Set((unclaimed.data || []).map((t) => t.id));
+    assert.ok(!uids.has(`${ns}_disputetrip`), 'trip no longer in Unlinked Refunds');
+  });
+
+  await step('9. dispute-refund matched to an already-Resolved "Charge Driver" claim reverses the charge', async () => {
+    await callApi('PUT', '/automation-settings', { body: { driverTollChargeSyncEnabled: true } });
+
+    const markerBefore = await kvGet(`toll_charge_projection:${ns}_disputetoll2`);
+    assert.equal(markerBefore.active, true, 'sanity: prior charge marker starts active');
+
+    await callApi('PATCH', `/${ns}_disputerefund2/match`, {
+      base: DISPUTE_BASE,
+      body: { tollTransactionId: `${ns}_disputetoll2`, claimId: `${ns}_disputeclaim2` },
+    });
+
+    const claim2 = await kvGet(`claim:${ns}_disputeclaim2`);
+    assert.equal(claim2.resolutionReason, 'Reimbursed', 'previously-resolved "Charge Driver" claim now reimbursed (was silently skipped before this fix)');
+    assert.equal(claim2.preDisputeResolutionReason, 'Charge Driver', 'prior reason stashed for exact unmatch restore');
+
+    const markerAfter = await kvGet(`toll_charge_projection:${ns}_disputetoll2`);
+    assert.equal(markerAfter.active, false, 'prior driver charge reversed');
+  });
+
+  await step('10. unmatch reverses the flag-ON round trip (claim, charge, trip)', async () => {
+    await callApi('PATCH', `/${ns}_disputerefund/unmatch`, { base: DISPUTE_BASE });
+    const claim = await kvGet(`claim:${ns}_disputeclaim`);
+    assert.equal(claim.status, 'Sent_to_Driver', 'claim status restored');
+    assert.equal(claim.resolutionReason ?? null, null, 'claim resolutionReason cleared');
+    const toll = await kvGet(`toll_ledger:${ns}_disputetoll`);
+    assert.equal(toll.resolution ?? null, null, 'toll_ledger.resolution cleared');
+    const trip = await kvGet(`trip:${ns}_disputetrip`);
+    assert.equal(trip.tollRefundResolution?.status ?? 'pending', 'pending', 'trip reverted to pending');
+    const unclaimed = await callApi('GET', '/unclaimed-refunds', { query: { driverId, limit: '100' } });
+    const uids = new Set((unclaimed.data || []).map((t) => t.id));
+    assert.ok(uids.has(`${ns}_disputetrip`), 'trip reappears in Unlinked Refunds');
+
+    await callApi('PATCH', `/${ns}_disputerefund2/unmatch`, { base: DISPUTE_BASE });
+    const claim2 = await kvGet(`claim:${ns}_disputeclaim2`);
+    assert.equal(claim2.status, 'Resolved', 'claim2 restored to Resolved');
+    assert.equal(claim2.resolutionReason, 'Charge Driver', 'claim2 restored to exact prior reason');
+    const marker2 = await kvGet(`toll_charge_projection:${ns}_disputetoll2`);
+    assert.equal(marker2.active, true, 're-charged on flip back to Charge Driver');
+
+    // Revert flags back off for a clean slate (also restored wholesale in teardown).
+    await callApi('PUT', '/automation-settings', { body: { disputeRefundTripSyncEnabled: false, driverTollChargeSyncEnabled: false } });
+  });
 }
 
 // ── Teardown ─────────────────────────────────────────────────────────────────
@@ -317,6 +459,10 @@ async function teardown() {
   await del('kv trips', () => sb.from(KV).delete().like('key', `trip:${ns}_%`));
   await del('kv tolls', () => sb.from(KV).delete().like('key', `toll_ledger:${ns}_%`));
   await del('kv plazas', () => sb.from(KV).delete().like('key', `toll_plaza:${ns}_%`));
+  await del('kv claims', () => sb.from(KV).delete().like('key', `claim:${ns}_%`));
+  await del('kv dispute-refunds', () => sb.from(KV).delete().like('key', `dispute-refund:${ns}_%`));
+  await del('kv charge projections', () => sb.from(KV).delete().like('key', `toll_charge_projection:${ns}_%`));
+  await del('kv legacy transactions', () => sb.from(KV).delete().like('key', `transaction:${ns}_%`));
   if (bridgeMarkerKey) await del('bridge marker', () => sb.from(KV).delete().eq('key', bridgeMarkerKey));
   for (const id of createdLedgerIds) await del(`ledger ${id}`, () => sb.from(KV).delete().eq('key', `toll_ledger:${id}`));
   if (rideId) await del('ride_request (cascades crossing)', () => sbRides.from('ride_requests').delete().eq('id', rideId));

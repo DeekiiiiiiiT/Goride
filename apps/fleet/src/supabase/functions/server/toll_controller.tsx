@@ -4582,6 +4582,10 @@ interface RefundAutomationSettings {
   // MOI: match-on-ingest — compute+persist toll↔trip matches at write time
   // instead of recomputing on every GET /unreconciled read — additive, default OFF.
   matchOnIngestEnabled: boolean;
+  // Cascade a matched/unmatched dispute refund into the reversible claim/
+  // driver-charge sync and into the trip's Unlinked Refunds resolution —
+  // additive, default OFF.
+  disputeRefundTripSyncEnabled: boolean;
 }
 
 async function getRefundAutomationSettings(): Promise<RefundAutomationSettings> {
@@ -4600,6 +4604,7 @@ async function getRefundAutomationSettings(): Promise<RefundAutomationSettings> 
     driverTollChargeSyncEnabled: rec?.driverTollChargeSyncEnabled === true, // default OFF
     unifiedTollSettlementEnabled: rec?.unifiedTollSettlementEnabled === true, // default OFF
     matchOnIngestEnabled: rec?.matchOnIngestEnabled === true, // default OFF
+    disputeRefundTripSyncEnabled: rec?.disputeRefundTripSyncEnabled === true, // default OFF
   };
 }
 
@@ -4725,6 +4730,13 @@ async function applyRefundResolution(params: {
   driverId?: string;
   auto: boolean;
   confidence?: number;
+  /** When set, reuse this toll_ledger id instead of creating a new row (the
+   *  caller already owns the real ledger entry — e.g. a matched dispute
+   *  refund). Only meaningful with resolution:"expense_logged". */
+  existingLedgerId?: string;
+  /** Provenance tag stored on trip.tollRefundResolution.source. Defaults to
+   *  "admin" so existing call sites are unaffected. */
+  source?: string;
 }): Promise<{ tripId: string; resolution: RefundResolutionStatus; linkedTollLedgerId?: string }> {
   const { tripId, resolution, notes, auto } = params;
   const trip = await kv.get(`trip:${tripId}`);
@@ -4737,46 +4749,50 @@ async function applyRefundResolution(params: {
 
   // "expense_logged" creates a real cash toll expense and links it to the trip.
   if (resolution === "expense_logged") {
-    if (!driverId) throw new Error("driverId is required to log a cash toll expense");
-    const ledgerId = crypto.randomUUID();
-    const entry: TollLedgerRecord = {
-      id: ledgerId,
-      createdAt: now,
-      updatedAt: now,
-      vehicleId: trip.vehicleId || null,
-      vehiclePlate: null,
-      driverId: driverId || null,
-      driverName: trip.driverName || null,
-      tollTagId: null,
-      tagNumber: null,
-      plaza: null,
-      highway: null,
-      location: `${trip.pickupLocation || "?"} → ${trip.dropoffLocation || "?"}`.substring(0, 120),
-      date: String(trip.date || now).split("T")[0],
-      time: null,
-      type: "usage",
-      amount: -amount, // usage is negative
-      paymentMethod: "cash",
-      status: "reconciled",
-      resolution: null,
-      isReconciled: true,
-      tripId,
-      matchConfidence: null,
-      matchedAt: now,
-      matchedBy: auto ? "system-auto" : "admin",
-      batchId: null,
-      batchName: null,
-      importedAt: null,
-      sourceFile: null,
-      receiptUrl: null,
-      referenceNumber: null,
-      description: "Cash toll (logged from unlinked refund)",
-      notes: notes || null,
-      auditTrail: [],
-      metadata: { source: "refund_resolution" },
-    };
-    await saveTollLedgerEntry(entry);
-    linkedTollLedgerId = ledgerId;
+    if (params.existingLedgerId) {
+      linkedTollLedgerId = params.existingLedgerId;
+    } else {
+      if (!driverId) throw new Error("driverId is required to log a cash toll expense");
+      const ledgerId = crypto.randomUUID();
+      const entry: TollLedgerRecord = {
+        id: ledgerId,
+        createdAt: now,
+        updatedAt: now,
+        vehicleId: trip.vehicleId || null,
+        vehiclePlate: null,
+        driverId: driverId || null,
+        driverName: trip.driverName || null,
+        tollTagId: null,
+        tagNumber: null,
+        plaza: null,
+        highway: null,
+        location: `${trip.pickupLocation || "?"} → ${trip.dropoffLocation || "?"}`.substring(0, 120),
+        date: String(trip.date || now).split("T")[0],
+        time: null,
+        type: "usage",
+        amount: -amount, // usage is negative
+        paymentMethod: "cash",
+        status: "reconciled",
+        resolution: null,
+        isReconciled: true,
+        tripId,
+        matchConfidence: null,
+        matchedAt: now,
+        matchedBy: auto ? "system-auto" : "admin",
+        batchId: null,
+        batchName: null,
+        importedAt: null,
+        sourceFile: null,
+        receiptUrl: null,
+        referenceNumber: null,
+        description: "Cash toll (logged from unlinked refund)",
+        notes: notes || null,
+        auditTrail: [],
+        metadata: { source: "refund_resolution" },
+      };
+      await saveTollLedgerEntry(entry);
+      linkedTollLedgerId = ledgerId;
+    }
   }
 
   // Persist the resolution on the trip (additive field only).
@@ -4788,6 +4804,7 @@ async function applyRefundResolution(params: {
     auto,
     confidence: params.confidence,
     linkedTollLedgerId,
+    source: params.source || "admin",
   };
   await kv.set(`trip:${tripId}`, trip);
 
@@ -4959,6 +4976,10 @@ app.put(`${BASE}/automation-settings`, async (c) => {
         typeof body?.matchOnIngestEnabled === "boolean"
           ? body.matchOnIngestEnabled
           : current.matchOnIngestEnabled,
+      disputeRefundTripSyncEnabled:
+        typeof body?.disputeRefundTripSyncEnabled === "boolean"
+          ? body.disputeRefundTripSyncEnabled
+          : current.disputeRefundTripSyncEnabled,
     };
     await kv.set(REFUND_SETTINGS_KEY, next);
     return c.json({ success: true, data: next });
@@ -5429,3 +5450,12 @@ export {
   transactionToTollLedgerServer,
   isTollCategory,
 };
+
+// ── Exported helpers for dispute-refund → trip/settlement sync ─────────────
+export {
+  applyRefundResolution,
+  isUnresolvedRefund,
+  loadAllTollLedgerWithTrips,
+  getRefundAutomationSettings,
+};
+export type { RefundAutomationSettings };

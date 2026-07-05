@@ -20,6 +20,13 @@ import { Hono } from "npm:hono";
 import * as kv from "./kv_store.tsx";
 import { isTollCategory } from "./toll_category_flags.ts";
 import { getFleetTimezone, hasTzSuffix } from "./timezone_helper.tsx";
+import { syncClaimTollResolution } from "./claim_toll_sync.ts";
+import {
+  applyRefundResolution,
+  isUnresolvedRefund,
+  loadAllTollLedgerWithTrips,
+  getRefundAutomationSettings,
+} from "./toll_controller.tsx";
 
 const app = new Hono();
 
@@ -180,6 +187,7 @@ async function matchRefundToClaim(
   tollTransactionId: string,
   claimId: string | null,
   auto: boolean,
+  c: unknown,
 ): Promise<{ ok: true; data: any } | { ok: false; status: number; error: string }> {
   const id = refund.id;
   const recordKey = `dispute-refund:${id}`;
@@ -197,6 +205,8 @@ async function matchRefundToClaim(
     return { ok: false, status: 409, error: `Toll ${tollTransactionId} is already linked to refund ${existingMatch.id}. Unlink it first.` };
   }
 
+  const settings = await getRefundAutomationSettings();
+
   let updated: any = {
     ...refund,
     status: "matched",
@@ -212,15 +222,50 @@ async function matchRefundToClaim(
     const claim = await kv.get(claimKey);
     if (claim && typeof claim === "object") {
       const cs = (claim as any).status;
-      if (cs === "Resolved" || cs === "Rejected") {
-        console.log(`[DisputeRefund] Claim ${claimId} already ${cs} — refund marked matched, claim untouched`);
+      // Rejected is terminal/adversarial — leave it alone. Resolved claims
+      // (e.g. previously "Charge Driver") now flow through the reversible
+      // sync too, instead of being silently skipped, so a dispute that
+      // proves a toll was actually reimbursed correctly un-charges the driver.
+      if (cs === "Rejected") {
+        console.log(`[DisputeRefund] Claim ${claimId} is Rejected — refund marked matched, claim untouched`);
       } else {
+        const prevReason = cs === "Resolved" ? (claim as any).resolutionReason : undefined;
+        let resolutionTransactionIdPatch: any = (claim as any).resolutionTransactionId;
+
+        if (settings.disputeRefundTripSyncEnabled) {
+          const sync = await syncClaimTollResolution(
+            {
+              claimId,
+              transactionId: (claim as any).transactionId,
+              driverId: (claim as any).driverId,
+              driverName: (claim as any).driverName,
+              vehicleId: (claim as any).vehicleId,
+              tripId: (claim as any).tripId,
+              amount: (claim as any).amount,
+              date: (claim as any).date,
+              subject: (claim as any).subject,
+              prevReason,
+              nextReason: "Reimbursed",
+              source: "dispute_refund_sync",
+            },
+            c,
+          );
+          if (sync.resolutionTransactionId !== undefined) {
+            resolutionTransactionIdPatch = sync.resolutionTransactionId ?? undefined;
+          }
+        }
+
         await kv.set(claimKey, {
           ...claim,
           status: "Resolved",
           resolutionReason: "Reimbursed",
           disputeRefundId: id,
           preDisputeStatus: cs, // so unmatch can restore it
+          // Prior resolutionReason (e.g. "Charge Driver") — lets unmatch
+          // restore the exact prior reason, not just null. Only meaningful
+          // once cs === "Resolved" was reachable here at all.
+          preDisputeResolutionReason: cs === "Resolved" ? (claim as any).resolutionReason : null,
+          resolutionTransactionId: resolutionTransactionIdPatch,
           updatedAt: new Date().toISOString(),
         });
         updated = { ...updated, status: "auto_resolved", matchedClaimId: claimId };
@@ -229,6 +274,39 @@ async function matchRefundToClaim(
       }
     }
   }
+
+  // ── Trip-side cascade (Unlinked Refunds) ──────────────────────────────
+  if (settings.disputeRefundTripSyncEnabled) {
+    try {
+      const tollEntry = await loadTollForClaim(tollTransactionId);
+      const claimForTrip: any = claimId ? await kv.get(`claim:${claimId}`) : null;
+      const tripId = claimForTrip?.tripId || tollEntry?.tripId || null;
+      if (tripId) {
+        const trip = await kv.get(`trip:${tripId}`);
+        if (trip) {
+          const { tollTx } = await loadAllTollLedgerWithTrips();
+          const linkedTripIds = new Set(
+            tollTx.filter((tx: any) => tx.tripId).map((tx: any) => tx.tripId),
+          );
+          if (isUnresolvedRefund(trip, linkedTripIds)) {
+            await applyRefundResolution({
+              tripId,
+              resolution: "expense_logged",
+              existingLedgerId: tollTransactionId, // the matched toll IS the real ledger row
+              auto,
+              driverId: refund.driverId,
+              notes: `Linked via dispute refund ${id}`,
+              source: `system:dispute_refund_sync:${id}`,
+            });
+            console.log(`[DisputeRefund] Trip ${tripId} resolved (unlinked → expense_logged) via refund ${id}`);
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error(`[DisputeRefund] Trip cascade failed for refund ${id}:`, err.message);
+    }
+  }
+
   return { ok: true, data: updated };
 }
 
@@ -360,7 +438,7 @@ app.get(`${BASE}`, async (c) => {
           const sugg = await computeDisputeSuggestions(refund);
           const best = sugg[0];
           if (best && best.claimId && best.confidence >= minConf) {
-            const res = await matchRefundToClaim(refund, best.tollId, best.claimId, true);
+            const res = await matchRefundToClaim(refund, best.tollId, best.claimId, true, c);
             if (res.ok) {
               // reflect new status in the response payload
               Object.assign(refund, res.data);
@@ -421,7 +499,7 @@ app.patch(`${BASE}/:id/match`, async (c) => {
       claimId = newClaimId;
     }
 
-    const result = await matchRefundToClaim(refund, tollTransactionId, claimId || null, false);
+    const result = await matchRefundToClaim(refund, tollTransactionId, claimId || null, false, c);
     if (!result.ok) return c.json({ error: result.error }, result.status as any);
 
     console.log(`[DisputeRefund] Matched refund ${id} → toll ${tollTransactionId}${claimId ? ` + claim ${claimId}` : ""}`);
@@ -443,17 +521,82 @@ app.patch(`${BASE}/:id/unmatch`, async (c) => {
       return c.json({ error: `Dispute refund not found: ${id}` }, 404);
     }
 
+    const settings = await getRefundAutomationSettings();
+
     // Revert the claim this refund resolved (reversibility) — only if we set it.
     const claimId = refund.matchedClaimId;
+    let claimTripIdForTripReversal: string | null = null;
     if (claimId) {
       const claimKey = `claim:${claimId}`;
       const claim: any = await kv.get(claimKey);
       if (claim && typeof claim === "object" && claim.disputeRefundId === id) {
+        // Captured before any mutation/deletion below, so the trip-side
+        // reversal further down can still find the trip even when this claim
+        // is about to be deleted (the _createdByRefund branch).
+        claimTripIdForTripReversal = claim.tripId || null;
         if (claim._createdByRefund === id) {
-          // This claim only existed to hold this manual match — remove it.
+          // This claim only existed to hold this manual match — reverse any
+          // driver charge it drove before removing it.
+          if (settings.disputeRefundTripSyncEnabled) {
+            await syncClaimTollResolution(
+              {
+                claimId,
+                transactionId: claim.transactionId,
+                driverId: claim.driverId,
+                driverName: claim.driverName,
+                vehicleId: claim.vehicleId,
+                tripId: claim.tripId,
+                amount: claim.amount,
+                date: claim.date,
+                subject: claim.subject,
+                prevReason: "Reimbursed",
+                nextReason: undefined,
+                source: "dispute_refund_sync",
+              },
+              c,
+            );
+          }
           await kv.del(claimKey);
           console.log(`[DisputeRefund] Deleted refund-created claim ${claimId} on unmatch`);
+        } else if (settings.disputeRefundTripSyncEnabled && claim.preDisputeResolutionReason !== undefined) {
+          // Symmetric reversal via the same reversible sync, restoring the
+          // exact prior reason (e.g. re-charging the driver if it was
+          // "Charge Driver" before this dispute match reimbursed it).
+          const revertReason = claim.preDisputeResolutionReason || undefined;
+          const sync = await syncClaimTollResolution(
+            {
+              claimId,
+              transactionId: claim.transactionId,
+              driverId: claim.driverId,
+              driverName: claim.driverName,
+              vehicleId: claim.vehicleId,
+              tripId: claim.tripId,
+              amount: claim.amount,
+              date: claim.date,
+              subject: claim.subject,
+              prevReason: "Reimbursed",
+              nextReason: revertReason,
+              source: "dispute_refund_sync",
+            },
+            c,
+          );
+          await kv.set(claimKey, {
+            ...claim,
+            status: claim.preDisputeStatus || "Sent_to_Driver",
+            resolutionReason: revertReason || null,
+            disputeRefundId: null,
+            preDisputeStatus: null,
+            preDisputeResolutionReason: null,
+            resolutionTransactionId:
+              sync.resolutionTransactionId !== undefined
+                ? (sync.resolutionTransactionId ?? undefined)
+                : claim.resolutionTransactionId,
+            updatedAt: new Date().toISOString(),
+          });
+          console.log(`[DisputeRefund] Reverted claim ${claimId} to ${claim.preDisputeStatus || "Sent_to_Driver"} on unmatch`);
         } else {
+          // Flag off, or a legacy match from before preDisputeResolutionReason
+          // existed — fall back to the simpler restore (no charge reversal).
           await kv.set(claimKey, {
             ...claim,
             status: claim.preDisputeStatus || "Sent_to_Driver",
@@ -464,6 +607,24 @@ app.patch(`${BASE}/:id/unmatch`, async (c) => {
           });
           console.log(`[DisputeRefund] Reverted claim ${claimId} to ${claim.preDisputeStatus || "Sent_to_Driver"} on unmatch`);
         }
+      }
+    }
+
+    // Trip-side reversal — only undo what THIS cascade set (ownership check),
+    // never clobber a resolution an admin later set by hand.
+    if (settings.disputeRefundTripSyncEnabled && refund.matchedTollId) {
+      try {
+        const tollEntry = await loadTollForClaim(refund.matchedTollId);
+        const tripId = claimTripIdForTripReversal || tollEntry?.tripId || null;
+        if (tripId) {
+          const trip: any = await kv.get(`trip:${tripId}`);
+          if (trip?.tollRefundResolution?.source === `system:dispute_refund_sync:${id}`) {
+            await applyRefundResolution({ tripId, resolution: "pending", auto: false, source: "admin" });
+            console.log(`[DisputeRefund] Trip ${tripId} reverted to pending on unmatch of refund ${id}`);
+          }
+        }
+      } catch (err: any) {
+        console.error(`[DisputeRefund] Trip cascade reversal failed for refund ${id}:`, err.message);
       }
     }
 

@@ -68,8 +68,8 @@ import {
   deleteAllCanonicalLedgerBySourceType,
   deleteCanonicalLedgerBySource,
 } from "./ledger_canonical.ts";
-import { emitDriverTollCharge, reverseDriverTollCharge, isDriverTollChargeSyncEnabled, isUnifiedTollSettlementEnabled } from "./driver_toll_charge.ts";
-import { decideClaimResolutionSync } from "./claim_resolution_sync.ts";
+import { isDriverTollChargeSyncEnabled, isUnifiedTollSettlementEnabled } from "./driver_toll_charge.ts";
+import { syncClaimTollResolution } from "./claim_toll_sync.ts";
 import { addToTollDisposition, emptyTollDisposition, roundTollDisposition } from "./driver_toll_disposition.ts";
 import {
   appendCanonicalFuelExpenseIfEligible,
@@ -10367,76 +10367,25 @@ app.post("/make-server-37f42386/claims", async (c) => {
         const prevReason = existingClaim?.status === "Resolved" ? existingClaim.resolutionReason : undefined;
         const nextReason = claim.status === "Resolved" ? claim.resolutionReason : undefined;
 
-        const decision = decideClaimResolutionSync({
-          prevReason: prevReason as any,
-          nextReason: nextReason as any,
-        });
-
-        if (!decision.isNoop) {
-            // tollId used for the charge/reverse: falls back to claim.id for
-            // non-toll claim types (Wait_Time/Cleaning_Fee) that carry no
-            // transactionId, preserving the pre-existing fallback behavior.
-            const effectiveTollId = claim.transactionId || claim.id;
-
-            if (decision.shouldReverse) {
-                const reverseResult = await reverseDriverTollCharge(
-                    { tollId: effectiveTollId, claimId: claim.id, source: "claim_resolution" },
-                    c,
-                );
-                if (reverseResult.reversed) {
-                    // The active charge was unwound — clear the link so a future
-                    // charge (if any) is issued a fresh txId, not a stale one.
-                    claim.resolutionTransactionId = undefined;
-                }
-            }
-
-            if (decision.shouldCharge) {
-                // Fall back to the linked toll_ledger entry for date/vehicleId/
-                // driverName when the claim doesn't carry them (old claims, or
-                // any future caller that forgets to pass them) — this keeps the
-                // charge dated on the toll's ACTUAL date, not "today", correctly
-                // regardless of which client version created the claim.
-                const tollEntry = claim.transactionId && (!claim.date || !claim.vehicleId || !claim.driverName)
-                    ? await getTollLedgerEntry(claim.transactionId).catch(() => null)
-                    : null;
-                const result = await emitDriverTollCharge(
-                    {
-                        tollId: effectiveTollId,
-                        claimId: claim.id,
-                        driverId: claim.driverId,
-                        driverName: claim.driverName || tollEntry?.driverName || undefined,
-                        vehicleId: claim.vehicleId || tollEntry?.vehicleId || undefined,
-                        tripId: claim.tripId ?? null,
-                        amount: claim.amount || 0,
-                        date: claim.date || tollEntry?.date || new Date().toISOString(),
-                        description: `Toll Charge - ${claim.subject || "Personal Use"}`,
-                        source: "claim_resolution",
-                    },
-                    c,
-                );
-                if (result.projectionTxId) claim.resolutionTransactionId = result.projectionTxId;
-            }
-
-            // Keep toll_ledger's resolution label accurate for ALL three outcomes
-            // (Charge Driver / Write Off / Reimbursed), not just charges, so the
-            // Reconciliation tab and unified settlement engine reflect the true
-            // disposition. Only meaningful when this claim actually links a real
-            // toll_ledger record (non-toll claim types have nothing to sync).
-            if (claim.transactionId) {
-                try {
-                    await updateTollLedgerEntry(
-                        claim.transactionId,
-                        { resolution: decision.nextLedgerResolution },
-                        "resolved",
-                        "admin",
-                    );
-                } catch (err: any) {
-                    console.error(
-                        `[Claims] toll_ledger resolution sync failed for ${claim.transactionId}:`,
-                        err.message,
-                    );
-                }
-            }
+        const sync = await syncClaimTollResolution(
+          {
+            claimId: claim.id,
+            transactionId: claim.transactionId,
+            driverId: claim.driverId,
+            driverName: claim.driverName,
+            vehicleId: claim.vehicleId,
+            tripId: claim.tripId,
+            amount: claim.amount,
+            date: claim.date,
+            subject: claim.subject,
+            prevReason: prevReason as any,
+            nextReason: nextReason as any,
+            source: "claim_resolution",
+          },
+          c,
+        );
+        if (sync.resolutionTransactionId !== undefined) {
+          claim.resolutionTransactionId = sync.resolutionTransactionId ?? undefined;
         }
     } else {
         // Flag OFF: preserve legacy behavior byte-for-byte — first-charge-only,

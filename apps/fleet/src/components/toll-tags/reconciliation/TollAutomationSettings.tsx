@@ -23,6 +23,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
   const [driverChargeSync, setDriverChargeSync] = useState(false);
   const [unifiedSettlement, setUnifiedSettlement] = useState(false);
   const [matchOnIngest, setMatchOnIngest] = useState(false);
+  const [disputeRefundTripSync, setDisputeRefundTripSync] = useState(false);
   const [bridging, setBridging] = useState(false);
   const [claimsSyncChecking, setClaimsSyncChecking] = useState(false);
   const [claimsSyncApplying, setClaimsSyncApplying] = useState(false);
@@ -47,6 +48,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
     driverTollChargeSyncEnabled?: boolean;
     unifiedTollSettlementEnabled?: boolean;
     matchOnIngestEnabled?: boolean;
+    disputeRefundTripSyncEnabled?: boolean;
   }) => {
     setEnabled(data.refundAutomationEnabled);
     setMinConfidence(data.refundAutoMinConfidence);
@@ -55,6 +57,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
     setDriverChargeSync(data.driverTollChargeSyncEnabled === true);
     setUnifiedSettlement(data.unifiedTollSettlementEnabled === true);
     setMatchOnIngest(data.matchOnIngestEnabled === true);
+    setDisputeRefundTripSync(data.disputeRefundTripSyncEnabled === true);
   };
 
   useEffect(() => {
@@ -80,6 +83,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
     driverTollChargeSyncEnabled?: boolean;
     unifiedTollSettlementEnabled?: boolean;
     matchOnIngestEnabled?: boolean;
+    disputeRefundTripSyncEnabled?: boolean;
   }) => {
     setSaving(true);
     try {
@@ -239,6 +243,22 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
                     className="w-full mt-2 accent-indigo-600"
                   />
                   <p className="text-xs text-slate-500 mt-1">Suggestions below this score require manual review.</p>
+                </div>
+
+                <div className="border-t border-slate-100 pt-3">
+                  <label className="flex items-center justify-between">
+                    <span className="text-sm text-slate-700">Sync dispute matches to claims &amp; trips</span>
+                    <Switch
+                      checked={disputeRefundTripSync}
+                      disabled={saving}
+                      onCheckedChange={(v) => save({ disputeRefundTripSyncEnabled: v })}
+                    />
+                  </label>
+                  <p className="text-xs text-slate-500 mt-1">
+                    When a dispute refund is matched (or unmatched), cascade the resolution into the
+                    linked claim's driver-charge sync and the trip's Unlinked Refunds status, instead
+                    of only marking the refund itself.
+                  </p>
                 </div>
               </div>
 

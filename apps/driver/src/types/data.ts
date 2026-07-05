@@ -150,6 +150,10 @@ export interface TollRefundResolution {
   auto: boolean;       // true = applied by the automation classifier
   confidence?: number; // 0-100, when auto/suggested
   linkedTollLedgerId?: string; // set for expense_logged
+  /** Provenance: "admin" (default) or "system:dispute_refund_sync:<refundId>"
+   *  when a dispute-refund match cascaded this resolution — lets unmatch
+   *  revert only what it itself set. */
+  source?: string;
 }
 
 export interface CancellationMetrics {
