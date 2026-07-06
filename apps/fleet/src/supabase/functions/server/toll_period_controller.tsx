@@ -278,12 +278,53 @@ app.get(`${BASE}/periods`, async (c) => {
       })
       .sort((a, b) => (a.startDate < b.startDate ? 1 : a.startDate > b.startDate ? -1 : 0));
 
+    // ── All-time financial snapshot (the pre-period-redesign dashboard cards),
+    // now sourced from the same single loaded/scoped data this endpoint
+    // already builds its per-period counts from, so the two views can never
+    // silently disagree with each other. Unlike the per-period counts above,
+    // these are deliberately NOT period-scoped — they're the fleet-wide
+    // (optionally driver-scoped) totals shown once, above the period list.
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+
+    const tollSpend = scopedTollTx.reduce(
+      (sum: number, tx: any) => sum + (Number(tx.amount) < 0 ? Math.abs(Number(tx.amount)) : 0),
+      0,
+    );
+    const reimbursedFromTrips = scopedTrips.reduce((sum: number, t: any) => sum + (Number(t.tollCharges) || 0), 0);
+    const matchedDisputeRefundAmount = disputeRefunds
+      .filter((r: any) => isDisputeRefundMatched(r))
+      .reduce((sum: number, r: any) => sum + (Number(r.amount) || 0), 0);
+    const reimbursedByPlatform = reimbursedFromTrips + matchedDisputeRefundAmount;
+    const chargedToDrivers = claims
+      .filter((cl: any) => cl.status === "Resolved" && cl.resolutionReason === "Charge Driver")
+      .reduce((sum: number, cl: any) => sum + Math.abs(Number(cl.amount) || 0), 0);
+    const netTollLoss = Math.max(0, tollSpend - reimbursedByPlatform - chargedToDrivers);
+
+    const resolvedRefundTrips = scopedTrips.filter(
+      (t: any) => t.tollRefundResolution && t.tollRefundResolution.status !== "pending",
+    );
+    const resolvedRefundsAmount = resolvedRefundTrips.reduce(
+      (sum: number, t: any) => sum + (Number(t.tollCharges) || 0),
+      0,
+    );
+
     return c.json({
       success: true,
       timezone,
       generatedAt: new Date().toISOString(),
       workflowStageBackfillComplete: !anyMissingWorkflowStage,
       periods: periodsOut,
+      totals: {
+        tollSpend: round2(tollSpend),
+        reimbursedByPlatform: round2(reimbursedByPlatform),
+        matchedDisputeRefundAmount: round2(matchedDisputeRefundAmount),
+        chargedToDrivers: round2(chargedToDrivers),
+        netTollLoss: round2(netTollLoss),
+        needsReviewCount: unclaimedTolls.length + unclaimedRefundTrips.length,
+        tollsNeedingReviewCount: unclaimedTolls.length,
+        refundsNeedingReviewCount: unclaimedRefundTrips.length,
+        resolvedRefundsAmount: round2(resolvedRefundsAmount),
+      },
     });
   } catch (e: any) {
     console.log(`[TollPeriodController] GET /periods error: ${e.message}`);

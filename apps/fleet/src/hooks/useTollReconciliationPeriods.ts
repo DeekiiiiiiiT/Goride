@@ -12,6 +12,31 @@ export interface ReconciliationPeriod {
   counts: Record<StepId, { actionable: number; informational: number }>;
 }
 
+/** All-time (not period-scoped) financial snapshot — the pre-redesign dashboard cards. */
+export interface ReconciliationTotals {
+  tollSpend: number;
+  reimbursedByPlatform: number;
+  matchedDisputeRefundAmount: number;
+  chargedToDrivers: number;
+  netTollLoss: number;
+  needsReviewCount: number;
+  tollsNeedingReviewCount: number;
+  refundsNeedingReviewCount: number;
+  resolvedRefundsAmount: number;
+}
+
+const EMPTY_TOTALS: ReconciliationTotals = {
+  tollSpend: 0,
+  reimbursedByPlatform: 0,
+  matchedDisputeRefundAmount: 0,
+  chargedToDrivers: 0,
+  netTollLoss: 0,
+  needsReviewCount: 0,
+  tollsNeedingReviewCount: 0,
+  refundsNeedingReviewCount: 0,
+  resolvedRefundsAmount: 0,
+};
+
 /**
  * Period-first landing data for Toll Reconciliation (Phase F3) — backed by
  * the new GET /toll-reconciliation/periods aggregation endpoint, which scans
@@ -21,6 +46,7 @@ export interface ReconciliationPeriod {
  */
 export function useTollReconciliationPeriods(driverId?: string) {
   const [periods, setPeriods] = useState<ReconciliationPeriod[]>([]);
+  const [totals, setTotals] = useState<ReconciliationTotals>(EMPTY_TOTALS);
   const [workflowStageBackfillComplete, setWorkflowStageBackfillComplete] = useState(true);
   const [loading, setLoading] = useState(true);
   // Only blank the UI on first load — action refreshes stay silent
@@ -32,6 +58,7 @@ export function useTollReconciliationPeriods(driverId?: string) {
     try {
       const res = await api.getTollReconciliationPeriods({ driverId });
       setPeriods(res.periods || []);
+      setTotals(res.totals || EMPTY_TOTALS);
       setWorkflowStageBackfillComplete(res.workflowStageBackfillComplete !== false);
     } catch (error) {
       console.error('Failed to fetch reconciliation periods', error);
@@ -54,6 +81,7 @@ export function useTollReconciliationPeriods(driverId?: string) {
     periods,
     outstanding,
     reconciled,
+    totals,
     workflowStageBackfillComplete,
     loading,
     refresh: fetchPeriods,

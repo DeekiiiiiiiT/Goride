@@ -2,6 +2,7 @@ import { Loader2, HelpCircle, CarFront, Route, DollarSign, ShieldCheck, Unlink a
 import { Card, CardContent } from '../../ui/card';
 import { useTollReconciliationPeriods, ReconciliationPeriod } from '../../../hooks/useTollReconciliationPeriods';
 import { StepId } from '../../../utils/tollPeriodGating';
+import { TollFinancialOverviewCards } from './TollFinancialOverviewCards';
 
 const STEP_ICONS: Record<StepId, LucideIcon> = {
   'needs-review': HelpCircle,
@@ -74,7 +75,7 @@ function PeriodCard({ period, onSelect }: { period: ReconciliationPeriod; onSele
 }
 
 export function PeriodLandingPage({ driverId, onSelectPeriod }: PeriodLandingPageProps) {
-  const { outstanding, reconciled, workflowStageBackfillComplete, loading } = useTollReconciliationPeriods(driverId);
+  const { outstanding, reconciled, totals, workflowStageBackfillComplete, loading } = useTollReconciliationPeriods(driverId);
 
   if (loading) {
     return (
@@ -93,6 +94,20 @@ export function PeriodLandingPage({ driverId, onSelectPeriod }: PeriodLandingPag
         <h2 className="text-2xl font-bold tracking-tight text-slate-900">Toll Reconciliation</h2>
         <p className="text-slate-500">Select a period to reconcile, step by step.</p>
       </div>
+
+      {/* All-time financial snapshot across every period — read-only, no
+          actions live here; select a period below to work through its steps. */}
+      <TollFinancialOverviewCards
+        tollSpend={totals.tollSpend}
+        reimbursedAmount={totals.reimbursedByPlatform}
+        scopedDisputeRefund={totals.matchedDisputeRefundAmount}
+        chargedToDrivers={totals.chargedToDrivers}
+        netTollLoss={totals.netTollLoss}
+        needsReviewCount={totals.needsReviewCount}
+        tollsNeedingReviewCount={totals.tollsNeedingReviewCount}
+        refundsNeedingReviewCount={totals.refundsNeedingReviewCount}
+        resolvedRefundsAmount={totals.resolvedRefundsAmount}
+      />
 
       {!workflowStageBackfillComplete && (
         <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
