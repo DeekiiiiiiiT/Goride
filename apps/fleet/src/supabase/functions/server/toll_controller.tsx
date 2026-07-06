@@ -21,8 +21,10 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 import { isTollCategory } from "./toll_category_flags.ts";
 import { classifyOrphanToll } from "./orphanTollClassifier.ts";
-import { emitDriverTollCharge } from "./driver_toll_charge.ts";
+import { emitDriverTollCharge, isUnifiedTollSettlementEnabled } from "./driver_toll_charge.ts";
 import { mapResolutionReasonToTollResolution } from "./claim_resolution_sync.ts";
+import { classifyTollLedgerEntry } from "./driver_toll_disposition.ts";
+import { computeTollWorkflowStage, type TollWorkflowStage } from "./toll_workflow_stage.ts";
 import { findTripsInDateRange, findTollsInDateRange, findTollsByMatchedTripId } from "./toll_match_index.ts";
 import { appendCanonicalTollReconciledBatch, type TollReconcileAuditEntry } from "./canonical_from_ops.ts";
 import { deleteCanonicalLedgerBySource } from "./ledger_canonical.ts";
@@ -798,6 +800,10 @@ function tollLedgerToTxShape(entry: TollLedgerRecord): any {
     notes: entry.notes,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
+    // RWF-1: persisted workflow position + reverse claim pointer — read path
+    // for the guided Toll Reconciliation stepper (bucketForWorkflowStage).
+    workflowStage: entry.workflowStage,
+    claimId: entry.claimId,
     metadata: {
       tollTagId: entry.tollTagId,
       tagNumber: entry.tagNumber,
@@ -1864,6 +1870,21 @@ interface TollLedgerRecord {
   matchConfidenceScore?: number | null;
   matchReasonCode?: string | null;
   lastMatchedAt?: string | null;
+  // RWF-1: matchReasonCode alone can't distinguish a perfect match from an
+  // underpaid one — reasonCode "ON_TRIP" is emitted for BOTH PERFECT_MATCH
+  // and AMOUNT_VARIANCE (see findTollMatchesServer). This sibling field
+  // persists the actual matchType so the workflow-stage classifier can tell
+  // them apart. Additive/optional, same null-safe convention as the MOI-1 fields.
+  matchTypeCode?: MatchType | null;
+  // RWF-1: reverse pointer so a toll can answer "do I have a claim" without
+  // scanning claim:* — set by the claim service (Phase B) when a claim is
+  // created against this toll's transactionId.
+  claimId?: string | null;
+  // RWF-1: persisted, single-source-of-truth workflow position. Absence means
+  // "not yet computed" (treated as needs_review by computeTollWorkflowStage's
+  // callers), same convention as the MOI-1 fields above.
+  workflowStage?: TollWorkflowStage;
+  workflowStageUpdatedAt?: string | null;
 }
 
 interface TollLedgerFilters {
@@ -1969,6 +1990,48 @@ async function updateTollLedgerEntry(
 }
 
 /**
+ * RWF-1: recompute a toll's persisted workflowStage and write it if changed.
+ * Lives here (not a separate file) so it can call getTollLedgerEntry/
+ * updateTollLedgerEntry directly without a circular import — other modules
+ * (the Phase B claim service, dispute_refund_controller.tsx) import this
+ * function from toll_controller.tsx the same way they already import
+ * applyRefundResolution/isUnresolvedRefund below.
+ *
+ * Idempotent no-op if the computed stage matches what's already stored.
+ * Never throws — a failure here must never break the caller's own write
+ * (matching the MOI-3 contract above); it just leaves workflowStage stale
+ * until the next recompute.
+ */
+async function recomputeAndPersistWorkflowStage(
+  tollId: string,
+  opts?: { claim?: { status: string; resolutionReason?: string | null } | null },
+): Promise<void> {
+  try {
+    const entry = await getTollLedgerEntry(tollId);
+    if (!entry) return;
+
+    let claim = opts?.claim;
+    if (claim === undefined) {
+      claim = entry.claimId ? ((await kv.get(`claim:${entry.claimId}`)) as { status: string; resolutionReason?: string | null } | null) : null;
+    }
+
+    const stage = computeTollWorkflowStage({
+      matchStatus: entry.matchStatus,
+      matchTypeCode: entry.matchTypeCode,
+      matchReasonCode: entry.matchReasonCode,
+      resolution: entry.resolution,
+      isReconciled: entry.isReconciled,
+      claim,
+    });
+
+    if (stage === entry.workflowStage) return;
+    await updateTollLedgerEntry(tollId, { workflowStage: stage, workflowStageUpdatedAt: new Date().toISOString() });
+  } catch (err: any) {
+    console.error(`[TollWorkflowStage] recompute failed for toll ${tollId}:`, err?.message);
+  }
+}
+
+/**
  * MOI-3: compute a toll's match at ingest time (right after it's created) and
  * persist the result onto the SAME row, instead of the read path recomputing
  * this from scratch on every GET /unreconciled call.
@@ -1997,6 +2060,7 @@ async function computeTollMatchPatch(
       matchedTripId: null,
       matchConfidenceScore: null,
       matchReasonCode: null,
+      matchTypeCode: null,
       lastMatchedAt: now,
     };
   }
@@ -2021,6 +2085,7 @@ async function computeTollMatchPatch(
       matchedTripId: best.tripId || null,
       matchConfidenceScore: best.confidenceScore ?? null,
       matchReasonCode: best.reasonCode ?? null,
+      matchTypeCode: best.matchType ?? null,
       lastMatchedAt: now,
     };
   }
@@ -2032,6 +2097,7 @@ async function computeTollMatchPatch(
         matchedTripId: null,
         matchConfidenceScore: null,
         matchReasonCode: orphan.reasonCode,
+        matchTypeCode: orphan.matchType ?? null,
         lastMatchedAt: now,
       };
     }
@@ -2040,6 +2106,7 @@ async function computeTollMatchPatch(
       matchedTripId: null,
       matchConfidenceScore: null,
       matchReasonCode: null,
+      matchTypeCode: null,
       lastMatchedAt: now,
     };
   }
@@ -2048,6 +2115,7 @@ async function computeTollMatchPatch(
     matchedTripId: null,
     matchConfidenceScore: null,
     matchReasonCode: null,
+    matchTypeCode: null,
     lastMatchedAt: now,
   };
 }
@@ -2063,10 +2131,11 @@ export async function computeAndPersistTollMatchOnIngest(
     const patch = await computeTollMatchPatch(tollRecord, timezone, settings);
 
     // updateTollLedgerEntry re-reads the current row fresh before merging, so
-    // passing only these 5 fields keeps this a scoped merge rather than a
+    // passing only these 6 fields keeps this a scoped merge rather than a
     // whole-row overwrite — safe even if something else touched the row
     // in between.
     await updateTollLedgerEntry(tollRecord.id, patch, "updated", "system-match-on-ingest");
+    await recomputeAndPersistWorkflowStage(tollRecord.id);
   } catch (err: any) {
     console.warn(
       `[MatchOnIngest] Failed to compute match for toll ${tollRecord.id}: ${err?.message}`,
@@ -2212,11 +2281,13 @@ export async function reconsiderTollsForNewTrips(
                 matchedTripId: best.tripId || null,
                 matchConfidenceScore: best.confidenceScore ?? null,
                 matchReasonCode: best.reasonCode ?? null,
+                matchTypeCode: best.matchType ?? null,
                 lastMatchedAt: new Date().toISOString(),
               },
               "updated",
               "system-match-on-ingest",
             );
+            await recomputeAndPersistWorkflowStage(toll.id);
           } else {
             console.log(
               `[MatchOnIngest] Would update unresolved toll ${toll.id} to matched (trip ${best.tripId}, score ${best.confidenceScore})`,
@@ -2316,11 +2387,13 @@ export async function invalidateStaleTollMatchesForTrip(
               matchedTripId: null,
               matchConfidenceScore: null,
               matchReasonCode: null,
+              matchTypeCode: null,
               lastMatchedAt: new Date().toISOString(),
             },
             "updated",
             "system-match-on-ingest",
           );
+          await recomputeAndPersistWorkflowStage(toll.id);
         } else {
           console.log(
             `[MatchOnIngest] Would clear unresolved toll ${toll.id} — its matched trip ${tripId} was deleted/moved`,
@@ -3401,6 +3474,123 @@ app.post(`${BASE}/match-index/backfill`, async (c) => {
   }
 });
 
+// ─── GET /workflow-stage/status (RWF-1) ─── read-only backfill preview ────
+// Historical tolls (and tolls created before this field existed) have no
+// workflowStage. This reports how many, without touching anything.
+app.get(`${BASE}/workflow-stage/status`, async (c) => {
+  try {
+    const all = (await loadAllByPrefix(TOLL_LEDGER_PREFIX)) as TollLedgerRecord[];
+    const missing = all.filter((tx) => !tx.workflowStage);
+    return c.json({
+      success: true,
+      totalTolls: all.length,
+      missingWorkflowStage: missing.length,
+      sampleIds: missing.slice(0, 20).map((tx) => tx.id),
+      message:
+        missing.length > 0
+          ? `${missing.length} of ${all.length} tolls have no workflowStage yet. POST /workflow-stage/backfill (dryRun defaults true) to compute it.`
+          : "Every toll already has a workflowStage — nothing to backfill.",
+    });
+  } catch (e: any) {
+    console.log(`[WorkflowStageBackfill] status error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── POST /workflow-stage/backfill (RWF-1) ─── apply (dry-run by default) ──
+// Mirrors the match-index/tag-backfill convention exactly: dryRun defaults
+// true, batched, capped error samples, manifest of every id touched. Builds
+// a one-time transactionId→claim reverse index (claim:* has no durable
+// transactionId→claim lookup otherwise) since claimId is only populated on
+// TollLedgerRecord going forward by the claim service (Phase B) — this is
+// the one place that index gets built from a full claims scan instead.
+app.post(`${BASE}/workflow-stage/backfill`, async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body?.dryRun !== false; // default to dry-run for safety
+    const batchSize = Math.max(1, Math.min(500, Number(body?.batchSize) || 100));
+
+    const all = (await loadAllByPrefix(TOLL_LEDGER_PREFIX)) as TollLedgerRecord[];
+    const missing = all.filter((tx) => !tx.workflowStage);
+    const batch = missing.slice(0, batchSize);
+
+    if (dryRun) {
+      return c.json({
+        success: true,
+        dryRun: true,
+        totalTolls: all.length,
+        missingWorkflowStage: missing.length,
+        wouldProcess: batch.length,
+        message:
+          missing.length > 0
+            ? `Dry run: would compute workflowStage for ${batch.length} of ${missing.length} missing tolls (batchSize=${batchSize}). Re-run with dryRun=false to apply.`
+            : "Nothing to backfill — every toll already has a workflowStage.",
+      });
+    }
+
+    // One-time reverse index: transactionId → claim (only claims not yet
+    // superseded by the toll's own claimId field, which post-Phase-B claims
+    // populate directly).
+    const allClaims = (await loadAllByPrefix("claim:")) as any[];
+    const claimByTransactionId = new Map<string, any>();
+    for (const cl of allClaims) {
+      if (cl && typeof cl === "object" && cl.transactionId) {
+        claimByTransactionId.set(cl.transactionId, cl);
+      }
+    }
+
+    const touchedIds: string[] = [];
+    const errors: string[] = [];
+
+    for (const tx of batch) {
+      try {
+        const claim = claimByTransactionId.get(tx.id) ?? null;
+        const stage = computeTollWorkflowStage({
+          matchStatus: tx.matchStatus,
+          matchTypeCode: tx.matchTypeCode,
+          matchReasonCode: tx.matchReasonCode,
+          resolution: tx.resolution,
+          isReconciled: tx.isReconciled,
+          claim,
+        });
+        const patch: Partial<TollLedgerRecord> = {
+          workflowStage: stage,
+          workflowStageUpdatedAt: new Date().toISOString(),
+        };
+        if (!tx.claimId && claim?.id) patch.claimId = claim.id;
+        await updateTollLedgerEntry(tx.id, patch, "updated", "system", "Workflow-Stage Backfill");
+        touchedIds.push(tx.id);
+      } catch (err: any) {
+        errors.push(`${tx.id}: ${err.message}`);
+        if (errors.length > 50) break;
+      }
+    }
+
+    const manifestKey = `toll_backfill_run:${new Date().toISOString()}`;
+    await kv.set(manifestKey, { touchedIds, at: new Date().toISOString(), errors, kind: "workflow_stage" });
+
+    const remaining = missing.length - touchedIds.length;
+    console.log(
+      `[WorkflowStageBackfill] processed=${touchedIds.length} remaining=${remaining} errors=${errors.length} manifest=${manifestKey}`,
+    );
+    return c.json({
+      success: true,
+      dryRun: false,
+      processed: touchedIds.length,
+      remaining,
+      errors: errors.slice(0, 50),
+      manifestKey,
+      message:
+        remaining > 0
+          ? `Processed ${touchedIds.length}. Re-run to continue with the remaining ${remaining}.`
+          : `Processed ${touchedIds.length}. Every toll now has a workflowStage.`,
+    });
+  } catch (e: any) {
+    console.log(`[WorkflowStageBackfill] backfill error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════════════
 // PHASE 3: Server-Side Reconciliation Actions (with ledger writes)
 // ═══════════════════════════════════════════════════════════════════════
@@ -3503,12 +3693,14 @@ app.post(`${BASE}/reconcile`, async (c) => {
       {
         status: "reconciled",
         tripId,
+        isReconciled: true,
         driverId: trip.driverId || tx.driverId,
         driverName: trip.driverName || tx.driverName,
       },
       "reconciled",
       "admin"
     );
+    await recomputeAndPersistWorkflowStage(transactionId);
 
     // Update local tx object for response (not persisted to transaction:*)
     tx.tripId = tripId;
@@ -3590,11 +3782,13 @@ app.post(`${BASE}/unreconcile`, async (c) => {
       {
         status: "pending",
         tripId: null,
+        isReconciled: false,
         metadata: wasAutoMatched ? { autoMatchOverridden: true } : undefined,
       },
       "unreconciled",
       "admin"
     );
+    await recomputeAndPersistWorkflowStage(transactionId);
 
     // Update local tx object for response (not persisted to transaction:*)
     tx.tripId = null;
@@ -3898,6 +4092,7 @@ app.post(`${BASE}/bulk-reconcile`, async (c) => {
           updates: {
             status: "reconciled",
             tripId,
+            isReconciled: true,
             driverId: trip.driverId || tx.driverId,
             driverName: trip.driverName || tx.driverName,
           },
@@ -3927,6 +4122,7 @@ app.post(`${BASE}/bulk-reconcile`, async (c) => {
       // Phase 6: Update toll_ledger entries (primary store)
       for (const { id, updates } of tollLedgerUpdates) {
         await updateTollLedgerEntry(id, updates, "reconciled", "admin_bulk");
+        await recomputeAndPersistWorkflowStage(id);
       }
     }
 
@@ -3963,11 +4159,13 @@ app.post(`${BASE}/approve`, async (c) => {
       transactionId,
       {
         status: "approved",
+        isReconciled: true,
         notes: notes || undefined,
       },
       "approved",
       "admin"
     );
+    await recomputeAndPersistWorkflowStage(transactionId);
 
     // Update local tx object for response
     tx.status = "Approved";
@@ -4036,11 +4234,13 @@ app.post(`${BASE}/reject`, async (c) => {
       transactionId,
       {
         status: "rejected",
+        isReconciled: true,
         notes: reason || undefined,
       },
       "rejected",
       "admin"
     );
+    await recomputeAndPersistWorkflowStage(transactionId);
 
     // Update local tx object for response
     tx.status = "Rejected";
@@ -4087,7 +4287,18 @@ app.post(`${BASE}/reject`, async (c) => {
 
 // ─── POST /resolve ─────────────────────────────────────────────────────
 // General resolution: Personal (charge driver), WriteOff, or Business
-
+//
+// NOTE: this is a 4th claim-creation path alongside index.tsx's POST /claims
+// and dispute_refund_controller.tsx's two call sites — but unlike those, it
+// CANNOT route through claim_service.ts's upsertClaim/deleteClaim: that
+// module (transitively, via claim_toll_sync.ts) imports getTollLedgerEntry/
+// updateTollLedgerEntry FROM this file, so this file importing back from it
+// would be a circular dependency. It stays intentionally self-contained,
+// using emitDriverTollCharge directly (imported above) for the Personal
+// case — no reversible reclassify/undo support the way claim_service.ts
+// callers get, which is an accepted limitation of this endpoint, not an
+// oversight. It DOES get the new isReconciled/claimId/workflowStage
+// bookkeeping (RWF-1) below, since those are local to this file.
 app.post(`${BASE}/resolve`, async (c) => {
   try {
     const { transactionId, resolution, notes, source, driverId: driverIdOverride } =
@@ -4196,7 +4407,7 @@ app.post(`${BASE}/resolve`, async (c) => {
         break;
       case "Business":
         tx.status = "Approved";
-        claimResolutionReason = "Write Off"; // Business expense = fleet cost
+        claimResolutionReason = "Business Expense"; // fleet absorbs the cost, distinct label from Write Off
         ledgerEventType = "toll_business_expense";
         ledgerDirection = "outflow";
         ledgerNetAmount = -amount;
@@ -4205,21 +4416,6 @@ app.post(`${BASE}/resolve`, async (c) => {
       default:
         return c.json({ error: "Invalid resolution" }, 400);
     }
-
-    // Phase 6: Write ONLY to toll_ledger (single source of truth)
-    await updateTollLedgerEntry(
-      transactionId,
-      {
-        status: tx.status === "Approved" ? "resolved" : "rejected",
-        resolution: ledgerResolution,
-        notes: notes || undefined,
-      },
-      "resolved",
-      "admin"
-    );
-
-    // Update local tx object for response (not persisted to transaction:*)
-    tx.isReconciled = true;
 
     // Create a claim record for audit trail
     const claimId = crypto.randomUUID();
@@ -4237,6 +4433,24 @@ app.post(`${BASE}/resolve`, async (c) => {
       driverName: tx.driverName,
     };
     await kv.set(`claim:${claimId}`, claim);
+
+    // Phase 6: Write ONLY to toll_ledger (single source of truth)
+    await updateTollLedgerEntry(
+      transactionId,
+      {
+        status: tx.status === "Approved" ? "resolved" : "rejected",
+        resolution: ledgerResolution,
+        isReconciled: true,
+        claimId,
+        notes: notes || undefined,
+      },
+      "resolved",
+      "admin"
+    );
+    await recomputeAndPersistWorkflowStage(transactionId, { claim });
+
+    // Update local tx object for response (not persisted to transaction:*)
+    tx.isReconciled = true;
 
     if (resolution === "Personal") {
       // Personal = charge the driver. Route through the single consolidated
@@ -4325,9 +4539,10 @@ app.get(`${BASE}/driver-toll-charges`, async (c) => {
       business: 0, // resolution === 'business'
       refunded: 0, // resolution === 'refunded'
       reconciled: 0, // matched to a trip (platform reimbursed)
+      cashWash: 0, // no resolution yet, but a cash toll — credit vs owed, not truly "unresolved"
       unresolved: 0, // still pending
     };
-    const counts = { chargedToDriver: 0, writtenOff: 0, business: 0, refunded: 0, reconciled: 0, unresolved: 0 };
+    const counts = { chargedToDriver: 0, writtenOff: 0, business: 0, refunded: 0, reconciled: 0, cashWash: 0, unresolved: 0 };
     const charges: any[] = [];
 
     for (const e of forDriver) {
@@ -4342,6 +4557,12 @@ app.get(`${BASE}/driver-toll-charges`, async (c) => {
         bucket.business += amt; counts.business++;
       } else if (res === "refunded") {
         bucket.refunded += amt; counts.refunded++;
+      } else if (classifyTollLedgerEntry(e) === "cashWash") {
+        // A cash toll with no resolution label yet — the canonical
+        // classifier (driver_toll_disposition.ts) already treats this as
+        // cashWash everywhere else; this endpoint used to silently fold it
+        // into reconciled/unresolved below, diverging from that classifier.
+        bucket.cashWash += amt; counts.cashWash++;
       } else if (e.isReconciled || e.tripId) {
         bucket.reconciled += amt; counts.reconciled++;
       } else {
@@ -4359,6 +4580,7 @@ app.get(`${BASE}/driver-toll-charges`, async (c) => {
           business: round(bucket.business),
           refunded: round(bucket.refunded),
           reconciled: round(bucket.reconciled),
+          cashWash: round(bucket.cashWash),
           unresolved: round(bucket.unresolved),
         },
         counts,
@@ -4824,6 +5046,10 @@ async function applyRefundResolution(params: {
     date: String(trip.date || now),
     metadata: { resolution, auto, notes, linkedTollLedgerId, confidence: params.confidence },
   });
+
+  if (linkedTollLedgerId) {
+    await recomputeAndPersistWorkflowStage(linkedTollLedgerId);
+  }
 
   console.log(`[TollReconciliation] Refund resolved: trip ${tripId} → ${resolution} (auto=${auto})`);
   return { tripId, resolution, linkedTollLedgerId };
@@ -5459,3 +5685,7 @@ export {
   getRefundAutomationSettings,
 };
 export type { RefundAutomationSettings };
+
+// ── Exported helpers for the persisted toll-workflow state (RWF-1) ─────────
+export { recomputeAndPersistWorkflowStage };
+export type { TollWorkflowStage };

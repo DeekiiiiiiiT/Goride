@@ -14,7 +14,7 @@
  * toll_controller.tsx) was deliberately built driver/vehicle-agnostic —
  * those fields only ever ADD confidence score, they never exclude a
  * candidate — specifically to handle shared vehicles / shift swaps (see the
- * client's `getInferredDriver` in UnmatchedTollsList.tsx, which infers a
+ * client's `getInferredDriver` in TollBucketPanel.tsx, which infers a
  * driver purely from "nearest trip in time for that vehicle plate" because a
  * toll's own driverId/vehicleId aren't reliable enough to filter on). Adding
  * a hard driverId/vehicleId AND-filter to `findTripsInDateRange` would

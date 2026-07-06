@@ -68,8 +68,8 @@ import {
   deleteAllCanonicalLedgerBySourceType,
   deleteCanonicalLedgerBySource,
 } from "./ledger_canonical.ts";
-import { isDriverTollChargeSyncEnabled, isUnifiedTollSettlementEnabled } from "./driver_toll_charge.ts";
-import { syncClaimTollResolution } from "./claim_toll_sync.ts";
+import { isUnifiedTollSettlementEnabled } from "./driver_toll_charge.ts";
+import { upsertClaim, deleteClaim } from "./claim_service.ts";
 import { addToTollDisposition, emptyTollDisposition, roundTollDisposition } from "./driver_toll_disposition.ts";
 import {
   appendCanonicalFuelExpenseIfEligible,
@@ -10344,88 +10344,8 @@ app.get("/make-server-37f42386/claims", requireAuth(), async (c) => {
 
 app.post("/make-server-37f42386/claims", async (c) => {
   try {
-    const claim = await c.req.json();
-    if (!claim.id) {
-        claim.id = crypto.randomUUID();
-    }
-    if (!claim.createdAt) {
-        claim.createdAt = new Date().toISOString();
-    }
-    claim.updatedAt = new Date().toISOString();
-
-    if (await isDriverTollChargeSyncEnabled()) {
-        // ── Reversible resolution sync ──────────────────────────────────────
-        // Read the PRIOR persisted claim (if any) so a resolution CHANGE (e.g.
-        // Charge Driver -> Write Off, or a flip-flop back to Charge Driver) is
-        // detected and correctly reverses/re-applies the driver charge, instead
-        // of the legacy behavior where `resolutionTransactionId` being set
-        // forever blocked any future re-sync (silently stale charge on
-        // reclassify-away; silent no-op on reclassify-back).
-        const existingClaim = (await kv.get(`claim:${claim.id}`)) as
-          | { status?: string; resolutionReason?: string; preIsReconciled?: boolean }
-          | null;
-        const prevReason = existingClaim?.status === "Resolved" ? existingClaim.resolutionReason : undefined;
-        const nextReason = claim.status === "Resolved" ? claim.resolutionReason : undefined;
-
-        const sync = await syncClaimTollResolution(
-          {
-            claimId: claim.id,
-            transactionId: claim.transactionId,
-            driverId: claim.driverId,
-            driverName: claim.driverName,
-            vehicleId: claim.vehicleId,
-            tripId: claim.tripId,
-            amount: claim.amount,
-            date: claim.date,
-            subject: claim.subject,
-            prevReason: prevReason as any,
-            nextReason: nextReason as any,
-            source: "claim_resolution",
-            priorIsReconciled: existingClaim?.preIsReconciled,
-          },
-          c,
-        );
-        if (sync.resolutionTransactionId !== undefined) {
-          claim.resolutionTransactionId = sync.resolutionTransactionId ?? undefined;
-        }
-        // Track isReconciled's pre-claim baseline across the whole
-        // resolved-lifetime so the eventual full revert restores it exactly
-        // (see syncClaimTollResolution's priorIsReconciled contract).
-        if (sync.priorIsReconciled !== undefined) {
-          claim.preIsReconciled = sync.priorIsReconciled;
-        } else if (nextReason === undefined) {
-          claim.preIsReconciled = undefined;
-        }
-    } else {
-        // Flag OFF: preserve legacy behavior byte-for-byte — first-charge-only,
-        // positive Adjustment txn (legacy sign), no reversal/reclassify support,
-        // no toll_ledger sync. Identical to the pre-existing code path.
-        if (claim.status === 'Resolved' && claim.resolutionReason === 'Charge Driver' && !claim.resolutionTransactionId) {
-            const txId = crypto.randomUUID();
-            const transaction = {
-                id: txId,
-                driverId: claim.driverId,
-                date: new Date().toISOString(),
-                // Ensure description contains 'Toll' so it's picked up by DriverDetail filter
-                description: `Toll Dispute Charge - ${claim.subject || 'Resolution'}`,
-                category: 'Adjustment',
-                tripId: claim.tripId, // Link to the Trip so it appears nested in the ledger
-                type: 'Adjustment',
-                amount: Math.abs(claim.amount || 0), // Positive magnitude; ledger logic subtracts it
-                status: 'Completed',
-                paymentMethod: 'Cash', // Affects Cash Wallet
-                metadata: {
-                    claimId: claim.id,
-                    source: 'claim_resolution'
-                }
-            };
-
-            await kv.set(`transaction:${txId}`, stampOrg(transaction, c));
-            claim.resolutionTransactionId = txId; // Link it to prevent duplicates
-        }
-    }
-
-    await kv.set(`claim:${claim.id}`, stampOrg(claim, c));
+    const claimInput = await c.req.json();
+    const claim = await upsertClaim(claimInput, c);
     return c.json({ success: true, data: claim });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
@@ -10435,7 +10355,7 @@ app.post("/make-server-37f42386/claims", async (c) => {
 app.delete("/make-server-37f42386/claims/:id", async (c) => {
   const id = c.req.param("id");
   try {
-    await kv.del(`claim:${id}`);
+    await deleteClaim(id, c);
     return c.json({ success: true });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);

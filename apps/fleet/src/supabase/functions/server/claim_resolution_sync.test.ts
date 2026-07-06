@@ -14,9 +14,17 @@ import {
 Deno.test("mapResolutionReasonToTollResolution — all mappings", () => {
   assertEquals(mapResolutionReasonToTollResolution("Charge Driver"), "personal");
   assertEquals(mapResolutionReasonToTollResolution("Write Off"), "write_off");
+  assertEquals(mapResolutionReasonToTollResolution("Business Expense"), "business");
   assertEquals(mapResolutionReasonToTollResolution("Reimbursed"), "refunded");
   assertEquals(mapResolutionReasonToTollResolution("Other"), null);
   assertEquals(mapResolutionReasonToTollResolution(undefined), null);
+});
+
+Deno.test("Business Expense behaves like Write Off (fleet absorbs, distinct label)", () => {
+  const r = decideClaimResolutionSync({ prevReason: "Charge Driver", nextReason: "Business Expense" });
+  assertEquals(r.shouldReverse, true);
+  assertEquals(r.shouldCharge, false);
+  assertEquals(r.nextLedgerResolution, "business");
 });
 
 Deno.test("no change (same reason resaved) → full no-op, idempotent", () => {

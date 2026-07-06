@@ -1,20 +1,25 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../ui/tooltip";
-import { UnmatchedTollsList } from "./UnmatchedTollsList";
-import { DisputeMatchEvent } from "./DisputeRefundsList";
+import { TollBucketPanel } from "./TollBucketPanel";
+import { UnderpaidClaimsStep } from "./UnderpaidClaimsStep";
+import { DisputeRefundsList, DisputeMatchEvent } from "./DisputeRefundsList";
 import { UnclaimedRefundsList } from "./UnclaimedRefundsList";
 import { ReconciledTollsList } from "./ReconciledTollsList";
 import { ResolvedRefundsList, ResolvedRefundRow } from "./ResolvedRefundsList";
+import { ReconciliationStepper, ReconciliationStepDef, pickDefaultStep } from "./ReconciliationStepper";
 import { useTollReconciliation } from "../../../hooks/useTollReconciliation";
 import { useClaims } from "../../../hooks/useClaims";
-import { Loader2, RefreshCw, Wand2, AlertTriangle, TrendingDown, TrendingUp, DollarSign, Wallet, HelpCircle, Filter, Bot } from "lucide-react";
+import {
+  Loader2, RefreshCw, Wand2, AlertTriangle, TrendingDown, TrendingUp, DollarSign, Wallet, HelpCircle,
+  Filter, Bot, CarFront, Route, ShieldCheck, Unlink as UnlinkIcon, History as HistoryIcon,
+} from "lucide-react";
 import { Button } from "../../ui/button";
 import { runScenarioTest } from "../../../utils/testScenario";
-import { DisputeModal } from "../../claimable-loss/DisputeModal";
 import { UnifiedTollActivityTable } from "./UnifiedTollActivityTable";
 import { FinancialTransaction } from "../../../types/data";
 import { MatchResult, calculateTollFinancials } from "../../../utils/tollReconciliation";
+import { bucketForBestMatch, bucketForWorkflowStage, TollBucket, TollWorkflowStage } from "../../../utils/tollBucket";
 import { toast } from "sonner@2.0.3";
 import { Trip as TripType } from "../../../types/data";
 import { api } from "../../../services/api";
@@ -27,6 +32,8 @@ import { normalizePlatform } from "../../../utils/normalizePlatform";
 type PlatformFilter = 'all' | 'Uber' | 'InDrive' | 'Roam';
 const PLATFORM_OPTIONS: PlatformFilter[] = ['all', 'Uber', 'InDrive', 'Roam'];
 
+type StepId = 'needs-review' | 'personal-use' | 'deadhead' | 'underpaid-claims' | 'dispute-refunds' | 'unlinked-refunds';
+
 export function ReconciliationDashboard() {
   const handleRunTest = () => {
     const result = runScenarioTest();
@@ -34,10 +41,8 @@ export function ReconciliationDashboard() {
     alert(result);
   };
 
-  // Phase 5: Driver filter
   const [drivers, setDrivers] = useState<any[]>([]);
   const [selectedDriverId, setSelectedDriverId] = useState<string>('');
-  // Platform filter (Uber / InDrive / Roam) — re-scopes tiles + tabs
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>('all');
 
   useEffect(() => {
@@ -68,9 +73,8 @@ export function ReconciliationDashboard() {
     refresh
   } = useTollReconciliation(selectedDriverId || undefined);
 
-  const { claims, loading: claimsLoading, refresh: refreshClaims, createClaim } = useClaims();
+  const { claims, loading: claimsLoading, refresh: refreshClaims, createClaim, updateClaim, deleteClaim } = useClaims();
 
-  // Optimistic list update, then silent background sync (no full-page spinner)
   const handleRefundMatchComplete = useCallback((event: DisputeMatchEvent) => {
     if (event.type === 'match') {
       applyDisputeMatch(event.refundId, event.tollId);
@@ -80,62 +84,30 @@ export function ReconciliationDashboard() {
     void Promise.all([refresh(), refreshClaims()]);
   }, [applyDisputeMatch, applyDisputeUnmatch, refresh, refreshClaims]);
 
-  const [isDisputeOpen, setIsDisputeOpen] = React.useState(false);
-  const [disputeTarget, setDisputeTarget] = React.useState<{ transaction: FinancialTransaction, match: MatchResult } | null>(null);
-  // Phase 5: driver assignment required before charging a driver
   const [pendingPersonalTx, setPendingPersonalTx] = React.useState<FinancialTransaction | null>(null);
   const [pendingDriverId, setPendingDriverId] = React.useState<string>('');
 
-  // Create Trip Map for O(1) lookup. MOVED UP before early return to obey Rules of Hooks.
   const tripMap = useMemo(() => new Map(trips.map(t => [t.id, t])), [trips]);
 
-  const handleOpenDispute = (transaction: FinancialTransaction, match: MatchResult) => {
-    setDisputeTarget({ transaction, match });
-    setIsDisputeOpen(true);
-  };
-
-  // Phase 4: Action Logic Handlers
-  // These handlers direct the user intent to the correct logical flow.
-  // In Phase 5, we will add the specific API calls (approveExpense, rejectExpense) inside these.
-
   const handleApprove = async (tx: FinancialTransaction) => {
-      // Case: Cash/Green (Perfect Match)
-      // Action: Reimburse Driver (Fleet owes Driver)
-      // Logic: Link the trip (Reconcile) AND set status to 'Approved'.
-      
       const match = suggestions.get(tx.id)?.[0];
       if (match) {
-          // 1. Link the toll to the trip
           await reconcile(tx, match.trip);
-          // 2. Mark as Approved (Resolved)
           await approve(tx, "Matched & Approved via Dashboard");
       }
   };
 
   const handleReject = async (tx: FinancialTransaction) => {
-      // Case: Cash/Purple (Personal)
-      // Action: Personal Expense (Driver Liability)
-      // Logic: Set status to 'Rejected'. 
-      
       const match = suggestions.get(tx.id)?.[0];
       const reason = match?.matchType === 'PERSONAL_MATCH' ? "Identified as Personal Trip" : "Rejected by Admin";
       await reject(tx, reason);
   };
 
   const handleFlag = async (tx: FinancialTransaction) => {
-      // Case: Cash/Amber (Variance/Partial)
-      // Action: Flag for Claim -> Now just Match & Reconcile
-      // Rationale: These are already surfaced in "Claimable Loss" based on the reconciliation status and variance.
-      // So we just need to confirm the link here.
-      
       const match = suggestions.get(tx.id)?.[0];
       if (match) {
-          // Just reconcile directly. 
-          // The variance will automatically make it show up in Claimable Loss if logic allows (it does).
           await reconcile(tx, match.trip);
           toast.success("Flagged for claim");
-          
-          // Force refresh to ensure list is updated (workaround for sticky state)
           refresh();
       }
   };
@@ -145,8 +117,6 @@ export function ReconciliationDashboard() {
       type: 'Personal' | 'WriteOff' | 'Business',
       driverIdOverride?: string,
   ) => {
-      // Integrity guard: charging a driver requires a real driver. Never write a
-      // "Charge Driver" claim against 'unknown'. Open the Driver Picker instead.
       const resolvedDriverId = driverIdOverride || tx.driverId;
       if (type === 'Personal' && !resolvedDriverId) {
           setPendingPersonalTx(tx);
@@ -154,7 +124,6 @@ export function ReconciliationDashboard() {
           return;
       }
       try {
-          // Full-toll resolutions have no platform pay — always persist financial fields.
           const tollCost = Math.abs(tx.amount);
           const commonData = {
               transactionId: tx.id,
@@ -175,7 +144,6 @@ export function ReconciliationDashboard() {
                   subject: 'Unmatched Toll - Personal Use',
                   message: 'This toll was identified as personal usage and charged to your account.'
               });
-              // Update transaction status to Rejected (driver liability, no fleet reimbursement)
               await reject(tx, 'Manual Resolution: Personal (Driver Pays)');
               toast.success("Marked as Personal (Driver Liability)");
           } else if (type === 'WriteOff') {
@@ -186,23 +154,20 @@ export function ReconciliationDashboard() {
                   subject: 'Unmatched Toll - Write Off',
                   message: 'Fleet wrote off this expense.'
               });
-              // Update transaction status to Approved (fleet absorbs cost → triggers wallet credit for Cash tolls)
               await approve(tx, 'Manual Resolution: Write Off (Fleet Pays)');
               toast.success("Written off as Fleet Loss");
           } else if (type === 'Business') {
                await createClaim({
                   ...commonData,
                   driverId: tx.driverId || 'fleet',
-                  resolutionReason: 'Write Off', // Effectively a fleet absorption
+                  resolutionReason: 'Business Expense',
                   subject: 'Business Expense',
                   message: 'Legitimate business expense (e.g. maintenance).'
               });
-              // Update transaction status to Approved (fleet absorbs cost → triggers wallet credit for Cash tolls)
               await approve(tx, 'Manual Resolution: Business Expense');
               toast.success("Marked as Business Expense");
           }
-          
-          // Refresh both datasets to update UI
+
           await Promise.all([refresh(), refreshClaims()]);
       } catch (error) {
           console.error("Manual resolution failed", error);
@@ -222,9 +187,6 @@ export function ReconciliationDashboard() {
   };
 
   // ── Platform scoping (Uber / InDrive / Roam) ─────────────────────────────
-  // Trips carry their platform; a toll only knows its platform once matched to a
-  // trip (or if it came from a Roam geofence crossing). When a specific platform
-  // is selected, unmatched tolls (platform unknown) fall out — which is honest.
   const normPlat = (p?: string | null) => normalizePlatform(p || undefined);
   const platformOfToll = (tx: FinancialTransaction): string | null => {
     const trip = tripMap.get(tx.tripId || '');
@@ -243,12 +205,28 @@ export function ReconciliationDashboard() {
   const pResolved = platformFilter === 'all' ? resolvedRefunds : resolvedRefunds.filter(tripInPlatform);
   const pClaims = platformFilter === 'all' ? claims : claims.filter(claimInPlatform);
 
-  // Filter out tolls that have an existing claim
-  // This ensures we don't double-process a toll or see items we've already handled.
   const claimedTransactionIds = new Set(claims.map(c => c.transactionId));
   const filteredUnreconciledTolls = pUnreconciled.filter(tx => !claimedTransactionIds.has(tx.id));
 
   const isLoading = tollsLoading || claimsLoading;
+
+  // ── RWF-1: classify into the 4 non-claims buckets, preferring the
+  // persisted workflowStage over a live suggestions recompute so a toll's
+  // queue position survives independent of this render's match recompute —
+  // falls back to bucketForBestMatch for rows that predate the backfill. ──
+  const classified = useMemo(() => {
+    const buckets: Record<TollBucket, FinancialTransaction[]> = {
+      'needs-review': [], 'underpaid': [], 'deadhead': [], 'personal-use': [],
+    };
+    filteredUnreconciledTolls.forEach(tx => {
+      const stage = (tx as any).workflowStage as TollWorkflowStage | undefined;
+      const bucket: TollBucket | null = stage
+        ? bucketForWorkflowStage(stage)
+        : bucketForBestMatch(suggestions.get(tx.id)?.[0]);
+      if (bucket) buckets[bucket].push(tx);
+    });
+    return buckets;
+  }, [filteredUnreconciledTolls, suggestions]);
 
   if (isLoading) {
     return (
@@ -260,9 +238,9 @@ export function ReconciliationDashboard() {
   }
 
   // Calculate Financial Aggregates
-  let claimableAmount = 0; // Amber: Unreconciled Underpayments
-  let unreconciledPersonal = 0;   // Purple: Unreconciled Personal matches
-  let unknownAmount = 0;    // No match found (Potential Personal)
+  let claimableAmount = 0;
+  let unreconciledPersonal = 0;
+  let unknownAmount = 0;
 
   filteredUnreconciledTolls.forEach(tx => {
     const matches = suggestions.get(tx.id);
@@ -275,122 +253,65 @@ export function ReconciliationDashboard() {
     }
 
     switch (bestMatch.matchType) {
-      case 'AMOUNT_VARIANCE': // Amber
+      case 'AMOUNT_VARIANCE':
         claimableAmount += (bestMatch.varianceAmount || amount);
         break;
-      case 'PERSONAL_MATCH': // Purple
+      case 'PERSONAL_MATCH':
         unreconciledPersonal += amount;
         break;
-      // Phase 6: PERFECT_MATCH tolls are now auto-reconciled server-side (Phase 1)
-      // and never appear in filteredUnreconciledTolls, so no case needed.
       default:
         unknownAmount += amount;
     }
   });
 
-  // Calculate Reconciled Stats (History)
   let reconciledLiability = 0;
   let recoveredAmount = 0;
 
   reconciledTolls.forEach(tx => {
       const trip = tripMap.get(tx.tripId || '');
       const claim = claims.find(c => c.transactionId === tx.id);
-      
       const financials = calculateTollFinancials(tx, trip, claim);
-
-      // Recovered: Platform + Driver
       recoveredAmount += financials.totalRecovered;
-
-      // Liability: Net Loss (what the fleet actually paid)
-      // NOTE: "Driver Liability" card traditionally means "What we need to charge the driver"
-      // But now that we have claims, "Driver Liability" should essentially be:
-      // 1. Unreconciled Personal (Needs to be charged)
-      // 2. Net Loss (Deficit that hasn't been charged yet?)
-      // Wait, let's stick to the definition:
-      // If it's recovered via Driver Charge (Claim), it's not a liability anymore, it's Recovered.
-      // So Liability should track UNRECOVERED personal usage or deficits.
-      
-      // If financials.netLoss > 0, that is money the fleet lost.
-      // Is it driver liability? Only if it SHOULD have been charged.
-      // For now, let's map "Net Loss" to the liability bucket if we assume strict fleet controls.
-      // However, the previous logic was: variance < -0.01 -> add to liability.
-      
-      // New Logic: 
-      // If netLoss > 0, it contributes to fleet loss (which might be driver liability if we pursue it).
       reconciledLiability += financials.netLoss;
   });
 
-  // ── Driver Liability (locked definition, Phase 5) ────────────────────────
-  // Driver Liability = toll cost the fleet expects to recover FROM a driver but
-  // has not yet recovered. It is the sum of three unrecovered buckets:
-  //   1. unreconciledPersonal — post-trip/personal-use tolls not yet charged
-  //   2. reconciledLiability   — net deficits on reconciled tolls (fleet paid
-  //                              more than the platform reimbursed)
-  //   3. unknownAmount         — unmatched tolls with no trip (potential personal)
-  // Once a toll is recovered via a "Charge Driver" claim it leaves this bucket
-  // and counts as Recovered instead. This client card is authoritative (it uses
-  // per-match classification); GET /summary.driverLiability is a coarse
-  // server-side approximation used only for lightweight summary callers.
   const totalDriverLiability = unreconciledPersonal + reconciledLiability + unknownAmount;
 
-  // Yellow: Unclaimed Refunds (Money Uber paid you, but you haven't matched to an expense)
   const refundsAmount = unclaimedRefunds.reduce((sum, t) => sum + (t.tollCharges || 0), 0);
-  // Phase 3: Amount cleared via refund resolution (cash wash / phantom / expense logged)
   const resolvedRefundsAmount = pResolved.reduce((sum, t) => sum + (t.tollCharges || 0), 0);
 
-  // Phase 6: Dispute refund recovery amount (matched/auto-resolved refunds)
   const matchedDisputeRefundAmount = (disputeRefunds || [])
     .filter(r => r.status === 'matched' || r.status === 'auto_resolved')
     .reduce((sum, r) => sum + (r.amount || 0), 0);
   const totalRecovered = recoveredAmount + matchedDisputeRefundAmount;
 
-  // ── Balancing KPI tiles (admin money-flow view) ──────────────────────────
-  // Reads as one equation: Spend − Reimbursed − Charged = Net Loss.
-  // All values respect the active platform filter (Uber / InDrive / Roam / all).
-  // Dispute refunds are Uber support adjustments, so only count them for Uber/all.
   const scopedDisputeRefund = (platformFilter === 'all' || platformFilter === 'Uber') ? matchedDisputeRefundAmount : 0;
-  // 1. Toll Spend — everything the fleet paid out on tolls (usage debits).
   const tollSpend = [...pUnreconciled, ...pReconciled]
     .reduce((sum, tx) => sum + (tx.amount < 0 ? Math.abs(tx.amount) : 0), 0);
-  // 2. Reimbursed — toll money the platform paid back across trips, plus matched
-  //    Uber support adjustments. (Cash-washes included — the trip refund exists.)
   const reimbursedByUber =
     pTrips.reduce((sum, t) => sum + (t.tollCharges || 0), 0) + scopedDisputeRefund;
-  // 3. Charged to Drivers — recovered by billing the driver (resolved claims).
   const chargedToDrivers = pClaims
     .filter(c => c.status === 'Resolved' && c.resolutionReason === 'Charge Driver')
     .reduce((sum, c) => sum + Math.abs(c.amount || 0), 0);
-  // 4. Net Toll Loss — unrecovered toll cost (floored at 0).
   const netTollLoss = Math.max(0, tollSpend - reimbursedByUber - chargedToDrivers);
-  // 5. Needs Review — open work: unmatched tolls + unresolved unlinked refunds.
   const needsReviewCount = filteredUnreconciledTolls.length + pUnclaimed.length;
 
-  // Count high confidence matches for auto-button
-  // Phase 5: Scope to filteredUnreconciledTolls only (excludes claimed items)
   const filteredTollIds = new Set(filteredUnreconciledTolls.map(tx => tx.id));
   const highConfidenceCount = Array.from(suggestions.entries())
     .filter(([txId, matches]) => filteredTollIds.has(txId) && matches[0]?.confidence === 'high')
     .length;
 
   const handleSmartReconcile = async (tx: FinancialTransaction, trip: TripType) => {
-      // Orphan personal-use suggestion: there is no trip to link (tripId is empty).
-      // Route to the integrity-guarded manual personal resolution (opens the driver
-      // picker if no driver), never a trip link. Only reachable when the
-      // personal-use detection flag is ON.
       if (!trip?.id) {
           await handleManualResolve(tx, 'Personal');
           return;
       }
 
-      // Check if this is a personal match
       const match = suggestions.get(tx.id)?.find(m => m.trip.id === trip.id);
 
       if (match?.matchType === 'PERSONAL_MATCH') {
           try {
-              // 1. Link the trip (Reconcile)
               await reconcile(tx, trip);
-              
-              // 2. Create the "Charge Driver" claim automatically
               const tollCost = Math.abs(tx.amount);
               await createClaim({
                   transactionId: tx.id,
@@ -407,7 +328,6 @@ export function ReconciliationDashboard() {
                   createdAt: new Date().toISOString(),
                   updatedAt: new Date().toISOString()
               });
-              
               toast.success("Linked to Trip & Charged to Driver");
               refreshClaims();
           } catch (e) {
@@ -415,11 +335,24 @@ export function ReconciliationDashboard() {
               toast.error("Failed to process Personal Match");
           }
       } else {
-          // Standard reconcile for other types
           await reconcile(tx, trip);
           toast.success("Transaction Linked Successfully");
       }
   };
+
+  // ── Guided step navigation (RWF-1 / Phase D) ─────────────────────────────
+  const claimsNeedingAttention = claims.filter(c => c.status !== 'Resolved').length;
+  const unmatchedDisputeRefunds = (disputeRefunds || []).filter(r => r.status === 'unmatched').length;
+
+  const steps: ReconciliationStepDef[] = [
+    { id: 'needs-review', label: 'Needs Review', icon: HelpCircle, count: classified['needs-review'].length },
+    { id: 'personal-use', label: 'Personal Use', icon: CarFront, count: classified['personal-use'].length },
+    { id: 'deadhead', label: 'Deadhead', icon: Route, count: classified['deadhead'].length },
+    { id: 'underpaid-claims', label: 'Underpaid & Claims', icon: DollarSign, count: classified['underpaid'].length + claimsNeedingAttention },
+    { id: 'dispute-refunds', label: 'Dispute Refunds', icon: ShieldCheck, count: unmatchedDisputeRefunds,
+      hint: claims.length === 0 ? 'Needs a claim first' : undefined },
+    { id: 'unlinked-refunds', label: 'Unlinked Refunds', icon: UnlinkIcon, count: pUnclaimed.length },
+  ];
 
   return (
     <TooltipProvider>
@@ -430,7 +363,6 @@ export function ReconciliationDashboard() {
             <p className="text-slate-500">Match toll expenses with trip refunds to identify leakage.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-            {/* Platform filter (Uber / InDrive / Roam) */}
             <div className="flex items-center rounded-md border border-slate-200 bg-white p-0.5 shadow-sm">
                 {PLATFORM_OPTIONS.map(p => (
                     <button
@@ -446,7 +378,6 @@ export function ReconciliationDashboard() {
                     </button>
                 ))}
             </div>
-            {/* Phase 5: Driver filter */}
             <div className="flex items-center gap-1.5">
                 <Filter className="h-4 w-4 text-slate-400" />
                 <select
@@ -479,7 +410,6 @@ export function ReconciliationDashboard() {
 
       {/* Financial Overview Cards — one balancing story: Spend − Reimbursed − Charged = Net Loss */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        {/* Tile 1: Toll Spend (slate) — money out */}
         <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm relative overflow-hidden">
             <div className="absolute top-0 right-0 w-2 h-full bg-slate-400" />
             <div className="flex justify-between items-start">
@@ -502,7 +432,6 @@ export function ReconciliationDashboard() {
             </div>
         </div>
 
-        {/* Tile 2: Reimbursed by Uber (green) — money in */}
         <div className="bg-white p-4 rounded-lg border border-emerald-200 shadow-sm relative overflow-hidden">
             <div className="absolute top-0 right-0 w-2 h-full bg-emerald-400" />
             <div className="flex justify-between items-start">
@@ -534,7 +463,6 @@ export function ReconciliationDashboard() {
             </div>
         </div>
 
-        {/* Tile 3: Charged to Drivers (purple) — money in */}
         <div className="bg-white p-4 rounded-lg border border-purple-200 shadow-sm relative overflow-hidden">
             <div className="absolute top-0 right-0 w-2 h-full bg-purple-400" />
             <div className="flex justify-between items-start">
@@ -557,7 +485,6 @@ export function ReconciliationDashboard() {
             </div>
         </div>
 
-        {/* Tile 4: Net Toll Loss (rose) — the headline */}
         <div className="bg-white p-4 rounded-lg border border-rose-200 shadow-sm relative overflow-hidden">
             <div className="absolute top-0 right-0 w-2 h-full bg-rose-400" />
             <div className="flex justify-between items-start">
@@ -580,7 +507,6 @@ export function ReconciliationDashboard() {
             </div>
         </div>
 
-        {/* Tile 5: Needs Review (amber) — the to-do */}
         <div className="bg-white p-4 rounded-lg border border-amber-200 shadow-sm relative overflow-hidden">
             <div className="absolute top-0 right-0 w-2 h-full bg-amber-400" />
             <div className="flex justify-between items-start">
@@ -592,7 +518,7 @@ export function ReconciliationDashboard() {
                                 <HelpCircle className="h-3.5 w-3.5 text-amber-400 hover:text-amber-600 transition-colors" />
                             </TooltipTrigger>
                             <TooltipContent>
-                                <p className="max-w-[200px] text-xs">Open items still to sort: unmatched tolls plus unlinked refunds awaiting a decision.</p>
+                                <p className="max-w-[200px] text-xs">Open items still to sort across every step below.</p>
                             </TooltipContent>
                         </Tooltip>
                     </div>
@@ -611,125 +537,62 @@ export function ReconciliationDashboard() {
         </div>
       </div>
 
-      {/* Phase 6: Auto-match session banner */}
       {autoReconciledCount > 0 && (
         <div className="flex items-center gap-2 px-4 py-2.5 bg-indigo-50 border border-indigo-200 rounded-lg text-sm text-indigo-700">
           <Bot className="h-4 w-4 shrink-0" />
           <span>
             <strong>{autoReconciledCount}</strong> toll{autoReconciledCount === 1 ? ' was' : 's were'} auto-matched to trips this session.{' '}
-            <span className="text-indigo-500">View in Matched History.</span>
+            <span className="text-indigo-500">View in History below.</span>
           </span>
         </div>
       )}
 
-      {/* MOI-5: already-resolved tolls flagged for a second look */}
+      {/* MOI-5: already-resolved tolls flagged for a second look — cuts across
+          steps, so it stays a banner above the stepper rather than a step. */}
       <RematchCandidatesQueue driverId={selectedDriverId || undefined} />
 
-      <Tabs defaultValue="unmatched" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-5 lg:max-w-5xl">
-          <TabsTrigger value="unmatched">
-            Unmatched Tolls
-            {filteredUnreconciledTolls.length > 0 && (
-                <span className="ml-2 bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full text-xs font-bold">
-                    {filteredUnreconciledTolls.length}
-                </span>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="unclaimed">
-            Unlinked Refunds
-            {pUnclaimed.length > 0 && (
-                <span className="ml-2 bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded-full text-xs font-bold">
-                    {pUnclaimed.length}
-                </span>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="resolved">
-            Resolved
-            {pResolved.length > 0 && (
-                <span className="ml-2 bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full text-xs font-bold">
-                    {pResolved.length}
-                </span>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="history">
-            Matched History
-            <span className="ml-2 bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full text-xs font-bold">
-                    {pReconciled.length}
-            </span>
-          </TabsTrigger>
-          <TabsTrigger value="activity">
-            All activity
-          </TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="unmatched" className="mt-4">
-            <UnmatchedTollsList 
-                tolls={filteredUnreconciledTolls} 
-                suggestions={suggestions}
-                onReconcile={handleSmartReconcile}
-                allTrips={trips}
-                onOpenDispute={handleOpenDispute}
-                onApprove={handleApprove}
-                onReject={handleReject}
-                onFlag={handleFlag}
-                onManualResolve={handleManualResolve}
-                onEdit={handleEditToll}
-                disputeRefunds={disputeRefunds}
-                onRefundMatchComplete={handleRefundMatchComplete}
-            />
-        </TabsContent>
-        
-        <TabsContent value="unclaimed" className="mt-4">
-            <UnclaimedRefundsList
-                trips={pUnclaimed}
-                suggestions={refundSuggestions}
-                drivers={drivers}
-                onResolve={resolveRefund}
-                onBulkResolve={bulkResolveRefunds}
-            />
-        </TabsContent>
+      <GuidedSteps
+        steps={steps}
+        classified={classified}
+        suggestions={suggestions}
+        trips={trips}
+        pClaims={pClaims}
+        pUnclaimed={pUnclaimed}
+        disputeRefunds={disputeRefunds}
+        refundSuggestions={refundSuggestions}
+        drivers={drivers}
+        claims={claims}
+        reconciledTolls={pReconciled}
+        loadingTolls={tollsLoading}
+        loadingClaims={claimsLoading}
+        onSmartReconcile={handleSmartReconcile}
+        onApprove={handleApprove}
+        onReject={handleReject}
+        onFlag={handleFlag}
+        onManualResolve={handleManualResolve}
+        onEditToll={handleEditToll}
+        onRefundMatchComplete={handleRefundMatchComplete}
+        onResolveRefund={resolveRefund}
+        onBulkResolveRefunds={bulkResolveRefunds}
+        unreconcile={unreconcile}
+        updateClaim={updateClaim}
+        deleteClaim={deleteClaim}
+        refreshClaims={refreshClaims}
+      />
 
-        <TabsContent value="resolved" className="mt-4">
-            <ResolvedRefundsList
-                rows={pResolved.map((t): ResolvedRefundRow => ({
-                    id: t.id,
-                    date: t.date,
-                    platform: t.platform,
-                    driverId: t.driverId,
-                    driverName: t.driverName,
-                    tollCharges: t.tollCharges,
-                    pickupLocation: t.pickupLocation,
-                    dropoffLocation: t.dropoffLocation,
-                    resolution: (t.tollRefundResolution?.status as ResolvedRefundRow['resolution']) || 'cash_wash',
-                    resolvedBy: t.tollRefundResolution?.resolvedBy,
-                    resolvedAt: t.tollRefundResolution?.resolvedAt,
-                    auto: t.tollRefundResolution?.auto,
-                }))}
-                onUndo={undoRefund}
-            />
-        </TabsContent>
+      {/* Read-only audit views — Resolved / Matched History / All activity,
+          kept as one persistent panel below the guided steps (not a step
+          itself: nothing here needs a decision). */}
+      <HistoryPanel
+        pResolved={pResolved}
+        onUndoRefund={undoRefund}
+        pReconciled={pReconciled}
+        trips={trips}
+        pClaims={pClaims}
+        onUnmatch={unreconcile}
+        selectedDriverId={selectedDriverId}
+      />
 
-        <TabsContent value="history" className="mt-4">
-            <ReconciledTollsList
-                tolls={pReconciled}
-                trips={trips}
-                claims={pClaims}
-                onUnmatch={unreconcile}
-            />
-        </TabsContent>
-
-        <TabsContent value="activity" className="mt-4">
-          <div className="mb-2">
-            <p className="text-sm text-slate-600">
-              One timeline across toll ledger, legacy imports, unlinked trip refunds, and Uber support adjustments.
-              Amounts follow each source&apos;s sign convention (toll charges are usually negative; credits positive).
-            </p>
-          </div>
-          <UnifiedTollActivityTable driverId={selectedDriverId || undefined} />
-        </TabsContent>
-      </Tabs>
-
-      {/* Phase 5: Assign a driver before charging (prevents 'unknown' liability) */}
       <Dialog open={!!pendingPersonalTx} onOpenChange={(o) => { if (!o) setPendingPersonalTx(null); }}>
         <DialogContent>
           <DialogHeader>
@@ -762,22 +625,211 @@ export function ReconciliationDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <DisputeModal
-        isOpen={isDisputeOpen}
-        onClose={() => setIsDisputeOpen(false)}
-        lossItem={disputeTarget}
-        onClaimSuccess={async () => {
-            if (disputeTarget) {
-                // Link the toll to the trip as we've just created a claim for the variance
-                await reconcile(disputeTarget.transaction, disputeTarget.match.trip);
-                setIsDisputeOpen(false);
-                await refreshClaims();
-                refresh();
-            }
-        }}
-      />
     </div>
     </TooltipProvider>
+  );
+}
+
+/** Matches useTollReconciliation.ts's local (unexported) RefundResolution union. */
+type RefundResolutionKind = 'cash_wash' | 'phantom' | 'expense_logged' | 'pending';
+
+// ── Guided step content router ─────────────────────────────────────────────
+function GuidedSteps(props: {
+  steps: ReconciliationStepDef[];
+  classified: Record<TollBucket, FinancialTransaction[]>;
+  suggestions: Map<string, MatchResult[]>;
+  trips: TripType[];
+  pClaims: any[];
+  pUnclaimed: TripType[];
+  disputeRefunds: any[];
+  refundSuggestions: any;
+  drivers: any[];
+  claims: any[];
+  reconciledTolls: FinancialTransaction[];
+  loadingTolls: boolean;
+  loadingClaims: boolean;
+  onSmartReconcile: (tx: FinancialTransaction, trip: TripType) => void;
+  onApprove: (tx: FinancialTransaction) => void;
+  onReject: (tx: FinancialTransaction) => void;
+  onFlag: (tx: FinancialTransaction) => void;
+  onManualResolve: (tx: FinancialTransaction, type: 'Personal' | 'WriteOff' | 'Business') => void;
+  onEditToll: (transactionId: string, updates: Record<string, any>) => Promise<void>;
+  onRefundMatchComplete: (event: DisputeMatchEvent) => void;
+  onResolveRefund: (tripId: string, resolution: RefundResolutionKind, opts?: { notes?: string; driverId?: string }) => Promise<void> | void;
+  onBulkResolveRefunds: (items: Array<{ tripId: string; resolution: RefundResolutionKind; notes?: string; driverId?: string }>) => Promise<any>;
+  unreconcile: (tx: FinancialTransaction) => Promise<any>;
+  updateClaim: (claim: any) => Promise<any>;
+  deleteClaim: (id: string) => Promise<any>;
+  refreshClaims: () => void;
+}) {
+  const [activeStepId, setActiveStepId] = useState<StepId>(() => pickDefaultStep(props.steps) as StepId);
+
+  return (
+    <div className="space-y-4">
+      <ReconciliationStepper steps={props.steps} activeStepId={activeStepId} onSelect={(id) => setActiveStepId(id as StepId)} />
+
+      <div className="pt-2">
+        {activeStepId === 'needs-review' && (
+          <TollBucketPanel
+            tolls={props.classified['needs-review']}
+            suggestions={props.suggestions}
+            allTrips={props.trips}
+            onReconcile={props.onSmartReconcile}
+            onApprove={props.onApprove}
+            onReject={props.onReject}
+            onFlag={props.onFlag}
+            onManualResolve={props.onManualResolve}
+            onEdit={props.onEditToll}
+            emptyState={{ icon: HelpCircle, title: "No tolls pending review", description: "All tolls have been classified into other steps." }}
+            listTitle="Needs Review"
+            listDescription="Toll provider charges that haven't been linked to a specific trip."
+          />
+        )}
+        {activeStepId === 'personal-use' && (
+          <TollBucketPanel
+            tolls={props.classified['personal-use']}
+            suggestions={props.suggestions}
+            allTrips={props.trips}
+            onReconcile={props.onSmartReconcile}
+            onApprove={props.onApprove}
+            onReject={props.onReject}
+            onFlag={props.onFlag}
+            onManualResolve={props.onManualResolve}
+            onEdit={props.onEditToll}
+            emptyState={{ icon: CarFront, title: "No personal use tolls detected", description: "No tolls were classified as personal driver use." }}
+            listTitle="Personal Use"
+            listDescription="Tolls with no trip explaining them, or matched post-dropoff — likely personal driving."
+          />
+        )}
+        {activeStepId === 'deadhead' && (
+          <TollBucketPanel
+            tolls={props.classified['deadhead']}
+            suggestions={props.suggestions}
+            allTrips={props.trips}
+            onReconcile={props.onSmartReconcile}
+            onApprove={props.onApprove}
+            onReject={props.onReject}
+            onFlag={props.onFlag}
+            onManualResolve={props.onManualResolve}
+            onEdit={props.onEditToll}
+            approveLabel="Acknowledge (Fleet Cost)"
+            emptyState={{ icon: Route, title: "No deadhead tolls found", description: "No unreimbursed business driving tolls detected." }}
+            listTitle="Deadhead"
+            listDescription="Unreimbursed business driving (en route to pickup) — a fleet cost, no driver liability. Link/Acknowledge closes these out."
+          />
+        )}
+        {activeStepId === 'underpaid-claims' && (
+          <UnderpaidClaimsStep
+            underpaidTolls={props.classified['underpaid']}
+            suggestions={props.suggestions}
+            allTrips={props.trips}
+            onFlag={props.onFlag}
+            onReconcile={props.onSmartReconcile}
+            onEdit={props.onEditToll}
+            claims={props.claims}
+            reconciledTolls={props.reconciledTolls}
+            trips={props.trips}
+            disputeRefunds={props.disputeRefunds}
+            drivers={props.drivers}
+            loadingTolls={props.loadingTolls}
+            loadingClaims={props.loadingClaims}
+            unreconcile={props.unreconcile}
+            updateClaim={props.updateClaim}
+            deleteClaim={props.deleteClaim}
+            refreshClaims={props.refreshClaims}
+          />
+        )}
+        {activeStepId === 'dispute-refunds' && (
+          <DisputeRefundsList
+            refunds={props.disputeRefunds}
+            onMatchComplete={props.onRefundMatchComplete}
+          />
+        )}
+        {activeStepId === 'unlinked-refunds' && (
+          <UnclaimedRefundsList
+            trips={props.pUnclaimed}
+            suggestions={props.refundSuggestions}
+            drivers={props.drivers}
+            onResolve={props.onResolveRefund}
+            onBulkResolve={props.onBulkResolveRefunds}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Persistent read-only history (Resolved / Matched History / All activity) ──
+function HistoryPanel(props: {
+  pResolved: TripType[];
+  onUndoRefund: (tripId: string) => Promise<void> | void;
+  pReconciled: FinancialTransaction[];
+  trips: TripType[];
+  pClaims: any[];
+  onUnmatch: (tx: FinancialTransaction) => Promise<any>;
+  selectedDriverId: string;
+}) {
+  return (
+    <div className="border-t border-slate-200 pt-6">
+      <div className="flex items-center gap-2 mb-4">
+        <HistoryIcon className="h-4 w-4 text-slate-400" />
+        <h3 className="text-sm font-semibold text-slate-700">History</h3>
+        <span className="text-xs text-slate-400">Read-only audit trail — nothing here needs a decision.</span>
+      </div>
+      <Tabs defaultValue="history" className="w-full">
+        <TabsList className="grid w-full grid-cols-3 sm:max-w-md">
+          <TabsTrigger value="resolved">
+            Resolved
+            {props.pResolved.length > 0 && (
+              <span className="ml-2 bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full text-xs font-bold">{props.pResolved.length}</span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="history">
+            Matched History
+            <span className="ml-2 bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full text-xs font-bold">{props.pReconciled.length}</span>
+          </TabsTrigger>
+          <TabsTrigger value="activity">All activity</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="resolved" className="mt-4">
+          <ResolvedRefundsList
+            rows={props.pResolved.map((t): ResolvedRefundRow => ({
+              id: t.id,
+              date: t.date,
+              platform: t.platform,
+              driverId: t.driverId,
+              driverName: t.driverName,
+              tollCharges: t.tollCharges,
+              pickupLocation: t.pickupLocation,
+              dropoffLocation: t.dropoffLocation,
+              resolution: (t.tollRefundResolution?.status as ResolvedRefundRow['resolution']) || 'cash_wash',
+              resolvedBy: t.tollRefundResolution?.resolvedBy,
+              resolvedAt: t.tollRefundResolution?.resolvedAt,
+              auto: t.tollRefundResolution?.auto,
+            }))}
+            onUndo={props.onUndoRefund}
+          />
+        </TabsContent>
+
+        <TabsContent value="history" className="mt-4">
+          <ReconciledTollsList
+            tolls={props.pReconciled}
+            trips={props.trips}
+            claims={props.pClaims}
+            onUnmatch={props.onUnmatch}
+          />
+        </TabsContent>
+
+        <TabsContent value="activity" className="mt-4">
+          <div className="mb-2">
+            <p className="text-sm text-slate-600">
+              One timeline across toll ledger, legacy imports, unlinked trip refunds, and Uber support adjustments.
+              Amounts follow each source&apos;s sign convention (toll charges are usually negative; credits positive).
+            </p>
+          </div>
+          <UnifiedTollActivityTable driverId={props.selectedDriverId || undefined} />
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }

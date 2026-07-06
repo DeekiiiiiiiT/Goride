@@ -20,7 +20,7 @@ import { Hono } from "npm:hono";
 import * as kv from "./kv_store.tsx";
 import { isTollCategory } from "./toll_category_flags.ts";
 import { getFleetTimezone, hasTzSuffix } from "./timezone_helper.tsx";
-import { syncClaimTollResolution } from "./claim_toll_sync.ts";
+import { upsertClaim, deleteClaim } from "./claim_service.ts";
 import {
   applyRefundResolution,
   isUnresolvedRefund,
@@ -229,53 +229,27 @@ async function matchRefundToClaim(
       if (cs === "Rejected") {
         console.log(`[DisputeRefund] Claim ${claimId} is Rejected — refund marked matched, claim untouched`);
       } else {
-        const prevReason = cs === "Resolved" ? (claim as any).resolutionReason : undefined;
-        let resolutionTransactionIdPatch: any = (claim as any).resolutionTransactionId;
-        let preIsReconciledPatch: any = (claim as any).preIsReconciled;
-
-        if (settings.disputeRefundTripSyncEnabled) {
-          const sync = await syncClaimTollResolution(
-            {
-              claimId,
-              transactionId: (claim as any).transactionId,
-              driverId: (claim as any).driverId,
-              driverName: (claim as any).driverName,
-              vehicleId: (claim as any).vehicleId,
-              tripId: (claim as any).tripId,
-              amount: (claim as any).amount,
-              date: (claim as any).date,
-              subject: (claim as any).subject,
-              prevReason,
-              nextReason: "Reimbursed",
-              source: "dispute_refund_sync",
-              priorIsReconciled: (claim as any).preIsReconciled,
-            },
-            c,
-          );
-          if (sync.resolutionTransactionId !== undefined) {
-            resolutionTransactionIdPatch = sync.resolutionTransactionId ?? undefined;
-          }
-          // Baseline isReconciled from before this claim was ever resolved —
-          // captured on first resolve only, so unmatch can restore it exactly.
-          if (sync.priorIsReconciled !== undefined) {
-            preIsReconciledPatch = sync.priorIsReconciled;
-          }
-        }
-
-        await kv.set(claimKey, {
-          ...claim,
-          status: "Resolved",
-          resolutionReason: "Reimbursed",
-          disputeRefundId: id,
-          preDisputeStatus: cs, // so unmatch can restore it
-          // Prior resolutionReason (e.g. "Charge Driver") — lets unmatch
-          // restore the exact prior reason, not just null. Only meaningful
-          // once cs === "Resolved" was reachable here at all.
-          preDisputeResolutionReason: cs === "Resolved" ? (claim as any).resolutionReason : null,
-          resolutionTransactionId: resolutionTransactionIdPatch,
-          preIsReconciled: preIsReconciledPatch,
-          updatedAt: new Date().toISOString(),
-        });
+        await upsertClaim(
+          {
+            ...(claim as any),
+            status: "Resolved",
+            resolutionReason: "Reimbursed",
+            disputeRefundId: id,
+            preDisputeStatus: cs, // so unmatch can restore it
+            // Prior resolutionReason (e.g. "Charge Driver") — lets unmatch
+            // restore the exact prior reason, not just null. Only meaningful
+            // once cs === "Resolved" was reachable here at all.
+            preDisputeResolutionReason: cs === "Resolved" ? (claim as any).resolutionReason : null,
+          },
+          c,
+          // disputeRefundTripSyncEnabled is this cascade's OWN outer gate,
+          // independent of the system-wide driverTollChargeSyncEnabled —
+          // force the sync when it's on (never fall back to upsertClaim's
+          // legacy branch, which this cascade never had), or skip entirely
+          // when off (matches this cascade's prior conservative behavior of
+          // doing nothing financial while its flag is off).
+          { syncMode: settings.disputeRefundTripSyncEnabled ? "force" : "skip" },
+        );
         updated = { ...updated, status: "auto_resolved", matchedClaimId: claimId };
         await kv.set(recordKey, updated);
         console.log(`[DisputeRefund] ${auto ? "Auto-" : ""}resolved claim ${claimId} as Reimbursed (refund ${id})`);
@@ -489,22 +463,23 @@ app.patch(`${BASE}/:id/match`, async (c) => {
     if (!claimId && createClaim) {
       const toll = await loadTollForClaim(tollTransactionId);
       const newClaimId = `claim-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-      await kv.set(`claim:${newClaimId}`, {
-        id: newClaimId,
-        transactionId: tollTransactionId,
-        tripId: toll?.tripId || null,
-        driverId: toll?.driverId || refund.driverId || "unknown",
-        driverName: toll?.driverName || refund.driverName || null,
-        type: "Toll_Refund",
-        status: "Submitted_to_Uber",
-        amount: Math.abs(refund.amount || 0),
-        expectedAmount: Math.abs(toll?.amount || 0),
-        subject: "Toll Underpayment (manual dispute match)",
-        _createdByRefund: id, // so unmatch can delete it
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-      claimId = newClaimId;
+      const newClaim = await upsertClaim(
+        {
+          id: newClaimId,
+          transactionId: tollTransactionId,
+          tripId: toll?.tripId || null,
+          driverId: toll?.driverId || refund.driverId || "unknown",
+          driverName: toll?.driverName || refund.driverName || null,
+          type: "Toll_Refund",
+          status: "Submitted_to_Uber",
+          amount: Math.abs(refund.amount || 0),
+          expectedAmount: Math.abs(toll?.amount || 0),
+          subject: "Toll Underpayment (manual dispute match)",
+          _createdByRefund: id, // so unmatch can delete it
+        },
+        c,
+      );
+      claimId = newClaim.id;
     }
 
     const result = await matchRefundToClaim(refund, tollTransactionId, claimId || null, false, c);
@@ -545,80 +520,44 @@ app.patch(`${BASE}/:id/unmatch`, async (c) => {
         if (claim._createdByRefund === id) {
           // This claim only existed to hold this manual match — reverse any
           // driver charge it drove before removing it.
-          if (settings.disputeRefundTripSyncEnabled) {
-            await syncClaimTollResolution(
-              {
-                claimId,
-                transactionId: claim.transactionId,
-                driverId: claim.driverId,
-                driverName: claim.driverName,
-                vehicleId: claim.vehicleId,
-                tripId: claim.tripId,
-                amount: claim.amount,
-                date: claim.date,
-                subject: claim.subject,
-                prevReason: "Reimbursed",
-                nextReason: undefined,
-                source: "dispute_refund_sync",
-                priorIsReconciled: claim.preIsReconciled,
-              },
-              c,
-            );
-          }
-          await kv.del(claimKey);
+          await deleteClaim(claimId, c, { syncMode: settings.disputeRefundTripSyncEnabled ? "force" : "skip" });
           console.log(`[DisputeRefund] Deleted refund-created claim ${claimId} on unmatch`);
         } else if (settings.disputeRefundTripSyncEnabled && claim.preDisputeResolutionReason !== undefined) {
           // Symmetric reversal via the same reversible sync, restoring the
           // exact prior reason (e.g. re-charging the driver if it was
           // "Charge Driver" before this dispute match reimbursed it).
           const revertReason = claim.preDisputeResolutionReason || undefined;
-          const sync = await syncClaimTollResolution(
+          await upsertClaim(
             {
-              claimId,
-              transactionId: claim.transactionId,
-              driverId: claim.driverId,
-              driverName: claim.driverName,
-              vehicleId: claim.vehicleId,
-              tripId: claim.tripId,
-              amount: claim.amount,
-              date: claim.date,
-              subject: claim.subject,
-              prevReason: "Reimbursed",
-              nextReason: revertReason,
-              source: "dispute_refund_sync",
-              priorIsReconciled: claim.preIsReconciled,
+              ...claim,
+              status: claim.preDisputeStatus || "Sent_to_Driver",
+              resolutionReason: revertReason || null,
+              disputeRefundId: null,
+              preDisputeStatus: null,
+              preDisputeResolutionReason: null,
+              // Only clear once fully back to unresolved — restoring to a still-
+              // Resolved reason (e.g. "Charge Driver") means a later claims-side
+              // revert must still be able to restore this same baseline.
+              preIsReconciled: revertReason === undefined ? undefined : claim.preIsReconciled,
             },
             c,
+            { syncMode: "force" },
           );
-          await kv.set(claimKey, {
-            ...claim,
-            status: claim.preDisputeStatus || "Sent_to_Driver",
-            resolutionReason: revertReason || null,
-            disputeRefundId: null,
-            preDisputeStatus: null,
-            preDisputeResolutionReason: null,
-            // Only clear once fully back to unresolved — restoring to a still-
-            // Resolved reason (e.g. "Charge Driver") means a later claims-side
-            // revert must still be able to restore this same baseline.
-            preIsReconciled: revertReason === undefined ? undefined : claim.preIsReconciled,
-            resolutionTransactionId:
-              sync.resolutionTransactionId !== undefined
-                ? (sync.resolutionTransactionId ?? undefined)
-                : claim.resolutionTransactionId,
-            updatedAt: new Date().toISOString(),
-          });
           console.log(`[DisputeRefund] Reverted claim ${claimId} to ${claim.preDisputeStatus || "Sent_to_Driver"} on unmatch`);
         } else {
           // Flag off, or a legacy match from before preDisputeResolutionReason
           // existed — fall back to the simpler restore (no charge reversal).
-          await kv.set(claimKey, {
-            ...claim,
-            status: claim.preDisputeStatus || "Sent_to_Driver",
-            resolutionReason: null,
-            disputeRefundId: null,
-            preDisputeStatus: null,
-            updatedAt: new Date().toISOString(),
-          });
+          await upsertClaim(
+            {
+              ...claim,
+              status: claim.preDisputeStatus || "Sent_to_Driver",
+              resolutionReason: null,
+              disputeRefundId: null,
+              preDisputeStatus: null,
+            },
+            c,
+            { syncMode: "skip" },
+          );
           console.log(`[DisputeRefund] Reverted claim ${claimId} to ${claim.preDisputeStatus || "Sent_to_Driver"} on unmatch`);
         }
       }

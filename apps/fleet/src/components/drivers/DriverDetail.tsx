@@ -157,6 +157,8 @@ import { TierConfig } from '../../types/data';
 import { getEffectiveTripEarnings } from '../../utils/tripEarnings';
 import { normalizePlatform } from '../../utils/normalizePlatform';
 import { getTripPhysicalCashCollected, sumTripPhysicalCashCollected } from '../../utils/tripPhysicalCash';
+import { isTollCategory } from '../../utils/tollCategoryHelper';
+import { classifyTollLedgerEntry } from '../../utils/tollDisposition';
 import { expandDriverTransactionIds } from '../../utils/expandDriverTransactionIds';
 import { isDriverCashPaymentTransaction } from '../../utils/driverCashPayment';
 import { isUberCashEligibleMetricPeriod, isValidDriverMetricPeriod } from '../../utils/driverMetricPeriod';
@@ -2394,14 +2396,15 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     const lifetimeCashCollected = tripLifetimeCash > 0.005 ? tripLifetimeCash : ledgerLifetimeCash;
     const floatIssued = metrics.floatHeld;
     const paymentsReceived = metrics.cashReceived || 0;
+    // Was a hardcoded category/status-string filter (t.status === 'Resolved',
+    // title-case) that never actually matched toll_ledger-sourced tx shapes
+    // (whose status values are lowercase — 'resolved'/'approved', per
+    // TollStatus) — a dormant divergence from the canonical classifier used
+    // by the Reconciliation tab and "Net Settlement" below. classifyTollLedgerEntry's
+    // 'cashWash' bucket is the equivalent concept: a cash toll not yet given
+    // an explicit business/personal/write-off resolution, netting against float.
     const tollExpenses = (transactions || [])
-      .filter((t: any) => {
-        if (!t) return false;
-        const isToll = t.category === 'Toll Usage' || t.category === 'Toll' || t.category === 'Tolls';
-        const isCash = t.paymentMethod === 'Cash' || !!t.receiptUrl;
-        const isResolved = t.status === 'Resolved' || t.status === 'Approved';
-        return isToll && isCash && isResolved;
-      })
+      .filter((t: any) => t && isTollCategory(t.category) && classifyTollLedgerEntry(t) === 'cashWash')
       .reduce((sum: number, t: any) => sum + Math.abs(t?.amount || 0), 0);
     const netOutstanding = (lifetimeCashCollected + floatIssued) - (paymentsReceived + tollExpenses);
     return { netOutstanding, lifetimeCashCollected };

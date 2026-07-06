@@ -836,7 +836,13 @@ export interface FinancialTransaction {
   bankAccount?: string;
   processedDate?: string;
   isReconciled: boolean;
-  
+
+  // RWF-1: persisted toll workflow position (Toll Reconciliation stepper) +
+  // reverse claim pointer — only meaningful for toll_ledger-sourced rows.
+  // See apps/fleet/src/utils/tollBucket.ts's TollWorkflowStage for the value set.
+  workflowStage?: string;
+  claimId?: string | null;
+
   // Phase 1 Refactor: Fuel Anchor Tracking
   anchorPeriodId?: string; // Links this transaction to a specific fuel window
   reconciliationStatus?: 'Pending' | 'Verified' | 'Flagged' | 'Observing' | 'Archived';
@@ -1102,7 +1108,11 @@ export interface TollTag {
 
 export interface Claim {
   id: string;
-  type: 'Toll_Refund' | 'Wait_Time' | 'Cleaning_Fee';
+  // 'Toll' = a one-shot, already-resolved-at-creation classification claim
+  // (Personal/Write Off/Business Expense from the Toll Reconciliation
+  // "Resolve" action). Distinct from 'Toll_Refund', which tracks the
+  // multi-stage Claimable Loss shortfall-dispute lifecycle.
+  type: 'Toll_Refund' | 'Toll' | 'Wait_Time' | 'Cleaning_Fee';
   status: 'Open' | 'Sent_to_Driver' | 'Submitted_to_Uber' | 'Resolved' | 'Rejected';
   driverId: string;
   tripId?: string; // Links to the Uber trip
@@ -1129,7 +1139,7 @@ export interface Claim {
   dropoff?: string;
 
   // Resolution Tracking
-  resolutionReason?: 'Charge Driver' | 'Write Off' | 'Reimbursed' | 'Other';
+  resolutionReason?: 'Charge Driver' | 'Write Off' | 'Business Expense' | 'Reimbursed' | 'Other';
   disputeRefundId?: string; // Phase 7: Links to dispute refund that auto-resolved this claim
 
   // Toll attribution (set at creation from the underlying toll transaction so

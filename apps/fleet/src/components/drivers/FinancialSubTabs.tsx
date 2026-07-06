@@ -21,6 +21,7 @@ interface DriverTollChargeTotals {
   business: number;
   refunded: number;
   reconciled: number;
+  cashWash: number;
   unresolved: number;
 }
 
@@ -64,6 +65,18 @@ export function FinancialSubTabs({
       .catch(err => console.error('[FinancialSubTabs] driver toll charges load failed', err));
     return () => { active = false; };
   }, [driverId]);
+
+  // Cash Wash is a new bucket that only appears once the unified settlement
+  // model is trusted — gate its display so the card grid doesn't change for
+  // fleets that haven't opted in yet.
+  const [unifiedTollSettlementEnabled, setUnifiedTollSettlementEnabled] = React.useState(false);
+  React.useEffect(() => {
+    let active = true;
+    api.getTollAutomationSettings()
+      .then(res => { if (active) setUnifiedTollSettlementEnabled(res.data.unifiedTollSettlementEnabled === true); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   const uberSsotReconciliation = React.useMemo(() => {
     let fareComponents = 0;
@@ -254,6 +267,9 @@ export function FinancialSubTabs({
                   { label: 'Refunded', value: tollTotals.refunded, tone: 'text-emerald-600', hint: 'Refunded by the provider.' },
                   { label: 'Business Expense', value: tollTotals.business, tone: 'text-slate-700', hint: 'Absorbed by the fleet as a business cost.' },
                   { label: 'Written Off', value: tollTotals.writtenOff, tone: 'text-slate-700', hint: 'Written off as a loss.' },
+                  ...(unifiedTollSettlementEnabled
+                    ? [{ label: 'Cash Wash', value: tollTotals.cashWash, tone: 'text-sky-600', hint: 'Cash toll, no resolution yet — nets against what the driver is owed, not a real loss.' }] as const
+                    : []),
                   { label: 'Unresolved', value: tollTotals.unresolved, tone: 'text-amber-600', hint: 'Still pending reconciliation.' },
                 ] as const).map(item => (
                   <div key={item.label} className="rounded-lg border border-slate-200 p-3">

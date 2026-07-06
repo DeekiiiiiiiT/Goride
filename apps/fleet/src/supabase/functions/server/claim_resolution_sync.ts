@@ -23,7 +23,7 @@
  * driver_toll_charge.ts isDriverTollChargeSyncEnabled).
  */
 
-export type ClaimResolutionReason = 'Charge Driver' | 'Write Off' | 'Reimbursed' | 'Other' | undefined;
+export type ClaimResolutionReason = 'Charge Driver' | 'Write Off' | 'Business Expense' | 'Reimbursed' | 'Other' | undefined;
 
 export type TollLedgerResolution = 'personal' | 'business' | 'write_off' | 'refunded' | null;
 
@@ -31,6 +31,10 @@ export type TollLedgerResolution = 'personal' | 'business' | 'write_off' | 'refu
  * Maps a claim's resolutionReason to the durable toll_ledger.resolution enum.
  * 'Other' and undefined map to null — an unrecognized/absent reason carries
  * no financial meaning and should not be persisted as a resolution label.
+ * 'Business Expense' is distinct from 'Write Off' — both mean "fleet absorbs
+ * the cost, no driver charge" (same shouldCharge/shouldReverse behavior below),
+ * but they're kept as separate toll_ledger.resolution labels ('business' vs
+ * 'write_off') because the toll-resolution UI already distinguishes them.
  */
 export function mapResolutionReasonToTollResolution(
   reason: ClaimResolutionReason,
@@ -40,6 +44,8 @@ export function mapResolutionReasonToTollResolution(
       return 'personal';
     case 'Write Off':
       return 'write_off';
+    case 'Business Expense':
+      return 'business';
     case 'Reimbursed':
       return 'refunded';
     default:

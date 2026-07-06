@@ -21,7 +21,6 @@ import { ReportsPage } from './components/reports/ReportsPage';
 import { TransactionsPage } from './components/transactions/TransactionsPage';
 import { TollReconciliation } from './pages/TollReconciliation';
 import { TagInventory } from './pages/TagInventory';
-import { ClaimableLoss } from './pages/ClaimableLoss';
 import { UserManagementPage } from './components/users/UserManagementPage';
 import { TierConfigPage } from './components/tiers/TierConfigPage';
 import { PerformanceDashboard } from './components/performance/PerformanceDashboard';
@@ -332,11 +331,6 @@ function AppContent() {
         {currentPage === 'tag-inventory' && (
           <PermissionGate permission="nav.toll_tag_inventory" onNavigate={setCurrentPage}>
             <TagInventory onNavigate={setCurrentPage} />
-          </PermissionGate>
-        )}
-        {currentPage === 'claimable-loss' && (
-          <PermissionGate permission="nav.toll_claimable_loss" onNavigate={setCurrentPage}>
-            <ClaimableLoss />
           </PermissionGate>
         )}
         {currentPage === 'toll-logs' && (

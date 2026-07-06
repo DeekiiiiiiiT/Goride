@@ -95,7 +95,7 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
   const { v, businessType } = useVocab();
   const { canView } = usePermissions();
   const { isModuleEnabled } = useFeatureFlags();
-  const isTollManagementOpen = ['toll-logs', 'toll-tags', 'tag-inventory', 'claimable-loss', 'toll-analytics'].includes(currentPage);
+  const isTollManagementOpen = ['toll-logs', 'toll-tags', 'tag-inventory', 'toll-analytics'].includes(currentPage);
   const isFuelManagementOpen = ['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration', 'fuel-reimbursements', 'fuel-audit', 'fuel-integrity-gap'].includes(currentPage);
   const isDriverOpsOpen = ['drivers', 'performance', 'tier-config', 'driver-ledger'].includes(currentPage);
   const isVehicleOpsOpen = ['vehicles', 'maintenance-hub', 'fleet'].includes(currentPage);
@@ -330,7 +330,7 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
           )}
 
           {/* Toll Management Section */}
-          {isModuleEnabled('tollManagement') && isSidebarItemVisible('toll-management', businessType) && (canView('toll-logs') || canView('toll-tags') || canView('tag-inventory') || canView('claimable-loss') || canView('toll-analytics')) && (
+          {isModuleEnabled('tollManagement') && isSidebarItemVisible('toll-management', businessType) && (canView('toll-logs') || canView('toll-tags') || canView('tag-inventory') || canView('toll-analytics')) && (
           <Collapsible defaultOpen={isTollManagementOpen} className="group/collapsible">
             <SidebarMenuItem>
               <CollapsibleTrigger asChild>
@@ -365,15 +365,6 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
                     <SidebarMenuSubButton asChild isActive={currentPage === 'tag-inventory'} onClick={() => onNavigate?.('tag-inventory')}>
                       <button className="w-full text-left cursor-pointer">
                         <span>Tag Inventory</span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  )}
-                  {canView('claimable-loss') && (
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={currentPage === 'claimable-loss'} onClick={() => onNavigate?.('claimable-loss')}>
-                      <button className="w-full text-left cursor-pointer">
-                        <span>Claimable Loss</span>
                       </button>
                     </SidebarMenuSubButton>
                   </SidebarMenuSubItem>

@@ -15,6 +15,7 @@ import { exportToCSV } from "../../utils/csvHelpers";
 import { toast } from "sonner@2.0.3";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "../ui/tooltip";
 import { isTollCategory } from '../../utils/tollCategoryHelper';
+import { classifyTollLedgerEntry } from '../../utils/tollDisposition';
 import { computeDisputeRefundCounts, getDisputeRefundWeekDate } from '../../utils/tollWeekPeriod';
 import { expandDriverTransactionIds } from '../../utils/expandDriverTransactionIds';
 
@@ -31,6 +32,7 @@ interface ExpensePeriodRow {
   transactionCount: number;
   tollReconciled: number;      // Phase 6: count of reconciled toll txns in this period
   tollUnreconciled: number;    // Phase 6: count of unreconciled toll txns in this period
+  tollCashWash: number;        // $ of tolls classifyTollLedgerEntry buckets as cashWash (only shown when unifiedTollSettlementEnabled)
   disputeRefundMatched: number;   // Uber support-case adjustments already linked to a toll
   disputeRefundUnmatched: number; // Uber support-case adjustments still needing a manual match
 }
@@ -52,6 +54,18 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
   const [finalizedReports, setFinalizedReports] = useState<any[]>([]);
   const [driverVehicleIds, setDriverVehicleIds] = useState<Set<string>>(new Set());
   const [disputeRefunds, setDisputeRefunds] = useState<DisputeRefund[]>([]);
+
+  // Cash Wash is additive — only surfaced once the unified settlement model
+  // is trusted, so this tab doesn't silently change for fleets that haven't
+  // opted in yet.
+  const [unifiedTollSettlementEnabled, setUnifiedTollSettlementEnabled] = useState(false);
+  useEffect(() => {
+    let active = true;
+    api.getTollAutomationSettings()
+      .then(res => { if (active) setUnifiedTollSettlementEnabled(res.data.unifiedTollSettlementEnabled === true); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -211,6 +225,7 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
       let tollCharged = 0;
       let tollReconciled = 0;
       let tollUnreconciled = 0;
+      let tollCashWash = 0;
 
       periodTx.forEach(tx => {
         const amt = Math.abs(tx.amount);
@@ -218,6 +233,11 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
           tollExpenses += amt;
           if (tx.isReconciled) tollReconciled++;
           else tollUnreconciled++;
+          // Additive: agrees with the canonical classifier used by the
+          // Reconciliation tab / Cash Wallet, so a cash toll with no
+          // resolution yet is identified here too, not just counted as
+          // "unmatched" — a different question (link state) than "$ impact".
+          if (classifyTollLedgerEntry(tx as any) === 'cashWash') tollCashWash += amt;
         } else if (tx.category === 'Toll Charge' || (tx.metadata as any)?.projection === 'driver_toll_charge') {
           // Personal-use toll billed to this driver (the negative projection).
           tollCharged += amt;
@@ -245,6 +265,7 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
         transactionCount: periodTx.length,
         tollReconciled,
         tollUnreconciled,
+        tollCashWash,
         disputeRefundMatched,
         disputeRefundUnmatched,
       };
@@ -571,6 +592,11 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
                           <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
                             <Unlink className="h-3 w-3" /> {row.tollUnreconciled} Unmatched
                           </span>
+                        )}
+                        {unifiedTollSettlementEnabled && row.tollCashWash > 0 && (
+                          <p className="text-[10px] text-sky-600 mt-0.5">
+                            ${row.tollCashWash.toLocaleString(undefined, { minimumFractionDigits: 2 })} cash wash
+                          </p>
                         )}
                       </TableCell>
                       <TableCell className="text-xs text-center">

@@ -3,50 +3,49 @@ import {
   AlertTriangle,
   Briefcase,
   CalendarRange,
-  CarFront,
-  CheckCircle2,
   ChevronDown,
-  DollarSign,
   FileText,
   Gauge,
-  HelpCircle,
   MoreHorizontal,
   Pencil,
-  Route,
   Search,
-  ShieldCheck,
   Sparkles,
   Tag,
   User,
   UserMinus,
+  type LucideIcon,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../../ui/card";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "../../ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/select";
-import { format } from "date-fns";
-import { FinancialTransaction, Trip, DisputeRefund } from "../../../types/data";
+import { FinancialTransaction, Trip } from "../../../types/data";
 import { EditTollModal } from "./EditTollModal";
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
 import { MatchResult } from "../../../utils/tollReconciliation";
-import { bucketForBestMatch } from "../../../utils/tollBucket";
 import { SuggestedMatchCard } from "./SuggestedMatchCard";
 import { ManualMatchModal } from "./ManualMatchModal";
 import { TollDetailOverlay } from "./TollDetailOverlay";
-import { DisputeRefundsList, DisputeMatchEvent } from "./DisputeRefundsList";
 import { EvidenceExpiryBadge } from '../../evidence/EvidenceExpiryBadge';
 import { resolveEvidenceMediaState } from '../../evidence/evidenceState';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../ui/collapsible";
 import { groupTollsByWeek } from "../../../utils/tollWeekPeriod";
 
-type UnmatchedSubTab = 'needs-review' | 'underpaid' | 'deadhead' | 'personal-use' | 'dispute-refunds';
+/**
+ * Shared per-bucket toll list renderer, factored out of the old
+ * UnmatchedTollsList (which mixed this rendering with its own sub-tab bar +
+ * live-match bucketing). Now reused by the Needs Review / Personal Use /
+ * Deadhead steps in ReconciliationDashboard — each just hands it a
+ * pre-filtered `tolls` list and its own empty-state copy, instead of the
+ * rendering being duplicated three times or gated behind an internal
+ * sub-tab switch.
+ */
 
-interface UnmatchedTollsListProps {
+export interface TollBucketPanelProps {
   tolls: FinancialTransaction[];
   suggestions: Map<string, MatchResult[]>;
   onReconcile: (tx: FinancialTransaction, trip: Trip) => void;
-  // We need all trips for manual search
   allTrips: Trip[];
   onOpenDispute?: (tx: FinancialTransaction, match: MatchResult) => void;
   onApprove?: (tx: FinancialTransaction) => void;
@@ -54,30 +53,34 @@ interface UnmatchedTollsListProps {
   onFlag?: (tx: FinancialTransaction) => void;
   onManualResolve?: (tx: FinancialTransaction, type: 'Personal' | 'WriteOff' | 'Business') => void;
   onEdit?: (transactionId: string, updates: Record<string, any>) => Promise<void>;
-  // Phase 6: Dispute refunds
-  disputeRefunds?: DisputeRefund[];
-  onRefundMatchComplete?: (event: DisputeMatchEvent) => void;
+  emptyState: { icon: LucideIcon; title: string; description: string };
+  listTitle?: string;
+  listDescription?: string;
+  /** Deadhead's "Approve"/"Link" already correctly reconciles it as a
+   *  fleet-absorbed cost with no driver charge — this just relabels the
+   *  button for clarity in that step, without changing behavior. */
+  approveLabel?: string;
 }
 
-export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, onOpenDispute, onApprove, onReject, onFlag, onManualResolve, onEdit, disputeRefunds = [], onRefundMatchComplete }: UnmatchedTollsListProps) {
+export function TollBucketPanel({
+  tolls, suggestions, onReconcile, allTrips, onApprove, onReject, onFlag, onManualResolve, onEdit,
+  emptyState, listTitle = 'Tolls', listDescription = "Toll provider charges that haven't been linked to a specific trip.",
+  approveLabel = 'Approve',
+}: TollBucketPanelProps) {
     const [hiddenSuggestions, setHiddenSuggestions] = useState<Set<string>>(new Set());
     const [selectedTxForManual, setSelectedTxForManual] = useState<FinancialTransaction | null>(null);
     const [sourceFilter, setSourceFilter] = useState<'all' | 'tag' | 'cash'>('all');
     const [visibleSmartMatches, setVisibleSmartMatches] = useState(10);
     const [visibleWeekCount, setVisibleWeekCount] = useState(12);
-    const [activeSubTab, setActiveSubTab] = useState<UnmatchedSubTab>('needs-review');
     const fleetTz = useFleetTimezone();
 
-    // Detail overlay state
     const [detailTx, setDetailTx] = useState<FinancialTransaction | null>(null);
     const [detailMatch, setDetailMatch] = useState<MatchResult | null>(null);
     const [isDetailOpen, setIsDetailOpen] = useState(false);
 
-    // Edit modal state
     const [editTx, setEditTx] = useState<FinancialTransaction | null>(null);
     const [isEditOpen, setIsEditOpen] = useState(false);
 
-    // Custom dropdown state (replaces Radix DropdownMenu which crashes in Figma Make iframe)
     const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -92,6 +95,12 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
         }
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [openDropdownId]);
+
+    // Reset visible counts when the underlying bucket changes (parent swaps `tolls`).
+    useEffect(() => {
+        setVisibleSmartMatches(10);
+        setVisibleWeekCount(12);
+    }, [tolls]);
 
     const openDetail = (tx: FinancialTransaction, match?: MatchResult) => {
         setDetailTx(tx);
@@ -115,7 +124,6 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
         setEditTx(null);
     };
 
-    // Filter tolls based on source
     const filteredTolls = useMemo(() => {
         return tolls.filter(tx => {
             const isCash = tx.paymentMethod === 'Cash' || !!tx.receiptUrl;
@@ -125,32 +133,6 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
         });
     }, [tolls, sourceFilter]);
 
-    // Phase 3: Classify tolls into sub-tab buckets based on best match type
-    const classified = useMemo(() => {
-        const buckets: Record<UnmatchedSubTab, FinancialTransaction[]> = {
-            'needs-review': [],
-            'underpaid': [],
-            'deadhead': [],
-            'personal-use': [],
-            'dispute-refunds': [],
-        };
-        filteredTolls.forEach(tx => {
-            const best = suggestions.get(tx.id)?.[0];
-            // Structured reasonCode drives the bucket (legacy string-check fallback
-            // lives inside bucketForBestMatch so OFF-state behavior is unchanged).
-            buckets[bucketForBestMatch(best)].push(tx);
-        });
-        return buckets;
-    }, [filteredTolls, suggestions]);
-
-    // Reset visible counts when sub-tab changes
-    useEffect(() => {
-        setVisibleSmartMatches(10);
-        setVisibleWeekCount(12);
-    }, [activeSubTab]);
-
-    // Group trips by vehicle for time-based driver inference
-    // This allows us to handle shared vehicles (Day/Night shifts) accurately
     const tripsByVehicle = useMemo(() => {
         const map = new Map<string, Trip[]>();
         allTrips.forEach(t => {
@@ -166,13 +148,11 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
         if (!plate) return null;
         const trips = tripsByVehicle.get(plate);
         if (!trips || trips.length === 0) return null;
-        
+
         const tollTime = new Date(dateStr).getTime();
         let closestDriver = null;
         let minDiff = Infinity;
-        
-        // Find the trip closest in time to this toll
-        // This ensures accuracy even if drivers swap vehicles
+
         for (const trip of trips) {
              const tripTime = new Date(trip.requestTime).getTime();
              const diff = Math.abs(tripTime - tollTime);
@@ -190,12 +170,9 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
 
     const renderActionButtons = (tx: FinancialTransaction, match?: MatchResult) => {
         const isClaim = tx.paymentMethod === 'Cash' || !!tx.receiptUrl;
-        // Orphan personal-use suggestions have no trip to link (empty trip id).
-        // Treat them like unmatched items: offer manual resolution, never a Link.
         const isOrphan = !!match && !match.trip?.id;
 
         if (!match || isOrphan) {
-             // Custom dropdown for Unmatched items (Radix DropdownMenu crashes in Figma Make iframe)
              const isOpen = openDropdownId === tx.id;
              return (
                 <div className="relative flex items-center justify-end gap-2" ref={isOpen ? dropdownRef : undefined}>
@@ -241,11 +218,10 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
                  return <Button size="sm" className="bg-rose-600 hover:bg-rose-700" onClick={() => onReject(tx)}>Reject</Button>;
             }
             if (onApprove) {
-                 return <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => onApprove(tx)}>Approve</Button>;
+                 return <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => onApprove(tx)}>{approveLabel}</Button>;
             }
         }
-        
-        // Tag Logic
+
         return (
             <Button size="sm" variant="outline" onClick={() => onReconcile(tx, match.trip)}>
                 Link
@@ -253,18 +229,10 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
         );
     };
 
-    // Separate tolls into those with visible matches and others
-    // Phase 4: Scope to active sub-tab bucket instead of all filteredTolls
-    const activeTabTolls = classified[activeSubTab];
-
-    const smartMatches = activeTabTolls.filter(tx => {
+    const smartMatches = filteredTolls.filter(tx => {
         const matches = suggestions.get(tx.id);
         const best = matches?.[0];
-        // Orphan personal-use suggestions have no trip to confirm — keep them out
-        // of the "Smart Suggestions" (trip-confirm) section so they render in the
-        // standard list, which offers manual resolution instead of a bad Link.
         const isOrphan = best && !best.trip?.id;
-        // Phase 3: Use confidenceScore >= 50 when available, fall back to old logic
         const hasHighScore = best?.confidenceScore != null ? best.confidenceScore >= 50 : (
             best?.confidence === 'high' ||
             best?.matchType === 'DEADHEAD_MATCH' ||
@@ -273,7 +241,7 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
         return best && hasHighScore && !isOrphan && !hiddenSuggestions.has(tx.id);
     });
 
-    const otherTolls = activeTabTolls.filter(tx => !smartMatches.includes(tx));
+    const otherTolls = filteredTolls.filter(tx => !smartMatches.includes(tx));
 
     const smartWeekGroups = useMemo(
         () => groupTollsByWeek(smartMatches.slice(0, visibleSmartMatches), fleetTz),
@@ -282,16 +250,6 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
 
     const otherWeekGroups = useMemo(() => groupTollsByWeek(otherTolls, fleetTz), [otherTolls, fleetTz]);
     const visibleOtherWeekGroups = otherWeekGroups.slice(0, visibleWeekCount);
-
-    if (tolls.length === 0) {
-        return (
-            <div className="flex flex-col items-center justify-center py-12 text-slate-500">
-                <CheckCircle2 className="h-12 w-12 text-emerald-500 mb-4" />
-                <h3 className="text-lg font-medium text-slate-900">All Tolls Reconciled</h3>
-                <p>Great job! No unmatched toll transactions found.</p>
-            </div>
-        );
-    }
 
     const getMatchBadge = (match: MatchResult) => {
         switch (match.matchType) {
@@ -321,89 +279,19 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
         return 'text-rose-600';
     };
 
+    if (tolls.length === 0) {
+        const EmptyIcon = emptyState.icon;
+        return (
+            <div className="flex flex-col items-center justify-center py-12 text-slate-500">
+                <EmptyIcon className="h-10 w-10 text-slate-300 mb-3" />
+                <h3 className="text-base font-medium text-slate-700">{emptyState.title}</h3>
+                <p className="text-sm">{emptyState.description}</p>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-6">
-            
-            {/* Phase 3: Sub-tab bar */}
-            <div className="flex flex-wrap gap-1 border-b border-slate-200 pb-1">
-                {([
-                    { key: 'needs-review' as UnmatchedSubTab, label: 'Needs Review', icon: HelpCircle, color: 'text-amber-600 border-amber-500 bg-amber-50' },
-                    { key: 'underpaid' as UnmatchedSubTab, label: 'Underpaid', icon: DollarSign, color: 'text-orange-600 border-orange-500 bg-orange-50' },
-                    { key: 'deadhead' as UnmatchedSubTab, label: 'Deadhead', icon: Route, color: 'text-blue-600 border-blue-500 bg-blue-50' },
-                    { key: 'personal-use' as UnmatchedSubTab, label: 'Personal Use', icon: CarFront, color: 'text-purple-600 border-purple-500 bg-purple-50' },
-                    { key: 'dispute-refunds' as UnmatchedSubTab, label: 'Dispute Refunds', icon: ShieldCheck, color: 'text-teal-600 border-teal-500 bg-teal-50' },
-                ] as const).map(tab => {
-                    const count = tab.key === 'dispute-refunds' ? disputeRefunds.length : classified[tab.key].length;
-                    const isActive = activeSubTab === tab.key;
-                    const Icon = tab.icon;
-                    return (
-                        <button
-                            key={tab.key}
-                            onClick={() => setActiveSubTab(tab.key)}
-                            className={`
-                                flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-t-md border-b-2 transition-all
-                                ${isActive
-                                    ? `${tab.color} border-current`
-                                    : 'text-slate-500 border-transparent hover:text-slate-700 hover:bg-slate-50'
-                                }
-                            `}
-                        >
-                            <Icon className="h-4 w-4" />
-                            <span>{tab.label}</span>
-                            <span className={`
-                                ml-1 text-[11px] font-semibold rounded-full px-1.5 py-0.5 min-w-[20px] text-center
-                                ${isActive
-                                    ? 'bg-white/80 text-current'
-                                    : 'bg-slate-100 text-slate-500'
-                                }
-                            `}>
-                                {count}
-                            </span>
-                        </button>
-                    );
-                })}
-            </div>
-
-            {/* Phase 4: Per-sub-tab empty state */}
-            {activeSubTab === 'dispute-refunds' ? (
-                <DisputeRefundsList 
-                    refunds={disputeRefunds} 
-                    onMatchComplete={onRefundMatchComplete || (() => undefined)} 
-                />
-            ) : activeTabTolls.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-10 text-slate-500">
-                    {activeSubTab === 'needs-review' && (
-                        <>
-                            <HelpCircle className="h-10 w-10 text-amber-300 mb-3" />
-                            <h3 className="text-base font-medium text-slate-700">No tolls pending review</h3>
-                            <p className="text-sm">All tolls have been classified into other categories.</p>
-                        </>
-                    )}
-                    {activeSubTab === 'underpaid' && (
-                        <>
-                            <DollarSign className="h-10 w-10 text-orange-300 mb-3" />
-                            <h3 className="text-base font-medium text-slate-700">No underpaid tolls found</h3>
-                            <p className="text-sm">All platform reimbursements match the actual toll amounts.</p>
-                        </>
-                    )}
-                    {activeSubTab === 'deadhead' && (
-                        <>
-                            <Route className="h-10 w-10 text-blue-300 mb-3" />
-                            <h3 className="text-base font-medium text-slate-700">No deadhead tolls found</h3>
-                            <p className="text-sm">No unreimbursed business driving tolls detected.</p>
-                        </>
-                    )}
-                    {activeSubTab === 'personal-use' && (
-                        <>
-                            <CarFront className="h-10 w-10 text-purple-300 mb-3" />
-                            <h3 className="text-base font-medium text-slate-700">No personal use tolls detected</h3>
-                            <p className="text-sm">No tolls were classified as personal driver use.</p>
-                        </>
-                    )}
-                </div>
-            ) : (
-                <>
-            {/* Smart Matches Section */}
             {smartMatches.length > 0 && (
                 <div className="space-y-4">
                     <div className="flex items-center space-x-2 text-indigo-600">
@@ -461,13 +349,12 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
                 </div>
             )}
 
-            {/* Standard List */}
-            {activeSubTab !== 'dispute-refunds' && activeTabTolls.length > 0 && (
+            {filteredTolls.length > 0 && (
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between pb-4">
                     <div className="space-y-1">
-                        <CardTitle>Unmatched Tolls</CardTitle>
-                        <CardDescription>Toll provider charges that haven't been linked to a specific trip.</CardDescription>
+                        <CardTitle>{listTitle}</CardTitle>
+                        <CardDescription>{listDescription}</CardDescription>
                     </div>
                     <div className="w-[180px]">
                         <Select value={sourceFilter} onValueChange={(v: any) => setSourceFilter(v)}>
@@ -652,10 +539,8 @@ export function UnmatchedTollsList({ tolls, suggestions, onReconcile, allTrips, 
                 </CardContent>
             </Card>
             )}
-                </>
-            )}
 
-            <ManualMatchModal 
+            <ManualMatchModal
                 isOpen={!!selectedTxForManual}
                 onClose={() => setSelectedTxForManual(null)}
                 transaction={selectedTxForManual}

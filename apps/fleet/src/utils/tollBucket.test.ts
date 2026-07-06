@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { bucketForBestMatch } from './tollBucket';
+import { bucketForBestMatch, bucketForWorkflowStage } from './tollBucket';
 import { MatchResult } from './tollReconciliation';
 
 /**
@@ -52,5 +52,31 @@ describe('bucketForBestMatch', () => {
       // A structured POST_TRIP_GAP must NOT be misrouted to deadhead by a stray word.
       expect(bucketForBestMatch(m({ reasonCode: 'POST_TRIP_GAP', reason: 'Approach mentioned' }))).toBe('personal-use');
     });
+  });
+});
+
+/**
+ * RWF-1: the persisted-workflow-stage read path (bucketForWorkflowStage) must
+ * agree with bucketForBestMatch's bucket set for the 4 pre-claim states, and
+ * correctly signal "no longer a to-do" (null) for every claimed/resolved state.
+ */
+describe('bucketForWorkflowStage', () => {
+  it('maps each pending stage to the same bucket bucketForBestMatch would use', () => {
+    expect(bucketForWorkflowStage('needs_review')).toBe('needs-review');
+    expect(bucketForWorkflowStage('underpaid_pending')).toBe('underpaid');
+    expect(bucketForWorkflowStage('deadhead_pending')).toBe('deadhead');
+    expect(bucketForWorkflowStage('personal_use_pending')).toBe('personal-use');
+  });
+
+  it('returns null for resolved/claimed stages — caller must exclude these from any to-do bucket', () => {
+    expect(bucketForWorkflowStage('deadhead_resolved')).toBeNull();
+    expect(bucketForWorkflowStage('personal_use_resolved')).toBeNull();
+    expect(bucketForWorkflowStage('claim_filed')).toBeNull();
+    expect(bucketForWorkflowStage('claim_resolved')).toBeNull();
+    expect(bucketForWorkflowStage('matched')).toBeNull();
+  });
+
+  it('falls back to needs-review for an unset stage (pre-backfill row)', () => {
+    expect(bucketForWorkflowStage(undefined)).toBe('needs-review');
   });
 });

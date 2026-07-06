@@ -35,3 +35,57 @@ export function bucketForBestMatch(
       return 'needs-review';
   }
 }
+
+/**
+ * Client mirror of the server's TollWorkflowStage (RWF-1,
+ * apps/fleet/src/supabase/functions/server/toll_workflow_stage.ts). Kept as a
+ * plain string union here (not imported — that file is a Deno server module)
+ * so `bucketForWorkflowStage` below can be unit-tested the same way
+ * `bucketForBestMatch` already is.
+ */
+export type TollWorkflowStage =
+  | 'needs_review'
+  | 'personal_use_pending'
+  | 'personal_use_resolved'
+  | 'deadhead_pending'
+  | 'deadhead_resolved'
+  | 'underpaid_pending'
+  | 'claim_filed'
+  | 'claim_resolved'
+  | 'matched';
+
+/**
+ * Decide which sub-tab/step a toll belongs to from its PERSISTED workflow
+ * stage — the read-path equivalent of `bucketForBestMatch`, but driven by a
+ * durable server field instead of a live-recomputed match result. Same
+ * 4-way bucket set; `null` means "no longer belongs in any to-do bucket"
+ * (already claimed/resolved — the caller should exclude it, matching how
+ * `ReconciliationDashboard` already excludes claimed tolls today via
+ * `claimedTransactionIds`).
+ *
+ * `undefined`/unset stage (a toll that predates the RWF-1 backfill) falls
+ * back to `needs-review` here — callers should prefer calling
+ * `bucketForBestMatch` directly for such rows instead, so a pre-backfill
+ * toll's real match isn't miscategorized as "needs review" when a perfectly
+ * good live suggestion already exists.
+ */
+export function bucketForWorkflowStage(stage: TollWorkflowStage | undefined): TollBucket | null {
+  switch (stage) {
+    case 'needs_review':
+      return 'needs-review';
+    case 'underpaid_pending':
+      return 'underpaid';
+    case 'deadhead_pending':
+      return 'deadhead';
+    case 'personal_use_pending':
+      return 'personal-use';
+    case 'deadhead_resolved':
+    case 'personal_use_resolved':
+    case 'claim_filed':
+    case 'claim_resolved':
+    case 'matched':
+      return null;
+    default:
+      return 'needs-review';
+  }
+}
