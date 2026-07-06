@@ -409,6 +409,13 @@ export interface ProcessedBatch {
     /** Post-merge hints for the import UI (e.g. Uber payments without matching trip_activity rows). */
     importWarnings?: {
         uberTripsMissingTripActivity: number;
+        /**
+         * Uber's own stated toll-refund total for the period (payments_organization.csv's
+         * "Refunds & Expenses:Refunds:Toll") doesn't match what this import actually
+         * captured (dispute refunds + per-trip toll amounts from payments_transaction.csv) —
+         * a silent under-import would otherwise leave real money unclaimed with no signal.
+         */
+        tollRefundMismatch?: { statedTotal: number; capturedTotal: number; difference: number };
     };
     /** Transaction-grain lines from Uber payments_transaction.csv. */
     paymentLedgerLines?: PaymentLedgerLine[];
@@ -2626,6 +2633,29 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
         paymentLedgerLines,
     );
 
+    // ── Toll-refund reconciliation check ──────────────────────────────────
+    // Uber's own stated toll-refund total for the period (payments_organization.csv)
+    // vs what this import actually captured (Support Adjustment dispute refunds +
+    // per-trip toll amounts from payments_transaction.csv). A mismatch means some
+    // toll refund silently failed to parse — real money the fleet is owed that
+    // would otherwise go unclaimed with no signal.
+    const capturedDisputeRefundTotal = Array.from(disputeRefundsMap.values())
+        .reduce((sum, r) => sum + Math.abs(r.amount || 0), 0);
+    const capturedTripTollTotal = tripsWithPaymentRollups
+        .filter((t) => t.platform === 'Uber')
+        .reduce((sum, t) => sum + Math.abs(t.tollCharges || 0), 0);
+    const capturedTollTotal = capturedDisputeRefundTotal + capturedTripTollTotal;
+    const statedTollTotal = organizationMetrics.reduce((sum, m) => sum + (m.refundsToll || 0), 0);
+    const TOLL_MISMATCH_TOLERANCE = 0.5; // rounding/multi-row noise, not a hard equality check
+    const tollRefundMismatch =
+        statedTollTotal > 0.01 && Math.abs(statedTollTotal - capturedTollTotal) > TOLL_MISMATCH_TOLERANCE
+            ? {
+                  statedTotal: Math.round(statedTollTotal * 100) / 100,
+                  capturedTotal: Math.round(capturedTollTotal * 100) / 100,
+                  difference: Math.round((statedTollTotal - capturedTollTotal) * 100) / 100,
+              }
+            : undefined;
+
     return {
         trips: tripsWithPaymentRollups,
         driverMetrics,
@@ -2647,8 +2677,8 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
         },
         disputeRefunds: Array.from(disputeRefundsMap.values()),
         importWarnings:
-            uberTripsMissingTripActivity > 0
-                ? { uberTripsMissingTripActivity }
+            uberTripsMissingTripActivity > 0 || tollRefundMismatch
+                ? { uberTripsMissingTripActivity, ...(tollRefundMismatch ? { tollRefundMismatch } : {}) }
                 : undefined,
         paymentLedgerLines: paymentLedgerLines.length > 0 ? paymentLedgerLines : undefined,
         driverQualitySnapshots: driverQualitySnapshots.length > 0 ? driverQualitySnapshots : undefined,

@@ -478,6 +478,13 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
               { duration: 12_000 }
           );
       }
+      if (importWarnings?.tollRefundMismatch) {
+          const { statedTotal, capturedTotal, difference } = importWarnings.tollRefundMismatch;
+          toast.warning(
+              `Toll refund mismatch: Uber's statement reports $${statedTotal.toFixed(2)} in toll refunds, but only $${capturedTotal.toFixed(2)} was captured from this import (${difference > 0 ? 'short' : 'over'} by $${Math.abs(difference).toFixed(2)}). Check payments_transaction.csv for a Support Adjustment row that may not have parsed correctly.`,
+              { duration: 15_000 }
+          );
+      }
       setStep('preview_merged');
   };
 
@@ -569,7 +576,14 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
                 { duration: 12_000 }
             );
         }
-        
+        if (localResult.importWarnings?.tollRefundMismatch) {
+            const { statedTotal, capturedTotal, difference } = localResult.importWarnings.tollRefundMismatch;
+            toast.warning(
+                `Toll refund mismatch: Uber's statement reports $${statedTotal.toFixed(2)} in toll refunds, but only $${capturedTotal.toFixed(2)} was captured from this import (${difference > 0 ? 'short' : 'over'} by $${Math.abs(difference).toFixed(2)}). Check payments_transaction.csv for a Support Adjustment row that may not have parsed correctly.`,
+                { duration: 15_000 }
+            );
+        }
+
         if (localResult.organizationName) {
             localStorage.setItem('roam_fleet_name', localResult.organizationName);
             window.dispatchEvent(new Event('fleetNameUpdated'));
