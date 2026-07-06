@@ -5,10 +5,27 @@ export type DashTransactionDualWrite = {
   transactionId: string;
   orderId: string;
   merchantId?: string | null;
+  courierId?: string | null;
   amount: number;
   currency?: string;
   kind: "order_capture" | "order_refund" | "merchant_payout" | "courier_payout";
 };
+
+/** Resolve product based on transaction kind */
+function resolveDashProduct(kind: DashTransactionDualWrite["kind"]): 
+  "roam_dash" | "roam_partner" | "roam_courier" {
+  switch (kind) {
+    case "order_capture":
+    case "order_refund":
+      return "roam_dash";      // Customer-facing order payments
+    case "merchant_payout":
+      return "roam_partner";   // Merchant settlements
+    case "courier_payout":
+      return "roam_courier";   // Courier payouts
+    default:
+      return "roam_dash";
+  }
+}
 
 /** Phase 10: mirror Dash payments row into ledger.entries. */
 export async function dualWriteDashPayment(row: DashTransactionDualWrite): Promise<void> {
@@ -32,10 +49,17 @@ export async function dualWriteDashPayment(row: DashTransactionDualWrite): Promi
   } else if (row.kind === "merchant_payout" && row.merchantId) {
     debitKey = `merchant:${row.merchantId}:receivable`;
     creditKey = "platform:clearing";
+  } else if (row.kind === "courier_payout" && row.courierId) {
+    // Use proper courier payable account
+    debitKey = "platform:clearing";
+    creditKey = `courier:${row.courierId}:payable`;
   } else if (row.kind === "courier_payout") {
+    // Fallback when no courierId
     debitKey = "platform:clearing";
     creditKey = "platform:receivable";
   }
+
+  const product = resolveDashProduct(row.kind);
 
   await ledgerPostEntry({
     idempotencyKey: `dash_payments:${row.transactionId}`,
@@ -44,10 +68,10 @@ export async function dualWriteDashPayment(row: DashTransactionDualWrite): Promi
     creditAccountKey: creditKey,
     amountMinor,
     currency: row.currency ?? "JMD",
-    product: "dash",
+    product,
     referenceType: "order",
     referenceId: row.orderId,
-    metadata: { merchant_id: row.merchantId, kind: row.kind },
+    metadata: { merchant_id: row.merchantId, courier_id: row.courierId, kind: row.kind },
     sourceSystem: "dash_payments",
     sourceId: row.transactionId,
   });

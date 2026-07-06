@@ -43,10 +43,14 @@ export async function fleetDualWriteCanonicalEvent(event: {
   if (amountMinor <= 0) return;
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const driverKey = uuidRe.test(event.driverId)
+  const hasValidDriverId = uuidRe.test(event.driverId);
+  const driverKey = hasValidDriverId
     ? `user:${event.driverId}:driver:digital`
     : (event.organizationId ? `org:${event.organizationId}:fleet` : "platform:clearing");
   const inflow = event.direction === "inflow";
+
+  // Product: roam_driver for driver earnings, roam_fleet for org-level
+  const product = hasValidDriverId ? "roam_driver" : "roam_fleet";
 
   await postEntry({
     p_idempotency_key: `kv_ledger_event:${event.idempotencyKey}`,
@@ -55,7 +59,7 @@ export async function fleetDualWriteCanonicalEvent(event: {
     p_credit_account_key: inflow ? driverKey : "platform:clearing",
     p_amount_minor: amountMinor,
     p_currency: event.currency ?? "JMD",
-    p_product: "fleet",
+    p_product: product,
     p_organization_id: event.organizationId ?? null,
     p_effective_at: event.date ? `${event.date}T12:00:00.000Z` : new Date().toISOString(),
     p_reference_type: event.sourceType,
@@ -93,7 +97,7 @@ export async function fleetDualWriteToll(entry: {
     p_credit_account_key: isUsage ? "platform:clearing" : fleetKey,
     p_amount_minor: amountMinor,
     p_currency: entry.currency ?? "JMD",
-    p_product: "fleet",
+    p_product: "roam_fleet",  // Fleet operations (Fleet Plus feature)
     p_organization_id: entry.organizationId ?? null,
     p_effective_at: entry.date ? `${entry.date}T12:00:00.000Z` : new Date().toISOString(),
     p_reference_type: "toll",

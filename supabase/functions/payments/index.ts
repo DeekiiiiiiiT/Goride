@@ -194,7 +194,15 @@ app.post("/webhooks/wipay", async (c) => {
     .eq("id", intent.id);
   
   if (isSuccess) {
-    await serviceSupabase
+    // Get merchant_id from order
+    const { data: order } = await serviceSupabase
+      .schema("delivery")
+      .from("orders")
+      .select("merchant_id")
+      .eq("id", intent.order_id)
+      .single();
+
+    const { data: txn } = await serviceSupabase
       .schema("payments")
       .from("transactions")
       .insert({
@@ -209,7 +217,26 @@ app.post("/webhooks/wipay", async (c) => {
         provider_transaction_id: transaction_id,
         provider_data: body,
         payment_method: "credit_card"
-      });
+      })
+      .select("id")
+      .single();
+
+    // Dual-write to unified ledger
+    if (txn?.id) {
+      try {
+        const { dualWriteDashPayment } = await import("../_shared/unifiedLedger/dualWriteDash.ts");
+        await dualWriteDashPayment({
+          transactionId: String(txn.id),
+          orderId: String(intent.order_id),
+          merchantId: order?.merchant_id ? String(order.merchant_id) : null,
+          amount: Number(intent.amount),
+          currency: "JMD",
+          kind: "order_capture",
+        });
+      } catch (e) {
+        console.error("[payments/wipay] unified dual-write failed:", e);
+      }
+    }
     
     await serviceSupabase
       .schema("delivery")
@@ -343,6 +370,14 @@ app.post("/paypal/capture", async (c) => {
           .update({ status: "completed", completed_at: new Date().toISOString() })
           .eq("id", intent.id);
         
+        // Get merchant_id from order
+        const { data: order } = await serviceSupabase
+          .schema("delivery")
+          .from("orders")
+          .select("merchant_id")
+          .eq("id", orderId)
+          .single();
+
         const capture = result.purchase_units[0].payments.captures[0];
         
         const { data: txn } = await serviceSupabase
@@ -364,19 +399,20 @@ app.post("/paypal/capture", async (c) => {
           .select("id")
           .single();
 
+        // Dual-write to unified ledger with merchantId
         if (txn?.id) {
           try {
             const { dualWriteDashPayment } = await import("../_shared/unifiedLedger/dualWriteDash.ts");
             await dualWriteDashPayment({
               transactionId: String(txn.id),
               orderId: String(orderId),
-              merchantId: null,
+              merchantId: order?.merchant_id ? String(order.merchant_id) : null,
               amount: Number(intent.amount),
               currency: "JMD",
               kind: "order_capture",
             });
           } catch (e) {
-            console.error("[payments] unified dual-write failed:", e);
+            console.error("[payments/paypal] unified dual-write failed:", e);
           }
         }
         
@@ -420,6 +456,14 @@ app.post("/refunds", async (c) => {
   if (!transaction) {
     return c.json({ error: "Transaction not found" }, 404);
   }
+
+  // Get merchant_id from order
+  const { data: order } = await serviceSupabase
+    .schema("delivery")
+    .from("orders")
+    .select("merchant_id")
+    .eq("id", transaction.order_id)
+    .single();
   
   const refundAmount = amount || transaction.amount;
   
@@ -439,11 +483,136 @@ app.post("/refunds", async (c) => {
     .single();
   
   if (error) return c.json({ error: error.message }, 500);
+
+  // Dual-write refund to unified ledger
+  if (refund?.id) {
+    try {
+      const { dualWriteDashPayment } = await import("../_shared/unifiedLedger/dualWriteDash.ts");
+      await dualWriteDashPayment({
+        transactionId: `refund:${refund.id}`,
+        orderId: String(transaction.order_id),
+        merchantId: order?.merchant_id ? String(order.merchant_id) : null,
+        amount: refundAmount,
+        currency: transaction.currency,
+        kind: "order_refund",
+      });
+    } catch (e) {
+      console.error("[payments/refund] unified dual-write failed:", e);
+    }
+  }
   
   // TODO: Process actual refund with payment provider
   // For now, mark as pending for manual processing
   
   return c.json({ refund }, 201);
+});
+
+// ============================================================================
+// Merchant Payouts (Roam Partner settlements)
+// ============================================================================
+
+app.post("/payouts/merchant", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+  const body = await c.req.json();
+  const { merchantId, amount, currency = "JMD", reference } = body;
+
+  if (!merchantId || !amount) {
+    return c.json({ error: "merchantId and amount required" }, 400);
+  }
+
+  const serviceSupabase = getServiceSupabase();
+
+  // Create payout record
+  const { data: payout, error } = await serviceSupabase
+    .schema("payments")
+    .from("payouts")
+    .insert({
+      recipient_type: "merchant",
+      recipient_id: merchantId,
+      amount,
+      currency,
+      status: "pending",
+      reference,
+    })
+    .select()
+    .single();
+
+  if (error) return c.json({ error: error.message }, 500);
+
+  // Dual-write to unified ledger
+  if (payout?.id) {
+    try {
+      const { dualWriteDashPayment } = await import("../_shared/unifiedLedger/dualWriteDash.ts");
+      await dualWriteDashPayment({
+        transactionId: `payout:${payout.id}`,
+        orderId: reference || `payout-${payout.id}`,
+        merchantId: String(merchantId),
+        amount,
+        currency,
+        kind: "merchant_payout",
+      });
+    } catch (e) {
+      console.error("[payments/merchant-payout] unified dual-write failed:", e);
+    }
+  }
+
+  return c.json({ payout }, 201);
+});
+
+// ============================================================================
+// Courier Payouts (Roam Courier earnings)
+// ============================================================================
+
+app.post("/payouts/courier", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+  const body = await c.req.json();
+  const { courierId, amount, currency = "JMD", reference } = body;
+
+  if (!courierId || !amount) {
+    return c.json({ error: "courierId and amount required" }, 400);
+  }
+
+  const serviceSupabase = getServiceSupabase();
+
+  // Create payout record
+  const { data: payout, error } = await serviceSupabase
+    .schema("payments")
+    .from("payouts")
+    .insert({
+      recipient_type: "courier",
+      recipient_id: courierId,
+      amount,
+      currency,
+      status: "pending",
+      reference,
+    })
+    .select()
+    .single();
+
+  if (error) return c.json({ error: error.message }, 500);
+
+  // Dual-write to unified ledger
+  if (payout?.id) {
+    try {
+      const { dualWriteDashPayment } = await import("../_shared/unifiedLedger/dualWriteDash.ts");
+      await dualWriteDashPayment({
+        transactionId: `payout:${payout.id}`,
+        orderId: reference || `payout-${payout.id}`,
+        courierId: String(courierId),
+        amount,
+        currency,
+        kind: "courier_payout",
+      });
+    } catch (e) {
+      console.error("[payments/courier-payout] unified dual-write failed:", e);
+    }
+  }
+
+  return c.json({ payout }, 201);
 });
 
 // ============================================================================

@@ -1,8 +1,9 @@
 /**
  * Build and persist immutable ledger lines for completed Roam platform rides.
+ * Note: Unified ledger dual-write removed to avoid double-counting. 
+ * Cash settlement already records entries via dualWriteRidesJournalLine.
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { dualWriteRideLedgerLine } from "./unifiedLedger/dualWriteRides.ts";
 
 export interface RideLedgerLineInsert {
   ride_request_id: string;
@@ -197,25 +198,8 @@ async function upsertLedgerLines(
       inserted++;
     }
 
-    try {
-      const { data: row } = await db
-        .from("ledger_lines")
-        .select("id")
-        .eq("idempotency_key", line.idempotency_key)
-        .maybeSingle();
-      if (row?.id) {
-        await dualWriteRideLedgerLine({
-          lineId: String(row.id),
-          rideId: line.ride_request_id,
-          lineKind: line.line_kind,
-          paidToYouMinor: line.paid_to_you_minor,
-          driverUserId: line.driver_user_id,
-          currency: "JMD",
-        });
-      }
-    } catch (e) {
-      console.error("[rideLedgerLines] unified dual-write failed:", e);
-    }
+    // Note: Unified ledger dual-write removed (double-counting fix).
+    // Ride settlements already recorded via cash settlement journal entries.
   }
 
   return { inserted, skipped };

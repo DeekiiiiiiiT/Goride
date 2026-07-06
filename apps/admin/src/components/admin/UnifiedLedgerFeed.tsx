@@ -4,8 +4,12 @@ import { useAuth } from '../auth/AuthContext';
 import {
   fetchUnifiedLedgerFeed,
   fetchUnifiedLedgerReconciliation,
+  fetchAmountReconciliation,
+  fetchBalanceChecks,
   type IslandReconciliation,
   type UnifiedLedgerEntry,
+  type AmountReconciliation,
+  type BalanceCheck,
 } from '../../services/unifiedLedgerService';
 
 type Props = {
@@ -33,11 +37,15 @@ export function UnifiedLedgerFeed({ onBack }: Props) {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [product, setProduct] = useState('');
+  const [driverId, setDriverId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [islands, setIslands] = useState<IslandReconciliation[]>([]);
   const [reconHealthy, setReconHealthy] = useState<boolean | null>(null);
   const [reconError, setReconError] = useState<string | null>(null);
+  const [amounts, setAmounts] = useState<AmountReconciliation[]>([]);
+  const [balances, setBalances] = useState<BalanceCheck[]>([]);
+  const [allBalanced, setAllBalanced] = useState<boolean | null>(null);
 
   const loadFeed = useCallback(async () => {
     if (!token) return;
@@ -48,6 +56,7 @@ export function UnifiedLedgerFeed({ onBack }: Props) {
         page,
         limit: 50,
         product: product || undefined,
+        driverId: driverId || undefined,
       });
       setEntries(data.entries);
       setTotal(data.total);
@@ -58,15 +67,22 @@ export function UnifiedLedgerFeed({ onBack }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [token, page, product]);
+  }, [token, page, product, driverId]);
 
   const loadReconciliation = useCallback(async () => {
     if (!token) return;
     setReconError(null);
     try {
-      const data = await fetchUnifiedLedgerReconciliation(token);
-      setIslands(data.islands);
-      setReconHealthy(data.healthy);
+      const [islandData, amountData, balanceData] = await Promise.all([
+        fetchUnifiedLedgerReconciliation(token),
+        fetchAmountReconciliation(token).catch(() => ({ amounts: [] })),
+        fetchBalanceChecks(token).catch(() => ({ balances: [], all_balanced: true })),
+      ]);
+      setIslands(islandData.islands);
+      setReconHealthy(islandData.healthy);
+      setAmounts(amountData.amounts);
+      setBalances(balanceData.balances);
+      setAllBalanced(balanceData.all_balanced);
     } catch (e) {
       setReconError(e instanceof Error ? e.message : 'Reconciliation failed');
       setIslands([]);
@@ -112,9 +128,10 @@ export function UnifiedLedgerFeed({ onBack }: Props) {
       </div>
 
       <p className="text-sm text-slate-500 dark:text-slate-400">
-        Platform-wide double-entry ledger across rides, fleet, and Dash. Feed requires{' '}
-        <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 rounded">LEDGER_READ_UNIFIED=1</code>{' '}
-        on the rides Edge function; dual-write requires{' '}
+        Enterprise ledger across <strong>Rideshare</strong> (Rides, Driver, Fleet) and{' '}
+        <strong>Delivery</strong> (Dash, Partner, Courier). Feed requires{' '}
+        <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 rounded">LEDGER_READ_UNIFIED=1</code>;{' '}
+        dual-write requires{' '}
         <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 rounded">LEDGER_DUAL_WRITE_ENABLED=1</code>.
       </p>
 
@@ -158,6 +175,68 @@ export function UnifiedLedgerFeed({ onBack }: Props) {
         </div>
       </section>
 
+      {/* Deep Reconciliation: Amount Totals */}
+      {amounts.length > 0 && (
+        <section className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4">
+          <h3 className="font-medium text-slate-900 dark:text-white mb-3">Amount Totals by Source</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-slate-500 border-b border-slate-200 dark:border-slate-700">
+                  <th className="py-2 pr-4">Source system</th>
+                  <th className="py-2 pr-4">Entry count</th>
+                  <th className="py-2 pr-4">Total amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {amounts.map((row) => (
+                  <tr key={row.source_system} className="border-b border-slate-100 dark:border-slate-800">
+                    <td className="py-2 pr-4 font-mono text-xs">{row.source_system}</td>
+                    <td className="py-2 pr-4">{row.entry_count.toLocaleString()}</td>
+                    <td className="py-2 pr-4">{formatMinor(row.total_amount_minor, row.currency)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* Deep Reconciliation: Product Balances */}
+      {balances.length > 0 && (
+        <section className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            {allBalanced === true && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
+            {allBalanced === false && <AlertTriangle className="w-5 h-5 text-amber-500" />}
+            <h3 className="font-medium text-slate-900 dark:text-white">Product Balance Check</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-slate-500 border-b border-slate-200 dark:border-slate-700">
+                  <th className="py-2 pr-4">Product</th>
+                  <th className="py-2 pr-4">Total Debits</th>
+                  <th className="py-2 pr-4">Total Credits</th>
+                  <th className="py-2">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {balances.filter(b => b.total_debits_minor > 0).map((row) => (
+                  <tr key={row.product} className="border-b border-slate-100 dark:border-slate-800">
+                    <td className="py-2 pr-4 font-mono text-xs">{row.product}</td>
+                    <td className="py-2 pr-4">{formatMinor(row.total_debits_minor, 'JMD')}</td>
+                    <td className="py-2 pr-4">{formatMinor(row.total_credits_minor, 'JMD')}</td>
+                    <td className={`py-2 ${row.balanced ? 'text-emerald-600' : 'text-red-600 font-medium'}`}>
+                      {row.balanced ? 'Balanced' : 'Unbalanced'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
       <section className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4">
         <div className="flex flex-wrap gap-3 mb-4 items-end">
           <label className="text-sm">
@@ -167,12 +246,31 @@ export function UnifiedLedgerFeed({ onBack }: Props) {
               onChange={(e) => { setProduct(e.target.value); setPage(1); }}
               className="rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 py-1.5 text-sm"
             >
-              <option value="">All</option>
-              <option value="rides">Rides</option>
-              <option value="fleet">Fleet</option>
-              <option value="dash">Dash</option>
-              <option value="platform">Platform</option>
+              <option value="">All Products</option>
+              <optgroup label="Rideshare">
+                <option value="roam_rides">Roam Rides (Passengers)</option>
+                <option value="roam_driver">Roam Driver (Earnings)</option>
+                <option value="roam_fleet">Roam Fleet (Fleet Ops)</option>
+              </optgroup>
+              <optgroup label="Delivery">
+                <option value="roam_dash">Roam Dash (Orders)</option>
+                <option value="roam_partner">Roam Partner (Merchants)</option>
+                <option value="roam_courier">Roam Courier (Couriers)</option>
+              </optgroup>
+              <optgroup label="System">
+                <option value="platform">Platform (Internal)</option>
+              </optgroup>
             </select>
+          </label>
+          <label className="text-sm">
+            <span className="block text-slate-500 mb-1">Driver ID</span>
+            <input
+              type="text"
+              value={driverId}
+              onChange={(e) => { setDriverId(e.target.value.trim()); setPage(1); }}
+              placeholder="UUID (optional)"
+              className="rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 py-1.5 text-sm w-64"
+            />
           </label>
           <p className="text-sm text-slate-500 ml-auto">{total} entries</p>
         </div>

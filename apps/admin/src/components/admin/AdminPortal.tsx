@@ -41,6 +41,7 @@ import { DriverUserDetailPage } from './product-users/DriverUserDetailPage';
 import { RiderUsersPage } from './product-users/RiderUsersPage';
 import { RiderUserDetailPage } from './product-users/RiderUserDetailPage';
 import { applyPortalTheme } from '../../hooks/usePortalTheme';
+import { api } from '../../services/api';
 import { UnifiedLedgerFeed } from './UnifiedLedgerFeed';
 
 function normalizePortalPage(page: string): string {

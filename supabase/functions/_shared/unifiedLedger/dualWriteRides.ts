@@ -16,6 +16,19 @@ export type RidesJournalLineDualWrite = {
   journalEntryId?: string | null;
 };
 
+/** Determine product based on account keys - rider-centric = roam_rides, driver-centric = roam_driver */
+function resolveRidesProduct(debitKey: string, creditKey: string): "roam_rides" | "roam_driver" {
+  const isRiderInvolved = debitKey.includes(":rider") || creditKey.includes(":rider");
+  const isDriverInvolved = debitKey.includes(":driver") || creditKey.includes(":driver");
+  
+  // If rider is involved, it's a passenger-side transaction
+  if (isRiderInvolved) return "roam_rides";
+  // If only driver (no rider), it's driver earnings
+  if (isDriverInvolved) return "roam_driver";
+  // Default to roam_rides for platform-only transactions
+  return "roam_rides";
+}
+
 /** Phase 7: mirror rides.payment_journal_entries line into ledger.entries. */
 export async function dualWriteRidesJournalLine(
   client: SupabaseClient,
@@ -37,6 +50,8 @@ export async function dualWriteRidesJournalLine(
     sourceId = data?.id ? String(data.id) : line.rowIdempotencyKey;
   }
 
+  const product = resolveRidesProduct(line.debitAccountKey, line.creditAccountKey);
+
   await ledgerPostEntry({
     idempotencyKey: `rides_payment_journal:${sourceId}`,
     entryType: line.entryType,
@@ -45,7 +60,7 @@ export async function dualWriteRidesJournalLine(
     amountMinor: line.amountMinor,
     currency: line.currency,
     requestHash: line.requestHash,
-    product: "rides",
+    product,
     referenceType: line.rideId ? "ride" : null,
     referenceId: line.rideId,
     metadata: line.metadata ?? {},
@@ -65,7 +80,11 @@ export type LedgerLineDualWrite = {
   currency?: string;
 };
 
-/** Phase 7: record reporting line linkage (no double-entry — metadata-only mirror). */
+/** 
+ * @deprecated Removed to fix double-counting. 
+ * Cash settlement journal entries already record these amounts.
+ * Kept for reference but not called from production code.
+ */
 export async function dualWriteRideLedgerLine(line: LedgerLineDualWrite): Promise<void> {
   if (!isLedgerDualWriteEnabled()) return;
   const amount = Math.abs(line.paidToYouMinor);
@@ -84,7 +103,7 @@ export async function dualWriteRideLedgerLine(line: LedgerLineDualWrite): Promis
     creditAccountKey: isCredit ? driverKey : "platform:clearing",
     amountMinor: amount,
     currency: line.currency ?? "JMD",
-    product: "rides",
+    product: "roam_driver",  // Driver earnings
     referenceType: "ride",
     referenceId: line.rideId,
     metadata: { line_kind: line.lineKind, reporting_only: true },

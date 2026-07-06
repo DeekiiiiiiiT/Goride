@@ -16,7 +16,11 @@ export type PostEntryParams = {
   currency: string;
   requestHash?: string | null;
   organizationId?: string | null;
-  product?: "rides" | "fleet" | "dash" | "platform";
+  product?: 
+    | "roam_rides" | "roam_driver" | "roam_fleet"  // Rideshare
+    | "roam_dash" | "roam_partner" | "roam_courier" // Delivery
+    | "platform"                                    // System
+    | "rides" | "fleet" | "dash";                  // Legacy (deprecated)
   effectiveAt?: string;
   referenceType?: string | null;
   referenceId?: string | null;

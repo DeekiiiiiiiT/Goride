@@ -60,6 +60,7 @@ export async function fetchUnifiedLedgerFeed(
     page?: number;
     limit?: number;
     product?: string;
+    driverId?: string;
     from?: string;
     to?: string;
     organizationId?: string;
@@ -69,6 +70,7 @@ export async function fetchUnifiedLedgerFeed(
   if (opts.page) sp.set('page', String(opts.page));
   if (opts.limit) sp.set('limit', String(opts.limit));
   if (opts.product) sp.set('product', opts.product);
+  if (opts.driverId) sp.set('driver_id', opts.driverId);
   if (opts.from) sp.set('from', opts.from);
   if (opts.to) sp.set('to', opts.to);
   if (opts.organizationId) sp.set('organization_id', opts.organizationId);
@@ -83,6 +85,37 @@ export async function fetchUnifiedLedgerReconciliation(
   accessToken: string,
 ): Promise<UnifiedLedgerReconciliationResponse> {
   const res = await fetch(`${base}/reconciliation`, { headers: edgeHeaders(accessToken) });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export type AmountReconciliation = {
+  source_system: string;
+  entry_count: number;
+  total_amount_minor: number;
+  currency: string;
+};
+
+export type BalanceCheck = {
+  product: string;
+  total_debits_minor: number;
+  total_credits_minor: number;
+  net_balance_minor: number;
+  balanced: boolean;
+};
+
+export async function fetchAmountReconciliation(
+  accessToken: string,
+): Promise<{ amounts: AmountReconciliation[] }> {
+  const res = await fetch(`${base}/reconciliation/amounts`, { headers: edgeHeaders(accessToken) });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function fetchBalanceChecks(
+  accessToken: string,
+): Promise<{ balances: BalanceCheck[]; all_balanced: boolean }> {
+  const res = await fetch(`${base}/reconciliation/balances`, { headers: edgeHeaders(accessToken) });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
 }
