@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { bucketForBestMatch, bucketForWorkflowStage } from './tollBucket';
+import { bucketForBestMatch, bucketForWorkflowStage, TollWorkflowStage } from './tollBucket';
 import { MatchResult } from './tollReconciliation';
 
 /**
@@ -78,5 +78,45 @@ describe('bucketForWorkflowStage', () => {
 
   it('falls back to needs-review for an unset stage (pre-backfill row)', () => {
     expect(bucketForWorkflowStage(undefined)).toBe('needs-review');
+  });
+});
+
+/**
+ * Phase F2's period aggregation endpoint (apps/fleet/src/supabase/functions/
+ * server/toll_period_controller.tsx) cannot import this Deno-incompatible
+ * client module, so it carries its own local `bucketForWorkflowStage` mirror.
+ * That mirror must stay behaviorally identical to this one (StepId
+ * 'underpaid-claims' is that function's name for this function's 'underpaid'
+ * — same bucket, different label domain since the server groups underpaid
+ * tolls and claims into one step). This test locks down the exact mapping
+ * table both implementations must agree on — if this test ever needs to
+ * change, toll_period_controller.tsx's mirror must change to match.
+ */
+describe('bucketForWorkflowStage mirror contract (toll_period_controller.tsx)', () => {
+  const SERVER_STEP_ID_FOR_STAGE: Record<string, string | null> = {
+    needs_review: 'needs-review',
+    underpaid_pending: 'underpaid-claims',
+    deadhead_pending: 'deadhead',
+    personal_use_pending: 'personal-use',
+    deadhead_resolved: null,
+    personal_use_resolved: null,
+    claim_filed: null,
+    claim_resolved: null,
+    matched: null,
+  };
+
+  const CLIENT_BUCKET_TO_SERVER_STEP_ID: Record<string, string> = {
+    'needs-review': 'needs-review',
+    underpaid: 'underpaid-claims',
+    deadhead: 'deadhead',
+    'personal-use': 'personal-use',
+  };
+
+  it('every stage maps to the same step (translated to the server label domain)', () => {
+    for (const [stage, expectedServerStepId] of Object.entries(SERVER_STEP_ID_FOR_STAGE)) {
+      const clientBucket = bucketForWorkflowStage(stage as TollWorkflowStage);
+      const translated = clientBucket ? CLIENT_BUCKET_TO_SERVER_STEP_ID[clientBucket] : null;
+      expect(translated).toBe(expectedServerStepId);
+    }
   });
 });

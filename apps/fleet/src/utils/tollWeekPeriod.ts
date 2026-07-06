@@ -1,5 +1,5 @@
 import { startOfWeek, endOfWeek, format, parseISO } from 'date-fns';
-import type { DisputeRefund, FinancialTransaction, Trip } from '../types/data';
+import type { Claim, DisputeRefund, FinancialTransaction, Trip } from '../types/data';
 import { fleetTzDateKey, ymdToLocalDate } from './timezoneDisplay';
 
 /**
@@ -233,4 +233,32 @@ export function computeDisputeRefundCounts(
     else unmatched++;
   }
   return { matched, unmatched };
+}
+
+/**
+ * Which week a claim belongs to — needed because a claim's own `date` isn't
+ * always set (see Phase F1's backfill) and its resolution timestamp
+ * (`createdAt`) is NOT the same thing as when the underlying toll happened.
+ * Fallback chain, in priority order: `claim.date` → the linked toll's date
+ * (via the optional `tollDateById` map, keyed by `transactionId`) →
+ * `claim.tripDate` → `claim.createdAt`. Returns epoch if nothing parses, same
+ * "unparseable → oldest bucket" convention `getDisputeRefundWeekDate`/
+ * `groupByWeek` already use.
+ */
+export function getClaimWeekDate(
+  claim: Pick<Claim, 'date' | 'transactionId' | 'tripDate' | 'createdAt'>,
+  tollDateById?: Map<string, string>,
+): Date {
+  const candidates: (string | undefined)[] = [
+    claim.date,
+    claim.transactionId ? tollDateById?.get(claim.transactionId) : undefined,
+    claim.tripDate,
+    claim.createdAt,
+  ];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const d = new Date(candidate);
+    if (!isNaN(d.getTime())) return d;
+  }
+  return new Date(0);
 }

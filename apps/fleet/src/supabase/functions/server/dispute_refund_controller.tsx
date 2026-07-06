@@ -475,6 +475,7 @@ app.patch(`${BASE}/:id/match`, async (c) => {
           amount: Math.abs(refund.amount || 0),
           expectedAmount: Math.abs(toll?.amount || 0),
           subject: "Toll Underpayment (manual dispute match)",
+          date: toll?.date || undefined,
           _createdByRefund: id, // so unmatch can delete it
         },
         c,

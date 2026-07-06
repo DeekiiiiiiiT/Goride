@@ -29,9 +29,20 @@ const WORKFLOW_STATE_META: Record<TollEventWorkflowState, { label: string; class
   dispute_unmatched: { label: "Dispute Unmatched", className: "bg-amber-100 text-amber-700 border-amber-200" },
 };
 
-export function UnifiedTollActivityTable({ driverId }: { driverId?: string }) {
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+export function UnifiedTollActivityTable({
+  driverId,
+  initialFrom,
+  initialTo,
+}: {
+  driverId?: string;
+  /** Seeds the date-range pickers on first mount (e.g. to the selected
+   *  reconciliation period) — the user can still broaden/narrow from here,
+   *  this only sets the default. */
+  initialFrom?: string;
+  initialTo?: string;
+}) {
+  const [from, setFrom] = useState(initialFrom || "");
+  const [to, setTo] = useState(initialTo || "");
   const fleetTz = useFleetTimezone();
   // Opt-in set: a week is expanded only once its key is added here, so every
   // week starts collapsed by default (an empty set means "nothing expanded").

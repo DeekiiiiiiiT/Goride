@@ -42,7 +42,7 @@ async function fetchAllTrips(): Promise<Trip[]> {
 
 /** Paginate through all unreconciled tolls (server caps each page at 100). */
 async function fetchAllUnreconciled(
-  params: { driverId?: string; autoMatch?: boolean },
+  params: { driverId?: string; autoMatch?: boolean; from?: string; to?: string },
 ): Promise<{ data: FinancialTransaction[]; suggestions: Record<string, any[]>; autoReconciled: number; total: number }> {
   const PAGE_SIZE = 100;
   let offset = 0;
@@ -134,7 +134,12 @@ export interface RefundSuggestion {
   reason: string;
 }
 
-export function useTollReconciliation(driverId?: string) {
+export interface ReconciliationPeriodScope {
+  startDate: string;
+  endDate: string;
+}
+
+export function useTollReconciliation(driverId?: string, period?: ReconciliationPeriodScope) {
   const [loading, setLoading] = useState(true);
   const [unreconciledTolls, setUnreconciledTolls] = useState<FinancialTransaction[]>([]);
   const [reconciledTolls, setReconciledTolls] = useState<FinancialTransaction[]>([]);
@@ -155,15 +160,16 @@ export function useTollReconciliation(driverId?: string) {
     const blockUi = isInitialLoad.current;
     if (blockUi) setLoading(true);
     try {
-      const filterParams = { ...(driverId ? { driverId } : {}), autoMatch: opts?.autoMatch };
-      
+      const dateParams = period ? { from: period.startDate, to: period.endDate } : {};
+      const filterParams = { ...(driverId ? { driverId } : {}), ...dateParams, autoMatch: opts?.autoMatch };
+
       // Step 1: Fetch unreconciled in pages (server caps page size; avoids edge timeout)
       const unreconciledRes = await fetchAllUnreconciled(filterParams);
-      
+
       // Step 2: Now fetch reconciled + refunds + trips (after auto-reconciliation writes have persisted)
       const [reconciledRes, refundsRes, allTrips] = await Promise.all([
-        api.getTollReconciled({ limit: 1000, ...(driverId ? { driverId } : {}) }),
-        api.getTollUnclaimedRefunds({ limit: 1000, ...(driverId ? { driverId } : {}) }),
+        api.getTollReconciled({ limit: 1000, ...(driverId ? { driverId } : {}), ...dateParams }),
+        api.getTollUnclaimedRefunds({ limit: 1000, ...(driverId ? { driverId } : {}), ...dateParams }),
         fetchAllTrips()
       ]);
 
@@ -195,7 +201,9 @@ export function useTollReconciliation(driverId?: string) {
 
       // Phase 6 (Dispute Refunds): Fetch imported dispute refunds
       try {
-        const drRes = await api.getDisputeRefunds();
+        const drRes = await api.getDisputeRefunds(
+          period ? { dateFrom: period.startDate, dateTo: period.endDate } : undefined,
+        );
         setDisputeRefunds(drRes.data || []);
       } catch (drErr) {
         console.error('[Reconciliation] Failed to fetch dispute refunds:', drErr);
@@ -227,7 +235,7 @@ export function useTollReconciliation(driverId?: string) {
       isInitialLoad.current = false;
       if (blockUi) setLoading(false);
     }
-  }, [driverId]);
+  }, [driverId, period?.startDate, period?.endDate]);
 
   useEffect(() => {
     isInitialLoad.current = true;

@@ -69,7 +69,7 @@ import {
   deleteCanonicalLedgerBySource,
 } from "./ledger_canonical.ts";
 import { isUnifiedTollSettlementEnabled } from "./driver_toll_charge.ts";
-import { upsertClaim, deleteClaim } from "./claim_service.ts";
+import { upsertClaim, deleteClaim, executeClaimDateBackfill } from "./claim_service.ts";
 import { addToTollDisposition, emptyTollDisposition, roundTollDisposition } from "./driver_toll_disposition.ts";
 import {
   appendCanonicalFuelExpenseIfEligible,
@@ -119,6 +119,7 @@ import tollApp, {
   invalidateStaleTollMatchesForTrip,
 } from "./toll_controller.tsx";
 import disputeRefundApp from "./dispute_refund_controller.tsx";
+import tollPeriodApp from "./toll_period_controller.tsx";
 import paymentLedgerLineApp from "./payment_ledger_line_controller.tsx";
 import apiCenterApp from "./api_command_center.tsx";
 import { getFleetTimezone } from "./timezone_helper.tsx";
@@ -1453,6 +1454,7 @@ app.route("/", safetyApp);
 app.route("/", syncApp);
 app.route("/", tollApp);
 app.route("/", disputeRefundApp);
+app.route("/", tollPeriodApp);
 app.route("/", paymentLedgerLineApp);
 app.route("/", apiCenterApp);
 
@@ -10357,6 +10359,30 @@ app.delete("/make-server-37f42386/claims/:id", async (c) => {
   try {
     await deleteClaim(id, c);
     return c.json({ success: true });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── GET /claims/date-backfill/status (Phase F1) ─── read-only preview ─────
+// Historical claims (created before every claim-creation call site set
+// `date`) have no `date`. Reports how many, without touching anything.
+app.get("/make-server-37f42386/claims/date-backfill/status", requireAuth(), async (c) => {
+  try {
+    const result = await executeClaimDateBackfill({ dryRun: true });
+    return c.json({ success: true, ...result });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── POST /claims/date-backfill (Phase F1) ─── apply (dry-run by default) ──
+app.post("/make-server-37f42386/claims/date-backfill", requireAuth(), async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body?.dryRun !== false; // default to dry-run for safety
+    const result = await executeClaimDateBackfill({ dryRun });
+    return c.json({ success: true, dryRun, ...result });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }

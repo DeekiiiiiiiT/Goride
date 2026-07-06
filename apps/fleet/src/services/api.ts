@@ -1863,12 +1863,14 @@ export const api = {
     return response.json();
   },
 
-  async getTollUnreconciled(params?: { driverId?: string; limit?: number; offset?: number; autoMatch?: boolean }) {
+  async getTollUnreconciled(params?: { driverId?: string; limit?: number; offset?: number; autoMatch?: boolean; from?: string; to?: string }) {
     const qs = new URLSearchParams();
     if (params?.driverId) qs.set('driverId', params.driverId);
     if (params?.limit !== undefined) qs.set('limit', params.limit.toString());
     if (params?.offset !== undefined) qs.set('offset', params.offset.toString());
     if (params?.autoMatch) qs.set('autoMatch', '1');
+    if (params?.from) qs.set('from', params.from);
+    if (params?.to) qs.set('to', params.to);
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/unreconciled?${qs.toString()}`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
@@ -1876,11 +1878,13 @@ export const api = {
     return response.json();
   },
 
-  async getTollReconciled(params?: { driverId?: string; limit?: number; offset?: number }) {
+  async getTollReconciled(params?: { driverId?: string; limit?: number; offset?: number; from?: string; to?: string }) {
     const qs = new URLSearchParams();
     if (params?.driverId) qs.set('driverId', params.driverId);
     if (params?.limit !== undefined) qs.set('limit', params.limit.toString());
     if (params?.offset !== undefined) qs.set('offset', params.offset.toString());
+    if (params?.from) qs.set('from', params.from);
+    if (params?.to) qs.set('to', params.to);
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/reconciled?${qs.toString()}`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
@@ -1888,11 +1892,13 @@ export const api = {
     return response.json();
   },
 
-  async getTollUnclaimedRefunds(params?: { driverId?: string; limit?: number; offset?: number }) {
+  async getTollUnclaimedRefunds(params?: { driverId?: string; limit?: number; offset?: number; from?: string; to?: string }) {
     const qs = new URLSearchParams();
     if (params?.driverId) qs.set('driverId', params.driverId);
     if (params?.limit !== undefined) qs.set('limit', params.limit.toString());
     if (params?.offset !== undefined) qs.set('offset', params.offset.toString());
+    if (params?.from) qs.set('from', params.from);
+    if (params?.to) qs.set('to', params.to);
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/unclaimed-refunds?${qs.toString()}`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
@@ -1900,11 +1906,23 @@ export const api = {
     return response.json();
   },
 
-  async getResolvedRefunds(params?: { driverId?: string; limit?: number; offset?: number }) {
+  async getTollReconciliationPeriods(params?: { driverId?: string }) {
+    const qs = new URLSearchParams();
+    if (params?.driverId) qs.set('driverId', params.driverId);
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/periods?${qs.toString()}`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch reconciliation periods");
+    return response.json();
+  },
+
+  async getResolvedRefunds(params?: { driverId?: string; limit?: number; offset?: number; from?: string; to?: string }) {
     const qs = new URLSearchParams();
     if (params?.driverId) qs.set('driverId', params.driverId);
     if (params?.limit !== undefined) qs.set('limit', params.limit.toString());
     if (params?.offset !== undefined) qs.set('offset', params.offset.toString());
+    if (params?.from) qs.set('from', params.from);
+    if (params?.to) qs.set('to', params.to);
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/resolved-refunds?${qs.toString()}`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });

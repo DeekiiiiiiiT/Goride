@@ -1132,6 +1132,13 @@ export interface Claim {
   // Resolution Tracking
   resolutionReason?: 'Charge Driver' | 'Write Off' | 'Business Expense' | 'Reimbursed' | 'Other';
   disputeRefundId?: string; // Phase 7: Links to dispute refund that auto-resolved this claim
+
+  // Toll attribution (set at creation from the underlying toll transaction so
+  // resolution-time charges/labels are dated and scoped correctly, not to
+  // "today" or left vehicle-less). Optional/additive — old claims lack these.
+  date?: string; // The underlying toll's actual date (not the resolution date)
+  vehicleId?: string;
+  driverName?: string;
 }
 
 // --- Dispute Refunds (Support Adjustment Import) ---

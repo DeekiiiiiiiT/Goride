@@ -28,7 +28,7 @@ import { stampOrg } from "./org_scope.ts";
 import { isDriverTollChargeSyncEnabled } from "./driver_toll_charge.ts";
 import { syncClaimTollResolution } from "./claim_toll_sync.ts";
 import { type ClaimResolutionReason } from "./claim_resolution_sync.ts";
-import { getTollLedgerEntry, updateTollLedgerEntry, recomputeAndPersistWorkflowStage } from "./toll_controller.tsx";
+import { getTollLedgerEntry, updateTollLedgerEntry, recomputeAndPersistWorkflowStage, loadAllByPrefix } from "./toll_controller.tsx";
 
 /**
  * After persisting the claim, link the toll (if any) back to it and
@@ -199,4 +199,56 @@ export async function deleteClaim(claimId: string, c: unknown, opts?: UpsertClai
   }
   await kv.del(`claim:${claimId}`);
   if (claim) await clearTollLinkage(claim.transactionId, claimId);
+}
+
+export interface ClaimDateBackfillResult {
+  scanned: number;
+  updated: number;
+  skippedAlreadySet: number;
+  skippedNoSource: number;
+}
+
+/**
+ * One-time repair for claims created before every claim-creation call site
+ * set `date` (Phase F1). Fallback chain, in priority order: the linked
+ * toll's own date (via `transactionId`) → `tripDate` → `createdAt`. Patches
+ * ONLY the `date` field via a bare `kv.set` — never `upsertClaim`, which
+ * would re-run the reversible sync/workflow-stage side effects on claims
+ * that are already fully resolved. Idempotent: a second run reports
+ * `updated: 0` since every claim it already touched now has `date` set.
+ */
+export async function executeClaimDateBackfill(opts?: { dryRun?: boolean }): Promise<ClaimDateBackfillResult> {
+  const dryRun = opts?.dryRun ?? true;
+  const claims = (await loadAllByPrefix("claim:")) as any[];
+  let updated = 0;
+  let skippedAlreadySet = 0;
+  let skippedNoSource = 0;
+
+  for (const claim of claims) {
+    if (!claim || typeof claim !== "object" || !claim.id) continue;
+    if (claim.date) {
+      skippedAlreadySet++;
+      continue;
+    }
+
+    let resolvedDate: string | undefined;
+    if (claim.transactionId) {
+      const toll = await getTollLedgerEntry(claim.transactionId);
+      if (toll?.date) resolvedDate = toll.date;
+    }
+    if (!resolvedDate && claim.tripDate) resolvedDate = claim.tripDate;
+    if (!resolvedDate && claim.createdAt) resolvedDate = claim.createdAt;
+
+    if (!resolvedDate) {
+      skippedNoSource++;
+      continue;
+    }
+
+    updated++;
+    if (!dryRun) {
+      await kv.set(`claim:${claim.id}`, { ...claim, date: resolvedDate });
+    }
+  }
+
+  return { scanned: claims.length, updated, skippedAlreadySet, skippedNoSource };
 }

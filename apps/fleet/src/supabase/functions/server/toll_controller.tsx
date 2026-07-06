@@ -934,7 +934,9 @@ function parseQueryParams(c: any) {
   const driverId = c.req.query("driverId") || undefined;
   const limit = parseInt(c.req.query("limit") || "50", 10);
   const offset = parseInt(c.req.query("offset") || "0", 10);
-  return { driverId, limit, offset };
+  const from = c.req.query("from") || undefined;
+  const to = c.req.query("to") || undefined;
+  return { driverId, limit, offset, from, to };
 }
 
 const UNRECONCILED_MAX_PAGE_LIMIT = 100;
@@ -947,7 +949,28 @@ function parseUnreconciledQueryParams(c: any) {
     : Math.min(rawLimit, UNRECONCILED_MAX_PAGE_LIMIT);
   const offset = parseInt(c.req.query("offset") || "0", 10);
   const autoMatch = c.req.query("autoMatch") === "1";
-  return { driverId, limit, offset, autoMatch };
+  const from = c.req.query("from") || undefined;
+  const to = c.req.query("to") || undefined;
+  return { driverId, limit, offset, autoMatch, from, to };
+}
+
+/**
+ * Optional [from, to] (yyyy-MM-dd) scoping for the period-gated wizard
+ * (Phase F4) — best-effort day-boundary filtering (not full fleet-tz
+ * correction, unlike the period aggregation endpoint) since this only needs
+ * to narrow an already-loaded list to roughly the right week, not compute
+ * authoritative period membership.
+ */
+function filterByDateRange<T extends { date?: string }>(items: T[], from?: string, to?: string): T[] {
+  if (!from && !to) return items;
+  const fromMs = from ? new Date(from).getTime() : -Infinity;
+  const toMs = to ? new Date(`${to}T23:59:59.999`).getTime() : Infinity;
+  return items.filter((item) => {
+    if (!item.date) return false;
+    const t = new Date(item.date).getTime();
+    if (isNaN(t)) return false;
+    return t >= fromMs && t <= toMs;
+  });
 }
 
 function parseUnifiedQueryParams(c: any) {
@@ -1250,7 +1273,7 @@ app.post(`${BASE}/rematch-candidates/:id/dismiss`, async (c) => {
 app.get(`${BASE}/unreconciled`, async (c) => {
   const t0 = Date.now();
   try {
-    const { driverId, limit, offset, autoMatch } = parseUnreconciledQueryParams(c);
+    const { driverId, limit, offset, autoMatch, from, to } = parseUnreconciledQueryParams(c);
 
     // Phase 5: Read from toll_ledger:* (single source of truth)
     const loaded = await loadAllTollLedgerWithTrips();
@@ -1263,7 +1286,7 @@ app.get(`${BASE}/unreconciled`, async (c) => {
     }
 
     // Unreconciled filter (same logic as the hook)
-    const unreconciled = tollTx.filter((tx: any) => {
+    let unreconciled = tollTx.filter((tx: any) => {
       const isCashClaim =
         tx.paymentMethod === "Cash" || !!tx.receiptUrl;
       if (isCashClaim) {
@@ -1271,6 +1294,9 @@ app.get(`${BASE}/unreconciled`, async (c) => {
       }
       return !tx.isReconciled || !tx.tripId;
     });
+
+    // Phase F4: optional period scoping for the gated reconciliation wizard.
+    unreconciled = filterByDateRange(unreconciled, from, to);
 
     // Sort by date descending
     unreconciled.sort(
@@ -1452,7 +1478,7 @@ app.get(`${BASE}/unreconciled`, async (c) => {
 
 app.get(`${BASE}/unclaimed-refunds`, async (c) => {
   try {
-    const { driverId, limit, offset } = parseQueryParams(c);
+    const { driverId, limit, offset, from, to } = parseQueryParams(c);
 
     // Phase 5: Read from toll_ledger:* (single source of truth)
     const loaded = await loadAllTollLedgerWithTrips();
@@ -1468,7 +1494,12 @@ app.get(`${BASE}/unclaimed-refunds`, async (c) => {
 
     // Candidates: trips with a toll refund, no linked toll tx, and not already
     // resolved (cash_wash/phantom/expense_logged drop off; pending stays).
-    const candidates = trips.filter((t: any) => isUnresolvedRefund(t, linkedTripIds));
+    // Phase F4: optional period scoping for the gated reconciliation wizard.
+    const candidates = filterByDateRange(
+      trips.filter((t: any) => isUnresolvedRefund(t, linkedTripIds)),
+      from,
+      to,
+    );
 
     // ── Automation (flagged, default OFF): auto-apply integrity-safe cash washes ──
     const automation = await getRefundAutomationSettings();
@@ -1537,7 +1568,7 @@ app.get(`${BASE}/unclaimed-refunds`, async (c) => {
 
 app.get(`${BASE}/reconciled`, async (c) => {
   try {
-    const { driverId, limit, offset } = parseQueryParams(c);
+    const { driverId, limit, offset, from, to } = parseQueryParams(c);
 
     const allTollTx = await loadMergedTollTxArray();
 
@@ -1548,6 +1579,9 @@ app.get(`${BASE}/reconciled`, async (c) => {
     if (driverId) {
       reconciled = filterByDriver(reconciled, driverId);
     }
+
+    // Phase F4: optional period scoping for the gated reconciliation wizard.
+    reconciled = filterByDateRange(reconciled, from, to);
 
     // Sort by date descending
     reconciled.sort(
@@ -4431,6 +4465,7 @@ app.post(`${BASE}/resolve`, async (c) => {
       resolvedAt: new Date().toISOString(),
       driverId: tx.driverId,
       driverName: tx.driverName,
+      date: tollEntry.date,
     };
     await kv.set(`claim:${claimId}`, claim);
 
@@ -5137,12 +5172,15 @@ app.post(`${BASE}/resolve-refund/bulk`, async (c) => {
 // Trips whose unlinked refund has been resolved (any non-pending status).
 app.get(`${BASE}/resolved-refunds`, async (c) => {
   try {
-    const { driverId, limit, offset } = parseQueryParams(c);
+    const { driverId, limit, offset, from, to } = parseQueryParams(c);
     const loaded = await loadAllTollLedgerWithTrips();
     const trips = filterByDriver(loaded.trips, driverId);
 
-    const resolved = trips.filter(
-      (t: any) => t.tollRefundResolution && t.tollRefundResolution.status !== "pending",
+    // Phase F4: optional period scoping for the gated reconciliation wizard.
+    const resolved = filterByDateRange(
+      trips.filter((t: any) => t.tollRefundResolution && t.tollRefundResolution.status !== "pending"),
+      from,
+      to,
     );
     resolved.sort((a: any, b: any) => {
       const ra = a.tollRefundResolution?.resolvedAt || a.date;
@@ -5688,4 +5726,7 @@ export type { RefundAutomationSettings };
 
 // ── Exported helpers for the persisted toll-workflow state (RWF-1) ─────────
 export { recomputeAndPersistWorkflowStage };
+
+// ── Exported helpers for the period aggregation endpoint (Phase F2) ────────
+export { loadAllByPrefix, loadDisputeRefundRecords, filterByDriver };
 export type { TollWorkflowStage };
