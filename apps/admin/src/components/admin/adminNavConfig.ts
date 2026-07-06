@@ -200,6 +200,7 @@ export const PLATFORM_ROLE_PAGES: Record<string, string[]> = {
     ...LEGACY_SETTINGS_PAGES,
     'db-management',
     'db-settings',
+    'unified-ledger',
   ],
   platform_support: [...SHARED_PLATFORM_PAGES],
   platform_analyst: [

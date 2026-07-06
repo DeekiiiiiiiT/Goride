@@ -345,7 +345,7 @@ app.post("/paypal/capture", async (c) => {
         
         const capture = result.purchase_units[0].payments.captures[0];
         
-        await serviceSupabase
+        const { data: txn } = await serviceSupabase
           .schema("payments")
           .from("transactions")
           .insert({
@@ -359,8 +359,26 @@ app.post("/paypal/capture", async (c) => {
             provider: "paypal",
             provider_transaction_id: capture.id,
             provider_data: result,
-            payment_method: "paypal"
-          });
+            payment_method: "paypal",
+          })
+          .select("id")
+          .single();
+
+        if (txn?.id) {
+          try {
+            const { dualWriteDashPayment } = await import("../_shared/unifiedLedger/dualWriteDash.ts");
+            await dualWriteDashPayment({
+              transactionId: String(txn.id),
+              orderId: String(orderId),
+              merchantId: null,
+              amount: Number(intent.amount),
+              currency: "JMD",
+              kind: "order_capture",
+            });
+          } catch (e) {
+            console.error("[payments] unified dual-write failed:", e);
+          }
+        }
         
         await serviceSupabase
           .schema("delivery")

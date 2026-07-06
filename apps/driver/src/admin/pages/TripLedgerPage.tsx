@@ -4,20 +4,15 @@ import { Session } from '@supabase/supabase-js';
 import { ChevronDown, ChevronRight, Loader2, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatMoneyMinor } from '@roam/types/rides';
+import { formatPlatformLedgerWhen } from '@roam/admin-core';
 import { TripLedgerDetailPanel } from '../components/TripLedgerDetailPanel';
-import { listPlatformLedgerTrips } from '../services/driverAdminService';
+import { listPlatformLedgerTrips, type PlatformLedgerTripRow } from '../services/driverAdminService';
 
 interface OutletContext {
   session: Session;
 }
 
-function formatWhen(iso: string | null | undefined) {
-  if (!iso) return '—';
-  return new Intl.DateTimeFormat('en-JM', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(iso));
-}
+const formatWhen = formatPlatformLedgerWhen;
 
 export function TripLedgerPage() {
   const { session } = useOutletContext<OutletContext>();

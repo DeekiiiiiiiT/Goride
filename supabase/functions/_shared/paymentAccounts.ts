@@ -10,6 +10,7 @@ import {
   type JournalLineSpec,
 } from "../rides/cashSettlement/buildJournalEntries.ts";
 import { getRidesPaymentDb } from "./ridesPaymentDb.ts";
+import { dualWriteRidesJournalLine } from "./unifiedLedger/dualWriteRides.ts";
 
 export interface PaymentAccountRow {
   id: string;
@@ -353,7 +354,6 @@ export async function postPaymentJournal(
     return { inserted: 0, skipped: false };
   }
 
-  const accountCache = new Map<string, PaymentAccountRow>();
   const digitalCredits: Array<{ userId: string; amount: number }> = [];
   const existingTypes = new Set(existingRows.map((row) => String(row.entry_type)));
 
@@ -368,47 +368,6 @@ export async function postPaymentJournal(
     );
   }
 
-  async function resolveAccountKey(key: string): Promise<PaymentAccountRow> {
-    const cached = accountCache.get(key);
-    if (cached) return cached;
-    if (key === PLATFORM_RECEIVABLE_KEY) {
-      const acct = await ensureSystemReceivableAccount(db, currency);
-      accountCache.set(key, acct);
-      return acct;
-    }
-    if (key === PLATFORM_CLEARING_KEY) {
-      const acct = await ensureSystemClearingAccount(db, currency);
-      accountCache.set(key, acct);
-      return acct;
-    }
-    const sub = parseDriverSubAccountKey(key);
-    if (sub) {
-      const acct = sub.subtype === "digital"
-        ? await ensureDriverDigitalAccount(db, sub.userId, currency)
-        : sub.subtype === "cash"
-        ? await ensureDriverCashAccount(db, sub.userId, currency)
-        : await ensureDriverDebtAccount(db, sub.userId, currency);
-      accountCache.set(key, acct);
-      return acct;
-    }
-    if (key.startsWith("user:") && key.endsWith(":rider")) {
-      const userId = key.split(":")[1];
-      const acct = await ensureRiderAccount(db, userId, currency);
-      accountCache.set(key, acct);
-      return acct;
-    }
-    if (key.startsWith("user:") && key.endsWith(":driver")) {
-      const userId = key.split(":")[1];
-      const acct = await ensureDriverAccount(db, userId, currency);
-      accountCache.set(key, acct);
-      return acct;
-    }
-    const acct = await getAccountByKey(db, key, currency);
-    if (!acct) throw new Error(`account_not_found:${key}`);
-    accountCache.set(key, acct);
-    return acct;
-  }
-
   let inserted = 0;
   for (const line of lines) {
     if (existingTypes.has(line.entry_type)) {
@@ -418,58 +377,47 @@ export async function postPaymentJournal(
       continue;
     }
 
-    const debit = await resolveAccountKey(line.debit_account_key);
-    const credit = await resolveAccountKey(line.credit_account_key);
     const rowIdempotencyKey = lineIdempotencyKey(idempotencyKey, line.entry_type);
 
-    const { error: insertError } = await client.from(tables.journal).insert({
-      ride_request_id: rideId,
-      idempotency_key: rowIdempotencyKey,
-      entry_type: line.entry_type,
-      debit_account_id: debit.id,
-      credit_account_id: credit.id,
-      amount_minor: line.amount_minor,
-      currency,
-      request_hash: requestHash,
-      metadata: line.metadata,
-      created_by_user_id: createdByUserId,
+    const { data, error } = await client.rpc("rides_post_payment_journal_line", {
+      p_ride_request_id: rideId,
+      p_idempotency_key: rowIdempotencyKey,
+      p_entry_type: line.entry_type,
+      p_debit_account_key: line.debit_account_key,
+      p_credit_account_key: line.credit_account_key,
+      p_amount_minor: line.amount_minor,
+      p_currency: currency,
+      p_request_hash: requestHash,
+      p_metadata: line.metadata,
+      p_created_by_user_id: createdByUserId,
     });
 
-    if (insertError) {
-      if (String(insertError.code) === "23505") {
-        let dupQuery = client
-          .from(tables.journal)
-          .select("request_hash")
-          .eq("idempotency_key", rowIdempotencyKey);
-        dupQuery = rideId
-          ? dupQuery.eq("ride_request_id", rideId)
-          : dupQuery.is("ride_request_id", null);
-        const { data: dup } = await dupQuery.maybeSingle();
-        if (dup && String(dup.request_hash) !== requestHash) {
-          return { inserted: 0, skipped: false, conflict: true };
-        }
-        continue;
-      }
-      throw new Error(insertError.message);
+    if (error) throw new Error(error.message);
+
+    const lineResult = data as { inserted?: boolean; skipped?: boolean; conflict?: boolean };
+    if (lineResult.conflict) {
+      return { inserted: 0, skipped: false, conflict: true };
+    }
+    if (!lineResult.inserted) {
+      continue;
     }
 
-    const newDebitBalance = Number(debit.balance_minor) - line.amount_minor;
-    const newCreditBalance = Number(credit.balance_minor) + line.amount_minor;
-
-    const { error: debitErr } = await client
-      .from(tables.accounts)
-      .update({ balance_minor: newDebitBalance })
-      .eq("id", debit.id);
-    if (debitErr) throw new Error(debitErr.message);
-
-    const { error: creditErr } = await client
-      .from(tables.accounts)
-      .update({ balance_minor: newCreditBalance })
-      .eq("id", credit.id);
-    if (creditErr) throw new Error(creditErr.message);
-
-    debit.balance_minor = newDebitBalance;
-    credit.balance_minor = newCreditBalance;
+    try {
+      await dualWriteRidesJournalLine(client, tables, {
+        rideId,
+        rowIdempotencyKey,
+        entryType: line.entry_type,
+        debitAccountKey: line.debit_account_key,
+        creditAccountKey: line.credit_account_key,
+        amountMinor: line.amount_minor,
+        currency,
+        requestHash,
+        metadata: line.metadata,
+        createdByUserId,
+      });
+    } catch (e) {
+      console.error("[paymentAccounts] unified ledger dual-write failed:", e);
+    }
 
     const creditSub = parseDriverSubAccountKey(line.credit_account_key);
     if (creditSub?.subtype === "digital") {

@@ -9,6 +9,7 @@ import {
   Fuel,
   Activity,
   HardDrive,
+  Receipt,
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { AdminNavSection } from './AdminNavSection';
@@ -92,6 +93,7 @@ function pageTitle(currentPage: string): string {
     return child.label;
   }
   if (currentPage === 'db-management') return 'Database Management';
+  if (currentPage === 'unified-ledger') return 'Unified Ledger Feed';
   if (currentPage === 'db-settings') return 'Database Management — Settings';
   if (currentPage.startsWith('db-biz-')) return 'Database Management';
   if (currentPage.startsWith('db-customer-')) return 'Database Management — Customer Ledgers';
@@ -166,6 +168,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const isDbPage =
     currentPage === 'db-management'
     || currentPage === 'db-settings'
+    || currentPage === 'unified-ledger'
     || currentPage.startsWith('db-biz-')
     || currentPage.startsWith('db-customer-');
 
@@ -395,18 +398,35 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
           )}
 
           {canViewDbManagement && (
-            <button
-              type="button"
-              onClick={() => handleNav('db-management')}
-              className={`
-                w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-                ${isDbPage ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800'}
-              `}
-            >
-              <Database className="w-4.5 h-4.5 shrink-0" />
-              <span className="truncate">{DATABASE_MANAGEMENT_ITEM.label}</span>
-              {isDbPage && <ChevronRight className="w-3.5 h-3.5 ml-auto text-amber-400/60" />}
-            </button>
+            <div className="space-y-1">
+              <button
+                type="button"
+                onClick={() => handleNav('db-management')}
+                className={`
+                  w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+                  ${currentPage === 'db-management' || (isDbPage && currentPage !== 'unified-ledger') ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800'}
+                `}
+              >
+                <Database className="w-4.5 h-4.5 shrink-0" />
+                <span className="truncate">{DATABASE_MANAGEMENT_ITEM.label}</span>
+                {(currentPage === 'db-management' || (isDbPage && currentPage !== 'unified-ledger')) && (
+                  <ChevronRight className="w-3.5 h-3.5 ml-auto text-amber-400/60" />
+                )}
+              </button>
+              {canViewPage('unified-ledger') && (
+                <button
+                  type="button"
+                  onClick={() => handleNav('unified-ledger')}
+                  className={`
+                    w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ml-2
+                    ${currentPage === 'unified-ledger' ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800'}
+                  `}
+                >
+                  <Receipt className="w-4 h-4 shrink-0" />
+                  <span className="truncate">Unified Ledger</span>
+                </button>
+              )}
+            </div>
           )}
         </nav>
 

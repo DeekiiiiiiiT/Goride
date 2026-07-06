@@ -11,6 +11,8 @@ import {
 } from "../../_shared/platformLedgerQueries.ts";
 import { getDriverWallets } from "../../_shared/paymentAccounts.ts";
 import { isCashSettlementV2Enabled } from "../cashSettlement/flags.ts";
+import { isLedgerReadUnifiedEnabled } from "../../_shared/unifiedLedger/flags.ts";
+import { listUnifiedLedgerEntries } from "../../_shared/unifiedLedger/queries.ts";
 
 function ridesSvc() {
   return createClient(
@@ -35,6 +37,23 @@ export function registerPlatformLedgerAdminRoutes(admin: Hono) {
     const from = c.req.query("from")?.trim() || undefined;
     const to = c.req.query("to")?.trim() || undefined;
     const grain = c.req.query("grain")?.trim() === "line" ? "line" as const : "trip" as const;
+
+    if (isLedgerReadUnifiedEnabled() && grain === "line") {
+      const { entries, total } = await listUnifiedLedgerEntries({
+        product: "rides",
+        from,
+        to,
+        limit,
+        offset: (page - 1) * limit,
+      });
+      return c.json({
+        lines: entries,
+        total,
+        page,
+        limit,
+        source: "ledger.entries",
+      });
+    }
 
     const db = ridesSvc();
     const pub = createClient(

@@ -556,5 +556,6 @@ export const PAGE_PERMISSIONS: Record<string, DominionPageSensitivity> = {
   'settings-announcements': 'standard',
   'settings-danger': 'destructive_possible',
   'db-management': 'standard',
+  'unified-ledger': 'standard',
   'db-settings': 'standard',
 };

@@ -1964,6 +1964,25 @@ async function saveTollLedgerEntry(entry: TollLedgerRecord): Promise<void> {
 
   await kv.set(`${TOLL_LEDGER_PREFIX}${entry.id}`, entry);
   console.log(`[TollLedgerStorage] Saved toll_ledger:${entry.id}`);
+
+  try {
+    const { fleetDualWriteToll } = await import("./unified_ledger_dual_write.ts");
+    const orgId = typeof (entry as { organizationId?: string }).organizationId === "string"
+      ? (entry as { organizationId: string }).organizationId
+      : null;
+    await fleetDualWriteToll({
+      id: entry.id,
+      type: entry.type,
+      amount: entry.amount,
+      currency: entry.currency,
+      driverId: entry.driverId,
+      organizationId: orgId,
+      vehicleId: entry.vehicleId,
+      date: entry.date,
+    });
+  } catch (e) {
+    console.error("[TollLedgerStorage] unified dual-write failed:", e);
+  }
 }
 
 /**

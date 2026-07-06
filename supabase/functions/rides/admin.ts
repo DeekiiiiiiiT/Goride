@@ -28,6 +28,7 @@ import { registerDashboardStatsRoutes } from "./admin/dashboardStats.ts";
 import { registerDashboardListRoutes } from "./admin/dashboardLists.ts";
 import { registerRideOperationsAdminRoutes } from "./admin/rideOperations.ts";
 import { registerPlatformLedgerAdminRoutes } from "./admin/platformLedger.ts";
+import { registerUnifiedLedgerAdminRoutes } from "./admin/unifiedLedger.ts";
 import { registerPlayStoreLaunchAdminRoutes } from "./admin/playStoreLaunch.ts";
 import { registerDisputeAdminRoutes } from "./admin/disputeAdmin.ts";
 import { registerSettlementOverrideRoutes } from "./admin/settlementOverrides.ts";
@@ -658,6 +659,7 @@ export function registerAdminRoutes(
   registerRideOperationsAdminRoutes(admin, ridesDbOrResponse, adminAudit);
 
   registerPlatformLedgerAdminRoutes(admin);
+  registerUnifiedLedgerAdminRoutes(admin);
 
   registerPlayStoreLaunchAdminRoutes(admin, ridesDbOrResponse);
 

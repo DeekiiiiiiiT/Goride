@@ -352,6 +352,29 @@ export async function appendCanonicalLedgerEvents(
       console.log(
         `[CanonicalLedger] inserted id=${id} type=${base.eventType} idem=${idem.slice(0, 40)}…`,
       );
+
+      try {
+        const { fleetDualWriteCanonicalEvent } = await import("./unified_ledger_dual_write.ts");
+        const orgId = typeof (stamped as { organizationId?: string }).organizationId === "string"
+          ? (stamped as { organizationId: string }).organizationId
+          : null;
+        await fleetDualWriteCanonicalEvent({
+          id,
+          idempotencyKey: idem,
+          eventType: String(base.eventType),
+          direction: String(base.direction),
+          netAmount: Number(base.netAmount),
+          currency: String(base.currency ?? "JMD"),
+          driverId: String(base.driverId),
+          sourceType: String(base.sourceType),
+          sourceId: String(base.sourceId),
+          organizationId: orgId,
+          date: String(base.date),
+          metadata: (base.metadata as Record<string, unknown>) ?? {},
+        });
+      } catch (dwErr) {
+        console.error("[CanonicalLedger] unified dual-write failed:", dwErr);
+      }
     } catch (err: any) {
       failed++;
       details.push({ index: i, idempotencyKey: idem, error: err?.message || String(err) });

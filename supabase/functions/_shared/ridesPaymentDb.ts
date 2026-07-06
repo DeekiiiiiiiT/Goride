@@ -27,6 +27,19 @@ const PUBLIC_VIEWS: RidesPaymentTables = {
 };
 
 let resolved: Resolved | null = null;
+let testOverride: Resolved | null = null;
+
+/** Test-only: inject an in-memory client instead of probing Supabase. */
+export function setRidesPaymentDbOverrideForTests(override: Resolved | null): void {
+  testOverride = override;
+  resolved = null;
+}
+
+/** Test-only: clear cached resolution between tests. */
+export function resetRidesPaymentDbForTests(): void {
+  testOverride = null;
+  resolved = null;
+}
 
 function serviceClient(schema: string): SupabaseClient {
   return createClient(
@@ -55,6 +68,7 @@ async function probe(schema: string, table: string): Promise<PostgrestError | nu
 
 /** Resolve once per isolate; tries rides schema then public views. */
 export async function getRidesPaymentDb(): Promise<Resolved> {
+  if (testOverride) return testOverride;
   if (resolved) return resolved;
 
   const ridesErr = await probe("rides", NATIVE.accounts);

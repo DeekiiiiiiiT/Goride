@@ -5,8 +5,11 @@ import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatMoneyMinor } from '@roam/types/rides';
 import type { RideRequestRow } from '@roam/types/rides';
-import { AdminCashSettleModal } from '../components/AdminCashSettleModal';
+import {
+  AdminCashSettleModal,
+} from '../components/AdminCashSettleModal';
 import { AdminCashTripActions } from '../components/AdminCashTripActions';
+import { formatPlatformLedgerWhen } from '@roam/admin-core';
 import {
   adminForceCompleteRide,
   adminReleaseCashSettlement,
@@ -20,13 +23,7 @@ interface OutletContext {
   session: Session;
 }
 
-function formatWhen(iso: string | null | undefined) {
-  if (!iso) return '—';
-  return new Intl.DateTimeFormat('en-JM', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(iso));
-}
+const formatWhen = formatPlatformLedgerWhen;
 
 export function TripLedgerPage() {
   const { session } = useOutletContext<OutletContext>();

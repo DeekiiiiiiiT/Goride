@@ -46,5 +46,6 @@
       "@tailwindcss/oxide",
       "esbuild"
     ]
-  }
+  },
+  "workspaces": ["apps/*", "packages/*", "services/*"]
 }

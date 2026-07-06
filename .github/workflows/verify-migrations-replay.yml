@@ -1,0 +1,47 @@
+# Verifies supabase/migrations/*.sql replays cleanly, in filename order, from an empty
+# database. No existing workflow does this today (deploy-supabase-edge.yml only deploys
+# Edge Functions, never runs `supabase db push`/migrations), so a migration-ordering bug
+# can currently ship silently. This is exactly the class of bug tracked in
+# docs/adr/0001-migration-reorder-decision.md.
+#
+# Non-blocking for now (continue-on-error): promote to a required check once this has run
+# green against the current migration set (see the ADR above for the fix that makes that
+# possible). Automatic triggers are left commented out for now, matching ci.yml's existing
+# convention — uncomment when ready to gate PRs.
+name: Verify Migrations Replay
+
+# on:
+#   pull_request:
+#     paths:
+#       - 'supabase/migrations/**'
+on: workflow_dispatch
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # setup-cli@v1/v2 download URLs no longer match Supabase release asset names
+      # (same fix already applied in deploy-supabase-edge.yml).
+      - name: Install Supabase CLI
+        env:
+          SUPABASE_CLI_VERSION: "2.99.0"
+        run: |
+          set -euo pipefail
+          url="https://github.com/supabase/cli/releases/download/v${SUPABASE_CLI_VERSION}/supabase_${SUPABASE_CLI_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL "$url" -o /tmp/supabase.tar.gz
+          sudo tar -xzf /tmp/supabase.tar.gz -C /usr/local/bin
+          supabase --version
+
+      - name: Start local Supabase stack (applies migrations in filename order)
+        run: |
+          set -euo pipefail
+          supabase start
+
+      - name: Confirm all migrations applied
+        run: |
+          set -euo pipefail
+          supabase migration list
