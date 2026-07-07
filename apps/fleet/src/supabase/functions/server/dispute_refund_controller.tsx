@@ -869,16 +869,9 @@ app.get(`${BASE}/match-candidates`, async (c) => {
           }
         });
 
-        // A trip's refund is a shared pool, handed out in chronological
-        // order, each toll capped at its own cost — the same rule applied
-        // client-side (tollReconciliation.ts's `allocateTripRefundAcrossTolls`)
-        // and in toll_controller.tsx's `/unreconciled` suggestions. A trip
-        // already tied to SOME claim (open or resolved) elsewhere has its
-        // pool treated as fully spent for every bare candidate seen here.
-        const tripIdsAlreadyClaimed = new Set(
-          allClaims.filter((cl: any) => cl && typeof cl === "object" && cl.tripId).map((cl: any) => cl.tripId),
-        );
-
+        // Hand out each trip's toll-refund pool across the tolls matched in
+        // this modal only — do NOT zero the pool just because claims exist
+        // elsewhere (that was hiding every refund as $0).
         const byTrip = new Map<string, typeof resolved>();
         for (const r of resolved) {
           const list = byTrip.get(r.tripId) || [];
@@ -892,11 +885,32 @@ app.get(`${BASE}/match-candidates`, async (c) => {
             return da - db;
           });
           const tripDetail = tripDetailsById.get(tripId);
-          let remaining = tripIdsAlreadyClaimed.has(tripId) ? 0 : (tripRefundById.get(tripId) ?? 0);
+          let remaining = tripRefundById.get(tripId) ?? 0;
           for (const r of group) {
             const allocated = Math.max(0, Math.min(remaining, r.cost));
             remaining -= allocated;
             r.toll.tripRefund = allocated;
+            // #region agent log
+            fetch("http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9637fe" },
+              body: JSON.stringify({
+                sessionId: "9637fe",
+                location: "dispute_refund_controller.tsx:tripRefund",
+                message: "refund allocated",
+                hypothesisId: "refund-zero",
+                runId: "post-fix-v2",
+                data: {
+                  tollId: r.toll.tollId,
+                  tripId,
+                  tollCost: r.cost,
+                  tripGrossRefund: tripRefundById.get(tripId) ?? 0,
+                  allocated,
+                },
+                timestamp: Date.now(),
+              }),
+            }).catch(() => {});
+            // #endregion
             if (tripDetail) {
               r.toll.tripPickup = tripDetail.pickupLocation || null;
               r.toll.tripDropoff = tripDetail.dropoffLocation || null;

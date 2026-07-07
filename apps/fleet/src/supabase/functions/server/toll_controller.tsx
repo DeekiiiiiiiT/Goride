@@ -33,7 +33,6 @@ import {
   getFleetTimezone,
   naiveToUtc,
   hasTzSuffix,
-  parseFleetLocalInstant,
   normalizeWallClockTime,
 } from "./timezone_helper.tsx";
 import {
@@ -148,16 +147,16 @@ interface TripWindows {
   searchEnd: Date;
 }
 
-function calculateTripTimes(trip: any, timezone: string): TripTimes {
+function calculateTripTimes(trip: any): TripTimes {
   const dropoffStr = trip.dropoffTime || trip.date;
-  const dropoffTime = parseFleetLocalInstant(dropoffStr, timezone);
+  const dropoffTime = parseISO(dropoffStr);
 
   const requestStr = trip.requestTime || trip.date;
-  const requestTime = parseFleetLocalInstant(requestStr, timezone);
+  const requestTime = parseISO(requestStr);
 
   let pickupTime: Date;
   if (trip.startTime) {
-    pickupTime = parseFleetLocalInstant(trip.startTime, timezone);
+    pickupTime = parseISO(trip.startTime);
   } else if (trip.duration) {
     pickupTime = subMinutes(dropoffTime, trip.duration);
   } else {
@@ -197,8 +196,8 @@ type DataQuality = "PRECISE" | "TIMED" | "DATE_ONLY";
  * TIMED    = Has start/end times but request = pickup (e.g., manual InDrive/Roam entry)
  * DATE_ONLY = Only has a date, no meaningful time-of-day (e.g., generic CSV import)
  */
-function assessDataQuality(trip: any, timezone: string): DataQuality {
-  const tripTimes = calculateTripTimes(trip, timezone);
+function assessDataQuality(trip: any): DataQuality {
+  const tripTimes = calculateTripTimes(trip);
   if (!tripTimes.isValid) return "DATE_ONLY";
 
   // Check if request and pickup times are meaningfully different (> 1 minute apart)
@@ -375,14 +374,14 @@ function calculateConfidenceScore(params: {
  *   - The post-trip gap (up to 15 min after dropoff)
  *   - Timezone edge cases at midnight boundaries
  */
-function sameDayPreFilter(txDate: Date, trips: any[], timezone: string): any[] {
+function sameDayPreFilter(txDate: Date, trips: any[]): any[] {
   const windowStart = subDays(startOfDay(txDate), 1);
   const windowEnd = addDays(endOfDay(txDate), 1);
 
   return trips.filter((trip: any) => {
     const tripDateStr = trip.dropoffTime || trip.date;
     if (!tripDateStr) return false;
-    const tripDate = parseFleetLocalInstant(tripDateStr, timezone);
+    const tripDate = parseISO(tripDateStr);
     if (!isValid(tripDate)) return false;
     return tripDate >= windowStart && tripDate <= windowEnd;
   });
@@ -578,14 +577,14 @@ function findTollMatchesServer(
   const matches: MatchResult[] = [];
 
   // Phase 6: Replace hard vehicle/driver gate with time-based pre-filter
-  const candidateTrips = sameDayPreFilter(txDate, trips, timezone);
+  const candidateTrips = sameDayPreFilter(txDate, trips);
 
   for (const trip of candidateTrips) {
-    const tripTimes = calculateTripTimes(trip, timezone);
+    const tripTimes = calculateTripTimes(trip);
     if (!tripTimes.isValid) continue;
 
     const windows = getTripWindows(tripTimes);
-    const dataQuality = assessDataQuality(trip, timezone);
+    const dataQuality = assessDataQuality(trip);
 
     // Calculate time difference for sorting
     let diff = 0;
@@ -748,7 +747,7 @@ function buildOrphanSuggestion(
   const txDate = getTransactionDateTime(tx, timezone);
   if (!txDate) return null;
 
-  const candidateTrips = sameDayPreFilter(txDate, trips, timezone).map((t: any) => ({
+  const candidateTrips = sameDayPreFilter(txDate, trips).map((t: any) => ({
     requestTime: t.requestTime,
     dropoffTime: t.dropoffTime,
     date: t.date,
