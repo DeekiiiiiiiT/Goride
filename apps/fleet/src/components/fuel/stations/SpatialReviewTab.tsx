@@ -206,7 +206,7 @@ export function SpatialReviewTab({ onResolved }: SpatialReviewTabProps) {
             These fuel logs have GPS near <span className="font-medium text-slate-700">multiple verified stations</span>{' '}
             at similar distances, so the system did not auto-pick one. Assign the correct station here.{' '}
             <span className="text-amber-700/90">
-              This is not the Learnt tab — Learnt is for unknown locations with no confident station match.
+              Part of Resolution Queue — not for unknown locations (use Unresolved stops for those).
             </span>
           </p>
         </div>

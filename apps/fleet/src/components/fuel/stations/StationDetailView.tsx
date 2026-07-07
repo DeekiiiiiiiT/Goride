@@ -756,7 +756,7 @@ export function StationDetailView({ station, onClose, logs, onTogglePreferred, o
                 <ul className="list-disc list-inside mt-1 space-y-0.5">
                   <li>Move the station to the Unverified MGMT tab</li>
                   <li>Unlink all fuel entries connected to it</li>
-                  <li>Create a Learnt Location so you can re-match them</li>
+                  <li>Create a resolution queue entry so you can re-match them</li>
                 </ul>
               </div>
             </AlertDialogDescription>

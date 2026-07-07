@@ -11,15 +11,14 @@ import { StationExport } from './StationExport';
 import { BulkDeleteStationsModal } from './BulkDeleteStationsModal';
 import { ParentCompanyManager } from './ParentCompanyManager';
 import { VerifiedStationsTab } from './VerifiedStationsTab';
-import { LearntLocationsTab } from './LearntLocationsTab';
-import { EvidenceInboxTab } from './EvidenceInboxTab';
-import { SpatialReviewTab } from './SpatialReviewTab';
+import { ResolutionQueueTab } from './ResolutionQueueTab';
+import type { ResolutionQueueSubTab } from './ResolutionQueueTab';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../ui/tabs';
 import { Switch } from '../../ui/switch';
 import { Label } from '../../ui/label';
 import { Button } from '../../ui/button';
 import { Badge } from '../../ui/badge';
-import { Star, Loader2, Upload, Trash2, Plus, ShieldCheck, ShieldOff, Map as MapIcon } from 'lucide-react';
+import { Star, Loader2, Upload, Trash2, Plus, ShieldCheck, ShieldOff, Map as MapIcon, Inbox } from 'lucide-react';
 import { SpatialIntegrityMap } from './SpatialIntegrityMap';
 import { fuelService } from '../../../services/fuelService';
 import { api } from '../../../services/api';
@@ -29,9 +28,17 @@ import { AddStationModal } from './AddStationModal';
 interface StationDatabaseViewProps {
   logs: FuelEntry[];
   loading?: boolean;
+  /** Top-level Station Database tab to open on load (e.g. resolution-queue for deep links). */
+  defaultTab?: string;
+  defaultResolutionSubTab?: ResolutionQueueSubTab;
 }
 
-export function StationDatabaseView({ logs, loading = false }: StationDatabaseViewProps) {
+export function StationDatabaseView({
+  logs,
+  loading = false,
+  defaultTab = 'spatial-audit',
+  defaultResolutionSubTab = 'unresolved-stops',
+}: StationDatabaseViewProps) {
   const [selectedStation, setSelectedStation] = useState<StationProfile | null>(null);
   const [preferredStationIds, setPreferredStationIds] = useState<Set<string>>(new Set());
   const [stationOverrides, setStationOverrides] = useState<Record<string, StationOverride>>({});
@@ -44,6 +51,47 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
   const [editingStation, setEditingStation] = useState<StationProfile | null>(null);
   const [verifyingLearntId, setVerifyingLearntId] = useState<string | null>(null);
   const [verifyingNearbyStation, setVerifyingNearbyStation] = useState<any>(null);
+  const [resolutionQueueCount, setResolutionQueueCount] = useState(0);
+
+  const handleVerifyLearntLocation = useCallback((learntLoc: any) => {
+    const pseudoStation: StationProfile = {
+      id: generateStationId(
+        normalizeStationName(learntLoc.name || 'Unknown Station'),
+        learntLoc.address || `${learntLoc.location?.lat ?? 0},${learntLoc.location?.lng ?? 0}`,
+      ),
+      name: learntLoc.name || 'Unknown Station',
+      brand: learntLoc.brand || 'Independent',
+      address: learntLoc.address || '',
+      city: learntLoc.city || '',
+      parish: learntLoc.parish || '',
+      country: learntLoc.country || 'Jamaica',
+      plusCode: learntLoc.plusCode || '',
+      location: {
+        lat: learntLoc.location?.lat ?? 0,
+        lng: learntLoc.location?.lng ?? 0,
+      },
+      isPreferred: false,
+      stats: {
+        avgPrice: 0,
+        lastPrice: 0,
+        priceTrend: 'Stable',
+        totalVisits: 1,
+        rating: 0,
+        lastUpdated: learntLoc.timestamp || new Date().toISOString(),
+      },
+      amenities: [],
+      dataSource: 'manual',
+      contactInfo: {},
+      status: 'unverified',
+      operationalStatus: 'active',
+      category: 'fuel',
+    } as StationProfile;
+
+    setEditingStation(pseudoStation);
+    setVerifyingLearntId(learntLoc.id);
+    setVerifyingNearbyStation(learntLoc.nearbyStation || null);
+    setIsAddStationOpen(true);
+  }, []);
 
   const fetchData = useCallback(async () => {
     setIsBackendLoading(true);
@@ -426,7 +474,7 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="overflow-x-auto overflow-y-visible rounded-xl border border-slate-200 bg-white shadow-sm dark:border-border dark:bg-card">
-        <Tabs defaultValue="spatial-audit" className="w-full">
+        <Tabs defaultValue={defaultTab} className="w-full">
           <div className="border-b border-slate-200 px-4 py-3 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <h3 className="font-semibold text-slate-900">Station Database</h3>
@@ -445,17 +493,14 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
               </TabsTrigger>
               <TabsTrigger value="accepted-stations">Accepted Gas Stations</TabsTrigger>
               <TabsTrigger value="non-fuel">Non-Fuel Locations</TabsTrigger>
-              <TabsTrigger value="learnt-locations" className="flex items-center gap-1.5">
-                Learnt
-                <Badge variant="outline" className="h-4 px-1 text-[8px] border-amber-200 text-amber-500">STAGING</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="station-evidence-inbox" className="flex items-center gap-1.5">
-                Evidence
-                <Badge variant="outline" className="h-4 px-1 text-[8px] border-sky-200 text-sky-600">INBOX</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="spatial-review" className="flex items-center gap-1.5">
-                Spatial review
-                <Badge variant="outline" className="h-4 px-1 text-[8px] border-violet-200 text-violet-600">GPS</Badge>
+              <TabsTrigger value="resolution-queue" className="flex items-center gap-1.5">
+                <Inbox className="h-3.5 w-3.5 opacity-70" />
+                Resolution Queue
+                {resolutionQueueCount > 0 && (
+                  <Badge variant="outline" className="h-4 px-1 text-[8px] border-indigo-200 text-indigo-600">
+                    {resolutionQueueCount}
+                  </Badge>
+                )}
               </TabsTrigger>
             </TabsList>
           </div>
@@ -594,104 +639,15 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
              </div>
           </TabsContent>
 
-          {/* --- Learnt Location Tab --- */}
-          <TabsContent value="learnt-locations" className="m-0 p-0 border-0">
-             <LearntLocationsTab 
-               onPromoted={() => fetchData()}
-               onVerifyLocation={(learntLoc) => {
-                 // Convert the learnt location into a pseudo-StationProfile
-                 // so the AddStationModal can pre-fill the form with existing data
-                 const pseudoStation: StationProfile = {
-                   id: generateStationId(
-                     normalizeStationName(learntLoc.name || 'Unknown Station'),
-                     learntLoc.address || `${learntLoc.location.lat},${learntLoc.location.lng}`
-                   ),
-                   name: learntLoc.name || 'Unknown Station',
-                   brand: learntLoc.brand || 'Independent',
-                   address: learntLoc.address || '',
-                   city: learntLoc.city || '',
-                   parish: learntLoc.parish || '',
-                   country: learntLoc.country || 'Jamaica',
-                   plusCode: learntLoc.plusCode || '',
-                   location: {
-                     lat: learntLoc.location?.lat ?? 0,
-                     lng: learntLoc.location?.lng ?? 0,
-                   },
-                   isPreferred: false,
-                   stats: {
-                     avgPrice: 0,
-                     lastPrice: 0,
-                     priceTrend: 'Stable',
-                     totalVisits: 1,
-                     rating: 0,
-                     lastUpdated: learntLoc.timestamp || new Date().toISOString(),
-                   },
-                   amenities: [],
-                   dataSource: 'manual',
-                   contactInfo: {},
-                   status: 'unverified',
-                   operationalStatus: 'active',
-                   category: 'fuel',
-                 } as StationProfile;
-
-                 setEditingStation(pseudoStation);
-                 setVerifyingLearntId(learntLoc.id);
-                 // Phase 7: Pass nearby station data for pre-populating duplicate warning
-                 setVerifyingNearbyStation(learntLoc.nearbyStation || null);
-                 setIsAddStationOpen(true);
-               }}
-             />
-          </TabsContent>
-
-          {/* --- Evidence inbox: pending fuel txs with station gate hold (read-only) --- */}
-          <TabsContent value="station-evidence-inbox" className="m-0 p-0 border-0">
-            <EvidenceInboxTab
+          {/* --- Resolution Queue: merged unresolved stops + spatial review --- */}
+          <TabsContent value="resolution-queue" className="m-0 p-0 border-0">
+            <ResolutionQueueTab
+              defaultSubTab={defaultResolutionSubTab}
               onPromoted={() => fetchData()}
-              onVerifyLocation={(learntLoc) => {
-                const pseudoStation: StationProfile = {
-                  id: generateStationId(
-                    normalizeStationName(learntLoc.name || 'Unknown Station'),
-                    learntLoc.address || `${learntLoc.location.lat},${learntLoc.location.lng}`,
-                  ),
-                  name: learntLoc.name || 'Unknown Station',
-                  brand: learntLoc.brand || 'Independent',
-                  address: learntLoc.address || '',
-                  city: learntLoc.city || '',
-                  parish: learntLoc.parish || '',
-                  country: learntLoc.country || 'Jamaica',
-                  plusCode: learntLoc.plusCode || '',
-                  location: {
-                    lat: learntLoc.location?.lat ?? 0,
-                    lng: learntLoc.location?.lng ?? 0,
-                  },
-                  isPreferred: false,
-                  stats: {
-                    avgPrice: 0,
-                    lastPrice: 0,
-                    priceTrend: 'Stable',
-                    totalVisits: 1,
-                    rating: 0,
-                    lastUpdated: learntLoc.timestamp || new Date().toISOString(),
-                  },
-                  amenities: [],
-                  dataSource: 'manual',
-                  contactInfo: {},
-                  status: 'unverified',
-                  operationalStatus: 'active',
-                  category: 'fuel',
-                } as StationProfile;
-
-                setEditingStation(pseudoStation);
-                setVerifyingLearntId(learntLoc.id);
-                setVerifyingNearbyStation(learntLoc.nearbyStation || null);
-                setIsAddStationOpen(true);
-              }}
+              onVerifyLocation={handleVerifyLearntLocation}
+              onResolved={() => fetchData()}
+              onCountChange={setResolutionQueueCount}
             />
-          </TabsContent>
-
-          {/* --- Spatial review (ambiguous GPS between verified stations) --- */}
-          <TabsContent value="spatial-review" className="m-0 p-0 border-0">
-            <SpatialReviewTab onResolved={() => fetchData()} />
           </TabsContent>
         </Tabs>
       </div>
@@ -711,7 +667,7 @@ export function StationDatabaseView({ logs, loading = false }: StationDatabaseVi
             const result = await fuelService.demoteStation(stationId);
             toast.success(result.message, {
               description: result.learntLocationId
-                ? 'A Learnt Location has been created — go to the Learnt STAGING tab to re-match.'
+                ? 'A learnt location has been created — open Resolution Queue → Unresolved stops to re-match.'
                 : 'No fuel entries were linked to this station.',
               icon: <ShieldOff className="h-4 w-4 text-amber-500" />,
               duration: 8000,

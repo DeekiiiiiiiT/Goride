@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AdminLayout } from './AdminLayout';
 import { AdminDashboard } from './AdminDashboard';
@@ -27,6 +27,7 @@ import { DriverOverviewCard } from './product-overviews/DriverOverviewCard';
 import { HaulOverviewCard } from './product-overviews/HaulOverviewCard';
 import { PartsSourcingManager } from './parts-sourcing/PartsSourcingManager';
 import { StationDatabaseView } from '../fuel/stations/StationDatabaseView';
+import type { ResolutionQueueSubTab } from '../fuel/stations/ResolutionQueueTab';
 import { GasStationAnalytics } from '../fuel/stations/GasStationAnalytics';
 import { fuelService } from '../../services/fuelService';
 import { FuelEntry } from '../../types/fuel';
@@ -56,7 +57,23 @@ type NavExtras = { userId?: string; customer?: unknown } | null;
 export function AdminPortal() {
   const { session, user } = useAuth();
   const queryClient = useQueryClient();
-  const [currentPageRaw, setCurrentPageRaw] = useState(() => normalizePortalPage('dashboard'));
+  const [currentPageRaw, setCurrentPageRaw] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const page = new URLSearchParams(window.location.search).get('page');
+      if (page) return normalizePortalPage(page);
+    }
+    return normalizePortalPage('dashboard');
+  });
+  const stationDbDefaultTab = useMemo(() => {
+    if (typeof window === 'undefined') return 'spatial-audit';
+    const tab = new URLSearchParams(window.location.search).get('tab');
+    return tab === 'resolution-queue' ? 'resolution-queue' : 'spatial-audit';
+  }, []);
+  const resolutionSubTab = useMemo<ResolutionQueueSubTab>(() => {
+    if (typeof window === 'undefined') return 'unresolved-stops';
+    const sub = new URLSearchParams(window.location.search).get('sub');
+    return sub === 'spatial-review' ? 'spatial-review' : 'unresolved-stops';
+  }, []);
   const [fuelLogs, setFuelLogs] = useState<FuelEntry[]>([]);
   const [fuelLoading, setFuelLoading] = useState(false);
   const [navData, setNavData] = useState<NavExtras>(null);
@@ -199,7 +216,12 @@ export function AdminPortal() {
       {currentPage === 'activity-log' && <ActivityLog />}
       {currentPage === 'fuel-stations' && (
         <div className="min-h-[600px] rounded-xl bg-white shadow-sm overflow-x-auto overflow-y-visible dark:bg-card dark:shadow-none dark:ring-1 dark:ring-border">
-          <StationDatabaseView logs={fuelLogs} loading={fuelLoading} />
+          <StationDatabaseView
+            logs={fuelLogs}
+            loading={fuelLoading}
+            defaultTab={stationDbDefaultTab}
+            defaultResolutionSubTab={resolutionSubTab}
+          />
         </div>
       )}
       {currentPage === 'fuel-analytics' && (

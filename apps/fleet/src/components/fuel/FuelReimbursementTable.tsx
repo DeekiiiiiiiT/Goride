@@ -28,7 +28,44 @@ import { DateRange } from "react-day-picker";
 import { DatePickerWithRange } from "../ui/date-range-picker";
 import { usePermissions } from '../../hooks/usePermissions';
 import { fuelService } from '../../services/fuelService';
+import { api } from '../../services/api';
 import { StationProfile } from '../../types/station';
+import type { StationGateEvidenceRow } from './stations/EvidenceInboxTab';
+
+const RESOLUTION_QUEUE_ADMIN_URL =
+  'https://roamdominion.co/?page=fuel-stations&tab=resolution-queue';
+
+function gateEvidenceToTransaction(row: StationGateEvidenceRow): FinancialTransaction {
+    return {
+        id: row.id,
+        date: row.date || '',
+        time: row.time,
+        driverName: row.driverName,
+        driverId: row.driverId,
+        amount: row.amount,
+        vendor: row.vendor,
+        description: row.description,
+        status: 'Pending',
+        category: 'Fuel',
+        type: 'Expense',
+        metadata: {
+            stationGateHold: true,
+            gateReason: row.gateReason,
+            holdReason: row.holdReason,
+            locationStatus: row.locationStatus,
+            learntLocationId: row.learntLocationId,
+            ...(row.hasGps && row.lat != null && row.lng != null
+                ? {
+                      locationMetadata: {
+                          lat: row.lat,
+                          lng: row.lng,
+                          accuracy: row.accuracy,
+                      },
+                  }
+                : {}),
+        },
+    } as FinancialTransaction;
+}
 
 /** Liters from stored quantity/fuelVolume, or amount ÷ price/L (same as manual log). */
 function computeResolvedFuelLiters(tx: FinancialTransaction): number | null {
@@ -136,11 +173,11 @@ function buildStationHoldDiagnostics(tx: FinancialTransaction): string[] {
     if (learntId) {
         const short = learntId.length > 14 ? `${learntId.slice(0, 8)}…${learntId.slice(-4)}` : learntId;
         lines.push(
-            `Learnt (staging) reference: ${short} — in Super Admin → Station Database → Learnt, search or match using this ID if it appears there.`
+            `Staging reference: ${short} — resolve in Super Admin → Station Database → Resolution Queue → Unresolved stops.`
         );
     } else {
         lines.push(
-            'No Learnt staging record is attached to this transaction — Super Admin may see nothing under Learnt until GPS exists or the system creates a staging row.'
+            'No staging record is attached yet — Roam resolves these in Station Database → Resolution Queue.'
         );
     }
 
@@ -198,6 +235,25 @@ export function FuelReimbursementTable({
     const [adminNotes, setAdminNotes] = useState('');
     const [isLogReviewSubmitting, setIsLogReviewSubmitting] = useState(false);
     const [odometerError, setOdometerError] = useState('');
+    const [gateHeldEvidence, setGateHeldEvidence] = useState<StationGateEvidenceRow[]>([]);
+    const [gateHeldLoading, setGateHeldLoading] = useState(false);
+
+    const fetchGateHeldEvidence = useCallback(async () => {
+        try {
+            setGateHeldLoading(true);
+            const data = await api.getStationGateEvidence({ limit: 5000 });
+            setGateHeldEvidence(Array.isArray(data) ? data : []);
+        } catch (e) {
+            console.error('[ReviewQueue] gate-held evidence', e);
+            setGateHeldEvidence([]);
+        } finally {
+            setGateHeldLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        void fetchGateHeldEvidence();
+    }, [fetchGateHeldEvidence, isRefreshing]);
 
     const [verifiedStations, setVerifiedStations] = useState<StationProfile[]>([]);
     const [stationsLoading, setStationsLoading] = useState(false);
@@ -389,7 +445,13 @@ export function FuelReimbursementTable({
     };
 
     const pendingAll = transactions.filter(t => isPendingFuelQueueRow(t));
-    const pendingStationHold = pendingAll.filter((t) => metaFlagOn(t.metadata?.stationGateHold));
+    const pendingStationHold = useMemo(() => {
+        return gateHeldEvidence.map((row) => {
+            const full = transactions.find((t) => t.id === row.id);
+            if (full && metaFlagOn(full.metadata?.stationGateHold)) return full;
+            return gateEvidenceToTransaction(row);
+        });
+    }, [gateHeldEvidence, transactions]);
     const pendingReadyForReview = pendingAll.filter((t) => !metaFlagOn(t.metadata?.stationGateHold));
 
     const logReview = transactions.filter(isLogReviewEligible);
@@ -1027,7 +1089,7 @@ export function FuelReimbursementTable({
                                 <div className="rounded-md border border-slate-200 bg-white p-8 text-center space-y-2">
                                     <p className="text-sm text-slate-600">Nothing waiting for fleet approval right now.</p>
                                     <p className="text-xs text-slate-400 max-w-md mx-auto">
-                                        Fuel rows held because the gas station is not verified yet appear under <span className="font-medium text-slate-600">Awaiting station</span> until they are matched in the station database.
+                                        Fuel rows held because the gas station is not verified yet appear under <span className="font-medium text-slate-600">Awaiting station</span> until Roam resolves them in the station database.
                                     </p>
                                 </div>
                             ) : (
@@ -1035,17 +1097,36 @@ export function FuelReimbursementTable({
                             )}
                         </TabsContent>
                         <TabsContent value="station-hold" className="mt-4 space-y-3 focus-visible:outline-none">
-                            <div className="rounded-lg border border-sky-100 bg-sky-50/60 px-4 py-3 text-sm text-sky-900 flex gap-2 items-start">
-                                <MapPin className="h-4 w-4 shrink-0 mt-0.5 text-sky-700" />
-                                <p className="leading-snug">
-                                    These submissions are paused until a verified station exists in the master station database. Approve or reject is disabled here; open a row for specifics (GPS, staging ID, notes). Your team can still view details.
-                                </p>
+                            <div className="rounded-lg border border-sky-100 bg-sky-50/60 px-4 py-3 text-sm text-sky-900 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                                <div className="flex gap-2 items-start">
+                                    <MapPin className="h-4 w-4 shrink-0 mt-0.5 text-sky-700" />
+                                    <p className="leading-snug">
+                                        These submissions are paused until a verified station exists in the master station database.
+                                        Approve and reject stay disabled here. Roam resolves stops in{' '}
+                                        <span className="font-medium">Station Database → Resolution Queue</span>.
+                                    </p>
+                                </div>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="shrink-0 border-sky-200 bg-white text-sky-800 hover:bg-sky-100"
+                                    onClick={() => window.open(RESOLUTION_QUEUE_ADMIN_URL, '_blank', 'noopener,noreferrer')}
+                                >
+                                    Open Resolution Queue
+                                </Button>
                             </div>
-                            {pendingStationHold.length === 0 ? (
+                            {gateHeldLoading && pendingStationHold.length === 0 ? (
+                                <div className="rounded-md border border-slate-200 bg-white p-8 text-center text-slate-500 flex items-center justify-center gap-2">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Loading station holds…
+                                </div>
+                            ) : pendingStationHold.length === 0 ? (
                                 <div className="rounded-md border border-slate-200 bg-white p-8 text-center space-y-2">
                                     <p className="text-sm text-slate-600">No transactions awaiting station verification.</p>
                                     <p className="text-xs text-slate-400 max-w-md mx-auto">
-                                        When GPS does not match a verified station, entries appear here until resolved in the station admin workflow.
+                                        When GPS does not match a verified station, entries appear here until resolved in{' '}
+                                        <span className="font-medium text-slate-500">Resolution Queue → Unresolved stops</span>.
                                     </p>
                                 </div>
                             ) : (

@@ -685,7 +685,7 @@ export function FuelLogTable({
                                                                 )}
                                                                 {entry.metadata?.verificationMethod === 'gps_ambiguous' && (
                                                                     <p className="text-[9px] text-slate-500">
-                                                                        Resolve under Station Database → Spatial review (GPS).
+                                                                        Resolve under Station Database → Resolution Queue → Spatial review (GPS).
                                                                     </p>
                                                                 )}
                                                             </div>
@@ -703,7 +703,7 @@ export function FuelLogTable({
                                                         <TooltipContent>
                                                             <p className="text-[10px] font-bold">Unverified Location</p>
                                                             <p className="text-[10px]">
-                                                                No verified station link yet — check Learnt (STAGING) for new coordinates, or wait for a server match.
+                                                                No verified station link yet — check Resolution Queue → Unresolved stops for new coordinates, or wait for a server match.
                                                             </p>
                                                         </TooltipContent>
                                                     </Tooltip>
