@@ -680,6 +680,13 @@ app.get(`${BASE}/match-candidates`, async (c) => {
       if (!toll || typeof toll !== "object" || !toll.id) continue;
       if (toll.type && toll.type !== "usage") continue;
       if (claimTollIds.has(toll.id) || linkedTollIds.has(toll.id)) continue;
+      // Only tolls still needing a claim decision (untriaged) or already
+      // flagged underpaid belong here — Deadhead never gets a claim at all
+      // (fleet-absorbed by design) and a resolved Personal-Use claim isn't
+      // "open" (excluded above), so both would otherwise slip through as if
+      // they still needed a dispute-refund match.
+      const stage = toll.workflowStage;
+      if (stage && stage !== "needs_review" && stage !== "underpaid_pending") continue;
       tollCandidates.push({
         matchType: "toll",
         claimId: null,
