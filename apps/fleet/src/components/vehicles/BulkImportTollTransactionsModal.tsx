@@ -11,6 +11,15 @@ import { api } from "../../services/api";
 import { toast } from "sonner@2.0.3";
 import Papa from 'papaparse';
 
+/** Wall-clock YYYY-MM-DD + HH:MM:SS from a parsed CSV Date (no browser TZ bake). */
+function wallClockStorageFromDate(d: Date): { date: string; time: string } {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return {
+    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    time: `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`,
+  };
+}
+
 interface BulkImportTollTransactionsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -871,7 +880,7 @@ export function BulkImportTollTransactionsModal({
                 );
 
                 await api.saveTransaction({
-                    date: tx.date.toISOString(),
+                    date: wallClockStorageFromDate(tx.date).date,
                     amount: tx.amount, 
                     type: (tx.type === 'Usage' ? 'Usage' : 'Expense'), // Maps Top-up/Refund to Expense
                     category: finalCategory,
@@ -883,7 +892,7 @@ export function BulkImportTollTransactionsModal({
                     paymentMethod: finalPaymentMethod,
                     status: finalStatus,
                     isReconciled: false,
-                    time: tx.date.toLocaleTimeString(),
+                    time: wallClockStorageFromDate(tx.date).time,
                     batchId: currentBatchId,
                     batchName: currentBatchName,
                     metadata: {

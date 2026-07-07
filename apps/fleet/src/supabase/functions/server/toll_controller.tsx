@@ -29,7 +29,13 @@ import { findTripsInDateRange, findTollsInDateRange, findTollsByMatchedTripId } 
 import { appendCanonicalTollReconciledBatch, type TollReconcileAuditEntry } from "./canonical_from_ops.ts";
 import { deleteCanonicalLedgerBySource } from "./ledger_canonical.ts";
 import { applyEvidenceResolution } from "./evidence_routes.ts";
-import { getFleetTimezone, naiveToUtc, hasTzSuffix } from "./timezone_helper.tsx";
+import {
+  getFleetTimezone,
+  naiveToUtc,
+  hasTzSuffix,
+  parseFleetLocalInstant,
+  normalizeWallClockTime,
+} from "./timezone_helper.tsx";
 import {
   parseISO,
   subMinutes,
@@ -142,16 +148,16 @@ interface TripWindows {
   searchEnd: Date;
 }
 
-function calculateTripTimes(trip: any): TripTimes {
+function calculateTripTimes(trip: any, timezone: string): TripTimes {
   const dropoffStr = trip.dropoffTime || trip.date;
-  const dropoffTime = parseISO(dropoffStr);
+  const dropoffTime = parseFleetLocalInstant(dropoffStr, timezone);
 
   const requestStr = trip.requestTime || trip.date;
-  const requestTime = parseISO(requestStr);
+  const requestTime = parseFleetLocalInstant(requestStr, timezone);
 
   let pickupTime: Date;
   if (trip.startTime) {
-    pickupTime = parseISO(trip.startTime);
+    pickupTime = parseFleetLocalInstant(trip.startTime, timezone);
   } else if (trip.duration) {
     pickupTime = subMinutes(dropoffTime, trip.duration);
   } else {
@@ -191,8 +197,8 @@ type DataQuality = "PRECISE" | "TIMED" | "DATE_ONLY";
  * TIMED    = Has start/end times but request = pickup (e.g., manual InDrive/Roam entry)
  * DATE_ONLY = Only has a date, no meaningful time-of-day (e.g., generic CSV import)
  */
-function assessDataQuality(trip: any): DataQuality {
-  const tripTimes = calculateTripTimes(trip);
+function assessDataQuality(trip: any, timezone: string): DataQuality {
+  const tripTimes = calculateTripTimes(trip, timezone);
   if (!tripTimes.isValid) return "DATE_ONLY";
 
   // Check if request and pickup times are meaningfully different (> 1 minute apart)
@@ -369,14 +375,14 @@ function calculateConfidenceScore(params: {
  *   - The post-trip gap (up to 15 min after dropoff)
  *   - Timezone edge cases at midnight boundaries
  */
-function sameDayPreFilter(txDate: Date, trips: any[]): any[] {
+function sameDayPreFilter(txDate: Date, trips: any[], timezone: string): any[] {
   const windowStart = subDays(startOfDay(txDate), 1);
   const windowEnd = addDays(endOfDay(txDate), 1);
 
   return trips.filter((trip: any) => {
     const tripDateStr = trip.dropoffTime || trip.date;
     if (!tripDateStr) return false;
-    const tripDate = parseISO(tripDateStr);
+    const tripDate = parseFleetLocalInstant(tripDateStr, timezone);
     if (!isValid(tripDate)) return false;
     return tripDate >= windowStart && tripDate <= windowEnd;
   });
@@ -501,18 +507,61 @@ function isAmountMatch(a: number, b: number): boolean {
 
 function getTransactionDateTime(tx: any, timezone: string): Date | null {
   try {
-    // If the datetime already has a TZ suffix, parse directly
-    if (tx.date && tx.date.includes("T")) {
-      if (hasTzSuffix(tx.date)) {
-        return new Date(tx.date);
+    const rawDate = tx.date ? String(tx.date) : "";
+    const datePart = rawDate.slice(0, 10);
+    let result: Date | null = null;
+    let parsePath = "unknown";
+
+    // Prefer wall-clock date + separate time field in fleet TZ (toll imports store these)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(datePart) && tx.time) {
+      parsePath = "date_plus_time_fleet_tz";
+      const timeNorm = normalizeWallClockTime(String(tx.time));
+      result = naiveToUtc(`${datePart}T${timeNorm}`, timezone);
+    } else if (rawDate.includes("T")) {
+      if (hasTzSuffix(rawDate)) {
+        parsePath = "tz_suffix_direct";
+        result = new Date(rawDate);
+      } else {
+        parsePath = "naive_iso_fleet_tz";
+        result = naiveToUtc(rawDate, timezone);
       }
-      // Naive ISO-ish string — interpret in fleet timezone
-      return naiveToUtc(tx.date, timezone);
+    } else if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+      parsePath = "date_only_fleet_tz";
+      result = naiveToUtc(`${datePart}T00:00:00`, timezone);
     }
-    // Separate date + time fields — combine and interpret in fleet timezone
-    const timeStr = tx.time || "00:00:00";
-    const naiveStr = `${tx.date}T${timeStr}`;
-    return naiveToUtc(naiveStr, timezone);
+    // #region agent log
+    if (tx.id) {
+      const altFromTime = tx.time
+        ? naiveToUtc(`${String(tx.date).slice(0, 10)}T${tx.time}`, timezone)
+        : null;
+      fetch("http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9637fe" },
+        body: JSON.stringify({
+          sessionId: "9637fe",
+          location: "toll_controller.tsx:getTransactionDateTime",
+          message: "toll datetime parse",
+          hypothesisId: "A",
+          runId: "post-fix",
+          data: {
+            tollId: tx.id,
+            rawDate: tx.date,
+            rawTime: tx.time ?? null,
+            fleetTimezone: timezone,
+            parsePath,
+            hasTzSuffix: tx.date ? hasTzSuffix(tx.date) : false,
+            parsedIso: result?.toISOString() ?? null,
+            altFromTimeIso: altFromTime?.toISOString() ?? null,
+            altDiffMinutes: result && altFromTime
+              ? Math.round(Math.abs(result.getTime() - altFromTime.getTime()) / 60000)
+              : null,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+    }
+    // #endregion
+    return result;
   } catch {
     return null;
   }
@@ -529,14 +578,14 @@ function findTollMatchesServer(
   const matches: MatchResult[] = [];
 
   // Phase 6: Replace hard vehicle/driver gate with time-based pre-filter
-  const candidateTrips = sameDayPreFilter(txDate, trips);
+  const candidateTrips = sameDayPreFilter(txDate, trips, timezone);
 
   for (const trip of candidateTrips) {
-    const tripTimes = calculateTripTimes(trip);
+    const tripTimes = calculateTripTimes(trip, timezone);
     if (!tripTimes.isValid) continue;
 
     const windows = getTripWindows(tripTimes);
-    const dataQuality = assessDataQuality(trip);
+    const dataQuality = assessDataQuality(trip, timezone);
 
     // Calculate time difference for sorting
     let diff = 0;
@@ -583,6 +632,47 @@ function findTollMatchesServer(
       scoreResult.windowHit === "ON_TRIP" ? "ON_TRIP" :
       scoreResult.windowHit === "ENROUTE" ? "ENROUTE_APPROACH" :
       scoreResult.windowHit === "POST_TRIP" ? "POST_TRIP_GAP" : undefined;
+
+    // #region agent log
+    if (
+      scoreResult.matchType === "AMOUNT_VARIANCE" ||
+      scoreResult.matchType === "PERFECT_MATCH"
+    ) {
+      const tollFleetDay = toFleetDateOnly(txDate, timezone);
+      const tripDropFleetDay = toFleetDateOnly(tripTimes.dropoffTime, timezone);
+      const tripReqFleetDay = toFleetDateOnly(tripTimes.requestTime, timezone);
+      fetch("http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9637fe" },
+        body: JSON.stringify({
+          sessionId: "9637fe",
+          location: "toll_controller.tsx:findTollMatchesServer",
+          message: "toll-trip match candidate",
+          hypothesisId: "B,C,E",
+          runId: "post-fix",
+          data: {
+            tollId: transaction.id,
+            tripId: trip.id,
+            matchType: scoreResult.matchType,
+            windowHit: scoreResult.windowHit,
+            timeDiffMinutes: diff,
+            txDateIso: txDate.toISOString(),
+            tripRequestIso: tripTimes.requestTime.toISOString(),
+            tripDropoffIso: tripTimes.dropoffTime.toISOString(),
+            windowActiveStartIso: windows.activeStart.toISOString(),
+            windowActiveEndIso: windows.activeEnd.toISOString(),
+            windowSearchEndIso: windows.searchEnd.toISOString(),
+            tollFleetDay,
+            tripReqFleetDay,
+            tripDropFleetDay,
+            crossDayTollVsDropoff: tollFleetDay !== tripDropFleetDay,
+            candidateCount: candidateTrips.length,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+    }
+    // #endregion
 
     matches.push({
       tripId: trip.id,
@@ -658,7 +748,7 @@ function buildOrphanSuggestion(
   const txDate = getTransactionDateTime(tx, timezone);
   if (!txDate) return null;
 
-  const candidateTrips = sameDayPreFilter(txDate, trips).map((t: any) => ({
+  const candidateTrips = sameDayPreFilter(txDate, trips, timezone).map((t: any) => ({
     requestTime: t.requestTime,
     dropoffTime: t.dropoffTime,
     date: t.date,

@@ -796,17 +796,63 @@ app.get(`${BASE}/match-candidates`, async (c) => {
       const resolved: { toll: any; tripId: string; cost: number; date: string; time?: string }[] = [];
       for (const t of tolls) {
         const rawToll = rawTollById.get(t.tollId);
-        if (t.tripId) {
-          resolved.push({ toll: t, tripId: t.tripId, cost: Math.abs(t.tollAmount || 0), date: t.date, time: rawToll?.time });
-          continue;
-        }
         if (!rawToll) continue;
+
         const matches = findTollMatchesServer(rawToll, trips, fleetTz);
-        const best = matches.find((m: any) => m.matchType === "AMOUNT_VARIANCE" || m.matchType === "PERFECT_MATCH");
-        if (best) {
-          t.suggestedTripId = best.tripId;
-          resolved.push({ toll: t, tripId: best.tripId, cost: Math.abs(t.tollAmount || 0), date: t.date, time: rawToll.time });
+        const validMatch = matches.find(
+          (m: any) => m.matchType === "AMOUNT_VARIANCE" || m.matchType === "PERFECT_MATCH",
+        );
+
+        let tripId: string | null = null;
+        if (validMatch) {
+          if (t.tripId && t.tripId !== validMatch.tripId) {
+            // Stale persisted link — live matcher found a different valid trip.
+            t.tripId = null;
+          }
+          tripId = validMatch.tripId;
+          if (!t.tripId) t.suggestedTripId = validMatch.tripId;
+        } else if (t.tripId) {
+          // Persisted link no longer passes time-window validation — drop it.
+          t.tripId = null;
         }
+
+        if (!tripId) continue;
+
+        resolved.push({
+          toll: t,
+          tripId,
+          cost: Math.abs(t.tollAmount || 0),
+          date: t.date,
+          time: rawToll.time,
+        });
+
+        // #region agent log
+        fetch("http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9637fe" },
+          body: JSON.stringify({
+            sessionId: "9637fe",
+            location: "dispute_refund_controller.tsx:match-candidates",
+            message: "validated trip assigned",
+            hypothesisId: "D",
+            runId: "post-fix",
+            data: {
+              tollId: t.tollId,
+              tripId,
+              suggestedTripId: t.suggestedTripId ?? null,
+              tollDate: t.date,
+              tollTime: rawToll?.time ?? null,
+              tripRequestTime: validMatch?.tripRequestTime ?? null,
+              tripDropoffTime: validMatch?.tripDropoffTime ?? null,
+              fleetTimezone: fleetTz,
+              matchCount: matches.length,
+              bestWindowHit: validMatch?.windowHit ?? null,
+              bestTimeDiffMinutes: validMatch?.timeDifferenceMinutes ?? null,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
       }
 
       if (resolved.length > 0) {

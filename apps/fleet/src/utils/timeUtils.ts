@@ -1,5 +1,18 @@
 import { format, parseISO, subMinutes, addMinutes, isValid, differenceInMinutes, differenceInDays, startOfDay } from 'date-fns';
 import { Trip } from '../types/data';
+import { hasTzSuffix, naiveToUtcBrowser } from '../services/import-validator';
+
+export function parseFleetLocalInstant(stored: string, fleetTimezone?: string): Date {
+  if (!stored) return new Date(NaN);
+  if (!fleetTimezone || !hasTzSuffix(stored)) return parseISO(stored);
+  const d = new Date(stored);
+  if (isNaN(d.getTime())) return d;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const naive =
+    `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T` +
+    `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+  return new Date(naiveToUtcBrowser(naive, fleetTimezone));
+}
 
 export interface TripTimes {
   requestTime: Date; // The time the driver accepted the trip
@@ -22,23 +35,20 @@ export interface TripWindows {
  * Crucially, it derives the Pickup Time (Start of Trip) from Dropoff - Duration
  * if an explicit Pickup Time is missing.
  */
-export function calculateTripTimes(trip: Trip): TripTimes {
+export function calculateTripTimes(trip: Trip, fleetTimezone?: string): TripTimes {
   // 1. Determine Dropoff Time (Anchor)
-  // Fallback to generic date if dropoff specific time is missing (though unlikely for valid trips)
   const dropoffStr = trip.dropoffTime || trip.date;
-  const dropoffTime = parseISO(dropoffStr);
+  const dropoffTime = parseFleetLocalInstant(dropoffStr, fleetTimezone);
 
   // 2. Determine Request Time
-  // Fallback to generic date if missing
   const requestStr = trip.requestTime || trip.date;
-  const requestTime = parseISO(requestStr);
+  const requestTime = parseFleetLocalInstant(requestStr, fleetTimezone);
 
   // 3. Calculate Pickup Time (The "Start" of the paid trip)
   let pickupTime: Date;
   
   if (trip.startTime) {
-     // If we have explicit start time from a better data source
-     pickupTime = parseISO(trip.startTime);
+     pickupTime = parseFleetLocalInstant(trip.startTime, fleetTimezone);
   } else if (trip.duration) {
      // Standard derivation: Pickup = Dropoff - Duration
      pickupTime = subMinutes(dropoffTime, trip.duration);

@@ -72,6 +72,44 @@ export function hasTzSuffix(s: string): boolean {
 }
 
 /**
+ * Legacy imports stored CSV wall-clock components via browser `toISOString()`,
+ * baking the importing browser's offset into a Z-suffixed UTC string. Recover
+ * the original Y-M-D H:M:S digits and reinterpret them in the fleet timezone.
+ * Idempotent when the stored instant is already correct (e.g. Jamaica browser).
+ */
+export function parseFleetLocalInstant(stored: string, timezone: string): Date {
+  if (!stored) return new Date(NaN);
+  if (!hasTzSuffix(stored)) return naiveToUtc(stored, timezone);
+  const d = new Date(stored);
+  if (isNaN(d.getTime())) return d;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const naive =
+    `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T` +
+    `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+  return naiveToUtc(naive, timezone);
+}
+
+/** Normalize "3:16:00 PM" / "15:16:00" to HH:MM:SS for naiveToUtc. */
+export function normalizeWallClockTime(raw: string): string {
+  const pm = raw.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)$/i);
+  if (pm) {
+    let h = parseInt(pm[1], 10);
+    const m = pm[2];
+    const s = pm[3] || "00";
+    const ampm = pm[4].toLowerCase();
+    if (ampm === "pm" && h < 12) h += 12;
+    if (ampm === "am" && h === 12) h = 0;
+    return `${String(h).padStart(2, "0")}:${m}:${s}`;
+  }
+  const parts = raw.trim().split(":");
+  if (parts.length >= 2) {
+    const sec = (parts[2] || "00").replace(/\D/g, "") || "00";
+    return `${parts[0].padStart(2, "0")}:${parts[1].padStart(2, "0")}:${sec.padStart(2, "0")}`;
+  }
+  return "00:00:00";
+}
+
+/**
  * Converts a naive (no timezone) datetime string to a UTC Date object,
  * interpreting it as local time in the given IANA timezone.
  *
