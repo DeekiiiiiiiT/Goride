@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../../ui/dialog";
 import { Button } from "../../ui/button";
 import { Card, CardContent } from "../../ui/card";
-import { Loader2, Search, LinkIcon, Sparkles } from "lucide-react";
+import { Loader2, Search, LinkIcon, Sparkles, ChevronDown, ChevronUp, MapPin } from "lucide-react";
 import { DisputeRefund } from "../../../types/data";
 import { formatStoredDateInFleetTz, fleetTzDateKey, useFleetTimezone } from '../../../utils/timezoneDisplay';
 import { api } from '../../../services/api';
@@ -29,6 +29,8 @@ interface Candidate {
   matchType: 'claim' | 'toll';
   claimId: string | null;
   tollId: string;
+  /** The persisted trip link, if this toll/claim is already reconciled to one. */
+  tripId?: string | null;
   driverName: string;
   claimAmount: number | null;
   tollAmount: number;
@@ -37,6 +39,13 @@ interface Candidate {
   /** The live-suggested trip for a bare toll with no persisted trip link yet — passed
    *  through to the match endpoint so linking reconciles the toll to this trip too. */
   suggestedTripId?: string | null;
+  /** Matched/suggested trip details — shown on demand via "View trip" so the
+   *  user can verify exactly which trip a candidate is linked to. */
+  tripPickup?: string | null;
+  tripDropoff?: string | null;
+  tripPlatform?: string | null;
+  tripRequestTime?: string | null;
+  tripDropoffTime?: string | null;
   date: string | null;
   status: string | null;
 }
@@ -242,62 +251,30 @@ export function DisputeMatchModal({ open, onOpenChange, refund, onMatched }: Dis
                   <div className="space-y-1">
                     <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Open underpaid claims</div>
                     {candidates.claims.map((c) => (
-                      <Card key={`c-${c.claimId}`} className="border-slate-200 shadow-none">
-                        <CardContent className="p-2.5 flex items-center justify-between gap-3">
-                          <div className="min-w-0 text-xs">
-                            <div className="font-medium text-slate-800 truncate">{c.driverName}</div>
-                            <div className="flex flex-wrap items-center gap-x-1.5 mt-0.5">
-                              <span>Toll <span className="font-semibold text-rose-600">-${Math.abs(c.tollAmount || 0).toFixed(2)}</span></span>
-                              <span className="text-slate-300">·</span>
-                              <span>Refund <span className="font-semibold text-emerald-600">${Math.abs(c.tripRefund ?? 0).toFixed(2)}</span></span>
-                              <span className="text-slate-300">·</span>
-                              <span>Underpaid <span className="font-semibold text-amber-600">-${Math.abs(c.claimAmount || 0).toFixed(2)}</span></span>
-                            </div>
-                            {c.date && <div className="text-[10px] text-slate-500 mt-0.5">{fmtDate(c.date)}</div>}
-                          </div>
-                          <Button size="sm" className="h-7 px-3 text-xs bg-teal-600 hover:bg-teal-700"
-                            onClick={() => link(c.tollId, c.claimId)} disabled={linkingTollId === c.tollId}>
-                            {linkingTollId === c.tollId ? <Loader2 className="h-3 w-3 animate-spin" /> : <><LinkIcon className="h-3 w-3 mr-1" /> Link</>}
-                          </Button>
-                        </CardContent>
-                      </Card>
+                      <ClaimCandidateCard
+                        key={`c-${c.claimId}`}
+                        candidate={c}
+                        fleetTz={fleetTz}
+                        fmtDate={fmtDate}
+                        linking={linkingTollId === c.tollId}
+                        onLink={() => link(c.tollId, c.claimId)}
+                      />
                     ))}
                   </div>
                 )}
                 {candidates.tolls.length > 0 && (
                   <div className="space-y-1">
                     <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Tolls with no claim yet</div>
-                    {candidates.tolls.map((c) => {
-                      const hasTripRefund = c.tripRefund != null;
-                      const underpaidBy = hasTripRefund ? Math.abs(c.tollAmount || 0) - Math.abs(c.tripRefund || 0) : null;
-                      return (
-                      <Card key={`t-${c.tollId}`} className="border-slate-200 shadow-none">
-                        <CardContent className="p-2.5 flex items-center justify-between gap-3">
-                          <div className="min-w-0 text-xs">
-                            <div className="font-medium text-slate-800 truncate">{c.driverName}</div>
-                            {hasTripRefund ? (
-                              <div className="flex flex-wrap items-center gap-x-1.5 mt-0.5">
-                                <span>Toll <span className="font-semibold text-rose-600">-${Math.abs(c.tollAmount || 0).toFixed(2)}</span></span>
-                                <span className="text-slate-300">·</span>
-                                <span>Refund <span className="font-semibold text-emerald-600">${Math.abs(c.tripRefund || 0).toFixed(2)}</span></span>
-                                <span className="text-slate-300">·</span>
-                                <span>Underpaid <span className="font-semibold text-amber-600">-${(underpaidBy || 0).toFixed(2)}</span></span>
-                              </div>
-                            ) : (
-                              <div className="text-[10px] text-slate-500 mt-0.5">
-                                Toll <span className="font-semibold text-rose-600">-${Math.abs(c.tollAmount || 0).toFixed(2)}</span> · no trip matched yet
-                              </div>
-                            )}
-                            {c.date && <div className="text-[10px] text-slate-500 mt-0.5">{fmtDate(c.date)}</div>}
-                          </div>
-                          <Button size="sm" variant="outline" className="h-7 px-3 text-xs"
-                            onClick={() => link(c.tollId, null, true, c.suggestedTripId)} disabled={linkingTollId === c.tollId}>
-                            {linkingTollId === c.tollId ? <Loader2 className="h-3 w-3 animate-spin" /> : <><LinkIcon className="h-3 w-3 mr-1" /> Link + create claim</>}
-                          </Button>
-                        </CardContent>
-                      </Card>
-                      );
-                    })}
+                    {candidates.tolls.map((c) => (
+                      <TollCandidateCard
+                        key={`t-${c.tollId}`}
+                        candidate={c}
+                        fleetTz={fleetTz}
+                        fmtDate={fmtDate}
+                        linking={linkingTollId === c.tollId}
+                        onLink={() => link(c.tollId, null, true, c.suggestedTripId)}
+                      />
+                    ))}
                   </div>
                 )}
               </div>
@@ -306,5 +283,121 @@ export function DisputeMatchModal({ open, onOpenChange, refund, onMatched }: Dis
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Matched/suggested trip's pickup, dropoff, and times — expanded on demand
+ *  via "View trip" so the user can verify exactly which trip a candidate is
+ *  linked to before linking it (and so trip-matching bugs are traceable). */
+function TripLinkDetails({ candidate, fleetTz }: { candidate: Candidate; fleetTz: string }) {
+  const hasTripInfo = candidate.tripPickup || candidate.tripDropoff || candidate.tripRequestTime;
+  if (!hasTripInfo) {
+    return (
+      <div className="mt-1.5 rounded-md border border-slate-200 bg-slate-50 p-2 text-[10px] text-slate-500">
+        No trip details available for this match.
+      </div>
+    );
+  }
+  return (
+    <div className="mt-1.5 rounded-md border border-slate-200 bg-slate-50 p-2 text-[10px] text-slate-600 space-y-0.5">
+      {candidate.tripPlatform && <div className="font-semibold text-slate-700">{candidate.tripPlatform} trip</div>}
+      {candidate.tripPickup && <div>Pickup: {candidate.tripPickup}</div>}
+      {candidate.tripDropoff && <div>Dropoff: {candidate.tripDropoff}</div>}
+      {candidate.tripRequestTime && (
+        <div>
+          Pickup time: {formatStoredDateInFleetTz(candidate.tripRequestTime, fleetTz, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}
+        </div>
+      )}
+      {candidate.tripDropoffTime && (
+        <div>
+          Dropoff time: {formatStoredDateInFleetTz(candidate.tripDropoffTime, fleetTz, { hour: 'numeric', minute: '2-digit', hour12: true })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ViewTripToggle({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium text-indigo-600 hover:text-indigo-800"
+    >
+      <MapPin className="h-3 w-3" />
+      View trip
+      {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+    </button>
+  );
+}
+
+interface CandidateCardProps {
+  candidate: Candidate;
+  fleetTz: string;
+  fmtDate: (d?: string | null) => string;
+  linking: boolean;
+  onLink: () => void;
+}
+
+function ClaimCandidateCard({ candidate: c, fleetTz, fmtDate, linking, onLink }: CandidateCardProps) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <Card className="border-slate-200 shadow-none">
+      <CardContent className="p-2.5 flex items-center justify-between gap-3">
+        <div className="min-w-0 text-xs flex-1">
+          <div className="font-medium text-slate-800 truncate">{c.driverName}</div>
+          <div className="flex flex-wrap items-center gap-x-1.5 mt-0.5">
+            <span>Toll <span className="font-semibold text-rose-600">-${Math.abs(c.tollAmount || 0).toFixed(2)}</span></span>
+            <span className="text-slate-300">·</span>
+            <span>Refund <span className="font-semibold text-emerald-600">${Math.abs(c.tripRefund ?? 0).toFixed(2)}</span></span>
+            <span className="text-slate-300">·</span>
+            <span>Underpaid <span className="font-semibold text-amber-600">-${Math.abs(c.claimAmount || 0).toFixed(2)}</span></span>
+          </div>
+          {c.date && <div className="text-[10px] text-slate-500 mt-0.5">{fmtDate(c.date)}</div>}
+          {c.tripId && <ViewTripToggle expanded={expanded} onToggle={() => setExpanded((v) => !v)} />}
+          {expanded && <TripLinkDetails candidate={c} fleetTz={fleetTz} />}
+        </div>
+        <Button size="sm" className="h-7 px-3 text-xs bg-teal-600 hover:bg-teal-700 shrink-0"
+          onClick={onLink} disabled={linking}>
+          {linking ? <Loader2 className="h-3 w-3 animate-spin" /> : <><LinkIcon className="h-3 w-3 mr-1" /> Link</>}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TollCandidateCard({ candidate: c, fleetTz, fmtDate, linking, onLink }: CandidateCardProps) {
+  const [expanded, setExpanded] = useState(false);
+  const hasTripRefund = c.tripRefund != null;
+  const underpaidBy = hasTripRefund ? Math.abs(c.tollAmount || 0) - Math.abs(c.tripRefund || 0) : null;
+  const linkedTripId = c.tripId || c.suggestedTripId;
+  return (
+    <Card className="border-slate-200 shadow-none">
+      <CardContent className="p-2.5 flex items-center justify-between gap-3">
+        <div className="min-w-0 text-xs flex-1">
+          <div className="font-medium text-slate-800 truncate">{c.driverName}</div>
+          {hasTripRefund ? (
+            <div className="flex flex-wrap items-center gap-x-1.5 mt-0.5">
+              <span>Toll <span className="font-semibold text-rose-600">-${Math.abs(c.tollAmount || 0).toFixed(2)}</span></span>
+              <span className="text-slate-300">·</span>
+              <span>Refund <span className="font-semibold text-emerald-600">${Math.abs(c.tripRefund || 0).toFixed(2)}</span></span>
+              <span className="text-slate-300">·</span>
+              <span>Underpaid <span className="font-semibold text-amber-600">-${(underpaidBy || 0).toFixed(2)}</span></span>
+            </div>
+          ) : (
+            <div className="text-[10px] text-slate-500 mt-0.5">
+              Toll <span className="font-semibold text-rose-600">-${Math.abs(c.tollAmount || 0).toFixed(2)}</span> · no trip matched yet
+            </div>
+          )}
+          {c.date && <div className="text-[10px] text-slate-500 mt-0.5">{fmtDate(c.date)}</div>}
+          {linkedTripId && <ViewTripToggle expanded={expanded} onToggle={() => setExpanded((v) => !v)} />}
+          {expanded && <TripLinkDetails candidate={c} fleetTz={fleetTz} />}
+        </div>
+        <Button size="sm" variant="outline" className="h-7 px-3 text-xs shrink-0"
+          onClick={onLink} disabled={linking}>
+          {linking ? <Loader2 className="h-3 w-3 animate-spin" /> : <><LinkIcon className="h-3 w-3 mr-1" /> Link + create claim</>}
+        </Button>
+      </CardContent>
+    </Card>
   );
 }

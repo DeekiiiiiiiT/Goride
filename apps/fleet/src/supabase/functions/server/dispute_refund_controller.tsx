@@ -748,6 +748,33 @@ app.get(`${BASE}/match-candidates`, async (c) => {
     const claims = claimCandidates.filter(keep).sort(byDate).slice(0, LIMIT);
     const tolls = tollCandidates.filter(keep).sort(byDate).slice(0, LIMIT);
 
+    // Attach matched-trip details to claim candidates (already linked via
+    // Underpaid & Claims' "Flag for Claim") so the user can see exactly
+    // which trip a claim's toll was matched to.
+    const claimTripIds = [...new Set(claims.map((c: any) => c.tripId).filter(Boolean))] as string[];
+    if (claimTripIds.length > 0) {
+      try {
+        const tripKeys = claimTripIds.map((tid) => `trip:${tid}`);
+        const tripValues = await kv.mget(tripKeys);
+        const tripById = new Map<string, any>();
+        claimTripIds.forEach((tid, idx) => {
+          if (tripValues[idx]) tripById.set(tid, tripValues[idx]);
+        });
+        for (const c of claims) {
+          const trip = c.tripId ? tripById.get(c.tripId) : null;
+          if (trip) {
+            c.tripPickup = trip.pickupLocation || null;
+            c.tripDropoff = trip.dropoffLocation || null;
+            c.tripPlatform = trip.platform || null;
+            c.tripRequestTime = trip.requestTime || trip.date || null;
+            c.tripDropoffTime = trip.dropoffTime || null;
+          }
+        }
+      } catch {
+        // Best-effort enrichment — candidates are still usable without it.
+      }
+    }
+
     // Enrich the (small, already-sliced) bare-toll candidates with a trip
     // refund figure, so the user sees the same toll cost / refund / shortfall
     // picture the Underpaid & Claims step shows — vital context for deciding
@@ -779,8 +806,13 @@ app.get(`${BASE}/match-candidates`, async (c) => {
         const tripKeys = tripIds.map((tid) => `trip:${tid}`);
         const tripValues = await kv.mget(tripKeys);
         const tripRefundById = new Map<string, number>();
+        const tripDetailsById = new Map<string, any>();
         tripIds.forEach((tid, idx) => {
-          if (tripValues[idx]) tripRefundById.set(tid, Math.abs((tripValues[idx] as any).tollCharges || 0));
+          const trip = tripValues[idx] as any;
+          if (trip) {
+            tripRefundById.set(tid, Math.abs(trip.tollCharges || 0));
+            tripDetailsById.set(tid, trip);
+          }
         });
 
         // A trip's refund is a shared pool, handed out in chronological
@@ -805,11 +837,19 @@ app.get(`${BASE}/match-candidates`, async (c) => {
             const db = new Date(`${b.date}T${b.time || "00:00:00"}`).getTime();
             return da - db;
           });
+          const tripDetail = tripDetailsById.get(tripId);
           let remaining = tripIdsAlreadyClaimed.has(tripId) ? 0 : (tripRefundById.get(tripId) ?? 0);
           for (const r of group) {
             const allocated = Math.max(0, Math.min(remaining, r.cost));
             remaining -= allocated;
             r.toll.tripRefund = allocated;
+            if (tripDetail) {
+              r.toll.tripPickup = tripDetail.pickupLocation || null;
+              r.toll.tripDropoff = tripDetail.dropoffLocation || null;
+              r.toll.tripPlatform = tripDetail.platform || null;
+              r.toll.tripRequestTime = tripDetail.requestTime || tripDetail.date || null;
+              r.toll.tripDropoffTime = tripDetail.dropoffTime || null;
+            }
           }
         }
       }
