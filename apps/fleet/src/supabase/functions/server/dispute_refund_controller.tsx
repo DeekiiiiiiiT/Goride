@@ -692,6 +692,10 @@ app.get(`${BASE}/match-candidates`, async (c) => {
         // Align to the toll date (what the period filters on), not the claim's
         // creation date — createdAt is often days/weeks after the trip.
         date: toll?.date || cl.createdAt || null,
+        // The toll's own time-of-day — shown alongside the matched trip's
+        // time so a cross-day (or otherwise implausible) match is visible
+        // at a glance instead of hidden behind a date-only display.
+        tollTime: toll?.time || null,
         status: cl.status,
       });
     }
@@ -722,6 +726,10 @@ app.get(`${BASE}/match-candidates`, async (c) => {
         claimAmount: null,
         tollAmount: Math.abs(toll.amount || 0),
         date: toll.date,
+        // The toll's own time-of-day — shown alongside the matched trip's
+        // time so a cross-day (or otherwise implausible) match is visible
+        // at a glance instead of hidden behind a date-only display.
+        tollTime: toll.time || null,
         status: null,
       });
     }

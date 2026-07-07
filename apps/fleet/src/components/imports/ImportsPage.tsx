@@ -86,6 +86,7 @@ import {
     VehicleTimeDistance
 } from '../../utils/csvHelpers';
 import { fetchFullTollHistory, generateBackupCSV } from '../../utils/exportHelpers';
+import { useFleetTimezone } from '../../utils/timezoneDisplay';
 import { Trip, FieldDefinition, FieldType, ParsedRow, DriverMetrics, VehicleMetrics, OrganizationMetrics, ImportAuditState, DisputeRefund } from '../../types/data';
 import { FuelEntry, FuelCard } from '../../types/fuel';
 import { api } from '../../services/api';
@@ -201,6 +202,7 @@ type ImportsPageProps = {
 
 export function ImportsPage({ onNavigate }: ImportsPageProps) {
   const queryClient = useQueryClient();
+  const fleetTimezone = useFleetTimezone();
   const [activeTab, setActiveTab] = useState<'import' | 'export' | 'delete'>('import');
   const [step, setStep] = useState<Step>('select_platform');
   
@@ -429,7 +431,7 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
         uberStatementsByDriverId,
         paymentLedgerLines,
         driverQualitySnapshots,
-      } = mergeAndProcessData(uploadedFiles, availableFields, knownFleetName, fuelCards);
+      } = mergeAndProcessData(uploadedFiles, availableFields, knownFleetName, fuelCards, fleetTimezone);
 
       if (organizationName) {
           localStorage.setItem('roam_fleet_name', organizationName);
@@ -569,7 +571,7 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
         // 2. Get Local Trips (for the table view)
         // This also runs the robust "Bottom-Up" financial calculation we just fixed.
         const knownFleetName = localStorage.getItem('roam_fleet_name') || undefined;
-        const localResult = mergeAndProcessData(filteredFiles, availableFields, knownFleetName, fuelCards);
+        const localResult = mergeAndProcessData(filteredFiles, availableFields, knownFleetName, fuelCards, fleetTimezone);
         if (localResult.importWarnings?.uberTripsMissingTripActivity) {
             toast.warning(
                 `${localResult.importWarnings.uberTripsMissingTripActivity} Uber trip(s) have earnings but no trip_activity row — addresses were not imported. Include trip_activity.csv that lists those trips, or re-import when Uber’s export includes them.`,

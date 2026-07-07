@@ -14,6 +14,28 @@ import {
   extractPaymentLedgerLineFromUberRow,
   applyPaymentLineRollupsToTrips,
 } from './extractPaymentLedgerLines';
+import { naiveToUtcBrowser } from '../services/import-validator';
+
+// Matches the server's timezone_helper.tsx default — used when the caller
+// hasn't loaded the fleet's configured timezone yet, so trip-time parsing
+// never silently falls back to the importing browser's local timezone.
+const DEFAULT_FLEET_TIMEZONE = 'America/Jamaica';
+
+/**
+ * Converts a Date built from naive local wall-clock components (year/month/day/
+ * hour/minute/second, as extracted by parseDateString) into a true UTC instant
+ * interpreted in the fleet's configured timezone — not the browser's local
+ * timezone the Date object was originally constructed against.
+ *
+ * Without this, request/dropoff times baked at import time carry whatever UTC
+ * offset the importing browser happened to have, which can silently diverge
+ * from the fleet's timezone and produce cross-day toll/trip match errors.
+ */
+function localComponentsToFleetTzIso(d: Date, fleetTimezone: string): string {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const naive = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    return naiveToUtcBrowser(naive, fleetTimezone);
+}
 
 // ... (Legacy code support if needed, but we focus on new logic)
 
@@ -1022,7 +1044,7 @@ function processFuelData(rows: ParsedRow[], fuelCards: FuelCard[]): FuelEntry[] 
     return entries;
 }
 
-export function mergeAndProcessData(files: FileData[], availableFields: FieldDefinition[], knownFleetName?: string, fuelCards: FuelCard[] = []): ProcessedBatch {
+export function mergeAndProcessData(files: FileData[], availableFields: FieldDefinition[], knownFleetName?: string, fuelCards: FuelCard[] = [], fleetTimezone: string = DEFAULT_FLEET_TIMEZONE): ProcessedBatch {
     const tripMap = new Map<string, Partial<Trip>>();
     /** Trip UUIDs that appeared in Uber `trip_activity` / TRIP_ACTIVITY CSV (not payments-only).
      * Stored in lower-case for case-insensitive matching with `payments_transaction` Trip UUIDs.
@@ -1446,9 +1468,9 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                         if (key) reqVal = row[key];
                     }
                     if (reqVal) {
-                        try { 
+                        try {
                              const d = parseDateString(String(reqVal), isMMDD);
-                             if (d) current.requestTime = d.toISOString(); 
+                             if (d) current.requestTime = localComponentsToFleetTzIso(d, fleetTimezone);
                         } catch(e) {}
                     }
 
@@ -1462,9 +1484,9 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                         if (key) dropVal = row[key];
                     }
                     if (dropVal) {
-                        try { 
+                        try {
                             const d = parseDateString(String(dropVal), isMMDD);
-                            if (d) current.dropoffTime = d.toISOString(); 
+                            if (d) current.dropoffTime = localComponentsToFleetTzIso(d, fleetTimezone);
                         } catch(e) {}
                     }
 

@@ -46,6 +46,9 @@ interface Candidate {
   tripPlatform?: string | null;
   tripRequestTime?: string | null;
   tripDropoffTime?: string | null;
+  /** The toll's own time-of-day — shown next to the matched trip's time so a
+   *  cross-day or otherwise implausible match is visible at a glance. */
+  tollTime?: string | null;
   date: string | null;
   status: string | null;
 }
@@ -353,7 +356,11 @@ function ClaimCandidateCard({ candidate: c, fleetTz, fmtDate, linking, onLink }:
             <span className="text-slate-300">·</span>
             <span>Underpaid <span className="font-semibold text-amber-600">-${Math.abs(c.claimAmount || 0).toFixed(2)}</span></span>
           </div>
-          {c.date && <div className="text-[10px] text-slate-500 mt-0.5">{fmtDate(c.date)}</div>}
+          {c.date && (
+            <div className="text-[10px] text-slate-500 mt-0.5">
+              {fmtDate(c.date)}{c.tollTime && ` · ${c.tollTime}`}
+            </div>
+          )}
           {c.tripId && <ViewTripToggle expanded={expanded} onToggle={() => setExpanded((v) => !v)} />}
           {expanded && <TripLinkDetails candidate={c} fleetTz={fleetTz} />}
         </div>
@@ -389,7 +396,11 @@ function TollCandidateCard({ candidate: c, fleetTz, fmtDate, linking, onLink }: 
               Toll <span className="font-semibold text-rose-600">-${Math.abs(c.tollAmount || 0).toFixed(2)}</span> · no trip matched yet
             </div>
           )}
-          {c.date && <div className="text-[10px] text-slate-500 mt-0.5">{fmtDate(c.date)}</div>}
+          {c.date && (
+            <div className="text-[10px] text-slate-500 mt-0.5">
+              {fmtDate(c.date)}{c.tollTime && ` · ${c.tollTime}`}
+            </div>
+          )}
           {linkedTripId && <ViewTripToggle expanded={expanded} onToggle={() => setExpanded((v) => !v)} />}
           {expanded && <TripLinkDetails candidate={c} fleetTz={fleetTz} />}
         </div>

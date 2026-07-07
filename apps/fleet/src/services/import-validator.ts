@@ -8,7 +8,7 @@ import { normalizePlatform } from '../utils/normalizePlatform';
 // ─── Browser-side timezone helpers (mirrors server-side timezone_helper.tsx) ───
 
 /** Returns true if the string already ends with Z or ±HH:MM */
-function hasTzSuffix(s: string): boolean {
+export function hasTzSuffix(s: string): boolean {
     return /[Zz]|[+-]\d{2}:\d{2}$/.test(s);
 }
 
@@ -20,7 +20,7 @@ function hasTzSuffix(s: string): boolean {
  * Two-pass DST correction: the first guess might land on the wrong side of a
  * DST boundary, so we re-check the offset at the corrected instant.
  */
-function naiveToUtcBrowser(naiveStr: string, timezone: string): string {
+export function naiveToUtcBrowser(naiveStr: string, timezone: string): string {
     // Parse components: "2026-02-27T14:30:00" or "2026-02-27 14:30:00"
     const cleaned = naiveStr.replace(' ', 'T');
     const parts = cleaned.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?)?/);

@@ -1407,29 +1407,8 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
           {/* Toll Review — read-only parsed fields with ✗ reject / ✓ accept buttons */}
           {viewState === 'toll_review' && (
             <div className="p-6 space-y-5">
-              {/* Receipt thumbnail */}
-              {receiptPreview && (
-                <div className="flex justify-center">
-                  <div className="relative w-32 h-44 rounded-xl overflow-hidden border border-slate-200 shadow-sm">
-                    <img
-                      src={receiptPreview}
-                      alt="Toll receipt"
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/40 to-transparent p-2">
-                      <p className="text-[10px] font-bold text-white text-center uppercase tracking-wide">Scanned Receipt</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Parsed fields — read-only display */}
+              {/* Driver-facing summary — full receipt data still saved on accept */}
               <div className="space-y-1 bg-slate-50 rounded-xl p-4 border border-slate-100">
-                {/* Always-shown fields */}
-                <div className="flex items-center justify-between py-2.5 border-b border-slate-100">
-                  <span className="text-sm font-medium text-slate-500">Merchant</span>
-                  <span className="text-sm font-bold text-slate-900">{merchant || <span className="text-slate-300 font-normal italic">Not detected</span>}</span>
-                </div>
                 <div className="flex items-center justify-between py-2.5 border-b border-slate-100">
                   <span className="text-sm font-medium text-slate-500">Date</span>
                   <span className="text-sm font-bold text-slate-900">{isValid(date) ? format(date, 'MMM d, yyyy') : <span className="text-slate-300 font-normal italic">Not detected</span>}</span>
@@ -1442,38 +1421,10 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                   <span className="text-sm font-medium text-slate-500">Amount</span>
                   <span className="text-lg font-bold text-purple-700">{amount ? `$${parseFloat(amount).toFixed(2)}` : <span className="text-slate-300 font-normal italic text-sm">Not detected</span>}</span>
                 </div>
-
-                {/* Conditional fields — only shown when populated */}
-                {plaza && (
-                  <div className="flex items-center justify-between py-2.5 border-b border-slate-100">
-                    <span className="text-sm font-medium text-slate-500">Plaza</span>
-                    <span className="text-sm font-bold text-slate-900">{plaza}</span>
-                  </div>
-                )}
-                {lane && (
-                  <div className="flex items-center justify-between py-2.5 border-b border-slate-100">
-                    <span className="text-sm font-medium text-slate-500">Lane</span>
-                    <span className="text-sm font-bold text-slate-900">{lane}</span>
-                  </div>
-                )}
-                {vehicleClass && (
-                  <div className="flex items-center justify-between py-2.5 border-b border-slate-100">
-                    <span className="text-sm font-medium text-slate-500">Vehicle Class</span>
-                    <span className="text-sm font-bold text-slate-900">{vehicleClass}</span>
-                  </div>
-                )}
-                {referenceNumber && (
-                  <div className="flex items-center justify-between py-2.5 border-b border-slate-100">
-                    <span className="text-sm font-medium text-slate-500">Reference #</span>
-                    <span className="text-sm font-bold text-slate-900">{referenceNumber}</span>
-                  </div>
-                )}
-                {collector && (
-                  <div className="flex items-center justify-between py-2.5">
-                    <span className="text-sm font-medium text-slate-500">Collector</span>
-                    <span className="text-sm font-bold text-slate-900">{collector}</span>
-                  </div>
-                )}
+                <div className="flex items-center justify-between py-2.5">
+                  <span className="text-sm font-medium text-slate-500">Plaza</span>
+                  <span className="text-sm font-bold text-slate-900">{plaza || <span className="text-slate-300 font-normal italic">Not detected</span>}</span>
+                </div>
               </div>
 
               {/* Error message */}
