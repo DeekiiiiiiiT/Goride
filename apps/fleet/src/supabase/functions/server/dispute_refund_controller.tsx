@@ -26,6 +26,8 @@ import {
   isUnresolvedRefund,
   loadAllTollLedgerWithTrips,
   getRefundAutomationSettings,
+  findTollMatchesServer,
+  reconcileTollForDisputeMatch,
 } from "./toll_controller.tsx";
 
 const app = new Hono();
@@ -144,6 +146,11 @@ async function computeDisputeSuggestions(refund: any): Promise<any[]> {
       tripId: claim.tripId || toll?.tripId || null,
       tollAmount: tollCost,          // full toll cost (context)
       claimAmount,                    // the shortfall we're matching against
+      // What Uber's trip fare already paid toward this toll — claimAmount IS
+      // the shortfall, so the remainder is the trip refund. Shown alongside
+      // tollAmount so the user sees the same cost/refund/shortfall picture
+      // the Underpaid & Claims step shows.
+      tripRefund: Math.max(0, tollCost - claimAmount),
       uberRefund: refundAmount,
       variance: claimAmount - refundAmount, // ~0 when the refund covers the loss
       date: toll?.date || claim.createdAt || refund.date, // toll date = the frame the UI groups by
@@ -446,7 +453,7 @@ app.patch(`${BASE}/:id/match`, async (c) => {
   try {
     const id = c.req.param("id");
     const body = await c.req.json();
-    const { tollTransactionId, createClaim } = body;
+    const { tollTransactionId, createClaim, suggestedTripId } = body;
     let { claimId } = body;
 
     if (!tollTransactionId) {
@@ -461,7 +468,16 @@ app.patch(`${BASE}/:id/match`, async (c) => {
     // Manual link to a bare toll (no claim yet) → create the claim on the fly,
     // sized to the amount we won back, so the loop still closes.
     if (!claimId && createClaim) {
-      const toll = await loadTollForClaim(tollTransactionId);
+      let toll = await loadTollForClaim(tollTransactionId);
+      // The toll usually has no persisted trip yet (only "Flag for Claim" in
+      // Underpaid & Claims reconciles a toll to its trip) — the caller sends
+      // along the same live-suggested trip that step would show, so this
+      // path reconciles first and ends in the exact same state, regardless
+      // of which step the fleet manager resolved it from.
+      if (!toll?.tripId && suggestedTripId) {
+        await reconcileTollForDisputeMatch(tollTransactionId, suggestedTripId);
+        toll = await loadTollForClaim(tollTransactionId);
+      }
       const newClaimId = `claim-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       const newClaim = await upsertClaim(
         {
@@ -657,6 +673,8 @@ app.get(`${BASE}/match-candidates`, async (c) => {
     const claimCandidates: any[] = [];
     for (const cl of openClaims) {
       const toll = await loadTollForClaim(cl.transactionId);
+      const claimAmount = Math.abs(cl.amount || 0);
+      const tollAmount = Math.abs(cl.expectedAmount ?? toll?.amount ?? 0);
       claimCandidates.push({
         matchType: "claim",
         claimId: cl.id,
@@ -664,8 +682,13 @@ app.get(`${BASE}/match-candidates`, async (c) => {
         tripId: cl.tripId || toll?.tripId || null,
         driverId: cl.driverId,
         driverName: toll?.driverName || cl.driverName || "Unknown",
-        claimAmount: Math.abs(cl.amount || 0),
-        tollAmount: Math.abs(cl.expectedAmount ?? toll?.amount ?? 0),
+        claimAmount,
+        tollAmount,
+        // The claim amount IS the shortfall (see the file-level doc comment),
+        // so what Uber already paid via the trip fare is the remainder —
+        // shown alongside the toll cost so the user can see the same
+        // cost/refund/shortfall picture the Underpaid & Claims step shows.
+        tripRefund: Math.max(0, tollAmount - claimAmount),
         // Align to the toll date (what the period filters on), not the claim's
         // creation date — createdAt is often days/weeks after the trip.
         date: toll?.date || cl.createdAt || null,
@@ -676,6 +699,7 @@ app.get(`${BASE}/match-candidates`, async (c) => {
     // Bare tolls (usage, no claim yet, not already linked).
     const ledger = await loadAllByPrefix("toll_ledger:");
     const tollCandidates: any[] = [];
+    const rawTollById = new Map<string, any>();
     for (const toll of ledger) {
       if (!toll || typeof toll !== "object" || !toll.id) continue;
       if (toll.type && toll.type !== "usage") continue;
@@ -687,6 +711,7 @@ app.get(`${BASE}/match-candidates`, async (c) => {
       // they still needed a dispute-refund match.
       const stage = toll.workflowStage;
       if (stage && stage !== "needs_review" && stage !== "underpaid_pending") continue;
+      rawTollById.set(toll.id, toll);
       tollCandidates.push({
         matchType: "toll",
         claimId: null,
@@ -722,6 +747,53 @@ app.get(`${BASE}/match-candidates`, async (c) => {
 
     const claims = claimCandidates.filter(keep).sort(byDate).slice(0, LIMIT);
     const tolls = tollCandidates.filter(keep).sort(byDate).slice(0, LIMIT);
+
+    // Enrich the (small, already-sliced) bare-toll candidates with a trip
+    // refund figure, so the user sees the same toll cost / refund / shortfall
+    // picture the Underpaid & Claims step shows — vital context for deciding
+    // whether a dispute refund actually covers this toll. Most of these
+    // tolls have NO persisted trip link yet (only Underpaid & Claims' own
+    // "Flag for Claim" action reconciles a toll to its trip) — so for those
+    // we compute the same live suggested match the Underpaid & Claims step
+    // itself shows, rather than reading a `tripId` field that isn't set yet.
+    const alreadyLinkedTripIds = [...new Set(tolls.map((t: any) => t.tripId).filter(Boolean))] as string[];
+    if (alreadyLinkedTripIds.length > 0) {
+      try {
+        const tripKeys = alreadyLinkedTripIds.map((id: string) => `trip:${id}`);
+        const tripValues = await kv.mget(tripKeys);
+        const linkedTripById = new Map<string, any>();
+        alreadyLinkedTripIds.forEach((id: string, idx: number) => {
+          if (tripValues[idx]) linkedTripById.set(id, tripValues[idx]);
+        });
+        for (const t of tolls) {
+          if (t.tripId && linkedTripById.has(t.tripId)) {
+            t.tripRefund = Math.abs(linkedTripById.get(t.tripId).tollCharges || 0);
+          }
+        }
+      } catch {
+        // Best-effort enrichment — candidates are still usable without it.
+      }
+    }
+
+    const needsLiveSuggestion = tolls.filter((t: any) => !t.tripId);
+    if (needsLiveSuggestion.length > 0) {
+      try {
+        const { trips } = await loadAllTollLedgerWithTrips();
+        for (const t of needsLiveSuggestion) {
+          const rawToll = rawTollById.get(t.tollId);
+          if (!rawToll) continue;
+          const matches = findTollMatchesServer(rawToll, trips, fleetTz);
+          const best = matches.find((m: any) => m.matchType === "AMOUNT_VARIANCE" || m.matchType === "PERFECT_MATCH");
+          if (best) {
+            t.suggestedTripId = best.tripId;
+            t.tripRefund = Math.abs(best.tripTollCharges || 0);
+          }
+        }
+      } catch {
+        // Best-effort enrichment — candidates are still usable without it.
+      }
+    }
+
     return c.json({ claims, tolls });
   } catch (err: any) {
     console.log(`[DisputeRefund] Match-candidates error: ${err.message}`);

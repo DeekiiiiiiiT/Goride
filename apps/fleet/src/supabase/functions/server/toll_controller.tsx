@@ -5758,6 +5758,67 @@ app.get(`${BASE}/unified-events/export`, async (c) => {
   }
 });
 
+/**
+ * Reconcile a toll to a trip as a side effect of a dispute-refund match
+ * (dispute_refund_controller.tsx's `PATCH /:id/match`), so a toll resolved
+ * that way ends up in the exact same state as one resolved via "Flag for
+ * Claim" in the Underpaid & Claims step (which reconciles first, then
+ * claims) — same write shape as `POST /reconcile`, but as a standalone
+ * function rather than touching that already-live route. Idempotent: a
+ * no-op if the toll already has a different trip linked (never overwrites
+ * an existing reconciliation), and safe to call with a trip that no longer
+ * exists (just skips).
+ */
+async function reconcileTollForDisputeMatch(transactionId: string, tripId: string): Promise<void> {
+  try {
+    const tollEntry = await getTollLedgerEntry(transactionId);
+    if (!tollEntry || tollEntry.tripId) return; // already linked (to this trip or another) — don't clobber
+
+    const trip = await kv.get(`trip:${tripId}`) as any;
+    if (!trip) return;
+
+    const tx = tollLedgerToTxShape(tollEntry);
+
+    await updateTollLedgerEntry(
+      transactionId,
+      {
+        status: "reconciled",
+        tripId,
+        isReconciled: true,
+        driverId: trip.driverId || tx.driverId,
+        driverName: trip.driverName || tx.driverName,
+      },
+      "reconciled",
+      "dispute-refund-match",
+    );
+    await recomputeAndPersistWorkflowStage(transactionId);
+
+    await writeTollLedgerEntry({
+      eventType: "toll_reconciled",
+      category: "Toll Reconciliation",
+      description: `Toll matched to trip via dispute refund: ${(trip.pickupLocation || "").substring(0, 30)} → ${(trip.dropoffLocation || "").substring(0, 30)}`,
+      grossAmount: Math.abs(Number(tx.amount) || 0),
+      netAmount: 0,
+      direction: "neutral",
+      sourceType: "reconciliation",
+      sourceId: transactionId,
+      driverId: tx.driverId || trip.driverId || "unknown",
+      driverName: tx.driverName || trip.driverName || "Unknown",
+      vehicleId: tx.vehicleId || trip.vehicleId,
+      date: tx.date,
+      metadata: {
+        tripId,
+        matchedAt: new Date().toISOString(),
+        matchedBy: "dispute-refund-match",
+        tollAmount: Math.abs(Number(tx.amount) || 0),
+        tripTollCharges: trip.tollCharges || 0,
+      },
+    });
+  } catch (err: any) {
+    console.log(`[TollReconciliation] reconcileTollForDisputeMatch failed for toll ${transactionId} → trip ${tripId}: ${err.message}`);
+  }
+}
+
 export default app;
 
 // ── Exported helpers for dual-write (Phase 3) ───────────────────────────────
@@ -5784,4 +5845,7 @@ export { recomputeAndPersistWorkflowStage };
 
 // ── Exported helpers for the period aggregation endpoint (Phase F2) ────────
 export { loadAllByPrefix, loadDisputeRefundRecords, filterByDriver };
+
+// ── Exported helpers for dispute-refund match candidates ───────────────────
+export { findTollMatchesServer, reconcileTollForDisputeMatch };
 export type { TollWorkflowStage };

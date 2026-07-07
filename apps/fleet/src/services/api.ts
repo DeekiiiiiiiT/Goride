@@ -2462,14 +2462,14 @@ export const api = {
     return response.json();
   },
 
-  async matchDisputeRefund(refundId: string, tollTransactionId: string, claimId?: string, opts?: { createClaim?: boolean }): Promise<{ data: DisputeRefund }> {
+  async matchDisputeRefund(refundId: string, tollTransactionId: string, claimId?: string, opts?: { createClaim?: boolean; suggestedTripId?: string | null }): Promise<{ data: DisputeRefund }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/dispute-refunds/${refundId}/match`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${publicAnonKey}`
       },
-      body: JSON.stringify({ tollTransactionId, claimId, createClaim: opts?.createClaim })
+      body: JSON.stringify({ tollTransactionId, claimId, createClaim: opts?.createClaim, suggestedTripId: opts?.suggestedTripId })
     });
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));

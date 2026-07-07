@@ -14,6 +14,8 @@ interface SuggestionRow {
   tollId: string;
   tollAmount: number;
   claimAmount?: number;
+  /** What Uber's trip fare already paid toward this toll (claim type only). */
+  tripRefund?: number;
   uberRefund: number;
   variance: number;
   date: string;
@@ -30,6 +32,11 @@ interface Candidate {
   driverName: string;
   claimAmount: number | null;
   tollAmount: number;
+  /** What Uber's trip fare already paid toward this toll, if a trip is linked or suggested. */
+  tripRefund?: number | null;
+  /** The live-suggested trip for a bare toll with no persisted trip link yet — passed
+   *  through to the match endpoint so linking reconciles the toll to this trip too. */
+  suggestedTripId?: string | null;
   date: string | null;
   status: string | null;
 }
@@ -106,11 +113,11 @@ export function DisputeMatchModal({ open, onOpenChange, refund, onMatched }: Dis
     loadCandidates(query, start, end);
   };
 
-  const link = async (tollId: string, claimId: string | null, createClaim?: boolean) => {
+  const link = async (tollId: string, claimId: string | null, createClaim?: boolean, suggestedTripId?: string | null) => {
     if (!refund) return;
     setLinkingTollId(tollId);
     try {
-      await api.matchDisputeRefund(refund.id, tollId, claimId || undefined, createClaim ? { createClaim: true } : undefined);
+      await api.matchDisputeRefund(refund.id, tollId, claimId || undefined, createClaim ? { createClaim: true, suggestedTripId } : undefined);
       toast.success('Refund matched — claim marked Reimbursed');
       onMatched(tollId);
       onOpenChange(false);
@@ -159,17 +166,28 @@ export function DisputeMatchModal({ open, onOpenChange, refund, onMatched }: Dis
                 <Card key={`s-${s.tollId}`} className="border-slate-200 shadow-none">
                   <CardContent className="p-2.5 flex items-center justify-between gap-3">
                     <div className="min-w-0 text-xs">
-                      <div className="text-slate-700">
-                        {s.matchType === 'claim' ? 'Underpaid loss' : 'Toll'}:{' '}
-                        <span className="font-semibold text-slate-900">${Math.abs(s.claimAmount ?? s.tollAmount).toFixed(2)}</span>
-                        {' · '}Won back <span className="font-semibold text-emerald-600">${s.uberRefund.toFixed(2)}</span>
+                      {s.matchType === 'claim' ? (
+                        <div className="text-slate-700 flex flex-wrap items-center gap-x-1.5">
+                          <span>Toll <span className="font-semibold text-rose-600">-${Math.abs(s.tollAmount).toFixed(2)}</span></span>
+                          <span className="text-slate-300">·</span>
+                          <span>Refund <span className="font-semibold text-emerald-600">${Math.abs(s.tripRefund ?? 0).toFixed(2)}</span></span>
+                          <span className="text-slate-300">·</span>
+                          <span>Underpaid <span className="font-semibold text-amber-600">-${Math.abs(s.claimAmount ?? 0).toFixed(2)}</span></span>
+                        </div>
+                      ) : (
+                        <div className="text-slate-700">
+                          Toll: <span className="font-semibold text-slate-900">${Math.abs(s.tollAmount).toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="text-slate-700 mt-0.5">
+                        Won back <span className="font-semibold text-emerald-600">${s.uberRefund.toFixed(2)}</span>
                         {' · '}
                         <span className={Math.abs(s.variance) < 0.01 ? 'text-emerald-600' : 'text-amber-600'}>
                           {Math.abs(s.variance) < 0.01 ? 'Exact match' : `$${Math.abs(s.variance).toFixed(2)} off`}
                         </span>
                       </div>
                       <div className="text-[10px] text-slate-500 mt-0.5">
-                        {fmtDate(s.date)}{s.matchType === 'claim' && <> · on ${Math.abs(s.tollAmount).toFixed(2)} toll</>}
+                        {fmtDate(s.date)}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -228,10 +246,14 @@ export function DisputeMatchModal({ open, onOpenChange, refund, onMatched }: Dis
                         <CardContent className="p-2.5 flex items-center justify-between gap-3">
                           <div className="min-w-0 text-xs">
                             <div className="font-medium text-slate-800 truncate">{c.driverName}</div>
-                            <div className="text-[10px] text-slate-500">
-                              Loss ${Math.abs(c.claimAmount || 0).toFixed(2)} · on ${Math.abs(c.tollAmount || 0).toFixed(2)} toll
-                              {c.date && <> · {fmtDate(c.date)}</>}
+                            <div className="flex flex-wrap items-center gap-x-1.5 mt-0.5">
+                              <span>Toll <span className="font-semibold text-rose-600">-${Math.abs(c.tollAmount || 0).toFixed(2)}</span></span>
+                              <span className="text-slate-300">·</span>
+                              <span>Refund <span className="font-semibold text-emerald-600">${Math.abs(c.tripRefund ?? 0).toFixed(2)}</span></span>
+                              <span className="text-slate-300">·</span>
+                              <span>Underpaid <span className="font-semibold text-amber-600">-${Math.abs(c.claimAmount || 0).toFixed(2)}</span></span>
                             </div>
+                            {c.date && <div className="text-[10px] text-slate-500 mt-0.5">{fmtDate(c.date)}</div>}
                           </div>
                           <Button size="sm" className="h-7 px-3 text-xs bg-teal-600 hover:bg-teal-700"
                             onClick={() => link(c.tollId, c.claimId)} disabled={linkingTollId === c.tollId}>
@@ -245,22 +267,37 @@ export function DisputeMatchModal({ open, onOpenChange, refund, onMatched }: Dis
                 {candidates.tolls.length > 0 && (
                   <div className="space-y-1">
                     <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Tolls with no claim yet</div>
-                    {candidates.tolls.map((c) => (
+                    {candidates.tolls.map((c) => {
+                      const hasTripRefund = c.tripRefund != null;
+                      const underpaidBy = hasTripRefund ? Math.abs(c.tollAmount || 0) - Math.abs(c.tripRefund || 0) : null;
+                      return (
                       <Card key={`t-${c.tollId}`} className="border-slate-200 shadow-none">
                         <CardContent className="p-2.5 flex items-center justify-between gap-3">
                           <div className="min-w-0 text-xs">
                             <div className="font-medium text-slate-800 truncate">{c.driverName}</div>
-                            <div className="text-[10px] text-slate-500">
-                              Toll ${Math.abs(c.tollAmount || 0).toFixed(2)}{c.date && <> · {fmtDate(c.date)}</>}
-                            </div>
+                            {hasTripRefund ? (
+                              <div className="flex flex-wrap items-center gap-x-1.5 mt-0.5">
+                                <span>Toll <span className="font-semibold text-rose-600">-${Math.abs(c.tollAmount || 0).toFixed(2)}</span></span>
+                                <span className="text-slate-300">·</span>
+                                <span>Refund <span className="font-semibold text-emerald-600">${Math.abs(c.tripRefund || 0).toFixed(2)}</span></span>
+                                <span className="text-slate-300">·</span>
+                                <span>Underpaid <span className="font-semibold text-amber-600">-${(underpaidBy || 0).toFixed(2)}</span></span>
+                              </div>
+                            ) : (
+                              <div className="text-[10px] text-slate-500 mt-0.5">
+                                Toll <span className="font-semibold text-rose-600">-${Math.abs(c.tollAmount || 0).toFixed(2)}</span> · no trip matched yet
+                              </div>
+                            )}
+                            {c.date && <div className="text-[10px] text-slate-500 mt-0.5">{fmtDate(c.date)}</div>}
                           </div>
                           <Button size="sm" variant="outline" className="h-7 px-3 text-xs"
-                            onClick={() => link(c.tollId, null, true)} disabled={linkingTollId === c.tollId}>
+                            onClick={() => link(c.tollId, null, true, c.suggestedTripId)} disabled={linkingTollId === c.tollId}>
                             {linkingTollId === c.tollId ? <Loader2 className="h-3 w-3 animate-spin" /> : <><LinkIcon className="h-3 w-3 mr-1" /> Link + create claim</>}
                           </Button>
                         </CardContent>
                       </Card>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
