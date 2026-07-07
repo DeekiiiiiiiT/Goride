@@ -107,18 +107,6 @@ export function DisputeMatchModal({ open, onOpenChange, refund, onMatched }: Dis
         from: from || undefined,
         to: to || undefined,
       });
-      // #region agent log
-      for (const t of res.tolls || []) {
-        if (!t.suggestedTripId && !t.tripId) continue;
-        const tollDay = t.date ? fleetTzDateKey(t.date, fleetTz) : null;
-        const tripReqDay = t.tripRequestTime ? fleetTzDateKey(t.tripRequestTime, fleetTz) : null;
-        const tripDropDay = t.tripDropoffTime ? fleetTzDateKey(t.tripDropoffTime, fleetTz) : null;
-        const tollMs = t.date ? new Date(t.date).getTime() : NaN;
-        const dropMs = t.tripDropoffTime ? new Date(t.tripDropoffTime).getTime() : NaN;
-        const gapHours = !isNaN(tollMs) && !isNaN(dropMs) ? Math.round((tollMs - dropMs) / 3600000) : null;
-        fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9637fe'},body:JSON.stringify({sessionId:'9637fe',location:'DisputeMatchModal.tsx:loadCandidates',message:'client cross-day check',hypothesisId:'B,C,D',runId:'post-fix-v3',data:{tollId:t.tollId,suggestedTripId:t.suggestedTripId||t.tripId,tollDate:t.date,tollTime:t.tollTime,tripRequestTime:t.tripRequestTime,tripDropoffTime:t.tripDropoffTime,tripPickup:t.tripPickup,fleetTimezone:fleetTz,tollDay,tripReqDay,tripDropDay,crossDay:tollDay&&tripDropDay?tollDay!==tripDropDay:null,gapHoursAfterDropoff:gapHours},timestamp:Date.now()})}).catch(()=>{});
-      }
-      // #endregion
       setCandidates({ claims: res.claims || [], tolls: res.tolls || [] });
     } catch (err: any) {
       console.error('[DisputeMatch] candidates failed:', err);

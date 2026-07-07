@@ -32,6 +32,13 @@ import { TollAutomationSettings } from "./TollAutomationSettings";
 import { RematchCandidatesQueue } from "./RematchCandidatesQueue";
 import { normalizePlatform } from "../../../utils/normalizePlatform";
 import { ReconciliationPeriod } from "../../../hooks/useTollReconciliationPeriods";
+import { useFleetTimezone } from "../../../utils/timezoneDisplay";
+import {
+  computeReimbursedTotals,
+  computeTollSpendByPlatform,
+  normPlatformBucket,
+  type PlatformBucket,
+} from "../../../utils/tollFinancialOverview";
 
 type PlatformFilter = 'all' | 'Uber' | 'InDrive' | 'Roam';
 const PLATFORM_OPTIONS: PlatformFilter[] = ['all', 'Uber', 'InDrive', 'Roam'];
@@ -88,6 +95,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
   };
 
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>('all');
+  const fleetTz = useFleetTimezone();
 
   const {
     loading: tollsLoading,
@@ -229,14 +237,17 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
 
   // ── Platform scoping (Uber / InDrive / Roam) ─────────────────────────────
   const normPlat = (p?: string | null) => normalizePlatform(p || undefined);
-  const platformOfToll = (tx: FinancialTransaction): string | null => {
+  const platformOfToll = (tx: FinancialTransaction): PlatformBucket => {
     const trip = tripMap.get(tx.tripId || '');
-    if (trip?.platform) return normPlat(trip.platform);
+    if (trip?.platform) return normPlatformBucket(trip.platform);
     if ((tx as any).metadata?.source === 'roam_geofence') return 'Roam';
-    return null;
+    const suggested = suggestions.get(tx.id)?.[0]?.trip?.platform;
+    if (suggested) return normPlatformBucket(suggested);
+    return 'Unlinked';
   };
   const tripInPlatform = (t: TripType) => platformFilter === 'all' || normPlat(t.platform) === platformFilter;
-  const tollInPlatform = (tx: FinancialTransaction) => platformFilter === 'all' || platformOfToll(tx) === platformFilter;
+  const tollInPlatform = (tx: FinancialTransaction) =>
+    platformFilter === 'all' || platformOfToll(tx) === platformFilter;
   const claimInPlatform = (c: any) => platformFilter === 'all' || normPlat(tripMap.get(c.tripId || '')?.platform) === platformFilter;
 
   const pTrips = platformFilter === 'all' ? trips : trips.filter(tripInPlatform);
@@ -391,11 +402,22 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
     .reduce((sum, r) => sum + (r.amount || 0), 0);
   const totalRecovered = recoveredAmount + matchedDisputeRefundAmount;
 
-  const scopedDisputeRefund = (platformFilter === 'all' || platformFilter === 'Uber') ? matchedDisputeRefundAmount : 0;
-  const tollSpend = [...pUnreconciled, ...pReconciled]
-    .reduce((sum, tx) => sum + (tx.amount < 0 ? Math.abs(tx.amount) : 0), 0);
-  const reimbursedByUber =
-    pTrips.reduce((sum, t) => sum + (t.tollCharges || 0), 0) + scopedDisputeRefund;
+  const periodTolls = [...pUnreconciled, ...pReconciled];
+  const { total: tollSpend, byPlatform: tollSpendByPlatform } = computeTollSpendByPlatform(
+    periodTolls,
+    platformOfToll,
+  );
+  const {
+    total: reimbursedByUber,
+    byPlatform: reimbursedByPlatform,
+    disputeRefundAmount: scopedDisputeFromCalc,
+  } = computeReimbursedTotals({
+    trips: pTrips,
+    disputeRefunds: disputeRefunds || [],
+    period: { startDate: period.startDate, endDate: period.endDate },
+    fleetTz,
+    platformFilter: platformFilter === 'all' ? 'all' : platformFilter,
+  });
   const chargedToDrivers = pPeriodClaims
     .filter(c => c.status === 'Resolved' && c.resolutionReason === 'Charge Driver')
     .reduce((sum, c) => sum + Math.abs(c.amount || 0), 0);
@@ -543,9 +565,11 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
       {/* Financial Overview Cards — one balancing story: Spend − Reimbursed − Charged = Net Loss */}
       <TollFinancialOverviewCards
         tollSpend={tollSpend}
+        tollSpendByPlatform={tollSpendByPlatform}
         reimbursedAmount={reimbursedByUber}
+        reimbursedByPlatform={reimbursedByPlatform}
         reimbursedLabelSuffix={platformFilter !== 'all' ? ` · ${platformFilter}` : undefined}
-        scopedDisputeRefund={scopedDisputeRefund}
+        scopedDisputeRefund={scopedDisputeFromCalc}
         chargedToDrivers={chargedToDrivers}
         netTollLoss={netTollLoss}
         needsReviewCount={needsReviewCount}

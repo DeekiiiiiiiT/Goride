@@ -513,6 +513,17 @@ interface MatchResult {
   tripServiceType?: string;
 }
 
+/** Sort toll match candidates: score → time proximity → Uber toll refund pool. */
+function compareTollMatchResults(a: MatchResult, b: MatchResult): number {
+  const scoreA = a.confidenceScore ?? 0;
+  const scoreB = b.confidenceScore ?? 0;
+  if (scoreA !== scoreB) return scoreB - scoreA;
+  if (a.timeDifferenceMinutes !== b.timeDifferenceMinutes) {
+    return a.timeDifferenceMinutes - b.timeDifferenceMinutes;
+  }
+  return (b.tripTollCharges ?? 0) - (a.tripTollCharges ?? 0);
+}
+
 function isAmountMatch(a: number, b: number): boolean {
   return Math.abs(a - b) < VARIANCE_THRESHOLD;
 }
@@ -522,57 +533,20 @@ function getTransactionDateTime(tx: any, timezone: string): Date | null {
     const rawDate = tx.date ? String(tx.date) : "";
     const datePart = rawDate.slice(0, 10);
     let result: Date | null = null;
-    let parsePath = "unknown";
 
     // Prefer wall-clock date + separate time field in fleet TZ (toll imports store these)
     if (/^\d{4}-\d{2}-\d{2}$/.test(datePart) && tx.time) {
-      parsePath = "date_plus_time_fleet_tz";
       const timeNorm = normalizeWallClockTime(String(tx.time));
       result = naiveToUtc(`${datePart}T${timeNorm}`, timezone);
     } else if (rawDate.includes("T")) {
       if (hasTzSuffix(rawDate)) {
-        parsePath = "tz_suffix_direct";
         result = new Date(rawDate);
       } else {
-        parsePath = "naive_iso_fleet_tz";
         result = naiveToUtc(rawDate, timezone);
       }
     } else if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
-      parsePath = "date_only_fleet_tz";
       result = naiveToUtc(`${datePart}T00:00:00`, timezone);
     }
-    // #region agent log
-    if (tx.id) {
-      const altFromTime = tx.time
-        ? naiveToUtc(`${String(tx.date).slice(0, 10)}T${tx.time}`, timezone)
-        : null;
-      fetch("http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9637fe" },
-        body: JSON.stringify({
-          sessionId: "9637fe",
-          location: "toll_controller.tsx:getTransactionDateTime",
-          message: "toll datetime parse",
-          hypothesisId: "A",
-            runId: "post-fix-v3",
-          data: {
-            tollId: tx.id,
-            rawDate: tx.date,
-            rawTime: tx.time ?? null,
-            fleetTimezone: timezone,
-            parsePath,
-            hasTzSuffix: tx.date ? hasTzSuffix(tx.date) : false,
-            parsedIso: result?.toISOString() ?? null,
-            altFromTimeIso: altFromTime?.toISOString() ?? null,
-            altDiffMinutes: result && altFromTime
-              ? Math.round(Math.abs(result.getTime() - altFromTime.getTime()) / 60000)
-              : null,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-    }
-    // #endregion
     return result;
   } catch {
     return null;
@@ -653,47 +627,6 @@ function findTollMatchesServer(
       scoreResult.windowHit === "ENROUTE" ? "ENROUTE_APPROACH" :
       scoreResult.windowHit === "POST_TRIP" ? "POST_TRIP_GAP" : undefined;
 
-    // #region agent log
-    if (
-      scoreResult.matchType === "AMOUNT_VARIANCE" ||
-      scoreResult.matchType === "PERFECT_MATCH"
-    ) {
-      const tollFleetDay = toFleetDateOnly(txDate, timezone);
-      const tripDropFleetDay = toFleetDateOnly(tripTimes.dropoffTime, timezone);
-      const tripReqFleetDay = toFleetDateOnly(tripTimes.requestTime, timezone);
-      fetch("http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9637fe" },
-        body: JSON.stringify({
-          sessionId: "9637fe",
-          location: "toll_controller.tsx:findTollMatchesServer",
-          message: "toll-trip match candidate",
-          hypothesisId: "B,C,E",
-            runId: "post-fix-v3",
-          data: {
-            tollId: transaction.id,
-            tripId: trip.id,
-            matchType: scoreResult.matchType,
-            windowHit: scoreResult.windowHit,
-            timeDiffMinutes: diff,
-            txDateIso: txDate.toISOString(),
-            tripRequestIso: tripTimes.requestTime.toISOString(),
-            tripDropoffIso: tripTimes.dropoffTime.toISOString(),
-            windowActiveStartIso: windows.activeStart.toISOString(),
-            windowActiveEndIso: windows.activeEnd.toISOString(),
-            windowSearchEndIso: windows.searchEnd.toISOString(),
-            tollFleetDay,
-            tripReqFleetDay,
-            tripDropFleetDay,
-            crossDayTollVsDropoff: tollFleetDay !== tripDropFleetDay,
-            candidateCount: candidateTrips.length,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-    }
-    // #endregion
-
     matches.push({
       tripId: trip.id,
       confidence: scoreResult.confidence,
@@ -728,17 +661,7 @@ function findTollMatchesServer(
     });
   }
 
-  // Sort by confidence score descending, then by time difference ascending,
-  // then prefer trips that actually carry an Uber toll refund.
-  matches.sort((a, b) => {
-    const scoreA = a.confidenceScore || 0;
-    const scoreB = b.confidenceScore || 0;
-    if (scoreA !== scoreB) return scoreB - scoreA;
-    if (a.timeDifferenceMinutes !== b.timeDifferenceMinutes) {
-      return a.timeDifferenceMinutes - b.timeDifferenceMinutes;
-    }
-    return (b.tripTollCharges ?? 0) - (a.tripTollCharges ?? 0);
-  });
+  matches.sort(compareTollMatchResults);
 
   // Ambiguity detection: if top 2 matches both have score >= 50
   // and are within 15 points of each other, flag both as ambiguous
@@ -761,15 +684,7 @@ function pickBestValidTollMatch(matches: MatchResult[]): MatchResult | undefined
     (m) => m.matchType === "AMOUNT_VARIANCE" || m.matchType === "PERFECT_MATCH",
   );
   if (valid.length === 0) return undefined;
-  return [...valid].sort((a, b) => {
-    const scoreA = a.confidenceScore ?? 0;
-    const scoreB = b.confidenceScore ?? 0;
-    if (scoreA !== scoreB) return scoreB - scoreA;
-    if (a.timeDifferenceMinutes !== b.timeDifferenceMinutes) {
-      return a.timeDifferenceMinutes - b.timeDifferenceMinutes;
-    }
-    return (b.tripTollCharges ?? 0) - (a.tripTollCharges ?? 0);
-  })[0];
+  return [...valid].sort(compareTollMatchResults)[0];
 }
 
 /**

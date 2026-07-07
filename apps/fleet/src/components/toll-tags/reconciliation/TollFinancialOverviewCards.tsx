@@ -1,9 +1,12 @@
 import { HelpCircle, DollarSign, TrendingUp, Wallet, TrendingDown, AlertTriangle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../ui/tooltip";
+import { platformBreakdownLines, type PlatformAmountBreakdown } from "../../../utils/tollFinancialOverview";
 
 export interface TollFinancialOverviewCardsProps {
   tollSpend: number;
+  tollSpendByPlatform?: PlatformAmountBreakdown;
   reimbursedAmount: number;
+  reimbursedByPlatform?: PlatformAmountBreakdown;
   /** e.g. " · Uber" when a platform filter is active — omitted on the all-time landing page. */
   reimbursedLabelSuffix?: string;
   scopedDisputeRefund: number;
@@ -22,9 +25,27 @@ export interface TollFinancialOverviewCardsProps {
  * same numbers always render identically regardless of which scope is
  * feeding them.
  */
+function PlatformSplit({ breakdown, className }: { breakdown?: PlatformAmountBreakdown; className?: string }) {
+  if (!breakdown) return null;
+  const lines = platformBreakdownLines(breakdown);
+  if (lines.length === 0) return null;
+  return (
+    <div className={`mt-1.5 space-y-0.5 ${className || ''}`}>
+      {lines.map(({ label, amount }) => (
+        <div key={label} className="flex items-center justify-between gap-2 text-[10px] text-slate-500">
+          <span>{label}</span>
+          <span className="font-medium text-slate-700 tabular-nums">${amount.toFixed(2)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function TollFinancialOverviewCards({
   tollSpend,
+  tollSpendByPlatform,
   reimbursedAmount,
+  reimbursedByPlatform,
   reimbursedLabelSuffix,
   scopedDisputeRefund,
   chargedToDrivers,
@@ -54,6 +75,7 @@ export function TollFinancialOverviewCards({
               </div>
               <div className="text-2xl font-bold text-slate-900 mt-1">${tollSpend.toFixed(2)}</div>
               <div className="text-xs text-slate-500 mt-1">Money out</div>
+              <PlatformSplit breakdown={tollSpendByPlatform} />
             </div>
             <DollarSign className="h-5 w-5 text-slate-400" />
           </div>
@@ -85,6 +107,7 @@ export function TollFinancialOverviewCards({
                   </span>
                 )}
               </div>
+              <PlatformSplit breakdown={reimbursedByPlatform} />
             </div>
             <TrendingUp className="h-5 w-5 text-emerald-400" />
           </div>

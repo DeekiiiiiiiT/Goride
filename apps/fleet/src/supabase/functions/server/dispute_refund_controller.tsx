@@ -68,6 +68,23 @@ function fleetTzDay(dateStr: string | null | undefined, tz: string): string {
   }
 }
 
+function mapTripsById(tripIds: string[], tripValues: any[]): Map<string, any> {
+  const map = new Map<string, any>();
+  tripIds.forEach((id, idx) => {
+    const trip = tripValues[idx];
+    if (trip) map.set(id, trip);
+  });
+  return map;
+}
+
+function attachTripDisplayFields(target: any, trip: any): void {
+  target.tripPickup = trip.pickupLocation || null;
+  target.tripDropoff = trip.dropoffLocation || null;
+  target.tripPlatform = trip.platform || null;
+  target.tripRequestTime = trip.requestTime || trip.date || null;
+  target.tripDropoffTime = trip.dropoffTime || null;
+}
+
 // ─── Helper: Load all KV entries by prefix with 1000-row pagination ────
 async function loadAllByPrefix(prefix: string): Promise<any[]> {
   const results: any[] = [];
@@ -765,19 +782,10 @@ app.get(`${BASE}/match-candidates`, async (c) => {
       try {
         const tripKeys = claimTripIds.map((tid) => `trip:${tid}`);
         const tripValues = await kv.mget(tripKeys);
-        const tripById = new Map<string, any>();
-        claimTripIds.forEach((tid, idx) => {
-          if (tripValues[idx]) tripById.set(tid, tripValues[idx]);
-        });
+        const tripById = mapTripsById(claimTripIds, tripValues);
         for (const c of claims) {
           const trip = c.tripId ? tripById.get(c.tripId) : null;
-          if (trip) {
-            c.tripPickup = trip.pickupLocation || null;
-            c.tripDropoff = trip.dropoffLocation || null;
-            c.tripPlatform = trip.platform || null;
-            c.tripRequestTime = trip.requestTime || trip.date || null;
-            c.tripDropoffTime = trip.dropoffTime || null;
-          }
+          if (trip) attachTripDisplayFields(c, trip);
         }
       } catch {
         // Best-effort enrichment — candidates are still usable without it.
@@ -824,50 +832,17 @@ app.get(`${BASE}/match-candidates`, async (c) => {
           date: t.date,
           time: rawToll.time,
         });
-
-        // #region agent log
-        fetch("http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9637fe" },
-          body: JSON.stringify({
-            sessionId: "9637fe",
-            location: "dispute_refund_controller.tsx:match-candidates",
-            message: "validated trip assigned",
-            hypothesisId: "D",
-            runId: "post-fix-v3",
-            data: {
-              tollId: t.tollId,
-              tripId,
-              suggestedTripId: t.suggestedTripId ?? null,
-              tollDate: t.date,
-              tollTime: rawToll?.time ?? null,
-              tripPickup: validMatch?.tripPickup ?? null,
-              tripRequestTime: validMatch?.tripRequestTime ?? null,
-              tripDropoffTime: validMatch?.tripDropoffTime ?? null,
-              fleetTimezone: fleetTz,
-              matchCount: matches.length,
-              bestWindowHit: validMatch?.windowHit ?? null,
-              bestTimeDiffMinutes: validMatch?.timeDifferenceMinutes ?? null,
-            },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
       }
 
       if (resolved.length > 0) {
         const tripIds = [...new Set(resolved.map((r) => r.tripId))];
         const tripKeys = tripIds.map((tid) => `trip:${tid}`);
         const tripValues = await kv.mget(tripKeys);
+        const tripDetailsById = mapTripsById(tripIds, tripValues);
         const tripRefundById = new Map<string, number>();
-        const tripDetailsById = new Map<string, any>();
-        tripIds.forEach((tid, idx) => {
-          const trip = tripValues[idx] as any;
-          if (trip) {
-            tripRefundById.set(tid, Math.abs(trip.tollCharges || 0));
-            tripDetailsById.set(tid, trip);
-          }
-        });
+        for (const [tid, trip] of tripDetailsById) {
+          tripRefundById.set(tid, Math.abs(trip.tollCharges || 0));
+        }
 
         // Hand out each trip's toll-refund pool across the tolls matched in
         // this modal only — do NOT zero the pool just because claims exist
@@ -890,34 +865,7 @@ app.get(`${BASE}/match-candidates`, async (c) => {
             const allocated = Math.max(0, Math.min(remaining, r.cost));
             remaining -= allocated;
             r.toll.tripRefund = allocated;
-            // #region agent log
-            fetch("http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9637fe" },
-              body: JSON.stringify({
-                sessionId: "9637fe",
-                location: "dispute_refund_controller.tsx:tripRefund",
-                message: "refund allocated",
-                hypothesisId: "refund-zero",
-                runId: "post-fix-v3",
-                data: {
-                  tollId: r.toll.tollId,
-                  tripId,
-                  tollCost: r.cost,
-                  tripGrossRefund: tripRefundById.get(tripId) ?? 0,
-                  allocated,
-                },
-                timestamp: Date.now(),
-              }),
-            }).catch(() => {});
-            // #endregion
-            if (tripDetail) {
-              r.toll.tripPickup = tripDetail.pickupLocation || null;
-              r.toll.tripDropoff = tripDetail.dropoffLocation || null;
-              r.toll.tripPlatform = tripDetail.platform || null;
-              r.toll.tripRequestTime = tripDetail.requestTime || tripDetail.date || null;
-              r.toll.tripDropoffTime = tripDetail.dropoffTime || null;
-            }
+            if (tripDetail) attachTripDisplayFields(r.toll, tripDetail);
           }
         }
       }
