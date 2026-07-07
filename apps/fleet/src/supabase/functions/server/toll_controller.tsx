@@ -35,7 +35,6 @@ import {
   hasTzSuffix,
   normalizeWallClockTime,
   resolveFleetInstant,
-  repairTripTimesForMatching,
 } from "./timezone_helper.tsx";
 import {
   parseISO,
@@ -815,12 +814,7 @@ async function loadAllTransactions(): Promise<any[]> {
 }
 
 async function loadAllTrips(): Promise<any[]> {
-  const trips = await loadAllByPrefix("trip:");
-  const fleetTz = await getFleetTimezone();
-  for (const trip of trips) {
-    repairTripTimesForMatching(trip, fleetTz);
-  }
-  return trips;
+  return loadAllByPrefix("trip:");
 }
 
 /**
