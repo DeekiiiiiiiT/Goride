@@ -30,6 +30,8 @@ interface TollDetailOverlayProps {
   onApprove?: () => void;
   onReject?: () => void;
   onFlag?: () => void;
+  /** Deadhead-only: bill this toll to the driver instead of the fleet absorbing it. */
+  onChargeDriver?: () => void;
 }
 
 export function TollDetailOverlay({
@@ -42,6 +44,7 @@ export function TollDetailOverlay({
   onApprove,
   onReject,
   onFlag,
+  onChargeDriver,
 }: TollDetailOverlayProps) {
   if (!transaction) return null;
 
@@ -137,6 +140,20 @@ export function TollDetailOverlay({
           <Button onClick={onReject} className="bg-rose-600 hover:bg-rose-700 flex-1">
             <X className="h-4 w-4 mr-2" /> Reject Claim
           </Button>
+        );
+      }
+      if (match.matchType === 'DEADHEAD_MATCH' && onChargeDriver) {
+        return (
+          <>
+            {onApprove && (
+              <Button onClick={onApprove} className="bg-emerald-600 hover:bg-emerald-700 flex-1">
+                <Check className="h-4 w-4 mr-2" /> Approve Reimbursement
+              </Button>
+            )}
+            <Button onClick={onChargeDriver} variant="outline" className="border-purple-300 text-purple-700 hover:bg-purple-50 flex-1">
+              <User className="h-4 w-4 mr-2" /> Charge Driver
+            </Button>
+          </>
         );
       }
       if (onApprove) {

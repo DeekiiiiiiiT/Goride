@@ -60,12 +60,14 @@ export interface TollBucketPanelProps {
    *  fleet-absorbed cost with no driver charge — this just relabels the
    *  button for clarity in that step, without changing behavior. */
   approveLabel?: string;
+  /** Deadhead-only: bill this toll to the driver instead of the fleet absorbing it. */
+  onChargeDriver?: (tx: FinancialTransaction, match: MatchResult) => void;
 }
 
 export function TollBucketPanel({
   tolls, suggestions, onReconcile, allTrips, onApprove, onReject, onFlag, onManualResolve, onEdit,
   emptyState, listTitle = 'Tolls', listDescription = "Toll provider charges that haven't been linked to a specific trip.",
-  approveLabel = 'Approve',
+  approveLabel = 'Approve', onChargeDriver,
 }: TollBucketPanelProps) {
     const [hiddenSuggestions, setHiddenSuggestions] = useState<Set<string>>(new Set());
     const [selectedTxForManual, setSelectedTxForManual] = useState<FinancialTransaction | null>(null);
@@ -217,6 +219,14 @@ export function TollBucketPanel({
             if (match.matchType === 'PERSONAL_MATCH' && onReject) {
                  return <Button size="sm" className="bg-rose-600 hover:bg-rose-700" onClick={() => onReject(tx)}>Reject</Button>;
             }
+            if (match.matchType === 'DEADHEAD_MATCH' && onChargeDriver) {
+                 return (
+                     <div className="flex items-center justify-end gap-2">
+                         {onApprove && <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => onApprove(tx)}>{approveLabel}</Button>}
+                         <Button size="sm" variant="outline" className="border-purple-300 text-purple-700 hover:bg-purple-50" onClick={() => onChargeDriver(tx, match)}>Charge Driver</Button>
+                     </div>
+                 );
+            }
             if (onApprove) {
                  return <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => onApprove(tx)}>{approveLabel}</Button>;
             }
@@ -324,6 +334,7 @@ export function TollBucketPanel({
                                                     onApprove={onApprove ? () => onApprove(tx) : undefined}
                                                     onReject={onReject ? () => onReject(tx) : undefined}
                                                     onFlag={onFlag ? () => onFlag(tx) : undefined}
+                                                    onChargeDriver={onChargeDriver ? () => onChargeDriver(tx, match) : undefined}
                                                     onClickDetail={() => openDetail(tx, match)}
                                                 />
                                             );
@@ -576,6 +587,10 @@ export function TollBucketPanel({
                 } : undefined}
                 onFlag={detailTx && onFlag ? () => {
                     onFlag(detailTx);
+                    closeDetail();
+                } : undefined}
+                onChargeDriver={detailTx && detailMatch && onChargeDriver ? () => {
+                    onChargeDriver(detailTx, detailMatch);
                     closeDetail();
                 } : undefined}
             />

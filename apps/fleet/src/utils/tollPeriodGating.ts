@@ -15,12 +15,19 @@ export type StepId =
   | 'dispute-refunds'
   | 'unlinked-refunds';
 
+/**
+ * Dispute Refunds comes before Underpaid & Claims: a Dispute Refund is often
+ * Uber's own after-the-fact correction for an underpaid toll, and matching it
+ * can auto-resolve the underlying toll directly (creating the claim as a
+ * side effect) — resolving these first means fewer tolls need a manual
+ * "Flag for Claim" by the time the user reaches that step.
+ */
 export const STEP_ORDER: StepId[] = [
   'needs-review',
   'personal-use',
   'deadhead',
-  'underpaid-claims',
   'dispute-refunds',
+  'underpaid-claims',
   'unlinked-refunds',
 ];
 

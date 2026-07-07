@@ -17,10 +17,12 @@ interface SuggestedMatchCardProps {
   onApprove?: () => void;
   onReject?: () => void;
   onFlag?: () => void;
+  /** Deadhead-only: bill this toll to the driver instead of the fleet absorbing it. */
+  onChargeDriver?: () => void;
   onClickDetail?: () => void;
 }
 
-export function SuggestedMatchCard({ transaction, match, onConfirm, onDismiss, onApprove, onReject, onFlag, onClickDetail }: SuggestedMatchCardProps) {
+export function SuggestedMatchCard({ transaction, match, onConfirm, onDismiss, onApprove, onReject, onFlag, onChargeDriver, onClickDetail }: SuggestedMatchCardProps) {
   const { trip, confidence, reason, timeDifferenceMinutes, matchType, varianceAmount, confidenceScore, vehicleMatch, driverMatch, dataQuality, windowHit, isAmbiguous } = match;
   const isClaim = transaction.paymentMethod === 'Cash' || !!transaction.receiptUrl;
   const fleetTz = useFleetTimezone();
@@ -76,6 +78,18 @@ export function SuggestedMatchCard({ transaction, match, onConfirm, onDismiss, o
                   </Button>
               );
           }
+          if (matchType === 'DEADHEAD_MATCH' && onChargeDriver) {
+              return (
+                  <>
+                      <Button size="sm" onClick={onApprove} className="bg-emerald-600 hover:bg-emerald-700 w-full lg:w-auto">
+                          <Check className="h-4 w-4 mr-2" /> Approve Reimbursement
+                      </Button>
+                      <Button size="sm" onClick={onChargeDriver} variant="outline" className="border-purple-300 text-purple-700 hover:bg-purple-50 w-full lg:w-auto">
+                          <User className="h-4 w-4 mr-2" /> Charge Driver
+                      </Button>
+                  </>
+              );
+          }
           // Default / Perfect Match -> Approve
           return (
               <Button size="sm" onClick={onApprove} className="bg-emerald-600 hover:bg-emerald-700 w-full lg:w-auto">
@@ -92,11 +106,18 @@ export function SuggestedMatchCard({ transaction, match, onConfirm, onDismiss, o
       if (matchType === 'PERSONAL_MATCH') label = 'Mark Personal';
       else if (matchType === 'DEADHEAD_MATCH') label = 'Confirm Deadhead';
       else if (matchType === 'AMOUNT_VARIANCE') label = 'Confirm & Flag';
-      
+
       return (
-          <Button size="sm" onClick={onConfirm} className="bg-emerald-600 hover:bg-emerald-700 w-full lg:w-auto">
-              <Check className="h-4 w-4 mr-2" /> {label}
-          </Button>
+          <>
+              <Button size="sm" onClick={onConfirm} className="bg-emerald-600 hover:bg-emerald-700 w-full lg:w-auto">
+                  <Check className="h-4 w-4 mr-2" /> {label}
+              </Button>
+              {matchType === 'DEADHEAD_MATCH' && onChargeDriver && (
+                  <Button size="sm" onClick={onChargeDriver} variant="outline" className="border-purple-300 text-purple-700 hover:bg-purple-50 w-full lg:w-auto">
+                      <User className="h-4 w-4 mr-2" /> Charge Driver
+                  </Button>
+              )}
+          </>
       );
   };
 

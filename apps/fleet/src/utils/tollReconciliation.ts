@@ -265,3 +265,38 @@ export function calculateTollFinancials(
         status
     };
 }
+
+/**
+ * A trip's `tollCharges` is ONE refund amount, but multiple distinct tolls
+ * (e.g. two toll plazas on the same route) can each independently link to
+ * that same trip. `calculateTollFinancials` credits `trip.tollCharges` in
+ * full to whichever toll it's called with — so calling it once per toll
+ * without accounting for siblings double- (or triple-) counts the same
+ * refund. Policy: only the chronologically FIRST toll linked to a given
+ * trip is eligible for that trip's refund; every other toll sharing the
+ * trip should be passed a `trip` with `tollCharges` zeroed out (a real,
+ * unreimbursed loss for that charge, since the trip's one refund was
+ * already claimed by the earlier toll). Mirrors the same policy applied to
+ * suggestions server-side (toll_controller.tsx's `/unreconciled` handler).
+ */
+export function computeEligibleTollIdsForTripRefund(
+    tolls: Array<Pick<FinancialTransaction, 'id' | 'tripId' | 'date' | 'time'>>,
+): Set<string> {
+    const byTrip = new Map<string, typeof tolls>();
+    for (const t of tolls) {
+        if (!t.tripId) continue;
+        const list = byTrip.get(t.tripId) || [];
+        list.push(t);
+        byTrip.set(t.tripId, list);
+    }
+    const eligible = new Set<string>();
+    for (const list of byTrip.values()) {
+        const sorted = [...list].sort((a, b) => {
+            const ta = new Date(`${a.date}T${a.time || '00:00:00'}`).getTime();
+            const tb = new Date(`${b.date}T${b.time || '00:00:00'}`).getTime();
+            return ta - tb;
+        });
+        eligible.add(sorted[0].id);
+    }
+    return eligible;
+}

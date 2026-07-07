@@ -17,8 +17,8 @@ const STEP_ORDER: StepId[] = [
   'needs-review',
   'personal-use',
   'deadhead',
-  'underpaid-claims',
   'dispute-refunds',
+  'underpaid-claims',
   'unlinked-refunds',
 ];
 

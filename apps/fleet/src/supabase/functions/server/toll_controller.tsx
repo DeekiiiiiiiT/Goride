@@ -1432,6 +1432,42 @@ app.get(`${BASE}/unreconciled`, async (c) => {
       }
     }
 
+    // ── Shared-trip-refund correction ────────────────────────────────────
+    // A trip's `tollCharges` is ONE refund amount, but multiple distinct
+    // tolls (e.g. two toll plazas on the same route) can each independently
+    // match to that same trip. Crediting the full trip refund to every one
+    // of them double-counts the same money (each shows as "profit"/fully
+    // reimbursed off the SAME dollars). Policy: only the chronologically
+    // FIRST toll for a given trip keeps its suggested refund; every other
+    // toll sharing that trip is corrected to reflect $0 credited — a real,
+    // unreimbursed loss, since the trip's refund was already claimed by the
+    // earlier toll.
+    const tripGroups = new Map<string, { tx: any; matches: MatchResult[] }[]>();
+    for (const tx of page) {
+      const top = suggestionsMap[tx.id]?.[0];
+      if (!top?.tripId || (top.matchType !== "PERFECT_MATCH" && top.matchType !== "AMOUNT_VARIANCE")) continue;
+      const list = tripGroups.get(top.tripId) || [];
+      list.push({ tx, matches: suggestionsMap[tx.id] });
+      tripGroups.set(top.tripId, list);
+    }
+    for (const group of tripGroups.values()) {
+      if (group.length < 2) continue;
+      group.sort((a, b) => {
+        const da = getTransactionDateTime(a.tx, timezone)?.getTime() ?? 0;
+        const db = getTransactionDateTime(b.tx, timezone)?.getTime() ?? 0;
+        return da - db;
+      });
+      for (let i = 1; i < group.length; i++) {
+        const { tx, matches } = group[i];
+        const top = matches[0];
+        const txAmountAbs = Math.abs(Number(tx.amount) || 0);
+        top.matchType = "AMOUNT_VARIANCE";
+        top.varianceAmount = -txAmountAbs;
+        top.tripTollCharges = 0;
+        top.reason = `This trip's toll refund was already credited to an earlier toll on the same trip — this charge is unreimbursed (Diff: -${txAmountAbs.toFixed(2)})`;
+      }
+    }
+
     // MOI-6: shadow-diff verification. Response below is UNCHANGED — this
     // only logs a mismatch between the live-computed suggestion (above) and
     // whatever match-on-ingest already persisted onto the row (MOI-3/MOI-4b),

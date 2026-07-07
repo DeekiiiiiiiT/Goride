@@ -19,7 +19,7 @@ import { Button } from "../../ui/button";
 import { runScenarioTest } from "../../../utils/testScenario";
 import { UnifiedTollActivityTable } from "./UnifiedTollActivityTable";
 import { FinancialTransaction, Claim } from "../../../types/data";
-import { MatchResult, calculateTollFinancials } from "../../../utils/tollReconciliation";
+import { MatchResult, calculateTollFinancials, computeEligibleTollIdsForTripRefund } from "../../../utils/tollReconciliation";
 import { bucketForBestMatch, bucketForWorkflowStage, TollBucket, TollWorkflowStage } from "../../../utils/tollBucket";
 import { StepId, StepCounts, computeStepCounts } from "../../../utils/tollPeriodGating";
 import { getClaimWeekDate } from "../../../utils/tollWeekPeriod";
@@ -36,8 +36,13 @@ import { ReconciliationPeriod } from "../../../hooks/useTollReconciliationPeriod
 type PlatformFilter = 'all' | 'Uber' | 'InDrive' | 'Roam';
 const PLATFORM_OPTIONS: PlatformFilter[] = ['all', 'Uber', 'InDrive', 'Roam'];
 
+// Dispute Refunds before Underpaid & Claims: a Dispute Refund often IS the
+// fix for an underpaid toll (Uber's own after-the-fact correction), and
+// matching one can auto-resolve the underlying toll directly — so resolving
+// these first clears tolls out of Underpaid & Claims before the user has to
+// manually flag them.
 const STEP_ORDER: StepId[] = [
-  'needs-review', 'personal-use', 'deadhead', 'underpaid-claims', 'dispute-refunds', 'unlinked-refunds',
+  'needs-review', 'personal-use', 'deadhead', 'dispute-refunds', 'underpaid-claims', 'unlinked-refunds',
 ];
 
 const STEP_LABELS: Record<StepId, string> = {
@@ -354,10 +359,16 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
   let reconciledLiability = 0;
   let recoveredAmount = 0;
 
+  // Only the chronologically-first toll linked to a given trip is credited
+  // with that trip's refund — prevents two tolls sharing one trip (e.g. two
+  // toll plazas on the same route) from each independently double-counting
+  // the same trip.tollCharges amount.
+  const tollRefundEligibleIds = computeEligibleTollIdsForTripRefund(reconciledTolls);
   reconciledTolls.forEach(tx => {
       const trip = tripMap.get(tx.tripId || '');
       const claim = claims.find(c => c.transactionId === tx.id);
-      const financials = calculateTollFinancials(tx, trip, claim);
+      const effectiveTrip = trip && !tollRefundEligibleIds.has(tx.id) ? { ...trip, tollCharges: 0 } : trip;
+      const financials = calculateTollFinancials(tx, effectiveTrip, claim);
       recoveredAmount += financials.totalRecovered;
       reconciledLiability += financials.netLoss;
   });
@@ -425,6 +436,40 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
       } else {
           await reconcile(tx, trip);
           toast.success("Transaction Linked Successfully");
+      }
+  };
+
+  /**
+   * Deadhead-only: bill an enroute-to-pickup toll to the driver instead of
+   * the fleet absorbing it (the step's default via handleApprove). Same
+   * shape as handleSmartReconcile's PERSONAL_MATCH branch — reconcile the
+   * toll to its trip, then a resolved "Charge Driver" claim.
+   */
+  const handleChargeDriverForDeadhead = async (tx: FinancialTransaction, match: MatchResult) => {
+      try {
+          await reconcile(tx, match.trip);
+          const tollCost = Math.abs(tx.amount);
+          await createClaim({
+              transactionId: tx.id,
+              driverId: match.trip.driverId || tx.driverId || 'unknown',
+              amount: tollCost,
+              expectedAmount: tollCost,
+              paidAmount: 0,
+              status: 'Resolved',
+              type: 'Toll_Refund',
+              resolutionReason: 'Charge Driver',
+              subject: 'Deadhead Toll - Charged to Driver',
+              message: `Enroute-to-pickup toll charged to driver for trip ${match.trip.id}.`,
+              tripId: match.trip.id,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              date: tx.date
+          });
+          toast.success("Deadhead toll charged to driver");
+          refreshClaims();
+      } catch (e) {
+          console.error(e);
+          toast.error("Failed to charge driver for deadhead toll");
       }
   };
 
@@ -568,10 +613,11 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               onFlag={handleFlag}
               onManualResolve={handleManualResolve}
               onEdit={handleEditToll}
+              onChargeDriver={handleChargeDriverForDeadhead}
               approveLabel="Acknowledge (Fleet Cost)"
               emptyState={{ icon: Route, title: "No deadhead tolls this period", description: "No unreimbursed business driving tolls detected." }}
               listTitle="Deadhead"
-              listDescription="Unreimbursed business driving (en route to pickup) — a fleet cost, no driver liability. Link/Acknowledge closes these out."
+              listDescription="Unreimbursed business driving (en route to pickup) — normally a fleet cost, but chargeable to the driver on a case-by-case basis."
             />
           )}
           {activeStepId === 'underpaid-claims' && (
