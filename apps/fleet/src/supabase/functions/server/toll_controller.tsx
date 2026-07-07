@@ -139,6 +139,18 @@ interface TripTimes {
   isValid: boolean;
 }
 
+/** Toll must share a fleet calendar day with trip pickup or dropoff for ON_TRIP links. */
+function tollSharesFleetDayWithTrip(
+  txDate: Date,
+  tripTimes: TripTimes,
+  timezone: string,
+): boolean {
+  const tollDay = toFleetDateOnly(txDate, timezone);
+  const pickupDay = toFleetDateOnly(tripTimes.pickupTime, timezone);
+  const dropDay = toFleetDateOnly(tripTimes.dropoffTime, timezone);
+  return tollDay === pickupDay || tollDay === dropDay;
+}
+
 interface TripWindows {
   activeStart: Date;
   activeEnd: Date;
@@ -542,7 +554,7 @@ function getTransactionDateTime(tx: any, timezone: string): Date | null {
           location: "toll_controller.tsx:getTransactionDateTime",
           message: "toll datetime parse",
           hypothesisId: "A",
-          runId: "post-fix",
+            runId: "post-fix-v3",
           data: {
             tollId: tx.id,
             rawDate: tx.date,
@@ -614,6 +626,14 @@ function findTollMatchesServer(
     // null = toll fell outside all windows, skip
     if (!scoreResult) continue;
 
+    // Reject cross-calendar-day ON_TRIP links (e.g. Jun 30 toll → Jun 29 trip).
+    if (
+      scoreResult.windowHit === "ON_TRIP" &&
+      !tollSharesFleetDayWithTrip(txDate, tripTimes, timezone)
+    ) {
+      continue;
+    }
+
     // Build reason string
     const reason = buildReasonString({
       windowHit: scoreResult.windowHit,
@@ -649,7 +669,7 @@ function findTollMatchesServer(
           location: "toll_controller.tsx:findTollMatchesServer",
           message: "toll-trip match candidate",
           hypothesisId: "B,C,E",
-          runId: "post-fix",
+            runId: "post-fix-v3",
           data: {
             tollId: transaction.id,
             tripId: trip.id,
@@ -708,12 +728,16 @@ function findTollMatchesServer(
     });
   }
 
-  // Sort by confidence score descending, then by time difference ascending
+  // Sort by confidence score descending, then by time difference ascending,
+  // then prefer trips that actually carry an Uber toll refund.
   matches.sort((a, b) => {
     const scoreA = a.confidenceScore || 0;
     const scoreB = b.confidenceScore || 0;
     if (scoreA !== scoreB) return scoreB - scoreA;
-    return a.timeDifferenceMinutes - b.timeDifferenceMinutes;
+    if (a.timeDifferenceMinutes !== b.timeDifferenceMinutes) {
+      return a.timeDifferenceMinutes - b.timeDifferenceMinutes;
+    }
+    return (b.tripTollCharges ?? 0) - (a.tripTollCharges ?? 0);
   });
 
   // Ambiguity detection: if top 2 matches both have score >= 50
@@ -729,6 +753,23 @@ function findTollMatchesServer(
 
   // Cap at top 5 matches to prevent UI overload
   return matches.slice(0, 5);
+}
+
+/** Best ON_TRIP match for dispute / underpaid linking (time + refund pool). */
+function pickBestValidTollMatch(matches: MatchResult[]): MatchResult | undefined {
+  const valid = matches.filter(
+    (m) => m.matchType === "AMOUNT_VARIANCE" || m.matchType === "PERFECT_MATCH",
+  );
+  if (valid.length === 0) return undefined;
+  return [...valid].sort((a, b) => {
+    const scoreA = a.confidenceScore ?? 0;
+    const scoreB = b.confidenceScore ?? 0;
+    if (scoreA !== scoreB) return scoreB - scoreA;
+    if (a.timeDifferenceMinutes !== b.timeDifferenceMinutes) {
+      return a.timeDifferenceMinutes - b.timeDifferenceMinutes;
+    }
+    return (b.tripTollCharges ?? 0) - (a.tripTollCharges ?? 0);
+  })[0];
 }
 
 /**
@@ -5941,5 +5982,5 @@ export { recomputeAndPersistWorkflowStage };
 export { loadAllByPrefix, loadDisputeRefundRecords, filterByDriver };
 
 // ── Exported helpers for dispute-refund match candidates ───────────────────
-export { findTollMatchesServer, reconcileTollForDisputeMatch };
+export { findTollMatchesServer, pickBestValidTollMatch, reconcileTollForDisputeMatch };
 export type { TollWorkflowStage };

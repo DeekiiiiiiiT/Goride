@@ -58,13 +58,16 @@ export const mset = async (keys: string[], values: any[]): Promise<void> => {
 };
 
 // Gets multiple key-value pairs from the database.
+// Results are returned in the same order as `keys` (Postgres IN does not guarantee order).
 export const mget = async (keys: string[]): Promise<any[]> => {
+  if (keys.length === 0) return [];
   const supabase = client()
-  const { data, error } = await supabase.from("kv_store_37f42386").select("value").in("key", keys);
+  const { data, error } = await supabase.from("kv_store_37f42386").select("key, value").in("key", keys);
   if (error) {
     throw new Error(error.message);
   }
-  return data?.map((d) => d.value) ?? [];
+  const byKey = new Map((data ?? []).map((row) => [row.key, row.value]));
+  return keys.map((k) => byKey.get(k) ?? null);
 };
 
 // Deletes multiple key-value pairs from the database.

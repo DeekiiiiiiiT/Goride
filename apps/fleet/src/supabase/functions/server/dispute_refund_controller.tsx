@@ -19,7 +19,7 @@
 import { Hono } from "npm:hono";
 import * as kv from "./kv_store.tsx";
 import { isTollCategory } from "./toll_category_flags.ts";
-import { getFleetTimezone, hasTzSuffix, repairTripTimesForMatching } from "./timezone_helper.tsx";
+import { getFleetTimezone, hasTzSuffix } from "./timezone_helper.tsx";
 import { upsertClaim, deleteClaim } from "./claim_service.ts";
 import {
   applyRefundResolution,
@@ -27,6 +27,7 @@ import {
   loadAllTollLedgerWithTrips,
   getRefundAutomationSettings,
   findTollMatchesServer,
+  pickBestValidTollMatch,
   reconcileTollForDisputeMatch,
 } from "./toll_controller.tsx";
 
@@ -799,9 +800,7 @@ app.get(`${BASE}/match-candidates`, async (c) => {
         if (!rawToll) continue;
 
         const matches = findTollMatchesServer(rawToll, trips, fleetTz);
-        const validMatch = matches.find(
-          (m: any) => m.matchType === "AMOUNT_VARIANCE" || m.matchType === "PERFECT_MATCH",
-        );
+        const validMatch = pickBestValidTollMatch(matches);
 
         let tripId: string | null = null;
         if (validMatch) {
@@ -835,13 +834,14 @@ app.get(`${BASE}/match-candidates`, async (c) => {
             location: "dispute_refund_controller.tsx:match-candidates",
             message: "validated trip assigned",
             hypothesisId: "D",
-            runId: "post-fix",
+            runId: "post-fix-v3",
             data: {
               tollId: t.tollId,
               tripId,
               suggestedTripId: t.suggestedTripId ?? null,
               tollDate: t.date,
               tollTime: rawToll?.time ?? null,
+              tripPickup: validMatch?.tripPickup ?? null,
               tripRequestTime: validMatch?.tripRequestTime ?? null,
               tripDropoffTime: validMatch?.tripDropoffTime ?? null,
               fleetTimezone: fleetTz,
@@ -864,7 +864,6 @@ app.get(`${BASE}/match-candidates`, async (c) => {
         tripIds.forEach((tid, idx) => {
           const trip = tripValues[idx] as any;
           if (trip) {
-            repairTripTimesForMatching(trip, fleetTz);
             tripRefundById.set(tid, Math.abs(trip.tollCharges || 0));
             tripDetailsById.set(tid, trip);
           }
@@ -900,7 +899,7 @@ app.get(`${BASE}/match-candidates`, async (c) => {
                 location: "dispute_refund_controller.tsx:tripRefund",
                 message: "refund allocated",
                 hypothesisId: "refund-zero",
-                runId: "post-fix-v2",
+                runId: "post-fix-v3",
                 data: {
                   tollId: r.toll.tollId,
                   tripId,

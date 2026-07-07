@@ -1405,7 +1405,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                                  try {
                                      const d = parseDateString(String(row[k]), isMMDD);
                                      if (d && !isNaN(d.getTime())) {
-                                         current.date = d.toISOString();
+                                         current.date = localComponentsToFleetTzIso(d, fleetTimezone);
                                          break;
                                      }
                                  } catch(e) {}
@@ -1640,7 +1640,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                                  try {
                                      const d = parseDateString(String(val), isMMDD);
                                      if (d && !isNaN(d.getTime())) {
-                                         current.date = d.toISOString();
+                                         current.date = localComponentsToFleetTzIso(d, fleetTimezone);
                                          break;
                                      }
                                  } catch(e) {}
