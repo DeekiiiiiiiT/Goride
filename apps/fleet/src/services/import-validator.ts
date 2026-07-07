@@ -21,7 +21,6 @@ export function hasTzSuffix(s: string): boolean {
  * DST boundary, so we re-check the offset at the corrected instant.
  */
 export function naiveToUtcBrowser(naiveStr: string, timezone: string): string {
-    // Parse components: "2026-02-27T14:30:00" or "2026-02-27 14:30:00"
     const cleaned = naiveStr.replace(' ', 'T');
     const parts = cleaned.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?)?/);
     if (!parts) throw new Error(`Cannot parse naive datetime: "${naiveStr}"`);
@@ -70,6 +69,52 @@ export function naiveToUtcBrowser(naiveStr: string, timezone: string): string {
         return new Date(guess.getTime() - off2 * 60000).toISOString();
     }
     return corrected.toISOString();
+}
+
+function fleetLocalHourBrowser(instant: Date, timezone: string): number {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        hour: 'numeric',
+        hour12: false,
+    }).formatToParts(instant);
+    return Number(parts.find((p) => p.type === 'hour')?.value ?? 0);
+}
+
+function toFleetCalendarDayBrowser(instant: Date, timezone: string): string {
+    if (isNaN(instant.getTime())) return '';
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: timezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).formatToParts(instant);
+    const y = parts.find((p) => p.type === 'year')?.value;
+    const m = parts.find((p) => p.type === 'month')?.value;
+    const d = parts.find((p) => p.type === 'day')?.value;
+    return y && m && d ? `${y}-${m}-${d}` : '';
+}
+
+/** Browser mirror of server resolveFleetInstant — auto-fixes legacy stored times. */
+export function resolveFleetInstantBrowser(stored: string, timezone: string): Date {
+    if (!stored) return new Date(NaN);
+    if (!hasTzSuffix(stored)) return new Date(naiveToUtcBrowser(stored, timezone));
+    const direct = new Date(stored);
+    if (isNaN(direct.getTime())) return direct;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const naive =
+        `${direct.getUTCFullYear()}-${pad(direct.getUTCMonth() + 1)}-${pad(direct.getUTCDate())}T` +
+        `${pad(direct.getUTCHours())}:${pad(direct.getUTCMinutes())}:${pad(direct.getUTCSeconds())}`;
+    const reinterpreted = new Date(naiveToUtcBrowser(naive, timezone));
+    if (direct.getTime() === reinterpreted.getTime()) return direct;
+    const utcYmd = stored.slice(0, 10);
+    const directYmd = toFleetCalendarDayBrowser(direct, timezone);
+    const reinterpretYmd = toFleetCalendarDayBrowser(reinterpreted, timezone);
+    if (reinterpretYmd === utcYmd && directYmd !== utcYmd) return reinterpreted;
+    const utcH = direct.getUTCHours();
+    const reH = fleetLocalHourBrowser(reinterpreted, timezone);
+    const diH = fleetLocalHourBrowser(direct, timezone);
+    if (Math.abs(utcH - reH) <= 1 && Math.abs(utcH - diH) > 1 && diH <= 7) return reinterpreted;
+    return direct;
 }
 
 // --- Types ---

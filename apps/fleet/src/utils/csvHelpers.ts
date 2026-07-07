@@ -1393,7 +1393,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                     if (row[schema.date]) {
                          try { 
                              const d = parseDateString(String(row[schema.date]), isMMDD);
-                             if (d && !isNaN(d.getTime())) current.date = d.toISOString();
+                             if (d) current.date = localComponentsToFleetTzIso(d, fleetTimezone);
                          } catch(e) { }
                     }
 
@@ -1488,6 +1488,11 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                             const d = parseDateString(String(dropVal), isMMDD);
                             if (d) current.dropoffTime = localComponentsToFleetTzIso(d, fleetTimezone);
                         } catch(e) {}
+                    }
+
+                    // Mark trips imported with fleet-TZ parsing so auto-repair skips them.
+                    if (current.requestTime || current.dropoffTime) {
+                        current.timesSource = 'fleetTzV2';
                     }
 
                     // Phase 4: Per-Trip Analytics Logic

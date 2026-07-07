@@ -19,7 +19,7 @@
 import { Hono } from "npm:hono";
 import * as kv from "./kv_store.tsx";
 import { isTollCategory } from "./toll_category_flags.ts";
-import { getFleetTimezone, hasTzSuffix } from "./timezone_helper.tsx";
+import { getFleetTimezone, hasTzSuffix, repairTripTimesForMatching } from "./timezone_helper.tsx";
 import { upsertClaim, deleteClaim } from "./claim_service.ts";
 import {
   applyRefundResolution,
@@ -864,6 +864,7 @@ app.get(`${BASE}/match-candidates`, async (c) => {
         tripIds.forEach((tid, idx) => {
           const trip = tripValues[idx] as any;
           if (trip) {
+            repairTripTimesForMatching(trip, fleetTz);
             tripRefundById.set(tid, Math.abs(trip.tollCharges || 0));
             tripDetailsById.set(tid, trip);
           }

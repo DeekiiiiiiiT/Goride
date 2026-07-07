@@ -34,6 +34,8 @@ import {
   naiveToUtc,
   hasTzSuffix,
   normalizeWallClockTime,
+  resolveFleetInstant,
+  repairTripTimesForMatching,
 } from "./timezone_helper.tsx";
 import {
   parseISO,
@@ -147,16 +149,16 @@ interface TripWindows {
   searchEnd: Date;
 }
 
-function calculateTripTimes(trip: any): TripTimes {
+function calculateTripTimes(trip: any, timezone: string): TripTimes {
   const dropoffStr = trip.dropoffTime || trip.date;
-  const dropoffTime = parseISO(dropoffStr);
+  const dropoffTime = resolveFleetInstant(String(dropoffStr || ""), timezone);
 
   const requestStr = trip.requestTime || trip.date;
-  const requestTime = parseISO(requestStr);
+  const requestTime = resolveFleetInstant(String(requestStr || ""), timezone);
 
   let pickupTime: Date;
   if (trip.startTime) {
-    pickupTime = parseISO(trip.startTime);
+    pickupTime = resolveFleetInstant(String(trip.startTime), timezone);
   } else if (trip.duration) {
     pickupTime = subMinutes(dropoffTime, trip.duration);
   } else {
@@ -196,8 +198,8 @@ type DataQuality = "PRECISE" | "TIMED" | "DATE_ONLY";
  * TIMED    = Has start/end times but request = pickup (e.g., manual InDrive/Roam entry)
  * DATE_ONLY = Only has a date, no meaningful time-of-day (e.g., generic CSV import)
  */
-function assessDataQuality(trip: any): DataQuality {
-  const tripTimes = calculateTripTimes(trip);
+function assessDataQuality(trip: any, timezone: string): DataQuality {
+  const tripTimes = calculateTripTimes(trip, timezone);
   if (!tripTimes.isValid) return "DATE_ONLY";
 
   // Check if request and pickup times are meaningfully different (> 1 minute apart)
@@ -580,11 +582,11 @@ function findTollMatchesServer(
   const candidateTrips = sameDayPreFilter(txDate, trips);
 
   for (const trip of candidateTrips) {
-    const tripTimes = calculateTripTimes(trip);
+    const tripTimes = calculateTripTimes(trip, timezone);
     if (!tripTimes.isValid) continue;
 
     const windows = getTripWindows(tripTimes);
-    const dataQuality = assessDataQuality(trip);
+    const dataQuality = assessDataQuality(trip, timezone);
 
     // Calculate time difference for sorting
     let diff = 0;
@@ -813,7 +815,12 @@ async function loadAllTransactions(): Promise<any[]> {
 }
 
 async function loadAllTrips(): Promise<any[]> {
-  return loadAllByPrefix("trip:");
+  const trips = await loadAllByPrefix("trip:");
+  const fleetTz = await getFleetTimezone();
+  for (const trip of trips) {
+    repairTripTimesForMatching(trip, fleetTz);
+  }
+  return trips;
 }
 
 /**

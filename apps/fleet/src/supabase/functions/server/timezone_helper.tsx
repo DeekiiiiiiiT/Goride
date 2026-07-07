@@ -75,18 +75,102 @@ export function hasTzSuffix(s: string): boolean {
  * Legacy imports stored CSV wall-clock components via browser `toISOString()`,
  * baking the importing browser's offset into a Z-suffixed UTC string. Recover
  * the original Y-M-D H:M:S digits and reinterpret them in the fleet timezone.
- * Idempotent when the stored instant is already correct (e.g. Jamaica browser).
  */
-export function parseFleetLocalInstant(stored: string, timezone: string): Date {
-  if (!stored) return new Date(NaN);
-  if (!hasTzSuffix(stored)) return naiveToUtc(stored, timezone);
-  const d = new Date(stored);
-  if (isNaN(d.getTime())) return d;
+function reinterpretUtcDigitsAsFleetLocal(d: Date, timezone: string): Date {
   const pad = (n: number) => String(n).padStart(2, "0");
   const naive =
     `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T` +
     `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
   return naiveToUtc(naive, timezone);
+}
+
+/** yyyy-MM-dd calendar day for an instant in the fleet timezone. */
+export function toFleetCalendarDay(instant: Date, timezone: string): string {
+  if (isNaN(instant.getTime())) return "";
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(instant);
+    const y = parts.find((p) => p.type === "year")?.value;
+    const m = parts.find((p) => p.type === "month")?.value;
+    const d = parts.find((p) => p.type === "day")?.value;
+    return y && m && d ? `${y}-${m}-${d}` : "";
+  } catch {
+    return "";
+  }
+}
+
+function fleetLocalHour(instant: Date, timezone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hour: "numeric",
+    hour12: false,
+  }).formatToParts(instant);
+  return Number(parts.find((p) => p.type === "hour")?.value ?? 0);
+}
+
+/**
+ * Resolve a stored timestamp for matching/display without re-importing.
+ * - Already-fleetTz imports (v2): parse directly.
+ * - Jamaica-browser legacy: direct parseISO is correct.
+ * - UTC-browser legacy: UTC digit clock was local wall time — reinterpret.
+ */
+export function resolveFleetInstant(stored: string, timezone: string): Date {
+  if (!stored) return new Date(NaN);
+  if (!hasTzSuffix(stored)) return naiveToUtc(stored, timezone);
+
+  const direct = new Date(stored);
+  if (isNaN(direct.getTime())) return direct;
+
+  const reinterpreted = reinterpretUtcDigitsAsFleetLocal(direct, timezone);
+  if (direct.getTime() === reinterpreted.getTime()) return direct;
+
+  const utcYmd = stored.slice(0, 10);
+  const directYmd = toFleetCalendarDay(direct, timezone);
+  const reinterpretYmd = toFleetCalendarDay(reinterpreted, timezone);
+
+  // Cross-midnight UTC-browser import: fleet day from direct ≠ UTC digit day.
+  if (reinterpretYmd === utcYmd && directYmd !== utcYmd) {
+    return reinterpreted;
+  }
+
+  // Same day but shifted hours: e.g. 11:39 stored as UTC → displays 6:39 AM fleet.
+  const utcH = direct.getUTCHours();
+  const reH = fleetLocalHour(reinterpreted, timezone);
+  const diH = fleetLocalHour(direct, timezone);
+  const utcMatchesRe = Math.abs(utcH - reH) <= 1;
+  const utcMatchesDi = Math.abs(utcH - diH) <= 1;
+  if (utcMatchesRe && !utcMatchesDi && diH <= 7) {
+    return reinterpreted;
+  }
+
+  return direct;
+}
+
+/** In-memory repair for legacy trip rows — safe to call on every load. */
+export function repairTripTimesForMatching(trip: any, timezone: string): void {
+  if (!trip || trip.timesSource === "fleetTzV2") return;
+
+  const fields = ["requestTime", "dropoffTime", "startTime"] as const;
+  for (const key of fields) {
+    const raw = trip[key];
+    if (!raw || typeof raw !== "string") continue;
+    const fixed = resolveFleetInstant(raw, timezone);
+    if (!isNaN(fixed.getTime())) trip[key] = fixed.toISOString();
+  }
+
+  if (trip.date && typeof trip.date === "string" && hasTzSuffix(trip.date)) {
+    const fixed = resolveFleetInstant(trip.date, timezone);
+    if (!isNaN(fixed.getTime())) trip.date = fixed.toISOString();
+  }
+}
+
+/** @deprecated Use resolveFleetInstant */
+export function parseFleetLocalInstant(stored: string, timezone: string): Date {
+  return resolveFleetInstant(stored, timezone);
 }
 
 /** Normalize "3:16:00 PM" / "15:16:00" to HH:MM:SS for naiveToUtc. */

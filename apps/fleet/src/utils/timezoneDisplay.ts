@@ -10,6 +10,7 @@
 
 import { useState, useEffect } from 'react';
 import { fetchFleetTimezone } from '../services/api';
+import { hasTzSuffix, resolveFleetInstantBrowser } from '../services/import-validator';
 
 // ── formatInFleetTz ──────────────────────────────────────────────────────────
 
@@ -37,7 +38,9 @@ export function formatInFleetTz(
   options?: Intl.DateTimeFormatOptions,
 ): string {
   try {
-    const date = typeof utcDateStr === 'string' ? new Date(utcDateStr) : utcDateStr;
+    const date = typeof utcDateStr === 'string' && hasTzSuffix(utcDateStr)
+      ? resolveFleetInstantBrowser(utcDateStr, timezone)
+      : (typeof utcDateStr === 'string' ? new Date(utcDateStr) : utcDateStr);
     if (isNaN(date.getTime())) return String(utcDateStr);
     return new Intl.DateTimeFormat('en-US', {
       ...(options ?? DEFAULT_OPTIONS),
@@ -56,7 +59,9 @@ export function formatInFleetTz(
  * always lands in a week whose label contains its own displayed date.
  */
 export function fleetTzDateKey(input: string | Date, timezone: string): string {
-  const date = typeof input === 'string' ? new Date(input) : input;
+  const date = typeof input === 'string'
+    ? (hasTzSuffix(input) ? resolveFleetInstantBrowser(input, timezone) : new Date(input))
+    : input;
   if (isNaN(date.getTime())) {
     return typeof input === 'string' ? input.slice(0, 10) : '';
   }
