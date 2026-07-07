@@ -779,15 +779,50 @@ app.get(`${BASE}/match-candidates`, async (c) => {
     if (needsLiveSuggestion.length > 0) {
       try {
         const { trips } = await loadAllTollLedgerWithTrips();
+
+        // A trip's tollCharges is ONE refund amount — if two different bare
+        // tolls both suggest the same trip, crediting each with the full
+        // refund double-counts the same money (same bug already fixed for
+        // Underpaid & Claims' suggestions and the wizard's summary cards;
+        // this endpoint runs its own independent match pass, so it needs the
+        // same correction applied here too). Trips already tied to SOME
+        // claim (open or resolved) have their refund already spoken for by
+        // that claim, so any other bare toll suggesting the same trip must
+        // show $0, not the full refund a second time.
+        const tripIdsAlreadyClaimed = new Set(
+          allClaims.filter((cl: any) => cl && typeof cl === "object" && cl.tripId).map((cl: any) => cl.tripId),
+        );
+
+        const bestByTollId = new Map<string, { toll: any; raw: any; best: any }>();
         for (const t of needsLiveSuggestion) {
           const rawToll = rawTollById.get(t.tollId);
           if (!rawToll) continue;
           const matches = findTollMatchesServer(rawToll, trips, fleetTz);
           const best = matches.find((m: any) => m.matchType === "AMOUNT_VARIANCE" || m.matchType === "PERFECT_MATCH");
-          if (best) {
-            t.suggestedTripId = best.tripId;
-            t.tripRefund = Math.abs(best.tripTollCharges || 0);
-          }
+          if (best) bestByTollId.set(t.tollId, { toll: t, raw: rawToll, best });
+        }
+
+        // Group by suggested trip so only the chronologically-first bare
+        // candidate for a given trip is credited with its refund.
+        const bySuggestedTrip = new Map<string, { toll: any; raw: any; best: any }[]>();
+        for (const entry of bestByTollId.values()) {
+          const list = bySuggestedTrip.get(entry.best.tripId) || [];
+          list.push(entry);
+          bySuggestedTrip.set(entry.best.tripId, list);
+        }
+
+        for (const [tripId, group] of bySuggestedTrip) {
+          group.sort((a, b) => {
+            const da = new Date(`${a.raw.date}T${a.raw.time || "00:00:00"}`).getTime();
+            const db = new Date(`${b.raw.date}T${b.raw.time || "00:00:00"}`).getTime();
+            return da - db;
+          });
+          const tripAlreadyClaimedElsewhere = tripIdsAlreadyClaimed.has(tripId);
+          group.forEach((entry, idx) => {
+            const eligible = !tripAlreadyClaimedElsewhere && idx === 0;
+            entry.toll.suggestedTripId = tripId;
+            entry.toll.tripRefund = eligible ? Math.abs(entry.best.tripTollCharges || 0) : 0;
+          });
         }
       } catch {
         // Best-effort enrichment — candidates are still usable without it.
