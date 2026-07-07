@@ -272,16 +272,23 @@ export function calculateTollFinancials(
  * that same trip. `calculateTollFinancials` credits `trip.tollCharges` in
  * full to whichever toll it's called with — so calling it once per toll
  * without accounting for siblings double- (or triple-) counts the same
- * refund. Policy: only the chronologically FIRST toll linked to a given
- * trip is eligible for that trip's refund; every other toll sharing the
- * trip should be passed a `trip` with `tollCharges` zeroed out (a real,
- * unreimbursed loss for that charge, since the trip's one refund was
- * already claimed by the earlier toll). Mirrors the same policy applied to
- * suggestions server-side (toll_controller.tsx's `/unreconciled` handler).
+ * refund.
+ *
+ * Policy: treat the trip's refund as a shared POOL, handed out in
+ * chronological order, each toll capped at its own cost — never more than
+ * it actually cost, so a toll's shown refund can never exceed its own
+ * charge (a $645 refund on a $285 toll is exactly the confusing, wrong-
+ * looking number this avoids). Any amount left over after a toll takes its
+ * share carries forward to the next toll sharing the trip; whatever's left
+ * unclaimed once the pool is exhausted is a real, unreimbursed loss on the
+ * later toll(s). Mirrors the same policy applied to suggestions server-side
+ * (toll_controller.tsx's `/unreconciled` handler and dispute_refund_controller.tsx's
+ * `/match-candidates`).
  */
-export function computeEligibleTollIdsForTripRefund(
-    tolls: Array<Pick<FinancialTransaction, 'id' | 'tripId' | 'date' | 'time'>>,
-): Set<string> {
+export function allocateTripRefundAcrossTolls(
+    tolls: Array<Pick<FinancialTransaction, 'id' | 'tripId' | 'date' | 'time' | 'amount'>>,
+    tripRefundById: Map<string, number>,
+): Map<string, number> {
     const byTrip = new Map<string, typeof tolls>();
     for (const t of tolls) {
         if (!t.tripId) continue;
@@ -289,14 +296,20 @@ export function computeEligibleTollIdsForTripRefund(
         list.push(t);
         byTrip.set(t.tripId, list);
     }
-    const eligible = new Set<string>();
-    for (const list of byTrip.values()) {
+    const allocation = new Map<string, number>();
+    for (const [tripId, list] of byTrip) {
+        let remaining = tripRefundById.get(tripId) ?? 0;
         const sorted = [...list].sort((a, b) => {
             const ta = new Date(`${a.date}T${a.time || '00:00:00'}`).getTime();
             const tb = new Date(`${b.date}T${b.time || '00:00:00'}`).getTime();
             return ta - tb;
         });
-        eligible.add(sorted[0].id);
+        for (const t of sorted) {
+            const cost = Math.abs(t.amount || 0);
+            const share = Math.max(0, Math.min(remaining, cost));
+            allocation.set(t.id, share);
+            remaining -= share;
+        }
     }
-    return eligible;
+    return allocation;
 }

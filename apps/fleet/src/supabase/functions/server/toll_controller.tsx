@@ -1436,12 +1436,12 @@ app.get(`${BASE}/unreconciled`, async (c) => {
     // A trip's `tollCharges` is ONE refund amount, but multiple distinct
     // tolls (e.g. two toll plazas on the same route) can each independently
     // match to that same trip. Crediting the full trip refund to every one
-    // of them double-counts the same money (each shows as "profit"/fully
-    // reimbursed off the SAME dollars). Policy: only the chronologically
-    // FIRST toll for a given trip keeps its suggested refund; every other
-    // toll sharing that trip is corrected to reflect $0 credited — a real,
-    // unreimbursed loss, since the trip's refund was already claimed by the
-    // earlier toll.
+    // of them double-counts the same money AND can show a refund bigger
+    // than any one toll ever cost (e.g. a $645 refund on a $285 toll).
+    // Policy: treat the trip's refund as a shared pool, handed out in
+    // chronological order, each toll capped at its own cost — same rule as
+    // tollReconciliation.ts's `allocateTripRefundAcrossTolls` (client) and
+    // dispute_refund_controller.tsx's `/match-candidates` (server).
     const tripGroups = new Map<string, { tx: any; matches: MatchResult[] }[]>();
     for (const tx of page) {
       const top = suggestionsMap[tx.id]?.[0];
@@ -1457,14 +1457,18 @@ app.get(`${BASE}/unreconciled`, async (c) => {
         const db = getTransactionDateTime(b.tx, timezone)?.getTime() ?? 0;
         return da - db;
       });
-      for (let i = 1; i < group.length; i++) {
-        const { tx, matches } = group[i];
+      let remaining = group[0].matches[0].tripTollCharges || 0; // the trip's own refund — same for every member
+      for (const { tx, matches } of group) {
         const top = matches[0];
         const txAmountAbs = Math.abs(Number(tx.amount) || 0);
+        const allocated = Math.max(0, Math.min(remaining, txAmountAbs));
+        remaining -= allocated;
         top.matchType = "AMOUNT_VARIANCE";
-        top.varianceAmount = -txAmountAbs;
-        top.tripTollCharges = 0;
-        top.reason = `This trip's toll refund was already credited to an earlier toll on the same trip — this charge is unreimbursed (Diff: -${txAmountAbs.toFixed(2)})`;
+        top.varianceAmount = allocated - txAmountAbs;
+        top.tripTollCharges = allocated;
+        top.reason = allocated >= txAmountAbs
+          ? `Trip toll refund covers this charge (shared with ${group.length - 1} other toll${group.length > 2 ? "s" : ""} on the same trip)`
+          : `Trip toll refund only partially covers this charge — the rest was already credited to an earlier toll on the same trip (Diff: -${(txAmountAbs - allocated).toFixed(2)})`;
       }
     }
 

@@ -756,77 +756,65 @@ app.get(`${BASE}/match-candidates`, async (c) => {
     // "Flag for Claim" action reconciles a toll to its trip) — so for those
     // we compute the same live suggested match the Underpaid & Claims step
     // itself shows, rather than reading a `tripId` field that isn't set yet.
-    const alreadyLinkedTripIds = [...new Set(tolls.map((t: any) => t.tripId).filter(Boolean))] as string[];
-    if (alreadyLinkedTripIds.length > 0) {
-      try {
-        const tripKeys = alreadyLinkedTripIds.map((id: string) => `trip:${id}`);
-        const tripValues = await kv.mget(tripKeys);
-        const linkedTripById = new Map<string, any>();
-        alreadyLinkedTripIds.forEach((id: string, idx: number) => {
-          if (tripValues[idx]) linkedTripById.set(id, tripValues[idx]);
-        });
-        for (const t of tolls) {
-          if (t.tripId && linkedTripById.has(t.tripId)) {
-            t.tripRefund = Math.abs(linkedTripById.get(t.tripId).tollCharges || 0);
-          }
+    try {
+      const { trips } = await loadAllTollLedgerWithTrips();
+      const resolved: { toll: any; tripId: string; cost: number; date: string; time?: string }[] = [];
+      for (const t of tolls) {
+        const rawToll = rawTollById.get(t.tollId);
+        if (t.tripId) {
+          resolved.push({ toll: t, tripId: t.tripId, cost: Math.abs(t.tollAmount || 0), date: t.date, time: rawToll?.time });
+          continue;
         }
-      } catch {
-        // Best-effort enrichment — candidates are still usable without it.
+        if (!rawToll) continue;
+        const matches = findTollMatchesServer(rawToll, trips, fleetTz);
+        const best = matches.find((m: any) => m.matchType === "AMOUNT_VARIANCE" || m.matchType === "PERFECT_MATCH");
+        if (best) {
+          t.suggestedTripId = best.tripId;
+          resolved.push({ toll: t, tripId: best.tripId, cost: Math.abs(t.tollAmount || 0), date: t.date, time: rawToll.time });
+        }
       }
-    }
 
-    const needsLiveSuggestion = tolls.filter((t: any) => !t.tripId);
-    if (needsLiveSuggestion.length > 0) {
-      try {
-        const { trips } = await loadAllTollLedgerWithTrips();
+      if (resolved.length > 0) {
+        const tripIds = [...new Set(resolved.map((r) => r.tripId))];
+        const tripKeys = tripIds.map((tid) => `trip:${tid}`);
+        const tripValues = await kv.mget(tripKeys);
+        const tripRefundById = new Map<string, number>();
+        tripIds.forEach((tid, idx) => {
+          if (tripValues[idx]) tripRefundById.set(tid, Math.abs((tripValues[idx] as any).tollCharges || 0));
+        });
 
-        // A trip's tollCharges is ONE refund amount — if two different bare
-        // tolls both suggest the same trip, crediting each with the full
-        // refund double-counts the same money (same bug already fixed for
-        // Underpaid & Claims' suggestions and the wizard's summary cards;
-        // this endpoint runs its own independent match pass, so it needs the
-        // same correction applied here too). Trips already tied to SOME
-        // claim (open or resolved) have their refund already spoken for by
-        // that claim, so any other bare toll suggesting the same trip must
-        // show $0, not the full refund a second time.
+        // A trip's refund is a shared pool, handed out in chronological
+        // order, each toll capped at its own cost — the same rule applied
+        // client-side (tollReconciliation.ts's `allocateTripRefundAcrossTolls`)
+        // and in toll_controller.tsx's `/unreconciled` suggestions. A trip
+        // already tied to SOME claim (open or resolved) elsewhere has its
+        // pool treated as fully spent for every bare candidate seen here.
         const tripIdsAlreadyClaimed = new Set(
           allClaims.filter((cl: any) => cl && typeof cl === "object" && cl.tripId).map((cl: any) => cl.tripId),
         );
 
-        const bestByTollId = new Map<string, { toll: any; raw: any; best: any }>();
-        for (const t of needsLiveSuggestion) {
-          const rawToll = rawTollById.get(t.tollId);
-          if (!rawToll) continue;
-          const matches = findTollMatchesServer(rawToll, trips, fleetTz);
-          const best = matches.find((m: any) => m.matchType === "AMOUNT_VARIANCE" || m.matchType === "PERFECT_MATCH");
-          if (best) bestByTollId.set(t.tollId, { toll: t, raw: rawToll, best });
+        const byTrip = new Map<string, typeof resolved>();
+        for (const r of resolved) {
+          const list = byTrip.get(r.tripId) || [];
+          list.push(r);
+          byTrip.set(r.tripId, list);
         }
-
-        // Group by suggested trip so only the chronologically-first bare
-        // candidate for a given trip is credited with its refund.
-        const bySuggestedTrip = new Map<string, { toll: any; raw: any; best: any }[]>();
-        for (const entry of bestByTollId.values()) {
-          const list = bySuggestedTrip.get(entry.best.tripId) || [];
-          list.push(entry);
-          bySuggestedTrip.set(entry.best.tripId, list);
-        }
-
-        for (const [tripId, group] of bySuggestedTrip) {
+        for (const [tripId, group] of byTrip) {
           group.sort((a, b) => {
-            const da = new Date(`${a.raw.date}T${a.raw.time || "00:00:00"}`).getTime();
-            const db = new Date(`${b.raw.date}T${b.raw.time || "00:00:00"}`).getTime();
+            const da = new Date(`${a.date}T${a.time || "00:00:00"}`).getTime();
+            const db = new Date(`${b.date}T${b.time || "00:00:00"}`).getTime();
             return da - db;
           });
-          const tripAlreadyClaimedElsewhere = tripIdsAlreadyClaimed.has(tripId);
-          group.forEach((entry, idx) => {
-            const eligible = !tripAlreadyClaimedElsewhere && idx === 0;
-            entry.toll.suggestedTripId = tripId;
-            entry.toll.tripRefund = eligible ? Math.abs(entry.best.tripTollCharges || 0) : 0;
-          });
+          let remaining = tripIdsAlreadyClaimed.has(tripId) ? 0 : (tripRefundById.get(tripId) ?? 0);
+          for (const r of group) {
+            const allocated = Math.max(0, Math.min(remaining, r.cost));
+            remaining -= allocated;
+            r.toll.tripRefund = allocated;
+          }
         }
-      } catch {
-        // Best-effort enrichment — candidates are still usable without it.
       }
+    } catch {
+      // Best-effort enrichment — candidates are still usable without it.
     }
 
     return c.json({ claims, tolls });

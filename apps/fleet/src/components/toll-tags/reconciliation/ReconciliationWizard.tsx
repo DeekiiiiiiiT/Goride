@@ -19,7 +19,7 @@ import { Button } from "../../ui/button";
 import { runScenarioTest } from "../../../utils/testScenario";
 import { UnifiedTollActivityTable } from "./UnifiedTollActivityTable";
 import { FinancialTransaction, Claim } from "../../../types/data";
-import { MatchResult, calculateTollFinancials, computeEligibleTollIdsForTripRefund } from "../../../utils/tollReconciliation";
+import { MatchResult, calculateTollFinancials, allocateTripRefundAcrossTolls } from "../../../utils/tollReconciliation";
 import { bucketForBestMatch, bucketForWorkflowStage, TollBucket, TollWorkflowStage } from "../../../utils/tollBucket";
 import { StepId, StepCounts, computeStepCounts } from "../../../utils/tollPeriodGating";
 import { getClaimWeekDate } from "../../../utils/tollWeekPeriod";
@@ -359,15 +359,23 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
   let reconciledLiability = 0;
   let recoveredAmount = 0;
 
-  // Only the chronologically-first toll linked to a given trip is credited
-  // with that trip's refund — prevents two tolls sharing one trip (e.g. two
-  // toll plazas on the same route) from each independently double-counting
-  // the same trip.tollCharges amount.
-  const tollRefundEligibleIds = computeEligibleTollIdsForTripRefund(reconciledTolls);
+  // A trip's refund is a shared pool split across every toll linked to it
+  // (time order, each capped at its own cost) — prevents two tolls sharing
+  // one trip (e.g. two toll plazas on the same route) from each showing the
+  // full trip.tollCharges amount, which both double-counts the same money
+  // AND can show a refund bigger than the toll itself ever cost.
+  const tripRefundById = new Map<string, number>();
+  reconciledTolls.forEach(tx => {
+      if (tx.tripId && !tripRefundById.has(tx.tripId)) {
+          const trip = tripMap.get(tx.tripId);
+          if (trip) tripRefundById.set(tx.tripId, trip.tollCharges || 0);
+      }
+  });
+  const tollRefundAllocation = allocateTripRefundAcrossTolls(reconciledTolls, tripRefundById);
   reconciledTolls.forEach(tx => {
       const trip = tripMap.get(tx.tripId || '');
       const claim = claims.find(c => c.transactionId === tx.id);
-      const effectiveTrip = trip && !tollRefundEligibleIds.has(tx.id) ? { ...trip, tollCharges: 0 } : trip;
+      const effectiveTrip = trip ? { ...trip, tollCharges: tollRefundAllocation.get(tx.id) ?? 0 } : trip;
       const financials = calculateTollFinancials(tx, effectiveTrip, claim);
       recoveredAmount += financials.totalRecovered;
       reconciledLiability += financials.netLoss;
