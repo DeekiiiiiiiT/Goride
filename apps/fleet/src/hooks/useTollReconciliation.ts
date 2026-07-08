@@ -147,6 +147,7 @@ export interface UnlinkedShortfallSuggestion {
   date: string;
   claimStatus: string | null;
   matchType: 'claim' | 'toll';
+  location?: string | null;
 }
 
 export interface ReconciliationPeriodScope {
@@ -175,6 +176,7 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
   const fetchData = useCallback(async (opts?: { autoMatch?: boolean }) => {
     const blockUi = isInitialLoad.current;
     if (blockUi) setLoading(true);
+    setShortfallSuggestions(new Map());
     try {
       const dateParams = period ? { from: period.startDate, to: period.endDate } : {};
       const filterParams = { ...(driverId ? { driverId } : {}), ...dateParams, autoMatch: opts?.autoMatch };
@@ -226,11 +228,11 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
         setDisputeRefunds([]);
       }
 
-      // Phase 3: Fetch refund suggestions + shortfall suggestions + resolved refunds
+      // Phase 3: Refund leftovers + resolved — keep on critical path (fast).
+      // Shortfall picker suggestions are heavier; load them after the wizard paints.
       try {
-        const [sugRes, shortRes, resolvedRes] = await Promise.all([
+        const [sugRes, resolvedRes] = await Promise.all([
           api.getRefundSuggestions(driverId ? { driverId } : undefined),
-          api.getUnlinkedShortfallSuggestions(driverId ? { driverId } : undefined),
           api.getResolvedRefunds(filterParams),
         ]);
         const sugMap = new Map<string, RefundSuggestion>();
@@ -239,19 +241,10 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
           sugMap.set(tripId, s as RefundSuggestion);
         }
         setRefundSuggestions(sugMap);
-
-        const shortMap = new Map<string, UnlinkedShortfallSuggestion[]>();
-        const rawShort = shortRes?.suggestions || {};
-        for (const [tripId, list] of Object.entries(rawShort)) {
-          shortMap.set(tripId, list as UnlinkedShortfallSuggestion[]);
-        }
-        setShortfallSuggestions(shortMap);
-
         setResolvedRefunds(resolvedRes?.data || []);
       } catch (refErr) {
         console.error('[Reconciliation] Failed to fetch refund suggestions/resolved:', refErr);
         setRefundSuggestions(new Map());
-        setShortfallSuggestions(new Map());
         setResolvedRefunds([]);
       }
 
@@ -260,6 +253,23 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
     } finally {
       isInitialLoad.current = false;
       if (blockUi) setLoading(false);
+    }
+
+    // After UI unlocks: underpaid-match suggestions (period-scoped, non-blocking)
+    try {
+      const shortRes = await api.getUnlinkedShortfallSuggestions({
+        ...(driverId ? { driverId } : {}),
+        ...(period ? { from: period.startDate, to: period.endDate } : {}),
+      });
+      const shortMap = new Map<string, UnlinkedShortfallSuggestion[]>();
+      const rawShort = shortRes?.suggestions || {};
+      for (const [tripId, list] of Object.entries(rawShort)) {
+        shortMap.set(tripId, list as UnlinkedShortfallSuggestion[]);
+      }
+      setShortfallSuggestions(shortMap);
+    } catch (shortErr) {
+      console.error('[Reconciliation] Failed to fetch unlinked shortfall suggestions:', shortErr);
+      setShortfallSuggestions(new Map());
     }
   }, [driverId, period?.startDate, period?.endDate]);
 

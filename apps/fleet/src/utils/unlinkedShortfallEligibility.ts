@@ -4,6 +4,10 @@
  */
 
 export const UNLINKED_SHORTFALL_TOLERANCE = 0.05;
+/** Minimum score to show a candidate in the Review picker. */
+export const UNLINKED_PICKER_MIN_CONFIDENCE = 25;
+/** Score at which a candidate is labeled "recommended" / row shortcut. */
+export const UNLINKED_RECOMMENDED_MIN_CONFIDENCE = 50;
 
 export interface UnlinkedShortfallCandidateInput {
   tripRefund: number;
@@ -26,6 +30,7 @@ export interface UnlinkedShortfallSuggestionShape {
   date: string;
   claimStatus: string | null;
   matchType: 'claim' | 'toll';
+  location?: string | null;
 }
 
 export function remainingClaimShortfall(claim: {
@@ -39,6 +44,75 @@ export function remainingClaimShortfall(claim: {
 
 export function leftoverAfterApply(remainingShortfall: number, tripRefund: number): number {
   return Math.max(0, remainingShortfall - Math.abs(tripRefund));
+}
+
+/**
+ * Claims eligible to receive an Unlinked Refund credit.
+ * Only open underpaid shortfalls — never Personal Use / Deadhead Charge Driver,
+ * or already-reimbursed / dispute-matched resolved claims from earlier steps.
+ */
+export function isEligibleUnlinkedShortfallClaim(claim: {
+  type?: string;
+  status?: string;
+  resolutionReason?: string | null;
+  unlinkedTripId?: string | null;
+  amount?: number;
+  paidAmount?: number;
+  expectedAmount?: number;
+}): boolean {
+  if (claim.type !== 'Toll_Refund') return false;
+  // Resolved Charge Driver = Personal Use / Deadhead already handled
+  if (claim.status === 'Resolved' && claim.resolutionReason === 'Charge Driver') return false;
+  // Reimbursed = dispute match or prior reimbursement already done
+  if (claim.status === 'Resolved' && claim.resolutionReason === 'Reimbursed') return false;
+  // Write-offs / other resolved outcomes are finished earlier in the workflow
+  if (claim.status === 'Resolved') return false;
+
+  const matchable = ['Open', 'Sent_to_Driver', 'Submitted_to_Uber', 'Rejected'];
+  if (!claim.status || !matchable.includes(claim.status)) return false;
+
+  return remainingClaimShortfall(claim) > UNLINKED_SHORTFALL_TOLERANCE;
+}
+
+/**
+ * Ledger tolls eligible as underpaid shortfall targets (no usable open claim).
+ * Amount-proximity alone is NOT enough — that pulled Personal Use / Deadhead rows.
+ */
+export function isEligibleUnlinkedShortfallToll(toll: {
+  type?: string;
+  matchTypeCode?: string | null;
+  workflowStage?: string | null;
+  resolution?: string | null;
+  claimId?: string | null;
+  amount?: number;
+}): boolean {
+  if (toll.type && toll.type !== 'usage') return false;
+  if (Math.abs(Number(toll.amount) || 0) <= 0) return false;
+
+  // Finished in Personal Use / Deadhead / Business / Write-off
+  const res = toll.resolution;
+  if (res === 'personal' || res === 'business' || res === 'write_off' || res === 'refunded') {
+    return false;
+  }
+
+  const stage = toll.workflowStage || '';
+  if (
+    stage.startsWith('personal_use') ||
+    stage.startsWith('deadhead') ||
+    stage === 'matched' ||
+    stage === 'claim_resolved' ||
+    stage === 'needs_review'
+  ) {
+    return false;
+  }
+
+  // True underpaid path only
+  return (
+    toll.matchTypeCode === 'AMOUNT_VARIANCE' ||
+    stage === 'underpaid_pending' ||
+    stage === 'underpaid' ||
+    stage === 'claim_filed'
+  );
 }
 
 export function coversShortfallFully(
@@ -71,9 +145,12 @@ export function scoreUnlinkedShortfallMatch(input: UnlinkedShortfallCandidateInp
   const daysDiff = Number.isFinite(tripMs) && Number.isFinite(claimMs)
     ? Math.abs(tripMs - claimMs) / (1000 * 60 * 60 * 24)
     : 14;
-  const dateScore = Math.max(0, 100 - daysDiff * 5);
+  // Soft boost within ±2 days (common: refund day vs tag toll next day)
+  let dateScore = Math.max(0, 100 - daysDiff * 5);
+  if (daysDiff <= 2) dateScore = Math.min(100, dateScore + 15);
+  else if (daysDiff <= 7) dateScore = Math.min(100, dateScore + 5);
 
-  return Math.round(amountScore * 0.8 + dateScore * 0.2);
+  return Math.round(amountScore * 0.75 + dateScore * 0.25);
 }
 
 export function isPendingOnlyRefundResolution(trip: {

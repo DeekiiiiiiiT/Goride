@@ -2,16 +2,20 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from "../../ui/sheet";
 import { Button } from "../../ui/button";
 import { Textarea } from "../../ui/textarea";
-import { Sparkles } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { cn } from "../../ui/utils";
 import { DriverPicker, DriverOption } from "../../ui/DriverPicker";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../ui/collapsible";
 import {
   RefundResolutionType,
   RefundSuggestion,
   RefundTripLike,
   REFUND_RESOLUTION_META,
   REFUND_RESOLUTION_ORDER,
+  REFUND_OTHER_WAYS_LABEL,
 } from "./refundResolutionShell";
+import type { UnlinkedShortfallSuggestion } from "../../../hooks/useTollReconciliation";
+import { UNLINKED_RECOMMENDED_MIN_CONFIDENCE } from "../../../utils/unlinkedShortfallEligibility";
 
 export interface RefundResolutionPayload {
   tripId: string;
@@ -25,10 +29,13 @@ interface RefundResolutionDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   trip: RefundTripLike | null;
+  /** Leftover resolution suggestion (cash wash / phantom / etc.) — not primary. */
   suggestion?: RefundSuggestion | null;
-  /** Driver list for the picker when the trip has no driver. */
+  /** Underpaid claim/toll candidates for Apply to underpaid. */
+  shortfallCandidates?: UnlinkedShortfallSuggestion[];
   drivers?: DriverOption[];
   onResolve: (payload: RefundResolutionPayload) => Promise<void> | void;
+  onApplyToShortfall?: (tripId: string, candidate: UnlinkedShortfallSuggestion) => Promise<void> | void;
 }
 
 function formatDate(iso: string): string {
@@ -43,44 +50,72 @@ function formatDate(iso: string): string {
   });
 }
 
+function candidateKey(c: UnlinkedShortfallSuggestion): string {
+  return `${c.tollId}::${c.claimId ?? ""}`;
+}
+
 /**
- * Refund Resolution Drawer (Phase 1 shell).
- *
- * Presents the automation's suggested resolution front-and-center (one-tap
- * accept) with a manual fallback list. Fully interactive UI; the actual
- * persistence is delegated to `onResolve` (wired in Phase 3).
+ * Review drawer: primary path is Apply to underpaid (picker).
+ * Cash wash / Phantom / Pending / Expense logged live under "Other ways to clear".
  */
 export function RefundResolutionDrawer({
   open,
   onOpenChange,
   trip,
   suggestion,
+  shortfallCandidates = [],
   drivers = [],
   onResolve,
+  onApplyToShortfall,
 }: RefundResolutionDrawerProps) {
+  const [selectedShortfallKey, setSelectedShortfallKey] = useState<string | null>(null);
   const [selected, setSelected] = useState<RefundResolutionType | null>(null);
   const [notes, setNotes] = useState("");
   const [driverId, setDriverId] = useState<string | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
-
-  // Reset local state whenever the target trip changes.
-  useEffect(() => {
-    setSelected(suggestion?.type ?? null);
-    setNotes("");
-    setDriverId(trip?.driverId ?? undefined);
-  }, [trip?.id, suggestion?.type, trip?.driverId]);
+  const [otherOpen, setOtherOpen] = useState(false);
 
   const amount = useMemo(() => Math.abs(trip?.tollCharges ?? 0), [trip]);
 
-  // "Log cash expense" attributes cost to a driver — require one.
+  const rankedCandidates = useMemo(
+    () => [...shortfallCandidates].sort((a, b) => b.confidence - a.confidence),
+    [shortfallCandidates],
+  );
+
+  // Reset when trip changes; auto-select top recommended shortfall once candidates are present.
+  useEffect(() => {
+    setSelected(null);
+    setNotes("");
+    setDriverId(trip?.driverId ?? undefined);
+    setOtherOpen(false);
+    const recommended =
+      rankedCandidates.find((c) => c.confidence >= UNLINKED_RECOMMENDED_MIN_CONFIDENCE) ??
+      rankedCandidates[0] ??
+      null;
+    setSelectedShortfallKey(recommended ? candidateKey(recommended) : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-init selection when trip or candidate set identity changes
+  }, [trip?.id, trip?.driverId, shortfallCandidates]);
+
+  const selectedCandidate = rankedCandidates.find((c) => candidateKey(c) === selectedShortfallKey) ?? null;
   const needsDriver = selected === "expense_logged" && !driverId;
 
-  const submit = async (resolution: RefundResolutionType, auto: boolean) => {
+  const submitLeftover = async (resolution: RefundResolutionType, auto: boolean) => {
     if (!trip) return;
-    if (resolution === "expense_logged" && !driverId) return; // guarded by disabled state
+    if (resolution === "expense_logged" && !driverId) return;
     setSubmitting(true);
     try {
       await onResolve({ tripId: trip.id, resolution, notes: notes.trim() || undefined, driverId, auto });
+      onOpenChange(false);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const submitApply = async () => {
+    if (!trip || !selectedCandidate || !onApplyToShortfall) return;
+    setSubmitting(true);
+    try {
+      await onApplyToShortfall(trip.id, selectedCandidate);
       onOpenChange(false);
     } finally {
       setSubmitting(false);
@@ -91,11 +126,11 @@ export function RefundResolutionDrawer({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-md p-0">
+      <SheetContent side="right" className="w-full sm:max-w-md p-0 flex flex-col">
         <SheetHeader className="p-5 border-b border-slate-200">
           <SheetTitle className="text-lg text-slate-900">Resolve Unlinked Refund</SheetTitle>
           <SheetDescription>
-            The platform reimbursed a toll on this trip, but no toll expense is linked.
+            Apply this credit to an underpaid toll, or use another way to clear it.
           </SheetDescription>
         </SheetHeader>
 
@@ -120,105 +155,178 @@ export function RefundResolutionDrawer({
             </div>
           </div>
 
-          {/* Suggested resolution banner */}
-          {suggestion && (
-            <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-white">
-                  <Sparkles className="h-3.5 w-3.5" />
-                </span>
-                <div className="text-sm font-semibold text-indigo-900">
-                  Suggested: {REFUND_RESOLUTION_META[suggestion.type].label}
-                </div>
-                <span className="ml-auto inline-flex items-center rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-semibold text-indigo-700">
-                  {suggestion.confidence}% confidence
-                </span>
-              </div>
-              <p className="text-xs text-indigo-700 mt-2">{suggestion.reason}</p>
-              <Button
-                onClick={() => submit(suggestion.type, true)}
-                disabled={submitting || (suggestion.type === "expense_logged" && !driverId)}
-                className="mt-3 w-full bg-indigo-600 hover:bg-indigo-700"
-              >
-                Accept suggestion
-              </Button>
-            </div>
-          )}
-
-          {/* Manual options */}
+          {/* Primary: Apply to underpaid */}
           <div className="space-y-2">
             <div className="text-xs font-medium uppercase tracking-wider text-slate-500">
-              Or choose manually
+              Apply to underpaid
             </div>
-            {REFUND_RESOLUTION_ORDER.map((type) => {
-              const meta = REFUND_RESOLUTION_META[type];
-              const active = selected === type;
-              return (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => setSelected(type)}
-                  className={cn(
-                    "flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors",
-                    active ? "border-indigo-400 bg-indigo-50/50" : "border-slate-200 hover:border-indigo-300",
-                  )}
+            {rankedCandidates.length === 0 ? (
+              <p className="text-sm text-slate-500 rounded-lg border border-dashed border-slate-200 p-3">
+                No underpaid tolls found for this driver — use Other ways to clear below.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {rankedCandidates.map((c) => {
+                  const key = candidateKey(c);
+                  const active = selectedShortfallKey === key;
+                  const recommended = c.confidence >= UNLINKED_RECOMMENDED_MIN_CONFIDENCE;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => {
+                        setSelectedShortfallKey(key);
+                        setSelected(null);
+                      }}
+                      className={cn(
+                        "flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors",
+                        active ? "border-orange-400 bg-orange-50/60" : "border-slate-200 hover:border-orange-300",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "mt-1 h-4 w-4 shrink-0 rounded-full border",
+                          active ? "border-orange-600 bg-orange-600 ring-2 ring-orange-100" : "border-slate-300",
+                        )}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium text-slate-900">
+                            {formatDate(c.date)} · ${c.tollAmount.toFixed(2)}
+                          </span>
+                          {recommended && (
+                            <span className="inline-flex items-center rounded-full bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-800">
+                              Recommended
+                            </span>
+                          )}
+                          <span className="ml-auto text-[11px] font-semibold text-slate-500">
+                            {c.confidence}%
+                          </span>
+                        </span>
+                        {c.location && (
+                          <span className="block text-xs text-slate-500 mt-0.5 truncate">{c.location}</span>
+                        )}
+                        <span className="block text-xs text-slate-500 mt-0.5">
+                          Shortfall ${c.remainingShortfall.toFixed(2)}
+                          {c.leftoverShortfall > 0.05
+                            ? ` · leftover $${c.leftoverShortfall.toFixed(2)} after apply`
+                            : " · fully covered"}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+                <Button
+                  onClick={submitApply}
+                  disabled={!selectedCandidate || !onApplyToShortfall || submitting}
+                  className="w-full bg-orange-600 hover:bg-orange-700"
                 >
-                  <span
+                  Apply to selected
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Secondary leftovers */}
+          <Collapsible open={otherOpen} onOpenChange={setOtherOpen}>
+            <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-left hover:bg-slate-100 transition-colors">
+              <span className="text-xs font-medium uppercase tracking-wider text-slate-600">
+                {REFUND_OTHER_WAYS_LABEL}
+              </span>
+              <ChevronDown
+                className={cn(
+                  "h-4 w-4 text-slate-500 transition-transform",
+                  otherOpen ? "rotate-0" : "-rotate-90",
+                )}
+              />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-3 space-y-2">
+              {suggestion && suggestion.confidence >= 40 && (
+                <p className="text-xs text-slate-500 px-0.5">
+                  System hint: {REFUND_RESOLUTION_META[suggestion.type]?.label} ({suggestion.confidence}%) — {suggestion.reason}
+                </p>
+              )}
+              {REFUND_RESOLUTION_ORDER.map((type) => {
+                const meta = REFUND_RESOLUTION_META[type];
+                const active = selected === type;
+                const isAdvanced = type === "expense_logged";
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => {
+                      setSelected(type);
+                      setSelectedShortfallKey(null);
+                    }}
                     className={cn(
-                      "mt-1 h-4 w-4 shrink-0 rounded-full border",
-                      active ? "border-indigo-600 bg-indigo-600 ring-2 ring-indigo-100" : "border-slate-300",
+                      "flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors",
+                      active ? "border-indigo-400 bg-indigo-50/50" : "border-slate-200 hover:border-indigo-300",
+                      isAdvanced && "mt-1",
                     )}
-                  />
-                  <span>
-                    <span className="block text-sm font-medium text-slate-900">{meta.label}</span>
-                    <span className="block text-xs text-slate-500">{meta.description}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+                  >
+                    <span
+                      className={cn(
+                        "mt-1 h-4 w-4 shrink-0 rounded-full border",
+                        active ? "border-indigo-600 bg-indigo-600 ring-2 ring-indigo-100" : "border-slate-300",
+                      )}
+                    />
+                    <span>
+                      <span className="block text-sm font-medium text-slate-900">
+                        {meta.label}
+                        {isAdvanced && (
+                          <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                            Advanced
+                          </span>
+                        )}
+                      </span>
+                      <span className="block text-xs text-slate-500">{meta.description}</span>
+                    </span>
+                  </button>
+                );
+              })}
 
-          {/* Driver picker when logging a cash expense with no driver */}
-          {selected === "expense_logged" && (
-            <div>
-              <label className="text-xs font-medium uppercase tracking-wider text-slate-500">
-                Assign driver
-              </label>
-              <p className="text-xs text-slate-500 mb-1.5">Required to attribute the cash toll expense.</p>
-              <DriverPicker drivers={drivers} value={driverId} onChange={setDriverId} />
-            </div>
-          )}
+              {selected === "expense_logged" && (
+                <div>
+                  <label className="text-xs font-medium uppercase tracking-wider text-slate-500">
+                    Assign driver
+                  </label>
+                  <p className="text-xs text-slate-500 mb-1.5">Required to attribute the cash toll expense.</p>
+                  <DriverPicker drivers={drivers} value={driverId} onChange={setDriverId} />
+                </div>
+              )}
 
-          {/* Notes */}
-          <div>
-            <label className="text-xs font-medium uppercase tracking-wider text-slate-500">
-              Notes (optional)
-            </label>
-            <Textarea
-              rows={2}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Add context for the audit trail…"
-              className="mt-1"
-            />
-          </div>
+              <div>
+                <label className="text-xs font-medium uppercase tracking-wider text-slate-500">
+                  Notes (optional)
+                </label>
+                <Textarea
+                  rows={2}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Add context for the audit trail…"
+                  className="mt-1"
+                />
+              </div>
+
+              <Button
+                className="w-full bg-indigo-600 hover:bg-indigo-700"
+                disabled={!selected || needsDriver || submitting}
+                onClick={() => selected && submitLeftover(selected, false)}
+              >
+                Resolve with selected
+              </Button>
+            </CollapsibleContent>
+          </Collapsible>
         </div>
 
-        <SheetFooter className="p-4 border-t border-slate-200 flex-row gap-2">
+        <SheetFooter className="p-4 border-t border-slate-200">
           <Button
             variant="outline"
-            className="flex-1"
+            className="w-full"
             onClick={() => onOpenChange(false)}
             disabled={submitting}
           >
             Cancel
-          </Button>
-          <Button
-            className="flex-1 bg-indigo-600 hover:bg-indigo-700"
-            disabled={!selected || needsDriver || submitting}
-            onClick={() => selected && submit(selected, false)}
-          >
-            Resolve
           </Button>
         </SheetFooter>
       </SheetContent>

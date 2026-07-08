@@ -17,7 +17,10 @@ import { REFUND_RESOLUTION_META, RefundResolutionType } from "./refundResolution
 import { DriverOption } from "../../ui/DriverPicker";
 import type { RefundSuggestion } from "../../../hooks/useTollReconciliation";
 import type { UnlinkedShortfallSuggestion } from "../../../hooks/useTollReconciliation";
+import { UNLINKED_RECOMMENDED_MIN_CONFIDENCE } from "../../../utils/unlinkedShortfallEligibility";
 import { toast } from "sonner@2.0.3";
+
+const EMPTY_SHORTFALL: UnlinkedShortfallSuggestion[] = [];
 
 interface UnclaimedRefundsListProps {
   trips: Trip[];
@@ -57,10 +60,11 @@ export function UnclaimedRefundsList({
     });
 
   const suggestionFor = (tripId: string) => suggestions?.get(tripId);
-  const shortfallFor = (tripId: string) => shortfallSuggestions?.get(tripId)?.[0];
+  const shortfallsFor = (tripId: string) => shortfallSuggestions?.get(tripId) ?? EMPTY_SHORTFALL;
+  const bestShortfallFor = (tripId: string) => shortfallsFor(tripId)[0];
 
-  const handleApplyShortfall = async (trip: Trip) => {
-    const best = shortfallFor(trip.id);
+  const handleApplyShortfall = async (trip: Trip, candidate?: UnlinkedShortfallSuggestion) => {
+    const best = candidate ?? bestShortfallFor(trip.id);
     if (!best || !onApplyToShortfall) return;
     setBusy(true);
     try {
@@ -72,6 +76,7 @@ export function UnclaimedRefundsList({
       );
     } catch (e: any) {
       toast.error(e?.message || 'Failed to apply refund to underpaid claim');
+      throw e;
     } finally {
       setBusy(false);
     }
@@ -82,6 +87,11 @@ export function UnclaimedRefundsList({
     const s = suggestionFor(drawerTrip.id);
     return s ? { type: s.status as RefundResolutionType, confidence: s.confidence, reason: s.reason } : null;
   }, [drawerTrip, suggestions]);
+
+  const drawerShortfalls = useMemo(
+    () => (drawerTrip ? shortfallsFor(drawerTrip.id) : EMPTY_SHORTFALL),
+    [drawerTrip, shortfallSuggestions],
+  );
 
   const handleDrawerResolve = async (payload: RefundResolutionPayload) => {
     if (!onResolve) return;
@@ -204,7 +214,9 @@ export function UnclaimedRefundsList({
                         <tbody className="[&_tr:last-child]:border-0">
                           {week.items.map(trip => {
                             const s = suggestionFor(trip.id);
-                            const shortfall = shortfallFor(trip.id);
+                            const shortfall = bestShortfallFor(trip.id);
+                            const showApplyShortcut =
+                              !!shortfall && shortfall.confidence >= UNLINKED_RECOMMENDED_MIN_CONFIDENCE;
                             const isFuture = new Date(trip.date) > new Date();
                             return (
                               <TableRow key={trip.id}>
@@ -235,7 +247,7 @@ export function UnclaimedRefundsList({
                                 </TableCell>
                                 <TableCell>
                                   {interactive ? (
-                                    shortfall && shortfall.confidence >= 50 ? (
+                                    showApplyShortcut ? (
                                       <div className="flex flex-col gap-0.5">
                                         <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold border-orange-200 bg-orange-50 text-orange-800 border">
                                           Apply to underpaid · {shortfall.confidence}%
@@ -266,16 +278,19 @@ export function UnclaimedRefundsList({
                                 <TableCell className="text-right">
                                   {interactive ? (
                                     <div className="flex items-center justify-end gap-1">
-                                      {shortfall && shortfall.confidence >= 50 && onApplyToShortfall && (
-                                        <Button size="sm" className="bg-orange-600 hover:bg-orange-700" disabled={busy} onClick={() => handleApplyShortfall(trip)}>
+                                      {showApplyShortcut ? (
+                                        <Button
+                                          size="sm"
+                                          className="bg-orange-600 hover:bg-orange-700"
+                                          onClick={() => setDrawerTrip(trip)}
+                                        >
                                           Apply to underpaid
                                         </Button>
-                                      )}
-                                      {s && s.status !== 'pending' && !(shortfall && shortfall.confidence >= 50) && (
+                                      ) : s && s.status !== 'pending' ? (
                                         <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700" disabled={busy} onClick={() => handleAcceptRow(trip)}>
                                           <Sparkles className="h-3.5 w-3.5 mr-1" /> Accept
                                         </Button>
-                                      )}
+                                      ) : null}
                                       <Button size="sm" variant="outline" onClick={() => setDrawerTrip(trip)}>Review</Button>
                                     </div>
                                   ) : (
@@ -317,8 +332,17 @@ export function UnclaimedRefundsList({
           onOpenChange={(o) => !o && setDrawerTrip(null)}
           trip={drawerTrip}
           suggestion={drawerSuggestion}
+          shortfallCandidates={drawerShortfalls}
           drivers={drivers}
           onResolve={handleDrawerResolve}
+          onApplyToShortfall={
+            onApplyToShortfall
+              ? async (tripId, candidate) => {
+                  const trip = trips.find((t) => t.id === tripId);
+                  if (trip) await handleApplyShortfall(trip, candidate);
+                }
+              : undefined
+          }
         />
       )}
     </Card>

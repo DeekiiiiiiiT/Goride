@@ -6,6 +6,8 @@ import {
   scoreUnlinkedShortfallMatch,
   isPendingOnlyRefundResolution,
   hasBlockingUnlinkedRefund,
+  isEligibleUnlinkedShortfallClaim,
+  isEligibleUnlinkedShortfallToll,
 } from './unlinkedShortfallEligibility';
 
 describe('unlinked shortfall eligibility', () => {
@@ -25,15 +27,25 @@ describe('unlinked shortfall eligibility', () => {
     expect(remainingClaimShortfall({ amount: 285, paidAmount: 275 })).toBe(10);
   });
 
-  it('scores $275 refund near $285 toll highly', () => {
-    const score = scoreUnlinkedShortfallMatch({
+  it('scores $275 refund near $285 toll highly (picker + recommended)', () => {
+    const sameDay = scoreUnlinkedShortfallMatch({
       tripRefund: 275,
       tripDate: '2026-06-29',
       remainingShortfall: 285,
       tollAmount: 285,
       claimOrTollDate: '2026-06-29',
     });
-    expect(score).toBeGreaterThanOrEqual(50);
+    expect(sameDay).toBeGreaterThanOrEqual(50);
+
+    // Jul 1 Transjam vs Jun 29 Uber credit — still above picker floor
+    const nearby = scoreUnlinkedShortfallMatch({
+      tripRefund: 275,
+      tripDate: '2026-06-29T13:49:00',
+      remainingShortfall: 285,
+      tollAmount: 285,
+      claimOrTollDate: '2026-07-01T18:25:00',
+    });
+    expect(nearby).toBeGreaterThanOrEqual(25);
   });
 
   it('pending-only resolution is detected for informational gating', () => {
@@ -55,5 +67,60 @@ describe('unlinked shortfall eligibility', () => {
         unlinkedTrips: [{ driverId: 'd1', tollCharges: 275, tollRefundResolution: { status: 'cash_wash' } }],
       }),
     ).toBe(false);
+  });
+
+  it('excludes Personal Use / Deadhead Charge Driver and Reimbursed claims from picker', () => {
+    expect(
+      isEligibleUnlinkedShortfallClaim({
+        type: 'Toll_Refund',
+        status: 'Resolved',
+        resolutionReason: 'Charge Driver',
+        amount: 285,
+      }),
+    ).toBe(false);
+    expect(
+      isEligibleUnlinkedShortfallClaim({
+        type: 'Toll_Refund',
+        status: 'Resolved',
+        resolutionReason: 'Reimbursed',
+        amount: 285,
+        expectedAmount: 285,
+      }),
+    ).toBe(false);
+    expect(
+      isEligibleUnlinkedShortfallClaim({
+        type: 'Toll_Refund',
+        status: 'Open',
+        amount: 285,
+        paidAmount: 0,
+      }),
+    ).toBe(true);
+  });
+
+  it('excludes personal/deadhead ledger rows; keeps underpaid AMOUNT_VARIANCE', () => {
+    expect(
+      isEligibleUnlinkedShortfallToll({
+        type: 'usage',
+        amount: 285,
+        workflowStage: 'personal_use_resolved',
+        matchTypeCode: null,
+      }),
+    ).toBe(false);
+    expect(
+      isEligibleUnlinkedShortfallToll({
+        type: 'usage',
+        amount: 380,
+        workflowStage: 'deadhead_resolved',
+        resolution: 'personal',
+      }),
+    ).toBe(false);
+    expect(
+      isEligibleUnlinkedShortfallToll({
+        type: 'usage',
+        amount: 285,
+        matchTypeCode: 'AMOUNT_VARIANCE',
+        workflowStage: 'underpaid_pending',
+      }),
+    ).toBe(true);
   });
 });

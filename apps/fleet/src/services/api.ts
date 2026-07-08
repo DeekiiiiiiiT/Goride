@@ -1940,7 +1940,7 @@ export const api = {
     return response.json();
   },
 
-  async getUnlinkedShortfallSuggestions(params?: { driverId?: string }): Promise<{
+  async getUnlinkedShortfallSuggestions(params?: { driverId?: string; from?: string; to?: string }): Promise<{
     success: boolean;
     suggestions: Record<string, Array<{
       claimId: string | null;
@@ -1955,10 +1955,13 @@ export const api = {
       date: string;
       claimStatus: string | null;
       matchType: 'claim' | 'toll';
+      location?: string | null;
     }>>;
   }> {
     const qs = new URLSearchParams();
     if (params?.driverId) qs.set('driverId', params.driverId);
+    if (params?.from) qs.set('from', params.from);
+    if (params?.to) qs.set('to', params.to);
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/unlinked-shortfall-suggestions?${qs.toString()}`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });

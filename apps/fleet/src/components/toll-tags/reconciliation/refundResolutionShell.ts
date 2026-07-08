@@ -26,11 +26,6 @@ export const REFUND_RESOLUTION_META: Record<RefundResolutionType, RefundResoluti
     description: "Fare reimbursed the driver; driver paid cash. No leakage, no liability.",
     chipClass: "border-emerald-200 bg-emerald-100 text-emerald-800",
   },
-  expense_logged: {
-    label: "Expense logged",
-    description: "Create a matching toll expense and link it to this trip.",
-    chipClass: "border-indigo-200 bg-indigo-100 text-indigo-800",
-  },
   phantom: {
     label: "Phantom / estimate",
     description: "No real toll was crossed. Dismiss from leakage.",
@@ -41,15 +36,23 @@ export const REFUND_RESOLUTION_META: Record<RefundResolutionType, RefundResoluti
     description: "Expected to auto-match once the tag statement imports.",
     chipClass: "border-yellow-200 bg-yellow-100 text-yellow-800",
   },
+  expense_logged: {
+    label: "Expense logged",
+    description: "Create a new cash expense — only if no real toll exists.",
+    chipClass: "border-indigo-200 bg-indigo-100 text-indigo-800",
+  },
 };
 
-/** Order options appear in the manual list. */
+/** Leftover clear options (collapsed section). Expense logged last = advanced. */
 export const REFUND_RESOLUTION_ORDER: RefundResolutionType[] = [
   "cash_wash",
-  "expense_logged",
   "phantom",
   "pending",
+  "expense_logged",
 ];
+
+/** Section label for collapsed leftovers in Review drawer. */
+export const REFUND_OTHER_WAYS_LABEL = "Other ways to clear";
 
 export interface RefundSuggestion {
   type: RefundResolutionType;
