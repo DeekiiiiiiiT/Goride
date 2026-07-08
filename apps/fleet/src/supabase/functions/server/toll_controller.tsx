@@ -850,6 +850,8 @@ function tollLedgerToTxShape(entry: TollLedgerRecord): any {
     // for the guided Toll Reconciliation stepper (bucketForWorkflowStage).
     workflowStage: entry.workflowStage,
     claimId: entry.claimId,
+    matchStatus: entry.matchStatus,
+    isAmbiguous: entry.metadata?.isAmbiguous === true || entry.matchStatus === "ambiguous",
     metadata: {
       tollTagId: entry.tollTagId,
       tagNumber: entry.tagNumber,
@@ -1380,6 +1382,7 @@ app.get(`${BASE}/unreconciled`, async (c) => {
 
       const matches = findTollMatchesServer(tx, trips, timezone);
       const best = matches[0];
+      if (best?.isAmbiguous) continue;
       if (best?.matchType !== "PERFECT_MATCH") continue;
 
       const tripId = best.tripId;
@@ -2219,6 +2222,29 @@ async function computeTollMatchPatch(
   const best = matches[0];
 
   if (best) {
+    const matchCandidates = matches.slice(0, 3).map((m) => ({
+      tripId: m.tripId ?? null,
+      confidenceScore: m.confidenceScore ?? null,
+      matchType: m.matchType ?? null,
+      timeDifferenceMinutes: m.timeDifferenceMinutes ?? null,
+    }));
+
+    if (best.isAmbiguous) {
+      return {
+        matchStatus: "ambiguous",
+        matchedTripId: null,
+        matchConfidenceScore: best.confidenceScore ?? null,
+        matchReasonCode: best.reasonCode ?? null,
+        matchTypeCode: best.matchType ?? null,
+        lastMatchedAt: now,
+        metadata: {
+          ...tollRecord.metadata,
+          isAmbiguous: true,
+          matchCandidates,
+        },
+      };
+    }
+
     return {
       matchStatus: "matched",
       matchedTripId: best.tripId || null,
@@ -2226,6 +2252,11 @@ async function computeTollMatchPatch(
       matchReasonCode: best.reasonCode ?? null,
       matchTypeCode: best.matchType ?? null,
       lastMatchedAt: now,
+      metadata: {
+        ...tollRecord.metadata,
+        isAmbiguous: false,
+        matchCandidates,
+      },
     };
   }
   if (settings.personalUseDetectionEnabled) {

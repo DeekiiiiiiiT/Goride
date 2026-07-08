@@ -19,6 +19,7 @@ import type {
   SendRideMessageResponse,
   SettlementSummaryDto,
 } from '@roam/types/rides';
+import type { TollCrossingsResponse } from '@roam/types/tollCrossings';
 import type { RidesVehicleTypeDto } from '@/types/vehicleTypes';
 
 const base = API_ENDPOINTS.rides;
@@ -407,6 +408,14 @@ export async function ridesCreateDispute(
     method: 'POST',
     headers: await ridesHeaders(),
     body: JSON.stringify({ reason, notes }),
+  });
+  if (!res.ok) await parseRidesError(res);
+  return res.json();
+}
+
+export async function ridesFetchTollCrossings(rideId: string): Promise<TollCrossingsResponse> {
+  const res = await ridesFetch(`${base}/v1/requests/${rideId}/toll-crossings`, {
+    headers: await ridesHeaders(),
   });
   if (!res.ok) await parseRidesError(res);
   return res.json();

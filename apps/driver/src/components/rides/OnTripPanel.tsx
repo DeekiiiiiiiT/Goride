@@ -22,6 +22,8 @@ import { canCompleteTrip } from './rideGeofenceClient';
 import { shouldCollectCashAtDropoff } from '../../lib/cashSettlementUi';
 import { RideChatUnreadDot } from '@roam/ride-chat';
 import { DriverRideChatWrap } from './DriverRideChatWrap';
+import type { DriverRideLocationLive } from '../../services/ridesDriverEdge';
+import { LiveTollBanner } from '@roam/toll-ui';
 
 type Props = {
   ride: RideRequestRow;
@@ -32,6 +34,7 @@ type Props = {
   ) => Promise<void>;
   trackingError?: string | null;
   gpsAccuracyM?: number | null;
+  rideLocationLive?: DriverRideLocationLive | null;
 };
 
 function shortAddress(address: string | null | undefined): string {
@@ -56,7 +59,7 @@ function droppingOffMeta(ride: RideRequestRow): { title: string; sub: string } {
   };
 }
 
-export function OnTripPanel({ ride, onAdvance, trackingError }: Props) {
+export function OnTripPanel({ ride, onAdvance, trackingError, rideLocationLive }: Props) {
   const [advancing, setAdvancing] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState(RIDE_CANCEL_REASONS[0].value);
@@ -68,6 +71,9 @@ export function OnTripPanel({ ride, onAdvance, trackingError }: Props) {
   const dropoffAddress = shortAddress(ride.dropoff_address);
   const tripMiles = formatOfferDistanceMi(ride.distance_estimate_km);
   const { title: navTitle, sub: navSub } = droppingOffMeta(ride);
+  const tollTotalMinor =
+    rideLocationLive?.actual_tolls_minor ?? Number(ride.actual_tolls_minor ?? 0);
+  const currency = ride.currency ?? 'JMD';
 
   const mapRoute = useMemo((): RoutePoint[] => {
     const now = Date.now();
@@ -169,6 +175,18 @@ export function OnTripPanel({ ride, onAdvance, trackingError }: Props) {
               {trackingError}
             </p>
           ) : null}
+
+          <LiveTollBanner
+            variant="driver"
+            crossings={(rideLocationLive?.tolls_crossed ?? []).map((t) => ({
+              toll_plaza_id: t.toll_plaza_id,
+              toll_plaza_name: t.toll_plaza_name,
+              toll_amount_minor: t.toll_amount_minor,
+            }))}
+            totalMinor={tollTotalMinor}
+            currency={currency}
+            className="mb-2"
+          />
 
           <div className="mb-3 flex items-start gap-3">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-100 dark:bg-blue-950/50">

@@ -24,13 +24,24 @@ import { FinancialTransaction, Trip } from "../../../types/data";
 import { EditTollModal } from "./EditTollModal";
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
 import { MatchResult } from "../../../utils/tollReconciliation";
+import { isTripLinkConfirmed } from "../../../utils/tollBucket";
 import { SuggestedMatchCard } from "./SuggestedMatchCard";
 import { ManualMatchModal } from "./ManualMatchModal";
 import { TollDetailOverlay } from "./TollDetailOverlay";
 import { EvidenceExpiryBadge } from '../../evidence/EvidenceExpiryBadge';
 import { resolveEvidenceMediaState } from '../../evidence/evidenceState';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../ui/collapsible";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "../../ui/tooltip";
 import { groupTollsByWeek } from "../../../utils/tollWeekPeriod";
+
+function needsTripPick(tx: FinancialTransaction, match?: MatchResult): boolean {
+  return !!(match?.isAmbiguous && !isTripLinkConfirmed(tx));
+}
 
 /**
  * Shared per-bucket toll list renderer, factored out of the old
@@ -78,6 +89,7 @@ export function TollBucketPanel({
 
     const [detailTx, setDetailTx] = useState<FinancialTransaction | null>(null);
     const [detailMatch, setDetailMatch] = useState<MatchResult | null>(null);
+    const [detailMatches, setDetailMatches] = useState<MatchResult[]>([]);
     const [isDetailOpen, setIsDetailOpen] = useState(false);
 
     const [editTx, setEditTx] = useState<FinancialTransaction | null>(null);
@@ -104,9 +116,10 @@ export function TollBucketPanel({
         setVisibleWeekCount(12);
     }, [tolls]);
 
-    const openDetail = (tx: FinancialTransaction, match?: MatchResult) => {
+    const openDetail = (tx: FinancialTransaction, match?: MatchResult, allMatches?: MatchResult[]) => {
         setDetailTx(tx);
         setDetailMatch(match || null);
+        setDetailMatches(allMatches ?? (match ? [match] : []));
         setIsDetailOpen(true);
     };
 
@@ -114,6 +127,7 @@ export function TollBucketPanel({
         setIsDetailOpen(false);
         setDetailTx(null);
         setDetailMatch(null);
+        setDetailMatches([]);
     };
 
     const openEdit = (tx: FinancialTransaction) => {
@@ -173,6 +187,27 @@ export function TollBucketPanel({
     const renderActionButtons = (tx: FinancialTransaction, match?: MatchResult) => {
         const isClaim = tx.paymentMethod === 'Cash' || !!tx.receiptUrl;
         const isOrphan = !!match && !match.trip?.id;
+        const tripPickRequired = needsTripPick(tx, match);
+
+        if (tripPickRequired && match) {
+            return (
+                <div className="flex items-center justify-end gap-2">
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <span>
+                                    <Button size="sm" disabled className="cursor-not-allowed">Link</Button>
+                                </span>
+                            </TooltipTrigger>
+                            <TooltipContent><p>Pick the correct trip first</p></TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                    <Button size="sm" variant="outline" className="gap-1" onClick={() => setSelectedTxForManual(tx)}>
+                        <Search className="h-3 w-3" /> Find Match...
+                    </Button>
+                </div>
+            );
+        }
 
         if (!match || isOrphan) {
              const isOpen = openDropdownId === tx.id;
@@ -214,6 +249,18 @@ export function TollBucketPanel({
 
         if (isClaim) {
             if (match.matchType === 'AMOUNT_VARIANCE' && onFlag) {
+                 if (tripPickRequired) {
+                     return (
+                         <TooltipProvider>
+                             <Tooltip>
+                                 <TooltipTrigger asChild>
+                                     <span><Button size="sm" disabled className="cursor-not-allowed">Flag</Button></span>
+                                 </TooltipTrigger>
+                                 <TooltipContent><p>Pick the correct trip first</p></TooltipContent>
+                             </Tooltip>
+                         </TooltipProvider>
+                     );
+                 }
                  return <Button size="sm" className="bg-amber-600 hover:bg-amber-700" onClick={() => onFlag(tx)}>Flag</Button>;
             }
             if (match.matchType === 'PERSONAL_MATCH' && onReject) {
@@ -251,12 +298,55 @@ export function TollBucketPanel({
         return best && hasHighScore && !isOrphan && !hiddenSuggestions.has(tx.id);
     });
 
+    const visibleSmart = smartMatches.slice(0, visibleSmartMatches);
+    const ambiguousSmartMatches = visibleSmart.filter(tx => needsTripPick(tx, suggestions.get(tx.id)?.[0]));
+    const normalSmartMatches = visibleSmart.filter(tx => !needsTripPick(tx, suggestions.get(tx.id)?.[0]));
+
     const otherTolls = filteredTolls.filter(tx => !smartMatches.includes(tx));
 
-    const smartWeekGroups = useMemo(
-        () => groupTollsByWeek(smartMatches.slice(0, visibleSmartMatches), fleetTz),
-        [smartMatches, visibleSmartMatches, fleetTz]
+    const renderSmartMatchCards = (items: FinancialTransaction[]) => (
+        smartWeekGroupsFor(items).map((week) => (
+            <Collapsible key={week.key} defaultOpen={false} className="group rounded-xl border border-indigo-200/80 bg-indigo-50/50 dark:bg-indigo-950/25 dark:border-indigo-800/50 overflow-hidden shadow-sm">
+                <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-indigo-100/60 dark:hover:bg-indigo-900/40 transition-colors">
+                    <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                        <CalendarRange className="h-4 w-4 text-indigo-600 shrink-0" />
+                        <span className="font-semibold text-slate-800 dark:text-slate-100">{week.label}</span>
+                        <span className="text-[10px] uppercase tracking-wide text-slate-500">Mon–Sun</span>
+                        <Badge variant="secondary" className="text-[11px]">{week.items.length} toll{week.items.length !== 1 ? 's' : ''}</Badge>
+                    </div>
+                    <ChevronDown className="h-4 w-4 text-slate-500 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-0 group-data-[state=closed]:-rotate-90" />
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                    <div className="grid grid-cols-1 gap-4 px-4 pb-4 pt-0 border-t border-indigo-100/80 dark:border-indigo-800/50">
+                        {week.items.map(tx => {
+                            const matches = suggestions.get(tx.id) ?? [];
+                            const match = matches[0];
+                            return (
+                                <SuggestedMatchCard
+                                    key={tx.id}
+                                    transaction={tx}
+                                    match={match}
+                                    allMatches={matches}
+                                    onConfirm={() => onReconcile(tx, match.trip)}
+                                    onDismiss={() => handleDismiss(tx.id)}
+                                    onApprove={onApprove ? () => onApprove(tx) : undefined}
+                                    onReject={onReject ? () => onReject(tx) : undefined}
+                                    onFlag={onFlag ? () => onFlag(tx) : undefined}
+                                    onChargeDriver={onChargeDriver ? () => onChargeDriver(tx, match) : undefined}
+                                    onClickDetail={() => openDetail(tx, match, matches)}
+                                    onSelectTrip={(trip) => onReconcile(tx, trip)}
+                                    onFindMatch={() => setSelectedTxForManual(tx)}
+                                />
+                            );
+                        })}
+                    </div>
+                </CollapsibleContent>
+            </Collapsible>
+        ))
     );
+
+    const smartWeekGroupsFor = (items: FinancialTransaction[]) =>
+        groupTollsByWeek(items, fleetTz);
 
     const otherWeekGroups = useMemo(() => groupTollsByWeek(otherTolls, fleetTz), [otherTolls, fleetTz]);
     const visibleOtherWeekGroups = otherWeekGroups.slice(0, visibleWeekCount);
@@ -303,47 +393,32 @@ export function TollBucketPanel({
     return (
         <div className="space-y-6">
             {smartMatches.length > 0 && (
-                <div className="space-y-4">
-                    <div className="flex items-center space-x-2 text-indigo-600">
-                        <Sparkles className="h-5 w-5" />
-                        <h3 className="font-semibold">Smart Suggestions ({smartMatches.length})</h3>
-                    </div>
-                    <div className="space-y-3">
-                        {smartWeekGroups.map((week) => (
-                            <Collapsible key={week.key} defaultOpen={false} className="group rounded-xl border border-indigo-200/80 bg-indigo-50/50 dark:bg-indigo-950/25 dark:border-indigo-800/50 overflow-hidden shadow-sm">
-                                <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-indigo-100/60 dark:hover:bg-indigo-900/40 transition-colors">
-                                    <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                                        <CalendarRange className="h-4 w-4 text-indigo-600 shrink-0" />
-                                        <span className="font-semibold text-slate-800 dark:text-slate-100">{week.label}</span>
-                                        <span className="text-[10px] uppercase tracking-wide text-slate-500">Mon–Sun</span>
-                                        <Badge variant="secondary" className="text-[11px]">{week.items.length} toll{week.items.length !== 1 ? 's' : ''}</Badge>
-                                    </div>
-                                    <ChevronDown className="h-4 w-4 text-slate-500 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-0 group-data-[state=closed]:-rotate-90" />
-                                </CollapsibleTrigger>
-                                <CollapsibleContent>
-                                    <div className="grid grid-cols-1 gap-4 px-4 pb-4 pt-0 border-t border-indigo-100/80 dark:border-indigo-800/50">
-                                        {week.items.map(tx => {
-                                            const match = suggestions.get(tx.id)![0];
-                                            return (
-                                                <SuggestedMatchCard
-                                                    key={tx.id}
-                                                    transaction={tx}
-                                                    match={match}
-                                                    onConfirm={() => onReconcile(tx, match.trip)}
-                                                    onDismiss={() => handleDismiss(tx.id)}
-                                                    onApprove={onApprove ? () => onApprove(tx) : undefined}
-                                                    onReject={onReject ? () => onReject(tx) : undefined}
-                                                    onFlag={onFlag ? () => onFlag(tx) : undefined}
-                                                    onChargeDriver={onChargeDriver ? () => onChargeDriver(tx, match) : undefined}
-                                                    onClickDetail={() => openDetail(tx, match)}
-                                                />
-                                            );
-                                        })}
-                                    </div>
-                                </CollapsibleContent>
-                            </Collapsible>
-                        ))}
-                    </div>
+                <div className="space-y-6">
+                    {ambiguousSmartMatches.length > 0 && (
+                        <div className="space-y-4">
+                            <div className="flex items-center space-x-2 text-orange-600">
+                                <AlertTriangle className="h-5 w-5" />
+                                <div>
+                                    <h3 className="font-semibold">Pick the trip ({ambiguousSmartMatches.length})</h3>
+                                    <p className="text-xs text-orange-600/80">Ambiguous — multiple trips compete. Choose one before flagging or linking.</p>
+                                </div>
+                            </div>
+                            <div className="space-y-3">
+                                {renderSmartMatchCards(ambiguousSmartMatches)}
+                            </div>
+                        </div>
+                    )}
+                    {normalSmartMatches.length > 0 && (
+                        <div className="space-y-4">
+                            <div className="flex items-center space-x-2 text-indigo-600">
+                                <Sparkles className="h-5 w-5" />
+                                <h3 className="font-semibold">Smart Suggestions ({normalSmartMatches.length})</h3>
+                            </div>
+                            <div className="space-y-3">
+                                {renderSmartMatchCards(normalSmartMatches)}
+                            </div>
+                        </div>
+                    )}
                     {visibleSmartMatches < smartMatches.length && (
                         <div className="flex items-center justify-center">
                             <Button
@@ -417,14 +492,15 @@ export function TollBucketPanel({
                                                     <table className="w-full text-sm caption-bottom">
                                                         <tbody className="[&_tr:last-child]:border-0">
                                                             {week.items.map(tx => {
-                                                                const bestMatch = suggestions.get(tx.id)?.[0];
+                                                                const txMatches = suggestions.get(tx.id) ?? [];
+                                                                const bestMatch = txMatches[0];
                                                                 const hasHiddenMatch = hiddenSuggestions.has(tx.id);
                                                                 const vehicleId = tx.vehiclePlate || tx.vehicleId || '';
                                                                 const inferredDriver = getInferredDriver(vehicleId, tx.date);
                                                                 const displayDriver = tx.driverName || bestMatch?.trip.driverName || inferredDriver;
 
                                                                 return (
-                                                                    <TableRow key={tx.id} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors" onClick={() => openDetail(tx, bestMatch || undefined)}>
+                                                                    <TableRow key={tx.id} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors" onClick={() => openDetail(tx, bestMatch || undefined, txMatches)}>
                                                                         <TableCell>
                                                                             <div className="flex flex-col">
                                                                                 {(() => {
@@ -505,6 +581,11 @@ export function TollBucketPanel({
                                                                                         </span>
                                                                                     )}
                                                                                     {bestMatch.isAmbiguous && (
+                                                                                        <Badge variant="outline" className="text-[10px] border-orange-300 text-orange-700 bg-orange-50">
+                                                                                            Ambiguous — pick trip
+                                                                                        </Badge>
+                                                                                    )}
+                                                                                    {bestMatch.isAmbiguous && (
                                                                                         <span title="Ambiguous — multiple trips compete with similar scores">
                                                                                             <AlertTriangle className="h-3.5 w-3.5 text-orange-500" />
                                                                                         </span>
@@ -569,7 +650,8 @@ export function TollBucketPanel({
                 onClose={closeDetail}
                 transaction={detailTx}
                 match={detailMatch}
-                onConfirm={detailTx && detailMatch ? () => {
+                allMatches={detailMatches}
+                onConfirm={detailTx && detailMatch && !needsTripPick(detailTx, detailMatch) ? () => {
                     onReconcile(detailTx, detailMatch.trip);
                     closeDetail();
                 } : undefined}
@@ -585,12 +667,16 @@ export function TollBucketPanel({
                     onReject(detailTx);
                     closeDetail();
                 } : undefined}
-                onFlag={detailTx && onFlag ? () => {
+                onFlag={detailTx && onFlag && detailMatch && !needsTripPick(detailTx, detailMatch) ? () => {
                     onFlag(detailTx);
                     closeDetail();
                 } : undefined}
                 onChargeDriver={detailTx && detailMatch && onChargeDriver ? () => {
                     onChargeDriver(detailTx, detailMatch);
+                    closeDetail();
+                } : undefined}
+                onSelectTrip={detailTx ? (trip) => {
+                    onReconcile(detailTx, trip);
                     closeDetail();
                 } : undefined}
             />

@@ -18,6 +18,8 @@ import { RideChatUnreadDot } from '@roam/ride-chat';
 import { RiderRideChatWrap } from '@/components/RiderRideChatWrap';
 import { ShareMyTripSheet } from '@/components/trusted-contacts/ShareMyTripSheet';
 import { formatShortAddress } from '@/lib/formatRideAddress';
+import { LiveTollBanner } from '@roam/toll-ui';
+import { useRideTollCrossings } from '@/hooks/useRideTollCrossings';
 type LatLng = { lat: number; lng: number };
 
 type Props = {
@@ -59,6 +61,12 @@ export function TripInProgressView({
     ride.fare_final_minor ?? ride.fare_estimate_minor,
     ride.currency ?? 'JMD',
   );
+
+  const { crossings, actualTollsMinor, state: tollState } = useRideTollCrossings(
+    ride.id,
+    ride.status === 'on_trip',
+  );
+  const currency = ride.currency ?? 'JMD';
 
   const comingSoon = (label: string) => {
     toast.message(label, { description: 'Coming soon' });
@@ -112,6 +120,15 @@ export function TripInProgressView({
           </p>
 
           <LiveRideDriverCard assignedDriver={assignedDriver} serviceLabel={serviceLabel} />
+
+          <LiveTollBanner
+            variant="rider"
+            crossings={crossings}
+            totalMinor={actualTollsMinor}
+            currency={currency}
+            state={tollState}
+            className="mb-3"
+          />
 
           <div className="trip-progress-actions" role="group" aria-label="Trip actions">
             {canChat ? (

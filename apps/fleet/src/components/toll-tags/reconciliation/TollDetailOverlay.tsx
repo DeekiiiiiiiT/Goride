@@ -16,15 +16,27 @@ import {
 } from "lucide-react";
 import { FinancialTransaction, Trip } from "../../../types/data";
 import { MatchResult, MatchType } from "../../../utils/tollReconciliation";
+import { isTripLinkConfirmed } from "../../../utils/tollBucket";
+import { MatchAlternatesPanel } from "./MatchAlternatesPanel";
+import { GeofenceMatchBadge } from '@roam/toll-ui';
+import type { GeofenceMatchStatus } from '@roam/types/tollCrossings';
 import { normalizePlatform } from '../../../utils/normalizePlatform';
 import { format } from "date-fns";
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
+
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "../../ui/tooltip";
 
 interface TollDetailOverlayProps {
   isOpen: boolean;
   onClose: () => void;
   transaction: FinancialTransaction | null;
   match: MatchResult | null;
+  allMatches?: MatchResult[];
   onConfirm?: () => void;
   onDismiss?: () => void;
   onApprove?: () => void;
@@ -32,6 +44,17 @@ interface TollDetailOverlayProps {
   onFlag?: () => void;
   /** Deadhead-only: bill this toll to the driver instead of the fleet absorbing it. */
   onChargeDriver?: () => void;
+  onSelectTrip?: (trip: Trip) => void;
+}
+
+function geofenceMatchStatus(
+  transaction: FinancialTransaction,
+  match: MatchResult | null,
+): GeofenceMatchStatus {
+  const source = (transaction as { metadata?: { source?: string } }).metadata?.source;
+  if (source === 'roam_geofence') return 'confirmed';
+  if (match?.trip) return 'mismatch';
+  return 'none';
 }
 
 export function TollDetailOverlay({
@@ -39,18 +62,22 @@ export function TollDetailOverlay({
   onClose,
   transaction,
   match,
+  allMatches,
   onConfirm,
   onDismiss,
   onApprove,
   onReject,
   onFlag,
   onChargeDriver,
+  onSelectTrip,
 }: TollDetailOverlayProps) {
   if (!transaction) return null;
 
   const fleetTz = useFleetTimezone();
   const trip = match?.trip;
   const isClaim = transaction.paymentMethod === 'Cash' || !!transaction.receiptUrl;
+  const needsTripPick = !!(match?.isAmbiguous && !isTripLinkConfirmed(transaction));
+  const alternates = allMatches && allMatches.length > 0 ? allMatches : (match && needsTripPick ? [match] : []);
 
   // --- Helpers ---
   const formatTxDate = () => {
@@ -123,9 +150,27 @@ export function TollDetailOverlay({
   const txDate = formatTxDate();
   const tripDate = formatTripDate();
   const matchConfig = getMatchConfig(match?.matchType);
+  const geofenceStatus = geofenceMatchStatus(transaction, match);
 
   const renderActionButtons = () => {
     if (!match) return null;
+
+    if (needsTripPick) {
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="flex-1">
+                <Button disabled className="w-full bg-slate-300 cursor-not-allowed">
+                  Choose trip below
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent><p>Pick the correct trip first</p></TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
 
     if (isClaim) {
       if (match.matchType === 'AMOUNT_VARIANCE' && onFlag) {
@@ -183,6 +228,7 @@ export function TollDetailOverlay({
               <div className="flex items-center gap-3">
                 <DialogTitle className="text-xl font-bold text-slate-900">Toll Detail</DialogTitle>
                 <Badge className={`${matchConfig.color} text-white`}>{matchConfig.label}</Badge>
+                <GeofenceMatchBadge status={geofenceStatus} className="ml-2" />
               </div>
               <span className="text-2xl font-bold text-rose-600">
                 -${Math.abs(transaction.amount).toFixed(2)}
@@ -392,6 +438,13 @@ export function TollDetailOverlay({
                 )}
               </div>
             </div>
+          )}
+
+          {needsTripPick && onSelectTrip && alternates.length > 0 && (
+            <MatchAlternatesPanel
+              matches={alternates}
+              onSelectTrip={onSelectTrip}
+            />
           )}
 
           {/* No match info */}

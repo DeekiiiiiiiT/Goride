@@ -385,7 +385,14 @@ export function FareRulesManager({ accessToken }: FareRulesManagerProps) {
                   ] as const
                 ).map(([key, label]) => (
                   <div key={key} className="space-y-2">
-                    <label className="block text-sm font-medium text-slate-300">{label}</label>
+                    <label className="block text-sm font-medium text-slate-300">
+                      {label}
+                      {key === 'estimated_tolls' ? (
+                        <span className="block text-xs font-normal text-slate-500 mt-0.5">
+                          Used only when route-based toll estimation is off
+                        </span>
+                      ) : null}
+                    </label>
                     <input
                       type="number"
                       min={0}

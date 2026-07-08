@@ -93,6 +93,12 @@ export function useRideDispatch() {
   const [vehicleReady, setVehicleReady] = useState(false);
   const [presenceError, setPresenceError] = useState<string | null>(null);
   const [rideLocationLive, setRideLocationLive] = useState<DriverRideLocationLive | null>(null);
+  const [driverTollToast, setDriverTollToast] = useState<{
+    plazaName: string;
+    amountMinor: number;
+    tripTotalMinor: number;
+  } | null>(null);
+  const seenTollKeysRef = useRef<Set<string>>(new Set());
   const [userId, setUserId] = useState<string | null>(null);
   const [cashSettlementResult, setCashSettlementResult] = useState<CashSettlementResponse | null>(null);
   const [digitalTripComplete, setDigitalTripComplete] = useState<RideRequestRow | null>(null);
@@ -123,6 +129,8 @@ export function useRideDispatch() {
         setActiveRide(null);
         setActiveRideWaitTime(null);
         setRideLocationLive(null);
+        setDriverTollToast(null);
+        seenTollKeysRef.current = new Set();
         setRecoveredRide(null);
         persistActiveRideId(null);
         persistActiveRideSnapshot(null);
@@ -309,10 +317,29 @@ export function useRideDispatch() {
     await pollActiveRide(activeRide.id);
   }, [activeRide?.id, pollActiveRide]);
 
+  const handleRideLocationLive = useCallback((live: DriverRideLocationLive | null) => {
+    setRideLocationLive(live);
+    const crossed = live?.tolls_crossed;
+    if (!crossed?.length) return;
+    const latest = crossed[crossed.length - 1];
+    const key = `${latest.toll_plaza_id}:${latest.toll_amount_minor}:${crossed.length}`;
+    if (seenTollKeysRef.current.has(key)) return;
+    seenTollKeysRef.current.add(key);
+    setDriverTollToast({
+      plazaName: latest.toll_plaza_name,
+      amountMinor: latest.toll_amount_minor,
+      tripTotalMinor: live?.actual_tolls_minor ?? latest.toll_amount_minor,
+    });
+  }, []);
+
+  const dismissDriverTollToast = useCallback(() => {
+    setDriverTollToast(null);
+  }, []);
+
   const { trackingError, gpsAccuracyM, isTracking } = useActiveRideTracking(
     activeRide,
     syncActiveRide,
-    setRideLocationLive,
+    handleRideLocationLive,
     undefined,
     refreshActiveRideFromServer,
   );
@@ -850,6 +877,8 @@ export function useRideDispatch() {
     gpsAccuracyM,
     isTracking,
     rideLocationLive,
+    driverTollToast,
+    dismissDriverTollToast,
     goOnline,
     goOffline,
     toggleOnline,

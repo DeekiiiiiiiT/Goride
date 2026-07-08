@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { bucketForBestMatch, bucketForWorkflowStage, TollWorkflowStage } from './tollBucket';
+import {
+  bucketForBestMatch,
+  bucketForWorkflowStage,
+  isTripLinkConfirmed,
+  resolveTollBucket,
+  TollWorkflowStage,
+} from './tollBucket';
 import { MatchResult } from './tollReconciliation';
 
 /**
@@ -60,6 +66,43 @@ describe('bucketForBestMatch', () => {
  * agree with bucketForBestMatch's bucket set for the 4 pre-claim states, and
  * correctly signal "no longer a to-do" (null) for every claimed/resolved state.
  */
+describe('resolveTollBucket', () => {
+  it('ambiguous unreconciled AMOUNT_VARIANCE → needs-review', () => {
+    expect(
+      resolveTollBucket(
+        { isReconciled: false, tripId: null },
+        { matchType: 'AMOUNT_VARIANCE', isAmbiguous: true },
+      ),
+    ).toBe('needs-review');
+  });
+
+  it('ambiguous but reconciled → underpaid', () => {
+    expect(
+      resolveTollBucket(
+        { isReconciled: true, tripId: 'trip-1' },
+        { matchType: 'AMOUNT_VARIANCE', isAmbiguous: true },
+      ),
+    ).toBe('underpaid');
+  });
+
+  it('non-ambiguous underpaid → underpaid', () => {
+    expect(
+      resolveTollBucket(
+        { isReconciled: false, tripId: null },
+        { matchType: 'AMOUNT_VARIANCE', isAmbiguous: false },
+      ),
+    ).toBe('underpaid');
+  });
+});
+
+describe('isTripLinkConfirmed', () => {
+  it('requires both isReconciled and tripId', () => {
+    expect(isTripLinkConfirmed({ isReconciled: true, tripId: 'x' })).toBe(true);
+    expect(isTripLinkConfirmed({ isReconciled: true, tripId: null })).toBe(false);
+    expect(isTripLinkConfirmed({ isReconciled: false, tripId: 'x' })).toBe(false);
+  });
+});
+
 describe('bucketForWorkflowStage', () => {
   it('maps each pending stage to the same bucket bucketForBestMatch would use', () => {
     expect(bucketForWorkflowStage('needs_review')).toBe('needs-review');

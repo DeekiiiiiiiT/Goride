@@ -24,6 +24,7 @@ import {
   receiptPassengerLabel,
   receiptPaymentLabel,
 } from '@/lib/activityReceiptUtils';
+import { TripTollReceiptSection } from '@roam/toll-ui';
 import {
   INVERSE_SURFACE,
   ON_PRIMARY,
@@ -259,6 +260,19 @@ export function ActivityTripReceiptSheet({ trip, ride, onBack }: ActivityTripRec
                   <span className="text-sm font-semibold tabular-nums" style={{ color: ON_SURFACE }}>
                     {formatReceiptLine(fare.tipMinor, currency)}
                   </span>
+                </div>
+              ) : null}
+
+              {Number(ride.actual_tolls_minor ?? 0) > 0 ? (
+                <div className="mt-4 border-t pt-4" style={{ borderColor: OUTLINE_VARIANT }}>
+                  <TripTollReceiptSection
+                    baseMinor={fare.tripFareMinor}
+                    actualTollsMinor={Number(ride.actual_tolls_minor ?? 0)}
+                    estimatedTollsMinor={Number(ride.fare_breakdown?.estimated_tolls_minor ?? 0)}
+                    waitTimeMinor={Number(ride.wait_time_fee_minor ?? 0)}
+                    totalMinor={fare.totalMinor}
+                    currency={currency}
+                  />
                 </div>
               ) : null}
             </div>

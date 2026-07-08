@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@roam/types": "workspace:*",
+    "@roam/toll-ui": "workspace:*",
     "@roam/ui": "workspace:*",
     "@roam/api-client": "workspace:*",
     "@roam/auth-client": "workspace:*",

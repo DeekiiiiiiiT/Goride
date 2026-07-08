@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AdminLayout } from './AdminLayout';
 import { AdminDashboard } from './AdminDashboard';
@@ -44,6 +44,10 @@ import { RiderUserDetailPage } from './product-users/RiderUserDetailPage';
 import { applyPortalTheme } from '../../hooks/usePortalTheme';
 import { api } from '../../services/api';
 import { UnifiedLedgerFeed } from './UnifiedLedgerFeed';
+
+const TollLiveMonitorPage = lazy(() =>
+  import('../../pages/TollLiveMonitorPage').then((m) => ({ default: m.TollLiveMonitorPage })),
+);
 
 function normalizePortalPage(page: string): string {
   return LEGACY_PAGE_REDIRECTS[page] ?? page;
@@ -237,6 +241,13 @@ export function AdminPortal() {
       {currentPage === 'toll-info' && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
           <TollInfoPage />
+        </div>
+      )}
+      {currentPage === 'toll-live-monitor' && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card p-4">
+          <Suspense fallback={<div className="p-8 text-slate-500">Loading toll monitor…</div>}>
+            <TollLiveMonitorPage />
+          </Suspense>
         </div>
       )}
       {currentPage === 'motor-vehicles' && (

@@ -71,6 +71,15 @@ function zeroCounts(): Record<StepId, StepCounts> {
   return counts;
 }
 
+/** Mirrors isTripLinkConfirmed / resolveTollBucket in apps/fleet/src/utils/tollBucket.ts. */
+function resolvePeriodBucket(tx: any): "needs-review" | "underpaid-claims" | "deadhead" | "personal-use" | null {
+  const linkConfirmed = !!(tx.isReconciled && tx.tripId);
+  if (!linkConfirmed && (tx.matchStatus === "ambiguous" || tx.isAmbiguous === true)) {
+    return "needs-review";
+  }
+  return bucketForWorkflowStage(tx.workflowStage);
+}
+
 /** Mirrors bucketForWorkflowStage in apps/fleet/src/utils/tollBucket.ts. */
 function bucketForWorkflowStage(stage: string | undefined): "needs-review" | "underpaid-claims" | "deadhead" | "personal-use" | null {
   switch (stage) {
@@ -235,7 +244,7 @@ app.get(`${BASE}/periods`, async (c) => {
     for (const tx of unclaimedTolls) {
       if (!tx?.date) continue;
       if (!tx.workflowStage) anyMissingWorkflowStage = true;
-      const bucket = bucketForWorkflowStage(tx.workflowStage);
+      const bucket = resolvePeriodBucket(tx);
       if (!bucket) continue;
       getOrCreatePeriod(tx.date).counts[bucket].actionable++;
     }

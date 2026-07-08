@@ -43,9 +43,18 @@ function parseKvTollPlaza(key: string, value: unknown): LoadedTollPlaza | null {
   if (!location?.lat || !location?.lng) return null;
   
   const rates = Array.isArray(v.rates) ? v.rates : [];
-  const defaultRate = rates.find((r: { vehicleClass?: string }) => 
-    r.vehicleClass === "standard" || r.vehicleClass === "car"
-  ) || rates[0];
+  const classPriority = ["Class 1", "standard", "car"];
+  let defaultRate: Record<string, unknown> | undefined;
+  for (const cls of classPriority) {
+    const hit = rates.find((r: Record<string, unknown>) => r.vehicleClass === cls);
+    if (hit) {
+      defaultRate = hit as Record<string, unknown>;
+      break;
+    }
+  }
+  if (!defaultRate && rates.length > 0) {
+    defaultRate = rates[0] as Record<string, unknown>;
+  }
   
   return {
     id,
@@ -57,12 +66,17 @@ function parseKvTollPlaza(key: string, value: unknown): LoadedTollPlaza | null {
     geofenceRadius: Number(v.geofenceRadius ?? 100),
     rates: rates.map((r: Record<string, unknown>) => ({
       vehicleClass: String(r.vehicleClass ?? "standard"),
-      amount: Number(r.amount ?? 0),
+      amount: Number(r.amount ?? r.rate ?? 0),
       currency: String(r.currency ?? "JMD"),
     })),
     direction: typeof v.direction === "string" ? v.direction : undefined,
-    status: v.status === "active" ? "active" : "inactive",
-    defaultRateMinor: Math.round((Number(defaultRate?.amount ?? 0)) * 100),
+    status:
+      v.operationalStatus === "inactive" || v.status === "inactive"
+        ? "inactive"
+        : "active",
+    defaultRateMinor: Math.round(
+      Number(defaultRate?.amount ?? defaultRate?.rate ?? 0) * 100,
+    ),
     currency: String(defaultRate?.currency ?? "JMD"),
   };
 }

@@ -15,6 +15,26 @@ export type TollBucket = 'needs-review' | 'underpaid' | 'deadhead' | 'personal-u
  * payloads / personal-use flag OFF) so bucketing stays byte-identical to prior
  * behavior. Extracted from UnmatchedTollsList so it can be unit-tested directly.
  */
+/** Trip link is confirmed once reconciled to a specific trip. */
+export function isTripLinkConfirmed(tx: {
+  isReconciled?: boolean;
+  tripId?: string | null;
+}): boolean {
+  return !!(tx.isReconciled && tx.tripId);
+}
+
+/**
+ * Wizard bucket: financial classification only after the trip link is settled.
+ * Ambiguous unreconciled tolls stay in needs-review until the user picks a trip.
+ */
+export function resolveTollBucket(
+  tx: { isReconciled?: boolean; tripId?: string | null },
+  best: Pick<MatchResult, 'matchType' | 'reasonCode' | 'reason' | 'isAmbiguous'> | undefined,
+): TollBucket {
+  if (best?.isAmbiguous && !isTripLinkConfirmed(tx)) return 'needs-review';
+  return bucketForBestMatch(best);
+}
+
 export function bucketForBestMatch(
   best: Pick<MatchResult, 'matchType' | 'reasonCode' | 'reason'> | undefined,
 ): TollBucket {

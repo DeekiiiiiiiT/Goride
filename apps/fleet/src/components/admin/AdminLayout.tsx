@@ -36,14 +36,15 @@ import {
   Receipt,
   Activity,
   Utensils,
+  Radio,
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { resolveRole } from '../../utils/permissions';
 
 // Phase 11: Define which admin pages each platform role can access
 const PLATFORM_ROLE_PAGES: Record<string, string[]> = {
-  platform_owner:   ['dashboard', 'customers', 'platform-team', 'drivers', 'team-members', 'activity-log', 'fuel-stations', 'fuel-analytics', 'toll-stations', 'toll-info', 'motor-vehicles', 'pending-motor-vehicles', 'maintenance-templates', 'parts-sourcing', 'roam-dash-merchants', 'api-center', 'api-center-overview', 'api-center-usage', 'api-center-keys', 'api-center-budgets', 'api-center-logs', 'api-center-billing', 'settings', 'settings-general', 'settings-features', 'settings-registration', 'settings-security', 'settings-announcements', 'settings-danger', 'db-management', 'db-settings'],
-  platform_support: ['dashboard', 'customers', 'drivers', 'team-members', 'fuel-stations', 'fuel-analytics', 'toll-stations', 'toll-info', 'motor-vehicles', 'pending-motor-vehicles', 'maintenance-templates', 'parts-sourcing', 'roam-dash-merchants'],
+  platform_owner:   ['dashboard', 'customers', 'platform-team', 'drivers', 'team-members', 'activity-log', 'fuel-stations', 'fuel-analytics', 'toll-stations', 'toll-info', 'toll-live-monitor', 'motor-vehicles', 'pending-motor-vehicles', 'maintenance-templates', 'parts-sourcing', 'roam-dash-merchants', 'api-center', 'api-center-overview', 'api-center-usage', 'api-center-keys', 'api-center-budgets', 'api-center-logs', 'api-center-billing', 'settings', 'settings-general', 'settings-features', 'settings-registration', 'settings-security', 'settings-announcements', 'settings-danger', 'db-management', 'db-settings'],
+  platform_support: ['dashboard', 'customers', 'drivers', 'team-members', 'fuel-stations', 'fuel-analytics', 'toll-stations', 'toll-info', 'toll-live-monitor', 'motor-vehicles', 'pending-motor-vehicles', 'maintenance-templates', 'parts-sourcing', 'roam-dash-merchants'],
   platform_analyst: ['dashboard', 'api-center', 'api-center-overview', 'api-center-usage', 'api-center-logs'],
 };
 
@@ -76,6 +77,7 @@ const FUEL_MANAGEMENT_CHILDREN = [
 const TOLL_MANAGEMENT_CHILDREN = [
   { id: 'toll-stations', label: 'Toll Database', icon: MapPin },
   { id: 'toll-info', label: 'Toll Info', icon: Info },
+  { id: 'toll-live-monitor', label: 'Live Toll Monitor', icon: Radio },
 ];
 
 // Vehicle master data (motor variants)

@@ -84,6 +84,18 @@ During steps 2–6 on rider app:
 4. Driver location **Block** on → **Go online** disabled until location granted.
 5. Native-only rows save without errors; web shows checklist only.
 
+## 12. Toll geofence (flags ON in staging)
+
+Prerequisites: plazas verified in Toll Database; `route_toll_estimation_enabled` and `toll_detection_enabled` on; `toll_detect_enroute` **off**.
+
+1. **Quote:** Book a route that crosses a known plaza — **Expect:** “View fare breakdown” shows estimated toll line(s).
+2. **Live trip:** Driver passes plaza geofence — **Expect:** Rider on-trip banner updates; driver toll toast; `actual_tolls_minor` on ride.
+3. **Avoid toll:** Driver takes toll-free route — **Expect:** No live toll charge (estimate may differ; credit at settlement if estimate was higher).
+4. **Cooldown:** Double-cross same plaza within 5 minutes — **Expect:** Single charge only.
+5. **Round trip:** Return through same plaza after cooldown — **Expect:** Second charge recorded.
+6. **Cash settlement:** Complete cash trip with tolls — **Expect:** Receipt shows base + tolls ± adjustment.
+7. **Ops:** Live Toll Monitor and Ride Operations **Tolls** drawer show crossings.
+
 ## Future (not in web v1 scope)
 
 - **Phase 6 — Capacitor native:** background GPS when phone locked or in full-screen Maps. Deferred until web v1 is stable in production.
@@ -98,3 +110,5 @@ During steps 2–6 on rider app:
 - [ ] Ops active rides panel
 - [ ] No ledger regression on completed/cancelled trips
 - [ ] Permission policy admin + client gates (rider book, driver go online)
+- [ ] Toll quote breakdown (route estimation flag)
+- [ ] Live toll detection + settlement (detection flag)

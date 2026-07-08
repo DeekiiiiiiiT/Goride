@@ -20,7 +20,12 @@ import { runScenarioTest } from "../../../utils/testScenario";
 import { UnifiedTollActivityTable } from "./UnifiedTollActivityTable";
 import { FinancialTransaction, Claim } from "../../../types/data";
 import { MatchResult, calculateTollFinancials, allocateTripRefundAcrossTolls } from "../../../utils/tollReconciliation";
-import { bucketForBestMatch, bucketForWorkflowStage, TollBucket, TollWorkflowStage } from "../../../utils/tollBucket";
+import {
+  bucketForWorkflowStage,
+  resolveTollBucket,
+  TollBucket,
+  TollWorkflowStage,
+} from "../../../utils/tollBucket";
 import { StepId, StepCounts, computeStepCounts } from "../../../utils/tollPeriodGating";
 import { getClaimWeekDate } from "../../../utils/tollWeekPeriod";
 import { toast } from "sonner@2.0.3";
@@ -290,10 +295,15 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
       'needs-review': [], 'underpaid': [], 'deadhead': [], 'personal-use': [],
     };
     filteredUnreconciledTolls.forEach(tx => {
+      const best = suggestions.get(tx.id)?.[0];
       const stage = (tx as any).workflowStage as TollWorkflowStage | undefined;
-      const bucket: TollBucket | null = stage
-        ? bucketForWorkflowStage(stage)
-        : bucketForBestMatch(suggestions.get(tx.id)?.[0]);
+      const liveBucket = resolveTollBucket(tx, best);
+      const bucket: TollBucket | null =
+        liveBucket === 'needs-review'
+          ? 'needs-review'
+          : stage
+            ? bucketForWorkflowStage(stage)
+            : liveBucket;
       if (bucket) buckets[bucket].push(tx);
     });
     return buckets;
@@ -615,7 +625,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               onEdit={handleEditToll}
               emptyState={{ icon: HelpCircle, title: "No tolls pending review", description: "There are no tolls needing review this period." }}
               listTitle="Needs Review"
-              listDescription="Toll provider charges that haven't been linked to a specific trip."
+              listDescription="Toll charges with no clear trip link, or where multiple trips compete — pick the correct trip first."
             />
           )}
           {activeStepId === 'personal-use' && (

@@ -70,6 +70,7 @@ import { isCashSettlementEnabled, isCashSettlementV2Enabled, driverDebtDispatchT
 import { getOpenDebtMinor } from "./cashSettlement/debtRepayment.ts";
 import { isRiderArrearsBlocked } from "./cashSettlement/arrearsCheck.ts";
 import { evaluateGeofenceTransitions, cleanupRideLiveState } from "./rideGeofence.ts";
+import { getTotalTollsForRide } from "./fare/tollGeofence.ts";
 import { loadAppPermissionPolicy, policyDto } from "../_shared/appPermissionPolicy.ts";
 import type { AppPermissionSurface } from "../_shared/appPermissionCatalog.ts";
 import { registerRideChatRoutes } from "./rideChat.ts";
@@ -2529,17 +2530,33 @@ app.post("/v1/drivers/ride-location", async (c) => {
   }
 
   const freshRide = await loadRideRequestById(rideId);
+  const liveBase = geofenceResult
+    ? {
+        distance_to_pickup_m: geofenceResult.distanceToPickupM,
+        distance_to_dropoff_m: geofenceResult.distanceToDropoffM,
+        transition_applied: geofenceResult.transitionApplied ?? null,
+        complete_suggested: geofenceResult.completeSuggested ?? false,
+      }
+    : undefined;
+
+  let live = liveBase;
+  if (liveBase && geofenceResult?.tollsCrossed && geofenceResult.tollsCrossed.length > 0) {
+    live = {
+      ...liveBase,
+      tolls_crossed: geofenceResult.tollsCrossed.map((t) => ({
+        toll_plaza_id: t.toll_plaza_id,
+        toll_plaza_name: t.toll_plaza_name,
+        toll_amount_minor: t.toll_amount_minor,
+      })),
+      total_new_tolls_minor: geofenceResult.totalNewTollsMinor ?? 0,
+      actual_tolls_minor: Number(freshRide?.actual_tolls_minor ?? 0),
+    };
+  }
+
   return c.json({
     ok: true,
     ride: sanitizeRideForDriver(freshRide, settings.pin_verification_required_for_start),
-    live: geofenceResult
-      ? {
-          distance_to_pickup_m: geofenceResult.distanceToPickupM,
-          distance_to_dropoff_m: geofenceResult.distanceToDropoffM,
-          transition_applied: geofenceResult.transitionApplied ?? null,
-          complete_suggested: geofenceResult.completeSuggested ?? false,
-        }
-      : undefined,
+    live,
   });
 });
 
@@ -2587,6 +2604,35 @@ app.get("/v1/requests/:id/live", async (c) => {
       last_driver_location_at: ride.last_driver_location_at ?? null,
     },
     driver_location: driverLocation,
+  });
+});
+
+app.get("/v1/requests/:id/toll-crossings", async (c) => {
+  const auth = await requireUser(c.req.header("Authorization"));
+  if ("error" in auth) return c.json({ error: auth.error }, auth.status);
+
+  const id = c.req.param("id");
+  const ride = await loadRideRequestById(id);
+  if (!ride) return c.json({ error: "not_found" }, 404);
+
+  const role = ridesUserSurfaceRole(auth.user);
+  const participantRole = getRideParticipantRole(ride, auth.user.id);
+  if (participantRole === "none" && role !== "admin") {
+    return jsonEdgeForbidden(c, "forbidden");
+  }
+
+  const { totalMinor, crossings } = await getTotalTollsForRide(svc(), id);
+  return c.json({
+    ride_id: id,
+    actual_tolls_minor: totalMinor,
+    crossings: crossings.map((x) => ({
+      toll_plaza_id: x.toll_plaza_id,
+      toll_plaza_name: x.toll_plaza_name,
+      toll_amount_minor: x.toll_amount_minor,
+      currency: x.currency,
+      driver_lat: x.driver_lat,
+      driver_lng: x.driver_lng,
+    })),
   });
 });
 

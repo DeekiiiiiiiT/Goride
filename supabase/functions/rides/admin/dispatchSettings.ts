@@ -166,7 +166,9 @@ function parsePatch(
   boolField("pin_verification_enabled");
   boolField("pin_verification_required_for_start");
   boolField("toll_detection_enabled");
-  
+  boolField("toll_detect_enroute");
+  boolField("route_toll_estimation_enabled");
+
   const tollRadiusCheck = intField("toll_geofence_radius_m", 50, 500);
   if (tollRadiusCheck) return tollRadiusCheck;
 

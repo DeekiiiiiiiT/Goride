@@ -7,6 +7,7 @@ import {
   getCashPaymentCardMode,
   resolveLockedFareMinor,
 } from '@roam/types/cashSettlementDisplay';
+import { TripTollReceiptSection } from '@roam/toll-ui';
 import {
   ON_SURFACE,
   ON_SURFACE_VARIANT,
@@ -127,23 +128,17 @@ export function CashPaymentCard({ ride, variant = 'default' }: CashPaymentCardPr
 
       {hasExtras && (
         <div
-          className="space-y-2 border-t pt-3"
+          className="border-t pt-3"
           style={{ borderColor: OUTLINE_VARIANT }}
         >
-          <div className="flex justify-between text-sm">
-            <span style={{ color: ON_SURFACE_VARIANT }}>Trip fare</span>
-            <span className="tabular-nums" style={{ color: ON_SURFACE }}>
-              {formatMoneyMinor(baseFareMinor, currency)}
-            </span>
-          </div>
-          {actualTollsMinor > 0 && (
-            <div className="flex justify-between text-sm">
-              <span style={{ color: ON_SURFACE_VARIANT }}>Tolls</span>
-              <span className="tabular-nums" style={{ color: ON_SURFACE }}>
-                +{formatMoneyMinor(actualTollsMinor, currency)}
-              </span>
-            </div>
-          )}
+          <TripTollReceiptSection
+            baseMinor={baseFareMinor}
+            actualTollsMinor={actualTollsMinor}
+            estimatedTollsMinor={Number(ride.fare_breakdown?.estimated_tolls_minor ?? 0)}
+            waitTimeMinor={Number(ride.wait_time_fee_minor ?? 0)}
+            totalMinor={lockedMinor ?? amountMinor}
+            currency={currency}
+          />
         </div>
       )}
 

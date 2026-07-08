@@ -3,6 +3,7 @@ import { Banknote } from 'lucide-react';
 import type { RideRequestRow } from '@roam/types/rides';
 import { formatMoneyMinor } from '@roam/types/rides';
 import { resolveLockedFareMinor } from '@roam/types/cashSettlementDisplay';
+import { TripTollReceiptSection } from '@roam/toll-ui';
 
 interface CashCollectionCardProps {
   ride: RideRequestRow;
@@ -63,22 +64,13 @@ export function CashCollectionCard({ ride, compact = false }: CashCollectionCard
       ) : null}
 
       {hasExtras && lockedMinor != null && (
-        <div className="space-y-1.5 pt-2 border-t border-emerald-200 dark:border-emerald-800/50">
-          <div className="flex justify-between text-xs">
-            <span className="text-slate-500 dark:text-slate-400">Base fare</span>
-            <span className="text-slate-700 dark:text-slate-300 tabular-nums">
-              {formatMoneyMinor(baseFareMinor, currency)}
-            </span>
-          </div>
-          {actualTollsMinor > 0 && (
-            <div className="flex justify-between text-xs">
-              <span className="text-slate-500 dark:text-slate-400">Tolls</span>
-              <span className="text-slate-700 dark:text-slate-300 tabular-nums">
-                +{formatMoneyMinor(actualTollsMinor, currency)}
-              </span>
-            </div>
-          )}
-        </div>
+        <TripTollReceiptSection
+          baseMinor={baseFareMinor}
+          actualTollsMinor={actualTollsMinor}
+          estimatedTollsMinor={Number(ride.fare_breakdown?.estimated_tolls_minor ?? 0)}
+          totalMinor={lockedMinor}
+          currency={currency}
+        />
       )}
 
       {ride.status === 'awaiting_cash_settlement' && (

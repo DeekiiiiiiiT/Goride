@@ -14,6 +14,13 @@ export interface FareBreakdown {
   base_minor: number;
   booking_fee_minor: number;
   estimated_tolls_minor: number;
+  /** Plazas on planned route (metadata only; not added again to fare math). */
+  estimated_tolls_plazas?: Array<{
+    toll_plaza_id: string;
+    toll_plaza_name: string;
+    toll_amount_minor: number;
+    currency: string;
+  }>;
   distance_component_minor: number;
   time_component_minor: number;
   subtotal_before_surge_minor: number;

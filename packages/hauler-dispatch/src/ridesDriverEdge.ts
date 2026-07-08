@@ -154,6 +154,13 @@ export type DriverRideLocationLive = {
   distance_to_dropoff_m?: number;
   transition_applied?: RideRequestRow['status'] | null;
   complete_suggested?: boolean;
+  tolls_crossed?: Array<{
+    toll_plaza_id: string;
+    toll_plaza_name: string;
+    toll_amount_minor: number;
+  }>;
+  total_new_tolls_minor?: number;
+  actual_tolls_minor?: number;
 };
 
 export async function ridesDriverPostRideLocation(

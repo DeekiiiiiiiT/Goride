@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const adminSrc = path.resolve(__dirname, 'src');
 const fleetSrc = path.resolve(__dirname, '../fleet/src');
+const repoRoot = path.resolve(__dirname, '../..');
 
 /** Fleet UI was generated with `pkg@semver` import specifiers; resolve to real packages in admin. */
 function resolveFleetVersionedPackages(fleetSrcRoot: string): Plugin {
@@ -35,6 +36,9 @@ export default defineConfig({
     extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
     alias: [
       { find: '@', replacement: adminSrc },
+      { find: '@roam/toll-ui', replacement: path.resolve(repoRoot, 'packages/toll-ui/src/index.ts') },
+      { find: '@roam/types/tollCrossings', replacement: path.resolve(repoRoot, 'packages/types/src/tollCrossings.ts') },
+      { find: '@roam/types/rides', replacement: path.resolve(repoRoot, 'packages/types/src/rides.ts') },
       /** Reuse fleet Super-Admin–equivalent screens without duplicating code */
       { find: '@fleet', replacement: fleetSrc },
       /** Fleet sources still reference this legacy import string */

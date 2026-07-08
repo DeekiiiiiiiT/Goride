@@ -9,10 +9,13 @@ import { AdminCashTripActions } from '../components/AdminCashTripActions';
 import {
   adminForceCancelRide,
   adminForceCompleteRide,
+  adminFetchTollCrossings,
   adminReleaseCashSettlement,
   adminSettleCashRide,
   listRidesDashboardView,
 } from '../services/ridesAdminService';
+import { AdminTripTollDrawer } from '@roam/toll-ui';
+import type { TollCrossingDto } from '@roam/types/tollCrossings';
 import { useAdminConfirm } from '../contexts/AdminConfirmContext';
 
 interface OutletContext {
@@ -60,6 +63,9 @@ export function RideOperationsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [actingId, setActingId] = useState<string | null>(null);
   const [settleRide, setSettleRide] = useState<RideRequestRow | null>(null);
+  const [tollRideId, setTollRideId] = useState<string | null>(null);
+  const [tollCrossings, setTollCrossings] = useState<TollCrossingDto[]>([]);
+  const [tollTotalMinor, setTollTotalMinor] = useState(0);
 
   const load = useCallback(async () => {
     if (!session.access_token) return;
@@ -142,6 +148,19 @@ export function RideOperationsPage() {
       toast.error(e instanceof Error ? e.message : 'Complete failed');
     } finally {
       setActingId(null);
+    }
+  };
+
+  const openTolls = async (ride: RideRequestRow) => {
+    setTollRideId(ride.id);
+    try {
+      const res = await adminFetchTollCrossings(session.access_token, ride.id);
+      setTollCrossings(res.crossings ?? []);
+      setTollTotalMinor(res.actual_tolls_minor ?? 0);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Could not load tolls');
+      setTollCrossings([]);
+      setTollTotalMinor(0);
     }
   };
 
@@ -258,7 +277,12 @@ export function RideOperationsPage() {
                           <button
                             type="button"
                             disabled={busy}
-                            onClick={() => void runCancel(ride)}
+                            onClick={() => void openTolls(ride)}
+                            className="rounded-md border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                          >
+                            Tolls
+                          </button>
+                          <button
                             className="rounded-md border border-red-800/60 px-2.5 py-1 text-xs text-red-300 hover:bg-red-950/40 disabled:opacity-50"
                           >
                             Cancel
@@ -280,6 +304,14 @@ export function RideOperationsPage() {
         submitting={actingId === settleRide?.id}
         onClose={() => setSettleRide(null)}
         onConfirm={runSettle}
+      />
+
+      <AdminTripTollDrawer
+        rideId={tollRideId}
+        crossings={tollCrossings}
+        actualTollsMinor={tollTotalMinor}
+        currency={rides[0]?.currency ?? 'JMD'}
+        onClose={() => setTollRideId(null)}
       />
 
       <p className="text-xs text-slate-500">

@@ -40,6 +40,7 @@ import {
 } from '@/components/TransportOptionPicker';
 import { TripPaymentMethodBar } from '@/components/TripPaymentMethodBar';
 import { TripPaymentMethodSheet } from '@/components/TripPaymentMethodSheet';
+import { TollFareBreakdownSheet } from '@roam/toll-ui';
 import { useDefaultPaymentMethod } from '@/hooks/useDefaultPaymentMethod';
 import {
   coerceDigitalPaymentMethodId,
@@ -190,6 +191,7 @@ export default function HomePage() {
   const [walletArrearsMinor, setWalletArrearsMinor] = useState(0);
   const [walletCurrency, setWalletCurrency] = useState('JMD');
   const [payArrearsOpen, setPayArrearsOpen] = useState(false);
+  const [fareBreakdownOpen, setFareBreakdownOpen] = useState(false);
 
   useEffect(() => {
     if (!requiresDigitalPayment || isDigitalTripPaymentMethodId(selectedPaymentId)) return;
@@ -840,6 +842,17 @@ export default function HomePage() {
               onPress={() => setPaymentSheetOpen(true)}
             />
 
+            {quote?.fare_breakdown && (
+              <button
+                type="button"
+                onClick={() => setFareBreakdownOpen(true)}
+                className="mt-2 w-full text-center text-sm font-medium underline touch-manipulation"
+                style={{ color: 'var(--home-primary)' }}
+              >
+                View fare breakdown
+              </button>
+            )}
+
             <button
               type="button"
               onClick={() => void handleBook()}
@@ -1298,6 +1311,15 @@ export default function HomePage() {
         onClose={() => setPaymentSheetOpen(false)}
         onSelect={setSelectedPaymentId}
         excludeIds={requiresDigitalPayment ? DELEGATED_BOOKING_EXCLUDED_PAYMENT_IDS : undefined}
+      />
+
+      <TollFareBreakdownSheet
+        open={fareBreakdownOpen}
+        onClose={() => setFareBreakdownOpen(false)}
+        currency={quote?.currency ?? 'JMD'}
+        breakdown={quote?.fare_breakdown ?? null}
+        plazas={quote?.fare_breakdown?.estimated_tolls_plazas}
+        state={quote?.fare_breakdown ? 'data' : 'empty'}
       />
 
       {walletArrearsMinor > 0 && CASH_SETTLEMENT_PAY_ARREARS_ENABLED ? (

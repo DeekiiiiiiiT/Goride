@@ -12,6 +12,7 @@ import type {
   RiderArrearsRowDto,
 } from '@roam/types/rides';
 import type { RideRequestRow } from '@roam/types/rides';
+import type { TollCrossingsResponse } from '@roam/types/tollCrossings';
 import type { AppPermissionPolicyRow } from '@roam/types';
 import type { AppPermissionPolicyPatch } from '@roam/admin-core';
 import type {
@@ -759,6 +760,7 @@ export interface DispatchSettingsDto {
   toll_detection_enabled: boolean;
   toll_geofence_radius_m: number;
   toll_detect_enroute?: boolean;
+  route_toll_estimation_enabled?: boolean;
   updated_at?: string;
   updated_by?: string | null;
 }
@@ -1033,4 +1035,13 @@ export async function listRidersWithArrears(
     page: data.page ?? 1,
     limit: data.limit ?? 50,
   };
+}
+
+export async function adminFetchTollCrossings(
+  accessToken: string,
+  rideId: string,
+): Promise<TollCrossingsResponse> {
+  const res = await adminFetch(accessToken, `${RIDES_BASE}/v1/requests/${rideId}/toll-crossings`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
 }

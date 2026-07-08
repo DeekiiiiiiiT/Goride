@@ -35,6 +35,7 @@
     "@roam/play-store-launch": "workspace:*",
     "@roam/ride-chat": "workspace:*",
     "@roam/types": "workspace:*",
+    "@roam/toll-ui": "workspace:*",
     "@roam/ui": "workspace:*",
     "@supabase/supabase-js": "^2",
     "@tanstack/react-query": "*",

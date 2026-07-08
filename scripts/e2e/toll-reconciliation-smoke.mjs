@@ -243,6 +243,17 @@ async function seed() {
   log(`Seeded ns=${ns} rider=${riderUserId} ride=${rideId} crossing=${crossingId}`);
 }
 
+async function assertGeofenceCrossingRow() {
+  const { data, error } = await sbRides
+    .from('ride_toll_crossings')
+    .select('id, ride_request_id, toll_plaza_id')
+    .eq('ride_request_id', rideId)
+    .maybeSingle();
+  assert.ok(!error, error?.message);
+  assert.ok(data?.id, 'ride_toll_crossings row must exist for seeded test ride');
+  assert.equal(data.toll_plaza_id, `${ns}_plaza`, 'crossing links to seeded plaza');
+}
+
 // ── Step runner ──────────────────────────────────────────────────────────────
 const results = [];
 async function step(name, fn) {
@@ -252,6 +263,8 @@ async function step(name, fn) {
 
 async function run() {
   console.log(`\n▶ Toll reconciliation E2E smoke (ns=${ns})\n`);
+
+  await step('0. geofence crossing row exists for test ride', assertGeofenceCrossingRow);
 
   await step('1. auto-match perfect toll', async () => {
     const res = await callApi('GET', '/unreconciled', { query: { driverId, limit: '1000' } });

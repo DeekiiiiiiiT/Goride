@@ -100,6 +100,7 @@ const SECTION_KEYS: Record<SectionId, (keyof DispatchSettingsDto)[]> = {
     'toll_detection_enabled',
     'toll_geofence_radius_m',
     'toll_detect_enroute',
+    'route_toll_estimation_enabled',
   ],
   quotes: ['quote_driver_radius_km'],
 };
@@ -167,6 +168,8 @@ const TOOLTIPS = {
     'Radius around toll plazas for geofence detection. Driver must pass within this distance for toll to be recorded.',
   toll_detect_enroute:
     'Also detect tolls crossed while en route to pickup (deadhead), not only during the trip.',
+  route_toll_estimation_enabled:
+    'Use route polyline intersection for toll estimates on quotes. When off, fare rules static estimated tolls apply.',
 } as const;
 
 interface DispatchSettingsFormProps {
@@ -1077,6 +1080,27 @@ export function DispatchSettingsForm({ accessToken, role }: DispatchSettingsForm
                 variant="inline"
                 label="Detect tolls en route to pickup"
                 tip={TOOLTIPS.toll_detect_enroute}
+              />
+            </span>
+          </label>
+
+          <label
+            className={`flex items-start gap-3 ${sectionDisabled(canEdit, editing.tollDetection) ? 'cursor-default' : 'cursor-pointer'}`}
+          >
+            <input
+              type="checkbox"
+              disabled={sectionDisabled(canEdit, editing.tollDetection)}
+              checked={form.route_toll_estimation_enabled ?? false}
+              onChange={(e) =>
+                setForm({ ...form, route_toll_estimation_enabled: e.target.checked })
+              }
+              className="mt-1 rounded border-slate-600"
+            />
+            <span className="text-sm text-slate-300">
+              <SettingLabel
+                variant="inline"
+                label="Route-based toll estimation on quotes"
+                tip={TOOLTIPS.route_toll_estimation_enabled}
               />
             </span>
           </label>

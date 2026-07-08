@@ -5,6 +5,7 @@ import { getRouteEstimate, type RouteEstimate } from "./routing.ts";
 import { mintQuoteToken } from "./quoteToken.ts";
 import type { DispatchSettings } from "./dispatchSettings.ts";
 import { resolvePickupEta, type PickupEtaSource } from "./pickupEta.ts";
+import { estimateRouteTolls } from "./estimateRouteTolls.ts";
 
 export interface BuiltFareQuote {
   distanceKm: number;
@@ -73,17 +74,46 @@ export async function buildFareQuote(
     params.departureTimeUnix,
   );
 
+  let estimatedTollsMinor = rules.estimatedTollsMinor;
+  let estimatedTollsPlazas: FareBreakdown["estimated_tolls_plazas"];
+
+  const dispatch = params.dispatchSettings;
+  if (
+    dispatch?.route_toll_estimation_enabled &&
+    route.encodedPolyline
+  ) {
+    try {
+      const tollEst = await estimateRouteTolls(
+        db,
+        route.encodedPolyline,
+        dispatch.toll_geofence_radius_m,
+      );
+      estimatedTollsMinor = tollEst.estimatedTollsMinor;
+      if (tollEst.plazas.length > 0) {
+        estimatedTollsPlazas = tollEst.plazas;
+      }
+    } catch (e) {
+      console.warn("[buildQuote] route toll estimate failed, using fare rule:", e);
+    }
+  }
+
+  const rulesWithTolls = { ...rules, estimatedTollsMinor };
+
   const cellKey = gridCellKey(params.pickupLat, params.pickupLng);
   const surge = await params.readSurge(cellKey);
 
   const { fareMinor, breakdown, durationMinutes } = computeFareMinor({
-    rules,
+    rules: rulesWithTolls,
     distanceKm: route.distanceKm,
     durationMinutes: route.durationMinutes,
     surgeMultiplier: surge,
     locationKey: rules.location_key,
     vehicleType: rules.vehicle_type,
   });
+
+  if (estimatedTollsPlazas?.length) {
+    breakdown.estimated_tolls_plazas = estimatedTollsPlazas;
+  }
 
   const quoteToken = await mintQuoteToken({
     pickup_lat: params.pickupLat,

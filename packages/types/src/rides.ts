@@ -249,6 +249,13 @@ export interface FareBreakdown {
   actual_tolls_minor?: number;
   /** Adjustment from estimated to actual tolls. */
   toll_adjustment_minor?: number;
+  /** Plazas on planned route (quote metadata). */
+  estimated_tolls_plazas?: Array<{
+    toll_plaza_id: string;
+    toll_plaza_name: string;
+    toll_amount_minor: number;
+    currency: string;
+  }>;
 }
 
 export interface RideRequestRow {

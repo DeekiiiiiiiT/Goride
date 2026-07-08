@@ -7,11 +7,22 @@ import { FinancialTransaction, Trip } from "../../../types/data";
 import { normalizePlatform } from '../../../utils/normalizePlatform';
 import { format } from "date-fns";
 import { MatchResult } from "../../../utils/tollReconciliation";
+import { isTripLinkConfirmed } from "../../../utils/tollBucket";
+import { MatchAlternatesPanel } from "./MatchAlternatesPanel";
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
+
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "../../ui/tooltip";
 
 interface SuggestedMatchCardProps {
   transaction: FinancialTransaction;
   match: MatchResult;
+  /** Full ranked match list when ambiguous — drives the alternates panel. */
+  allMatches?: MatchResult[];
   onConfirm: () => void;
   onDismiss: () => void;
   onApprove?: () => void;
@@ -20,9 +31,15 @@ interface SuggestedMatchCardProps {
   /** Deadhead-only: bill this toll to the driver instead of the fleet absorbing it. */
   onChargeDriver?: () => void;
   onClickDetail?: () => void;
+  onSelectTrip?: (trip: Trip) => void;
+  /** Prominent manual match when trip link is unsettled. */
+  onFindMatch?: () => void;
 }
 
-export function SuggestedMatchCard({ transaction, match, onConfirm, onDismiss, onApprove, onReject, onFlag, onChargeDriver, onClickDetail }: SuggestedMatchCardProps) {
+export function SuggestedMatchCard({
+  transaction, match, allMatches, onConfirm, onDismiss, onApprove, onReject, onFlag, onChargeDriver,
+  onClickDetail, onSelectTrip, onFindMatch,
+}: SuggestedMatchCardProps) {
   const { trip, confidence, reason, timeDifferenceMinutes, matchType, varianceAmount, confidenceScore, vehicleMatch, driverMatch, dataQuality, windowHit, isAmbiguous } = match;
   const isClaim = transaction.paymentMethod === 'Cash' || !!transaction.receiptUrl;
   const fleetTz = useFleetTimezone();
@@ -61,7 +78,38 @@ export function SuggestedMatchCard({ transaction, match, onConfirm, onDismiss, o
     }
   };
 
+  const needsTripPick = !!(isAmbiguous && !isTripLinkConfirmed(transaction));
+  const alternates = allMatches && allMatches.length > 0 ? allMatches : (needsTripPick ? [match] : []);
+
+  const disabledAction = (button: React.ReactNode, tooltip: string) => (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex w-full lg:w-auto">{button}</span>
+        </TooltipTrigger>
+        <TooltipContent><p>{tooltip}</p></TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+
   const renderActionButton = () => {
+      if (needsTripPick) {
+          return (
+              <>
+                  {disabledAction(
+                      <Button size="sm" disabled className="bg-slate-300 w-full lg:w-auto cursor-not-allowed">
+                          Choose trip below
+                      </Button>,
+                      'Pick the correct trip first',
+                  )}
+                  {onFindMatch && (
+                      <Button size="sm" variant="outline" onClick={onFindMatch} className="w-full lg:w-auto">
+                          Find Match...
+                      </Button>
+                  )}
+              </>
+          );
+      }
       // Logic Branching for Driver Claims (Cash/Receipts)
       if (isClaim) {
           if (matchType === 'AMOUNT_VARIANCE') {
@@ -268,6 +316,13 @@ export function SuggestedMatchCard({ transaction, match, onConfirm, onDismiss, o
             </div>
 
         </div>
+
+        {needsTripPick && onSelectTrip && alternates.length > 0 && (
+          <MatchAlternatesPanel
+            matches={alternates}
+            onSelectTrip={onSelectTrip}
+          />
+        )}
       </CardContent>
     </Card>
   );

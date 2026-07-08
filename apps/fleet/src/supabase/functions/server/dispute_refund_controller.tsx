@@ -26,10 +26,13 @@ import {
   isUnresolvedRefund,
   loadAllTollLedgerWithTrips,
   getRefundAutomationSettings,
-  findTollMatchesServer,
-  pickBestValidTollMatch,
   reconcileTollForDisputeMatch,
 } from "./toll_controller.tsx";
+import { isFullyReimbursedViaTrip } from "./dispute_refund_eligibility.ts";
+import {
+  enrichAndFilterDisputeBareTolls,
+  computeLiveTripRefundForToll,
+} from "./dispute_match_toll_enrichment.ts";
 
 const app = new Hono();
 
@@ -180,12 +183,17 @@ async function computeDisputeSuggestions(refund: any): Promise<any[]> {
     });
   }
 
-  // Fallback: full-toll disputes (Uber refunded the whole toll → no variance claim).
+  // Fallback: tolls with no open claim — only when trip fare left a shortfall.
   if (suggestions.length === 0 && driverId) {
+    const fleetTz = await getFleetTimezone();
     const ledger = await loadAllByPrefix("toll_ledger:");
     for (const toll of ledger) {
       if (!toll || typeof toll !== "object" || toll.driverId !== driverId) continue;
+      if (toll.type && toll.type !== "usage") continue;
       const tollAmount = Math.abs(toll.amount || 0);
+      const tripRefund = await computeLiveTripRefundForToll(toll, fleetTz);
+      if (tripRefund != null && isFullyReimbursedViaTrip(tollAmount, tripRefund)) continue;
+
       const amountDiff = Math.abs(tollAmount - refundAmount);
       const maxA = Math.max(tollAmount, refundAmount, 1);
       const amountScore = Math.max(0, 100 - (amountDiff / maxA) * 100);
@@ -196,6 +204,7 @@ async function computeDisputeSuggestions(refund: any): Promise<any[]> {
       suggestions.push({
         tollId: toll.id, tripId: toll.tripId || null,
         tollAmount, claimAmount: tollAmount, uberRefund: refundAmount,
+        tripRefund: tripRefund ?? 0,
         variance: tollAmount - refundAmount, date: toll.date,
         confidence, claimId: null, claimStatus: null, matchType: "toll",
       });
@@ -476,6 +485,18 @@ app.patch(`${BASE}/:id/match`, async (c) => {
 
     if (!tollTransactionId) {
       return c.json({ error: "tollTransactionId is required" }, 400);
+    }
+
+    const tollForGuard = await loadTollForClaim(tollTransactionId);
+    if (tollForGuard) {
+      const fleetTz = await getFleetTimezone();
+      const liveRefund = await computeLiveTripRefundForToll(tollForGuard, fleetTz);
+      const tollAmount = Math.abs(tollForGuard.amount || 0);
+      if (liveRefund != null && isFullyReimbursedViaTrip(tollAmount, liveRefund)) {
+        return c.json({
+          error: "This toll was already fully reimbursed on the trip fare — use Needs Review or Underpaid & Claims, not Dispute Refunds.",
+        }, 409);
+      }
     }
 
     const refund: any = await kv.get(`dispute-refund:${id}`);
@@ -772,7 +793,21 @@ app.get(`${BASE}/match-candidates`, async (c) => {
     const byDate = (a: any, b: any) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime();
 
     const claims = claimCandidates.filter(keep).sort(byDate).slice(0, LIMIT);
-    const tolls = tollCandidates.filter(keep).sort(byDate).slice(0, LIMIT);
+
+    // Enrich + eligibility-filter BEFORE slice so fully-reimbursed tolls don't
+    // consume the result cap (Dispute Refunds is shortfall-only).
+    const ENRICH_CAP = 100;
+    let tolls = tollCandidates.filter(keep).sort(byDate).slice(0, ENRICH_CAP);
+    try {
+      tolls = await enrichAndFilterDisputeBareTolls(tolls, rawTollById, fleetTz);
+    } catch {
+      // Best-effort — fall back to workflow-stage filter only.
+      tolls = tolls.filter((t) => {
+        const raw = rawTollById.get(t.tollId);
+        return raw?.workflowStage === "underpaid_pending";
+      });
+    }
+    tolls = tolls.slice(0, LIMIT);
 
     // Attach matched-trip details to claim candidates (already linked via
     // Underpaid & Claims' "Flag for Claim") so the user can see exactly
@@ -790,87 +825,6 @@ app.get(`${BASE}/match-candidates`, async (c) => {
       } catch {
         // Best-effort enrichment — candidates are still usable without it.
       }
-    }
-
-    // Enrich the (small, already-sliced) bare-toll candidates with a trip
-    // refund figure, so the user sees the same toll cost / refund / shortfall
-    // picture the Underpaid & Claims step shows — vital context for deciding
-    // whether a dispute refund actually covers this toll. Most of these
-    // tolls have NO persisted trip link yet (only Underpaid & Claims' own
-    // "Flag for Claim" action reconciles a toll to its trip) — so for those
-    // we compute the same live suggested match the Underpaid & Claims step
-    // itself shows, rather than reading a `tripId` field that isn't set yet.
-    try {
-      const { trips } = await loadAllTollLedgerWithTrips();
-      const resolved: { toll: any; tripId: string; cost: number; date: string; time?: string }[] = [];
-      for (const t of tolls) {
-        const rawToll = rawTollById.get(t.tollId);
-        if (!rawToll) continue;
-
-        const matches = findTollMatchesServer(rawToll, trips, fleetTz);
-        const validMatch = pickBestValidTollMatch(matches);
-
-        let tripId: string | null = null;
-        if (validMatch) {
-          if (t.tripId && t.tripId !== validMatch.tripId) {
-            // Stale persisted link — live matcher found a different valid trip.
-            t.tripId = null;
-          }
-          tripId = validMatch.tripId;
-          if (!t.tripId) t.suggestedTripId = validMatch.tripId;
-        } else if (t.tripId) {
-          // Persisted link no longer passes time-window validation — drop it.
-          t.tripId = null;
-        }
-
-        if (!tripId) continue;
-
-        resolved.push({
-          toll: t,
-          tripId,
-          cost: Math.abs(t.tollAmount || 0),
-          date: t.date,
-          time: rawToll.time,
-        });
-      }
-
-      if (resolved.length > 0) {
-        const tripIds = [...new Set(resolved.map((r) => r.tripId))];
-        const tripKeys = tripIds.map((tid) => `trip:${tid}`);
-        const tripValues = await kv.mget(tripKeys);
-        const tripDetailsById = mapTripsById(tripIds, tripValues);
-        const tripRefundById = new Map<string, number>();
-        for (const [tid, trip] of tripDetailsById) {
-          tripRefundById.set(tid, Math.abs(trip.tollCharges || 0));
-        }
-
-        // Hand out each trip's toll-refund pool across the tolls matched in
-        // this modal only — do NOT zero the pool just because claims exist
-        // elsewhere (that was hiding every refund as $0).
-        const byTrip = new Map<string, typeof resolved>();
-        for (const r of resolved) {
-          const list = byTrip.get(r.tripId) || [];
-          list.push(r);
-          byTrip.set(r.tripId, list);
-        }
-        for (const [tripId, group] of byTrip) {
-          group.sort((a, b) => {
-            const da = new Date(`${a.date}T${a.time || "00:00:00"}`).getTime();
-            const db = new Date(`${b.date}T${b.time || "00:00:00"}`).getTime();
-            return da - db;
-          });
-          const tripDetail = tripDetailsById.get(tripId);
-          let remaining = tripRefundById.get(tripId) ?? 0;
-          for (const r of group) {
-            const allocated = Math.max(0, Math.min(remaining, r.cost));
-            remaining -= allocated;
-            r.toll.tripRefund = allocated;
-            if (tripDetail) attachTripDisplayFields(r.toll, tripDetail);
-          }
-        }
-      }
-    } catch {
-      // Best-effort enrichment — candidates are still usable without it.
     }
 
     return c.json({ claims, tolls });
