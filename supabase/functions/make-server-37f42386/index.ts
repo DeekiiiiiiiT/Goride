@@ -11,4 +11,5 @@
  */
 import "../../../apps/fleet/src/supabase/functions/server/toll_controller.tsx";
 import "../../../apps/fleet/src/supabase/functions/server/maintenance_schedule_engine.ts";
+import "../../../apps/fleet/src/supabase/functions/server/normalize_platform.ts";
 import "../../../apps/fleet/src/supabase/functions/server/index.tsx";

@@ -3,7 +3,7 @@
  * Shared by fleet UI gates and toll_controller match-and-net.
  */
 
-import { platformsEqual } from './normalizePlatform';
+import { platformsEqual } from './normalizePlatform.ts';
 
 export const UNLINKED_SHORTFALL_TOLERANCE = 0.05;
 /** Minimum score to show a candidate in the Review picker. */
