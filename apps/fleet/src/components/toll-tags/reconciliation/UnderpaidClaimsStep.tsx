@@ -48,6 +48,9 @@ interface UnderpaidClaimsStepProps {
   disputeRefunds: DisputeRefund[];
   /** Open unlinked trip refunds — blocks Charge Driver until applied. */
   unlinkedRefundTrips?: Trip[];
+  /** Undo apply-to-underpaid from claim history (trip id). */
+  onUndoUnlinkedApply?: (tripId: string) => Promise<void> | void;
+  busyUnlinkedTripId?: string | null;
   drivers: any[];
   loadingTolls: boolean;
   loadingClaims: boolean;
@@ -59,7 +62,8 @@ interface UnderpaidClaimsStepProps {
 
 export function UnderpaidClaimsStep({
   underpaidTolls, suggestions, allTrips, onFlag, onReconcile, onEdit,
-  claims, reconciledTolls, trips, disputeRefunds, unlinkedRefundTrips = [], drivers, loadingTolls, loadingClaims,
+  claims, reconciledTolls, trips, disputeRefunds, unlinkedRefundTrips = [], onUndoUnlinkedApply, busyUnlinkedTripId,
+  drivers, loadingTolls, loadingClaims,
   unreconcile, updateClaim, deleteClaim, refreshClaims,
 }: UnderpaidClaimsStepProps) {
   const tripMap = useMemo(() => new Map(trips.map(t => [t.id, t])), [trips]);
@@ -451,6 +455,9 @@ export function UnderpaidClaimsStep({
             onDelete={handleDeleteClaims}
             onUpdateStatus={handleUpdateStatus}
             onSelectClaim={(claim) => { setSelectedClaimDetail(claim); setIsClaimDetailOpen(true); }}
+            trips={trips}
+            onUndoUnlinkedApply={onUndoUnlinkedApply}
+            busyUnlinkedTripId={busyUnlinkedTripId}
           />
         </TabsContent>
       </Tabs>

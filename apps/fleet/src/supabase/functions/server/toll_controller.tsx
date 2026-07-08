@@ -5742,7 +5742,128 @@ async function applyUnlinkedRefundToClaim(
 /**
  * Reverse an Apply-to-Underpaid: restore claim (via force sync), clear toll
  * provenance, and return the trip to the unresolved Unlinked Refunds queue.
+ * Also repairs split state when the trip was reset to pending but the claim
+ * was left Reimbursed (legacy/basic Undo).
  */
+async function findClaimByUnlinkedTripId(tripId: string): Promise<any | null> {
+  const claims = (await loadAllByPrefix("claim:")) as any[];
+  return claims.find((c) => c?.unlinkedTripId === tripId) ?? null;
+}
+
+function isTripPendingUnlinkedRefund(trip: any): boolean {
+  const status = trip?.tollRefundResolution?.status;
+  return !status || status === "pending";
+}
+
+async function restoreClaimFromUnlinkedApply(
+  claim: any,
+  tripId: string,
+  tripRefund: number,
+  c: unknown,
+): Promise<string> {
+  const { upsertClaim: upsertClaimFn } = await import("./claim_service.ts");
+  const restoredStatus = claim.preUnlinkedStatus || "Open";
+  const restoredReason = claim.preUnlinkedResolutionReason ?? null;
+  const restoredPaid =
+    typeof claim.preUnlinkedPaidAmount === "number"
+      ? claim.preUnlinkedPaidAmount
+      : Math.max(0, Math.abs(Number(claim.paidAmount) || 0) - tripRefund);
+  const restoredAmount =
+    typeof claim.preUnlinkedAmount === "number"
+      ? claim.preUnlinkedAmount
+      : Math.abs(Number(claim.expectedAmount ?? claim.amount) || 0);
+
+  await upsertClaimFn(
+    {
+      ...claim,
+      status: restoredStatus,
+      resolutionReason: restoredReason,
+      paidAmount: restoredPaid,
+      amount: restoredAmount,
+      unlinkedTripId: null,
+      unlinkedSourcePlatform: null,
+      preUnlinkedStatus: null,
+      preUnlinkedResolutionReason: null,
+      preUnlinkedPaidAmount: null,
+      preUnlinkedAmount: null,
+    },
+    c,
+    { syncMode: "force" },
+  );
+  return restoredStatus;
+}
+
+async function clearTollAfterUnlinkedUndo(tollId: string | null, tripId: string): Promise<void> {
+  if (!tollId) return;
+  try {
+    const toll = await loadTollForUnlinkedMatch(tollId);
+    await updateTollLedgerEntry(
+      tollId,
+      {
+        unlinkedSourceTripId: null,
+        unlinkedSourcePlatform: null,
+        unlinkedAppliedAt: null,
+        unlinkedAppliedBy: null,
+        ...(toll?.preUnlinkedTripId
+          ? { tripId: toll.preUnlinkedTripId, preUnlinkedTripId: null }
+          : toll?.tripId === tripId
+            ? { tripId: null, preUnlinkedTripId: null }
+            : { preUnlinkedTripId: null }),
+        matchedBy: toll?.matchedBy === "unlinked-shortfall" ? null : toll?.matchedBy ?? null,
+      },
+      "updated",
+      "undo-unlinked-apply",
+    );
+    await recomputeAndPersistWorkflowStage(tollId);
+  } catch (err: any) {
+    console.warn(`[UnlinkedShortfall:Undo] toll clear warn: ${err?.message}`);
+  }
+}
+
+/** Trip pending + claim still linked — repair without touching trip resolution. */
+async function repairUnlinkedApplySplitForTrip(
+  tripId: string,
+  c: unknown,
+): Promise<{ repaired: boolean; claimId?: string; tollId?: string | null; restoredClaimStatus?: string }> {
+  const claim = await findClaimByUnlinkedTripId(tripId);
+  if (!claim?.unlinkedTripId || claim.unlinkedTripId !== tripId) {
+    return { repaired: false };
+  }
+  const trip = await kv.get(`trip:${tripId}`);
+  if (!trip || !isTripPendingUnlinkedRefund(trip)) return { repaired: false };
+
+  const tripRefund = Math.abs(Number(trip.tollCharges) || 0);
+  const restoredStatus = await restoreClaimFromUnlinkedApply(claim, tripId, tripRefund, c);
+  const tollId = claim.transactionId || null;
+  await clearTollAfterUnlinkedUndo(tollId, tripId);
+
+  console.log(
+    `[TollReconciliation:RepairSplit] Trip ${tripId} pending — claim ${claim.id} reverted to ${restoredStatus}`,
+  );
+  return { repaired: true, claimId: claim.id, tollId, restoredClaimStatus: restoredStatus };
+}
+
+async function repairAllUnlinkedApplySplits(
+  c: unknown,
+  driverId?: string,
+): Promise<{ repaired: number; items: Array<{ tripId: string; claimId?: string; restoredClaimStatus?: string }> }> {
+  const claims = (await loadAllByPrefix("claim:")) as any[];
+  const items: Array<{ tripId: string; claimId?: string; restoredClaimStatus?: string }> = [];
+  for (const claim of claims) {
+    if (!claim?.unlinkedTripId) continue;
+    if (driverId && claim.driverId !== driverId) continue;
+    const result = await repairUnlinkedApplySplitForTrip(claim.unlinkedTripId, c);
+    if (result.repaired) {
+      items.push({
+        tripId: claim.unlinkedTripId,
+        claimId: result.claimId,
+        restoredClaimStatus: result.restoredClaimStatus,
+      });
+    }
+  }
+  return { repaired: items.length, items };
+}
+
 async function undoApplyUnlinkedRefundToClaim(
   tripId: string,
   c: unknown,
@@ -5756,11 +5877,29 @@ async function undoApplyUnlinkedRefundToClaim(
     };
   }
 
-  const { upsertClaim: upsertClaimFn } = await import("./claim_service.ts");
   const trip = await kv.get(`trip:${tripId}`);
   if (!trip) return { ok: false, status: 404, error: `Trip ${tripId} not found` };
 
+  const linkedClaim = await findClaimByUnlinkedTripId(tripId);
   const resolution = trip.tollRefundResolution;
+
+  // Split repair: basic Undo left trip pending but claim still Reimbursed.
+  if (isTripPendingUnlinkedRefund(trip) && linkedClaim) {
+    const repair = await repairUnlinkedApplySplitForTrip(tripId, c);
+    if (repair.repaired) {
+      return {
+        ok: true,
+        data: {
+          mode: "repair_split",
+          tripId,
+          claimId: repair.claimId,
+          tollId: repair.tollId,
+          restoredClaimStatus: repair.restoredClaimStatus,
+        },
+      };
+    }
+  }
+
   if (!resolution || resolution.status !== "expense_logged") {
     return { ok: false, status: 409, error: "Trip was not applied to a claim via Apply to Underpaid" };
   }
@@ -5769,73 +5908,20 @@ async function undoApplyUnlinkedRefundToClaim(
   const claimIdFromSource = source.startsWith("system:unlinked_shortfall:")
     ? source.slice("system:unlinked_shortfall:".length)
     : null;
-  const claimId = resolution.appliedToClaimId || claimIdFromSource;
-  const tollId = resolution.appliedToTollId || resolution.linkedTollLedgerId || null;
+  const claimId = resolution.appliedToClaimId || claimIdFromSource || linkedClaim?.id;
+  const tollId = resolution.appliedToTollId || resolution.linkedTollLedgerId || linkedClaim?.transactionId || null;
   const tripRefund = Math.abs(Number(trip.tollCharges) || 0);
 
   let restoredClaimStatus: string | null = null;
 
   if (claimId) {
-    const claim = await kv.get(`claim:${claimId}`);
+    const claim = (await kv.get(`claim:${claimId}`)) || linkedClaim;
     if (claim && (!claim.unlinkedTripId || claim.unlinkedTripId === tripId)) {
-      const restoredStatus = claim.preUnlinkedStatus || "Open";
-      const restoredReason = claim.preUnlinkedResolutionReason ?? null;
-      const restoredPaid =
-        typeof claim.preUnlinkedPaidAmount === "number"
-          ? claim.preUnlinkedPaidAmount
-          : Math.max(0, Math.abs(Number(claim.paidAmount) || 0) - tripRefund);
-      const restoredAmount =
-        typeof claim.preUnlinkedAmount === "number"
-          ? claim.preUnlinkedAmount
-          : Math.abs(Number(claim.expectedAmount ?? claim.amount) || 0);
-
-      await upsertClaimFn(
-        {
-          ...claim,
-          status: restoredStatus,
-          resolutionReason: restoredReason,
-          paidAmount: restoredPaid,
-          amount: restoredAmount,
-          unlinkedTripId: null,
-          unlinkedSourcePlatform: null,
-          preUnlinkedStatus: null,
-          preUnlinkedResolutionReason: null,
-          preUnlinkedPaidAmount: null,
-          preUnlinkedAmount: null,
-        },
-        c,
-        { syncMode: "force" },
-      );
-      restoredClaimStatus = restoredStatus;
+      restoredClaimStatus = await restoreClaimFromUnlinkedApply(claim, tripId, tripRefund, c);
     }
   }
 
-  if (tollId) {
-    try {
-      const toll = await loadTollForUnlinkedMatch(tollId);
-      await updateTollLedgerEntry(
-        tollId,
-        {
-          unlinkedSourceTripId: null,
-          unlinkedSourcePlatform: null,
-          unlinkedAppliedAt: null,
-          unlinkedAppliedBy: null,
-          // Restore original trip link if preserved; clear if tripId was the unlinked trip (legacy bug).
-          ...(toll?.preUnlinkedTripId
-            ? { tripId: toll.preUnlinkedTripId, preUnlinkedTripId: null }
-            : toll?.tripId === tripId
-              ? { tripId: null, preUnlinkedTripId: null }
-              : { preUnlinkedTripId: null }),
-          matchedBy: toll?.matchedBy === "unlinked-shortfall" ? null : toll?.matchedBy ?? null,
-        },
-        "updated",
-        "undo-unlinked-apply",
-      );
-      await recomputeAndPersistWorkflowStage(tollId);
-    } catch (err: any) {
-      console.warn(`[UnlinkedShortfall:Undo] toll clear warn: ${err?.message}`);
-    }
-  }
+  await clearTollAfterUnlinkedUndo(tollId, tripId);
 
   const now = new Date().toISOString();
   await kv.set(`trip:${tripId}`, {
@@ -5860,6 +5946,7 @@ async function undoApplyUnlinkedRefundToClaim(
   return {
     ok: true,
     data: {
+      mode: "full_undo",
       tripId,
       claimId,
       tollId,
@@ -5925,6 +6012,29 @@ app.post(`${BASE}/unlinked-refunds/undo-apply`, async (c) => {
     return c.json({ success: true, data: result.data });
   } catch (e: any) {
     console.log(`[TollReconciliation] POST /unlinked-refunds/undo-apply error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── POST /unlinked-refunds/repair-split ─────────────────────────────────
+/** Auto-fix claims left Reimbursed after a partial (trip-only) undo. */
+app.post(`${BASE}/unlinked-refunds/repair-split`, async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const tripId = body?.tripId as string | undefined;
+    const driverId = body?.driverId as string | undefined;
+    if (tripId) {
+      const result = await repairUnlinkedApplySplitForTrip(tripId, c);
+      return c.json({
+        success: true,
+        repaired: result.repaired ? 1 : 0,
+        items: result.repaired ? [{ tripId, ...result }] : [],
+      });
+    }
+    const batch = await repairAllUnlinkedApplySplits(c, driverId);
+    return c.json({ success: true, repaired: batch.repaired, items: batch.items });
+  } catch (e: any) {
+    console.log(`[TollReconciliation] POST /unlinked-refunds/repair-split error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
 });

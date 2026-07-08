@@ -2010,6 +2010,26 @@ export const api = {
     return response.json();
   },
 
+  async repairUnlinkedApplySplits(payload?: { tripId?: string; driverId?: string }) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/unlinked-refunds/repair-split`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify(payload ?? {})
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to repair unlinked apply split state");
+    }
+    return response.json() as Promise<{
+      success: boolean;
+      repaired: number;
+      items: Array<{ tripId: string; claimId?: string; restoredClaimStatus?: string }>;
+    }>;
+  },
+
   async resolveRefund(payload: { tripId: string; resolution: 'cash_wash' | 'phantom' | 'expense_logged' | 'pending'; notes?: string; driverId?: string }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/resolve-refund`, {
       method: 'POST',

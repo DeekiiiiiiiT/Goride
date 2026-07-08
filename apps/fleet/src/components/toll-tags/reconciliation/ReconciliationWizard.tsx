@@ -116,6 +116,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
     bulkResolveRefunds,
     undoRefund,
     undoApplyToUnderpaid,
+    repairUnlinkedApplySplits,
     applyUnlinkedToClaim,
     applyDisputeMatch,
     applyDisputeUnmatch,
@@ -326,6 +327,43 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
 
   const [activeStepId, setActiveStepId] = useState<StepId>(STEP_ORDER[0]);
   const hasInitializedRef = React.useRef(false);
+  const [busyUnlinkedTripId, setBusyUnlinkedTripId] = useState<string | null>(null);
+
+  const handleUndoApply = useCallback(async (tripId: string) => {
+    setBusyUnlinkedTripId(tripId);
+    try {
+      await undoApplyToUnderpaid(tripId);
+      await refreshClaims();
+      toast.success('Apply undone — trip and claim are back in sync.');
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to undo apply');
+      throw e;
+    } finally {
+      setBusyUnlinkedTripId(null);
+    }
+  }, [undoApplyToUnderpaid, refreshClaims]);
+
+  // Auto-repair split state: trip pending in Unlinked but claim still Reimbursed.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await repairUnlinkedApplySplits({ driverId: driverId || undefined });
+        if (cancelled || !res.repaired) return;
+        await Promise.all([refresh(), refreshClaims()]);
+        toast.info(
+          res.repaired === 1
+            ? 'Repaired 1 claim that was out of sync with an unlinked refund.'
+            : `Repaired ${res.repaired} claims that were out of sync with unlinked refunds.`,
+        );
+      } catch {
+        // Non-fatal — manual undo still available on claim history rows.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [driverId, period.startDate, period.endDate, repairUnlinkedApplySplits, refresh, refreshClaims]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -729,6 +767,8 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               updateClaim={updateClaim}
               deleteClaim={deleteClaim}
               refreshClaims={refreshClaims}
+              onUndoUnlinkedApply={handleUndoApply}
+              busyUnlinkedTripId={busyUnlinkedTripId}
             />
           )}
         </div>
@@ -750,7 +790,8 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
       <HistoryPanel
         pResolved={pResolved}
         onUndoRefund={undoRefund}
-        onUndoApply={undoApplyToUnderpaid}
+        onUndoApply={handleUndoApply}
+        busyUnlinkedTripId={busyUnlinkedTripId}
         pReconciled={pReconciled}
         trips={trips}
         pClaims={pPeriodClaims}
@@ -802,6 +843,7 @@ function HistoryPanel(props: {
   pResolved: TripType[];
   onUndoRefund: (tripId: string) => Promise<void> | void;
   onUndoApply?: (tripId: string) => Promise<void> | void;
+  busyUnlinkedTripId?: string | null;
   pReconciled: FinancialTransaction[];
   trips: TripType[];
   pClaims: any[];
@@ -878,6 +920,7 @@ function HistoryPanel(props: {
             })}
             onUndo={props.onUndoRefund}
             onUndoApply={props.onUndoApply}
+            busyTripId={props.busyUnlinkedTripId}
           />
         </TabsContent>
 

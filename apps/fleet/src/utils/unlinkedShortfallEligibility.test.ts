@@ -6,6 +6,7 @@ import {
   scoreUnlinkedShortfallMatch,
   isPendingOnlyRefundResolution,
   isUnlinkedApplyResolution,
+  isUnlinkedApplySplitState,
   hasBlockingUnlinkedRefund,
   isEligibleUnlinkedShortfallClaim,
   isEligibleUnlinkedShortfallToll,
@@ -160,6 +161,21 @@ describe('unlinked shortfall eligibility', () => {
       isUnlinkedApplyResolution({
         tollRefundResolution: { status: 'cash_wash' },
       }),
+    ).toBe(false);
+  });
+
+  it('detects split state: pending trip + reimbursed claim', () => {
+    expect(
+      isUnlinkedApplySplitState(
+        { unlinkedTripId: 't1', status: 'Resolved', resolutionReason: 'Reimbursed' },
+        { id: 't1', tollRefundResolution: { status: 'pending' } },
+      ),
+    ).toBe(true);
+    expect(
+      isUnlinkedApplySplitState(
+        { unlinkedTripId: 't1', status: 'Resolved', resolutionReason: 'Reimbursed' },
+        { id: 't1', tollRefundResolution: { status: 'expense_logged' } },
+      ),
     ).toBe(false);
   });
 

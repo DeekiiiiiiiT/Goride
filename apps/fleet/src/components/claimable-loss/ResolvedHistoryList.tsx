@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Table, 
   TableBody, 
@@ -21,6 +21,9 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { getMondaySundayForDate, formatWeekPeriodLabel } from "../../utils/tollWeekPeriod";
+import { isUnlinkedApplySplitState } from "../../utils/unlinkedShortfallEligibility";
+import { UndoApplyToUnderpaidDialog } from "../toll-tags/reconciliation/UndoApplyToUnderpaidDialog";
+import type { Trip } from "../../types/data";
 
 /**
  * The toll's actual period should follow the toll's real date (claim.date,
@@ -76,9 +79,25 @@ interface ResolvedHistoryListProps {
   onUpdateStatus?: (claim: Claim, newReason: 'Charge Driver' | 'Write Off' | 'Reimbursed') => void;
   /** Opens the admin detail overlay for a row. */
   onSelectClaim?: (claim: Claim) => void;
+  /** Linked trips — used to detect split undo (trip pending, claim still Reimbursed). */
+  trips?: Trip[];
+  /** Undo apply from claim row — passes the linked unlinked trip id. */
+  onUndoUnlinkedApply?: (tripId: string) => Promise<void> | void;
+  busyUnlinkedTripId?: string | null;
 }
 
-export function ResolvedHistoryList({ claims, isLoading, getDriverName, onDelete, onUpdateStatus, onSelectClaim }: ResolvedHistoryListProps) {
+export function ResolvedHistoryList({
+  claims,
+  isLoading,
+  getDriverName,
+  onDelete,
+  onUpdateStatus,
+  onSelectClaim,
+  trips = [],
+  onUndoUnlinkedApply,
+  busyUnlinkedTripId,
+}: ResolvedHistoryListProps) {
+  const tripById = useMemo(() => new Map(trips.map((t) => [t.id, t])), [trips]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   if (isLoading) {
@@ -158,11 +177,19 @@ export function ResolvedHistoryList({ claims, isLoading, getDriverName, onDelete
             <TableHead>Location</TableHead>
             <TableHead className="text-right">Amount</TableHead>
             <TableHead className="text-right">Status</TableHead>
+            {onUndoUnlinkedApply && <TableHead className="text-right w-[120px]">Action</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
           {claims.map((claim) => {
             const styles = getResolutionStyle(claim.resolutionReason);
+            const linkedTrip = claim.unlinkedTripId ? tripById.get(claim.unlinkedTripId) : undefined;
+            const splitApply = isUnlinkedApplySplitState(claim, linkedTrip);
+            const staleUnlinkedApply =
+              !!claim.unlinkedTripId &&
+              claim.status === 'Resolved' &&
+              claim.resolutionReason === 'Reimbursed';
+            const showUndo = !!onUndoUnlinkedApply && claim.unlinkedTripId && (splitApply || staleUnlinkedApply);
             return (
               <TableRow
                 key={claim.id}
@@ -245,6 +272,35 @@ export function ResolvedHistoryList({ claims, isLoading, getDriverName, onDelete
                     </DropdownMenu>
                   </div>
                 </TableCell>
+                {onUndoUnlinkedApply && (
+                  <TableCell className="text-right" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                    {showUndo && claim.unlinkedTripId ? (
+                      <div className="flex flex-col items-end gap-1">
+                        {splitApply && (
+                          <span className="text-[10px] font-medium text-amber-700">Out of sync</span>
+                        )}
+                        <UndoApplyToUnderpaidDialog
+                          summary={{
+                            tripId: claim.unlinkedTripId,
+                            tripRefund: Math.abs(linkedTrip?.tollCharges ?? 0),
+                            tripPlatform: linkedTrip?.platform,
+                            tollAmount: Math.abs(Number(claim.expectedAmount ?? claim.amount) || 0),
+                            tollLocation: claim.pickup || claim.subject,
+                            priorClaimStatus: claim.preUnlinkedStatus,
+                            priorResolutionReason: claim.preUnlinkedResolutionReason,
+                            willReinstateDriverCharge:
+                              claim.preUnlinkedResolutionReason === 'Charge Driver',
+                          }}
+                          onConfirm={() => onUndoUnlinkedApply(claim.unlinkedTripId!)}
+                          disabled={busyUnlinkedTripId === claim.unlinkedTripId}
+                          triggerLabel="Undo apply"
+                        />
+                      </div>
+                    ) : (
+                      <span className="text-slate-300 text-xs">—</span>
+                    )}
+                  </TableCell>
+                )}
               </TableRow>
             );
           })}

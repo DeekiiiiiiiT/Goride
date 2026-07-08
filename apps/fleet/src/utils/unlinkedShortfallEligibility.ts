@@ -185,6 +185,18 @@ export function isUnlinkedApplyResolution(trip: {
   return typeof res.source === 'string' && res.source.startsWith('system:unlinked_shortfall:');
 }
 
+/** Trip back in Unlinked queue but claim still shows Reimbursed (partial undo). */
+export function isUnlinkedApplySplitState(
+  claim: { unlinkedTripId?: string | null; status?: string; resolutionReason?: string | null },
+  trip?: { id?: string; tollRefundResolution?: { status?: string } | null } | null,
+): boolean {
+  if (!claim.unlinkedTripId || !trip || trip.id !== claim.unlinkedTripId) return false;
+  const tripPending =
+    !trip.tollRefundResolution?.status || trip.tollRefundResolution.status === 'pending';
+  if (!tripPending) return false;
+  return claim.status === 'Resolved' && claim.resolutionReason === 'Reimbursed';
+}
+
 /**
  * Charge Driver should not fire while the same driver still has an unresolved
  * unlinked trip refund that could cover a shortfall.

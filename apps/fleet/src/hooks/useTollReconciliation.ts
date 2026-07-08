@@ -526,19 +526,33 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
     return result;
   };
 
-  // Undo leftover resolutions (cash wash / phantom / etc.) — NOT Apply-to-Underpaid.
+  // Undo leftover resolutions (cash wash / phantom / etc.) — routes apply rows to full undo.
   const undoRefund = async (tripId: string) => {
+    const trip = resolvedRefunds.find((t) => t.id === tripId);
+    const isApply =
+      trip &&
+      (trip.tollRefundResolution?.appliedToClaimId ||
+        (typeof trip.tollRefundResolution?.source === 'string' &&
+          trip.tollRefundResolution.source.startsWith('system:unlinked_shortfall:')));
+    if (isApply) {
+      return undoApplyToUnderpaid(tripId);
+    }
     await api.resolveRefund({ tripId, resolution: 'pending' });
-    setResolvedRefunds(prev => prev.filter(t => t.id !== tripId));
+    setResolvedRefunds((prev) => prev.filter((t) => t.id !== tripId));
     await fetchData();
   };
 
   /** Full undo of Apply to Underpaid (restores claim + toll provenance + trip queue). */
   const undoApplyToUnderpaid = async (tripId: string) => {
     const result = await api.undoApplyUnlinkedRefund(tripId);
-    setResolvedRefunds(prev => prev.filter(t => t.id !== tripId));
+    setResolvedRefunds((prev) => prev.filter((t) => t.id !== tripId));
     await fetchData();
     return result;
+  };
+
+  /** Repair trip-pending / claim-still-Reimbursed splits (also runs via wizard on load). */
+  const repairUnlinkedApplySplits = async (opts?: { tripId?: string; driverId?: string }) => {
+    return api.repairUnlinkedApplySplits(opts);
   };
 
   return {
@@ -562,6 +576,7 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
     bulkResolveRefunds,
     undoRefund,
     undoApplyToUnderpaid,
+    repairUnlinkedApplySplits,
     applyUnlinkedToClaim,
     applyDisputeMatch,
     applyDisputeUnmatch,
