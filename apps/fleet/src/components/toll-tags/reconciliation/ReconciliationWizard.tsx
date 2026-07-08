@@ -19,7 +19,7 @@ import { Button } from "../../ui/button";
 import { runScenarioTest } from "../../../utils/testScenario";
 import { UnifiedTollActivityTable } from "./UnifiedTollActivityTable";
 import { FinancialTransaction, Claim } from "../../../types/data";
-import { MatchResult, calculateTollFinancials, allocateTripRefundAcrossTolls } from "../../../utils/tollReconciliation";
+import { MatchResult, calculateTollFinancials, buildTollFinancialsContext, buildTripRefundAllocation } from "../../../utils/tollReconciliation";
 import {
   bucketForWorkflowStage,
   resolveTollBucket,
@@ -28,7 +28,7 @@ import {
 } from "../../../utils/tollBucket";
 import { StepId, StepCounts, STEP_ORDER, computeStepCounts } from "../../../utils/tollPeriodGating";
 import { hasBlockingUnlinkedRefund } from "../../../utils/unlinkedShortfallEligibility";
-import { getClaimWeekDate } from "../../../utils/tollWeekPeriod";
+import { isClaimInPeriod } from "../../../utils/tollWeekPeriod";
 import type { UnlinkedShortfallSuggestion } from "../../../hooks/useTollReconciliation";
 import { toast } from "sonner@2.0.3";
 import { Trip as TripType } from "../../../types/data";
@@ -258,20 +258,20 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
   const pUnclaimed = platformFilter === 'all' ? unclaimedRefunds : unclaimedRefunds.filter(tripInPlatform);
   const pResolved = platformFilter === 'all' ? resolvedRefunds : resolvedRefunds.filter(tripInPlatform);
 
-  // ── Period-scoping for claims (the one list the data hooks can't date-filter
-  // server-side, since a claim's own `date` — not its resolution timestamp —
-  // decides which week it belongs to; see getClaimWeekDate). ──────────────────
+  // ── Period-scoping for claims (strict: toll/claim/trip date only — never
+  // createdAt, which can bucket resolved claims into the wrong week). ───────
   const tollDateById = useMemo(() => {
     const map = new Map<string, string>();
     [...unreconciledTolls, ...reconciledTolls].forEach(tx => { if (tx?.id && tx?.date) map.set(tx.id, tx.date); });
     return map;
   }, [unreconciledTolls, reconciledTolls]);
-  const periodStartMs = useMemo(() => new Date(period.startDate).getTime(), [period.startDate]);
-  const periodEndMs = useMemo(() => new Date(`${period.endDate}T23:59:59.999`).getTime(), [period.endDate]);
-  const periodClaims = useMemo(() => claims.filter((c: Claim) => {
-    const d = getClaimWeekDate(c, tollDateById).getTime();
-    return d >= periodStartMs && d <= periodEndMs;
-  }), [claims, tollDateById, periodStartMs, periodEndMs]);
+  const periodClaims = useMemo(
+    () =>
+      claims.filter((c: Claim) =>
+        isClaimInPeriod(c, { startDate: period.startDate, endDate: period.endDate }, tollDateById, fleetTz),
+      ),
+    [claims, tollDateById, period.startDate, period.endDate, fleetTz],
+  );
   const pPeriodClaims = platformFilter === 'all' ? periodClaims : periodClaims.filter(claimInPlatform);
 
   // Claimed-toll exclusion is deliberately ALL-TIME (not period-scoped): "does
@@ -425,19 +425,12 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
   // one trip (e.g. two toll plazas on the same route) from each showing the
   // full trip.tollCharges amount, which both double-counts the same money
   // AND can show a refund bigger than the toll itself ever cost.
-  const tripRefundById = new Map<string, number>();
-  reconciledTolls.forEach(tx => {
-      if (tx.tripId && !tripRefundById.has(tx.tripId)) {
-          const trip = tripMap.get(tx.tripId);
-          if (trip) tripRefundById.set(tx.tripId, trip.tollCharges || 0);
-      }
-  });
-  const tollRefundAllocation = allocateTripRefundAcrossTolls(reconciledTolls, tripRefundById);
+  const tollRefundAllocation = buildTripRefundAllocation(reconciledTolls, tripMap);
   reconciledTolls.forEach(tx => {
       const trip = tripMap.get(tx.tripId || '');
-      const claim = claims.find(c => c.transactionId === tx.id);
-      const effectiveTrip = trip ? { ...trip, tollCharges: tollRefundAllocation.get(tx.id) ?? 0 } : trip;
-      const financials = calculateTollFinancials(tx, effectiveTrip, claim);
+      const claim = periodClaims.find(c => c.transactionId === tx.id);
+      const ctx = buildTollFinancialsContext(tx, trip, claim, trips, disputeRefunds || [], tollRefundAllocation);
+      const financials = calculateTollFinancials(tx, trip, claim, ctx);
       recoveredAmount += financials.totalRecovered;
       reconciledLiability += financials.netLoss;
   });
@@ -749,17 +742,13 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
           )}
           {activeStepId === 'underpaid-claims' && (
             <UnderpaidClaimsStep
-              underpaidTolls={classified['underpaid']}
-              suggestions={suggestions}
-              allTrips={trips}
-              onFlag={handleFlag}
-              onReconcile={handleSmartReconcile}
-              onEdit={handleEditToll}
               claims={pPeriodClaims}
               reconciledTolls={pReconciled}
               trips={trips}
               disputeRefunds={disputeRefunds}
               unlinkedRefundTrips={unclaimedRefunds}
+              periodReimbursedAmount={reimbursedByUber}
+              periodChargedToDrivers={chargedToDrivers}
               drivers={drivers}
               loadingTolls={tollsLoading}
               loadingClaims={claimsLoading}
@@ -792,6 +781,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
         onUndoRefund={undoRefund}
         onUndoApply={handleUndoApply}
         busyUnlinkedTripId={busyUnlinkedTripId}
+        disputeRefunds={disputeRefunds || []}
         pReconciled={pReconciled}
         trips={trips}
         pClaims={pPeriodClaims}
@@ -847,6 +837,7 @@ function HistoryPanel(props: {
   pReconciled: FinancialTransaction[];
   trips: TripType[];
   pClaims: any[];
+  disputeRefunds?: import('../../../types/data').DisputeRefund[];
   onUnmatch: (tx: FinancialTransaction) => Promise<any>;
   selectedDriverId: string;
   periodStartDate: string;
@@ -929,6 +920,7 @@ function HistoryPanel(props: {
             tolls={props.pReconciled}
             trips={props.trips}
             claims={props.pClaims}
+            disputeRefunds={props.disputeRefunds || []}
             onUnmatch={props.onUnmatch}
           />
         </TabsContent>

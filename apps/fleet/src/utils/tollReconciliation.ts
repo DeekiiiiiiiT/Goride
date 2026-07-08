@@ -1,4 +1,4 @@
-import { FinancialTransaction, Trip, Claim } from '../types/data';
+import { FinancialTransaction, Trip, Claim, DisputeRefund } from '../types/data';
 import { isWithinInterval, differenceInMinutes } from 'date-fns';
 import { calculateTripTimes, getTripWindows } from './timeUtils';
 
@@ -200,69 +200,135 @@ export function findTollMatches(
  * accounting for Platform Reimbursement and Driver Recoveries.
  */
 export interface TollFinancials {
-    cost: number;              // The original toll cost (absolute value)
-    platformRefund: number;    // Amount reimbursed by Uber/Lyft
-    driverRecovered: number;   // Amount charged to driver via Claims
-    fleetAbsorbed: number;     // Amount explicitly written off
-    totalRecovered: number;    // platformRefund + driverRecovered
-    netLoss: number;           // cost - totalRecovered
+    cost: number;
+    /** Allocated share of matched trip tollCharges (trip-match path). */
+    platformRefund: number;
+    /** claim.paidAmount or pending unlinked source trip credit. */
+    creditsApplied: number;
+    /** Matched Support Adjustment / dispute refund. */
+    disputeRefund: number;
+    driverRecovered: number;
+    fleetAbsorbed: number;
+    totalRecovered: number;
+    netLoss: number;
     status: 'Recovered' | 'Partial Loss' | 'Full Loss';
+}
+
+export interface TollFinancialsContext {
+    /** Pooled share from allocateTripRefundAcrossTolls — preferred over raw trip.tollCharges. */
+    allocatedTripRefund?: number;
+    disputeRefundAmount?: number;
+    /** Fallback credit when no claim.paidAmount yet (unlinked apply pending). */
+    unlinkedSourceTrip?: Trip | null;
+}
+
+function finiteAmount(value: unknown): number {
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.abs(n) : 0;
+}
+
+/**
+ * Builds allocation + dispute + unlinked context for a single toll row.
+ */
+export function buildTollFinancialsContext(
+    transaction: FinancialTransaction,
+    trip: Trip | undefined,
+    claim: Claim | undefined,
+    trips: Trip[],
+    disputeRefunds: DisputeRefund[],
+    allocation?: Map<string, number>,
+): TollFinancialsContext {
+    const tripById = new Map(trips.filter((t) => t?.id).map((t) => [t.id, t]));
+    const unlinkedTripId = transaction.unlinkedSourceTripId ?? null;
+    const dispute = disputeRefunds.find(
+        (r) =>
+            r.matchedTollId === transaction.id &&
+            (r.status === 'matched' || r.status === 'auto_resolved'),
+    );
+    return {
+        allocatedTripRefund: allocation?.get(transaction.id),
+        disputeRefundAmount: dispute ? finiteAmount(dispute.amount) : 0,
+        unlinkedSourceTrip: unlinkedTripId ? tripById.get(unlinkedTripId) ?? null : null,
+    };
+}
+
+/**
+ * Builds trip refund pool map + allocation across reconciled tolls sharing a trip.
+ */
+export function buildTripRefundAllocation(
+    reconciledTolls: Array<Pick<FinancialTransaction, 'id' | 'tripId' | 'date' | 'time' | 'amount'>>,
+    tripById: Map<string, Trip>,
+): Map<string, number> {
+    const tripRefundById = new Map<string, number>();
+    for (const tx of reconciledTolls) {
+        if (!tx.tripId || tripRefundById.has(tx.tripId)) continue;
+        const trip = tripById.get(tx.tripId);
+        if (trip) tripRefundById.set(tx.tripId, finiteAmount(trip.tollCharges));
+    }
+    return allocateTripRefundAcrossTolls(reconciledTolls, tripRefundById);
 }
 
 export function calculateTollFinancials(
     transaction: FinancialTransaction,
     trip?: Trip,
-    claim?: Claim
+    claim?: Claim,
+    ctx?: TollFinancialsContext,
 ): TollFinancials {
     const cost = Math.abs(transaction.amount);
-    
-    // 1. Platform Reimbursement (Source A)
-    // Only if a trip is linked (either passed in or via transaction.tripId)
-    // We prioritize the passed trip object as it might be fresher
-    const platformRefund = trip?.tollCharges || 0;
 
-    // 2. Driver Recovery (Source B)
-    // Only if a resolved claim exists and was charged to the driver
+    const tripRefund =
+        ctx?.allocatedTripRefund !== undefined
+            ? finiteAmount(ctx.allocatedTripRefund)
+            : finiteAmount(trip?.tollCharges);
+
+    let creditsApplied = 0;
+    const claimPaid = finiteAmount(claim?.paidAmount);
+    if (claimPaid > 0) {
+        creditsApplied = claimPaid;
+    } else if (ctx?.unlinkedSourceTrip) {
+        creditsApplied = finiteAmount(ctx.unlinkedSourceTrip.tollCharges);
+    }
+
+    const disputeRefund = finiteAmount(ctx?.disputeRefundAmount);
+
     let driverRecovered = 0;
     let fleetAbsorbed = 0;
-
-    if (claim && claim.status === 'Resolved') {
+    if (claim?.status === 'Resolved') {
         if (claim.resolutionReason === 'Charge Driver') {
-            driverRecovered = claim.amount; // The claim amount is the missing portion
-        } else if (claim.resolutionReason === 'Write Off') {
-            fleetAbsorbed = claim.amount;
+            driverRecovered = finiteAmount(claim.amount);
+        } else if (claim.resolutionReason === 'Write Off' || claim.resolutionReason === 'Business Expense') {
+            fleetAbsorbed = finiteAmount(claim.amount);
+        } else if (claim.resolutionReason === 'Reimbursed') {
+            // Resolved reimbursed: paidAmount holds platform recovery; amount may be leftover zero.
+            if (claimPaid > 0) {
+                creditsApplied = Math.max(creditsApplied, claimPaid);
+            }
         }
     }
 
-    const totalRecovered = platformRefund + driverRecovered;
-    
-    // Net Loss Calculation
-    // We use Math.round to avoid floating point artifacts (e.g. 0.00000001)
+    const rawRecovered = tripRefund + creditsApplied + disputeRefund + driverRecovered;
+    const totalRecovered = Math.min(cost, Math.round(rawRecovered * 100) / 100);
+
     let netLoss = Math.round((cost - totalRecovered) * 100) / 100;
-    
-    // Determine Status
     let status: TollFinancials['status'] = 'Full Loss';
-    
-    // If netLoss is negative (profit), we treat it as Recovered (0 loss) for status purposes
-    // but we return the actual netLoss value (which might be negative)? 
-    // No, usually "Loss" implies a non-negative number in this context. 
-    // If we made a profit, Net Loss is 0.
-    
-    if (netLoss <= 0) {
+
+    if (netLoss <= VARIANCE_THRESHOLD) {
         netLoss = 0;
         status = 'Recovered';
-    } else if (totalRecovered > 0) {
+    } else if (totalRecovered > VARIANCE_THRESHOLD) {
         status = 'Partial Loss';
     }
 
     return {
         cost,
-        platformRefund,
+        platformRefund: tripRefund,
+        creditsApplied,
+        disputeRefund,
         driverRecovered,
         fleetAbsorbed,
         totalRecovered,
         netLoss,
-        status
+        status,
     };
 }
 

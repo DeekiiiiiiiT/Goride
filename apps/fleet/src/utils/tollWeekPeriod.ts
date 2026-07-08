@@ -249,16 +249,46 @@ export function getClaimWeekDate(
   claim: Pick<Claim, 'date' | 'transactionId' | 'tripDate' | 'createdAt'>,
   tollDateById?: Map<string, string>,
 ): Date {
+  const anchor = getClaimPeriodAnchorDate(claim, tollDateById);
+  if (anchor) return new Date(anchor);
+  if (claim.createdAt) {
+    const d = new Date(claim.createdAt);
+    if (!isNaN(d.getTime())) return d;
+  }
+  return new Date(0);
+}
+
+/**
+ * Strict claim date for period-scoped UI — toll/claim/trip dates only.
+ * Never uses createdAt (resolution time), which can bucket claims into the wrong week.
+ */
+export function getClaimPeriodAnchorDate(
+  claim: Pick<Claim, 'date' | 'transactionId' | 'tripDate'>,
+  tollDateById?: Map<string, string>,
+): string | null {
   const candidates: (string | undefined)[] = [
     claim.date,
     claim.transactionId ? tollDateById?.get(claim.transactionId) : undefined,
     claim.tripDate,
-    claim.createdAt,
   ];
   for (const candidate of candidates) {
     if (!candidate) continue;
     const d = new Date(candidate);
-    if (!isNaN(d.getTime())) return d;
+    if (!isNaN(d.getTime())) return candidate;
   }
-  return new Date(0);
+  return null;
+}
+
+/** True when a claim's toll/claim/trip anchor falls inside [startDate, endDate] (fleet tz). */
+export function isClaimInPeriod(
+  claim: Pick<Claim, 'date' | 'transactionId' | 'tripDate'>,
+  period: { startDate: string; endDate: string },
+  tollDateById: Map<string, string> | undefined,
+  fleetTz: string,
+): boolean {
+  const anchor = getClaimPeriodAnchorDate(claim, tollDateById);
+  if (!anchor) return false;
+  const ymd = fleetTzDateKey(anchor, fleetTz);
+  if (!ymd) return false;
+  return ymd >= period.startDate && ymd <= period.endDate;
 }

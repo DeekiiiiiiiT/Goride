@@ -15,7 +15,7 @@ import {
   REFUND_OTHER_WAYS_LABEL,
 } from "./refundResolutionShell";
 import type { UnlinkedShortfallSuggestion } from "../../../hooks/useTollReconciliation";
-import { UNLINKED_RECOMMENDED_MIN_CONFIDENCE } from "../../../utils/unlinkedShortfallEligibility";
+import { isRecommendedUnlinkedShortfall, isUnlinkedShortfallPlatformMismatch } from "../../../utils/unlinkedShortfallEligibility";
 import { PlatformMismatchWarning, platformsMismatch } from "./PlatformMismatchWarning";
 import { PlatformSourceBadge } from "./PlatformSourceBadge";
 
@@ -101,7 +101,8 @@ export function RefundResolutionDrawer({
     setOtherOpen(false);
     setAcknowledgedMismatch(false);
     const recommended =
-      rankedCandidates.find((c) => c.confidence >= UNLINKED_RECOMMENDED_MIN_CONFIDENCE) ??
+      rankedCandidates.find((c) => isRecommendedUnlinkedShortfall(c, trip?.platform)) ??
+      rankedCandidates.find((c) => !isUnlinkedShortfallPlatformMismatch(c, trip?.platform)) ??
       rankedCandidates[0] ??
       null;
     setSelectedShortfallKey(recommended ? candidateKey(recommended) : null);
@@ -189,7 +190,7 @@ export function RefundResolutionDrawer({
                 {rankedCandidates.map((c) => {
                   const key = candidateKey(c);
                   const active = selectedShortfallKey === key;
-                  const recommended = c.confidence >= UNLINKED_RECOMMENDED_MIN_CONFIDENCE;
+                  const recommended = isRecommendedUnlinkedShortfall(c, trip.platform);
                   return (
                     <button
                       key={key}
@@ -212,6 +213,7 @@ export function RefundResolutionDrawer({
                       />
                       <span className="min-w-0 flex-1">
                         <span className="flex items-center gap-2 flex-wrap">
+                          <PlatformSourceBadge platform={c.tollPlatform} size="sm" />
                           <span className="text-sm font-medium text-slate-900">
                             {formatDate(c.date)} · ${c.tollAmount.toFixed(2)}
                           </span>

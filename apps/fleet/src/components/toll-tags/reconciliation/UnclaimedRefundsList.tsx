@@ -17,7 +17,7 @@ import { REFUND_RESOLUTION_META, RefundResolutionType } from "./refundResolution
 import { DriverOption } from "../../ui/DriverPicker";
 import type { RefundSuggestion } from "../../../hooks/useTollReconciliation";
 import type { UnlinkedShortfallSuggestion } from "../../../hooks/useTollReconciliation";
-import { UNLINKED_RECOMMENDED_MIN_CONFIDENCE } from "../../../utils/unlinkedShortfallEligibility";
+import { isRecommendedUnlinkedShortfall } from "../../../utils/unlinkedShortfallEligibility";
 import { toast } from "sonner@2.0.3";
 
 const EMPTY_SHORTFALL: UnlinkedShortfallSuggestion[] = [];
@@ -224,7 +224,7 @@ export function UnclaimedRefundsList({
                             const s = suggestionFor(trip.id);
                             const shortfall = bestShortfallFor(trip.id);
                             const showApplyShortcut =
-                              !!shortfall && shortfall.confidence >= UNLINKED_RECOMMENDED_MIN_CONFIDENCE;
+                              !!shortfall && isRecommendedUnlinkedShortfall(shortfall, trip.platform);
                             const isFuture = new Date(trip.date) > new Date();
                             return (
                               <TableRow key={trip.id}>

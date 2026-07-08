@@ -15,8 +15,8 @@ import {
   TrendingUp, TrendingDown, Shield, Info, CheckCircle2,
   AlertTriangle, Navigation, Route, Loader2, Layers, Receipt
 } from "lucide-react";
-import { FinancialTransaction, Trip, Claim } from "../../../types/data";
-import { TollFinancials, calculateTollFinancials } from "../../../utils/tollReconciliation";
+import { FinancialTransaction, Trip, Claim, DisputeRefund } from "../../../types/data";
+import { TollFinancials, calculateTollFinancials, buildTollFinancialsContext, buildTripRefundAllocation } from "../../../utils/tollReconciliation";
 import { normalizePlatform } from '../../../utils/normalizePlatform';
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
 
@@ -26,6 +26,8 @@ interface MatchedTollDetailOverlayProps {
   transaction: FinancialTransaction | null;
   trip: Trip | null;
   claim: Claim | null;
+  allTrips?: Trip[];
+  disputeRefunds?: DisputeRefund[];
   onUnmatch?: (tx: FinancialTransaction) => void;
 }
 
@@ -35,13 +37,21 @@ export function MatchedTollDetailOverlay({
   transaction,
   trip,
   claim,
+  allTrips = [],
+  disputeRefunds = [],
   onUnmatch,
 }: MatchedTollDetailOverlayProps) {
   if (!transaction) return null;
 
   const fleetTz = useFleetTimezone();
   const meta = (transaction as any).metadata || {};
-  const financials = calculateTollFinancials(transaction, trip || undefined, claim || undefined);
+  const tripById = new Map(allTrips.filter((t) => t?.id).map((t) => [t.id, t]));
+  const allocation = buildTripRefundAllocation(
+    [{ id: transaction.id, tripId: transaction.tripId, date: transaction.date, time: transaction.time, amount: transaction.amount }],
+    tripById,
+  );
+  const ctx = buildTollFinancialsContext(transaction, trip || undefined, claim || undefined, allTrips, disputeRefunds, allocation);
+  const financials = calculateTollFinancials(transaction, trip || undefined, claim || undefined, ctx);
   const isAuto = meta.reconciledBy === 'system-auto';
 
   // --- Date Helpers ---
@@ -248,6 +258,10 @@ export function MatchedTollDetailOverlay({
           <div className="bg-slate-50 rounded-lg p-3 space-y-2">
             <FinancialRow label="Toll Cost" value={`-$${financials.cost.toFixed(2)}`} valueClass="text-rose-600 font-bold" />
             <FinancialRow label="Platform Reimbursement" value={financials.platformRefund > 0 ? `+$${financials.platformRefund.toFixed(2)}` : '$0.00'} valueClass={financials.platformRefund > 0 ? 'text-emerald-600 font-semibold' : 'text-slate-400'} />
+            <FinancialRow label="Applied Credits" value={financials.creditsApplied > 0 ? `+$${financials.creditsApplied.toFixed(2)}` : '$0.00'} valueClass={financials.creditsApplied > 0 ? 'text-emerald-600 font-semibold' : 'text-slate-400'} />
+            {financials.disputeRefund > 0 && (
+              <FinancialRow label="Dispute Refund" value={`+$${financials.disputeRefund.toFixed(2)}`} valueClass="text-emerald-600 font-semibold" />
+            )}
             <FinancialRow label="Driver Recovery (Claims)" value={financials.driverRecovered > 0 ? `+$${financials.driverRecovered.toFixed(2)}` : '$0.00'} valueClass={financials.driverRecovered > 0 ? 'text-emerald-600 font-semibold' : 'text-slate-400'} />
             {financials.fleetAbsorbed > 0 && (
               <FinancialRow label="Fleet Absorbed (Write-off)" value={`$${financials.fleetAbsorbed.toFixed(2)}`} valueClass="text-amber-600" />
@@ -266,10 +280,10 @@ export function MatchedTollDetailOverlay({
               bold
             />
             {/* Variance indicator */}
-            {financials.platformRefund > financials.cost && (
+            {financials.totalRecovered > financials.cost && (
               <div className="flex items-center gap-1.5 text-xs text-emerald-600 bg-emerald-50 px-2 py-1 rounded mt-1">
                 <TrendingUp className="h-3 w-3" />
-                Reimbursed ${(financials.platformRefund - financials.cost).toFixed(2)} <em>more</em> than toll cost (positive variance)
+                Recovered ${(financials.totalRecovered - financials.cost).toFixed(2)} <em>more</em> than toll cost (positive variance)
               </div>
             )}
           </div>

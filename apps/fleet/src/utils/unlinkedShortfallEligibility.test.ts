@@ -10,6 +10,8 @@ import {
   hasBlockingUnlinkedRefund,
   isEligibleUnlinkedShortfallClaim,
   isEligibleUnlinkedShortfallToll,
+  isRecommendedUnlinkedShortfall,
+  isUnlinkedShortfallPlatformMismatch,
 } from './unlinkedShortfallEligibility';
 import { normalizePlatform, platformsEqual } from './normalizePlatform';
 
@@ -185,5 +187,24 @@ describe('unlinked shortfall eligibility', () => {
     expect(platformsEqual('Uber', 'uber')).toBe(true);
     expect(platformsEqual('Uber', 'Roam')).toBe(false);
     expect(platformsEqual('GoRide', 'Roam')).toBe(true);
+  });
+
+  it('recommended badge only when confidence high and platforms match', () => {
+    const highMatch = {
+      confidence: 97,
+      tripPlatform: 'Uber',
+      tollPlatform: 'Uber',
+      platformMismatch: false,
+    };
+    const mismatch = {
+      confidence: 97,
+      tripPlatform: 'Uber',
+      tollPlatform: 'Roam',
+      platformMismatch: true,
+    };
+    expect(isRecommendedUnlinkedShortfall(highMatch)).toBe(true);
+    expect(isRecommendedUnlinkedShortfall(mismatch)).toBe(false);
+    expect(isUnlinkedShortfallPlatformMismatch(mismatch)).toBe(true);
+    expect(isUnlinkedShortfallPlatformMismatch(highMatch)).toBe(false);
   });
 });

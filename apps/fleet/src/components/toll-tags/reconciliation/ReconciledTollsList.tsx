@@ -3,13 +3,13 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../..
 import { Button } from "../../ui/button";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "../../ui/table";
 import { Checkbox } from "../../ui/checkbox";
-import { FinancialTransaction, Trip, Claim } from "../../../types/data";
+import { FinancialTransaction, Trip, Claim, DisputeRefund } from "../../../types/data";
 import { normalizePlatform } from '../../../utils/normalizePlatform';
 import { History, Undo2, Loader2, Info, ChevronDown, Bot, UserCheck, CreditCard, Banknote, CalendarRange } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../ui/collapsible";
 import { groupTollsByWeek } from "../../../utils/tollWeekPeriod";
 import { Badge } from "../../ui/badge";
-import { calculateTollFinancials } from "../../../utils/tollReconciliation";
+import { calculateTollFinancials, buildTollFinancialsContext, buildTripRefundAllocation } from "../../../utils/tollReconciliation";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip";
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
 import { MatchedTollDetailOverlay } from './MatchedTollDetailOverlay';
@@ -19,10 +19,11 @@ interface ReconciledTollsListProps {
   tolls: FinancialTransaction[];
   trips: Trip[];
   claims: Claim[];
+  disputeRefunds?: DisputeRefund[];
   onUnmatch: (tx: FinancialTransaction) => Promise<any> | void;
 }
 
-export function ReconciledTollsList({ tolls, trips, claims, onUnmatch }: ReconciledTollsListProps) {
+export function ReconciledTollsList({ tolls, trips, claims, disputeRefunds = [], onUnmatch }: ReconciledTollsListProps) {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [isBulkUnmatching, setIsBulkUnmatching] = useState(false);
     const [visibleWeekCount, setVisibleWeekCount] = useState(12);
@@ -31,6 +32,8 @@ export function ReconciledTollsList({ tolls, trips, claims, onUnmatch }: Reconci
 
     const weekGroups = useMemo(() => groupTollsByWeek(tolls, fleetTz), [tolls, fleetTz]);
     const visibleWeekGroups = weekGroups.slice(0, visibleWeekCount);
+    const tripById = useMemo(() => new Map(trips.filter((t) => t?.id).map((t) => [t.id, t])), [trips]);
+    const allocation = useMemo(() => buildTripRefundAllocation(tolls, tripById), [tolls, tripById]);
 
     const toggleSelectAll = (checked: boolean) => {
         if (checked) {
@@ -147,7 +150,8 @@ export function ReconciledTollsList({ tolls, trips, claims, onUnmatch }: Reconci
                                                         const claim = claims.find(c => c.transactionId === tx.id);
                                                         const isSelected = selectedIds.has(tx.id);
 
-                                                        const financials = calculateTollFinancials(tx, trip, claim);
+                                                        const ctx = buildTollFinancialsContext(tx, trip || undefined, claim, trips, disputeRefunds, allocation);
+                                                        const financials = calculateTollFinancials(tx, trip || undefined, claim, ctx);
 
                                                         return (
                                                             <TableRow
@@ -330,6 +334,16 @@ export function ReconciledTollsList({ tolls, trips, claims, onUnmatch }: Reconci
                                                                                         <span>${financials.platformRefund.toFixed(2)}</span>
                                                                                     </div>
                                                                                     <div className="flex justify-between gap-4">
+                                                                                        <span>Applied credits:</span>
+                                                                                        <span>${financials.creditsApplied.toFixed(2)}</span>
+                                                                                    </div>
+                                                                                    {financials.disputeRefund > 0 && (
+                                                                                        <div className="flex justify-between gap-4">
+                                                                                            <span>Dispute:</span>
+                                                                                            <span>${financials.disputeRefund.toFixed(2)}</span>
+                                                                                        </div>
+                                                                                    )}
+                                                                                    <div className="flex justify-between gap-4">
                                                                                         <span>Driver Charge:</span>
                                                                                         <span>${financials.driverRecovered.toFixed(2)}</span>
                                                                                     </div>
@@ -404,6 +418,8 @@ export function ReconciledTollsList({ tolls, trips, claims, onUnmatch }: Reconci
                 transaction={detailTx}
                 trip={detailTx ? trips.find(t => t.id === detailTx.tripId) || (detailTx as any).linkedTrip || null : null}
                 claim={detailTx ? claims.find(c => c.transactionId === detailTx.id) || null : null}
+                allTrips={trips}
+                disputeRefunds={disputeRefunds}
                 onUnmatch={onUnmatch}
             />
         </Card>

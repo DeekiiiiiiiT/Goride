@@ -10,6 +10,7 @@ import {
 import { Badge } from "../ui/badge";
 import { CheckCircle2, History, Trash2, MoreHorizontal, FileText, UserMinus } from "lucide-react";
 import { Claim } from "../../types/data";
+import { toast } from "sonner@2.0.3";
 import { Checkbox } from "../ui/checkbox";
 import { Button } from "../ui/button";
 import {
@@ -150,7 +151,18 @@ export function ResolvedHistoryList({
                     variant="destructive" 
                     size="sm" 
                     onClick={() => {
-                        onDelete?.(Array.from(selectedIds));
+                        const ids = Array.from(selectedIds);
+                        const blocked = ids.filter((id) => {
+                          const c = claims.find((x) => x.id === id);
+                          return !!c?.unlinkedTripId;
+                        });
+                        if (blocked.length > 0) {
+                          toast.error('Use Undo Apply instead of delete', {
+                            description: `${blocked.length} selected claim(s) are linked to an unlinked refund apply.`,
+                          });
+                          return;
+                        }
+                        onDelete?.(ids);
                         setSelectedIds(new Set());
                     }}
                     className="gap-2 h-8"

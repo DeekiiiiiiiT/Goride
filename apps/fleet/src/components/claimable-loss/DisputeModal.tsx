@@ -10,8 +10,8 @@ import {
 import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
 import { Copy, Check, ExternalLink, Send } from "lucide-react";
-import { FinancialTransaction, Trip } from "../../types/data";
-import { MatchResult, calculateTollFinancials } from "../../utils/tollReconciliation";
+import { FinancialTransaction, Trip, Claim } from "../../types/data";
+import { MatchResult, TollFinancials } from "../../utils/tollReconciliation";
 import { toast } from "sonner";
 import { useClaims } from "../../hooks/useClaims";
 
@@ -19,10 +19,21 @@ interface DisputeModalProps {
   isOpen: boolean;
   onClose: () => void;
   lossItem: { transaction: FinancialTransaction, match: MatchResult } | null;
+  claim?: Claim | null;
+  financials?: TollFinancials;
   onClaimSuccess?: () => void;
+  onUpdateClaim?: (claim: Claim) => Promise<unknown>;
 }
 
-export function DisputeModal({ isOpen, onClose, lossItem, onClaimSuccess }: DisputeModalProps) {
+export function DisputeModal({
+  isOpen,
+  onClose,
+  lossItem,
+  claim,
+  financials: financialsProp,
+  onClaimSuccess,
+  onUpdateClaim,
+}: DisputeModalProps) {
   const [copied, setCopied] = useState(false);
   const textAreaRef = React.useRef<HTMLTextAreaElement>(null);
   const { createClaim } = useClaims();
@@ -31,14 +42,23 @@ export function DisputeModal({ isOpen, onClose, lossItem, onClaimSuccess }: Disp
   if (!lossItem) return null;
 
   const { transaction, match } = lossItem;
-  const { trip, varianceAmount } = match;
-  
-  const financials = calculateTollFinancials(transaction, trip);
+  const { trip } = match;
+
+  const financials = financialsProp ?? {
+    cost: Math.abs(transaction.amount),
+    platformRefund: trip.tollCharges || 0,
+    creditsApplied: 0,
+    disputeRefund: 0,
+    driverRecovered: 0,
+    fleetAbsorbed: 0,
+    totalRecovered: trip.tollCharges || 0,
+    netLoss: Math.max(0, Math.abs(transaction.amount) - (trip.tollCharges || 0)),
+    status: 'Partial Loss' as const,
+  };
   const tollCost = financials.cost;
-  const uberRefund = financials.platformRefund;
+  const creditsReceived = financials.totalRecovered;
   const missingAmount = financials.netLoss;
 
-  // Generate the dispute message
   const tripDate = new Date(trip.requestTime || trip.date);
   const message = `Issue: Toll Underpayment
 Trip ID: ${trip.id}
@@ -46,7 +66,7 @@ Trip Date: ${tripDate.toLocaleDateString()} at ${tripDate.toLocaleTimeString([],
 Pickup: ${trip.pickupLocation?.split(',')[0]}
 Dropoff: ${trip.dropoffLocation?.split(',')[0]}
 
-I was charged $${tollCost.toFixed(2)} for the toll at "${transaction.description}", but only reimbursed $${uberRefund.toFixed(2)}.
+I was charged $${tollCost.toFixed(2)} for the toll at "${transaction.description}", but only reimbursed $${creditsReceived.toFixed(2)}.
 
 Please adjust the fare to include the missing $${missingAmount.toFixed(2)}.`;
 
@@ -90,29 +110,36 @@ Please adjust the fare to include the missing $${missingAmount.toFixed(2)}.`;
   const handleSendToDriver = async () => {
     setIsSending(true);
     try {
-        await createClaim({
-           driverId: trip.driverId || 'unknown_driver',
-           tripId: trip.id,
-           transactionId: transaction.id,
-           type: 'Toll_Refund',
-           status: 'Sent_to_Driver',
-           amount: missingAmount,
-           expectedAmount: tollCost,
-           paidAmount: uberRefund,
-           subject: `Toll Refund: ${trip.pickupLocation?.split(',')[0] || 'Unknown Location'}`,
-           message: message,
-           tripDate: trip.requestTime || trip.date,
-           pickup: trip.pickupLocation,
-           dropoff: trip.dropoffLocation,
-           // Captured now so a later "Charge Driver" resolution charges the
-           // driver dated on the toll's ACTUAL date (not the resolution click
-           // date) and is properly vehicle/driver-attributed. The server also
-           // falls back to the linked toll_ledger entry if these are ever
-           // missing, but capturing them here avoids the extra lookup.
-           date: transaction.date,
-           vehicleId: transaction.vehicleId,
-           driverName: trip.driverName,
-        });
+        if (claim && onUpdateClaim) {
+          await onUpdateClaim({
+            ...claim,
+            status: 'Sent_to_Driver',
+            amount: missingAmount,
+            expectedAmount: tollCost,
+            paidAmount: creditsReceived,
+            message,
+            updatedAt: new Date().toISOString(),
+          });
+        } else {
+          await createClaim({
+             driverId: trip.driverId || 'unknown_driver',
+             tripId: trip.id,
+             transactionId: transaction.id,
+             type: 'Toll_Refund',
+             status: 'Sent_to_Driver',
+             amount: missingAmount,
+             expectedAmount: tollCost,
+             paidAmount: creditsReceived,
+             subject: `Toll Refund: ${trip.pickupLocation?.split(',')[0] || 'Unknown Location'}`,
+             message: message,
+             tripDate: trip.requestTime || trip.date,
+             pickup: trip.pickupLocation,
+             dropoff: trip.dropoffLocation,
+             date: transaction.date,
+             vehicleId: transaction.vehicleId,
+             driverName: trip.driverName,
+          });
+        }
         toast.success("Claim sent to driver successfully");
         if (onClaimSuccess) onClaimSuccess();
         onClose();
@@ -141,8 +168,8 @@ Please adjust the fare to include the missing $${missingAmount.toFixed(2)}.`;
                     <div className="text-lg font-bold text-slate-900">${tollCost.toFixed(2)}</div>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-md border text-center">
-                    <div className="text-xs text-slate-500 uppercase font-semibold">Reimbursed</div>
-                    <div className="text-lg font-bold text-emerald-600">${uberRefund.toFixed(2)}</div>
+                    <div className="text-xs text-slate-500 uppercase font-semibold">Credits Received</div>
+                    <div className="text-lg font-bold text-emerald-600">${creditsReceived.toFixed(2)}</div>
                 </div>
                 <div className="p-3 bg-orange-50 rounded-md border border-orange-100 text-center">
                     <div className="text-xs text-orange-600 uppercase font-semibold">Missing</div>

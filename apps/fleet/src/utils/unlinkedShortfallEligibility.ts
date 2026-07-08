@@ -3,6 +3,8 @@
  * Shared by fleet UI gates and toll_controller match-and-net.
  */
 
+import { platformsEqual } from './normalizePlatform';
+
 export const UNLINKED_SHORTFALL_TOLERANCE = 0.05;
 /** Minimum score to show a candidate in the Review picker. */
 export const UNLINKED_PICKER_MIN_CONFIDENCE = 25;
@@ -37,6 +39,26 @@ export interface UnlinkedShortfallSuggestionShape {
   tripPlatform?: string | null;
   /** True when tollPlatform and tripPlatform both set and differ. */
   platformMismatch?: boolean;
+}
+
+/** True when refund platform ≠ toll platform (explicit flag or both platforms known). */
+export function isUnlinkedShortfallPlatformMismatch(
+  candidate: Pick<UnlinkedShortfallSuggestionShape, 'tripPlatform' | 'tollPlatform' | 'platformMismatch'>,
+  refundPlatform?: string | null,
+): boolean {
+  if (candidate.platformMismatch === true) return true;
+  const sourcePlatform = candidate.tripPlatform ?? refundPlatform;
+  if (!sourcePlatform || !candidate.tollPlatform) return false;
+  return !platformsEqual(sourcePlatform, candidate.tollPlatform);
+}
+
+/** Recommended badge + row shortcut — high confidence AND same platform only. */
+export function isRecommendedUnlinkedShortfall(
+  candidate: Pick<UnlinkedShortfallSuggestionShape, 'confidence' | 'tripPlatform' | 'tollPlatform' | 'platformMismatch'>,
+  refundPlatform?: string | null,
+): boolean {
+  if (candidate.confidence < UNLINKED_RECOMMENDED_MIN_CONFIDENCE) return false;
+  return !isUnlinkedShortfallPlatformMismatch(candidate, refundPlatform);
 }
 
 export function remainingClaimShortfall(claim: {
