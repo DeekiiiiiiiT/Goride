@@ -24,6 +24,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
   const [unifiedSettlement, setUnifiedSettlement] = useState(false);
   const [matchOnIngest, setMatchOnIngest] = useState(false);
   const [disputeRefundTripSync, setDisputeRefundTripSync] = useState(false);
+  const [unlinkedRefundUndo, setUnlinkedRefundUndo] = useState(false);
   const [bridging, setBridging] = useState(false);
   const [claimsSyncChecking, setClaimsSyncChecking] = useState(false);
   const [claimsSyncApplying, setClaimsSyncApplying] = useState(false);
@@ -49,6 +50,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
     unifiedTollSettlementEnabled?: boolean;
     matchOnIngestEnabled?: boolean;
     disputeRefundTripSyncEnabled?: boolean;
+    unlinkedRefundUndoEnabled?: boolean;
   }) => {
     setEnabled(data.refundAutomationEnabled);
     setMinConfidence(data.refundAutoMinConfidence);
@@ -58,6 +60,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
     setUnifiedSettlement(data.unifiedTollSettlementEnabled === true);
     setMatchOnIngest(data.matchOnIngestEnabled === true);
     setDisputeRefundTripSync(data.disputeRefundTripSyncEnabled === true);
+    setUnlinkedRefundUndo(data.unlinkedRefundUndoEnabled === true);
   };
 
   useEffect(() => {
@@ -84,6 +87,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
     unifiedTollSettlementEnabled?: boolean;
     matchOnIngestEnabled?: boolean;
     disputeRefundTripSyncEnabled?: boolean;
+    unlinkedRefundUndoEnabled?: boolean;
   }) => {
     setSaving(true);
     try {
@@ -258,6 +262,21 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
                     When a dispute refund is matched (or unmatched), cascade the resolution into the
                     linked claim's driver-charge sync and the trip's Unlinked Refunds status, instead
                     of only marking the refund itself.
+                  </p>
+                </div>
+
+                <div className="border-t border-slate-100 pt-3">
+                  <label className="flex items-center justify-between">
+                    <span className="text-sm text-slate-700">Undo Apply to Underpaid</span>
+                    <Switch
+                      checked={unlinkedRefundUndo}
+                      disabled={saving}
+                      onCheckedChange={(v) => save({ unlinkedRefundUndoEnabled: v })}
+                    />
+                  </label>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Allow reversing an Unlinked Refund that was applied to an underpaid claim —
+                    restores the trip, claim, and driver financials.
                   </p>
                 </div>
               </div>

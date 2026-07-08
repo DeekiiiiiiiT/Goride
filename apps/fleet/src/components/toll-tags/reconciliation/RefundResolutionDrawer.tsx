@@ -16,6 +16,8 @@ import {
 } from "./refundResolutionShell";
 import type { UnlinkedShortfallSuggestion } from "../../../hooks/useTollReconciliation";
 import { UNLINKED_RECOMMENDED_MIN_CONFIDENCE } from "../../../utils/unlinkedShortfallEligibility";
+import { PlatformMismatchWarning, platformsMismatch } from "./PlatformMismatchWarning";
+import { PlatformSourceBadge } from "./PlatformSourceBadge";
 
 export interface RefundResolutionPayload {
   tripId: string;
@@ -23,6 +25,10 @@ export interface RefundResolutionPayload {
   notes?: string;
   driverId?: string;
   auto: boolean;
+}
+
+export interface ApplyToShortfallOptions {
+  acknowledgedPlatformMismatch?: boolean;
 }
 
 interface RefundResolutionDrawerProps {
@@ -35,7 +41,11 @@ interface RefundResolutionDrawerProps {
   shortfallCandidates?: UnlinkedShortfallSuggestion[];
   drivers?: DriverOption[];
   onResolve: (payload: RefundResolutionPayload) => Promise<void> | void;
-  onApplyToShortfall?: (tripId: string, candidate: UnlinkedShortfallSuggestion) => Promise<void> | void;
+  onApplyToShortfall?: (
+    tripId: string,
+    candidate: UnlinkedShortfallSuggestion,
+    opts?: ApplyToShortfallOptions,
+  ) => Promise<void> | void;
 }
 
 function formatDate(iso: string): string {
@@ -74,6 +84,7 @@ export function RefundResolutionDrawer({
   const [driverId, setDriverId] = useState<string | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
   const [otherOpen, setOtherOpen] = useState(false);
+  const [acknowledgedMismatch, setAcknowledgedMismatch] = useState(false);
 
   const amount = useMemo(() => Math.abs(trip?.tollCharges ?? 0), [trip]);
 
@@ -88,6 +99,7 @@ export function RefundResolutionDrawer({
     setNotes("");
     setDriverId(trip?.driverId ?? undefined);
     setOtherOpen(false);
+    setAcknowledgedMismatch(false);
     const recommended =
       rankedCandidates.find((c) => c.confidence >= UNLINKED_RECOMMENDED_MIN_CONFIDENCE) ??
       rankedCandidates[0] ??
@@ -98,6 +110,13 @@ export function RefundResolutionDrawer({
 
   const selectedCandidate = rankedCandidates.find((c) => candidateKey(c) === selectedShortfallKey) ?? null;
   const needsDriver = selected === "expense_logged" && !driverId;
+  const selectedMismatch =
+    !!selectedCandidate &&
+    (selectedCandidate.platformMismatch === true ||
+      platformsMismatch(
+        selectedCandidate.tripPlatform || trip?.platform,
+        selectedCandidate.tollPlatform,
+      ));
 
   const submitLeftover = async (resolution: RefundResolutionType, auto: boolean) => {
     if (!trip) return;
@@ -113,9 +132,12 @@ export function RefundResolutionDrawer({
 
   const submitApply = async () => {
     if (!trip || !selectedCandidate || !onApplyToShortfall) return;
+    if (selectedMismatch && !acknowledgedMismatch) return;
     setSubmitting(true);
     try {
-      await onApplyToShortfall(trip.id, selectedCandidate);
+      await onApplyToShortfall(trip.id, selectedCandidate, {
+        acknowledgedPlatformMismatch: selectedMismatch ? acknowledgedMismatch : undefined,
+      });
       onOpenChange(false);
     } finally {
       setSubmitting(false);
@@ -138,9 +160,7 @@ export function RefundResolutionDrawer({
           {/* Trip context */}
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
             <div className="flex items-center justify-between">
-              <span className="inline-flex items-center rounded-md border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-700">
-                {trip.platform || "Unknown"}
-              </span>
+              <PlatformSourceBadge platform={trip.platform} size="md" />
               <span className="font-semibold text-emerald-600">+${amount.toFixed(2)}</span>
             </div>
             <div className="mt-3 text-sm text-slate-700">
@@ -177,6 +197,7 @@ export function RefundResolutionDrawer({
                       onClick={() => {
                         setSelectedShortfallKey(key);
                         setSelected(null);
+                        setAcknowledgedMismatch(false);
                       }}
                       className={cn(
                         "flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors",
@@ -212,13 +233,32 @@ export function RefundResolutionDrawer({
                             ? ` · leftover $${c.leftoverShortfall.toFixed(2)} after apply`
                             : " · fully covered"}
                         </span>
+                        {(c.platformMismatch ||
+                          platformsMismatch(c.tripPlatform || trip.platform, c.tollPlatform)) && (
+                          <span className="mt-1 inline-flex text-[10px] font-semibold text-amber-700">
+                            Platform differs from refund
+                          </span>
+                        )}
                       </span>
                     </button>
                   );
                 })}
+                {selectedCandidate && selectedMismatch && (
+                  <PlatformMismatchWarning
+                    sourcePlatform={selectedCandidate.tripPlatform || trip.platform}
+                    targetPlatform={selectedCandidate.tollPlatform}
+                    acknowledged={acknowledgedMismatch}
+                    onAcknowledge={setAcknowledgedMismatch}
+                  />
+                )}
                 <Button
                   onClick={submitApply}
-                  disabled={!selectedCandidate || !onApplyToShortfall || submitting}
+                  disabled={
+                    !selectedCandidate ||
+                    !onApplyToShortfall ||
+                    submitting ||
+                    (selectedMismatch && !acknowledgedMismatch)
+                  }
                   className="w-full bg-orange-600 hover:bg-orange-700"
                 >
                   Apply to selected

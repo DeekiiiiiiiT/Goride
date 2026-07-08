@@ -107,6 +107,14 @@ export interface TollLedgerRecord {
   matchedAt: string | null;        // ISO timestamp
   matchedBy: string | null;        // User who reconciled
 
+  // ─── Unlinked refund apply (nullable on legacy rows) ───
+  unlinkedSourceTripId?: string | null;
+  unlinkedSourcePlatform?: string | null;
+  unlinkedAppliedAt?: string | null;
+  unlinkedAppliedBy?: string | null;
+  /** Trip that was linked before an unlinked apply overwrote tripId. */
+  preUnlinkedTripId?: string | null;
+
   // ─── Import/Batch ───
   batchId: string | null;
   batchName: string | null;
@@ -330,6 +338,12 @@ export function tollLedgerToTransaction(toll: TollLedgerRecord): FinancialTransa
     batchId: toll.batchId || undefined,
     batchName: toll.batchName || undefined,
 
+    unlinkedSourceTripId: toll.unlinkedSourceTripId ?? undefined,
+    unlinkedSourcePlatform: toll.unlinkedSourcePlatform ?? undefined,
+    unlinkedAppliedAt: toll.unlinkedAppliedAt ?? undefined,
+    unlinkedAppliedBy: toll.unlinkedAppliedBy ?? undefined,
+    preUnlinkedTripId: toll.preUnlinkedTripId ?? undefined,
+
     metadata: {
       ...toll.metadata,
       tollTagId: toll.tollTagId,
@@ -341,6 +355,11 @@ export function tollLedgerToTransaction(toll: TollLedgerRecord): FinancialTransa
       reconciledAt: toll.matchedAt,
       reconciledBy: toll.matchedBy,
       tollLedgerId: toll.id, // Reference back to toll ledger
+      unlinkedSourceTripId: toll.unlinkedSourceTripId,
+      unlinkedSourcePlatform: toll.unlinkedSourcePlatform,
+      unlinkedAppliedAt: toll.unlinkedAppliedAt,
+      unlinkedAppliedBy: toll.unlinkedAppliedBy,
+      preUnlinkedTripId: toll.preUnlinkedTripId,
     },
   };
 }

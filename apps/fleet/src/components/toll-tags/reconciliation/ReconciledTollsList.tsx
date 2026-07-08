@@ -13,6 +13,7 @@ import { calculateTollFinancials } from "../../../utils/tollReconciliation";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip";
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
 import { MatchedTollDetailOverlay } from './MatchedTollDetailOverlay';
+import { PlatformSourceBadge } from './PlatformSourceBadge';
 
 interface ReconciledTollsListProps {
   tolls: FinancialTransaction[];
@@ -116,6 +117,7 @@ export function ReconciledTollsList({ tolls, trips, claims, onUnmatch }: Reconci
                             <TableHead>Toll Date</TableHead>
                             <TableHead>Description</TableHead>
                             <TableHead>Platform</TableHead>
+                            <TableHead>Refund Source</TableHead>
                             <TableHead>Source</TableHead>
                             <TableHead>Paid Via</TableHead>
                             <TableHead>Recovered</TableHead>
@@ -126,7 +128,7 @@ export function ReconciledTollsList({ tolls, trips, claims, onUnmatch }: Reconci
                     <TableBody>
                         {visibleWeekGroups.map((week) => (
                             <TableRow key={week.key} className="border-0 hover:bg-transparent">
-                                <TableCell colSpan={9} className="p-0 align-top">
+                                <TableCell colSpan={10} className="p-0 align-top">
                                     <Collapsible defaultOpen={false} className="group border-b border-slate-200 last:border-b-0">
                                         <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 px-2 py-3 text-left bg-slate-50/80 dark:bg-slate-900/40 hover:bg-slate-100/90 dark:hover:bg-slate-800/50 transition-colors">
                                             <div className="flex items-center gap-2 min-w-0 flex-wrap">
@@ -202,18 +204,58 @@ export function ReconciledTollsList({ tolls, trips, claims, onUnmatch }: Reconci
                                                                 <TableCell>
                                                                     {trip ? (
                                                                         <div className="flex flex-col">
-                                                                            <Badge variant="outline" className="w-fit capitalize mb-1">
-                                                                                {normalizePlatform(trip.platform)}
-                                                                            </Badge>
-                                                                            <span className="text-xs text-slate-500">
+                                                                            <PlatformSourceBadge
+                                                                              platform={trip.platform}
+                                                                              tollPlatform={trip.platform}
+                                                                              refundPlatform={(tx as any).unlinkedSourcePlatform || (tx as any).metadata?.unlinkedSourcePlatform}
+                                                                              size="sm"
+                                                                            />
+                                                                            <span className="text-xs text-slate-500 mt-1">
                                                                                 {trip.requestTime ? formatInFleetTz(new Date(trip.requestTime), fleetTz, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : 'Unknown Date'}
                                                                             </span>
                                                                         </div>
+                                                                    ) : (tx as any).unlinkedSourcePlatform || (tx as any).metadata?.unlinkedSourcePlatform ? (
+                                                                        <PlatformSourceBadge
+                                                                          refundPlatform={(tx as any).unlinkedSourcePlatform || (tx as any).metadata?.unlinkedSourcePlatform}
+                                                                          size="sm"
+                                                                        />
                                                                     ) : (
                                                                         <Badge variant="secondary" className="bg-slate-100 text-slate-500 font-normal">
                                                                             Unmatched
                                                                         </Badge>
                                                                     )}
+                                                                </TableCell>
+
+                                                                <TableCell>
+                                                                    {(() => {
+                                                                        const unlinkedId = (tx as any).unlinkedSourceTripId || (tx as any).metadata?.unlinkedSourceTripId;
+                                                                        const matchedBy = (tx as any).matchedBy || (tx as any).metadata?.matchedBy || (tx as any).metadata?.reconciledBy;
+                                                                        if (unlinkedId || matchedBy === 'unlinked-shortfall') {
+                                                                            return (
+                                                                                <div className="flex flex-col gap-1">
+                                                                                    <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 text-[10px] w-fit">
+                                                                                        Unlinked Refund
+                                                                                    </Badge>
+                                                                                    <PlatformSourceBadge
+                                                                                      platform={(tx as any).unlinkedSourcePlatform || (tx as any).metadata?.unlinkedSourcePlatform}
+                                                                                      size="sm"
+                                                                                    />
+                                                                                </div>
+                                                                            );
+                                                                        }
+                                                                        if (matchedBy === 'dispute-refund-match' || matchedBy === 'dispute-refund') {
+                                                                            return (
+                                                                                <Badge variant="outline" className="bg-violet-50 text-violet-700 border-violet-200 text-[10px]">
+                                                                                    Dispute Refund
+                                                                                </Badge>
+                                                                            );
+                                                                        }
+                                                                        return (
+                                                                            <Badge variant="outline" className="bg-slate-50 text-slate-500 border-slate-200 text-[10px]">
+                                                                                Trip Match
+                                                                            </Badge>
+                                                                        );
+                                                                    })()}
                                                                 </TableCell>
 
                                                                 <TableCell>

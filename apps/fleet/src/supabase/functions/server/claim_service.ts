@@ -139,7 +139,10 @@ export async function upsertClaim(claimInput: any, c: unknown, opts?: UpsertClai
     }
   } else {
     // Flag OFF: preserve legacy behavior byte-for-byte — first-charge-only,
-    // positive Adjustment txn (legacy sign), no reversal/reclassify support,
+    // positive Adjustment txn (legacy sign), no reversal/reclassify support.
+    // DEPRECATED path: prefer driverTollChargeSyncEnabled ON + syncMode force
+    // for Apply/Undo unlinked shortfall. Planned for removal once all fleets
+    // run with the reversible claim_toll_sync projection.
     // no toll_ledger sync. Identical to the pre-existing code path.
     if (claim.status === "Resolved" && claim.resolutionReason === "Charge Driver" && !claim.resolutionTransactionId) {
       const txId = crypto.randomUUID();

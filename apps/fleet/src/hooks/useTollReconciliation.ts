@@ -148,6 +148,9 @@ export interface UnlinkedShortfallSuggestion {
   claimStatus: string | null;
   matchType: 'claim' | 'toll';
   location?: string | null;
+  tollPlatform?: string | null;
+  tripPlatform?: string | null;
+  platformMismatch?: boolean;
 }
 
 export interface ReconciliationPeriodScope {
@@ -499,12 +502,19 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
 
   const applyUnlinkedToClaim = async (
     tripId: string,
-    opts: { claimId?: string | null; tollId?: string | null },
+    opts: {
+      claimId?: string | null;
+      tollId?: string | null;
+      acknowledgedPlatformMismatch?: boolean;
+    },
   ) => {
     const result = await api.applyUnlinkedRefundToClaim({
       tripId,
       claimId: opts.claimId,
       tollId: opts.tollId,
+      acknowledgedPlatformMismatch: opts.acknowledgedPlatformMismatch,
+      // UI requires Proceed anyway checkbox — enforce on server too.
+      rejectOnPlatformMismatch: true,
     });
     setUnclaimedRefunds(prev => prev.filter(t => t.id !== tripId));
     setShortfallSuggestions(prev => {
@@ -516,11 +526,19 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
     return result;
   };
 
-  // Undo re-opens a resolved refund by setting it back to pending.
+  // Undo leftover resolutions (cash wash / phantom / etc.) — NOT Apply-to-Underpaid.
   const undoRefund = async (tripId: string) => {
     await api.resolveRefund({ tripId, resolution: 'pending' });
     setResolvedRefunds(prev => prev.filter(t => t.id !== tripId));
     await fetchData();
+  };
+
+  /** Full undo of Apply to Underpaid (restores claim + toll provenance + trip queue). */
+  const undoApplyToUnderpaid = async (tripId: string) => {
+    const result = await api.undoApplyUnlinkedRefund(tripId);
+    setResolvedRefunds(prev => prev.filter(t => t.id !== tripId));
+    await fetchData();
+    return result;
   };
 
   return {
@@ -543,6 +561,7 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
     resolveRefund,
     bulkResolveRefunds,
     undoRefund,
+    undoApplyToUnderpaid,
     applyUnlinkedToClaim,
     applyDisputeMatch,
     applyDisputeUnmatch,

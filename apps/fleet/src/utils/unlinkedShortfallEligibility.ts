@@ -31,6 +31,12 @@ export interface UnlinkedShortfallSuggestionShape {
   claimStatus: string | null;
   matchType: 'claim' | 'toll';
   location?: string | null;
+  /** Platform of the underpaid toll's linked / claim trip. */
+  tollPlatform?: string | null;
+  /** Platform of the unlinked refund trip. */
+  tripPlatform?: string | null;
+  /** True when tollPlatform and tripPlatform both set and differ. */
+  platformMismatch?: boolean;
 }
 
 export function remainingClaimShortfall(claim: {
@@ -46,15 +52,22 @@ export function leftoverAfterApply(remainingShortfall: number, tripRefund: numbe
   return Math.max(0, remainingShortfall - Math.abs(tripRefund));
 }
 
+/** Merged API rows use "Usage"; raw ledger rows use "usage". */
+export function isUsageTollType(type?: string | null): boolean {
+  if (!type) return true;
+  return String(type).toLowerCase() === 'usage';
+}
+
 /**
  * Claims eligible to receive an Unlinked Refund credit.
- * Only open underpaid shortfalls — never Personal Use / Deadhead Charge Driver,
+ * Open underpaid shortfalls only — never Personal Use / Deadhead Charge Driver,
  * or already-reimbursed / dispute-matched resolved claims from earlier steps.
  */
 export function isEligibleUnlinkedShortfallClaim(claim: {
   type?: string;
   status?: string;
   resolutionReason?: string | null;
+  subject?: string | null;
   unlinkedTripId?: string | null;
   amount?: number;
   paidAmount?: number;
@@ -75,38 +88,37 @@ export function isEligibleUnlinkedShortfallClaim(claim: {
 }
 
 /**
- * Ledger tolls eligible as underpaid shortfall targets (no usable open claim).
+ * Ledger / merged-tx tolls eligible as underpaid shortfall targets.
  * Amount-proximity alone is NOT enough — that pulled Personal Use / Deadhead rows.
  */
 export function isEligibleUnlinkedShortfallToll(toll: {
-  type?: string;
+  type?: string | null;
   matchTypeCode?: string | null;
   workflowStage?: string | null;
   resolution?: string | null;
   claimId?: string | null;
   amount?: number;
 }): boolean {
-  if (toll.type && toll.type !== 'usage') return false;
+  if (!isUsageTollType(toll.type)) return false;
   if (Math.abs(Number(toll.amount) || 0) <= 0) return false;
 
-  // Finished in Personal Use / Deadhead / Business / Write-off
+  // Finished in Personal Use / Deadhead / Business / Write-off / dispute reimbursement
   const res = toll.resolution;
   if (res === 'personal' || res === 'business' || res === 'write_off' || res === 'refunded') {
     return false;
   }
 
-  const stage = toll.workflowStage || '';
+  const stage = String(toll.workflowStage || '');
   if (
     stage.startsWith('personal_use') ||
     stage.startsWith('deadhead') ||
     stage === 'matched' ||
-    stage === 'claim_resolved' ||
-    stage === 'needs_review'
+    stage === 'claim_resolved'
   ) {
     return false;
   }
 
-  // True underpaid path only
+  // True underpaid path only (underpaid_pending / AMOUNT_VARIANCE / open claim_filed)
   return (
     toll.matchTypeCode === 'AMOUNT_VARIANCE' ||
     stage === 'underpaid_pending' ||
@@ -157,6 +169,20 @@ export function isPendingOnlyRefundResolution(trip: {
   tollRefundResolution?: { status?: string } | null;
 }): boolean {
   return trip.tollRefundResolution?.status === 'pending';
+}
+
+/** Expense-logged via Apply to Underpaid (has appliedToClaimId or unlinked shortfall source). */
+export function isUnlinkedApplyResolution(trip: {
+  tollRefundResolution?: {
+    status?: string;
+    appliedToClaimId?: string | null;
+    source?: string | null;
+  } | null;
+}): boolean {
+  const res = trip.tollRefundResolution;
+  if (!res || res.status !== 'expense_logged') return false;
+  if (res.appliedToClaimId) return true;
+  return typeof res.source === 'string' && res.source.startsWith('system:unlinked_shortfall:');
 }
 
 /**

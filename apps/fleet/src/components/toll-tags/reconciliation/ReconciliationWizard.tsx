@@ -115,6 +115,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
     resolveRefund,
     bulkResolveRefunds,
     undoRefund,
+    undoApplyToUnderpaid,
     applyUnlinkedToClaim,
     applyDisputeMatch,
     applyDisputeUnmatch,
@@ -543,8 +544,16 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
     onExit();
   };
 
-  const handleApplyUnlinkedShortfall = async (tripId: string, suggestion: UnlinkedShortfallSuggestion) => {
-    await applyUnlinkedToClaim(tripId, { claimId: suggestion.claimId, tollId: suggestion.tollId });
+  const handleApplyUnlinkedShortfall = async (
+    tripId: string,
+    suggestion: UnlinkedShortfallSuggestion,
+    opts?: { acknowledgedPlatformMismatch?: boolean },
+  ) => {
+    await applyUnlinkedToClaim(tripId, {
+      claimId: suggestion.claimId,
+      tollId: suggestion.tollId,
+      acknowledgedPlatformMismatch: opts?.acknowledgedPlatformMismatch,
+    });
     refreshClaims();
   };
 
@@ -741,6 +750,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
       <HistoryPanel
         pResolved={pResolved}
         onUndoRefund={undoRefund}
+        onUndoApply={undoApplyToUnderpaid}
         pReconciled={pReconciled}
         trips={trips}
         pClaims={pPeriodClaims}
@@ -791,6 +801,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
 function HistoryPanel(props: {
   pResolved: TripType[];
   onUndoRefund: (tripId: string) => Promise<void> | void;
+  onUndoApply?: (tripId: string) => Promise<void> | void;
   pReconciled: FinancialTransaction[];
   trips: TripType[];
   pClaims: any[];
@@ -823,21 +834,50 @@ function HistoryPanel(props: {
 
         <TabsContent value="resolved" className="mt-4">
           <ResolvedRefundsList
-            rows={props.pResolved.map((t): ResolvedRefundRow => ({
-              id: t.id,
-              date: t.date,
-              platform: t.platform,
-              driverId: t.driverId,
-              driverName: t.driverName,
-              tollCharges: t.tollCharges,
-              pickupLocation: t.pickupLocation,
-              dropoffLocation: t.dropoffLocation,
-              resolution: (t.tollRefundResolution?.status as ResolvedRefundRow['resolution']) || 'cash_wash',
-              resolvedBy: t.tollRefundResolution?.resolvedBy,
-              resolvedAt: t.tollRefundResolution?.resolvedAt,
-              auto: t.tollRefundResolution?.auto,
-            }))}
+            rows={props.pResolved.map((t): ResolvedRefundRow => {
+              const res = t.tollRefundResolution;
+              const claimId = res?.appliedToClaimId;
+              const claim = claimId
+                ? props.pClaims.find((c: any) => c?.id === claimId)
+                : props.pClaims.find((c: any) => c?.unlinkedTripId === t.id);
+              const toll = claim?.transactionId
+                ? props.pReconciled.find((tx) => tx.id === claim.transactionId)
+                : res?.appliedToTollId
+                  ? props.pReconciled.find((tx) => tx.id === res.appliedToTollId)
+                  : undefined;
+              return {
+                id: t.id,
+                date: t.date,
+                platform: t.platform,
+                driverId: t.driverId,
+                driverName: t.driverName,
+                tollCharges: t.tollCharges,
+                pickupLocation: t.pickupLocation,
+                dropoffLocation: t.dropoffLocation,
+                resolution: (res?.status as ResolvedRefundRow['resolution']) || 'cash_wash',
+                resolvedBy: res?.resolvedBy,
+                resolvedAt: res?.resolvedAt,
+                auto: res?.auto,
+                appliedToClaimId: res?.appliedToClaimId,
+                appliedToTollId: res?.appliedToTollId,
+                resolutionSource: res?.source,
+                resolutionNotes: res?.notes,
+                preUnlinkedStatus: claim?.preUnlinkedStatus,
+                preUnlinkedResolutionReason: claim?.preUnlinkedResolutionReason,
+                targetTollAmount: toll
+                  ? Math.abs(Number(toll.amount) || 0)
+                  : claim
+                    ? Math.abs(Number(claim.expectedAmount ?? claim.amount) || 0)
+                    : null,
+                targetLocation:
+                  (toll as any)?.description ||
+                  (toll as any)?.vendor ||
+                  claim?.subject ||
+                  null,
+              };
+            })}
             onUndo={props.onUndoRefund}
+            onUndoApply={props.onUndoApply}
           />
         </TabsContent>
 

@@ -5,10 +5,12 @@ import {
   remainingClaimShortfall,
   scoreUnlinkedShortfallMatch,
   isPendingOnlyRefundResolution,
+  isUnlinkedApplyResolution,
   hasBlockingUnlinkedRefund,
   isEligibleUnlinkedShortfallClaim,
   isEligibleUnlinkedShortfallToll,
 } from './unlinkedShortfallEligibility';
+import { normalizePlatform, platformsEqual } from './normalizePlatform';
 
 describe('unlinked shortfall eligibility', () => {
   it('285 toll / 275 refund → leftover 10, not fully covered for shortfall=285', () => {
@@ -97,7 +99,7 @@ describe('unlinked shortfall eligibility', () => {
     ).toBe(true);
   });
 
-  it('excludes personal/deadhead ledger rows; keeps underpaid AMOUNT_VARIANCE', () => {
+  it('excludes personal/deadhead ledger rows; keeps underpaid AMOUNT_VARIANCE (Usage or usage)', () => {
     expect(
       isEligibleUnlinkedShortfallToll({
         type: 'usage',
@@ -108,12 +110,20 @@ describe('unlinked shortfall eligibility', () => {
     ).toBe(false);
     expect(
       isEligibleUnlinkedShortfallToll({
-        type: 'usage',
+        type: 'Usage',
         amount: 380,
         workflowStage: 'deadhead_resolved',
         resolution: 'personal',
       }),
     ).toBe(false);
+    expect(
+      isEligibleUnlinkedShortfallToll({
+        type: 'Usage', // merged API shape
+        amount: 285,
+        matchTypeCode: 'AMOUNT_VARIANCE',
+        workflowStage: 'underpaid_pending',
+      }),
+    ).toBe(true);
     expect(
       isEligibleUnlinkedShortfallToll({
         type: 'usage',
@@ -122,5 +132,42 @@ describe('unlinked shortfall eligibility', () => {
         workflowStage: 'underpaid_pending',
       }),
     ).toBe(true);
+  });
+
+  it('detects Apply-to-Underpaid resolutions for undo routing', () => {
+    expect(
+      isUnlinkedApplyResolution({
+        tollRefundResolution: {
+          status: 'expense_logged',
+          appliedToClaimId: 'claim-1',
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isUnlinkedApplyResolution({
+        tollRefundResolution: {
+          status: 'expense_logged',
+          source: 'system:unlinked_shortfall:abc',
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isUnlinkedApplyResolution({
+        tollRefundResolution: { status: 'expense_logged', source: 'admin' },
+      }),
+    ).toBe(false);
+    expect(
+      isUnlinkedApplyResolution({
+        tollRefundResolution: { status: 'cash_wash' },
+      }),
+    ).toBe(false);
+  });
+
+  it('normalizes platforms for mismatch comparisons', () => {
+    expect(normalizePlatform('GoRide')).toBe('Roam');
+    expect(normalizePlatform('uber')).toBe('Uber');
+    expect(platformsEqual('Uber', 'uber')).toBe(true);
+    expect(platformsEqual('Uber', 'Roam')).toBe(false);
+    expect(platformsEqual('GoRide', 'Roam')).toBe(true);
   });
 });

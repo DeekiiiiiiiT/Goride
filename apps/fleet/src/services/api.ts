@@ -1956,6 +1956,9 @@ export const api = {
       claimStatus: string | null;
       matchType: 'claim' | 'toll';
       location?: string | null;
+      tollPlatform?: string | null;
+      tripPlatform?: string | null;
+      platformMismatch?: boolean;
     }>>;
   }> {
     const qs = new URLSearchParams();
@@ -1969,7 +1972,13 @@ export const api = {
     return response.json();
   },
 
-  async applyUnlinkedRefundToClaim(payload: { tripId: string; claimId?: string | null; tollId?: string | null }) {
+  async applyUnlinkedRefundToClaim(payload: {
+    tripId: string;
+    claimId?: string | null;
+    tollId?: string | null;
+    acknowledgedPlatformMismatch?: boolean;
+    rejectOnPlatformMismatch?: boolean;
+  }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/unlinked-refunds/apply-to-claim`, {
       method: 'POST',
       headers: {
@@ -1981,6 +1990,22 @@ export const api = {
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
       throw new Error(err.error || "Failed to apply unlinked refund to claim");
+    }
+    return response.json();
+  },
+
+  async undoApplyUnlinkedRefund(tripId: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/unlinked-refunds/undo-apply`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify({ tripId })
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to undo applied unlinked refund");
     }
     return response.json();
   },
@@ -2241,7 +2266,7 @@ export const api = {
     return response.json();
   },
 
-  async getTollAutomationSettings(): Promise<{ success: boolean; data: { refundAutomationEnabled: boolean; refundAutoMinConfidence: number; personalUseDetectionEnabled: boolean; orphanProximityMinutes: number; driverTollChargeSyncEnabled: boolean; unifiedTollSettlementEnabled: boolean; matchOnIngestEnabled: boolean; disputeRefundTripSyncEnabled: boolean } }> {
+  async getTollAutomationSettings(): Promise<{ success: boolean; data: { refundAutomationEnabled: boolean; refundAutoMinConfidence: number; personalUseDetectionEnabled: boolean; orphanProximityMinutes: number; driverTollChargeSyncEnabled: boolean; unifiedTollSettlementEnabled: boolean; matchOnIngestEnabled: boolean; disputeRefundTripSyncEnabled: boolean; unlinkedRefundUndoEnabled: boolean } }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/automation-settings`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
@@ -2249,7 +2274,7 @@ export const api = {
     return response.json();
   },
 
-  async updateTollAutomationSettings(payload: { refundAutomationEnabled?: boolean; refundAutoMinConfidence?: number; personalUseDetectionEnabled?: boolean; orphanProximityMinutes?: number; driverTollChargeSyncEnabled?: boolean; unifiedTollSettlementEnabled?: boolean; matchOnIngestEnabled?: boolean; disputeRefundTripSyncEnabled?: boolean }) {
+  async updateTollAutomationSettings(payload: { refundAutomationEnabled?: boolean; refundAutoMinConfidence?: number; personalUseDetectionEnabled?: boolean; orphanProximityMinutes?: number; driverTollChargeSyncEnabled?: boolean; unifiedTollSettlementEnabled?: boolean; matchOnIngestEnabled?: boolean; disputeRefundTripSyncEnabled?: boolean; unlinkedRefundUndoEnabled?: boolean }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/automation-settings`, {
       method: 'PUT',
       headers: {

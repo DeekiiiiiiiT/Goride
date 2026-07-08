@@ -29,7 +29,11 @@ interface UnclaimedRefundsListProps {
   drivers?: DriverOption[];
   onResolve?: (tripId: string, resolution: RefundResolutionType, opts?: { notes?: string; driverId?: string }) => Promise<void> | void;
   onBulkResolve?: (items: Array<{ tripId: string; resolution: RefundResolutionType; notes?: string; driverId?: string }>) => Promise<void> | void;
-  onApplyToShortfall?: (tripId: string, suggestion: UnlinkedShortfallSuggestion) => Promise<void> | void;
+  onApplyToShortfall?: (
+    tripId: string,
+    suggestion: UnlinkedShortfallSuggestion,
+    opts?: { acknowledgedPlatformMismatch?: boolean },
+  ) => Promise<void> | void;
 }
 
 export function UnclaimedRefundsList({
@@ -63,12 +67,16 @@ export function UnclaimedRefundsList({
   const shortfallsFor = (tripId: string) => shortfallSuggestions?.get(tripId) ?? EMPTY_SHORTFALL;
   const bestShortfallFor = (tripId: string) => shortfallsFor(tripId)[0];
 
-  const handleApplyShortfall = async (trip: Trip, candidate?: UnlinkedShortfallSuggestion) => {
+  const handleApplyShortfall = async (
+    trip: Trip,
+    candidate?: UnlinkedShortfallSuggestion,
+    opts?: { acknowledgedPlatformMismatch?: boolean },
+  ) => {
     const best = candidate ?? bestShortfallFor(trip.id);
     if (!best || !onApplyToShortfall) return;
     setBusy(true);
     try {
-      await onApplyToShortfall(trip.id, best);
+      await onApplyToShortfall(trip.id, best, opts);
       toast.success(
         best.coversFully
           ? `Applied $${best.tripRefund.toFixed(2)} — claim reimbursed`
@@ -337,9 +345,9 @@ export function UnclaimedRefundsList({
           onResolve={handleDrawerResolve}
           onApplyToShortfall={
             onApplyToShortfall
-              ? async (tripId, candidate) => {
+              ? async (tripId, candidate, opts) => {
                   const trip = trips.find((t) => t.id === tripId);
-                  if (trip) await handleApplyShortfall(trip, candidate);
+                  if (trip) await handleApplyShortfall(trip, candidate, opts);
                 }
               : undefined
           }

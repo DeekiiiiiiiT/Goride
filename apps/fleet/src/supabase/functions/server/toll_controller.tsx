@@ -861,6 +861,12 @@ function tollLedgerToTxShape(entry: TollLedgerRecord): any {
     claimId: entry.claimId,
     matchStatus: entry.matchStatus,
     isAmbiguous: entry.metadata?.isAmbiguous === true || entry.matchStatus === "ambiguous",
+    // Surface unlinked-apply provenance on the API shape for Matched History.
+    unlinkedSourceTripId: entry.unlinkedSourceTripId ?? null,
+    unlinkedSourcePlatform: entry.unlinkedSourcePlatform ?? null,
+    unlinkedAppliedAt: entry.unlinkedAppliedAt ?? null,
+    unlinkedAppliedBy: entry.unlinkedAppliedBy ?? null,
+    preUnlinkedTripId: entry.preUnlinkedTripId ?? null,
     metadata: {
       tollTagId: entry.tollTagId,
       tagNumber: entry.tagNumber,
@@ -877,6 +883,11 @@ function tollLedgerToTxShape(entry: TollLedgerRecord): any {
       auditTrail: entry.auditTrail,
       // Preserve auto-match override flag
       autoMatchOverridden: entry.metadata?.autoMatchOverridden,
+      unlinkedSourceTripId: entry.unlinkedSourceTripId,
+      unlinkedSourcePlatform: entry.unlinkedSourcePlatform,
+      unlinkedAppliedAt: entry.unlinkedAppliedAt,
+      unlinkedAppliedBy: entry.unlinkedAppliedBy,
+      preUnlinkedTripId: entry.preUnlinkedTripId,
       // Include any other metadata
       ...entry.metadata,
     },
@@ -2017,6 +2028,12 @@ interface TollLedgerRecord {
   // callers), same convention as the MOI-1 fields above.
   workflowStage?: TollWorkflowStage;
   workflowStageUpdatedAt?: string | null;
+  // Unlinked Apply provenance — nullable on legacy rows.
+  unlinkedSourceTripId?: string | null;
+  unlinkedSourcePlatform?: string | null;
+  unlinkedAppliedAt?: string | null;
+  unlinkedAppliedBy?: string | null;
+  preUnlinkedTripId?: string | null;
 }
 
 interface TollLedgerFilters {
@@ -4988,6 +5005,8 @@ interface RefundAutomationSettings {
   // driver-charge sync and into the trip's Unlinked Refunds resolution —
   // additive, default OFF.
   disputeRefundTripSyncEnabled: boolean;
+  // Real Undo for Apply-to-Underpaid — additive, default OFF.
+  unlinkedRefundUndoEnabled: boolean;
 }
 
 async function getRefundAutomationSettings(): Promise<RefundAutomationSettings> {
@@ -5007,6 +5026,7 @@ async function getRefundAutomationSettings(): Promise<RefundAutomationSettings> 
     unifiedTollSettlementEnabled: rec?.unifiedTollSettlementEnabled === true, // default OFF
     matchOnIngestEnabled: rec?.matchOnIngestEnabled === true, // default OFF
     disputeRefundTripSyncEnabled: rec?.disputeRefundTripSyncEnabled === true, // default OFF
+    unlinkedRefundUndoEnabled: rec?.unlinkedRefundUndoEnabled === true, // default OFF
   };
 }
 
@@ -5139,6 +5159,9 @@ async function applyRefundResolution(params: {
   /** Provenance tag stored on trip.tollRefundResolution.source. Defaults to
    *  "admin" so existing call sites are unaffected. */
   source?: string;
+  /** Persist Apply-to-Underpaid linkage for undo. */
+  appliedToClaimId?: string | null;
+  appliedToTollId?: string | null;
 }): Promise<{ tripId: string; resolution: RefundResolutionStatus; linkedTollLedgerId?: string }> {
   const { tripId, resolution, notes, auto } = params;
   const trip = await kv.get(`trip:${tripId}`);
@@ -5207,6 +5230,8 @@ async function applyRefundResolution(params: {
     confidence: params.confidence,
     linkedTollLedgerId,
     source: params.source || "admin",
+    appliedToClaimId: params.appliedToClaimId ?? undefined,
+    appliedToTollId: params.appliedToTollId ?? undefined,
   };
   await kv.set(`trip:${tripId}`, trip);
 
@@ -5280,6 +5305,8 @@ type UnlinkedShortfallContext = {
   claims: any[];
   ledger: any[];
   tollById: Map<string, any>;
+  trips: any[];
+  tripById: Map<string, any>;
 };
 
 /** Shared claim+ledger snapshot — load claims once; reuse ledger already in memory when provided. */
@@ -5288,17 +5315,67 @@ async function loadUnlinkedShortfallContext(ledgerHint?: any[]): Promise<Unlinke
     ledgerHint && ledgerHint.length > 0
       ? ledgerHint
       : ((await loadAllByPrefix("toll_ledger:")) as any[]);
-  const claims = (await loadAllByPrefix("claim:")) as any[];
+  const [claims, trips] = await Promise.all([
+    loadAllByPrefix("claim:"),
+    loadAllTrips(),
+  ]);
   const tollById = new Map<string, any>();
   for (const toll of ledger) {
     if (toll?.id) tollById.set(toll.id, toll);
   }
-  return { claims, ledger, tollById };
+  const tripById = new Map<string, any>();
+  for (const t of trips || []) {
+    if (t?.id) tripById.set(t.id, t);
+  }
+  return { claims, ledger, tollById, trips: trips || [], tripById };
 }
 
 function resolveTollFromContext(ctx: UnlinkedShortfallContext, transactionId: string | undefined): any | null {
   if (!transactionId) return null;
   return ctx.tollById.get(transactionId) || null;
+}
+
+/** Canonical platform brand for comparisons (GoRide → Roam, case-safe). */
+function normalizePlatformServer(platform?: string | null): string {
+  if (!platform) return "";
+  const trimmed = String(platform).trim();
+  if (!trimmed) return "";
+  const lower = trimmed.toLowerCase();
+  if (lower === "goride" || lower === "roam") return "roam";
+  if (lower === "uber") return "uber";
+  if (lower === "indrive" || lower === "in drive") return "indrive";
+  return lower;
+}
+
+/**
+ * Platform of the trip originally linked to the underpaid toll / claim —
+ * never the unlinked refund trip itself.
+ */
+function extractTollPlatform(
+  toll: any | null,
+  claim: any | null,
+  ctx: UnlinkedShortfallContext,
+): string | null {
+  const originalTripId =
+    toll?.preUnlinkedTripId ||
+    (toll?.unlinkedSourceTripId && toll?.tripId !== toll.unlinkedSourceTripId ? toll.tripId : null) ||
+    (toll?.unlinkedSourceTripId ? null : toll?.tripId) ||
+    claim?.tripId ||
+    null;
+  // Prefer claim's original trip (underpaid trip) when toll.tripId was overwritten by apply
+  if (claim?.tripId && claim.tripId !== claim.unlinkedTripId) {
+    const claimTrip = ctx.tripById.get(claim.tripId);
+    if (claimTrip?.platform) return String(claimTrip.platform);
+  }
+  if (originalTripId) {
+    const linked = ctx.tripById.get(originalTripId);
+    if (linked?.platform) return String(linked.platform);
+  }
+  if (toll?.tripId && toll.tripId !== toll.unlinkedSourceTripId) {
+    const linked = ctx.tripById.get(toll.tripId);
+    if (linked?.platform) return String(linked.platform);
+  }
+  return null;
 }
 
 /** Ranked underpaid claims / tolls this unlinked trip refund could cover (Review picker). */
@@ -5309,6 +5386,8 @@ function computeUnlinkedShortfallSuggestions(
   const driverId = trip.driverId;
   const tripRefund = Math.abs(Number(trip.tollCharges) || 0);
   if (!driverId || tripRefund <= 0) return [];
+  const tripPlatform = trip.platform ? String(trip.platform) : null;
+  const tripPlatformNorm = normalizePlatformServer(tripPlatform);
 
   const byTollId = new Map<string, any>();
 
@@ -5351,6 +5430,8 @@ function computeUnlinkedShortfallSuggestions(
       claimOrTollDate: claimDate,
     });
     const leftover = leftoverAfterApply(remaining, tripRefund);
+    const tollPlatform = extractTollPlatform(toll, claim, ctx);
+    const tollPlatformNorm = normalizePlatformServer(tollPlatform);
     pushCandidate({
       claimId: claim.id,
       tollId: claim.transactionId,
@@ -5365,6 +5446,13 @@ function computeUnlinkedShortfallSuggestions(
       claimStatus: claim.status,
       location: toll?.location || toll?.plaza || claim.subject || null,
       matchType: "claim",
+      tripPlatform,
+      tollPlatform,
+      platformMismatch: !!(
+        tripPlatformNorm &&
+        tollPlatformNorm &&
+        tripPlatformNorm !== tollPlatformNorm
+      ),
     });
   }
 
@@ -5396,6 +5484,8 @@ function computeUnlinkedShortfallSuggestions(
       claimOrTollDate: toll.date || trip.date,
     });
     const leftover = leftoverAfterApply(tollAmount, tripRefund);
+    const tollPlatform = extractTollPlatform(toll, null, ctx);
+    const tollPlatformNorm = normalizePlatformServer(tollPlatform);
     pushCandidate({
       claimId: toll.claimId || null,
       tollId: toll.id,
@@ -5408,8 +5498,15 @@ function computeUnlinkedShortfallSuggestions(
       confidence,
       date: toll.date,
       claimStatus: null,
-      location: toll.location || toll.plaza || null,
+      location: toll.location || toll.plaza || toll.description || toll.vendor || null,
       matchType: "toll",
+      tripPlatform,
+      tollPlatform,
+      platformMismatch: !!(
+        tripPlatformNorm &&
+        tollPlatformNorm &&
+        tripPlatformNorm !== tollPlatformNorm
+      ),
     });
   }
 
@@ -5423,13 +5520,14 @@ async function applyUnlinkedRefundToClaim(
   claimId: string | null,
   tollId: string | null,
   c: unknown,
+  opts?: { acknowledgedPlatformMismatch?: boolean; rejectOnPlatformMismatch?: boolean },
 ): Promise<{ ok: true; data: any } | { ok: false; status: number; error: string }> {
   // Dynamic import avoids circular init with claim_service ↔ toll_controller.
   const { upsertClaim: upsertClaimFn } = await import("./claim_service.ts");
   const trip = await kv.get(`trip:${tripId}`);
   if (!trip) return { ok: false, status: 404, error: `Trip ${tripId} not found` };
 
-  const { tollTx } = await loadAllTollLedgerWithTrips();
+  const { tollTx, trips } = await loadAllTollLedgerWithTrips();
   const linkedTripIds = new Set(tollTx.filter((tx: any) => tx.tripId).map((tx: any) => tx.tripId));
   if (!isUnresolvedRefund(trip, linkedTripIds)) {
     return { ok: false, status: 409, error: `Trip ${tripId} is not an unresolved unlinked refund` };
@@ -5444,6 +5542,13 @@ async function applyUnlinkedRefundToClaim(
   if (!claim && resolvedTollId) {
     const toll = await loadTollForUnlinkedMatch(resolvedTollId);
     if (!toll) return { ok: false, status: 404, error: `Toll ${resolvedTollId} not found` };
+    if (!isEligibleUnlinkedShortfallToll(toll)) {
+      return {
+        ok: false,
+        status: 409,
+        error: "That toll was already handled in an earlier step (Personal Use, Deadhead, or Dispute). Pick an open underpaid shortfall instead.",
+      };
+    }
     const tollAmount = Math.abs(Number(toll.amount) || 0);
     claim = await upsertClaimFn(
       {
@@ -5452,7 +5557,7 @@ async function applyUnlinkedRefundToClaim(
         driverId: trip.driverId || toll.driverId,
         driverName: trip.driverName || toll.driverName,
         vehicleId: trip.vehicleId || toll.vehicleId,
-        tripId: trip.id,
+        tripId: toll.tripId || undefined,
         transactionId: resolvedTollId,
         amount: tollAmount,
         expectedAmount: tollAmount,
@@ -5480,6 +5585,44 @@ async function applyUnlinkedRefundToClaim(
   }
 
   resolvedTollId = claim.transactionId || resolvedTollId;
+  const tollForPlatform = resolvedTollId
+    ? (await loadTollForUnlinkedMatch(resolvedTollId)) || tollTx.find((t: any) => t.id === resolvedTollId)
+    : null;
+
+  const tripById = new Map<string, any>();
+  for (const t of trips || []) {
+    if (t?.id) tripById.set(t.id, t);
+  }
+  const ctxForPlatform: UnlinkedShortfallContext = {
+    claims: [claim],
+    ledger: tollTx,
+    tollById: new Map(tollTx.filter((t: any) => t?.id).map((t: any) => [t.id, t])),
+    trips: trips || [],
+    tripById,
+  };
+  const tripPlatform = trip.platform ? String(trip.platform) : null;
+  const tollPlatform = extractTollPlatform(tollForPlatform, claim, ctxForPlatform);
+  const tripPlatformNorm = normalizePlatformServer(tripPlatform);
+  const tollPlatformNorm = normalizePlatformServer(tollPlatform);
+  const platformMismatch = !!(
+    tripPlatformNorm &&
+    tollPlatformNorm &&
+    tripPlatformNorm !== tollPlatformNorm
+  );
+
+  if (platformMismatch) {
+    console.warn(
+      `[UnlinkedShortfall] Platform mismatch: trip ${tripId} (${tripPlatform}) → toll ${resolvedTollId} (${tollPlatform})`,
+    );
+    if (opts?.rejectOnPlatformMismatch && !opts?.acknowledgedPlatformMismatch) {
+      return {
+        ok: false,
+        status: 409,
+        error: `Platform mismatch: ${tripPlatform} refund cannot be applied to ${tollPlatform} toll without acknowledgment`,
+      };
+    }
+  }
+
   const wasChargeDriver = claim.status === "Resolved" && claim.resolutionReason === "Charge Driver";
   const alreadyReimbursed = claim.status === "Resolved" && claim.resolutionReason === "Reimbursed";
   const remaining = wasChargeDriver
@@ -5493,6 +5636,9 @@ async function applyUnlinkedRefundToClaim(
 
   const priorPaid = Math.abs(Number(claim.paidAmount) || 0);
   const nextPaid = priorPaid + applied;
+  const priorStatus = claim.status;
+  const priorReason = claim.resolutionReason || null;
+  const priorAmount = claim.amount;
 
   if (alreadyReimbursed) {
     // Claim already manually reimbursed — only clear the unlinked trip link.
@@ -5505,13 +5651,19 @@ async function applyUnlinkedRefundToClaim(
         paidAmount: nextPaid,
         amount: wasChargeDriver ? claim.amount : Math.max(0, Math.abs(Number(claim.amount) || 0) - applied),
         unlinkedTripId: tripId,
-        preUnlinkedStatus: claim.status,
-        preUnlinkedResolutionReason: claim.resolutionReason || null,
+        unlinkedSourcePlatform: tripPlatform,
+        preUnlinkedStatus: priorStatus,
+        preUnlinkedResolutionReason: priorReason,
+        preUnlinkedPaidAmount: priorPaid,
+        preUnlinkedAmount: priorAmount,
       },
       c,
       { syncMode: "force" },
     );
   } else {
+    // Always force-sync so driver financials stay consistent with the claim ledger.
+    // Note: even when driverTollChargeSyncEnabled is OFF, canonical ledger events
+    // are still written; the flag only controls the driver-visible transaction:* projection.
     await upsertClaimFn(
       {
         ...claim,
@@ -5520,11 +5672,14 @@ async function applyUnlinkedRefundToClaim(
         paidAmount: nextPaid,
         amount: leftover,
         unlinkedTripId: tripId,
-        preUnlinkedStatus: claim.status,
-        preUnlinkedResolutionReason: claim.resolutionReason || null,
+        unlinkedSourcePlatform: tripPlatform,
+        preUnlinkedStatus: priorStatus,
+        preUnlinkedResolutionReason: priorReason,
+        preUnlinkedPaidAmount: priorPaid,
+        preUnlinkedAmount: priorAmount,
       },
       c,
-      { syncMode: wasChargeDriver ? "force" : "skip" },
+      { syncMode: "force" },
     );
   }
 
@@ -5536,17 +5691,27 @@ async function applyUnlinkedRefundToClaim(
     notes: `Applied unlinked trip refund $${tripRefund.toFixed(2)} to underpaid claim ${claim.id} (leftover $${leftover.toFixed(2)})`,
     source: `system:unlinked_shortfall:${claim.id}`,
     driverId: trip.driverId,
+    appliedToClaimId: claim.id,
+    appliedToTollId: resolvedTollId,
   });
 
   if (resolvedTollId) {
     try {
+      const existingToll = await loadTollForUnlinkedMatch(resolvedTollId);
+      // Do NOT overwrite the underpaid toll's original tripId with the unlinked
+      // refund trip — that was the Matched History Uber/Roam platform bug.
+      // Keep original tripId; store refund provenance on unlinkedSource*.
       await updateTollLedgerEntry(
         resolvedTollId,
         {
-          tripId,
           isReconciled: true,
           matchedAt: new Date().toISOString(),
           matchedBy: "unlinked-shortfall",
+          unlinkedSourceTripId: tripId,
+          unlinkedSourcePlatform: tripPlatform,
+          unlinkedAppliedAt: new Date().toISOString(),
+          unlinkedAppliedBy: "admin",
+          preUnlinkedTripId: existingToll?.tripId || existingToll?.preUnlinkedTripId || null,
         },
         "reconciled",
         "system-unlinked-shortfall",
@@ -5567,6 +5732,138 @@ async function applyUnlinkedRefundToClaim(
       applied,
       leftoverShortfall: leftover,
       coversFully: fullyCovered,
+      platformMismatch,
+      tripPlatform,
+      tollPlatform,
+    },
+  };
+}
+
+/**
+ * Reverse an Apply-to-Underpaid: restore claim (via force sync), clear toll
+ * provenance, and return the trip to the unresolved Unlinked Refunds queue.
+ */
+async function undoApplyUnlinkedRefundToClaim(
+  tripId: string,
+  c: unknown,
+): Promise<{ ok: true; data: any } | { ok: false; status: number; error: string }> {
+  const settings = await getRefundAutomationSettings();
+  if (!settings.unlinkedRefundUndoEnabled) {
+    return {
+      ok: false,
+      status: 403,
+      error: "Undo Apply to Underpaid is disabled. Enable unlinkedRefundUndoEnabled in Toll Automation Settings.",
+    };
+  }
+
+  const { upsertClaim: upsertClaimFn } = await import("./claim_service.ts");
+  const trip = await kv.get(`trip:${tripId}`);
+  if (!trip) return { ok: false, status: 404, error: `Trip ${tripId} not found` };
+
+  const resolution = trip.tollRefundResolution;
+  if (!resolution || resolution.status !== "expense_logged") {
+    return { ok: false, status: 409, error: "Trip was not applied to a claim via Apply to Underpaid" };
+  }
+
+  const source = String(resolution.source || "");
+  const claimIdFromSource = source.startsWith("system:unlinked_shortfall:")
+    ? source.slice("system:unlinked_shortfall:".length)
+    : null;
+  const claimId = resolution.appliedToClaimId || claimIdFromSource;
+  const tollId = resolution.appliedToTollId || resolution.linkedTollLedgerId || null;
+  const tripRefund = Math.abs(Number(trip.tollCharges) || 0);
+
+  let restoredClaimStatus: string | null = null;
+
+  if (claimId) {
+    const claim = await kv.get(`claim:${claimId}`);
+    if (claim && (!claim.unlinkedTripId || claim.unlinkedTripId === tripId)) {
+      const restoredStatus = claim.preUnlinkedStatus || "Open";
+      const restoredReason = claim.preUnlinkedResolutionReason ?? null;
+      const restoredPaid =
+        typeof claim.preUnlinkedPaidAmount === "number"
+          ? claim.preUnlinkedPaidAmount
+          : Math.max(0, Math.abs(Number(claim.paidAmount) || 0) - tripRefund);
+      const restoredAmount =
+        typeof claim.preUnlinkedAmount === "number"
+          ? claim.preUnlinkedAmount
+          : Math.abs(Number(claim.expectedAmount ?? claim.amount) || 0);
+
+      await upsertClaimFn(
+        {
+          ...claim,
+          status: restoredStatus,
+          resolutionReason: restoredReason,
+          paidAmount: restoredPaid,
+          amount: restoredAmount,
+          unlinkedTripId: null,
+          unlinkedSourcePlatform: null,
+          preUnlinkedStatus: null,
+          preUnlinkedResolutionReason: null,
+          preUnlinkedPaidAmount: null,
+          preUnlinkedAmount: null,
+        },
+        c,
+        { syncMode: "force" },
+      );
+      restoredClaimStatus = restoredStatus;
+    }
+  }
+
+  if (tollId) {
+    try {
+      const toll = await loadTollForUnlinkedMatch(tollId);
+      await updateTollLedgerEntry(
+        tollId,
+        {
+          unlinkedSourceTripId: null,
+          unlinkedSourcePlatform: null,
+          unlinkedAppliedAt: null,
+          unlinkedAppliedBy: null,
+          // Restore original trip link if preserved; clear if tripId was the unlinked trip (legacy bug).
+          ...(toll?.preUnlinkedTripId
+            ? { tripId: toll.preUnlinkedTripId, preUnlinkedTripId: null }
+            : toll?.tripId === tripId
+              ? { tripId: null, preUnlinkedTripId: null }
+              : { preUnlinkedTripId: null }),
+          matchedBy: toll?.matchedBy === "unlinked-shortfall" ? null : toll?.matchedBy ?? null,
+        },
+        "updated",
+        "undo-unlinked-apply",
+      );
+      await recomputeAndPersistWorkflowStage(tollId);
+    } catch (err: any) {
+      console.warn(`[UnlinkedShortfall:Undo] toll clear warn: ${err?.message}`);
+    }
+  }
+
+  const now = new Date().toISOString();
+  await kv.set(`trip:${tripId}`, {
+    ...trip,
+    tollRefundResolution: {
+      status: "pending",
+      resolvedBy: "admin",
+      resolvedAt: now,
+      auto: false,
+      notes: resolution.notes,
+      source: "admin:undo_unlinked_apply",
+      appliedToClaimId: null,
+      appliedToTollId: null,
+      undoneAt: now,
+    },
+  });
+
+  console.log(
+    `[TollReconciliation:UndoApply] Trip ${tripId} restored, claim ${claimId || "n/a"} reverted to ${restoredClaimStatus || "n/a"}`,
+  );
+
+  return {
+    ok: true,
+    data: {
+      tripId,
+      claimId,
+      tollId,
+      restoredClaimStatus,
     },
   };
 }
@@ -5605,11 +5902,29 @@ app.post(`${BASE}/unlinked-refunds/apply-to-claim`, async (c) => {
     const tollId = body?.tollId || null;
     if (!tripId) return c.json({ error: "tripId is required" }, 400);
     if (!claimId && !tollId) return c.json({ error: "claimId or tollId is required" }, 400);
-    const result = await applyUnlinkedRefundToClaim(tripId, claimId, tollId, c);
+    const result = await applyUnlinkedRefundToClaim(tripId, claimId, tollId, c, {
+      acknowledgedPlatformMismatch: body?.acknowledgedPlatformMismatch === true,
+      rejectOnPlatformMismatch: body?.rejectOnPlatformMismatch === true,
+    });
     if (!result.ok) return c.json({ error: result.error }, result.status);
     return c.json({ success: true, data: result.data });
   } catch (e: any) {
     console.log(`[TollReconciliation] POST /unlinked-refunds/apply-to-claim error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── POST /unlinked-refunds/undo-apply ───────────────────────────────────
+app.post(`${BASE}/unlinked-refunds/undo-apply`, async (c) => {
+  try {
+    const body = await c.req.json();
+    const tripId = body?.tripId;
+    if (!tripId) return c.json({ error: "tripId is required" }, 400);
+    const result = await undoApplyUnlinkedRefundToClaim(tripId, c);
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    return c.json({ success: true, data: result.data });
+  } catch (e: any) {
+    console.log(`[TollReconciliation] POST /unlinked-refunds/undo-apply error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
 });
@@ -5736,6 +6051,10 @@ app.put(`${BASE}/automation-settings`, async (c) => {
         typeof body?.disputeRefundTripSyncEnabled === "boolean"
           ? body.disputeRefundTripSyncEnabled
           : current.disputeRefundTripSyncEnabled,
+      unlinkedRefundUndoEnabled:
+        typeof body?.unlinkedRefundUndoEnabled === "boolean"
+          ? body.unlinkedRefundUndoEnabled
+          : current.unlinkedRefundUndoEnabled,
     };
     await kv.set(REFUND_SETTINGS_KEY, next);
     return c.json({ success: true, data: next });

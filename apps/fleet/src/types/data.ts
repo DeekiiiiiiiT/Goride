@@ -174,6 +174,12 @@ export interface TollRefundResolution {
    *  when a dispute-refund match cascaded this resolution — lets unmatch
    *  revert only what it itself set. */
   source?: string;
+  /** Claim this unlinked refund was applied to (Apply to Underpaid). */
+  appliedToClaimId?: string | null;
+  /** Toll ledger id the unlinked refund was applied against. */
+  appliedToTollId?: string | null;
+  /** When an Apply-to-Underpaid was undone. */
+  undoneAt?: string | null;
 }
 
 export interface CancellationMetrics {
@@ -843,6 +849,14 @@ export interface FinancialTransaction {
   workflowStage?: string;
   claimId?: string | null;
 
+  // Unlinked refund apply provenance (nullable on legacy rows).
+  unlinkedSourceTripId?: string | null;
+  unlinkedSourcePlatform?: string | null;
+  unlinkedAppliedAt?: string | null;
+  unlinkedAppliedBy?: string | null;
+  /** Original matched trip before unlinked apply overwrote tripId (if any). */
+  preUnlinkedTripId?: string | null;
+
   // Phase 1 Refactor: Fuel Anchor Tracking
   anchorPeriodId?: string; // Links this transaction to a specific fuel window
   reconciliationStatus?: 'Pending' | 'Verified' | 'Flagged' | 'Observing' | 'Archived';
@@ -1148,6 +1162,17 @@ export interface Claim {
   date?: string; // The underlying toll's actual date (not the resolution date)
   vehicleId?: string;
   driverName?: string;
+
+  // Unlinked refund apply (nullable on legacy claims — safe defaults).
+  unlinkedTripId?: string | null;
+  preUnlinkedStatus?: Claim['status'] | null;
+  preUnlinkedResolutionReason?: Claim['resolutionReason'] | null;
+  /** Platform of the unlinked trip whose refund covered this claim. */
+  unlinkedSourcePlatform?: string | null;
+  /** Paid amount snapshot before apply — used by undo to restore precisely. */
+  preUnlinkedPaidAmount?: number | null;
+  /** Claim amount snapshot before apply — used by undo to restore precisely. */
+  preUnlinkedAmount?: number | null;
 }
 
 // --- Dispute Refunds (Support Adjustment Import) ---
