@@ -56,6 +56,8 @@ export interface MatchingPolicy {
   pin_verification_required_for_start: boolean;
   toll_detection_enabled: boolean;
   toll_geofence_radius_m: number;
+  toll_detect_enroute: boolean;
+  route_toll_estimation_enabled: boolean;
   serial_dispatch_enabled: boolean;
   h3_resolution: number;
   h3_supply_enabled: boolean;
@@ -110,6 +112,8 @@ export const DEFAULT_POLICY: Omit<MatchingPolicy, "id" | "updated_at" | "updated
   pin_verification_required_for_start: false,
   toll_detection_enabled: false,
   toll_geofence_radius_m: 100,
+  toll_detect_enroute: false,
+  route_toll_estimation_enabled: false,
   serial_dispatch_enabled: false,
   h3_resolution: 7,
   h3_supply_enabled: false,
@@ -205,6 +209,8 @@ function rowToPolicy(row: Record<string, unknown>): MatchingPolicy {
     pin_verification_required_for_start: row.pin_verification_required_for_start === true,
     toll_detection_enabled: row.toll_detection_enabled === true,
     toll_geofence_radius_m: clamp(Number(row.toll_geofence_radius_m), 50, 500, DEFAULT_POLICY.toll_geofence_radius_m),
+    toll_detect_enroute: row.toll_detect_enroute === true,
+    route_toll_estimation_enabled: row.route_toll_estimation_enabled === true,
     serial_dispatch_enabled: row.serial_dispatch_enabled === true,
     h3_resolution: clamp(Number(row.h3_resolution), 4, 10, DEFAULT_POLICY.h3_resolution),
     h3_supply_enabled: row.h3_supply_enabled === true,

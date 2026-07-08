@@ -48,6 +48,9 @@ import { UnifiedLedgerFeed } from './UnifiedLedgerFeed';
 const TollLiveMonitorPage = lazy(() =>
   import('../../pages/TollLiveMonitorPage').then((m) => ({ default: m.TollLiveMonitorPage })),
 );
+const TollSettingsPage = lazy(() =>
+  import('../../pages/TollSettingsPage').then((m) => ({ default: m.TollSettingsPage })),
+);
 
 function normalizePortalPage(page: string): string {
   return LEGACY_PAGE_REDIRECTS[page] ?? page;
@@ -241,6 +244,13 @@ export function AdminPortal() {
       {currentPage === 'toll-info' && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
           <TollInfoPage />
+        </div>
+      )}
+      {currentPage === 'toll-settings' && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card p-4">
+          <Suspense fallback={<div className="p-8 text-slate-500">Loading toll settings…</div>}>
+            <TollSettingsPage />
+          </Suspense>
         </div>
       )}
       {currentPage === 'toll-live-monitor' && (

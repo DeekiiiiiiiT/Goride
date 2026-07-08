@@ -25,6 +25,7 @@ import {
   Utensils,
   Navigation,
   Radio,
+  Settings,
   ExternalLink,
   Building2,
   Truck,
@@ -97,6 +98,7 @@ export const FUEL_MANAGEMENT_CHILDREN: NavChild[] = [
 export const TOLL_MANAGEMENT_CHILDREN: NavChild[] = [
   { id: 'toll-stations', label: 'Toll Database', icon: MapPin },
   { id: 'toll-info', label: 'Toll Info', icon: Info },
+  { id: 'toll-settings', label: 'Toll Settings', icon: Settings },
   { id: 'toll-live-monitor', label: 'Live Toll Monitor', icon: Radio },
 ];
 
@@ -179,6 +181,7 @@ const SHARED_PLATFORM_PAGES = [
   'fuel-analytics',
   'toll-stations',
   'toll-info',
+  'toll-settings',
   'toll-live-monitor',
   'motor-vehicles',
   'pending-motor-vehicles',

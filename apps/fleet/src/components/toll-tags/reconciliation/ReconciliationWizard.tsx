@@ -26,8 +26,10 @@ import {
   TollBucket,
   TollWorkflowStage,
 } from "../../../utils/tollBucket";
-import { StepId, StepCounts, computeStepCounts } from "../../../utils/tollPeriodGating";
+import { StepId, StepCounts, STEP_ORDER, computeStepCounts } from "../../../utils/tollPeriodGating";
+import { hasBlockingUnlinkedRefund } from "../../../utils/unlinkedShortfallEligibility";
 import { getClaimWeekDate } from "../../../utils/tollWeekPeriod";
+import type { UnlinkedShortfallSuggestion } from "../../../hooks/useTollReconciliation";
 import { toast } from "sonner@2.0.3";
 import { Trip as TripType } from "../../../types/data";
 import { api } from "../../../services/api";
@@ -47,15 +49,6 @@ import {
 
 type PlatformFilter = 'all' | 'Uber' | 'InDrive' | 'Roam';
 const PLATFORM_OPTIONS: PlatformFilter[] = ['all', 'Uber', 'InDrive', 'Roam'];
-
-// Dispute Refunds before Underpaid & Claims: a Dispute Refund often IS the
-// fix for an underpaid toll (Uber's own after-the-fact correction), and
-// matching one can auto-resolve the underlying toll directly — so resolving
-// these first clears tolls out of Underpaid & Claims before the user has to
-// manually flag them.
-const STEP_ORDER: StepId[] = [
-  'needs-review', 'personal-use', 'deadhead', 'dispute-refunds', 'underpaid-claims', 'unlinked-refunds',
-];
 
 const STEP_LABELS: Record<StepId, string> = {
   'needs-review': 'Needs Review',
@@ -109,6 +102,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
     unclaimedRefunds,
     resolvedRefunds,
     refundSuggestions,
+    shortfallSuggestions,
     disputeRefunds,
     trips,
     suggestions,
@@ -121,6 +115,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
     resolveRefund,
     bulkResolveRefunds,
     undoRefund,
+    applyUnlinkedToClaim,
     applyDisputeMatch,
     applyDisputeUnmatch,
     refresh
@@ -283,18 +278,15 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
   // aggregation endpoint (toll_period_controller.tsx) uses.
   const claimedTransactionIds = new Set(claims.map(c => c.transactionId));
   const filteredUnreconciledTolls = pUnreconciled.filter(tx => !claimedTransactionIds.has(tx.id));
+  const allUnreconciledForGating = unreconciledTolls.filter(tx => !claimedTransactionIds.has(tx.id));
 
   const isLoading = tollsLoading || claimsLoading;
 
-  // ── RWF-1: classify into the 4 non-claims buckets, preferring the
-  // persisted workflowStage over a live suggestions recompute so a toll's
-  // queue position survives independent of this render's match recompute —
-  // falls back to bucketForBestMatch for rows that predate the backfill. ──
-  const classified = useMemo(() => {
+  const buildBuckets = useCallback((tolls: FinancialTransaction[]) => {
     const buckets: Record<TollBucket, FinancialTransaction[]> = {
       'needs-review': [], 'underpaid': [], 'deadhead': [], 'personal-use': [],
     };
-    filteredUnreconciledTolls.forEach(tx => {
+    tolls.forEach(tx => {
       const best = suggestions.get(tx.id)?.[0];
       const stage = (tx as any).workflowStage as TollWorkflowStage | undefined;
       const liveBucket = resolveTollBucket(tx, best);
@@ -307,15 +299,24 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
       if (bucket) buckets[bucket].push(tx);
     });
     return buckets;
-  }, [filteredUnreconciledTolls, suggestions]);
+  }, [suggestions]);
 
-  // ── Phase F4: hard-gate step counts + state machine ──────────────────────
+  const classified = useMemo(
+    () => buildBuckets(filteredUnreconciledTolls),
+    [buildBuckets, filteredUnreconciledTolls],
+  );
+  const classifiedAllPlatforms = useMemo(
+    () => buildBuckets(allUnreconciledForGating),
+    [buildBuckets, allUnreconciledForGating],
+  );
+
+  // ── Phase F4: hard-gate counts use ALL platforms (filter is display-only) ─
   const stepCounts: Record<StepId, StepCounts> = useMemo(() => computeStepCounts({
-    classified,
-    underpaidClaims: pPeriodClaims,
+    classified: classifiedAllPlatforms,
+    underpaidClaims: periodClaims,
     disputeRefunds: disputeRefunds || [],
-    unclaimedRefundTrips: pUnclaimed,
-  }), [classified, pPeriodClaims, disputeRefunds, pUnclaimed]);
+    unclaimedRefundTrips: unclaimedRefunds,
+  }), [classifiedAllPlatforms, periodClaims, disputeRefunds, unclaimedRefunds]);
 
   const gatedStates: GatedStepState[] = useMemo(
     () => computeGatedStepStates(stepCounts, STEP_ORDER),
@@ -486,6 +487,14 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
    * toll to its trip, then a resolved "Charge Driver" claim.
    */
   const handleChargeDriverForDeadhead = async (tx: FinancialTransaction, match: MatchResult) => {
+      const driverIdForCharge = match.trip.driverId || tx.driverId;
+      if (hasBlockingUnlinkedRefund({ claimDriverId: driverIdForCharge, unlinkedTrips: unclaimedRefunds })) {
+          toast.error('Pick Apply to underpaid on Unlinked Refunds first', {
+            description: 'This driver still has an open unlinked trip refund that may cover this toll.',
+          });
+          setActiveStepId('unlinked-refunds');
+          return;
+      }
       try {
           await reconcile(tx, match.trip);
           const tollCost = Math.abs(tx.amount);
@@ -523,8 +532,20 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
   };
 
   const handleFinish = () => {
+    const allPlatformActionable = STEP_ORDER.reduce((sum, id) => sum + (stepCounts[id]?.actionable || 0), 0);
+    if (allPlatformActionable > 0) {
+      toast.error('Still open items on other platforms', {
+        description: 'Clear the platform filter to All and finish remaining steps before closing this period.',
+      });
+      return;
+    }
     toast.success(`Period ${period.label} fully reconciled`);
     onExit();
+  };
+
+  const handleApplyUnlinkedShortfall = async (tripId: string, suggestion: UnlinkedShortfallSuggestion) => {
+    await applyUnlinkedToClaim(tripId, { claimId: suggestion.claimId, tollId: suggestion.tollId });
+    refreshClaims();
   };
 
   return (
@@ -662,6 +683,23 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               listDescription="Unreimbursed business driving (en route to pickup) — normally a fleet cost, but chargeable to the driver on a case-by-case basis."
             />
           )}
+          {activeStepId === 'dispute-refunds' && (
+            <DisputeRefundsList
+              refunds={disputeRefunds}
+              onMatchComplete={handleRefundMatchComplete}
+            />
+          )}
+          {activeStepId === 'unlinked-refunds' && (
+            <UnclaimedRefundsList
+              trips={pUnclaimed}
+              suggestions={refundSuggestions}
+              shortfallSuggestions={shortfallSuggestions}
+              drivers={drivers}
+              onResolve={resolveRefund}
+              onBulkResolve={bulkResolveRefunds}
+              onApplyToShortfall={handleApplyUnlinkedShortfall}
+            />
+          )}
           {activeStepId === 'underpaid-claims' && (
             <UnderpaidClaimsStep
               underpaidTolls={classified['underpaid']}
@@ -674,6 +712,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               reconciledTolls={pReconciled}
               trips={trips}
               disputeRefunds={disputeRefunds}
+              unlinkedRefundTrips={unclaimedRefunds}
               drivers={drivers}
               loadingTolls={tollsLoading}
               loadingClaims={claimsLoading}
@@ -681,21 +720,6 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               updateClaim={updateClaim}
               deleteClaim={deleteClaim}
               refreshClaims={refreshClaims}
-            />
-          )}
-          {activeStepId === 'dispute-refunds' && (
-            <DisputeRefundsList
-              refunds={disputeRefunds}
-              onMatchComplete={handleRefundMatchComplete}
-            />
-          )}
-          {activeStepId === 'unlinked-refunds' && (
-            <UnclaimedRefundsList
-              trips={pUnclaimed}
-              suggestions={refundSuggestions}
-              drivers={drivers}
-              onResolve={resolveRefund}
-              onBulkResolve={bulkResolveRefunds}
             />
           )}
         </div>

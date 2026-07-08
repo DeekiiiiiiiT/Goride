@@ -86,7 +86,7 @@ During steps 2–6 on rider app:
 
 ## 12. Toll geofence (flags ON in staging)
 
-Prerequisites: plazas verified in Toll Database; `route_toll_estimation_enabled` and `toll_detection_enabled` on; `toll_detect_enroute` **off**.
+Prerequisites: plazas verified in Toll Database; enable flags in **Dominion → Toll Management → Toll Settings** (`route_toll_estimation_enabled` and `toll_detection_enabled` on; `toll_detect_enroute` **off**).
 
 1. **Quote:** Book a route that crosses a known plaza — **Expect:** “View fare breakdown” shows estimated toll line(s).
 2. **Live trip:** Driver passes plaza geofence — **Expect:** Rider on-trip banner updates; driver toll toast; `actual_tolls_minor` on ride.

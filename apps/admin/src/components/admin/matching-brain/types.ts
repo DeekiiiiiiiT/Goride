@@ -90,7 +90,6 @@ export type SectionId =
   | 'inTripAutomation'
   | 'waitTimeBilling'
   | 'pinVerification'
-  | 'tollDetection'
   | 'h3Indexing';
 
 /**
@@ -143,10 +142,6 @@ export const SECTION_KEYS: Record<SectionId, (keyof MatchingPolicy)[]> = {
   pinVerification: [
     'pin_verification_enabled',
     'pin_verification_required_for_start',
-  ],
-  tollDetection: [
-    'toll_detection_enabled',
-    'toll_geofence_radius_m',
   ],
   h3Indexing: [
     'h3_resolution',
@@ -235,12 +230,6 @@ export const TOOLTIPS: Record<string, string> = {
     'Enable PIN generation for rides. Each ride shows a 4-digit PIN to the rider that the driver must verify.',
   pin_verification_required_for_start:
     'Require PIN verification before trip can start. Driver must enter the correct PIN to start the trip.',
-
-  // Toll Detection
-  toll_detection_enabled:
-    'Enable real-time toll detection during trips. Tolls are detected via geofence and added to the final fare.',
-  toll_geofence_radius_m:
-    'Radius around toll plazas for geofence detection. Driver must pass within this distance for toll to be recorded.',
 
   // H3 Indexing
   h3_resolution:

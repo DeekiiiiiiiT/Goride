@@ -1,15 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { computeGatedStepStates, pickInitialStep } from './GatedReconciliationStepper';
-import type { StepId, StepCounts } from '../../../utils/tollPeriodGating';
+import { STEP_ORDER, type StepId, type StepCounts } from '../../../utils/tollPeriodGating';
 
-const ORDER: StepId[] = [
-  'needs-review',
-  'personal-use',
-  'deadhead',
-  'underpaid-claims',
-  'dispute-refunds',
-  'unlinked-refunds',
-];
+const ORDER = STEP_ORDER;
 
 const counts = (overrides: Partial<Record<StepId, StepCounts>>): Record<StepId, StepCounts> => {
   const base: Record<StepId, StepCounts> = {
@@ -101,6 +94,6 @@ describe('pickInitialStep', () => {
 
   it('lands on the last step when every step is already clear', () => {
     const states = computeGatedStepStates(counts({}), ORDER);
-    expect(pickInitialStep(states)).toBe('unlinked-refunds');
+    expect(pickInitialStep(states)).toBe('underpaid-claims');
   });
 });

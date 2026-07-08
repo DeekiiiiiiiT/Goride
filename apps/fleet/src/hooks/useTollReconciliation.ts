@@ -134,6 +134,21 @@ export interface RefundSuggestion {
   reason: string;
 }
 
+export interface UnlinkedShortfallSuggestion {
+  claimId: string | null;
+  tollId: string;
+  tripId: string;
+  tripRefund: number;
+  tollAmount: number;
+  remainingShortfall: number;
+  leftoverShortfall: number;
+  coversFully: boolean;
+  confidence: number;
+  date: string;
+  claimStatus: string | null;
+  matchType: 'claim' | 'toll';
+}
+
 export interface ReconciliationPeriodScope {
   startDate: string;
   endDate: string;
@@ -147,6 +162,7 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
   // Phase 3: refund resolution
   const [resolvedRefunds, setResolvedRefunds] = useState<Trip[]>([]);
   const [refundSuggestions, setRefundSuggestions] = useState<Map<string, RefundSuggestion>>(new Map());
+  const [shortfallSuggestions, setShortfallSuggestions] = useState<Map<string, UnlinkedShortfallSuggestion[]>>(new Map());
   const [trips, setTrips] = useState<Trip[]>([]);
   const [suggestions, setSuggestions] = useState<Map<string, MatchResult[]>>(new Map());
   // Phase 6: Track auto-reconciled count for dashboard banner
@@ -210,10 +226,11 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
         setDisputeRefunds([]);
       }
 
-      // Phase 3: Fetch refund suggestions + resolved refunds (independent, non-fatal)
+      // Phase 3: Fetch refund suggestions + shortfall suggestions + resolved refunds
       try {
-        const [sugRes, resolvedRes] = await Promise.all([
+        const [sugRes, shortRes, resolvedRes] = await Promise.all([
           api.getRefundSuggestions(driverId ? { driverId } : undefined),
+          api.getUnlinkedShortfallSuggestions(driverId ? { driverId } : undefined),
           api.getResolvedRefunds(filterParams),
         ]);
         const sugMap = new Map<string, RefundSuggestion>();
@@ -222,10 +239,19 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
           sugMap.set(tripId, s as RefundSuggestion);
         }
         setRefundSuggestions(sugMap);
+
+        const shortMap = new Map<string, UnlinkedShortfallSuggestion[]>();
+        const rawShort = shortRes?.suggestions || {};
+        for (const [tripId, list] of Object.entries(rawShort)) {
+          shortMap.set(tripId, list as UnlinkedShortfallSuggestion[]);
+        }
+        setShortfallSuggestions(shortMap);
+
         setResolvedRefunds(resolvedRes?.data || []);
       } catch (refErr) {
         console.error('[Reconciliation] Failed to fetch refund suggestions/resolved:', refErr);
         setRefundSuggestions(new Map());
+        setShortfallSuggestions(new Map());
         setResolvedRefunds([]);
       }
 
@@ -461,6 +487,25 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
     return result;
   };
 
+  const applyUnlinkedToClaim = async (
+    tripId: string,
+    opts: { claimId?: string | null; tollId?: string | null },
+  ) => {
+    const result = await api.applyUnlinkedRefundToClaim({
+      tripId,
+      claimId: opts.claimId,
+      tollId: opts.tollId,
+    });
+    setUnclaimedRefunds(prev => prev.filter(t => t.id !== tripId));
+    setShortfallSuggestions(prev => {
+      const next = new Map(prev);
+      next.delete(tripId);
+      return next;
+    });
+    await fetchData();
+    return result;
+  };
+
   // Undo re-opens a resolved refund by setting it back to pending.
   const undoRefund = async (tripId: string) => {
     await api.resolveRefund({ tripId, resolution: 'pending' });
@@ -475,6 +520,7 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
     unclaimedRefunds,
     resolvedRefunds,
     refundSuggestions,
+    shortfallSuggestions,
     disputeRefunds,
     trips,
     suggestions,
@@ -487,6 +533,7 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
     resolveRefund,
     bulkResolveRefunds,
     undoRefund,
+    applyUnlinkedToClaim,
     applyDisputeMatch,
     applyDisputeUnmatch,
     refresh: fetchData

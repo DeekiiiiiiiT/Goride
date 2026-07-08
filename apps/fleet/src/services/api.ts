@@ -1940,6 +1940,48 @@ export const api = {
     return response.json();
   },
 
+  async getUnlinkedShortfallSuggestions(params?: { driverId?: string }): Promise<{
+    success: boolean;
+    suggestions: Record<string, Array<{
+      claimId: string | null;
+      tollId: string;
+      tripId: string;
+      tripRefund: number;
+      tollAmount: number;
+      remainingShortfall: number;
+      leftoverShortfall: number;
+      coversFully: boolean;
+      confidence: number;
+      date: string;
+      claimStatus: string | null;
+      matchType: 'claim' | 'toll';
+    }>>;
+  }> {
+    const qs = new URLSearchParams();
+    if (params?.driverId) qs.set('driverId', params.driverId);
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/unlinked-shortfall-suggestions?${qs.toString()}`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) throw new Error("Failed to fetch unlinked shortfall suggestions");
+    return response.json();
+  },
+
+  async applyUnlinkedRefundToClaim(payload: { tripId: string; claimId?: string | null; tollId?: string | null }) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/unlinked-refunds/apply-to-claim`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to apply unlinked refund to claim");
+    }
+    return response.json();
+  },
+
   async resolveRefund(payload: { tripId: string; resolution: 'cash_wash' | 'phantom' | 'expense_logged' | 'pending'; notes?: string; driverId?: string }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/resolve-refund`, {
       method: 'POST',

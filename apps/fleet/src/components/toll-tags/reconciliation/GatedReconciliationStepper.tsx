@@ -57,7 +57,7 @@ interface GatedReconciliationStepperProps {
  * Hard-gated sibling of ReconciliationStepper (soft-guide, kept unchanged —
  * every step there stays clickable). Here, a locked step cannot be entered:
  * the fleet manager is forced through needs-review → personal-use →
- * deadhead → underpaid-claims → dispute-refunds → unlinked-refunds in order,
+ * deadhead → dispute-refunds → unlinked-refunds → underpaid-claims in order,
  * one period at a time.
  */
 export function GatedReconciliationStepper({ states, activeStepId, onSelect, labels, icons }: GatedReconciliationStepperProps) {

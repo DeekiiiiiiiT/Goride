@@ -47,7 +47,6 @@ const OVERRIDABLE_FIELDS: Array<{
   { key: 'wait_time_grace_minutes', label: 'Wait Grace (min)', type: 'number', min: 0, max: 15 },
   { key: 'pin_verification_enabled', label: 'PIN Enabled', type: 'boolean' },
   { key: 'pin_verification_required_for_start', label: 'PIN Required for Start', type: 'boolean' },
-  { key: 'toll_detection_enabled', label: 'Toll Detection', type: 'boolean' },
 ];
 
 const PRODUCT_LABELS: Record<string, string> = {

@@ -55,9 +55,9 @@ const STEP_IDS: StepId[] = [
   "needs-review",
   "personal-use",
   "deadhead",
-  "underpaid-claims",
   "dispute-refunds",
   "unlinked-refunds",
+  "underpaid-claims",
 ];
 
 interface StepCounts {
@@ -266,10 +266,16 @@ app.get(`${BASE}/periods`, async (c) => {
       else acc.counts["dispute-refunds"].actionable++;
     }
 
-    // Unclaimed refund trips → unlinked-refunds (always actionable).
+    // Unclaimed refund trips → unlinked-refunds.
+    // Pending-import stays informational so Finish isn't blocked on statement arrival.
     for (const t of unclaimedRefundTrips) {
       if (!t?.date) continue;
-      getOrCreatePeriod(t.date).counts["unlinked-refunds"].actionable++;
+      const acc = getOrCreatePeriod(t.date);
+      if (t.tollRefundResolution?.status === "pending") {
+        acc.counts["unlinked-refunds"].informational++;
+      } else {
+        acc.counts["unlinked-refunds"].actionable++;
+      }
     }
 
     const periodsOut = Array.from(periods.entries())

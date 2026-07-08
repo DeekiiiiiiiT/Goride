@@ -18,4 +18,3 @@ export { H3IndexingSection } from './H3IndexingSection';
 export { InTripAutomationSection } from './InTripAutomationSection';
 export { WaitTimeBillingSection } from './WaitTimeBillingSection';
 export { PinVerificationSection } from './PinVerificationSection';
-export { TollDetectionSection } from './TollDetectionSection';

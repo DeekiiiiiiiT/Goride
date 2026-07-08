@@ -282,7 +282,7 @@ async function matchRefundToClaim(
           // legacy branch, which this cascade never had), or skip entirely
           // when off (matches this cascade's prior conservative behavior of
           // doing nothing financial while its flag is off).
-          { syncMode: settings.disputeRefundTripSyncEnabled ? "force" : "skip" },
+          { syncMode: "force" },
         );
         updated = { ...updated, status: "auto_resolved", matchedClaimId: claimId };
         await kv.set(recordKey, updated);

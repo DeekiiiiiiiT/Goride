@@ -4,10 +4,10 @@
 
 | Flag | Where | Purpose |
 |------|-------|---------|
-| `route_toll_estimation_enabled` | Dispatch settings / Matching Brain | Quote uses route polyline × plaza geofences instead of static fare-rule tolls |
-| `toll_detection_enabled` | Dispatch settings / Matching Brain | Live GPS toll detection during trips |
-| `toll_geofence_radius_m` | Dispatch settings | Plaza match radius (start 100m staging) |
-| `toll_detect_enroute` | Dispatch settings | Detect tolls before pickup — **keep OFF** (deadhead = driver expense) |
+| `route_toll_estimation_enabled` | Dominion → Toll Management → Toll Settings | Quote uses route polyline × plaza geofences instead of static fare-rule tolls |
+| `toll_detection_enabled` | Dominion → Toll Management → Toll Settings | Live GPS toll detection during trips |
+| `toll_geofence_radius_m` | Dominion → Toll Management → Toll Settings | Plaza match radius (start 100m staging) |
+| `toll_detect_enroute` | Dominion → Toll Management → Toll Settings | Detect tolls before pickup — **keep OFF** (deadhead = driver expense) |
 
 ## Staged rollout
 

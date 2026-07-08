@@ -238,6 +238,8 @@ app.patch("/admin/policies/:id", async (c) => {
     "pin_verification_required_for_start",
     "toll_detection_enabled",
     "toll_geofence_radius_m",
+    "toll_detect_enroute",
+    "route_toll_estimation_enabled",
   ];
 
   const patch: Record<string, unknown> = { updated_by: auth.id };
@@ -293,6 +295,7 @@ app.patch("/admin/policies/:id", async (c) => {
         "wait_time_charge_enabled", "wait_time_max_minutes",
         "pin_verification_enabled", "pin_verification_required_for_start",
         "toll_detection_enabled", "toll_geofence_radius_m",
+        "toll_detect_enroute", "route_toll_estimation_enabled",
       ];
 
       for (const field of legacyFields) {
@@ -883,6 +886,8 @@ app.get("/admin/policies/:id/sync-status", async (c) => {
     "pin_verification_required_for_start",
     "toll_detection_enabled",
     "toll_geofence_radius_m",
+    "toll_detect_enroute",
+    "route_toll_estimation_enabled",
   ];
 
   const differences: Array<{
@@ -1001,6 +1006,8 @@ app.post("/admin/sync-to-legacy", async (c) => {
     pin_verification_required_for_start: policy.pin_verification_required_for_start,
     toll_detection_enabled: policy.toll_detection_enabled,
     toll_geofence_radius_m: policy.toll_geofence_radius_m,
+    toll_detect_enroute: policy.toll_detect_enroute,
+    route_toll_estimation_enabled: policy.route_toll_estimation_enabled,
     updated_at: new Date().toISOString(),
     updated_by: auth.id,
   };

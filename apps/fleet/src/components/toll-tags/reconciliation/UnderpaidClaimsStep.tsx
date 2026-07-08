@@ -17,6 +17,7 @@ import { StatCard } from "../../claimable-loss/StatCard";
 import { TollBucketPanel } from "./TollBucketPanel";
 import { FinancialTransaction, Trip, Claim, DisputeRefund } from "../../../types/data";
 import { MatchResult } from "../../../utils/tollReconciliation";
+import { hasBlockingUnlinkedRefund } from "../../../utils/unlinkedShortfallEligibility";
 import { formatDateJM } from "../../../utils/csv-helper";
 
 /**
@@ -45,6 +46,8 @@ interface UnderpaidClaimsStepProps {
   reconciledTolls: FinancialTransaction[];
   trips: Trip[];
   disputeRefunds: DisputeRefund[];
+  /** Open unlinked trip refunds — blocks Charge Driver until applied. */
+  unlinkedRefundTrips?: Trip[];
   drivers: any[];
   loadingTolls: boolean;
   loadingClaims: boolean;
@@ -56,7 +59,7 @@ interface UnderpaidClaimsStepProps {
 
 export function UnderpaidClaimsStep({
   underpaidTolls, suggestions, allTrips, onFlag, onReconcile, onEdit,
-  claims, reconciledTolls, trips, disputeRefunds, drivers, loadingTolls, loadingClaims,
+  claims, reconciledTolls, trips, disputeRefunds, unlinkedRefundTrips = [], drivers, loadingTolls, loadingClaims,
   unreconcile, updateClaim, deleteClaim, refreshClaims,
 }: UnderpaidClaimsStepProps) {
   const tripMap = useMemo(() => new Map(trips.map(t => [t.id, t])), [trips]);
@@ -164,6 +167,21 @@ export function UnderpaidClaimsStep({
   };
 
   const handleChargeDriver = async (claim: Claim) => {
+    if (hasBlockingUnlinkedRefund({ claimDriverId: claim.driverId, unlinkedTrips: unlinkedRefundTrips })) {
+      toast.error('Pick Apply to underpaid on Unlinked Refunds first', {
+        description: 'This driver still has an open unlinked trip refund that may cover this shortfall.',
+      });
+      return;
+    }
+    const coveredByDispute = disputeRefunds.some(
+      (r) =>
+        (r.status === 'matched' || r.status === 'auto_resolved') &&
+        (r.matchedClaimId === claim.id || r.matchedTollId === claim.transactionId),
+    );
+    if (coveredByDispute) {
+      toast.error('A dispute refund already covers this toll — set Reimbursed instead of charging the driver.');
+      return;
+    }
     try {
       await updateClaim({ ...claim, status: 'Resolved', resolutionReason: 'Charge Driver', updatedAt: new Date().toISOString() });
       toast.success(`Claim resolved. $${claim.amount.toFixed(2)} will be deducted from driver pay.`);
@@ -180,6 +198,10 @@ export function UnderpaidClaimsStep({
   };
 
   const handleUpdateStatus = async (claim: Claim, newReason: 'Charge Driver' | 'Write Off' | 'Reimbursed') => {
+    if (newReason === 'Charge Driver' && hasBlockingUnlinkedRefund({ claimDriverId: claim.driverId, unlinkedTrips: unlinkedRefundTrips })) {
+      toast.error('Pick Apply to underpaid on Unlinked Refunds first');
+      return;
+    }
     try {
       await updateClaim({ ...claim, resolutionReason: newReason, updatedAt: new Date().toISOString() });
       toast.success(`Claim updated to: ${newReason}`);
@@ -265,6 +287,15 @@ export function UnderpaidClaimsStep({
 
   const handleBulkUpdateStatus = (claimsToUpdate: Claim[], status: Claim['status'], reason?: Claim['resolutionReason']) => {
     if (!claimsToUpdate.length) return;
+    if (reason === 'Charge Driver') {
+      const blocked = claimsToUpdate.filter((c) =>
+        hasBlockingUnlinkedRefund({ claimDriverId: c.driverId, unlinkedTrips: unlinkedRefundTrips }),
+      );
+      if (blocked.length > 0) {
+        toast.error(`${blocked.length} claim(s) blocked — apply Unlinked Refunds for those drivers first`);
+        return;
+      }
+    }
     const isReject = status === 'Rejected';
     const actionWord = isReject ? 'Reject' : 'Update';
     setConfirmDialog({

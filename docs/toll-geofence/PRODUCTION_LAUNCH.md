@@ -47,7 +47,7 @@ Without correct plazas, estimates and live detection silently return $0.
 
 ## 5. Enable flags (staging first)
 
-**Rides Admin → Dispatch Settings → Toll detection** (or SQL on `rides.dispatch_settings`):
+**Roam Dominion → Toll Management → Toll Settings** (or SQL on `rides.dispatch_settings`):
 
 | Step | Flag | Value |
 |------|------|-------|
@@ -89,6 +89,5 @@ Existing trips keep recorded crossings; new trips stop detecting and quotes reve
 
 ## 9. Known limits (v1)
 
-- Matching Brain UI does not yet expose `route_toll_estimation_enabled` — use **Rides Admin dispatch settings**
 - Fleet **Live Toll Monitor** nav links to Dominion; monitor lives in `apps/admin`
 - Quote shows estimated tolls; rider is charged **actual GPS crossings only** at trip end

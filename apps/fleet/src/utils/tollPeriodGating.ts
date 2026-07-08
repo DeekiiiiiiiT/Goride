@@ -1,6 +1,7 @@
 import type { Claim, DisputeRefund, FinancialTransaction, Trip } from '../types/data';
 import type { TollBucket } from './tollBucket';
 import { isDisputeRefundMatched } from './tollWeekPeriod';
+import { isPendingOnlyRefundResolution } from './unlinkedShortfallEligibility';
 
 /**
  * The 6 steps of the period-gated reconciliation wizard, in their fixed,
@@ -16,19 +17,18 @@ export type StepId =
   | 'unlinked-refunds';
 
 /**
- * Dispute Refunds comes before Underpaid & Claims: a Dispute Refund is often
- * Uber's own after-the-fact correction for an underpaid toll, and matching it
- * can auto-resolve the underlying toll directly (creating the claim as a
- * side effect) — resolving these first means fewer tolls need a manual
- * "Flag for Claim" by the time the user reaches that step.
+ * Platform payments before Underpaid & Claims:
+ * - Dispute Refunds: Uber Support corrections — matching can auto-reimburse a shortfall claim.
+ * - Unlinked Refunds: trip toll credits with no linked expense — apply to underpaid claims
+ *   before Charge Driver so leftover shortfall is all that remains to decide.
  */
 export const STEP_ORDER: StepId[] = [
   'needs-review',
   'personal-use',
   'deadhead',
   'dispute-refunds',
-  'underpaid-claims',
   'unlinked-refunds',
+  'underpaid-claims',
 ];
 
 /**
@@ -81,6 +81,11 @@ export function computeStepCounts(input: {
   const unmatchedDisputeRefunds = disputeRefunds.filter((r) => !isDisputeRefundMatched(r)).length;
   const matchedDisputeRefunds = disputeRefunds.filter(isDisputeRefundMatched).length;
 
+  // Pending-import unlinked rows stay visible but must not block Finish —
+  // only truly unresolved (no resolution yet) stay actionable.
+  const actionableUnlinked = unclaimedRefundTrips.filter((t) => !isPendingOnlyRefundResolution(t)).length;
+  const informationalUnlinked = unclaimedRefundTrips.filter(isPendingOnlyRefundResolution).length;
+
   return {
     'needs-review': { actionable: classified['needs-review'].length, informational: 0 },
     'personal-use': { actionable: classified['personal-use'].length, informational: 0 },
@@ -90,6 +95,6 @@ export function computeStepCounts(input: {
       informational: informationalClaims,
     },
     'dispute-refunds': { actionable: unmatchedDisputeRefunds, informational: matchedDisputeRefunds },
-    'unlinked-refunds': { actionable: unclaimedRefundTrips.length, informational: 0 },
+    'unlinked-refunds': { actionable: actionableUnlinked, informational: informationalUnlinked },
   };
 }

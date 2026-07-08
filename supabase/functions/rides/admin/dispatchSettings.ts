@@ -2,8 +2,10 @@
  * Admin API for global dispatch settings (Control Panel).
  */
 import type { Context, Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireProductAdmin } from "../../_shared/productAdmin.ts";
 import type { RidesAdminTables } from "../../_shared/ridesAdminDb.ts";
+import { invalidatePolicyCache } from "../../matching/policy/loadPolicy.ts";
 import {
   DEFAULT_DISPATCH_SETTINGS,
   dispatchSettingsDto,
@@ -15,6 +17,45 @@ import {
 } from "../fare/dispatchSettings.ts";
 
 const WRITE_ROLES = new Set(["platform_owner", "superadmin", "rides_admin"]);
+
+const TOLL_SYNC_FIELDS = [
+  "toll_detection_enabled",
+  "toll_geofence_radius_m",
+  "toll_detect_enroute",
+  "route_toll_estimation_enabled",
+] as const;
+
+async function syncTollFieldsToMatchingPolicy(
+  patch: Record<string, unknown>,
+  actorId: string,
+): Promise<void> {
+  const tollPatch: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+    updated_by: actorId,
+  };
+  let hasToll = false;
+  for (const field of TOLL_SYNC_FIELDS) {
+    if (patch[field] !== undefined) {
+      tollPatch[field] = patch[field];
+      hasToll = true;
+    }
+  }
+  if (!hasToll) return;
+
+  const db = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+  );
+  const { error } = await db
+    .from("matching_policies")
+    .update(tollPatch)
+    .eq("is_default", true);
+  if (error) {
+    console.warn(`[dispatch-settings] matching policy toll sync failed: ${error.message}`);
+    return;
+  }
+  invalidatePolicyCache();
+}
 
 function canWriteDispatchSettings(role: string): boolean {
   return WRITE_ROLES.has(role);
@@ -238,6 +279,7 @@ export function registerDispatchSettingsAdminRoutes(
     }
 
     invalidateDispatchSettingsCache();
+    await syncTollFieldsToMatchingPolicy(parsed.patch, adminUser.id);
     const settings = rowToDispatchSettings(data as Record<string, unknown>);
 
     await adminAudit(db, tables, adminUser.id, "admin_dispatch_settings_updated", {

@@ -16,21 +16,27 @@ import { RefundResolutionDrawer, RefundResolutionPayload } from "./RefundResolut
 import { REFUND_RESOLUTION_META, RefundResolutionType } from "./refundResolutionShell";
 import { DriverOption } from "../../ui/DriverPicker";
 import type { RefundSuggestion } from "../../../hooks/useTollReconciliation";
+import type { UnlinkedShortfallSuggestion } from "../../../hooks/useTollReconciliation";
+import { toast } from "sonner@2.0.3";
 
 interface UnclaimedRefundsListProps {
   trips: Trip[];
   suggestions?: Map<string, RefundSuggestion>;
+  shortfallSuggestions?: Map<string, UnlinkedShortfallSuggestion[]>;
   drivers?: DriverOption[];
   onResolve?: (tripId: string, resolution: RefundResolutionType, opts?: { notes?: string; driverId?: string }) => Promise<void> | void;
   onBulkResolve?: (items: Array<{ tripId: string; resolution: RefundResolutionType; notes?: string; driverId?: string }>) => Promise<void> | void;
+  onApplyToShortfall?: (tripId: string, suggestion: UnlinkedShortfallSuggestion) => Promise<void> | void;
 }
 
 export function UnclaimedRefundsList({
   trips,
   suggestions,
+  shortfallSuggestions,
   drivers = [],
   onResolve,
   onBulkResolve,
+  onApplyToShortfall,
 }: UnclaimedRefundsListProps) {
   const [visibleWeekCount, setVisibleWeekCount] = useState(12);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -51,6 +57,25 @@ export function UnclaimedRefundsList({
     });
 
   const suggestionFor = (tripId: string) => suggestions?.get(tripId);
+  const shortfallFor = (tripId: string) => shortfallSuggestions?.get(tripId)?.[0];
+
+  const handleApplyShortfall = async (trip: Trip) => {
+    const best = shortfallFor(trip.id);
+    if (!best || !onApplyToShortfall) return;
+    setBusy(true);
+    try {
+      await onApplyToShortfall(trip.id, best);
+      toast.success(
+        best.coversFully
+          ? `Applied $${best.tripRefund.toFixed(2)} — claim reimbursed`
+          : `Applied $${best.tripRefund.toFixed(2)} — $${best.leftoverShortfall.toFixed(2)} shortfall left`,
+      );
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to apply refund to underpaid claim');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const drawerSuggestion = useMemo(() => {
     if (!drawerTrip) return null;
@@ -131,6 +156,7 @@ export function UnclaimedRefundsList({
         <CardTitle>Unlinked Refunds</CardTitle>
         <CardDescription>
           Trips where the platform paid for a toll, but no corresponding toll expense has been linked.
+          Apply credits to underpaid claims before charging drivers.
           {interactive && ' Suggestions are automatic — review and apply.'}
         </CardDescription>
       </CardHeader>
@@ -178,6 +204,7 @@ export function UnclaimedRefundsList({
                         <tbody className="[&_tr:last-child]:border-0">
                           {week.items.map(trip => {
                             const s = suggestionFor(trip.id);
+                            const shortfall = shortfallFor(trip.id);
                             const isFuture = new Date(trip.date) > new Date();
                             return (
                               <TableRow key={trip.id}>
@@ -208,7 +235,19 @@ export function UnclaimedRefundsList({
                                 </TableCell>
                                 <TableCell>
                                   {interactive ? (
-                                    s ? (
+                                    shortfall && shortfall.confidence >= 50 ? (
+                                      <div className="flex flex-col gap-0.5">
+                                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold border-orange-200 bg-orange-50 text-orange-800 border">
+                                          Apply to underpaid · {shortfall.confidence}%
+                                        </span>
+                                        <span className="text-[10px] text-slate-500">
+                                          Shortfall ${shortfall.remainingShortfall.toFixed(2)}
+                                          {shortfall.leftoverShortfall > 0.05
+                                            ? ` → leftover $${shortfall.leftoverShortfall.toFixed(2)}`
+                                            : ' → covered'}
+                                        </span>
+                                      </div>
+                                    ) : s ? (
                                       <span className={cn(
                                         "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold",
                                         REFUND_RESOLUTION_META[s.status as RefundResolutionType]?.chipClass || "bg-slate-100 text-slate-600",
@@ -227,7 +266,12 @@ export function UnclaimedRefundsList({
                                 <TableCell className="text-right">
                                   {interactive ? (
                                     <div className="flex items-center justify-end gap-1">
-                                      {s && s.status !== 'pending' && (
+                                      {shortfall && shortfall.confidence >= 50 && onApplyToShortfall && (
+                                        <Button size="sm" className="bg-orange-600 hover:bg-orange-700" disabled={busy} onClick={() => handleApplyShortfall(trip)}>
+                                          Apply to underpaid
+                                        </Button>
+                                      )}
+                                      {s && s.status !== 'pending' && !(shortfall && shortfall.confidence >= 50) && (
                                         <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700" disabled={busy} onClick={() => handleAcceptRow(trip)}>
                                           <Sparkles className="h-3.5 w-3.5 mr-1" /> Accept
                                         </Button>

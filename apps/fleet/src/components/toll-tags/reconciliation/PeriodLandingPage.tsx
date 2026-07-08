@@ -1,7 +1,7 @@
 import { Loader2, HelpCircle, CarFront, Route, DollarSign, ShieldCheck, Unlink as UnlinkIcon, Check, AlertTriangle, type LucideIcon } from 'lucide-react';
 import { Card, CardContent } from '../../ui/card';
 import { useTollReconciliationPeriods, ReconciliationPeriod } from '../../../hooks/useTollReconciliationPeriods';
-import { StepId } from '../../../utils/tollPeriodGating';
+import { StepId, STEP_ORDER } from '../../../utils/tollPeriodGating';
 import { TollFinancialOverviewCards } from './TollFinancialOverviewCards';
 
 const STEP_ICONS: Record<StepId, LucideIcon> = {
@@ -12,15 +12,6 @@ const STEP_ICONS: Record<StepId, LucideIcon> = {
   'dispute-refunds': ShieldCheck,
   'unlinked-refunds': UnlinkIcon,
 };
-
-const STEP_ORDER: StepId[] = [
-  'needs-review',
-  'personal-use',
-  'deadhead',
-  'dispute-refunds',
-  'underpaid-claims',
-  'unlinked-refunds',
-];
 
 interface PeriodLandingPageProps {
   driverId?: string;

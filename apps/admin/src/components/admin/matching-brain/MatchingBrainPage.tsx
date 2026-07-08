@@ -27,7 +27,6 @@ import {
   InTripAutomationSection,
   WaitTimeBillingSection,
   PinVerificationSection,
-  TollDetectionSection,
 } from "./sections";
 import { ProductProfileEditor } from "./ProductProfileEditor";
 import { SyncStatusCard } from "./SyncStatusCard";
@@ -291,11 +290,6 @@ export function MatchingBrainPage() {
                 onSave={handleSave}
               />
               <PinVerificationSection
-                policy={selectedPolicy}
-                canEdit={canEdit}
-                onSave={handleSave}
-              />
-              <TollDetectionSection
                 policy={selectedPolicy}
                 canEdit={canEdit}
                 onSave={handleSave}
