@@ -35,6 +35,7 @@ import { MatchResult } from "../../../utils/tollReconciliation";
 import { isTripLinkConfirmed, isOrphanPersonalMatch, personalMatchReasonLabel } from "../../../utils/tollBucket";
 import { SuggestedMatchCard } from "./SuggestedMatchCard";
 import { ManualMatchModal } from "./ManualMatchModal";
+import { CompetingTripsPickerDialog } from "./CompetingTripsPickerDialog";
 import { TollDetailOverlay } from "./TollDetailOverlay";
 import { EvidenceExpiryBadge } from '../../evidence/EvidenceExpiryBadge';
 import { resolveEvidenceMediaState } from '../../evidence/evidenceState';
@@ -71,6 +72,8 @@ export interface TollBucketPanelProps {
   onApprove?: (tx: FinancialTransaction) => void;
   onReject?: (tx: FinancialTransaction) => void;
   onFlag?: (tx: FinancialTransaction) => void;
+  /** Personal step: fleet covers cost (reimburse receipt or write off tag). */
+  onAcceptPersonal?: (tx: FinancialTransaction) => void;
   onManualResolve?: (tx: FinancialTransaction, type: 'Personal' | 'WriteOff' | 'Business') => void;
   onEdit?: (transactionId: string, updates: Record<string, any>) => Promise<void>;
   drivers?: Array<{ id: string; name?: string; driverName?: string; firstName?: string; lastName?: string; uberDriverId?: string; inDriveDriverId?: string }>;
@@ -89,15 +92,17 @@ export interface TollBucketPanelProps {
   stepId?: 'needs-review' | 'personal-use' | 'deadhead';
   /** Period wizard: one card + one list (no duplicate week headers / stacked smart zone). */
   unifiedPeriodView?: boolean;
+  /** Shown inside empty state when the wizard step is complete. */
+  advancePrompt?: React.ReactNode;
 }
 
 export function TollBucketPanel({
   tolls, suggestions, onReconcile, allTrips, onApprove, onReject, onFlag, onManualResolve, onEdit, drivers = [],
   emptyState, listTitle = 'Tolls', listDescription = "Toll provider charges that haven't been linked to a specific trip.",
-  approveLabel = 'Approve', onChargeDriver, onChargePersonal, stepId, unifiedPeriodView = false,
+  approveLabel = 'Approve', onChargeDriver, onChargePersonal, onAcceptPersonal, stepId, unifiedPeriodView = false, advancePrompt,
 }: TollBucketPanelProps) {
-    const [hiddenSuggestions, setHiddenSuggestions] = useState<Set<string>>(new Set());
     const [selectedTxForManual, setSelectedTxForManual] = useState<FinancialTransaction | null>(null);
+    const [competingPickTx, setCompetingPickTx] = useState<FinancialTransaction | null>(null);
     const [sourceFilter, setSourceFilter] = useState<'all' | 'tag' | 'cash'>('all');
     const [visibleSmartMatches, setVisibleSmartMatches] = useState(10);
     const [visibleWeekCount, setVisibleWeekCount] = useState(12);
@@ -141,6 +146,10 @@ export function TollBucketPanel({
         setEditTx(null);
     };
 
+    const openCompetingPicker = (tx: FinancialTransaction) => {
+        setCompetingPickTx(tx);
+    };
+
     const filteredTolls = useMemo(() => {
         return tolls.filter(tx => {
             const isCash = tx.paymentMethod === 'Cash' || !!tx.receiptUrl;
@@ -181,10 +190,6 @@ export function TollBucketPanel({
         return closestDriver;
     };
 
-    const handleDismiss = (txId: string) => {
-        setHiddenSuggestions(prev => new Set(prev).add(txId));
-    };
-
     const renderActionButtons = (tx: FinancialTransaction, match?: MatchResult) => {
         const isClaim = tx.paymentMethod === 'Cash' || !!tx.receiptUrl;
         const isOrphan = !!match && isOrphanPersonalMatch(match);
@@ -192,21 +197,14 @@ export function TollBucketPanel({
 
         if (tripPickRequired && match) {
             return (
-                <div className="flex items-center justify-end gap-2">
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <span>
-                                    <Button size="sm" disabled className="cursor-not-allowed">Link</Button>
-                                </span>
-                            </TooltipTrigger>
-                            <TooltipContent><p>Pick the correct trip first</p></TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
-                    <Button size="sm" variant="outline" className="gap-1" onClick={() => setSelectedTxForManual(tx)}>
-                        <Search className="h-3 w-3" /> Find Match...
-                    </Button>
-                </div>
+                <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1 border-indigo-400 bg-indigo-50 text-indigo-900 hover:bg-indigo-100 font-semibold"
+                    onClick={() => openCompetingPicker(tx)}
+                >
+                    <Search className="h-3 w-3" /> Find match manually
+                </Button>
             );
         }
 
@@ -274,8 +272,26 @@ export function TollBucketPanel({
                  }
                  return <Button size="sm" className="bg-amber-600 hover:bg-amber-700" onClick={() => onFlag(tx)}>Flag</Button>;
             }
-            if (match.matchType === 'PERSONAL_MATCH' && onReject) {
-                 return <Button size="sm" className="bg-rose-600 hover:bg-rose-700" onClick={() => onReject(tx)}>Reject</Button>;
+            if (match.matchType === 'PERSONAL_MATCH') {
+                 return (
+                     <div className="flex items-center justify-end gap-2">
+                         {onAcceptPersonal && (
+                             <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => onAcceptPersonal(tx)}>
+                                 {isClaim ? 'Approve' : 'Fleet Pays'}
+                             </Button>
+                         )}
+                         {isClaim && onReject && (
+                             <Button size="sm" variant="outline" className="border-rose-300 text-rose-700 hover:bg-rose-50" onClick={() => onReject(tx)}>
+                                 Reject
+                             </Button>
+                         )}
+                         {!isClaim && onChargePersonal && (
+                             <Button size="sm" variant="outline" className="border-purple-300 text-purple-700 hover:bg-purple-50" onClick={() => onChargePersonal(tx, match)}>
+                                 Charge Driver
+                             </Button>
+                         )}
+                     </div>
+                 );
             }
             if (match.matchType === 'DEADHEAD_MATCH' && onChargeDriver) {
                  return (
@@ -291,27 +307,34 @@ export function TollBucketPanel({
         }
 
         return (
-            <Button
-                size="sm"
-                className={match.matchType === 'PERSONAL_MATCH' ? 'bg-rose-600 hover:bg-rose-700' : undefined}
-                variant={match.matchType === 'PERSONAL_MATCH' ? 'default' : 'outline'}
-                onClick={() => {
-                    if (match.matchType === 'PERSONAL_MATCH' && onChargePersonal) {
-                        onChargePersonal(tx, match);
-                    } else {
-                        onReconcile(tx, match.trip);
-                    }
-                }}
-            >
-                {match.matchType === 'PERSONAL_MATCH' ? 'Charge Driver' : 'Link'}
-            </Button>
+            <div className="flex items-center justify-end gap-2">
+                {match.matchType === 'PERSONAL_MATCH' && onAcceptPersonal && (
+                    <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => onAcceptPersonal(tx)}>
+                        Fleet Pays
+                    </Button>
+                )}
+                <Button
+                    size="sm"
+                    className={match.matchType === 'PERSONAL_MATCH' ? 'border-purple-300 text-purple-700 hover:bg-purple-50' : undefined}
+                    variant={match.matchType === 'PERSONAL_MATCH' ? 'outline' : 'outline'}
+                    onClick={() => {
+                        if (match.matchType === 'PERSONAL_MATCH' && onChargePersonal) {
+                            onChargePersonal(tx, match);
+                        } else {
+                            onReconcile(tx, match.trip);
+                        }
+                    }}
+                >
+                    {match.matchType === 'PERSONAL_MATCH' ? 'Charge Driver' : 'Link'}
+                </Button>
+            </div>
         );
     };
 
     const orphanSmartMatches = stepId === 'personal-use'
         ? filteredTolls.filter((tx) => {
             const best = suggestions.get(tx.id)?.[0];
-            return best && isOrphanPersonalMatch(best) && !hiddenSuggestions.has(tx.id);
+            return best && isOrphanPersonalMatch(best);
         })
         : [];
 
@@ -324,7 +347,7 @@ export function TollBucketPanel({
             best?.matchType === 'DEADHEAD_MATCH' ||
             best?.matchType === 'PERSONAL_MATCH'
         );
-        return best && hasHighScore && !hiddenSuggestions.has(tx.id);
+        return best && hasHighScore;
     });
 
     const visibleSmart = smartMatches.slice(0, visibleSmartMatches);
@@ -415,14 +438,14 @@ export function TollBucketPanel({
                         onReconcile(tx, match.trip);
                     }
                 }}
-                onDismiss={() => handleDismiss(tx.id)}
                 onApprove={onApprove ? () => onApprove(tx) : undefined}
                 onReject={onReject ? () => onReject(tx) : undefined}
+                onAcceptPersonal={onAcceptPersonal ? () => onAcceptPersonal(tx) : undefined}
                 onFlag={onFlag ? () => onFlag(tx) : undefined}
                 onChargeDriver={onChargeDriver ? () => onChargeDriver(tx, match) : undefined}
                 onClickDetail={() => openDetail(tx, match, matches)}
                 onSelectTrip={(trip) => onReconcile(tx, trip)}
-                onFindMatch={() => setSelectedTxForManual(tx)}
+                onFindMatch={() => openCompetingPicker(tx)}
             />
         );
     };
@@ -430,7 +453,6 @@ export function TollBucketPanel({
     const renderTollDataRow = (tx: FinancialTransaction) => {
         const txMatches = suggestions.get(tx.id) ?? [];
         const bestMatch = txMatches[0];
-        const hasHiddenMatch = hiddenSuggestions.has(tx.id);
         const vehicleId = tx.vehiclePlate || tx.vehicleId || '';
         const inferredDriver = getInferredDriver(vehicleId, tx.date);
         const profileDriver = drivers.length > 0 ? resolveTollDisplayDriverName(tx, drivers) : '';
@@ -499,7 +521,7 @@ export function TollBucketPanel({
                 </TableCell>
                 <TableCell className="font-medium text-rose-600">-${Math.abs(tx.amount).toFixed(2)}</TableCell>
                 <TableCell>
-                    {bestMatch && !hasHiddenMatch ? (
+                    {bestMatch ? (
                         <div className="flex items-center gap-1.5 flex-wrap">
                             {getMatchBadge(bestMatch)}
                             {bestMatch.confidenceScore != null && (
@@ -524,11 +546,7 @@ export function TollBucketPanel({
                     )}
                 </TableCell>
                 <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                    {hasHiddenMatch ? (
-                        <Button size="sm" variant="ghost" disabled>Dismissed</Button>
-                    ) : (
-                        renderActionButtons(tx, bestMatch)
-                    )}
+                    {renderActionButtons(tx, bestMatch)}
                 </TableCell>
             </TableRow>
         );
@@ -536,6 +554,18 @@ export function TollBucketPanel({
 
     const overlayModals = (
         <>
+            <CompetingTripsPickerDialog
+                isOpen={!!competingPickTx}
+                onClose={() => setCompetingPickTx(null)}
+                transaction={competingPickTx}
+                matches={competingPickTx ? (suggestions.get(competingPickTx.id) ?? []) : []}
+                onSelectTrip={(trip) => {
+                    if (competingPickTx) {
+                        onReconcile(competingPickTx, trip);
+                        setCompetingPickTx(null);
+                    }
+                }}
+            />
             <ManualMatchModal
                 isOpen={!!selectedTxForManual}
                 onClose={() => setSelectedTxForManual(null)}
@@ -558,16 +588,16 @@ export function TollBucketPanel({
                     onReconcile(detailTx, detailMatch.trip);
                     closeDetail();
                 } : undefined}
-                onDismiss={() => {
-                    if (detailTx) handleDismiss(detailTx.id);
-                    closeDetail();
-                }}
                 onApprove={detailTx && onApprove ? () => {
                     onApprove(detailTx);
                     closeDetail();
                 } : undefined}
                 onReject={detailTx && onReject ? () => {
                     onReject(detailTx);
+                    closeDetail();
+                } : undefined}
+                onAcceptPersonal={detailTx && onAcceptPersonal ? () => {
+                    onAcceptPersonal(detailTx);
                     closeDetail();
                 } : undefined}
                 onFlag={detailTx && onFlag && detailMatch && !needsTripPick(detailTx, detailMatch) ? () => {
@@ -582,6 +612,10 @@ export function TollBucketPanel({
                     onReconcile(detailTx, trip);
                     closeDetail();
                 } : undefined}
+                onFindMatch={detailTx && detailMatch && needsTripPick(detailTx, detailMatch) ? () => {
+                    closeDetail();
+                    openCompetingPicker(detailTx);
+                } : undefined}
             />
             <EditTollModal
                 isOpen={isEditOpen}
@@ -594,13 +628,45 @@ export function TollBucketPanel({
 
     if (tolls.length === 0) {
         const EmptyIcon = emptyState.icon;
-        return (
+        const emptyBody = (
             <div className="flex flex-col items-center justify-center py-12 text-slate-500">
                 <EmptyIcon className="h-10 w-10 text-slate-300 mb-3" />
                 <h3 className="text-base font-medium text-slate-700">{emptyState.title}</h3>
-                <p className="text-sm">{emptyState.description}</p>
+                <p className="text-sm text-center max-w-md">{emptyState.description}</p>
+                {advancePrompt}
             </div>
         );
+
+        if (unifiedPeriodView) {
+            return (
+                <>
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between pb-4">
+                            <div className="space-y-1">
+                                <CardTitle>{listTitle}</CardTitle>
+                                <CardDescription>{listDescription}</CardDescription>
+                            </div>
+                            <div className="w-[180px]">
+                                <Select value={sourceFilter} onValueChange={(v: 'all' | 'tag' | 'cash') => setSourceFilter(v)}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Filter Source" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Sources</SelectItem>
+                                        <SelectItem value="tag">Tag Imports Only</SelectItem>
+                                        <SelectItem value="cash">Cash Claims Only</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </CardHeader>
+                        <CardContent>{emptyBody}</CardContent>
+                    </Card>
+                    {overlayModals}
+                </>
+            );
+        }
+
+        return emptyBody;
     }
 
     if (unifiedPeriodView) {
@@ -632,8 +698,7 @@ export function TollBucketPanel({
                             <div className="space-y-3 w-full min-w-0">
                                 <div className="flex items-center gap-2 rounded-lg border border-purple-200 bg-purple-50/60 px-3 py-2 text-purple-900 text-sm">
                                     <Sparkles className="h-4 w-4 shrink-0" />
-                                    <span className="font-semibold">No trip explains these tolls ({orphanSmartMatches.length})</span>
-                                    <span className="text-purple-800/80">— confirm personal use before charging.</span>
+                                    <span className="font-semibold">No trips match these tolls.</span>
                                 </div>
                                 {orphanSmartMatches.map((tx) => (
                                     <div key={tx.id} className="w-full min-w-0">
@@ -642,29 +707,46 @@ export function TollBucketPanel({
                                 ))}
                             </div>
                         )}
-                        {ambiguousSmartMatches.length > 0 && (
-                            <div className="flex items-start gap-2 rounded-lg border border-orange-200 bg-orange-50/80 px-3 py-2.5 text-orange-800">
-                                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                                <div className="text-sm">
-                                    <span className="font-semibold">Pick the trip ({ambiguousSmartMatches.length})</span>
-                                    <span className="text-orange-700/90"> — multiple trips compete. Choose one before linking.</span>
-                                </div>
-                            </div>
-                        )}
-                        {normalSmartMatches.length > 0 && (
-                            <div className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50/60 px-3 py-2 text-indigo-800 text-sm">
-                                <Sparkles className="h-4 w-4 shrink-0" />
-                                <span className="font-semibold">Smart Suggestions ({normalSmartMatches.length})</span>
-                            </div>
-                        )}
                         {visibleSmartTolls.length > 0 && (
-                            <div className="space-y-3 w-full min-w-0">
-                                {visibleSmartTolls.map((tx) => (
-                                    <div key={tx.id} className="w-full min-w-0">
-                                        {renderSuggestedMatchCard(tx)}
+                            <Collapsible defaultOpen className="group rounded-xl border border-slate-200 bg-slate-50/40 overflow-hidden">
+                                <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-100/80 transition-colors">
+                                    <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                                        <Sparkles className="h-4 w-4 text-indigo-600 shrink-0" />
+                                        <span className="font-semibold text-slate-800">
+                                            Smart suggestions ({visibleSmartTolls.length})
+                                        </span>
                                     </div>
-                                ))}
-                            </div>
+                                    <ChevronDown className="h-4 w-4 text-slate-500 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                                </CollapsibleTrigger>
+                                <CollapsibleContent className="px-4 pb-4 space-y-4 border-t border-slate-200/80">
+                                    {normalSmartMatches.length > 0 && ambiguousSmartMatches.length === 0 && (
+                                        <div className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50/60 px-3 py-2 text-indigo-800 text-sm mt-3">
+                                            <Sparkles className="h-4 w-4 shrink-0" />
+                                            <span className="font-semibold">Ready to link ({normalSmartMatches.length})</span>
+                                        </div>
+                                    )}
+                                    <div className="space-y-3 w-full min-w-0">
+                                        {visibleSmartTolls.map((tx) => (
+                                            <div key={tx.id} className="w-full min-w-0">
+                                                {renderSuggestedMatchCard(tx)}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    {visibleSmartMatches < smartMatches.length && (
+                                        <div className="flex items-center justify-center pt-2 border-t border-slate-200">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => setVisibleSmartMatches((prev) => prev + 10)}
+                                                className="text-slate-600 hover:text-slate-900"
+                                            >
+                                                <ChevronDown className="h-4 w-4 mr-1" />
+                                                Show more suggestions ({visibleSmartMatches} of {smartMatches.length})
+                                            </Button>
+                                        </div>
+                                    )}
+                                </CollapsibleContent>
+                            </Collapsible>
                         )}
                         {otherTolls.length > 0 && (
                             <Table>
@@ -686,19 +768,6 @@ export function TollBucketPanel({
                         {filteredTolls.length === 0 && (
                             <p className="text-center text-slate-500 py-8 text-sm">No tolls match the current filter.</p>
                         )}
-                        {visibleSmartMatches < smartMatches.length && (
-                            <div className="flex items-center justify-center pt-2 border-t">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setVisibleSmartMatches((prev) => prev + 10)}
-                                    className="text-slate-600 hover:text-slate-900"
-                                >
-                                    <ChevronDown className="h-4 w-4 mr-1" />
-                                    Show more suggestions ({visibleSmartMatches} of {smartMatches.length})
-                                </Button>
-                            </div>
-                        )}
                     </CardContent>
                 </Card>
                 {overlayModals}
@@ -711,17 +780,8 @@ export function TollBucketPanel({
             {smartMatches.length > 0 && (
                 <div className="space-y-6">
                     {ambiguousSmartMatches.length > 0 && (
-                        <div className="space-y-4">
-                            <div className="flex items-center space-x-2 text-orange-600">
-                                <AlertTriangle className="h-5 w-5" />
-                                <div>
-                                    <h3 className="font-semibold">Pick the trip ({ambiguousSmartMatches.length})</h3>
-                                    <p className="text-xs text-orange-600/80">Ambiguous — multiple trips compete. Choose one before flagging or linking.</p>
-                                </div>
-                            </div>
-                            <div className="space-y-3">
-                                {renderSmartMatchCards(ambiguousSmartMatches)}
-                            </div>
+                        <div className="space-y-3">
+                            {renderSmartMatchCards(ambiguousSmartMatches)}
                         </div>
                     )}
                     {normalSmartMatches.length > 0 && (

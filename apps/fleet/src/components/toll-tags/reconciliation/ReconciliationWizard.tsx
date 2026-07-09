@@ -36,6 +36,7 @@ import { DriverPicker } from "../../ui/DriverPicker";
 import { TollAutomationSettings } from "./TollAutomationSettings";
 import { RematchCandidatesQueue } from "./RematchCandidatesQueue";
 import { PeriodResetDialog } from "./PeriodResetDialog";
+import { StepAdvancePrompt } from "./StepAdvancePrompt";
 import { normalizePlatform } from "../../../utils/normalizePlatform";
 import { ReconciliationPeriod } from "../../../hooks/useTollReconciliationPeriods";
 import { useFleetTimezone } from "../../../utils/timezoneDisplay";
@@ -214,6 +215,39 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
       const reason = match?.matchType === 'PERSONAL_MATCH' ? "Identified as Personal Trip" : "Rejected by Admin";
       await reject(tx, reason);
   };
+
+  const handleAcceptPersonal = useCallback(async (tx: FinancialTransaction) => {
+      const isClaim = tx.paymentMethod === 'Cash' || !!tx.receiptUrl;
+      try {
+          if (isClaim) {
+              await approve(tx, 'Personal toll — fleet reimbursed driver');
+              toast.success('Claim approved — fleet paid driver');
+          } else {
+              const tollCost = Math.abs(tx.amount);
+              await createClaim({
+                  transactionId: tx.id,
+                  driverId: tx.driverId || 'fleet',
+                  amount: tollCost,
+                  expectedAmount: tollCost,
+                  paidAmount: 0,
+                  status: 'Resolved',
+                  type: 'Toll_Refund',
+                  resolutionReason: 'Write Off',
+                  subject: 'Personal Toll - Fleet Pays',
+                  message: 'Fleet covered this personal toll.',
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                  date: tx.date,
+              });
+              await approve(tx, 'Personal toll — fleet paid (write off)');
+              toast.success('Fleet paid — toll written off');
+          }
+          await Promise.all([refresh(), refreshClaims()]);
+      } catch (error) {
+          console.error('Accept personal failed', error);
+          toast.error('Failed to process fleet payment');
+      }
+  }, [approve, createClaim, refresh, refreshClaims]);
 
   const handleFlag = async (tx: FinancialTransaction) => {
       const match = suggestions.get(tx.id)?.[0];
@@ -629,6 +663,16 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
   const activeState = gatedStates.find(s => s.id === activeStepId) ?? gatedStates[0];
   const isLastStep = activeStepId === STEP_ORDER[STEP_ORDER.length - 1];
   const canAdvance = activeState.actionable === 0;
+  const activeStepIdx = STEP_ORDER.indexOf(activeStepId);
+  const nextStepId = STEP_ORDER[activeStepIdx + 1];
+  const nextStepLabel = nextStepId ? STEP_LABELS[nextStepId] : undefined;
+
+  const bucketStepIds: StepId[] = ['needs-review', 'personal-use', 'deadhead'];
+  const isBucketStepEmpty =
+    bucketStepIds.includes(activeStepId) &&
+    (activeStepId === 'needs-review' ? classified['needs-review'] :
+      activeStepId === 'personal-use' ? classified['personal-use'] :
+      classified['deadhead']).length === 0;
 
   const handleNext = () => {
     const idx = STEP_ORDER.indexOf(activeStepId);
@@ -646,6 +690,16 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
     toast.success(`Period ${period.label} fully reconciled`);
     onExit();
   };
+
+  const renderAdvancePrompt = (compact = false) => (
+    <StepAdvancePrompt
+      currentStepLabel={STEP_LABELS[activeStepId]}
+      nextStepLabel={nextStepLabel}
+      isLastStep={isLastStep}
+      onAdvance={isLastStep ? handleFinish : handleNext}
+      compact={compact}
+    />
+  );
 
   const handleApplyUnlinkedShortfall = async (
     tripId: string,
@@ -764,9 +818,11 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               onReconcile={handleSmartReconcile}
               onApprove={handleApprove}
               onReject={handleReject}
+              onAcceptPersonal={handleAcceptPersonal}
               onFlag={handleFlag}
               onManualResolve={handleManualResolve}
               onEdit={handleEditToll}
+              advancePrompt={canAdvance ? renderAdvancePrompt(true) : undefined}
               emptyState={{ icon: HelpCircle, title: "No tolls pending review", description: "There are no tolls needing review this period." }}
               listTitle="Needs Review"
               listDescription="Toll charges with no clear trip link, or where multiple trips compete — pick the correct trip first."
@@ -783,10 +839,12 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               onReconcile={handleSmartReconcile}
               onApprove={handleApprove}
               onReject={handleReject}
+              onAcceptPersonal={handleAcceptPersonal}
               onFlag={handleFlag}
               onManualResolve={handleManualResolve}
               onChargePersonal={handleChargePersonal}
               onEdit={handleEditToll}
+              advancePrompt={canAdvance ? renderAdvancePrompt(true) : undefined}
               emptyState={{ icon: CarFront, title: "No personal use tolls this period", description: "No tolls were classified as personal driver use." }}
               listTitle="Personal Use"
               listDescription="Tolls with no trip explaining them, or after dropoff — confirm each driver charge. Approach tolls appear under Deadhead."
@@ -802,11 +860,13 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               onReconcile={handleSmartReconcile}
               onApprove={handleApprove}
               onReject={handleReject}
+              onAcceptPersonal={handleAcceptPersonal}
               onFlag={handleFlag}
               onManualResolve={handleManualResolve}
               onEdit={handleEditToll}
               onChargeDriver={handleChargeDriverForDeadhead}
               approveLabel="Acknowledge (Fleet Cost)"
+              advancePrompt={canAdvance ? renderAdvancePrompt(true) : undefined}
               emptyState={{ icon: Route, title: "No deadhead tolls this period", description: "No unreimbursed business driving tolls detected." }}
               listTitle="Deadhead"
               listDescription="Unreimbursed business driving (en route to pickup) — normally a fleet cost, but chargeable to the driver on a case-by-case basis."
@@ -853,15 +913,11 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
           )}
         </div>
 
-        <div className="flex justify-end pt-4 border-t border-slate-100">
-          <Button
-            disabled={!canAdvance}
-            onClick={isLastStep ? handleFinish : handleNext}
-            className="bg-indigo-600 hover:bg-indigo-700"
-          >
-            {isLastStep ? 'Finish — Back to Periods' : 'Next'}
-          </Button>
-        </div>
+        {canAdvance && !(isBucketStepEmpty && bucketStepIds.includes(activeStepId)) && (
+          <div className="pt-4">
+            {renderAdvancePrompt()}
+          </div>
+        )}
       </div>
 
       {/* Read-only audit views — Resolved / Matched History / All activity,

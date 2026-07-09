@@ -162,7 +162,7 @@ export function personalMatchReasonLabel(
 
 /**
  * Single source of truth for wizard step bucketing (client wizard + tests).
- * Priority: ambiguous → persisted personal → live match → zero-match tag → stage.
+ * Orphan personal wins over stale ambiguous flags — there is no trip to pick.
  */
 export function resolveWizardBucket(
   tx: WizardBucketTx,
@@ -172,15 +172,19 @@ export function resolveWizardBucket(
   const resolvedStageBucket = stage ? bucketForWorkflowStage(stage) : undefined;
   if (resolvedStageBucket === null && stage) return null;
 
+  if (best && isOrphanPersonalMatch(best)) {
+    return 'personal-use';
+  }
+
+  if (stage === 'personal_use_pending' || tx.matchStatus === 'orphan_personal') {
+    return 'personal-use';
+  }
+
   const linkConfirmed = isTripLinkConfirmed(tx);
   const ambiguous =
     (best?.isAmbiguous || tx.matchStatus === 'ambiguous' || tx.isAmbiguous === true) &&
     !linkConfirmed;
   if (ambiguous) return 'needs-review';
-
-  if (stage === 'personal_use_pending' || tx.matchStatus === 'orphan_personal') {
-    return 'personal-use';
-  }
 
   const liveBucket = resolveTollBucket(tx, best);
   if (liveBucket !== 'needs-review') return liveBucket;
@@ -193,7 +197,6 @@ export function resolveWizardBucket(
     return bucketForBestMatch(best);
   }
 
-  if (stage === 'personal_use_pending') return 'personal-use';
   if (resolvedStageBucket) return resolvedStageBucket;
 
   return liveBucket;

@@ -12,24 +12,16 @@ import { Separator } from "../../ui/separator";
 import {
   Clock, DollarSign, MapPin, Camera, Car, User, Gauge, AlertTriangle,
   Check, X, ArrowRight, Calendar, Hash, CreditCard, FileText, Tag,
-  Navigation, Route, Timer, Zap, Shield, Info
+  Navigation, Route, Timer, Zap, Shield, Info, Search
 } from "lucide-react";
 import { FinancialTransaction, Trip } from "../../../types/data";
 import { MatchResult, MatchType } from "../../../utils/tollReconciliation";
 import { isTripLinkConfirmed } from "../../../utils/tollBucket";
-import { MatchAlternatesPanel } from "./MatchAlternatesPanel";
 import { GeofenceMatchBadge } from '@roam/toll-ui';
 import type { GeofenceMatchStatus } from '@roam/types/tollCrossings';
 import { normalizePlatform } from '../../../utils/normalizePlatform';
 import { format } from "date-fns";
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
-
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "../../ui/tooltip";
 
 interface TollDetailOverlayProps {
   isOpen: boolean;
@@ -42,9 +34,13 @@ interface TollDetailOverlayProps {
   onApprove?: () => void;
   onReject?: () => void;
   onFlag?: () => void;
+  /** Personal: fleet covers cost (reimburse receipt or write off tag). */
+  onAcceptPersonal?: () => void;
   /** Deadhead-only: bill this toll to the driver instead of the fleet absorbing it. */
   onChargeDriver?: () => void;
   onSelectTrip?: (trip: Trip) => void;
+  /** Ambiguous tolls — open competing trips picker overlay. */
+  onFindMatch?: () => void;
 }
 
 function geofenceMatchStatus(
@@ -62,14 +58,14 @@ export function TollDetailOverlay({
   onClose,
   transaction,
   match,
-  allMatches,
   onConfirm,
   onDismiss,
   onApprove,
   onReject,
   onFlag,
+  onAcceptPersonal,
   onChargeDriver,
-  onSelectTrip,
+  onFindMatch,
 }: TollDetailOverlayProps) {
   if (!transaction) return null;
 
@@ -77,7 +73,6 @@ export function TollDetailOverlay({
   const trip = match?.trip;
   const isClaim = transaction.paymentMethod === 'Cash' || !!transaction.receiptUrl;
   const needsTripPick = !!(match?.isAmbiguous && !isTripLinkConfirmed(transaction));
-  const alternates = allMatches && allMatches.length > 0 ? allMatches : (match && needsTripPick ? [match] : []);
 
   // --- Helpers ---
   const formatTxDate = () => {
@@ -156,20 +151,15 @@ export function TollDetailOverlay({
     if (!match) return null;
 
     if (needsTripPick) {
-      return (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="flex-1">
-                <Button disabled className="w-full bg-slate-300 cursor-not-allowed">
-                  Choose trip below
-                </Button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent><p>Pick the correct trip first</p></TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      );
+      return onFindMatch ? (
+        <Button
+          onClick={onFindMatch}
+          variant="outline"
+          className="flex-1 border-2 border-indigo-400 bg-indigo-50 text-indigo-900 hover:bg-indigo-100 font-semibold"
+        >
+          <Search className="h-4 w-4 mr-2" /> Find match manually
+        </Button>
+      ) : null;
     }
 
     if (isClaim) {
@@ -180,11 +170,25 @@ export function TollDetailOverlay({
           </Button>
         );
       }
-      if (match.matchType === 'PERSONAL_MATCH' && onReject) {
+      if (match.matchType === 'PERSONAL_MATCH') {
         return (
-          <Button onClick={onReject} className="bg-rose-600 hover:bg-rose-700 flex-1">
-            <X className="h-4 w-4 mr-2" /> Reject Claim
-          </Button>
+          <>
+            {onAcceptPersonal && (
+              <Button onClick={onAcceptPersonal} className="bg-emerald-600 hover:bg-emerald-700 flex-1">
+                <Check className="h-4 w-4 mr-2" /> {isClaim ? 'Approve Reimbursement' : 'Fleet Pays'}
+              </Button>
+            )}
+            {isClaim && onReject && (
+              <Button onClick={onReject} variant="outline" className="border-rose-300 text-rose-700 hover:bg-rose-50 flex-1">
+                <X className="h-4 w-4 mr-2" /> Reject Claim
+              </Button>
+            )}
+            {!isClaim && onConfirm && (
+              <Button onClick={onConfirm} variant="outline" className="border-purple-300 text-purple-700 hover:bg-purple-50 flex-1">
+                <User className="h-4 w-4 mr-2" /> Charge Driver
+              </Button>
+            )}
+          </>
         );
       }
       if (match.matchType === 'DEADHEAD_MATCH' && onChargeDriver) {
@@ -210,7 +214,7 @@ export function TollDetailOverlay({
       }
     }
 
-    const label = match.matchType === 'PERSONAL_MATCH' ? 'Mark Personal' : 'Link Trip';
+    const label = match.matchType === 'DEADHEAD_MATCH' ? 'Confirm Deadhead' : 'Link Trip';
     return (
       <Button onClick={onConfirm} className="bg-emerald-600 hover:bg-emerald-700 flex-1">
         <Check className="h-4 w-4 mr-2" /> {label}
@@ -404,7 +408,7 @@ export function TollDetailOverlay({
           {trip && (
             <div>
               <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                <Navigation className="h-3.5 w-3.5" /> Matched Trip
+                <Navigation className="h-3.5 w-3.5" /> {needsTripPick ? 'Top suggested trip (#1)' : 'Matched Trip'}
               </h3>
               <div className="grid grid-cols-2 gap-x-6 gap-y-3 bg-emerald-50/40 rounded-lg p-4 border border-emerald-100">
                 <DetailRow icon={Tag} label="Platform" value={normalizePlatform(trip.platform)} valueColor="text-emerald-700" />
@@ -440,13 +444,6 @@ export function TollDetailOverlay({
             </div>
           )}
 
-          {needsTripPick && onSelectTrip && alternates.length > 0 && (
-            <MatchAlternatesPanel
-              matches={alternates}
-              onSelectTrip={onSelectTrip}
-            />
-          )}
-
           {/* No match info */}
           {!match && (
             <div className="text-center py-6 bg-slate-50 rounded-lg border border-slate-200">
@@ -461,11 +458,6 @@ export function TollDetailOverlay({
           {/* Action Bar */}
           <div className="flex items-center gap-3">
             {renderActionButtons()}
-            {onDismiss && match && (
-              <Button variant="outline" onClick={onDismiss} className="text-slate-500">
-                <X className="h-4 w-4 mr-2" /> Dismiss
-              </Button>
-            )}
             <Button variant="ghost" onClick={onClose} className="ml-auto text-slate-400">
               Close
             </Button>

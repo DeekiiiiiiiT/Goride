@@ -77,13 +77,18 @@ function resolvePeriodBucket(tx: any): "needs-review" | "underpaid-claims" | "de
   const stageBucket = bucketForWorkflowStage(stage);
   if (stageBucket === null && stage) return null;
 
+  const reasonCode = String(tx.matchReasonCode || "");
+  const isOrphanPersonal =
+    tx.matchTypeCode === "PERSONAL_MATCH" &&
+    (reasonCode.startsWith("ORPHAN_") || !tx.matchedTripId);
+
+  if (isOrphanPersonal || stage === "personal_use_pending" || tx.matchStatus === "orphan_personal") {
+    return "personal-use";
+  }
+
   const linkConfirmed = !!(tx.isReconciled && tx.tripId);
   if (!linkConfirmed && (tx.matchStatus === "ambiguous" || tx.isAmbiguous === true)) {
     return "needs-review";
-  }
-
-  if (stage === "personal_use_pending" || tx.matchStatus === "orphan_personal") {
-    return "personal-use";
   }
 
   const matchType = tx.matchTypeCode as string | undefined;

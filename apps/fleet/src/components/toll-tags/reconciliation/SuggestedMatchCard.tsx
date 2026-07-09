@@ -2,21 +2,13 @@ import React from 'react';
 import { Card, CardContent } from "../../ui/card";
 import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
-import { ArrowRight, Check, X, Clock, DollarSign, MapPin, Camera, AlertTriangle, Car, User, Gauge } from "lucide-react";
+import { ArrowRight, Check, X, Clock, DollarSign, MapPin, Camera, AlertTriangle, Car, User, Gauge, Search } from "lucide-react";
 import { FinancialTransaction, Trip } from "../../../types/data";
 import { normalizePlatform } from '../../../utils/normalizePlatform';
 import { format } from "date-fns";
 import { MatchResult } from "../../../utils/tollReconciliation";
 import { isTripLinkConfirmed, personalMatchReasonLabel } from "../../../utils/tollBucket";
-import { MatchAlternatesPanel } from "./MatchAlternatesPanel";
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
-
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "../../ui/tooltip";
 
 interface SuggestedMatchCardProps {
   transaction: FinancialTransaction;
@@ -26,10 +18,11 @@ interface SuggestedMatchCardProps {
   /** Orphan personal toll — no linked trip column. */
   orphanMode?: boolean;
   onConfirm: () => void;
-  onDismiss: () => void;
   onApprove?: () => void;
   onReject?: () => void;
   onFlag?: () => void;
+  /** Personal step: fleet covers cost (reimburse receipt or write off tag). */
+  onAcceptPersonal?: () => void;
   /** Deadhead-only: bill this toll to the driver instead of the fleet absorbing it. */
   onChargeDriver?: () => void;
   onClickDetail?: () => void;
@@ -39,8 +32,8 @@ interface SuggestedMatchCardProps {
 }
 
 export function SuggestedMatchCard({
-  transaction, match, allMatches, orphanMode = false, onConfirm, onDismiss, onApprove, onReject, onFlag, onChargeDriver,
-  onClickDetail, onSelectTrip, onFindMatch,
+  transaction, match, allMatches, orphanMode = false, onConfirm, onApprove, onReject, onFlag, onChargeDriver,
+  onClickDetail, onFindMatch, onAcceptPersonal,
 }: SuggestedMatchCardProps) {
   const { trip, confidence, reason, timeDifferenceMinutes, matchType, varianceAmount, confidenceScore, vehicleMatch, driverMatch, dataQuality, windowHit, isAmbiguous, reasonCode } = match;
   const isClaim = transaction.paymentMethod === 'Cash' || !!transaction.receiptUrl;
@@ -85,35 +78,26 @@ export function SuggestedMatchCard({
   };
 
   const needsTripPick = !!(isAmbiguous && !isTripLinkConfirmed(transaction));
-  const alternates = allMatches && allMatches.length > 0 ? allMatches : (needsTripPick ? [match] : []);
-
-  const disabledAction = (button: React.ReactNode, tooltip: string) => (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="inline-flex w-full lg:w-auto">{button}</span>
-        </TooltipTrigger>
-        <TooltipContent><p>{tooltip}</p></TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
 
   const renderActionButton = () => {
       if (needsTripPick) {
+          if (!onFindMatch) return null;
           return (
-              <>
-                  {disabledAction(
-                      <Button size="sm" disabled className="bg-slate-300 w-full lg:w-auto cursor-not-allowed">
-                          Choose trip below
-                      </Button>,
-                      'Pick the correct trip first',
-                  )}
-                  {onFindMatch && (
-                      <Button size="sm" variant="outline" onClick={onFindMatch} className="w-full lg:w-auto">
-                          Find Match...
-                      </Button>
-                  )}
-              </>
+              <div className="flex flex-col gap-2 w-full min-w-[200px]">
+                  <p className="text-xs font-medium text-orange-800 leading-snug">
+                    Multiple trips match — open manual pick to choose the correct one.
+                  </p>
+                  <Button
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                      onClick={onFindMatch}
+                      className="w-full lg:w-auto border-2 border-indigo-400 bg-indigo-50 text-indigo-900 hover:bg-indigo-100 font-semibold"
+                  >
+                      <Search className="h-4 w-4 mr-2" />
+                      Find match manually
+                  </Button>
+              </div>
           );
       }
       // Logic Branching for Driver Claims (Cash/Receipts)
@@ -127,9 +111,18 @@ export function SuggestedMatchCard({
           }
           if (matchType === 'PERSONAL_MATCH') {
               return (
-                  <Button size="sm" onClick={onReject} className="bg-rose-600 hover:bg-rose-700 w-full lg:w-auto">
-                      <X className="h-4 w-4 mr-2" /> Reject Claim
-                  </Button>
+                  <>
+                      {onAcceptPersonal && (
+                          <Button size="sm" onClick={onAcceptPersonal} className="bg-emerald-600 hover:bg-emerald-700 w-full lg:w-auto">
+                              <Check className="h-4 w-4 mr-2" /> Approve Reimbursement
+                          </Button>
+                      )}
+                      {onReject && (
+                          <Button size="sm" onClick={onReject} variant="outline" className="border-rose-300 text-rose-700 hover:bg-rose-50 w-full lg:w-auto">
+                              <X className="h-4 w-4 mr-2" /> Reject Claim
+                          </Button>
+                      )}
+                  </>
               );
           }
           if (matchType === 'DEADHEAD_MATCH' && onChargeDriver) {
@@ -152,11 +145,29 @@ export function SuggestedMatchCard({
           );
       }
 
-      // Logic for Tag Imports (Fleet Expenses)
-      // For tags, we generally "Link" them. Personal tags mean deducting from driver.
+      // Tag imports — personal tolls: fleet pays or charge driver
+      if (orphanMode || matchType === 'PERSONAL_MATCH') {
+          return (
+              <>
+                  {onAcceptPersonal && (
+                      <Button size="sm" onClick={onAcceptPersonal} className="bg-emerald-600 hover:bg-emerald-700 w-full lg:w-auto">
+                          <Check className="h-4 w-4 mr-2" /> Fleet Pays
+                      </Button>
+                  )}
+                  <Button
+                      size="sm"
+                      onClick={onConfirm}
+                      variant="outline"
+                      className="border-purple-300 text-purple-700 hover:bg-purple-50 w-full lg:w-auto"
+                  >
+                      <User className="h-4 w-4 mr-2" /> Charge Driver
+                  </Button>
+              </>
+          );
+      }
+
       let label = 'Link Trip';
-      if (orphanMode || matchType === 'PERSONAL_MATCH') label = 'Charge Driver';
-      else if (matchType === 'DEADHEAD_MATCH') label = 'Confirm Deadhead';
+      if (matchType === 'DEADHEAD_MATCH') label = 'Confirm Deadhead';
       else if (matchType === 'AMOUNT_VARIANCE') label = 'Confirm & Flag';
 
       return (
@@ -243,7 +254,7 @@ export function SuggestedMatchCard({
                 {orphanMode && timeDifferenceMinutes > 0 && (
                   <div className="flex items-center text-xs text-slate-500 space-x-1">
                     <Clock className="h-3 w-3" />
-                    <span>{Math.abs(timeDifferenceMinutes)} min from nearest trip</span>
+                    <span>{Math.abs(timeDifferenceMinutes).toFixed(2)} min from nearest trip</span>
                   </div>
                 )}
 
@@ -301,6 +312,11 @@ export function SuggestedMatchCard({
             {!orphanMode && (
             <div className="flex-1 min-w-0 basis-0 text-left" onClick={onClickDetail}>
                 <div className="flex items-center justify-start space-x-2 mb-2 flex-wrap">
+                    {needsTripPick && (
+                      <Badge variant="outline" className="text-[10px] border-orange-300 text-orange-700 bg-orange-50">
+                        Top match (#1)
+                      </Badge>
+                    )}
                     <Badge variant="outline" className="bg-white border-emerald-200 text-emerald-700">
                         {normalizePlatform(trip.platform)} Trip
                     </Badge>
@@ -322,22 +338,11 @@ export function SuggestedMatchCard({
             )}
 
             {/* Actions */}
-            <div className="flex flex-col gap-2 w-full xl:w-auto xl:shrink-0 border-t xl:border-t-0 xl:border-l border-slate-200 pt-4 xl:pt-0 xl:pl-4">
+            <div className="flex flex-col gap-2 w-full xl:w-auto xl:shrink-0 xl:min-w-[200px] border-t xl:border-t-0 xl:border-l border-slate-200 pt-4 xl:pt-0 xl:pl-4">
                 {renderActionButton()}
-                
-                <Button size="sm" variant="ghost" onClick={onDismiss} className="text-slate-500 w-full xl:w-auto">
-                    <X className="h-4 w-4 mr-2" /> Dismiss
-                </Button>
             </div>
 
         </div>
-
-        {needsTripPick && onSelectTrip && alternates.length > 0 && (
-          <MatchAlternatesPanel
-            matches={alternates}
-            onSelectTrip={onSelectTrip}
-          />
-        )}
       </CardContent>
     </Card>
   );

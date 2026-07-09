@@ -29,6 +29,68 @@ function attachTripDisplayFields(target: any, trip: any): void {
   target.tripDropoffTime = trip.dropoffTime || null;
 }
 
+type TollPoolRow = { id: string; date: string; time?: string; amount: number };
+
+function tollLedgerId(t: any): string | null {
+  const id = t?.id ?? t?.transactionId;
+  return id ? String(id) : null;
+}
+
+/** Shared pool: trip refund handed out in chronological order, each toll capped at its cost. */
+export function allocateTripRefundShare(
+  pool: number,
+  tollId: string,
+  siblings: TollPoolRow[],
+): number {
+  const sorted = [...siblings].sort((a, b) => {
+    const ta = new Date(`${a.date}T${a.time || "00:00:00"}`).getTime();
+    const tb = new Date(`${b.date}T${b.time || "00:00:00"}`).getTime();
+    return ta - tb;
+  });
+  let remaining = pool;
+  for (const s of sorted) {
+    const share = Math.max(0, Math.min(remaining, s.amount));
+    if (s.id === tollId) return share;
+    remaining -= share;
+  }
+  return 0;
+}
+
+function gatherTollsSharingTrip(
+  targetTripId: string,
+  focusToll: any,
+  tollTx: any[],
+  trips: any[],
+  fleetTz: string,
+): TollPoolRow[] {
+  const seen = new Set<string>();
+  const rows: TollPoolRow[] = [];
+  const add = (t: any) => {
+    const id = tollLedgerId(t);
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    rows.push({
+      id,
+      date: String(t.date || ""),
+      time: t.time,
+      amount: Math.abs(Number(t.amount) || 0),
+    });
+  };
+
+  for (const t of tollTx) {
+    if (String(t.tripId || "") === targetTripId) add(t);
+  }
+  for (const t of tollTx) {
+    if (t.tripId) continue;
+    if (t.type && String(t.type).toLowerCase() !== "usage") continue;
+    const matches = findTollMatchesServer(t, trips, fleetTz);
+    const best = pickBestValidTollMatch(matches);
+    if (best?.tripId === targetTripId) add(t);
+  }
+  add(focusToll);
+  return rows;
+}
+
 export type BareTollCandidate = {
   tollId: string;
   tollAmount: number;
@@ -86,11 +148,6 @@ export async function enrichAndFilterDisputeBareTolls(
     const tripIds = [...new Set(resolved.map((r) => r.tripId))];
     const tripValues = await kv.mget(tripIds.map((tid) => `trip:${tid}`));
     const tripDetailsById = mapTripsById(tripIds, tripValues);
-    const tripRefundById = new Map<string, number>();
-    for (const [tid, trip] of tripDetailsById) {
-      tripRefundById.set(tid, Math.abs(trip.tollCharges || 0));
-    }
-
     const byTrip = new Map<string, typeof resolved>();
     for (const r of resolved) {
       const list = byTrip.get(r.tripId) || [];
@@ -98,17 +155,16 @@ export async function enrichAndFilterDisputeBareTolls(
       byTrip.set(r.tripId, list);
     }
     for (const [tripId, group] of byTrip) {
-      group.sort((a, b) => {
-        const ta = new Date(`${a.toll.date ?? ""}T${a.time || "00:00:00"}`).getTime();
-        const tb = new Date(`${b.toll.date ?? ""}T${b.time || "00:00:00"}`).getTime();
-        return ta - tb;
-      });
       const tripDetail = tripDetailsById.get(tripId);
-      let remaining = tripRefundById.get(tripId) ?? 0;
+      const pool = Math.abs(tripDetail?.tollCharges || 0);
+      const siblings: TollPoolRow[] = group.map((r) => ({
+        id: r.toll.tollId,
+        date: String(r.toll.date ?? ""),
+        time: r.time,
+        amount: r.cost,
+      }));
       for (const r of group) {
-        const allocated = Math.max(0, Math.min(remaining, r.cost));
-        remaining -= allocated;
-        r.toll.tripRefund = allocated;
+        r.toll.tripRefund = allocateTripRefundShare(pool, r.toll.tollId, siblings);
         if (tripDetail) attachTripDisplayFields(r.toll, tripDetail);
       }
     }
@@ -128,53 +184,55 @@ export async function enrichAndFilterDisputeBareTolls(
 export async function computeLiveTripRefundForToll(
   rawToll: any,
   fleetTz: string,
+  opts?: { suggestedTripId?: string | null },
 ): Promise<number | null> {
-  const ctx = await resolveLiveTripContextForToll(rawToll, fleetTz);
+  const ctx = await resolveLiveTripContextForToll(rawToll, fleetTz, opts);
   return ctx?.tripRefund ?? null;
 }
 
-/** Best-effort trip link + fare refund for a toll (persisted link or live match). */
+/** Best-effort trip link + pooled fare refund for a toll (persisted, suggested, or live match). */
 export async function resolveLiveTripContextForToll(
   rawToll: any,
   fleetTz: string,
+  opts?: { suggestedTripId?: string | null },
 ): Promise<{
   tripId: string;
   trip: any;
   tripRefund: number;
-  tripLinkSource: "persisted" | "inferred";
+  tripLinkSource: "persisted" | "inferred" | "suggested";
 } | null> {
   if (!rawToll) return null;
 
+  const tollId = tollLedgerId(rawToll);
+  const tollCost = Math.abs(Number(rawToll.amount) || 0);
   const persistedTripId = rawToll.tripId ? String(rawToll.tripId) : null;
-  if (persistedTripId) {
-    const trip = await kv.get(`trip:${persistedTripId}`);
-    if (trip) {
-      const tollCost = Math.abs(Number(rawToll.amount) || 0);
-      const pool = Math.abs(Number(trip.tollCharges) || 0);
-      return {
-        tripId: persistedTripId,
-        trip,
-        tripRefund: Math.max(0, Math.min(pool, tollCost)),
-        tripLinkSource: "persisted",
-      };
-    }
+  const suggestedTripId = opts?.suggestedTripId ? String(opts.suggestedTripId) : null;
+
+  let tripId: string | null = persistedTripId ?? suggestedTripId ?? null;
+  let tripLinkSource: "persisted" | "inferred" | "suggested" = persistedTripId
+    ? "persisted"
+    : suggestedTripId
+      ? "suggested"
+      : "inferred";
+
+  const { tollTx, trips } = await loadAllTollLedgerWithTrips();
+
+  if (!tripId) {
+    const matches = findTollMatchesServer(rawToll, trips, fleetTz);
+    const validMatch = pickBestValidTollMatch(matches);
+    if (!validMatch?.tripId) return null;
+    tripId = validMatch.tripId;
+    tripLinkSource = "inferred";
   }
 
-  const { trips } = await loadAllTollLedgerWithTrips();
-  const matches = findTollMatchesServer(rawToll, trips, fleetTz);
-  const validMatch = pickBestValidTollMatch(matches);
-  if (!validMatch) return null;
-
-  const tripValues = await kv.mget([`trip:${validMatch.tripId}`]);
-  const trip = tripValues[0];
+  const trip = (await kv.mget([`trip:${tripId}`]))[0];
   if (!trip) return null;
 
-  const tollCost = Math.abs(Number(rawToll.amount) || 0);
   const pool = Math.abs(Number(trip.tollCharges) || 0);
-  return {
-    tripId: validMatch.tripId,
-    trip,
-    tripRefund: Math.max(0, Math.min(pool, tollCost)),
-    tripLinkSource: "inferred",
-  };
+  const siblings = gatherTollsSharingTrip(tripId, rawToll, tollTx, trips, fleetTz);
+  const tripRefund = tollId
+    ? allocateTripRefundShare(pool, tollId, siblings)
+    : Math.max(0, Math.min(pool, tollCost));
+
+  return { tripId, trip, tripRefund, tripLinkSource };
 }

@@ -12,6 +12,12 @@ interface MatchAlternatesPanelProps {
   onSelectTrip: (trip: Trip) => void;
   /** How many alternates to show before "Show more" (default 3, max 5 total). */
   initialVisible?: number;
+  /** Show every match (used in picker overlay). */
+  showAll?: boolean;
+  /** Render inside dialog — no inline card chrome. */
+  inDialog?: boolean;
+  /** Anchor for scroll-into-view from the parent card. */
+  id?: string;
 }
 
 function routeSnippet(trip: Trip): string {
@@ -31,21 +37,38 @@ export function MatchAlternatesPanel({
   matches,
   onSelectTrip,
   initialVisible = 3,
+  showAll = false,
+  inDialog = false,
+  id,
 }: MatchAlternatesPanelProps) {
   const fleetTz = useFleetTimezone();
   const [expanded, setExpanded] = useState(false);
 
-  if (matches.length <= 1) return null;
+  if (matches.length === 0) return null;
+  if (!showAll && matches.length <= 1) return null;
 
-  const visibleCount = expanded ? Math.min(5, matches.length) : Math.min(initialVisible, matches.length);
+  const visibleCount = showAll
+    ? matches.length
+    : expanded
+      ? Math.min(5, matches.length)
+      : Math.min(initialVisible, matches.length);
   const visible = matches.slice(0, visibleCount);
-  const canExpand = matches.length > initialVisible && !expanded;
+  const canExpand = !showAll && matches.length > initialVisible && !expanded;
 
   return (
-    <div className="mt-3 pt-3 border-t border-orange-200/80 space-y-2">
-      <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">
-        Competing trips — pick one
-      </p>
+    <div
+      id={id}
+      className={
+        inDialog
+          ? 'space-y-3'
+          : 'mt-3 pt-3 border-t border-orange-200/80 space-y-2 scroll-mt-4'
+      }
+    >
+      {!inDialog && (
+        <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">
+          Competing trips — pick one
+        </p>
+      )}
       <div className="space-y-2">
         {visible.map((match, idx) => {
           const { trip, confidenceScore, timeDifferenceMinutes, varianceAmount } = match;

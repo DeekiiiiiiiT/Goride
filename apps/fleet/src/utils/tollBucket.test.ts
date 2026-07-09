@@ -163,6 +163,17 @@ describe('resolveWizardBucket', () => {
       undefined,
     )).toBe('needs-review');
   });
+
+  it('orphan personal suggestion wins over stale ambiguous flags', () => {
+    expect(resolveWizardBucket(
+      { ...tagTx, matchStatus: 'ambiguous', isAmbiguous: true },
+      {
+        matchType: 'PERSONAL_MATCH',
+        reasonCode: 'ORPHAN_NEARBY_UNEXPLAINED',
+        trip: { id: '' } as any,
+      },
+    )).toBe('personal-use');
+  });
 });
 
 /**

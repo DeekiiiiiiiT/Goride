@@ -509,7 +509,9 @@ app.patch(`${BASE}/:id/match`, async (c) => {
     const tollForGuard = await loadTollForClaim(tollTransactionId);
     if (tollForGuard) {
       const fleetTz = await getFleetTimezone();
-      const liveRefund = await computeLiveTripRefundForToll(tollForGuard, fleetTz);
+      const liveRefund = await computeLiveTripRefundForToll(tollForGuard, fleetTz, {
+        suggestedTripId: suggestedTripId ?? null,
+      });
       const tollAmount = Math.abs(tollForGuard.amount || 0);
       if (liveRefund != null && isFullyReimbursedViaTrip(tollAmount, liveRefund)) {
         return c.json({
