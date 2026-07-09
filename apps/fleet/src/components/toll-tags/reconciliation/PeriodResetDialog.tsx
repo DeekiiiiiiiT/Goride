@@ -15,6 +15,7 @@ import { Label } from '../../ui/label';
 import { api } from '../../../services/api';
 import { toast } from 'sonner@2.0.3';
 import type { ReconciliationPeriod } from '../../../hooks/useTollReconciliationPeriods';
+import { periodConfirmLabelsMatch } from '../../../utils/tollWeekPeriod';
 
 interface PeriodResetInventory {
   unlinkedApplyTripIds: string[];
@@ -105,8 +106,8 @@ export function PeriodResetDialog({
   };
 
   const handleExecute = async () => {
-    if (confirmText.trim() !== period.label.trim()) {
-      toast.error('Period label does not match');
+    if (!periodConfirmLabelsMatch(confirmText, period.label)) {
+      toast.error('Period label does not match — copy it from the line above (use – not - if typing manually)');
       return;
     }
     setExecuting(true);
@@ -256,7 +257,7 @@ export function PeriodResetDialog({
               executing ||
               !preview ||
               totalItems === 0 ||
-              confirmText.trim() !== period.label.trim()
+              !periodConfirmLabelsMatch(confirmText, period.label)
             }
             onClick={handleExecute}
           >

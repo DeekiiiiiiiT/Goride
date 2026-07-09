@@ -54,6 +54,17 @@ export function formatWeekPeriodLabel(start: Date, end: Date): string {
   return `${format(start, 'MMM d')} – ${format(end, 'MMM d, yyyy')}`;
 }
 
+/** Loose match for typed confirmation (hyphen vs en-dash, extra spaces). */
+export function periodConfirmLabelsMatch(typed: string, expected: string): boolean {
+  const norm = (s: string) =>
+    s
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .replace(/[-–—]/g, '-');
+  return norm(typed) === norm(expected);
+}
+
 export interface TollWeekGroup {
   key: string;
   weekStart: Date;

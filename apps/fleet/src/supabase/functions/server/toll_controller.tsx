@@ -5897,14 +5897,17 @@ async function repairAllUnlinkedApplySplits(
 async function undoApplyUnlinkedRefundToClaim(
   tripId: string,
   c: unknown,
+  opts?: { skipUndoGate?: boolean },
 ): Promise<{ ok: true; data: any } | { ok: false; status: number; error: string }> {
-  const settings = await getRefundAutomationSettings();
-  if (!settings.unlinkedRefundUndoEnabled) {
-    return {
-      ok: false,
-      status: 403,
-      error: "Undo Apply to Underpaid is disabled. Enable unlinkedRefundUndoEnabled in Toll Automation Settings.",
-    };
+  if (!opts?.skipUndoGate) {
+    const settings = await getRefundAutomationSettings();
+    if (!settings.unlinkedRefundUndoEnabled) {
+      return {
+        ok: false,
+        status: 403,
+        error: "Undo Apply to Underpaid is disabled. Enable unlinkedRefundUndoEnabled in Toll Automation Settings.",
+      };
+    }
   }
 
   const trip = await kv.get(`trip:${tripId}`);

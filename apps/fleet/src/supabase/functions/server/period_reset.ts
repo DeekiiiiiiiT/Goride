@@ -60,6 +60,16 @@ export function formatPeriodConfirmationLabel(startDate: string, endDate: string
   return `${format(start, "MMM d")} – ${format(end, "MMM d, yyyy")}`;
 }
 
+function periodConfirmLabelsMatchServer(typed: string, expected: string): boolean {
+  const norm = (s: string) =>
+    s
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .replace(/[-–—]/g, "-");
+  return norm(typed) === norm(expected);
+}
+
 /** Toll-first claim anchor week key (mirrors client claimPeriodWeekKey). */
 export function claimPeriodWeekKeyServer(
   claim: any,
@@ -224,7 +234,7 @@ export async function executePeriodReconciliationReset(
 ): Promise<PeriodResetResult> {
   if (!opts.dryRun) {
     const expectedLabel = formatPeriodConfirmationLabel(opts.startDate, opts.endDate);
-    if (opts.confirmationLabel.trim() !== expectedLabel.trim()) {
+    if (!periodConfirmLabelsMatchServer(opts.confirmationLabel, expectedLabel)) {
       throw Object.assign(
         new Error(`Confirmation label must exactly match: ${expectedLabel}`),
         { status: 400 },
@@ -260,13 +270,28 @@ export async function executePeriodReconciliationReset(
   const settings = await getRefundAutomationSettings();
   const claimSyncMode = settings.driverTollChargeSyncEnabled ? "force" : "skip";
 
+  const unlinkedApplyStillResolved = new Set<string>();
   for (const tripId of inventory.unlinkedApplyTripIds) {
     try {
-      const result = await undoApplyUnlinkedRefundToClaim(tripId, c);
+      const result = await undoApplyUnlinkedRefundToClaim(tripId, c, { skipUndoGate: true });
       if (result.ok) summary.unlinkedAppliesUndone++;
-      else errors.push(`undo apply ${tripId}: ${result.error}`);
+      else {
+        errors.push(`undo apply ${tripId}: ${result.error}`);
+        unlinkedApplyStillResolved.add(tripId);
+      }
     } catch (e: any) {
       errors.push(`undo apply ${tripId}: ${e.message}`);
+      unlinkedApplyStillResolved.add(tripId);
+    }
+  }
+
+  // Safety net: if undo failed, force trip back to pending before claims are deleted.
+  for (const tripId of unlinkedApplyStillResolved) {
+    try {
+      await applyRefundResolution({ tripId, resolution: "pending", auto: false, source: "admin:period_reset" });
+      summary.refundResolutionsReverted++;
+    } catch (e: any) {
+      errors.push(`force revert unlinked apply ${tripId}: ${e.message}`);
     }
   }
 
