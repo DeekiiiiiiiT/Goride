@@ -170,12 +170,12 @@ export function SuggestedMatchCard({
   };
 
   return (
-    <Card className={`border-l-4 bg-slate-50/50 ${getBorderColor()} ${onClickDetail ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}>
+    <Card className={`border-l-4 bg-slate-50/50 w-full min-w-0 ${getBorderColor()} ${onClickDetail ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}>
       <CardContent className="p-4">
-        <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
+        <div className="flex flex-col xl:flex-row gap-4 items-stretch w-full min-w-0">
             
             {/* Left: Transaction (The Problem) */}
-            <div className="flex-1 min-w-0" onClick={onClickDetail}>
+            <div className="flex-1 min-w-0 basis-0" onClick={onClickDetail}>
                 <div className="flex items-center space-x-2 mb-2">
                     {transaction.receiptUrl ? (
                          <a href={transaction.receiptUrl} target="_blank" rel="noopener noreferrer" className="cursor-pointer hover:opacity-80 transition-opacity">
@@ -216,7 +216,7 @@ export function SuggestedMatchCard({
             </div>
 
             {/* Middle: Connection Info */}
-            <div className="flex flex-col items-center justify-center px-4 py-2 bg-white rounded-lg border border-slate-100 shadow-sm min-w-[160px]" onClick={onClickDetail}>
+            <div className="flex flex-col items-center justify-center px-4 py-3 bg-white rounded-lg border border-slate-100 shadow-sm w-full xl:w-auto xl:shrink-0 xl:max-w-[220px]" onClick={onClickDetail}>
                 {getMatchBadge()}
 
                 {/* Confidence Score Pill */}
@@ -251,7 +251,7 @@ export function SuggestedMatchCard({
                 )}
 
                 {reason && (
-                    <div className="text-[10px] text-slate-400 mt-1 max-w-[140px] text-center leading-tight">
+                    <div className="text-[10px] text-slate-400 mt-1 w-full text-center leading-snug break-words">
                         {reason}
                     </div>
                 )}
@@ -275,18 +275,18 @@ export function SuggestedMatchCard({
 
                 {/* Ambiguity Warning */}
                 {isAmbiguous && (
-                  <div className="flex items-center gap-1 text-[10px] text-orange-600 bg-orange-50 border border-orange-200 px-2 py-1 rounded mt-1.5 max-w-[160px] text-center leading-tight">
+                  <div className="flex items-center gap-1 text-[10px] text-orange-600 bg-orange-50 border border-orange-200 px-2 py-1 rounded mt-1.5 w-full text-center leading-snug">
                     <AlertTriangle className="h-3 w-3 shrink-0" />
                     <span>Ambiguous — multiple trips compete</span>
                   </div>
                 )}
 
-                <ArrowRight className="h-4 w-4 text-slate-300 mt-2" />
+                <ArrowRight className="hidden xl:block h-4 w-4 text-slate-300 mt-2 rotate-90 xl:rotate-0" />
             </div>
 
             {/* Right: Trip (The Solution) */}
-            <div className="flex-1 min-w-0 text-right lg:text-left" onClick={onClickDetail}>
-                <div className="flex items-center justify-end lg:justify-start space-x-2 mb-2">
+            <div className="flex-1 min-w-0 basis-0 text-left" onClick={onClickDetail}>
+                <div className="flex items-center justify-start space-x-2 mb-2 flex-wrap">
                     <Badge variant="outline" className="bg-white border-emerald-200 text-emerald-700">
                         {normalizePlatform(trip.platform)} Trip
                     </Badge>
@@ -297,9 +297,9 @@ export function SuggestedMatchCard({
                 <div className="font-bold text-lg text-emerald-600">
                     Refund: ${trip.tollCharges?.toFixed(2) || '0.00'}
                 </div>
-                <div className="text-sm text-slate-600 flex items-center justify-end lg:justify-start">
-                    <MapPin className="h-3 w-3 mr-1 text-slate-400" />
-                    <span className="truncate max-w-[200px]">{trip.pickupLocation}</span>
+                <div className="text-sm text-slate-600 flex items-center justify-start">
+                    <MapPin className="h-3 w-3 mr-1 text-slate-400 shrink-0" />
+                    <span className="truncate">{trip.pickupLocation}</span>
                 </div>
                  <div className="text-xs text-slate-400 mt-1">
                     Driver: {trip.driverName || "Unknown"}
@@ -307,10 +307,10 @@ export function SuggestedMatchCard({
             </div>
 
             {/* Actions */}
-            <div className="flex lg:flex-col gap-2 border-t lg:border-t-0 lg:border-l border-slate-200 pt-4 lg:pt-0 lg:pl-4 mt-4 lg:mt-0 w-full lg:w-auto justify-end">
+            <div className="flex flex-col gap-2 w-full xl:w-auto xl:shrink-0 border-t xl:border-t-0 xl:border-l border-slate-200 pt-4 xl:pt-0 xl:pl-4">
                 {renderActionButton()}
                 
-                <Button size="sm" variant="ghost" onClick={onDismiss} className="text-slate-500 w-full lg:w-auto">
+                <Button size="sm" variant="ghost" onClick={onDismiss} className="text-slate-500 w-full xl:w-auto">
                     <X className="h-4 w-4 mr-2" /> Dismiss
                 </Button>
             </div>

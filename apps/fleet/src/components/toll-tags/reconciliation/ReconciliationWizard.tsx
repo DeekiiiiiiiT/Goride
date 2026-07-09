@@ -27,7 +27,6 @@ import {
   TollWorkflowStage,
 } from "../../../utils/tollBucket";
 import { StepId, StepCounts, STEP_ORDER, computeStepCounts } from "../../../utils/tollPeriodGating";
-import { hasBlockingUnlinkedRefund } from "../../../utils/unlinkedShortfallEligibility";
 import { buildPeriodTollIdSet, isClaimVisibleInPeriod, isTollInWizardPeriod, tollWeekKey } from "../../../utils/tollWeekPeriod";
 import { mergeReconciledTollsForUnderpaid } from "../../../utils/claimByToll";
 import type { UnlinkedShortfallSuggestion } from "../../../hooks/useTollReconciliation";
@@ -562,14 +561,6 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
    * toll to its trip, then a resolved "Charge Driver" claim.
    */
   const handleChargeDriverForDeadhead = async (tx: FinancialTransaction, match: MatchResult) => {
-      const driverIdForCharge = match.trip.driverId || tx.driverId;
-      if (hasBlockingUnlinkedRefund({ claimDriverId: driverIdForCharge, unlinkedTrips: unclaimedRefunds })) {
-          toast.error('Pick Apply to underpaid on Unlinked Refunds first', {
-            description: 'This driver still has an open unlinked trip refund that may cover this toll.',
-          });
-          setActiveStepId('unlinked-refunds');
-          return;
-      }
       try {
           await reconcile(tx, match.trip);
           const tollCost = Math.abs(tx.amount);
@@ -731,6 +722,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               suggestions={suggestions}
               allTrips={trips}
               drivers={drivers}
+              unifiedPeriodView
               onReconcile={handleSmartReconcile}
               onApprove={handleApprove}
               onReject={handleReject}
@@ -748,6 +740,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               suggestions={suggestions}
               allTrips={trips}
               drivers={drivers}
+              unifiedPeriodView
               onReconcile={handleSmartReconcile}
               onApprove={handleApprove}
               onReject={handleReject}
@@ -765,6 +758,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               suggestions={suggestions}
               allTrips={trips}
               drivers={drivers}
+              unifiedPeriodView
               onReconcile={handleSmartReconcile}
               onApprove={handleApprove}
               onReject={handleReject}

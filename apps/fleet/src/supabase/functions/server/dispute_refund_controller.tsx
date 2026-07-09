@@ -14,6 +14,7 @@
  *   PATCH  /dispute-refunds/:id/match        – Link refund to toll + auto-resolve claim
  *   PATCH  /dispute-refunds/:id/unmatch      – Unlink a matched refund
  *   GET    /dispute-refunds/suggestions/:id  – Smart match suggestions
+ *   GET    /dispute-refunds/match-detail/:id – Linked toll + trip for a matched refund
  */
 
 import { Hono } from "npm:hono";
@@ -819,6 +820,85 @@ app.get(`${BASE}/match-candidates`, async (c) => {
   } catch (err: any) {
     console.log(`[DisputeRefund] Match-candidates error: ${err.message}`);
     return c.json({ error: `Failed to load match candidates: ${err.message}` }, 500);
+  }
+});
+
+// ─── GET /dispute-refunds/match-detail/:id ─────────────────────────────
+/** Read-only view of which toll/trip a matched refund was linked to. */
+app.get(`${BASE}/match-detail/:id`, async (c) => {
+  try {
+    const id = c.req.param("id");
+    const refund: any = await kv.get(`dispute-refund:${id}`);
+    if (!refund || typeof refund !== "object") {
+      return c.json({ error: `Dispute refund not found: ${id}` }, 404);
+    }
+    if (refund.status === "unmatched" || !refund.matchedTollId) {
+      return c.json({ error: "Refund is not linked to a toll yet" }, 404);
+    }
+
+    const toll = await loadTollForClaim(refund.matchedTollId);
+    const claim: any = refund.matchedClaimId
+      ? await kv.get(`claim:${refund.matchedClaimId}`)
+      : null;
+
+    const tripId = claim?.tripId || toll?.tripId || null;
+    const trip: any = tripId ? await kv.get(`trip:${tripId}`) : null;
+
+    const tollAmount = Math.abs(toll?.amount ?? 0);
+    const claimAmount = claim ? Math.abs(claim.amount ?? 0) : null;
+    const fleetTz = await getFleetTimezone();
+    const liveTripRefund = toll ? await computeLiveTripRefundForToll(toll, fleetTz) : null;
+    const tripRefundFromClaim =
+      claimAmount != null && tollAmount > 0 ? Math.max(0, tollAmount - claimAmount) : null;
+
+    return c.json({
+      refund: {
+        id: refund.id,
+        amount: refund.amount,
+        date: refund.date,
+        status: refund.status,
+        platform: refund.platform,
+        supportCaseId: refund.supportCaseId,
+        resolvedAt: refund.resolvedAt,
+        resolvedBy: refund.resolvedBy,
+      },
+      toll: toll
+        ? {
+            id: toll.id,
+            amount: tollAmount,
+            date: toll.date,
+            time: toll.time || null,
+            location: toll.location || toll.description || toll.vendor || null,
+            driverName: toll.driverName || refund.driverName || null,
+            tripId: toll.tripId || null,
+          }
+        : null,
+      claim: claim
+        ? {
+            id: claim.id,
+            amount: claimAmount,
+            expectedAmount: Math.abs(claim.expectedAmount ?? tollAmount),
+            status: claim.status,
+            resolutionReason: claim.resolutionReason || null,
+            tripId: claim.tripId || null,
+          }
+        : null,
+      trip: trip
+        ? {
+            id: trip.id,
+            pickup: trip.pickupLocation || null,
+            dropoff: trip.dropoffLocation || null,
+            platform: trip.platform || null,
+            requestTime: trip.requestTime || trip.date || null,
+            dropoffTime: trip.dropoffTime || null,
+            tollCharges: Number(trip.tollCharges) || 0,
+            tripRefund: tripRefundFromClaim ?? liveTripRefund ?? null,
+          }
+        : null,
+    });
+  } catch (err: any) {
+    console.log(`[DisputeRefund] Match-detail error: ${err.message}`);
+    return c.json({ error: `Failed to load match detail: ${err.message}` }, 500);
   }
 });
 

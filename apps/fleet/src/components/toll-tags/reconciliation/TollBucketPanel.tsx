@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   AlertTriangle,
   Briefcase,
@@ -18,6 +18,14 @@ import {
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../../ui/card";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../../ui/dropdown-menu";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "../../ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/select";
 import { FinancialTransaction, Trip } from "../../../types/data";
@@ -75,12 +83,14 @@ export interface TollBucketPanelProps {
   approveLabel?: string;
   /** Deadhead-only: bill this toll to the driver instead of the fleet absorbing it. */
   onChargeDriver?: (tx: FinancialTransaction, match: MatchResult) => void;
+  /** Period wizard: one card + one list (no duplicate week headers / stacked smart zone). */
+  unifiedPeriodView?: boolean;
 }
 
 export function TollBucketPanel({
   tolls, suggestions, onReconcile, allTrips, onApprove, onReject, onFlag, onManualResolve, onEdit, drivers = [],
   emptyState, listTitle = 'Tolls', listDescription = "Toll provider charges that haven't been linked to a specific trip.",
-  approveLabel = 'Approve', onChargeDriver,
+  approveLabel = 'Approve', onChargeDriver, unifiedPeriodView = false,
 }: TollBucketPanelProps) {
     const [hiddenSuggestions, setHiddenSuggestions] = useState<Set<string>>(new Set());
     const [selectedTxForManual, setSelectedTxForManual] = useState<FinancialTransaction | null>(null);
@@ -96,21 +106,6 @@ export function TollBucketPanel({
 
     const [editTx, setEditTx] = useState<FinancialTransaction | null>(null);
     const [isEditOpen, setIsEditOpen] = useState(false);
-
-    const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
-    const dropdownRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        const handleClickOutside = (e: MouseEvent) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-                setOpenDropdownId(null);
-            }
-        };
-        if (openDropdownId) {
-            document.addEventListener('mousedown', handleClickOutside);
-        }
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [openDropdownId]);
 
     // Reset visible counts when the underlying bucket changes (parent swaps `tolls`).
     useEffect(() => {
@@ -212,39 +207,40 @@ export function TollBucketPanel({
         }
 
         if (!match || isOrphan) {
-             const isOpen = openDropdownId === tx.id;
              return (
-                <div className="relative flex items-center justify-end gap-2" ref={isOpen ? dropdownRef : undefined}>
-                    <Button size="sm" variant="outline" className="gap-2" onClick={() => setOpenDropdownId(isOpen ? null : tx.id)}>
-                        Resolve <MoreHorizontal className="h-3 w-3" />
-                    </Button>
-                    {isOpen && (
-                        <div className="absolute right-0 top-full mt-1 z-50 min-w-[200px] rounded-md border bg-white shadow-md py-1">
-                            <div className="px-2 py-1.5 text-xs font-semibold text-slate-500">Manual Resolution</div>
-                            <div className="h-px bg-slate-200 mx-1 my-1" />
-                            <button className="flex w-full items-center px-2 py-1.5 text-sm hover:bg-slate-100 rounded-sm" onClick={() => { setOpenDropdownId(null); setSelectedTxForManual(tx); }}>
+                <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button size="sm" variant="outline" className="gap-2">
+                                Resolve <MoreHorizontal className="h-3 w-3" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56 z-[200]">
+                            <DropdownMenuLabel>Manual Resolution</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => setSelectedTxForManual(tx)}>
                                 <Search className="mr-2 h-4 w-4" /> Find Match...
-                            </button>
-                            <div className="h-px bg-slate-200 mx-1 my-1" />
-                            <button className="flex w-full items-center px-2 py-1.5 text-sm hover:bg-slate-100 rounded-sm" onClick={() => { setOpenDropdownId(null); onManualResolve?.(tx, 'Personal'); }}>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => onManualResolve?.(tx, 'Personal')}>
                                 <UserMinus className="mr-2 h-4 w-4 text-orange-600" /> Personal (Driver Pays)
-                            </button>
-                            <button className="flex w-full items-center px-2 py-1.5 text-sm hover:bg-slate-100 rounded-sm" onClick={() => { setOpenDropdownId(null); onManualResolve?.(tx, 'WriteOff'); }}>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => onManualResolve?.(tx, 'WriteOff')}>
                                 <FileText className="mr-2 h-4 w-4 text-blue-600" /> Write Off (Fleet Pays)
-                            </button>
-                            <button className="flex w-full items-center px-2 py-1.5 text-sm hover:bg-slate-100 rounded-sm" onClick={() => { setOpenDropdownId(null); onManualResolve?.(tx, 'Business'); }}>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => onManualResolve?.(tx, 'Business')}>
                                 <Briefcase className="mr-2 h-4 w-4 text-slate-600" /> Business Expense
-                            </button>
+                            </DropdownMenuItem>
                             {onEdit && (
                                 <>
-                                    <div className="h-px bg-slate-200 mx-1 my-1" />
-                                    <button className="flex w-full items-center px-2 py-1.5 text-sm hover:bg-slate-100 rounded-sm" onClick={() => { setOpenDropdownId(null); openEdit(tx); }}>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={() => openEdit(tx)}>
                                         <Pencil className="mr-2 h-4 w-4 text-indigo-600" /> Edit Transaction
-                                    </button>
+                                    </DropdownMenuItem>
                                 </>
                             )}
-                        </div>
-                    )}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             );
         }
@@ -320,27 +316,9 @@ export function TollBucketPanel({
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                     <div className="grid grid-cols-1 gap-4 px-4 pb-4 pt-0 border-t border-indigo-100/80 dark:border-indigo-800/50">
-                        {week.items.map(tx => {
-                            const matches = suggestions.get(tx.id) ?? [];
-                            const match = matches[0];
-                            return (
-                                <SuggestedMatchCard
-                                    key={tx.id}
-                                    transaction={tx}
-                                    match={match}
-                                    allMatches={matches}
-                                    onConfirm={() => onReconcile(tx, match.trip)}
-                                    onDismiss={() => handleDismiss(tx.id)}
-                                    onApprove={onApprove ? () => onApprove(tx) : undefined}
-                                    onReject={onReject ? () => onReject(tx) : undefined}
-                                    onFlag={onFlag ? () => onFlag(tx) : undefined}
-                                    onChargeDriver={onChargeDriver ? () => onChargeDriver(tx, match) : undefined}
-                                    onClickDetail={() => openDetail(tx, match, matches)}
-                                    onSelectTrip={(trip) => onReconcile(tx, trip)}
-                                    onFindMatch={() => setSelectedTxForManual(tx)}
-                                />
-                            );
-                        })}
+                        {week.items.map((tx) => (
+                            <div key={tx.id}>{renderSuggestedMatchCard(tx)}</div>
+                        ))}
                     </div>
                 </CollapsibleContent>
             </Collapsible>
@@ -381,6 +359,191 @@ export function TollBucketPanel({
         return 'text-rose-600';
     };
 
+    const renderSuggestedMatchCard = (tx: FinancialTransaction) => {
+        const matches = suggestions.get(tx.id) ?? [];
+        const match = matches[0];
+        if (!match) return null;
+        return (
+            <SuggestedMatchCard
+                transaction={tx}
+                match={match}
+                allMatches={matches}
+                onConfirm={() => onReconcile(tx, match.trip)}
+                onDismiss={() => handleDismiss(tx.id)}
+                onApprove={onApprove ? () => onApprove(tx) : undefined}
+                onReject={onReject ? () => onReject(tx) : undefined}
+                onFlag={onFlag ? () => onFlag(tx) : undefined}
+                onChargeDriver={onChargeDriver ? () => onChargeDriver(tx, match) : undefined}
+                onClickDetail={() => openDetail(tx, match, matches)}
+                onSelectTrip={(trip) => onReconcile(tx, trip)}
+                onFindMatch={() => setSelectedTxForManual(tx)}
+            />
+        );
+    };
+
+    const renderTollDataRow = (tx: FinancialTransaction) => {
+        const txMatches = suggestions.get(tx.id) ?? [];
+        const bestMatch = txMatches[0];
+        const hasHiddenMatch = hiddenSuggestions.has(tx.id);
+        const vehicleId = tx.vehiclePlate || tx.vehicleId || '';
+        const inferredDriver = getInferredDriver(vehicleId, tx.date);
+        const profileDriver = drivers.length > 0 ? resolveTollDisplayDriverName(tx, drivers) : '';
+        const displayDriver = profileDriver || tx.driverName || bestMatch?.trip.driverName || inferredDriver;
+
+        return (
+            <TableRow key={tx.id} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors" onClick={() => openDetail(tx, bestMatch || undefined, txMatches)}>
+                <TableCell>
+                    <div className="flex flex-col">
+                        {(() => {
+                            try {
+                                const timeStr = tx.time || '12:00:00';
+                                const cleanTime = timeStr.length >= 5 ? timeStr : '12:00:00';
+                                const localDate = new Date(`${tx.date}T${cleanTime}`);
+                                const validDate = !isNaN(localDate.getTime()) ? localDate : new Date(tx.date);
+                                const isFutureDate = validDate > new Date();
+                                return (
+                                    <>
+                                        <span className={`font-medium ${isFutureDate ? 'text-red-600' : ''}`}>{formatInFleetTz(validDate, fleetTz, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                        <span className="text-xs text-slate-500">{formatInFleetTz(validDate, fleetTz, { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
+                                        {isFutureDate && (
+                                            <span className="text-[10px] font-medium text-red-500 bg-red-50 px-1 py-0.5 rounded mt-0.5 inline-block">Future Date</span>
+                                        )}
+                                    </>
+                                );
+                            } catch {
+                                return <span className="font-medium">{tx.date}</span>;
+                            }
+                        })()}
+                    </div>
+                </TableCell>
+                <TableCell>
+                    <div className="flex items-center space-x-2">
+                        <div className="flex items-center">
+                            <Tag className="w-3 h-3 mr-1 text-slate-400" />
+                            <span>{vehicleId || <span className="text-slate-400">Unknown</span>}</span>
+                        </div>
+                        {tx.receiptUrl && (
+                            <EvidenceExpiryBadge
+                              state={resolveEvidenceMediaState({
+                                imageUrl: tx.receiptUrl,
+                                evidenceExpired: tx.metadata?.evidenceExpired,
+                                evidenceDeleteAfter: tx.metadata?.evidenceDeleteAfter,
+                                parentStatus: tx.status,
+                              })}
+                              deleteAfter={tx.metadata?.evidenceDeleteAfter}
+                            />
+                        )}
+                        <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-slate-400 hover:text-indigo-600" onClick={(e) => { e.stopPropagation(); openEdit(tx); }}>
+                            <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                    </div>
+                </TableCell>
+                <TableCell>
+                    {displayDriver ? (
+                        <div className="flex items-center group relative">
+                            {!tx.driverName && <User className="w-3 h-3 mr-1.5 text-slate-400" />}
+                            <span className={`text-sm font-medium ${tx.driverName ? 'text-slate-700' : 'text-slate-600'}`}>{displayDriver}</span>
+                            {!tx.driverName && (
+                                <span className="ml-2 hidden group-hover:inline-block text-[10px] text-slate-400 bg-slate-100 px-1 rounded">(Inferred)</span>
+                            )}
+                        </div>
+                    ) : (
+                        <span className="text-slate-400 font-normal italic">Unassigned</span>
+                    )}
+                </TableCell>
+                <TableCell className="font-medium text-rose-600">-${Math.abs(tx.amount).toFixed(2)}</TableCell>
+                <TableCell>
+                    {bestMatch && !hasHiddenMatch ? (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                            {getMatchBadge(bestMatch)}
+                            {bestMatch.confidenceScore != null && (
+                                <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold ${getScoreColor(bestMatch.confidenceScore)}`} title={`Confidence score: ${bestMatch.confidenceScore}/100`}>
+                                    <Gauge className="h-3 w-3" />
+                                    {bestMatch.confidenceScore}
+                                </span>
+                            )}
+                            {bestMatch.isAmbiguous && (
+                                <Badge variant="outline" className="text-[10px] border-orange-300 text-orange-700 bg-orange-50">Ambiguous — pick trip</Badge>
+                            )}
+                            {bestMatch.isAmbiguous && (
+                                <span title="Ambiguous — multiple trips compete with similar scores">
+                                    <AlertTriangle className="h-3.5 w-3.5 text-orange-500" />
+                                </span>
+                            )}
+                        </div>
+                    ) : (
+                        <Badge variant="outline" className="text-slate-600 border-slate-300 bg-slate-50">Unclassified</Badge>
+                    )}
+                </TableCell>
+                <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                    {hasHiddenMatch ? (
+                        <Button size="sm" variant="ghost" disabled>Dismissed</Button>
+                    ) : (
+                        renderActionButtons(tx, bestMatch)
+                    )}
+                </TableCell>
+            </TableRow>
+        );
+    };
+
+    const overlayModals = (
+        <>
+            <ManualMatchModal
+                isOpen={!!selectedTxForManual}
+                onClose={() => setSelectedTxForManual(null)}
+                transaction={selectedTxForManual}
+                allTrips={allTrips}
+                onConfirmMatch={(trip) => {
+                    if (selectedTxForManual) {
+                        onReconcile(selectedTxForManual, trip);
+                        setSelectedTxForManual(null);
+                    }
+                }}
+            />
+            <TollDetailOverlay
+                isOpen={isDetailOpen}
+                onClose={closeDetail}
+                transaction={detailTx}
+                match={detailMatch}
+                allMatches={detailMatches}
+                onConfirm={detailTx && detailMatch && !needsTripPick(detailTx, detailMatch) ? () => {
+                    onReconcile(detailTx, detailMatch.trip);
+                    closeDetail();
+                } : undefined}
+                onDismiss={() => {
+                    if (detailTx) handleDismiss(detailTx.id);
+                    closeDetail();
+                }}
+                onApprove={detailTx && onApprove ? () => {
+                    onApprove(detailTx);
+                    closeDetail();
+                } : undefined}
+                onReject={detailTx && onReject ? () => {
+                    onReject(detailTx);
+                    closeDetail();
+                } : undefined}
+                onFlag={detailTx && onFlag && detailMatch && !needsTripPick(detailTx, detailMatch) ? () => {
+                    onFlag(detailTx);
+                    closeDetail();
+                } : undefined}
+                onChargeDriver={detailTx && detailMatch && onChargeDriver ? () => {
+                    onChargeDriver(detailTx, detailMatch);
+                    closeDetail();
+                } : undefined}
+                onSelectTrip={detailTx ? (trip) => {
+                    onReconcile(detailTx, trip);
+                    closeDetail();
+                } : undefined}
+            />
+            <EditTollModal
+                isOpen={isEditOpen}
+                onClose={closeEdit}
+                transaction={editTx}
+                onSave={onEdit || (async () => {})}
+            />
+        </>
+    );
+
     if (tolls.length === 0) {
         const EmptyIcon = emptyState.icon;
         return (
@@ -389,6 +552,95 @@ export function TollBucketPanel({
                 <h3 className="text-base font-medium text-slate-700">{emptyState.title}</h3>
                 <p className="text-sm">{emptyState.description}</p>
             </div>
+        );
+    }
+
+    if (unifiedPeriodView) {
+        const visibleSmartTolls = [...ambiguousSmartMatches, ...normalSmartMatches];
+
+        return (
+            <>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between pb-4">
+                        <div className="space-y-1">
+                            <CardTitle>{listTitle}</CardTitle>
+                            <CardDescription>{listDescription}</CardDescription>
+                        </div>
+                        <div className="w-[180px]">
+                            <Select value={sourceFilter} onValueChange={(v: 'all' | 'tag' | 'cash') => setSourceFilter(v)}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Filter Source" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Sources</SelectItem>
+                                    <SelectItem value="tag">Tag Imports Only</SelectItem>
+                                    <SelectItem value="cash">Cash Claims Only</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        {ambiguousSmartMatches.length > 0 && (
+                            <div className="flex items-start gap-2 rounded-lg border border-orange-200 bg-orange-50/80 px-3 py-2.5 text-orange-800">
+                                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                                <div className="text-sm">
+                                    <span className="font-semibold">Pick the trip ({ambiguousSmartMatches.length})</span>
+                                    <span className="text-orange-700/90"> — multiple trips compete. Choose one before linking.</span>
+                                </div>
+                            </div>
+                        )}
+                        {normalSmartMatches.length > 0 && (
+                            <div className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50/60 px-3 py-2 text-indigo-800 text-sm">
+                                <Sparkles className="h-4 w-4 shrink-0" />
+                                <span className="font-semibold">Smart Suggestions ({normalSmartMatches.length})</span>
+                            </div>
+                        )}
+                        {visibleSmartTolls.length > 0 && (
+                            <div className="space-y-3 w-full min-w-0">
+                                {visibleSmartTolls.map((tx) => (
+                                    <div key={tx.id} className="w-full min-w-0">
+                                        {renderSuggestedMatchCard(tx)}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {otherTolls.length > 0 && (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Date</TableHead>
+                                        <TableHead>Vehicle</TableHead>
+                                        <TableHead>Driver</TableHead>
+                                        <TableHead>Amount</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead className="text-right">Action</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {otherTolls.map((tx) => renderTollDataRow(tx))}
+                                </TableBody>
+                            </Table>
+                        )}
+                        {filteredTolls.length === 0 && (
+                            <p className="text-center text-slate-500 py-8 text-sm">No tolls match the current filter.</p>
+                        )}
+                        {visibleSmartMatches < smartMatches.length && (
+                            <div className="flex items-center justify-center pt-2 border-t">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setVisibleSmartMatches((prev) => prev + 10)}
+                                    className="text-slate-600 hover:text-slate-900"
+                                >
+                                    <ChevronDown className="h-4 w-4 mr-1" />
+                                    Show more suggestions ({visibleSmartMatches} of {smartMatches.length})
+                                </Button>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+                {overlayModals}
+            </>
         );
     }
 
@@ -493,123 +745,7 @@ export function TollBucketPanel({
                                                 <CollapsibleContent>
                                                     <table className="w-full text-sm caption-bottom">
                                                         <tbody className="[&_tr:last-child]:border-0">
-                                                            {week.items.map(tx => {
-                                                                const txMatches = suggestions.get(tx.id) ?? [];
-                                                                const bestMatch = txMatches[0];
-                                                                const hasHiddenMatch = hiddenSuggestions.has(tx.id);
-                                                                const vehicleId = tx.vehiclePlate || tx.vehicleId || '';
-                                                                const inferredDriver = getInferredDriver(vehicleId, tx.date);
-                                                                const profileDriver = drivers.length > 0
-                                                                  ? resolveTollDisplayDriverName(tx, drivers)
-                                                                  : '';
-                                                                const displayDriver = profileDriver || tx.driverName || bestMatch?.trip.driverName || inferredDriver;
-
-                                                                return (
-                                                                    <TableRow key={tx.id} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors" onClick={() => openDetail(tx, bestMatch || undefined, txMatches)}>
-                                                                        <TableCell>
-                                                                            <div className="flex flex-col">
-                                                                                {(() => {
-                                                                                    try {
-                                                                                        const timeStr = tx.time || '12:00:00';
-                                                                                        const cleanTime = timeStr.length >= 5 ? timeStr : '12:00:00';
-                                                                                        const localDate = new Date(`${tx.date}T${cleanTime}`);
-                                                                                        const validDate = !isNaN(localDate.getTime()) ? localDate : new Date(tx.date);
-
-                                                                                        const isFutureDate = validDate > new Date();
-                                                                                        return (
-                                                                                            <>
-                                                                                                <span className={`font-medium ${isFutureDate ? 'text-red-600' : ''}`}>{formatInFleetTz(validDate, fleetTz, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                                                                                                <span className="text-xs text-slate-500">{formatInFleetTz(validDate, fleetTz, { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
-                                                                                                {isFutureDate && (
-                                                                                                    <span className="text-[10px] font-medium text-red-500 bg-red-50 px-1 py-0.5 rounded mt-0.5 inline-block">Future Date</span>
-                                                                                                )}
-                                                                                            </>
-                                                                                        );
-                                                                                    } catch (e) {
-                                                                                        return <span className="font-medium">{tx.date}</span>;
-                                                                                    }
-                                                                                })()}
-                                                                            </div>
-                                                                        </TableCell>
-                                                                        <TableCell>
-                                                                            <div className="flex items-center space-x-2">
-                                                                                <div className="flex items-center">
-                                                                                    <Tag className="w-3 h-3 mr-1 text-slate-400" />
-                                                                                    <span>{vehicleId || <span className="text-slate-400">Unknown</span>}</span>
-                                                                                </div>
-                                                                                {tx.receiptUrl && (
-                                                                                    <EvidenceExpiryBadge
-                                                                                      state={resolveEvidenceMediaState({
-                                                                                        imageUrl: tx.receiptUrl,
-                                                                                        evidenceExpired: tx.metadata?.evidenceExpired,
-                                                                                        evidenceDeleteAfter: tx.metadata?.evidenceDeleteAfter,
-                                                                                        parentStatus: tx.status,
-                                                                                      })}
-                                                                                      deleteAfter={tx.metadata?.evidenceDeleteAfter}
-                                                                                    />
-                                                                                )}
-                                                                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-slate-400 hover:text-indigo-600" onClick={(e) => { e.stopPropagation(); openEdit(tx); }}>
-                                                                                    <Pencil className="h-3.5 w-3.5" />
-                                                                                </Button>
-                                                                            </div>
-                                                                        </TableCell>
-                                                                        <TableCell>
-                                                                            {displayDriver ? (
-                                                                                <div className="flex items-center group relative">
-                                                                                    {!tx.driverName && (
-                                                                                        <User className="w-3 h-3 mr-1.5 text-slate-400" />
-                                                                                    )}
-                                                                                    <span className={`text-sm font-medium ${tx.driverName ? 'text-slate-700' : 'text-slate-600'}`}>
-                                                                                        {displayDriver}
-                                                                                    </span>
-                                                                                    {!tx.driverName && (
-                                                                                        <span className="ml-2 hidden group-hover:inline-block text-[10px] text-slate-400 bg-slate-100 px-1 rounded">
-                                                                                            (Inferred)
-                                                                                        </span>
-                                                                                    )}
-                                                                                </div>
-                                                                            ) : (
-                                                                                <span className="text-slate-400 font-normal italic">Unassigned</span>
-                                                                            )}
-                                                                        </TableCell>
-                                                                        <TableCell className="font-medium text-rose-600">
-                                                                            -${Math.abs(tx.amount).toFixed(2)}
-                                                                        </TableCell>
-                                                                        <TableCell>
-                                                                            {bestMatch && !hasHiddenMatch ? (
-                                                                                <div className="flex items-center gap-1.5 flex-wrap">
-                                                                                    {getMatchBadge(bestMatch)}
-                                                                                    {bestMatch.confidenceScore != null && (
-                                                                                        <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold ${getScoreColor(bestMatch.confidenceScore)}`} title={`Confidence score: ${bestMatch.confidenceScore}/100`}>
-                                                                                            <Gauge className="h-3 w-3" />
-                                                                                            {bestMatch.confidenceScore}
-                                                                                        </span>
-                                                                                    )}
-                                                                                    {bestMatch.isAmbiguous && (
-                                                                                        <Badge variant="outline" className="text-[10px] border-orange-300 text-orange-700 bg-orange-50">
-                                                                                            Ambiguous — pick trip
-                                                                                        </Badge>
-                                                                                    )}
-                                                                                    {bestMatch.isAmbiguous && (
-                                                                                        <span title="Ambiguous — multiple trips compete with similar scores">
-                                                                                            <AlertTriangle className="h-3.5 w-3.5 text-orange-500" />
-                                                                                        </span>
-                                                                                    )}
-                                                                                </div>
-                                                                            ) : (
-                                                                                <Badge variant="outline" className="text-slate-600 border-slate-300 bg-slate-50">Unclassified</Badge>
-                                                                            )}
-                                                                        </TableCell>
-                                                                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                                                                            {hasHiddenMatch ? (
-                                                                                <Button size="sm" variant="ghost" disabled>Dismissed</Button>
-                                                                            ) : (
-                                                                                renderActionButtons(tx, bestMatch)
-                                                                            )}
-                                                                        </TableCell>
-                                                                    </TableRow>
-                                                                );
-                                                            })}
+                                                            {week.items.map((tx) => renderTollDataRow(tx))}
                                                         </tbody>
                                                     </table>
                                                 </CollapsibleContent>
@@ -637,61 +773,7 @@ export function TollBucketPanel({
             </Card>
             )}
 
-            <ManualMatchModal
-                isOpen={!!selectedTxForManual}
-                onClose={() => setSelectedTxForManual(null)}
-                transaction={selectedTxForManual}
-                allTrips={allTrips}
-                onConfirmMatch={(trip) => {
-                    if (selectedTxForManual) {
-                        onReconcile(selectedTxForManual, trip);
-                        setSelectedTxForManual(null);
-                    }
-                }}
-            />
-
-            <TollDetailOverlay
-                isOpen={isDetailOpen}
-                onClose={closeDetail}
-                transaction={detailTx}
-                match={detailMatch}
-                allMatches={detailMatches}
-                onConfirm={detailTx && detailMatch && !needsTripPick(detailTx, detailMatch) ? () => {
-                    onReconcile(detailTx, detailMatch.trip);
-                    closeDetail();
-                } : undefined}
-                onDismiss={() => {
-                    if (detailTx) handleDismiss(detailTx.id);
-                    closeDetail();
-                }}
-                onApprove={detailTx && onApprove ? () => {
-                    onApprove(detailTx);
-                    closeDetail();
-                } : undefined}
-                onReject={detailTx && onReject ? () => {
-                    onReject(detailTx);
-                    closeDetail();
-                } : undefined}
-                onFlag={detailTx && onFlag && detailMatch && !needsTripPick(detailTx, detailMatch) ? () => {
-                    onFlag(detailTx);
-                    closeDetail();
-                } : undefined}
-                onChargeDriver={detailTx && detailMatch && onChargeDriver ? () => {
-                    onChargeDriver(detailTx, detailMatch);
-                    closeDetail();
-                } : undefined}
-                onSelectTrip={detailTx ? (trip) => {
-                    onReconcile(detailTx, trip);
-                    closeDetail();
-                } : undefined}
-            />
-
-            <EditTollModal
-                isOpen={isEditOpen}
-                onClose={closeEdit}
-                transaction={editTx}
-                onSave={onEdit || (async () => {})}
-            />
+            {overlayModals}
         </div>
     );
 }

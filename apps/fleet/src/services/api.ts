@@ -2651,6 +2651,17 @@ export const api = {
     return response.json();
   },
 
+  async getDisputeRefundMatchDetail(refundId: string): Promise<import('../components/toll-tags/reconciliation/DisputeRefundDetailDialog').DisputeRefundMatchDetail> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/dispute-refunds/match-detail/${refundId}`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to fetch dispute refund match detail");
+    }
+    return response.json();
+  },
+
   async getDisputeMatchCandidates(opts?: { query?: string; from?: string; to?: string }): Promise<{ claims: any[]; tolls: any[] }> {
     const qs = new URLSearchParams();
     if (opts?.query) qs.set('q', opts.query);

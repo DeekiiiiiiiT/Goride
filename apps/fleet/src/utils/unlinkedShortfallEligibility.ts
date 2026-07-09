@@ -220,8 +220,9 @@ export function isUnlinkedApplySplitState(
 }
 
 /**
- * Charge Driver should not fire while the same driver still has an unresolved
- * unlinked trip refund that could cover a shortfall.
+ * Underpaid Charge Driver only — not Deadhead/Personal Use (those steps run
+ * before Unlinked Refunds in the wizard). Blocks while the same driver still
+ * has an unresolved unlinked trip refund that could cover a shortfall.
  */
 export function hasBlockingUnlinkedRefund(input: {
   claimDriverId?: string | null;

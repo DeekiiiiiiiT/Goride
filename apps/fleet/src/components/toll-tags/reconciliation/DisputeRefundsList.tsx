@@ -10,6 +10,7 @@ import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDispla
 import { api } from '../../../services/api';
 import { toast } from 'sonner@2.0.3';
 import { DisputeMatchModal } from "./DisputeMatchModal";
+import { DisputeRefundDetailDialog } from "./DisputeRefundDetailDialog";
 
 export type DisputeMatchEvent =
   | { type: 'match'; refundId: string; tollId: string }
@@ -28,6 +29,18 @@ export function DisputeRefundsList({ refunds, onMatchComplete }: DisputeRefundsL
   const [statusFilter, setStatusFilter] = useState<'all' | 'unmatched' | 'matched'>('all');
   // Match overlay (smart suggestions + manual search live inside the modal)
   const [matchModalRefund, setMatchModalRefund] = useState<DisputeRefund | null>(null);
+  const [detailRefund, setDetailRefund] = useState<DisputeRefund | null>(null);
+
+  const isMatched = (r: DisputeRefund) =>
+    r.status === 'matched' || r.status === 'auto_resolved';
+
+  const handleRowClick = (refund: DisputeRefund) => {
+    if (isMatched(refund)) {
+      setDetailRefund(refund);
+    } else {
+      setMatchModalRefund(refund);
+    }
+  };
 
   const filtered = useMemo(() => {
     if (statusFilter === 'all') return refunds;
@@ -164,7 +177,12 @@ export function DisputeRefundsList({ refunds, onMatchComplete }: DisputeRefundsL
                           <tbody className="[&_tr:last-child]:border-0">
                             {week.items.map((refund) => (
                               <React.Fragment key={refund.id}>
-                                <TableRow className="[&>td]:py-2 [&>td]:px-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                                <TableRow
+                                  className={`[&>td]:py-2 [&>td]:px-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 ${
+                                    isMatched(refund) ? 'cursor-pointer' : ''
+                                  }`}
+                                  onClick={() => handleRowClick(refund)}
+                                >
                                   <TableCell className="whitespace-nowrap text-slate-700">
                                     {formatInFleetTz(refund.date, fleetTz, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}
                                   </TableCell>
@@ -181,7 +199,10 @@ export function DisputeRefundsList({ refunds, onMatchComplete }: DisputeRefundsL
                                       </code>
                                       <button
                                         type="button"
-                                        onClick={() => copyToClipboard(refund.supportCaseId, refund.id)}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          copyToClipboard(refund.supportCaseId, refund.id);
+                                        }}
                                         className="text-slate-400 hover:text-slate-600 transition-colors"
                                         title="Copy full ID"
                                       >
@@ -201,7 +222,7 @@ export function DisputeRefundsList({ refunds, onMatchComplete }: DisputeRefundsL
                                       <Badge className="bg-blue-100 text-blue-700 border-blue-200 text-[10px]">Auto-Resolved</Badge>
                                     )}
                                   </TableCell>
-                                  <TableCell className="text-right">
+                                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                                     <div className="flex items-center justify-end gap-1">
                                       {refund.status === 'unmatched' ? (
                                         <Button
@@ -213,19 +234,29 @@ export function DisputeRefundsList({ refunds, onMatchComplete }: DisputeRefundsL
                                           <Sparkles className="h-3 w-3 mr-1" /> Match
                                         </Button>
                                       ) : (
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          className="h-7 px-2 text-xs text-slate-500 hover:text-red-600 hover:bg-red-50"
-                                          onClick={() => handleUnmatch(refund.id)}
-                                          disabled={unmatchingId === refund.id}
-                                        >
-                                          {unmatchingId === refund.id ? (
-                                            <Loader2 className="h-3 w-3 animate-spin" />
-                                          ) : (
-                                            <><Unlink className="h-3 w-3 mr-1" /> Unlink</>
-                                          )}
-                                        </Button>
+                                        <>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-7 px-2 text-xs text-slate-600 hover:text-indigo-700 hover:bg-indigo-50"
+                                            onClick={() => setDetailRefund(refund)}
+                                          >
+                                            View
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-7 px-2 text-xs text-slate-500 hover:text-red-600 hover:bg-red-50"
+                                            onClick={() => handleUnmatch(refund.id)}
+                                            disabled={unmatchingId === refund.id}
+                                          >
+                                            {unmatchingId === refund.id ? (
+                                              <Loader2 className="h-3 w-3 animate-spin" />
+                                            ) : (
+                                              <><Unlink className="h-3 w-3 mr-1" /> Unlink</>
+                                            )}
+                                          </Button>
+                                        </>
                                       )}
                                     </div>
                                   </TableCell>
@@ -267,6 +298,17 @@ export function DisputeRefundsList({ refunds, onMatchComplete }: DisputeRefundsL
         onMatched={(tollId) => {
           if (!matchModalRefund) return;
           onMatchComplete({ type: 'match', refundId: matchModalRefund.id, tollId });
+        }}
+      />
+
+      <DisputeRefundDetailDialog
+        open={!!detailRefund}
+        onOpenChange={(o) => { if (!o) setDetailRefund(null); }}
+        refund={detailRefund}
+        unmatching={!!detailRefund && unmatchingId === detailRefund.id}
+        onUnmatch={async (refundId) => {
+          await handleUnmatch(refundId);
+          setDetailRefund(null);
         }}
       />
     </div>
