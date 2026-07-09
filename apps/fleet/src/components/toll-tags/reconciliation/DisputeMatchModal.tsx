@@ -14,8 +14,8 @@ interface SuggestionRow {
   tollId: string;
   tollAmount: number;
   claimAmount?: number;
-  /** What Uber's trip fare already paid toward this toll (claim type only). */
   tripRefund?: number;
+  shortfall?: number;
   uberRefund: number;
   variance: number;
   date: string;
@@ -23,6 +23,8 @@ interface SuggestionRow {
   claimId: string | null;
   claimStatus: string | null;
   matchType?: 'claim' | 'toll';
+  eligibleForAuto?: boolean;
+  rejectReason?: string | null;
 }
 
 interface Candidate {
@@ -129,8 +131,12 @@ export function DisputeMatchModal({ open, onOpenChange, refund, onMatched }: Dis
     if (!refund) return;
     setLinkingTollId(tollId);
     try {
-      await api.matchDisputeRefund(refund.id, tollId, claimId || undefined, createClaim ? { createClaim: true, suggestedTripId } : undefined);
-      toast.success('Refund matched — claim marked Reimbursed');
+      const res = await api.matchDisputeRefund(refund.id, tollId, claimId || undefined, createClaim ? { createClaim: true, suggestedTripId } : undefined);
+      if (res.warning) {
+        toast.warning(res.warning);
+      } else {
+        toast.success('Refund matched — claim marked Reimbursed');
+      }
       onMatched(tollId);
       onOpenChange(false);
     } catch (err: any) {
@@ -174,7 +180,9 @@ export function DisputeMatchModal({ open, onOpenChange, refund, onMatched }: Dis
             ) : suggestions.length === 0 ? (
               <div className="text-xs text-slate-500 py-2">No confident auto-match. Search below to pick it yourself.</div>
             ) : (
-              suggestions.map((s) => (
+              suggestions.map((s) => {
+                const shortfall = s.shortfall ?? s.claimAmount ?? 0;
+                return (
                 <Card key={`s-${s.tollId}`} className="border-slate-200 shadow-none">
                   <CardContent className="p-2.5 flex items-center justify-between gap-3">
                     <div className="min-w-0 text-xs">
@@ -182,9 +190,9 @@ export function DisputeMatchModal({ open, onOpenChange, refund, onMatched }: Dis
                         <div className="text-slate-700 flex flex-wrap items-center gap-x-1.5">
                           <span>Toll <span className="font-semibold text-rose-600">-${Math.abs(s.tollAmount).toFixed(2)}</span></span>
                           <span className="text-slate-300">·</span>
-                          <span>Refund <span className="font-semibold text-emerald-600">${Math.abs(s.tripRefund ?? 0).toFixed(2)}</span></span>
+                          <span>Paid <span className="font-semibold text-emerald-600">${Math.abs(s.tripRefund ?? 0).toFixed(2)}</span></span>
                           <span className="text-slate-300">·</span>
-                          <span>Underpaid <span className="font-semibold text-amber-600">-${Math.abs(s.claimAmount ?? 0).toFixed(2)}</span></span>
+                          <span>Shortfall <span className="font-semibold text-amber-600">-${Math.abs(shortfall).toFixed(2)}</span></span>
                         </div>
                       ) : (
                         <div className="text-slate-700">
@@ -195,14 +203,20 @@ export function DisputeMatchModal({ open, onOpenChange, refund, onMatched }: Dis
                         Won back <span className="font-semibold text-emerald-600">${s.uberRefund.toFixed(2)}</span>
                         {' · '}
                         <span className={Math.abs(s.variance) < 0.01 ? 'text-emerald-600' : 'text-amber-600'}>
-                          {Math.abs(s.variance) < 0.01 ? 'Exact match' : `$${Math.abs(s.variance).toFixed(2)} off`}
+                          {Math.abs(s.variance) < 0.01 ? 'Covers shortfall' : `$${Math.abs(s.variance).toFixed(2)} off`}
                         </span>
                       </div>
+                      {s.eligibleForAuto === false && s.rejectReason && (
+                        <div className="text-[10px] text-amber-700 mt-0.5">Manual review: {s.rejectReason}</div>
+                      )}
                       <div className="text-[10px] text-slate-500 mt-0.5">
                         {fmtDate(s.date)}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      {s.eligibleForAuto && (
+                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">Auto OK</span>
+                      )}
                       <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${confidenceClass(s.confidence)}`}>{s.confidence}%</span>
                       <Button size="sm" className="h-7 px-3 text-xs bg-teal-600 hover:bg-teal-700"
                         onClick={() => link(s.tollId, s.claimId, s.matchType === 'toll')}
@@ -212,7 +226,7 @@ export function DisputeMatchModal({ open, onOpenChange, refund, onMatched }: Dis
                     </div>
                   </CardContent>
                 </Card>
-              ))
+              );})
             )}
           </section>
 

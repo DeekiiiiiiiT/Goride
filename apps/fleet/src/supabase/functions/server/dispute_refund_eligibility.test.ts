@@ -2,6 +2,7 @@ import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   isBareTollEligibleForDisputeMatch,
   isFullyReimbursedViaTrip,
+  isTollBlockedForDisputeMatch,
   tollShortfallAmount,
 } from "./dispute_refund_eligibility.ts";
 
@@ -15,6 +16,13 @@ Deno.test("isFullyReimbursedViaTrip within tolerance", () => {
   assertEquals(isFullyReimbursedViaTrip(285, 285), true);
   assertEquals(isFullyReimbursedViaTrip(380, 370), false);
   assertEquals(isFullyReimbursedViaTrip(285.04, 285), true);
+});
+
+Deno.test("isTollBlockedForDisputeMatch blocks deadhead", () => {
+  assertEquals(
+    isTollBlockedForDisputeMatch({ workflowStage: "deadhead_pending", type: "usage" }),
+    true,
+  );
 });
 
 Deno.test("isBareTollEligibleForDisputeMatch", () => {

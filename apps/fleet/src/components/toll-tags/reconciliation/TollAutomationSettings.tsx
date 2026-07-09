@@ -18,6 +18,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
   const [saving, setSaving] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [minConfidence, setMinConfidence] = useState(85);
+  const [disputeMinConfidence, setDisputeMinConfidence] = useState(95);
   const [personalUseEnabled, setPersonalUseEnabled] = useState(false);
   const [orphanProximity, setOrphanProximity] = useState(180);
   const [driverChargeSync, setDriverChargeSync] = useState(false);
@@ -44,6 +45,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
   const applySettings = (data: {
     refundAutomationEnabled: boolean;
     refundAutoMinConfidence: number;
+    disputeRefundAutoMinConfidence?: number;
     personalUseDetectionEnabled: boolean;
     orphanProximityMinutes: number;
     driverTollChargeSyncEnabled?: boolean;
@@ -54,6 +56,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
   }) => {
     setEnabled(data.refundAutomationEnabled);
     setMinConfidence(data.refundAutoMinConfidence);
+    setDisputeMinConfidence(data.disputeRefundAutoMinConfidence ?? 95);
     setPersonalUseEnabled(data.personalUseDetectionEnabled);
     setOrphanProximity(data.orphanProximityMinutes);
     setDriverChargeSync(data.driverTollChargeSyncEnabled === true);
@@ -81,6 +84,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
   const save = async (next: {
     refundAutomationEnabled?: boolean;
     refundAutoMinConfidence?: number;
+    disputeRefundAutoMinConfidence?: number;
     personalUseDetectionEnabled?: boolean;
     orphanProximityMinutes?: number;
     driverTollChargeSyncEnabled?: boolean;
@@ -247,6 +251,27 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
                     className="w-full mt-2 accent-indigo-600"
                   />
                   <p className="text-xs text-slate-500 mt-1">Suggestions below this score require manual review.</p>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm text-slate-700">Dispute auto-match threshold</label>
+                    <span className="text-sm font-semibold text-indigo-700">{disputeMinConfidence}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={50}
+                    max={100}
+                    value={disputeMinConfidence}
+                    disabled={saving}
+                    onChange={(e) => setDisputeMinConfidence(parseInt(e.target.value, 10))}
+                    onMouseUp={() => save({ disputeRefundAutoMinConfidence: disputeMinConfidence })}
+                    onTouchEnd={() => save({ disputeRefundAutoMinConfidence: disputeMinConfidence })}
+                    className="w-full mt-2 accent-indigo-600"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">
+                    Dispute auto-match uses a higher bar than cash-wash. Shortfall and trip-time rules still apply.
+                  </p>
                 </div>
 
                 <div className="border-t border-slate-100 pt-3">

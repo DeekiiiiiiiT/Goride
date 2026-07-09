@@ -31,8 +31,15 @@ import {
 } from "./toll_controller.tsx";
 import { isFullyReimbursedViaTrip } from "./dispute_refund_eligibility.ts";
 import {
-  enrichAndFilterDisputeBareTolls,
+  candidateToSuggestion,
+  DEFAULT_DISPUTE_REFUND_AUTO_MIN_CONFIDENCE,
+  evaluateDisputeBareTollCandidate,
+  evaluateDisputeClaimCandidate,
+  pickDisputeMatchCandidate,
+} from "./dispute_match_rules.ts";
+import {
   computeLiveTripRefundForToll,
+  enrichAndFilterDisputeBareTolls,
   resolveLiveTripContextForToll,
 } from "./dispute_match_toll_enrichment.ts";
 
@@ -108,8 +115,6 @@ async function loadAllByPrefix(prefix: string): Promise<any[]> {
 // So we match a refund against open Toll_Refund claims by claim.amount, and
 // resolving the claim as "Reimbursed" closes the loop into the Reimbursed tile.
 
-const TOLL_SETTINGS_KEY = "toll_reconciliation:settings";
-const DEFAULT_DISPUTE_MIN_CONFIDENCE = 85;
 const OPEN_CLAIM_STATUSES = ["Open", "Sent_to_Driver", "Submitted_to_Uber"];
 
 /** Load a toll behind a claim from the ledger (falls back to legacy transaction). */
@@ -135,86 +140,67 @@ async function loadOpenTollClaimsForDriver(driverId: string): Promise<any[]> {
   );
 }
 
-/**
- * Score a claim as a match for a refund. The refund amount should equal the
- * claim (shortfall) amount, so amount similarity dominates; date decays gently
- * because disputes are resolved weeks after the trip.
- */
-function scoreClaimForRefund(claim: any, refundAmount: number, refundDate: number): number {
-  const claimAmount = Math.abs(claim.amount || 0);
-  const amountDiff = Math.abs(claimAmount - refundAmount);
-  const maxA = Math.max(claimAmount, refundAmount, 1);
-  const amountScore = Math.max(0, 100 - (amountDiff / maxA) * 100);
-  const claimDate = new Date(claim.createdAt || claim.date || refundDate).getTime();
-  const daysDiff = Math.abs(claimDate - refundDate) / (1000 * 60 * 60 * 24);
-  const dateScore = Math.max(0, 100 - daysDiff * 3);
-  return Math.round(amountScore * 0.75 + dateScore * 0.25);
+/** Load toll IDs already linked to a matched dispute refund. */
+async function loadLinkedDisputeTollIds(): Promise<Set<string>> {
+  const allRefunds = await loadAllByPrefix("dispute-refund:");
+  return new Set(
+    allRefunds
+      .filter((r: any) => r?.matchedTollId && (r.status === "matched" || r.status === "auto_resolved"))
+      .map((r: any) => String(r.matchedTollId)),
+  );
+}
+
+/** Evaluate all claim candidates for one refund (claims-first, bare-toll fallback). */
+async function buildDisputeCandidates(refund: any) {
+  const driverId = refund.driverId;
+  if (!driverId) return [];
+
+  const fleetTz = await getFleetTimezone();
+  const linkedTollIds = await loadLinkedDisputeTollIds();
+  const { trips } = await loadAllTollLedgerWithTrips();
+  const claims = await loadOpenTollClaimsForDriver(driverId);
+
+  const evaluated: NonNullable<Awaited<ReturnType<typeof evaluateDisputeClaimCandidate>>>[] = [];
+  for (const claim of claims) {
+    const toll = await loadTollForClaim(claim.transactionId);
+    const candidate = await evaluateDisputeClaimCandidate({
+      refund,
+      claim,
+      toll,
+      trips,
+      fleetTz,
+      linkedTollIds,
+    });
+    if (candidate) evaluated.push(candidate);
+  }
+
+  if (evaluated.some((c) => c.eligibleForSuggestion)) {
+    return evaluated;
+  }
+
+  const ledger = await loadAllByPrefix("toll_ledger:");
+  for (const toll of ledger) {
+    if (!toll || typeof toll !== "object" || toll.driverId !== driverId) continue;
+    const candidate = await evaluateDisputeBareTollCandidate({
+      refund,
+      toll,
+      fleetTz,
+      linkedTollIds,
+      trips,
+    });
+    if (candidate) evaluated.push(candidate);
+  }
+  return evaluated;
 }
 
 /** Build ranked match suggestions for a dispute refund (claims first, toll fallback). */
 async function computeDisputeSuggestions(refund: any): Promise<any[]> {
-  const driverId = refund.driverId;
-  const refundAmount = Math.abs(refund.amount || 0);
-  const refundDate = new Date(refund.date).getTime();
-  if (!driverId) return [];
-
-  const claims = await loadOpenTollClaimsForDriver(driverId);
-  const suggestions: any[] = [];
-  for (const claim of claims) {
-    const toll = await loadTollForClaim(claim.transactionId);
-    const tollCost = Math.abs(claim.expectedAmount ?? (toll ? toll.amount : 0)) || 0;
-    const claimAmount = Math.abs(claim.amount || 0);
-    suggestions.push({
-      tollId: claim.transactionId,
-      tripId: claim.tripId || toll?.tripId || null,
-      tollAmount: tollCost,          // full toll cost (context)
-      claimAmount,                    // the shortfall we're matching against
-      // What Uber's trip fare already paid toward this toll — claimAmount IS
-      // the shortfall, so the remainder is the trip refund. Shown alongside
-      // tollAmount so the user sees the same cost/refund/shortfall picture
-      // the Underpaid & Claims step shows.
-      tripRefund: Math.max(0, tollCost - claimAmount),
-      uberRefund: refundAmount,
-      variance: claimAmount - refundAmount, // ~0 when the refund covers the loss
-      date: toll?.date || claim.createdAt || refund.date, // toll date = the frame the UI groups by
-
-      confidence: scoreClaimForRefund(claim, refundAmount, refundDate),
-      claimId: claim.id,
-      claimStatus: claim.status,
-      matchType: "claim",
-    });
-  }
-
-  // Fallback: tolls with no open claim — only when trip fare left a shortfall.
-  if (suggestions.length === 0 && driverId) {
-    const fleetTz = await getFleetTimezone();
-    const ledger = await loadAllByPrefix("toll_ledger:");
-    for (const toll of ledger) {
-      if (!toll || typeof toll !== "object" || toll.driverId !== driverId) continue;
-      if (toll.type && toll.type !== "usage") continue;
-      const tollAmount = Math.abs(toll.amount || 0);
-      const tripRefund = await computeLiveTripRefundForToll(toll, fleetTz);
-      if (tripRefund != null && isFullyReimbursedViaTrip(tollAmount, tripRefund)) continue;
-
-      const amountDiff = Math.abs(tollAmount - refundAmount);
-      const maxA = Math.max(tollAmount, refundAmount, 1);
-      const amountScore = Math.max(0, 100 - (amountDiff / maxA) * 100);
-      const daysDiff = Math.abs(new Date(toll.date).getTime() - refundDate) / (1000 * 60 * 60 * 24);
-      const dateScore = Math.max(0, 100 - daysDiff * 3);
-      const confidence = Math.round(amountScore * 0.7 + dateScore * 0.3);
-      if (confidence <= 0) continue;
-      suggestions.push({
-        tollId: toll.id, tripId: toll.tripId || null,
-        tollAmount, claimAmount: tollAmount, uberRefund: refundAmount,
-        tripRefund: tripRefund ?? 0,
-        variance: tollAmount - refundAmount, date: toll.date,
-        confidence, claimId: null, claimStatus: null, matchType: "toll",
-      });
-    }
-  }
-
-  suggestions.sort((a, b) => b.confidence - a.confidence);
-  return suggestions.slice(0, 5);
+  const evaluated = await buildDisputeCandidates(refund);
+  return evaluated
+    .filter((c) => c.eligibleForSuggestion)
+    .sort((a, b) => b.confidence - a.confidence)
+    .slice(0, 5)
+    .map(candidateToSuggestion);
 }
 
 /** Shared match: link a refund to a toll (+claim), resolving the claim as Reimbursed. */
@@ -224,7 +210,8 @@ async function matchRefundToClaim(
   claimId: string | null,
   auto: boolean,
   c: unknown,
-): Promise<{ ok: true; data: any } | { ok: false; status: number; error: string }> {
+  opts?: { tripId?: string | null },
+): Promise<{ ok: true; data: any; warning?: string } | { ok: false; status: number; error: string }> {
   const id = refund.id;
   const recordKey = `dispute-refund:${id}`;
 
@@ -242,6 +229,30 @@ async function matchRefundToClaim(
   }
 
   const settings = await getRefundAutomationSettings();
+
+  // Persist toll→trip link when automation resolved a suggested trip.
+  const reconcileTripId = opts?.tripId || null;
+  if (reconcileTripId) {
+    try {
+      const tollEntry = await loadTollForClaim(tollTransactionId);
+      if (tollEntry && !tollEntry.tripId) {
+        await reconcileTollForDisputeMatch(tollTransactionId, reconcileTripId);
+      }
+    } catch (err: any) {
+      console.log(`[DisputeRefund] reconcileTollForDisputeMatch skipped: ${err.message}`);
+    }
+  }
+
+  let matchWarning: string | undefined;
+  if (!auto) {
+    const evaluated = await buildDisputeCandidates(refund);
+    const picked = evaluated.find(
+      (c) => c.tollId === tollTransactionId && (claimId ? c.claimId === claimId : !c.claimId),
+    );
+    if (picked && !picked.eligibleForAuto && picked.rejectReason) {
+      matchWarning = picked.rejectReason;
+    }
+  }
 
   let updated: any = {
     ...refund,
@@ -325,7 +336,7 @@ async function matchRefundToClaim(
     }
   }
 
-  return { ok: true, data: updated };
+  return { ok: true, data: updated, ...(matchWarning ? { warning: matchWarning } : {}) };
 }
 
 // ─── POST /dispute-refunds/import ──────────────────────────────────────
@@ -445,20 +456,26 @@ app.get(`${BASE}`, async (c) => {
     //    to an EXISTING claim, and unmatch fully reverts it.
     let autoMatched = 0;
     try {
-      const settings: any = await kv.get(TOLL_SETTINGS_KEY);
-      const enabled = settings?.refundAutomationEnabled === true;
-      const minConf = typeof settings?.refundAutoMinConfidence === "number"
-        ? settings.refundAutoMinConfidence
-        : DEFAULT_DISPUTE_MIN_CONFIDENCE;
+      const settings = await getRefundAutomationSettings();
+      const enabled = settings.refundAutomationEnabled === true;
+      const minConf = typeof settings.disputeRefundAutoMinConfidence === "number"
+        ? settings.disputeRefundAutoMinConfidence
+        : DEFAULT_DISPUTE_REFUND_AUTO_MIN_CONFIDENCE;
       if (enabled) {
         for (const refund of refunds) {
           if (refund.status !== "unmatched" || !refund.driverId) continue;
-          const sugg = await computeDisputeSuggestions(refund);
-          const best = sugg[0];
-          if (best && best.claimId && best.confidence >= minConf) {
-            const res = await matchRefundToClaim(refund, best.tollId, best.claimId, true, c);
+          const candidates = await buildDisputeCandidates(refund);
+          const best = pickDisputeMatchCandidate(candidates, { mode: "auto", minConfidence: minConf });
+          if (best?.claimId) {
+            const res = await matchRefundToClaim(
+              refund,
+              best.tollId,
+              best.claimId,
+              true,
+              c,
+              { tripId: best.tripId },
+            );
             if (res.ok) {
-              // reflect new status in the response payload
               Object.assign(refund, res.data);
               autoMatched++;
             }
@@ -540,11 +557,21 @@ app.patch(`${BASE}/:id/match`, async (c) => {
       claimId = newClaim.id;
     }
 
-    const result = await matchRefundToClaim(refund, tollTransactionId, claimId || null, false, c);
+    const result = await matchRefundToClaim(
+      refund,
+      tollTransactionId,
+      claimId || null,
+      false,
+      c,
+      { tripId: suggestedTripId || null },
+    );
     if (!result.ok) return c.json({ error: result.error }, result.status as any);
 
     console.log(`[DisputeRefund] Matched refund ${id} → toll ${tollTransactionId}${claimId ? ` + claim ${claimId}` : ""}`);
-    return c.json({ data: result.data });
+    return c.json({
+      data: result.data,
+      ...(result.warning ? { warning: result.warning } : {}),
+    });
   } catch (err: any) {
     console.log(`[DisputeRefund] Match error: ${err.message}`);
     return c.json({ error: `Failed to match dispute refund: ${err.message}` }, 500);

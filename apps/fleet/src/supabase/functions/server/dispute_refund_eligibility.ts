@@ -43,3 +43,23 @@ export function isBareTollEligibleForDisputeMatch(input: {
   }
   return workflowStage === "underpaid_pending";
 }
+
+/** Block tolls already closed in Personal / Deadhead / reimbursement paths. */
+export function isTollBlockedForDisputeMatch(toll: {
+  type?: string | null;
+  workflowStage?: string | null;
+  resolution?: string | null;
+}): boolean {
+  if (toll.type && String(toll.type).toLowerCase() !== "usage") return true;
+  const res = toll.resolution;
+  if (res === "personal" || res === "business" || res === "write_off" || res === "refunded") {
+    return true;
+  }
+  const stage = String(toll.workflowStage || "");
+  if (stage.startsWith("personal_use") || stage.startsWith("deadhead")) return true;
+  return false;
+}
+
+export function amountsAlign(a: number, b: number, tolerance = DISPUTE_SHORTFALL_TOLERANCE): boolean {
+  return Math.abs(Math.abs(a) - Math.abs(b)) <= tolerance;
+}

@@ -5041,6 +5041,7 @@ type RefundResolutionStatus = "cash_wash" | "phantom" | "expense_logged" | "pend
 const REFUND_SETTINGS_KEY = "toll_reconciliation:settings";
 const DEFAULT_PLAZA_RADIUS_M = 500;
 const REFUND_AUTO_APPLY_MIN_CONFIDENCE = 85;
+const DISPUTE_REFUND_AUTO_MIN_CONFIDENCE = 95;
 // Default proximity (minutes) that qualifies a toll as "orphan" (personal use).
 // A tighter nested window inside the ±1-day sameDayPreFilter.
 const DEFAULT_ORPHAN_PROXIMITY_MINUTES = 180;
@@ -5048,6 +5049,8 @@ const DEFAULT_ORPHAN_PROXIMITY_MINUTES = 180;
 interface RefundAutomationSettings {
   refundAutomationEnabled: boolean;
   refundAutoMinConfidence: number;
+  /** Higher bar for dispute-refund auto-link (separate from cash-wash). */
+  disputeRefundAutoMinConfidence: number;
   // Personal-use (orphan) toll detection — additive, default OFF.
   personalUseDetectionEnabled: boolean;
   orphanProximityMinutes: number;
@@ -5076,6 +5079,10 @@ async function getRefundAutomationSettings(): Promise<RefundAutomationSettings> 
       typeof rec?.refundAutoMinConfidence === "number"
         ? rec.refundAutoMinConfidence
         : REFUND_AUTO_APPLY_MIN_CONFIDENCE,
+    disputeRefundAutoMinConfidence:
+      typeof rec?.disputeRefundAutoMinConfidence === "number"
+        ? rec.disputeRefundAutoMinConfidence
+        : DISPUTE_REFUND_AUTO_MIN_CONFIDENCE,
     personalUseDetectionEnabled: rec?.personalUseDetectionEnabled === true, // default OFF
     orphanProximityMinutes:
       typeof rec?.orphanProximityMinutes === "number" && rec.orphanProximityMinutes > 0
@@ -6202,6 +6209,10 @@ app.put(`${BASE}/automation-settings`, async (c) => {
         typeof body?.refundAutoMinConfidence === "number"
           ? Math.max(50, Math.min(100, body.refundAutoMinConfidence))
           : current.refundAutoMinConfidence,
+      disputeRefundAutoMinConfidence:
+        typeof body?.disputeRefundAutoMinConfidence === "number"
+          ? Math.max(50, Math.min(100, body.disputeRefundAutoMinConfidence))
+          : current.disputeRefundAutoMinConfidence,
       personalUseDetectionEnabled:
         typeof body?.personalUseDetectionEnabled === "boolean"
           ? body.personalUseDetectionEnabled

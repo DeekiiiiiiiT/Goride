@@ -2286,7 +2286,7 @@ export const api = {
     return response.json();
   },
 
-  async getTollAutomationSettings(): Promise<{ success: boolean; data: { refundAutomationEnabled: boolean; refundAutoMinConfidence: number; personalUseDetectionEnabled: boolean; orphanProximityMinutes: number; driverTollChargeSyncEnabled: boolean; unifiedTollSettlementEnabled: boolean; matchOnIngestEnabled: boolean; disputeRefundTripSyncEnabled: boolean; unlinkedRefundUndoEnabled: boolean } }> {
+  async getTollAutomationSettings(): Promise<{ success: boolean; data: { refundAutomationEnabled: boolean; refundAutoMinConfidence: number; disputeRefundAutoMinConfidence: number; personalUseDetectionEnabled: boolean; orphanProximityMinutes: number; driverTollChargeSyncEnabled: boolean; unifiedTollSettlementEnabled: boolean; matchOnIngestEnabled: boolean; disputeRefundTripSyncEnabled: boolean; unlinkedRefundUndoEnabled: boolean } }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/automation-settings`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
@@ -2294,7 +2294,7 @@ export const api = {
     return response.json();
   },
 
-  async updateTollAutomationSettings(payload: { refundAutomationEnabled?: boolean; refundAutoMinConfidence?: number; personalUseDetectionEnabled?: boolean; orphanProximityMinutes?: number; driverTollChargeSyncEnabled?: boolean; unifiedTollSettlementEnabled?: boolean; matchOnIngestEnabled?: boolean; disputeRefundTripSyncEnabled?: boolean; unlinkedRefundUndoEnabled?: boolean }) {
+  async updateTollAutomationSettings(payload: { refundAutomationEnabled?: boolean; refundAutoMinConfidence?: number; disputeRefundAutoMinConfidence?: number; personalUseDetectionEnabled?: boolean; orphanProximityMinutes?: number; driverTollChargeSyncEnabled?: boolean; unifiedTollSettlementEnabled?: boolean; matchOnIngestEnabled?: boolean; disputeRefundTripSyncEnabled?: boolean; unlinkedRefundUndoEnabled?: boolean }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/automation-settings`, {
       method: 'PUT',
       headers: {
@@ -2608,7 +2608,7 @@ export const api = {
     return response.json();
   },
 
-  async matchDisputeRefund(refundId: string, tollTransactionId: string, claimId?: string, opts?: { createClaim?: boolean; suggestedTripId?: string | null }): Promise<{ data: DisputeRefund }> {
+  async matchDisputeRefund(refundId: string, tollTransactionId: string, claimId?: string, opts?: { createClaim?: boolean; suggestedTripId?: string | null }): Promise<{ data: DisputeRefund; warning?: string }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/dispute-refunds/${refundId}/match`, {
       method: 'PATCH',
       headers: {
@@ -2640,7 +2640,7 @@ export const api = {
     return response.json();
   },
 
-  async getDisputeRefundSuggestions(refundId: string): Promise<{ suggestions: Array<{ tollId: string; tripId: string | null; tollAmount: number; claimAmount?: number; uberRefund: number; variance: number; date: string; confidence: number; claimId: string | null; claimStatus: string | null; matchType?: 'claim' | 'toll' }> }> {
+  async getDisputeRefundSuggestions(refundId: string): Promise<{ suggestions: Array<{ tollId: string; tripId: string | null; tollAmount: number; claimAmount?: number; tripRefund?: number; shortfall?: number; uberRefund: number; variance: number; date: string; confidence: number; claimId: string | null; claimStatus: string | null; matchType?: 'claim' | 'toll'; eligibleForAuto?: boolean; rejectReason?: string | null }> }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/dispute-refunds/suggestions/${refundId}`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
