@@ -3,9 +3,13 @@ import {
   buildClaimByTollId,
   collectDuplicateClaimIds,
   dedupeClaimsForDisplay,
+  mergeReconciledTollsForUnderpaid,
   pickCanonicalClaimForToll,
 } from './claimByToll';
-import type { Claim } from '../types/data';
+import type { Claim, FinancialTransaction } from '../types/data';
+
+const toll = (id: string, date: string): FinancialTransaction =>
+  ({ id, date, time: '12:00:00', isReconciled: true, tripId: 'trip-1' }) as FinancialTransaction;
 
 const base = (overrides: Partial<Claim>): Claim =>
   ({
@@ -47,5 +51,32 @@ describe('claimByToll', () => {
       base({ id: 'b', status: 'Sent_to_Driver', updatedAt: '2026-07-08T19:02:00Z' }),
     ];
     expect(collectDuplicateClaimIds(claims)).toEqual(['a']);
+  });
+});
+
+describe('mergeReconciledTollsForUnderpaid', () => {
+  const periodWeekKey = '2026-06-29';
+  const tz = 'America/Jamaica';
+
+  it('does not pull Jun 15 toll when claimTollIds is empty and week is Jun 29', () => {
+    const merged = mergeReconciledTollsForUnderpaid(
+      [],
+      [toll('toll-jun15', '2026-06-15')],
+      periodWeekKey,
+      tz,
+      new Set(),
+    );
+    expect(merged).toHaveLength(0);
+  });
+
+  it('includes same-week toll from allReconciled when date API dropped it', () => {
+    const merged = mergeReconciledTollsForUnderpaid(
+      [],
+      [toll('toll-jun30', '2026-06-30')],
+      periodWeekKey,
+      tz,
+      new Set(),
+    );
+    expect(merged.map((t) => t.id)).toEqual(['toll-jun30']);
   });
 });

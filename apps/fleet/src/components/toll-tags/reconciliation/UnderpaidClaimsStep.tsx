@@ -650,6 +650,7 @@ export function UnderpaidClaimsStep({
             onUpdateStatus={handleUpdateStatus}
             onSelectClaim={(claim) => { setSelectedClaimDetail(claim); setIsClaimDetailOpen(true); }}
             trips={trips}
+            tollById={reconciledTollById}
             onUndoUnlinkedApply={onUndoUnlinkedApply}
             busyUnlinkedTripId={busyUnlinkedTripId}
           />

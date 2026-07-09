@@ -13,7 +13,7 @@ import { useTollReconciliation } from "../../../hooks/useTollReconciliation";
 import { useClaims } from "../../../hooks/useClaims";
 import {
   Loader2, RefreshCw, Wand2, DollarSign, HelpCircle,
-  CarFront, Route, ShieldCheck, Unlink as UnlinkIcon, History as HistoryIcon, ArrowLeft, type LucideIcon,
+  CarFront, Route, ShieldCheck, Unlink as UnlinkIcon, History as HistoryIcon, ArrowLeft, RotateCcw, type LucideIcon,
 } from "lucide-react";
 import { Button } from "../../ui/button";
 import { runScenarioTest } from "../../../utils/testScenario";
@@ -28,7 +28,7 @@ import {
 } from "../../../utils/tollBucket";
 import { StepId, StepCounts, STEP_ORDER, computeStepCounts } from "../../../utils/tollPeriodGating";
 import { hasBlockingUnlinkedRefund } from "../../../utils/unlinkedShortfallEligibility";
-import { isClaimVisibleInPeriod, tollWeekKey } from "../../../utils/tollWeekPeriod";
+import { buildPeriodTollIdSet, isClaimVisibleInPeriod, isTollInWizardPeriod, tollWeekKey } from "../../../utils/tollWeekPeriod";
 import { mergeReconciledTollsForUnderpaid } from "../../../utils/claimByToll";
 import type { UnlinkedShortfallSuggestion } from "../../../hooks/useTollReconciliation";
 import { toast } from "sonner@2.0.3";
@@ -38,6 +38,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { DriverPicker } from "../../ui/DriverPicker";
 import { TollAutomationSettings } from "./TollAutomationSettings";
 import { RematchCandidatesQueue } from "./RematchCandidatesQueue";
+import { PeriodResetDialog } from "./PeriodResetDialog";
 import { normalizePlatform } from "../../../utils/normalizePlatform";
 import { ReconciliationPeriod } from "../../../hooks/useTollReconciliationPeriods";
 import { useFleetTimezone } from "../../../utils/timezoneDisplay";
@@ -94,6 +95,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
   };
 
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>('all');
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const fleetTz = useFleetTimezone();
 
   const {
@@ -256,6 +258,10 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
 
   const pTrips = platformFilter === 'all' ? trips : trips.filter(tripInPlatform);
   const pReconciled = platformFilter === 'all' ? reconciledTolls : reconciledTolls.filter(tollInPlatform);
+  const pReconciledInPeriod = useMemo(
+    () => pReconciled.filter((tx) => isTollInWizardPeriod(tx, period.startDate, fleetTz)),
+    [pReconciled, period.startDate, fleetTz],
+  );
   const pUnreconciled = platformFilter === 'all' ? unreconciledTolls : unreconciledTolls.filter(tollInPlatform);
   const pUnclaimed = platformFilter === 'all' ? unclaimedRefunds : unclaimedRefunds.filter(tripInPlatform);
   const pResolved = platformFilter === 'all' ? resolvedRefunds : resolvedRefunds.filter(tripInPlatform);
@@ -267,13 +273,17 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
     [...unreconciledTolls, ...reconciledTolls, ...allReconciledTolls].forEach(tx => { if (tx?.id && tx?.date) map.set(tx.id, tx.date); });
     return map;
   }, [unreconciledTolls, reconciledTolls, allReconciledTolls]);
-  const periodTollIds = useMemo(() => {
-    const ids = new Set<string>();
-    [...unreconciledTolls, ...reconciledTolls, ...allReconciledTolls].forEach((tx) => {
-      if (tx?.id) ids.add(tx.id);
-    });
-    return ids;
-  }, [unreconciledTolls, reconciledTolls, allReconciledTolls]);
+  const periodTollIds = useMemo(
+    () =>
+      buildPeriodTollIdSet(
+        unreconciledTolls,
+        reconciledTolls,
+        allReconciledTolls,
+        period.startDate,
+        fleetTz,
+      ),
+    [unreconciledTolls, reconciledTolls, allReconciledTolls, period.startDate, fleetTz],
+  );
   const periodClaims = useMemo(
     () =>
       claims.filter((c: Claim) =>
@@ -291,22 +301,11 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
 
   const claimTollIdsForPeriod = useMemo(() => {
     const ids = new Set<string>();
-    claims.forEach((c) => {
-      if (
-        c.transactionId &&
-        isClaimVisibleInPeriod(
-          c,
-          { startDate: period.startDate, endDate: period.endDate },
-          tollDateById,
-          fleetTz,
-          periodTollIds,
-        )
-      ) {
-        ids.add(c.transactionId);
-      }
+    periodClaims.forEach((c) => {
+      if (c.transactionId) ids.add(c.transactionId);
     });
     return ids;
-  }, [claims, period.startDate, period.endDate, tollDateById, fleetTz, periodTollIds]);
+  }, [periodClaims]);
   const underpaidReconciledTolls = useMemo(() => {
     const merged = mergeReconciledTollsForUnderpaid(
       pReconciled,
@@ -670,6 +669,15 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
                 </Button>
             )}
             <TollAutomationSettings onChanged={refresh} />
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-red-700 border-red-200 hover:bg-red-50"
+              onClick={() => setResetDialogOpen(true)}
+            >
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Reset Period
+            </Button>
             <Button variant="outline" size="sm" onClick={() => refresh({ autoMatch: true })}>
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Refresh Data
@@ -828,7 +836,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
         onUndoApply={handleUndoApply}
         busyUnlinkedTripId={busyUnlinkedTripId}
         disputeRefunds={disputeRefunds || []}
-        pReconciled={pReconciled}
+        pReconciled={pReconciledInPeriod}
         trips={trips}
         pClaims={pPeriodClaims}
         onUnmatch={unreconcile}
@@ -869,6 +877,18 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <PeriodResetDialog
+        open={resetDialogOpen}
+        onOpenChange={setResetDialogOpen}
+        period={period}
+        drivers={drivers.map((d) => ({ id: d.id, name: d.name }))}
+        preselectedDriverId={driverId}
+        onComplete={() => {
+          setActiveStepId('needs-review');
+          void Promise.all([refresh({ autoMatch: false }), refreshClaims()]);
+        }}
+      />
     </div>
     </TooltipProvider>
   );

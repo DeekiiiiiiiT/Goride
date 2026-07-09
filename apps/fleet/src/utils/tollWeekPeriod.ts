@@ -260,7 +260,7 @@ export function getClaimWeekDate(
 }
 
 /**
- * Strict claim date for period-scoped UI — toll/claim/trip dates only.
+ * Strict claim date for period-scoped UI — linked toll date first, then claim/trip.
  * Never uses createdAt (resolution time), which can bucket claims into the wrong week.
  */
 export function getClaimPeriodAnchorDate(
@@ -268,8 +268,8 @@ export function getClaimPeriodAnchorDate(
   tollDateById?: Map<string, string>,
 ): string | null {
   const candidates: (string | undefined)[] = [
-    claim.date,
     claim.transactionId ? tollDateById?.get(claim.transactionId) : undefined,
+    claim.date,
     claim.tripDate,
   ];
   for (const candidate of candidates) {
@@ -278,6 +278,33 @@ export function getClaimPeriodAnchorDate(
     if (!isNaN(d.getTime())) return candidate;
   }
   return null;
+}
+
+/** Monday-start week key for a claim (matches period landing `period.id`). */
+export function claimPeriodWeekKey(
+  claim: Pick<Claim, 'date' | 'transactionId' | 'tripDate'>,
+  tollDateById: Map<string, string> | undefined,
+  fleetTz: string,
+): string | null {
+  const anchor = getClaimPeriodAnchorDate(claim, tollDateById);
+  if (!anchor) return null;
+  const ymd = fleetTzDateKey(anchor, fleetTz);
+  if (!ymd) return null;
+  const d = ymdToLocalDate(ymd);
+  if (isNaN(d.getTime())) return null;
+  return weekBucketForDate(d, fleetTz).key;
+}
+
+/** Human-readable week label for a claim row (toll-first anchor). */
+export function formatClaimPeriodLabel(
+  claim: Pick<Claim, 'date' | 'transactionId' | 'tripDate'>,
+  tollDateById?: Map<string, string>,
+): string {
+  const anchor = getClaimPeriodAnchorDate(claim, tollDateById);
+  const d = anchor ? new Date(anchor) : null;
+  if (!d || isNaN(d.getTime())) return 'Unknown';
+  const { start, end } = getMondaySundayForDate(d);
+  return formatWeekPeriodLabel(start, end);
 }
 
 /** Monday-start week key for a toll row (matches period landing `period.id`). */
@@ -296,6 +323,29 @@ export function isTollInWizardPeriod(
   timezone?: string,
 ): boolean {
   return tollWeekKey(tx, timezone) === periodWeekKey;
+}
+
+/**
+ * Toll IDs scoped to the active wizard week — date-filtered rows plus same-week
+ * reconciled tolls the API date filter may drop. Never includes all-time history.
+ */
+export function buildPeriodTollIdSet(
+  unreconciled: FinancialTransaction[],
+  reconciled: FinancialTransaction[],
+  allReconciled: FinancialTransaction[],
+  periodWeekKey: string,
+  fleetTz: string,
+): Set<string> {
+  const ids = new Set<string>();
+  for (const tx of [...unreconciled, ...reconciled]) {
+    if (tx?.id) ids.add(tx.id);
+  }
+  for (const tx of allReconciled) {
+    if (tx?.id && isTollInWizardPeriod(tx, periodWeekKey, fleetTz)) {
+      ids.add(tx.id);
+    }
+  }
+  return ids;
 }
 
 /** True when a claim is Open with credits applied and a remaining shortfall. */
@@ -342,32 +392,25 @@ export function isActionablePartialShortfall(
   );
 }
 
-/** True when a claim's toll/claim/trip anchor falls inside [startDate, endDate] (fleet tz). */
+/** True when a claim's toll-first anchor week matches the wizard period week key. */
 export function isClaimInPeriod(
   claim: Pick<Claim, 'date' | 'transactionId' | 'tripDate'>,
   period: { startDate: string; endDate: string },
   tollDateById: Map<string, string> | undefined,
   fleetTz: string,
 ): boolean {
-  const anchor = getClaimPeriodAnchorDate(claim, tollDateById);
-  if (!anchor) return false;
-  const ymd = fleetTzDateKey(anchor, fleetTz);
-  if (!ymd) return false;
-  return ymd >= period.startDate && ymd <= period.endDate;
+  const weekKey = claimPeriodWeekKey(claim, tollDateById, fleetTz);
+  if (!weekKey) return false;
+  return weekKey === period.startDate;
 }
 
-/**
- * Wizard period visibility — anchor date in range OR claim is tied to a toll
- * already loaded for this period (reconciled/unreconciled). Keeps active claims
- * visible when toll rows are shown even if anchor dates disagree.
- */
+/** Wizard period visibility — strict week-key match on toll-first anchor. */
 export function isClaimVisibleInPeriod(
   claim: Pick<Claim, 'date' | 'transactionId' | 'tripDate'>,
   period: { startDate: string; endDate: string },
   tollDateById: Map<string, string> | undefined,
   fleetTz: string,
-  periodTollIds?: ReadonlySet<string>,
+  _periodTollIds?: ReadonlySet<string>,
 ): boolean {
-  if (claim.transactionId && periodTollIds?.has(claim.transactionId)) return true;
   return isClaimInPeriod(claim, period, tollDateById, fleetTz);
 }

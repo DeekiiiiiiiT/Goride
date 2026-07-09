@@ -4217,6 +4217,32 @@ app.post(`${BASE}/reset-for-reconciliation`, async (c) => {
   }
 });
 
+// ─── POST /reset-period ──────────────────────────────────────────────────
+app.post(`${BASE}/reset-period`, async (c) => {
+  try {
+    const body = await c.req.json();
+    const { executePeriodReconciliationReset } = await import("./period_reset.ts");
+    const result = await executePeriodReconciliationReset(
+      {
+        startDate: body.startDate,
+        endDate: body.endDate,
+        driverIds: Array.isArray(body.driverIds) ? body.driverIds : undefined,
+        dryRun: body.dryRun === true,
+        confirmationLabel: String(body.confirmationLabel || ""),
+      },
+      c,
+    );
+    return c.json({ success: true, ...result });
+  } catch (e: any) {
+    const status =
+      typeof e.status === "number" && e.status >= 400 && e.status < 600
+        ? e.status
+        : 500;
+    console.log(`[TollReconciliation] POST /reset-period error: ${e.message}`);
+    return c.json({ error: e.message }, status);
+  }
+});
+
 // ─── POST /bulk-reconcile ──────────────────────────────────────────────
 
 app.post(`${BASE}/bulk-reconcile`, async (c) => {
@@ -6711,7 +6737,7 @@ export {
 export type { RefundAutomationSettings };
 
 // ── Exported helpers for the persisted toll-workflow state (RWF-1) ─────────
-export { recomputeAndPersistWorkflowStage };
+export { recomputeAndPersistWorkflowStage, undoApplyUnlinkedRefundToClaim };
 
 // ── Exported helpers for the period aggregation endpoint (Phase F2) ────────
 export { loadAllByPrefix, loadDisputeRefundRecords, filterByDriver };

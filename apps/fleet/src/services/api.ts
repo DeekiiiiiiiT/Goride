@@ -2440,6 +2440,62 @@ export const api = {
     return response.json();
   },
 
+  /** Preview or execute a full reconciliation reset for one wizard period. */
+  async resetReconciliationPeriod(payload: {
+    startDate: string;
+    endDate: string;
+    driverIds?: string[];
+    dryRun: boolean;
+    confirmationLabel: string;
+  }) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/toll-reconciliation/reset-period`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`,
+        },
+        body: JSON.stringify(payload),
+      },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to reset reconciliation period');
+    }
+    return response.json();
+  },
+
+  previewPeriodReset(
+    startDate: string,
+    endDate: string,
+    confirmationLabel: string,
+    driverIds?: string[],
+  ) {
+    return api.resetReconciliationPeriod({
+      startDate,
+      endDate,
+      driverIds,
+      dryRun: true,
+      confirmationLabel,
+    });
+  },
+
+  executePeriodReset(
+    startDate: string,
+    endDate: string,
+    confirmationLabel: string,
+    driverIds?: string[],
+  ) {
+    return api.resetReconciliationPeriod({
+      startDate,
+      endDate,
+      driverIds,
+      dryRun: false,
+      confirmationLabel,
+    });
+  },
+
   /** Fetch ALL toll transactions (flattened) for CSV export — no pagination. */
   async getTollTransactionsExport(organizationId?: string): Promise<any[]> {
     const url = organizationId 

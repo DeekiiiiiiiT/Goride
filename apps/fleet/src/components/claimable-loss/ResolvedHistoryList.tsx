@@ -9,7 +9,7 @@ import {
 } from "../ui/table";
 import { Badge } from "../ui/badge";
 import { CheckCircle2, History, Trash2, MoreHorizontal, FileText, UserMinus } from "lucide-react";
-import { Claim } from "../../types/data";
+import { Claim, FinancialTransaction } from "../../types/data";
 import { toast } from "sonner@2.0.3";
 import { Checkbox } from "../ui/checkbox";
 import { Button } from "../ui/button";
@@ -21,25 +21,27 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
-import { getMondaySundayForDate, formatWeekPeriodLabel } from "../../utils/tollWeekPeriod";
+import { formatClaimPeriodLabel } from "../../utils/tollWeekPeriod";
 import { isUnlinkedApplySplitState } from "../../utils/unlinkedShortfallEligibility";
 import { UndoApplyToUnderpaidDialog } from "../toll-tags/reconciliation/UndoApplyToUnderpaidDialog";
 import type { Trip } from "../../types/data";
+import { PlatformSourceBadge } from "../toll-tags/reconciliation/PlatformSourceBadge";
+import {
+  getClaimCategoryChipClass,
+  getClaimCategoryLabel,
+  getClaimPlatformDisplay,
+} from "../../utils/claimHistoryDisplay";
 
-/**
- * The toll's actual period should follow the toll's real date (claim.date,
- * captured at creation from the underlying transaction), falling back to the
- * matched trip's date, then to when the claim was created — in that order of
- * reliability. Never the resolution date (that's a separate "Date Resolved"
- * column) — this is what previously caused a charge to look like it belonged
- * to the wrong week.
- */
-export function getClaimPeriodLabel(claim: Claim): string {
-  const raw = claim.date || claim.tripDate || claim.createdAt;
-  const d = raw ? new Date(raw) : null;
-  if (!d || isNaN(d.getTime())) return "Unknown";
-  const { start, end } = getMondaySundayForDate(d);
-  return formatWeekPeriodLabel(start, end);
+/** Period label from toll-first anchor (shared with wizard period filter). */
+export function getClaimPeriodLabel(
+  claim: Claim,
+  toll?: Pick<FinancialTransaction, 'date'> | null,
+): string {
+  const tollDateById =
+    claim.transactionId && toll?.date
+      ? new Map([[claim.transactionId, toll.date]])
+      : undefined;
+  return formatClaimPeriodLabel(claim, tollDateById);
 }
 
 interface ResolutionStyle {
@@ -82,6 +84,8 @@ interface ResolvedHistoryListProps {
   onSelectClaim?: (claim: Claim) => void;
   /** Linked trips — used to detect split undo (trip pending, claim still Reimbursed). */
   trips?: Trip[];
+  /** Toll ledger rows keyed by id — platform + category context. */
+  tollById?: ReadonlyMap<string, FinancialTransaction>;
   /** Undo apply from claim row — passes the linked unlinked trip id. */
   onUndoUnlinkedApply?: (tripId: string) => Promise<void> | void;
   busyUnlinkedTripId?: string | null;
@@ -95,6 +99,7 @@ export function ResolvedHistoryList({
   onUpdateStatus,
   onSelectClaim,
   trips = [],
+  tollById,
   onUndoUnlinkedApply,
   busyUnlinkedTripId,
 }: ResolvedHistoryListProps) {
@@ -187,6 +192,8 @@ export function ResolvedHistoryList({
             <TableHead>Period</TableHead>
             <TableHead>Driver</TableHead>
             <TableHead>Location</TableHead>
+            <TableHead>Platform</TableHead>
+            <TableHead>Category</TableHead>
             <TableHead className="text-right">Amount</TableHead>
             <TableHead className="text-right">Status</TableHead>
             {onUndoUnlinkedApply && <TableHead className="text-right w-[120px]">Action</TableHead>}
@@ -195,6 +202,9 @@ export function ResolvedHistoryList({
         <TableBody>
           {claims.map((claim) => {
             const styles = getResolutionStyle(claim.resolutionReason);
+            const toll = claim.transactionId ? tollById?.get(claim.transactionId) : undefined;
+            const platformDisplay = getClaimPlatformDisplay(claim, toll, tripById);
+            const category = getClaimCategoryLabel(claim, toll);
             const linkedTrip = claim.unlinkedTripId ? tripById.get(claim.unlinkedTripId) : undefined;
             const splitApply = isUnlinkedApplySplitState(claim, linkedTrip);
             const staleUnlinkedApply =
@@ -222,7 +232,7 @@ export function ResolvedHistoryList({
                   </div>
                 </TableCell>
                 <TableCell className="text-sm text-slate-600 whitespace-nowrap">
-                  {getClaimPeriodLabel(claim)}
+                  {getClaimPeriodLabel(claim, tollById?.get(claim.transactionId || ''))}
                 </TableCell>
                 <TableCell>
                     <div className="font-medium text-sm">
@@ -233,6 +243,22 @@ export function ResolvedHistoryList({
                     <div className="text-sm truncate max-w-[200px]" title={claim.pickup}>
                         {claim.pickup || 'Unknown Location'}
                     </div>
+                </TableCell>
+                <TableCell>
+                  {platformDisplay.platform || platformDisplay.tollPlatform ? (
+                    <PlatformSourceBadge
+                      platform={platformDisplay.platform}
+                      tollPlatform={platformDisplay.tollPlatform}
+                      refundPlatform={platformDisplay.refundPlatform}
+                    />
+                  ) : (
+                    <span className="text-xs text-slate-400">—</span>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline" className={`text-[10px] font-medium ${getClaimCategoryChipClass(category)}`}>
+                    {category}
+                  </Badge>
                 </TableCell>
                 <TableCell className={`text-right font-bold ${
                     claim.resolutionReason === 'Write Off' ? 'text-red-600' : 'text-emerald-600'

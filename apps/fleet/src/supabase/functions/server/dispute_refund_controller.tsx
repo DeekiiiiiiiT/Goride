@@ -550,108 +550,96 @@ app.patch(`${BASE}/:id/match`, async (c) => {
 });
 
 // ─── PATCH /dispute-refunds/:id/unmatch ────────────────────────────────
+export async function unmatchDisputeRefundById(id: string, c: unknown): Promise<any> {
+  const recordKey = `dispute-refund:${id}`;
+  const refund: any = await kv.get(recordKey);
+  if (!refund || typeof refund !== "object") {
+    throw Object.assign(new Error(`Dispute refund not found: ${id}`), { status: 404 });
+  }
+
+  const settings = await getRefundAutomationSettings();
+
+  const claimId = refund.matchedClaimId;
+  let claimTripIdForTripReversal: string | null = null;
+  if (claimId) {
+    const claimKey = `claim:${claimId}`;
+    const claim: any = await kv.get(claimKey);
+    if (claim && typeof claim === "object" && claim.disputeRefundId === id) {
+      claimTripIdForTripReversal = claim.tripId || null;
+      if (claim._createdByRefund === id) {
+        await deleteClaim(claimId, c, { syncMode: settings.disputeRefundTripSyncEnabled ? "force" : "skip" });
+        console.log(`[DisputeRefund] Deleted refund-created claim ${claimId} on unmatch`);
+      } else if (settings.disputeRefundTripSyncEnabled && claim.preDisputeResolutionReason !== undefined) {
+        const revertReason = claim.preDisputeResolutionReason || undefined;
+        await upsertClaim(
+          {
+            ...claim,
+            status: claim.preDisputeStatus || "Sent_to_Driver",
+            resolutionReason: revertReason || null,
+            disputeRefundId: null,
+            preDisputeStatus: null,
+            preDisputeResolutionReason: null,
+            preIsReconciled: revertReason === undefined ? undefined : claim.preIsReconciled,
+          },
+          c,
+          { syncMode: "force" },
+        );
+        console.log(`[DisputeRefund] Reverted claim ${claimId} to ${claim.preDisputeStatus || "Sent_to_Driver"} on unmatch`);
+      } else {
+        await upsertClaim(
+          {
+            ...claim,
+            status: claim.preDisputeStatus || "Sent_to_Driver",
+            resolutionReason: null,
+            disputeRefundId: null,
+            preDisputeStatus: null,
+          },
+          c,
+          { syncMode: "skip" },
+        );
+        console.log(`[DisputeRefund] Reverted claim ${claimId} to ${claim.preDisputeStatus || "Sent_to_Driver"} on unmatch`);
+      }
+    }
+  }
+
+  if (settings.disputeRefundTripSyncEnabled && refund.matchedTollId) {
+    try {
+      const tollEntry = await loadTollForClaim(refund.matchedTollId);
+      const tripId = claimTripIdForTripReversal || tollEntry?.tripId || null;
+      if (tripId) {
+        const trip: any = await kv.get(`trip:${tripId}`);
+        if (trip?.tollRefundResolution?.source === `system:dispute_refund_sync:${id}`) {
+          await applyRefundResolution({ tripId, resolution: "pending", auto: false, source: "admin" });
+          console.log(`[DisputeRefund] Trip ${tripId} reverted to pending on unmatch of refund ${id}`);
+        }
+      }
+    } catch (err: any) {
+      console.error(`[DisputeRefund] Trip cascade reversal failed for refund ${id}:`, err.message);
+    }
+  }
+
+  const updated = {
+    ...refund,
+    status: "unmatched",
+    matchedTollId: null,
+    matchedClaimId: null,
+    resolvedAt: null,
+    resolvedBy: null,
+  };
+  await kv.set(recordKey, updated);
+  console.log(`[DisputeRefund] Unmatched refund ${id}`);
+  return updated;
+}
+
 app.patch(`${BASE}/:id/unmatch`, async (c) => {
   try {
     const id = c.req.param("id");
-
-    const recordKey = `dispute-refund:${id}`;
-    const refund: any = await kv.get(recordKey);
-    if (!refund || typeof refund !== "object") {
-      return c.json({ error: `Dispute refund not found: ${id}` }, 404);
-    }
-
-    const settings = await getRefundAutomationSettings();
-
-    // Revert the claim this refund resolved (reversibility) — only if we set it.
-    const claimId = refund.matchedClaimId;
-    let claimTripIdForTripReversal: string | null = null;
-    if (claimId) {
-      const claimKey = `claim:${claimId}`;
-      const claim: any = await kv.get(claimKey);
-      if (claim && typeof claim === "object" && claim.disputeRefundId === id) {
-        // Captured before any mutation/deletion below, so the trip-side
-        // reversal further down can still find the trip even when this claim
-        // is about to be deleted (the _createdByRefund branch).
-        claimTripIdForTripReversal = claim.tripId || null;
-        if (claim._createdByRefund === id) {
-          // This claim only existed to hold this manual match — reverse any
-          // driver charge it drove before removing it.
-          await deleteClaim(claimId, c, { syncMode: settings.disputeRefundTripSyncEnabled ? "force" : "skip" });
-          console.log(`[DisputeRefund] Deleted refund-created claim ${claimId} on unmatch`);
-        } else if (settings.disputeRefundTripSyncEnabled && claim.preDisputeResolutionReason !== undefined) {
-          // Symmetric reversal via the same reversible sync, restoring the
-          // exact prior reason (e.g. re-charging the driver if it was
-          // "Charge Driver" before this dispute match reimbursed it).
-          const revertReason = claim.preDisputeResolutionReason || undefined;
-          await upsertClaim(
-            {
-              ...claim,
-              status: claim.preDisputeStatus || "Sent_to_Driver",
-              resolutionReason: revertReason || null,
-              disputeRefundId: null,
-              preDisputeStatus: null,
-              preDisputeResolutionReason: null,
-              // Only clear once fully back to unresolved — restoring to a still-
-              // Resolved reason (e.g. "Charge Driver") means a later claims-side
-              // revert must still be able to restore this same baseline.
-              preIsReconciled: revertReason === undefined ? undefined : claim.preIsReconciled,
-            },
-            c,
-            { syncMode: "force" },
-          );
-          console.log(`[DisputeRefund] Reverted claim ${claimId} to ${claim.preDisputeStatus || "Sent_to_Driver"} on unmatch`);
-        } else {
-          // Flag off, or a legacy match from before preDisputeResolutionReason
-          // existed — fall back to the simpler restore (no charge reversal).
-          await upsertClaim(
-            {
-              ...claim,
-              status: claim.preDisputeStatus || "Sent_to_Driver",
-              resolutionReason: null,
-              disputeRefundId: null,
-              preDisputeStatus: null,
-            },
-            c,
-            { syncMode: "skip" },
-          );
-          console.log(`[DisputeRefund] Reverted claim ${claimId} to ${claim.preDisputeStatus || "Sent_to_Driver"} on unmatch`);
-        }
-      }
-    }
-
-    // Trip-side reversal — only undo what THIS cascade set (ownership check),
-    // never clobber a resolution an admin later set by hand.
-    if (settings.disputeRefundTripSyncEnabled && refund.matchedTollId) {
-      try {
-        const tollEntry = await loadTollForClaim(refund.matchedTollId);
-        const tripId = claimTripIdForTripReversal || tollEntry?.tripId || null;
-        if (tripId) {
-          const trip: any = await kv.get(`trip:${tripId}`);
-          if (trip?.tollRefundResolution?.source === `system:dispute_refund_sync:${id}`) {
-            await applyRefundResolution({ tripId, resolution: "pending", auto: false, source: "admin" });
-            console.log(`[DisputeRefund] Trip ${tripId} reverted to pending on unmatch of refund ${id}`);
-          }
-        }
-      } catch (err: any) {
-        console.error(`[DisputeRefund] Trip cascade reversal failed for refund ${id}:`, err.message);
-      }
-    }
-
-    const updated = {
-      ...refund,
-      status: "unmatched",
-      matchedTollId: null,
-      matchedClaimId: null,
-      resolvedAt: null,
-      resolvedBy: null,
-    };
-    await kv.set(recordKey, updated);
-
-    console.log(`[DisputeRefund] Unmatched refund ${id}`);
+    const updated = await unmatchDisputeRefundById(id, c);
     return c.json({ data: updated });
   } catch (err: any) {
+    const status = typeof err.status === "number" ? err.status : 500;
     console.log(`[DisputeRefund] Unmatch error: ${err.message}`);
-    return c.json({ error: `Failed to unmatch dispute refund: ${err.message}` }, 500);
+    return c.json({ error: `Failed to unmatch dispute refund: ${err.message}` }, status);
   }
 });
 
