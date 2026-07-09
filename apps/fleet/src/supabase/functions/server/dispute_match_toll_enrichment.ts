@@ -129,6 +129,37 @@ export async function computeLiveTripRefundForToll(
   rawToll: any,
   fleetTz: string,
 ): Promise<number | null> {
+  const ctx = await resolveLiveTripContextForToll(rawToll, fleetTz);
+  return ctx?.tripRefund ?? null;
+}
+
+/** Best-effort trip link + fare refund for a toll (persisted link or live match). */
+export async function resolveLiveTripContextForToll(
+  rawToll: any,
+  fleetTz: string,
+): Promise<{
+  tripId: string;
+  trip: any;
+  tripRefund: number;
+  tripLinkSource: "persisted" | "inferred";
+} | null> {
+  if (!rawToll) return null;
+
+  const persistedTripId = rawToll.tripId ? String(rawToll.tripId) : null;
+  if (persistedTripId) {
+    const trip = await kv.get(`trip:${persistedTripId}`);
+    if (trip) {
+      const tollCost = Math.abs(Number(rawToll.amount) || 0);
+      const pool = Math.abs(Number(trip.tollCharges) || 0);
+      return {
+        tripId: persistedTripId,
+        trip,
+        tripRefund: Math.max(0, Math.min(pool, tollCost)),
+        tripLinkSource: "persisted",
+      };
+    }
+  }
+
   const { trips } = await loadAllTollLedgerWithTrips();
   const matches = findTollMatchesServer(rawToll, trips, fleetTz);
   const validMatch = pickBestValidTollMatch(matches);
@@ -140,5 +171,10 @@ export async function computeLiveTripRefundForToll(
 
   const tollCost = Math.abs(Number(rawToll.amount) || 0);
   const pool = Math.abs(Number(trip.tollCharges) || 0);
-  return Math.max(0, Math.min(pool, tollCost));
+  return {
+    tripId: validMatch.tripId,
+    trip,
+    tripRefund: Math.max(0, Math.min(pool, tollCost)),
+    tripLinkSource: "inferred",
+  };
 }

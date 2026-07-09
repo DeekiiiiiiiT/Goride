@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../ui/dialog';
 import { Badge } from '../../ui/badge';
 import { Button } from '../../ui/button';
-import { Loader2, ArrowDown, MapPin, Unlink } from 'lucide-react';
+import { Loader2, ArrowDown, MapPin, Unlink, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { DisputeRefund } from '../../../types/data';
 import { formatInFleetTz, formatStoredDateInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
 import { api } from '../../../services/api';
@@ -18,6 +18,14 @@ export interface DisputeRefundMatchDetail {
     supportCaseId: string;
     resolvedAt: string | null;
     resolvedBy: string | null;
+  };
+  financials: {
+    tollCost: number;
+    tripRefund: number | null;
+    shortfall: number;
+    disputeRefund: number;
+    variance: number;
+    coversShortfallFully: boolean;
   };
   toll: {
     id: string;
@@ -45,6 +53,7 @@ export interface DisputeRefundMatchDetail {
     dropoffTime: string | null;
     tollCharges: number;
     tripRefund: number | null;
+    tripLinkSource: 'claim' | 'toll' | 'inferred' | 'persisted' | null;
   } | null;
 }
 
@@ -66,6 +75,37 @@ function resolvedByLabel(resolvedBy: string | null | undefined): string {
   if (resolvedBy === 'system-auto') return 'Automation';
   if (resolvedBy === 'admin') return 'Admin';
   return resolvedBy;
+}
+
+function MoneyRow({
+  label,
+  amount,
+  tone = 'neutral',
+}: {
+  label: string;
+  amount: number | null;
+  tone?: 'neutral' | 'cost' | 'credit' | 'warn';
+}) {
+  const toneClass =
+    tone === 'cost'
+      ? 'text-red-600'
+      : tone === 'credit'
+        ? 'text-emerald-600'
+        : tone === 'warn'
+          ? 'text-amber-600'
+          : 'text-slate-800';
+  return (
+    <div className="flex items-center justify-between gap-3 text-sm">
+      <span className="text-slate-600">{label}</span>
+      <span className={`font-semibold tabular-nums ${toneClass}`}>
+        {amount == null
+          ? '—'
+          : tone === 'cost'
+            ? `-$${Math.abs(amount).toFixed(2)}`
+            : fmtMoney(amount)}
+      </span>
+    </div>
+  );
 }
 
 export function DisputeRefundDetailDialog({
@@ -104,9 +144,13 @@ export function DisputeRefundDetailDialog({
         ? 'Matched'
         : 'Unmatched';
 
+  const fin = detail?.financials;
+  const matchOk = fin?.coversShortfallFully;
+  const tripInferred = detail?.trip?.tripLinkSource === 'inferred';
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             Dispute refund match
@@ -123,7 +167,7 @@ export function DisputeRefundDetailDialog({
             )}
           </DialogTitle>
           <DialogDescription>
-            Review which toll and trip this Uber support refund was linked to.
+            How this Uber support refund ties to the toll shortfall.
           </DialogDescription>
         </DialogHeader>
 
@@ -135,100 +179,99 @@ export function DisputeRefundDetailDialog({
           <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
             {error}
           </div>
-        ) : detail ? (
-          <div className="space-y-4">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-1">
+        ) : detail && fin ? (
+          <div className="space-y-3">
+            {/* Money story */}
+            <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
               <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                Uber support refund
+                Shortfall breakdown
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-lg font-semibold text-emerald-700">+{fmtMoney(detail.refund.amount)}</span>
-                <PlatformSourceBadge platform={detail.refund.platform} />
+              <MoneyRow label="Toll cost" amount={fin.tollCost} tone="cost" />
+              <MoneyRow
+                label="Paid on trip"
+                amount={fin.tripRefund}
+                tone="credit"
+              />
+              <div className="border-t border-slate-100 pt-2">
+                <MoneyRow label="Shortfall (underpaid)" amount={fin.shortfall} tone="warn" />
               </div>
-              <div className="text-xs text-slate-600">
-                {formatInFleetTz(detail.refund.date, fleetTz, {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                  hour: 'numeric',
-                  minute: '2-digit',
-                  hour12: true,
-                })}
+              <div className="flex justify-center py-0.5">
+                <ArrowDown className="h-3.5 w-3.5 text-slate-400" />
               </div>
-              <div className="text-[10px] text-slate-500">
-                Resolved by {resolvedByLabel(detail.refund.resolvedBy)}
-                {detail.refund.resolvedAt && (
-                  <> · {formatInFleetTz(detail.refund.resolvedAt, fleetTz, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}</>
+              <MoneyRow label="Uber dispute refund" amount={fin.disputeRefund} tone="credit" />
+              <div
+                className={`flex items-center gap-1.5 text-xs font-medium rounded-md px-2 py-1.5 ${
+                  matchOk
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : 'bg-amber-50 text-amber-800 border border-amber-200'
+                }`}
+              >
+                {matchOk ? (
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                ) : (
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                 )}
+                {matchOk
+                  ? 'Dispute refund covers the full shortfall'
+                  : `${fmtMoney(Math.abs(fin.variance))} ${fin.variance > 0 ? 'still owed' : 'over-applied'}`}
               </div>
             </div>
 
-            <div className="flex justify-center">
-              <ArrowDown className="h-4 w-4 text-slate-400" />
-            </div>
-
+            {/* Toll */}
             {detail.toll ? (
-              <div className="rounded-lg border border-slate-200 p-3 space-y-2">
+              <div className="rounded-lg border border-slate-200 p-3 space-y-1">
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                   Linked toll
                 </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-slate-800">
-                    {detail.toll.location || 'Toll charge'}
-                  </span>
-                  <span className="text-sm font-semibold text-red-600">-{fmtMoney(detail.toll.amount)}</span>
+                <div className="text-sm font-medium text-slate-800">
+                  {detail.toll.location || 'Toll charge'}
                 </div>
-                <div className="text-xs text-slate-600">
+                <div className="text-xs text-slate-500">
                   {formatInFleetTz(detail.toll.date, fleetTz, {
                     month: 'short',
                     day: 'numeric',
-                    year: 'numeric',
                     hour: 'numeric',
                     minute: '2-digit',
                     hour12: true,
                   })}
-                  {detail.toll.time ? ` · toll time ${detail.toll.time}` : ''}
+                  {detail.toll.driverName ? ` · ${detail.toll.driverName}` : ''}
                 </div>
-                {detail.toll.driverName && (
-                  <div className="text-xs text-slate-500">Driver: {detail.toll.driverName}</div>
-                )}
-                {detail.claim && (
-                  <div className="text-xs text-slate-600 pt-1 border-t border-slate-100">
-                    Underpaid claim: {fmtMoney(detail.claim.amount)} shortfall
-                    {detail.claim.resolutionReason && (
-                      <span className="text-slate-500"> · {detail.claim.resolutionReason}</span>
-                    )}
-                  </div>
-                )}
               </div>
             ) : (
               <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                Toll record not found — the link may be stale.
+                Toll record not found.
               </div>
             )}
 
+            {/* Trip */}
             {detail.trip ? (
-              <div className="rounded-lg border border-indigo-200 bg-indigo-50/50 p-3 space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-3.5 w-3.5 text-indigo-600" />
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-indigo-700">
-                    Matched trip
+              <div className="rounded-lg border border-indigo-200 bg-indigo-50/40 p-3 space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <MapPin className="h-3.5 w-3.5 text-indigo-600" />
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-indigo-700">
+                      Trip
+                    </span>
                   </div>
                   {detail.trip.platform && <PlatformSourceBadge platform={detail.trip.platform} />}
                 </div>
+                {tripInferred && (
+                  <p className="text-[10px] text-indigo-600/90">
+                    Suggested match — toll not formally linked yet
+                  </p>
+                )}
                 {detail.trip.pickup && (
                   <div className="text-xs text-slate-700">
-                    <span className="font-medium">Pickup:</span> {detail.trip.pickup}
+                    <span className="text-slate-500">From</span> {detail.trip.pickup}
                   </div>
                 )}
                 {detail.trip.dropoff && (
                   <div className="text-xs text-slate-700">
-                    <span className="font-medium">Dropoff:</span> {detail.trip.dropoff}
+                    <span className="text-slate-500">To</span> {detail.trip.dropoff}
                   </div>
                 )}
                 {detail.trip.requestTime && (
                   <div className="text-xs text-slate-600">
-                    Trip time:{' '}
                     {formatStoredDateInFleetTz(detail.trip.requestTime, fleetTz, {
                       month: 'short',
                       day: 'numeric',
@@ -238,15 +281,18 @@ export function DisputeRefundDetailDialog({
                     })}
                   </div>
                 )}
-                <div className="text-xs text-slate-600 pt-1 border-t border-indigo-100">
-                  Trip toll credit: {fmtMoney(detail.trip.tripRefund ?? detail.trip.tollCharges)}
-                </div>
               </div>
             ) : (
               <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
-                No trip linked to this toll yet.
+                No trip found for this toll — verify the match manually.
               </div>
             )}
+
+            <div className="text-[10px] text-slate-400 pt-1">
+              Uber refund {formatInFleetTz(detail.refund.date, fleetTz, { month: 'short', day: 'numeric' })}
+              {' · '}
+              Resolved by {resolvedByLabel(detail.refund.resolvedBy)}
+            </div>
 
             {onUnmatch && refund && (
               <div className="flex justify-end pt-2 border-t border-slate-100">

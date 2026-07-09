@@ -33,6 +33,7 @@ import { isFullyReimbursedViaTrip } from "./dispute_refund_eligibility.ts";
 import {
   enrichAndFilterDisputeBareTolls,
   computeLiveTripRefundForToll,
+  resolveLiveTripContextForToll,
 } from "./dispute_match_toll_enrichment.ts";
 
 const app = new Hono();
@@ -841,26 +842,61 @@ app.get(`${BASE}/match-detail/:id`, async (c) => {
       ? await kv.get(`claim:${refund.matchedClaimId}`)
       : null;
 
-    const tripId = claim?.tripId || toll?.tripId || null;
-    const trip: any = tripId ? await kv.get(`trip:${tripId}`) : null;
-
+    const fleetTz = await getFleetTimezone();
     const tollAmount = Math.abs(toll?.amount ?? 0);
     const claimAmount = claim ? Math.abs(claim.amount ?? 0) : null;
-    const fleetTz = await getFleetTimezone();
+    const tollCost = Math.abs(claim?.expectedAmount ?? tollAmount);
+
+    let trip: any = null;
+    let tripId: string | null = claim?.tripId || toll?.tripId || null;
+    let tripLinkSource: "claim" | "toll" | "inferred" | null = claim?.tripId
+      ? "claim"
+      : toll?.tripId
+        ? "toll"
+        : null;
+
+    if (tripId) {
+      trip = await kv.get(`trip:${tripId}`);
+    }
+    if (!trip && toll) {
+      const live = await resolveLiveTripContextForToll(toll, fleetTz);
+      if (live) {
+        trip = live.trip;
+        tripId = live.tripId;
+        tripLinkSource = live.tripLinkSource;
+      }
+    }
+
     const liveTripRefund = toll ? await computeLiveTripRefundForToll(toll, fleetTz) : null;
     const tripRefundFromClaim =
-      claimAmount != null && tollAmount > 0 ? Math.max(0, tollAmount - claimAmount) : null;
+      claimAmount != null && tollCost > 0 ? Math.max(0, tollCost - claimAmount) : null;
+    const tripRefund = tripRefundFromClaim ?? liveTripRefund ?? (
+      trip ? Math.max(0, Math.min(Math.abs(Number(trip.tollCharges) || 0), tollCost)) : null
+    );
+    const shortfall = claimAmount ?? (
+      tripRefund != null ? Math.max(0, tollCost - tripRefund) : tollCost
+    );
+    const disputeRefund = Math.abs(Number(refund.amount) || 0);
+    const variance = shortfall - disputeRefund;
 
     return c.json({
       refund: {
         id: refund.id,
-        amount: refund.amount,
+        amount: disputeRefund,
         date: refund.date,
         status: refund.status,
         platform: refund.platform,
         supportCaseId: refund.supportCaseId,
         resolvedAt: refund.resolvedAt,
         resolvedBy: refund.resolvedBy,
+      },
+      financials: {
+        tollCost,
+        tripRefund,
+        shortfall,
+        disputeRefund,
+        variance,
+        coversShortfallFully: Math.abs(variance) < 0.01,
       },
       toll: toll
         ? {
@@ -877,7 +913,7 @@ app.get(`${BASE}/match-detail/:id`, async (c) => {
         ? {
             id: claim.id,
             amount: claimAmount,
-            expectedAmount: Math.abs(claim.expectedAmount ?? tollAmount),
+            expectedAmount: Math.abs(claim.expectedAmount ?? tollCost),
             status: claim.status,
             resolutionReason: claim.resolutionReason || null,
             tripId: claim.tripId || null,
@@ -892,7 +928,8 @@ app.get(`${BASE}/match-detail/:id`, async (c) => {
             requestTime: trip.requestTime || trip.date || null,
             dropoffTime: trip.dropoffTime || null,
             tollCharges: Number(trip.tollCharges) || 0,
-            tripRefund: tripRefundFromClaim ?? liveTripRefund ?? null,
+            tripRefund,
+            tripLinkSource,
           }
         : null,
     });
