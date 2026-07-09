@@ -48,24 +48,26 @@ Deno.test("same-day trip outside proximity → medium / ORPHAN_OUT_OF_WINDOW", (
   assertEquals(r.nearestTripDiffMinutes, 240);
 });
 
-Deno.test("same-day trip within proximity → not orphan", () => {
+Deno.test("same-day trip within proximity → low / ORPHAN_NEARBY_UNEXPLAINED", () => {
   const r = classifyOrphanToll({
     txDate: new Date("2026-03-10T12:00:00Z"),
     candidateTrips: [tripAt("2026-03-10T11:00:00Z")],
     orphanProximityMinutes: PROXIMITY,
   });
-  assertEquals(r.isOrphan, false);
+  assertEquals(r.isOrphan, true);
   assertEquals(r.confidence, "low");
+  assertEquals(r.reasonCode, "ORPHAN_NEARBY_UNEXPLAINED");
   assertEquals(r.nearestTripDiffMinutes, 60);
 });
 
-Deno.test("exact proximity boundary → not orphan", () => {
+Deno.test("exact proximity boundary → low / ORPHAN_NEARBY_UNEXPLAINED", () => {
   const r = classifyOrphanToll({
     txDate: new Date("2026-03-10T12:00:00Z"),
     candidateTrips: [tripAt("2026-03-10T09:00:00Z")],
     orphanProximityMinutes: PROXIMITY,
   });
-  assertEquals(r.isOrphan, false);
+  assertEquals(r.isOrphan, true);
+  assertEquals(r.reasonCode, "ORPHAN_NEARBY_UNEXPLAINED");
   assertEquals(r.nearestTripDiffMinutes, 180);
 });
 
@@ -75,17 +77,19 @@ Deno.test("picks the nearest same-day trip", () => {
     candidateTrips: [tripAt("2026-03-10T06:00:00Z"), tripAt("2026-03-10T11:30:00Z")],
     orphanProximityMinutes: PROXIMITY,
   });
-  assertEquals(r.isOrphan, false);
+  assertEquals(r.isOrphan, true);
+  assertEquals(r.reasonCode, "ORPHAN_NEARBY_UNEXPLAINED");
   assertEquals(r.nearestTripDiffMinutes, 30);
 });
 
-Deno.test("unparseable toll timestamp → not orphan", () => {
+Deno.test("unparseable toll timestamp → low / ORPHAN_NEARBY_UNEXPLAINED", () => {
   const r = classifyOrphanToll({
     txDate: new Date("not-a-date"),
     candidateTrips: [tripAt("2026-03-10T08:00:00Z")],
     orphanProximityMinutes: PROXIMITY,
   });
-  assertEquals(r.isOrphan, false);
+  assertEquals(r.isOrphan, true);
+  assertEquals(r.reasonCode, "ORPHAN_NEARBY_UNEXPLAINED");
   assertEquals(r.nearestTripDiffMinutes, null);
 });
 

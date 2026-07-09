@@ -6,6 +6,7 @@ import {
 } from './tollPeriodGating';
 import type { Claim, DisputeRefund, FinancialTransaction, Trip } from '../types/data';
 import type { TollBucket } from './tollBucket';
+import { resolveWizardBucket } from './tollBucket';
 
 const claim = (status: Claim['status']): Pick<Claim, 'status'> => ({ status });
 
@@ -118,5 +119,19 @@ describe('computeStepCounts', () => {
       unclaimedRefundTrips: [{} as Trip, {} as Trip],
     });
     expect(counts['unlinked-refunds']).toEqual({ actionable: 2, informational: 0 });
+  });
+
+  it('zero-match tag tolls bucketed to personal-use do not block needs-review', () => {
+    const classified = emptyClassified();
+    classified['personal-use'] = [{ paymentMethod: 'Tag' } as FinancialTransaction];
+    const counts = computeStepCounts({
+      classified,
+      underpaidClaims: [],
+      disputeRefunds: [],
+      unclaimedRefundTrips: [],
+    });
+    expect(resolveWizardBucket({ paymentMethod: 'Tag' }, undefined)).toBe('personal-use');
+    expect(counts['needs-review'].actionable).toBe(0);
+    expect(counts['personal-use'].actionable).toBe(1);
   });
 });

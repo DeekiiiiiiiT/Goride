@@ -109,3 +109,92 @@ export function bucketForWorkflowStage(stage: TollWorkflowStage | undefined): To
       return 'needs-review';
   }
 }
+
+export type TollMatchStatus = 'unmatched' | 'matched' | 'orphan_personal' | 'ambiguous';
+
+export interface WizardBucketTx {
+  isReconciled?: boolean;
+  tripId?: string | null;
+  workflowStage?: TollWorkflowStage | string;
+  matchStatus?: TollMatchStatus;
+  isAmbiguous?: boolean;
+  paymentMethod?: string;
+  receiptUrl?: string;
+}
+
+/** Tag-import toll (not a cash/receipt driver claim). */
+export function isTagImportToll(tx: WizardBucketTx): boolean {
+  return tx.paymentMethod !== 'Cash' && !tx.receiptUrl;
+}
+
+export function isOrphanPersonalMatch(
+  best: Pick<MatchResult, 'matchType' | 'reasonCode' | 'trip'> | undefined,
+): boolean {
+  if (!best || best.matchType !== 'PERSONAL_MATCH') return false;
+  if (!best.trip?.id) return true;
+  const code = best.reasonCode || '';
+  return code.startsWith('ORPHAN_');
+}
+
+/**
+ * Human label for personal-match reason codes shown in the Personal Use step.
+ */
+export function personalMatchReasonLabel(
+  reasonCode?: string | null,
+  reason?: string | null,
+): string {
+  switch (reasonCode) {
+    case 'ORPHAN_NO_TRIP':
+      return 'No trip that day';
+    case 'ORPHAN_OUT_OF_WINDOW':
+      return 'Trip too far away';
+    case 'ORPHAN_NEARBY_UNEXPLAINED':
+      return 'Nearby trip — confirm personal';
+    case 'POST_TRIP_GAP':
+      return 'After dropoff';
+    default:
+      break;
+  }
+  if (reason?.toLowerCase().includes('dropoff')) return 'After dropoff';
+  if (reason?.toLowerCase().includes('personal')) return 'Personal — confirm';
+  return 'Personal — confirm';
+}
+
+/**
+ * Single source of truth for wizard step bucketing (client wizard + tests).
+ * Priority: ambiguous → persisted personal → live match → zero-match tag → stage.
+ */
+export function resolveWizardBucket(
+  tx: WizardBucketTx,
+  best: Pick<MatchResult, 'matchType' | 'reasonCode' | 'reason' | 'isAmbiguous' | 'trip'> | undefined,
+): TollBucket | null {
+  const stage = tx.workflowStage as TollWorkflowStage | undefined;
+  const resolvedStageBucket = stage ? bucketForWorkflowStage(stage) : undefined;
+  if (resolvedStageBucket === null && stage) return null;
+
+  const linkConfirmed = isTripLinkConfirmed(tx);
+  const ambiguous =
+    (best?.isAmbiguous || tx.matchStatus === 'ambiguous' || tx.isAmbiguous === true) &&
+    !linkConfirmed;
+  if (ambiguous) return 'needs-review';
+
+  if (stage === 'personal_use_pending' || tx.matchStatus === 'orphan_personal') {
+    return 'personal-use';
+  }
+
+  const liveBucket = resolveTollBucket(tx, best);
+  if (liveBucket !== 'needs-review') return liveBucket;
+
+  if (!best && isTagImportToll(tx) && tx.matchStatus !== 'ambiguous') {
+    return 'personal-use';
+  }
+
+  if (best?.matchType === 'PERSONAL_MATCH') {
+    return bucketForBestMatch(best);
+  }
+
+  if (stage === 'personal_use_pending') return 'personal-use';
+  if (resolvedStageBucket) return resolvedStageBucket;
+
+  return liveBucket;
+}

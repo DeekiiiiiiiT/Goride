@@ -71,13 +71,32 @@ function zeroCounts(): Record<StepId, StepCounts> {
   return counts;
 }
 
-/** Mirrors isTripLinkConfirmed / resolveTollBucket in apps/fleet/src/utils/tollBucket.ts. */
+/** Mirrors resolveWizardBucket in apps/fleet/src/utils/tollBucket.ts (no live MatchResult on server). */
 function resolvePeriodBucket(tx: any): "needs-review" | "underpaid-claims" | "deadhead" | "personal-use" | null {
+  const stage = tx.workflowStage as string | undefined;
+  const stageBucket = bucketForWorkflowStage(stage);
+  if (stageBucket === null && stage) return null;
+
   const linkConfirmed = !!(tx.isReconciled && tx.tripId);
   if (!linkConfirmed && (tx.matchStatus === "ambiguous" || tx.isAmbiguous === true)) {
     return "needs-review";
   }
-  return bucketForWorkflowStage(tx.workflowStage);
+
+  if (stage === "personal_use_pending" || tx.matchStatus === "orphan_personal") {
+    return "personal-use";
+  }
+
+  const matchType = tx.matchTypeCode as string | undefined;
+  if (matchType === "AMOUNT_VARIANCE" || stage === "underpaid_pending") return "underpaid-claims";
+  if (matchType === "DEADHEAD_MATCH" || stage === "deadhead_pending") return "deadhead";
+  if (matchType === "PERSONAL_MATCH" || stage === "personal_use_pending") return "personal-use";
+
+  const isCash = tx.paymentMethod === "Cash" || !!tx.receiptUrl;
+  if (!matchType && !isCash && tx.matchStatus !== "ambiguous") {
+    return "personal-use";
+  }
+
+  return stageBucket ?? "needs-review";
 }
 
 /** Mirrors bucketForWorkflowStage in apps/fleet/src/utils/tollBucket.ts. */

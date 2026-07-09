@@ -23,7 +23,10 @@
  * feature flag is ON. With the flag OFF this module is dead code.
  */
 
-export type PersonalUseReasonCode = 'ORPHAN_NO_TRIP' | 'ORPHAN_OUT_OF_WINDOW';
+export type PersonalUseReasonCode =
+  | 'ORPHAN_NO_TRIP'
+  | 'ORPHAN_OUT_OF_WINDOW'
+  | 'ORPHAN_NEARBY_UNEXPLAINED';
 
 /** Minimal trip shape the classifier reads — only the timing anchors. */
 export interface OrphanCandidateTrip {
@@ -81,13 +84,11 @@ export function classifyOrphanToll(input: OrphanClassifierInput): OrphanClassifi
   const { txDate, candidateTrips, orphanProximityMinutes } = input;
 
   const txMs = txDate instanceof Date ? txDate.getTime() : NaN;
-  // Without a usable toll timestamp we cannot reason about proximity — stay
-  // conservative and leave the toll in the ambiguous (Needs Review) bucket.
   if (Number.isNaN(txMs)) {
     return {
-      isOrphan: false,
+      isOrphan: true,
       confidence: 'low',
-      reasonCode: 'ORPHAN_OUT_OF_WINDOW',
+      reasonCode: 'ORPHAN_NEARBY_UNEXPLAINED',
       nearestTripDiffMinutes: null,
     };
   }
@@ -128,12 +129,12 @@ export function classifyOrphanToll(input: OrphanClassifierInput): OrphanClassifi
     };
   }
 
-  // A same-day trip is within proximity yet no window matched — genuinely
-  // ambiguous. Keep it in Needs Review rather than guess personal.
+  // Same-day trip within proximity but no trip window matched — route to
+  // Personal Use for human confirmation (low confidence).
   return {
-    isOrphan: false,
+    isOrphan: true,
     confidence: 'low',
-    reasonCode: 'ORPHAN_OUT_OF_WINDOW',
+    reasonCode: 'ORPHAN_NEARBY_UNEXPLAINED',
     nearestTripDiffMinutes: nearestDiffMin,
   };
 }

@@ -155,7 +155,8 @@ export function PeriodResetDialog({
           </DialogTitle>
           <DialogDescription>
             Undo all reconciliation work for <strong>{period.label}</strong> and send tolls back to
-            Needs Review. Toll charges and trips are not deleted.
+            Needs Review. Toll charges and trips are not deleted. Tolls will be re-classified using
+            current Automation settings (including personal-use detection).
           </DialogDescription>
         </DialogHeader>
 

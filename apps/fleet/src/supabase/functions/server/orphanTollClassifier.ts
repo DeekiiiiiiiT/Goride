@@ -11,7 +11,10 @@
  * personalUseDetectionEnabled feature flag is ON.
  */
 
-export type PersonalUseReasonCode = "ORPHAN_NO_TRIP" | "ORPHAN_OUT_OF_WINDOW";
+export type PersonalUseReasonCode =
+  | "ORPHAN_NO_TRIP"
+  | "ORPHAN_OUT_OF_WINDOW"
+  | "ORPHAN_NEARBY_UNEXPLAINED";
 
 export interface OrphanCandidateTrip {
   requestTime?: string | null;
@@ -55,9 +58,9 @@ export function classifyOrphanToll(input: OrphanClassifierInput): OrphanClassifi
   const txMs = txDate instanceof Date ? txDate.getTime() : NaN;
   if (Number.isNaN(txMs)) {
     return {
-      isOrphan: false,
+      isOrphan: true,
       confidence: "low",
-      reasonCode: "ORPHAN_OUT_OF_WINDOW",
+      reasonCode: "ORPHAN_NEARBY_UNEXPLAINED",
       nearestTripDiffMinutes: null,
     };
   }
@@ -97,9 +100,9 @@ export function classifyOrphanToll(input: OrphanClassifierInput): OrphanClassifi
   }
 
   return {
-    isOrphan: false,
+    isOrphan: true,
     confidence: "low",
-    reasonCode: "ORPHAN_OUT_OF_WINDOW",
+    reasonCode: "ORPHAN_NEARBY_UNEXPLAINED",
     nearestTripDiffMinutes: nearestDiffMin,
   };
 }

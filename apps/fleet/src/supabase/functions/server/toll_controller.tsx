@@ -728,10 +728,16 @@ function buildOrphanSuggestion(
   const cls = classifyOrphanToll({ txDate, candidateTrips, orphanProximityMinutes });
   if (!cls.isOrphan) return null;
 
+  const reasonByCode: Record<string, string> = {
+    ORPHAN_NO_TRIP: "No trip on this day explains this toll (personal use)",
+    ORPHAN_OUT_OF_WINDOW: "Nearest trip is too far from this toll (personal use)",
+    ORPHAN_NEARBY_UNEXPLAINED: "Nearby trip does not explain this toll — confirm personal",
+  };
+
   return {
     tripId: "", // no trip — prevents any auto-link / auto-charge downstream
     confidence: cls.confidence,
-    reason: "No trip explains this toll (personal use)",
+    reason: reasonByCode[cls.reasonCode] || "No trip explains this toll (personal use)",
     timeDifferenceMinutes: cls.nearestTripDiffMinutes ?? 0,
     matchType: "PERSONAL_MATCH",
     reasonCode: cls.reasonCode,
@@ -5083,7 +5089,7 @@ async function getRefundAutomationSettings(): Promise<RefundAutomationSettings> 
       typeof rec?.disputeRefundAutoMinConfidence === "number"
         ? rec.disputeRefundAutoMinConfidence
         : DISPUTE_REFUND_AUTO_MIN_CONFIDENCE,
-    personalUseDetectionEnabled: rec?.personalUseDetectionEnabled === true, // default OFF
+    personalUseDetectionEnabled: rec?.personalUseDetectionEnabled !== false, // default ON
     orphanProximityMinutes:
       typeof rec?.orphanProximityMinutes === "number" && rec.orphanProximityMinutes > 0
         ? rec.orphanProximityMinutes

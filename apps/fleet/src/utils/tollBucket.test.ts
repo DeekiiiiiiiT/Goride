@@ -4,6 +4,7 @@ import {
   bucketForWorkflowStage,
   isTripLinkConfirmed,
   resolveTollBucket,
+  resolveWizardBucket,
   TollWorkflowStage,
 } from './tollBucket';
 import { MatchResult } from './tollReconciliation';
@@ -51,8 +52,8 @@ describe('bucketForBestMatch', () => {
     it('ORPHAN_NO_TRIP → personal-use', () => {
       expect(bucketForBestMatch(m({ reasonCode: 'ORPHAN_NO_TRIP', reason: 'No trip explains this toll (personal use)' }))).toBe('personal-use');
     });
-    it('ORPHAN_OUT_OF_WINDOW → personal-use', () => {
-      expect(bucketForBestMatch(m({ reasonCode: 'ORPHAN_OUT_OF_WINDOW', reason: 'No trip explains this toll (personal use)' }))).toBe('personal-use');
+    it('ORPHAN_NEARBY_UNEXPLAINED → personal-use', () => {
+      expect(bucketForBestMatch(m({ reasonCode: 'ORPHAN_NEARBY_UNEXPLAINED', reason: 'Nearby trip' }))).toBe('personal-use');
     });
     it('reasonCode wins even when reason contains "Approach"', () => {
       // A structured POST_TRIP_GAP must NOT be misrouted to deadhead by a stray word.
@@ -121,6 +122,46 @@ describe('bucketForWorkflowStage', () => {
 
   it('falls back to needs-review for an unset stage (pre-backfill row)', () => {
     expect(bucketForWorkflowStage(undefined)).toBe('needs-review');
+  });
+});
+
+describe('resolveWizardBucket', () => {
+  const tagTx = { paymentMethod: 'Tag' as const };
+
+  it('ambiguous unreconciled → needs-review', () => {
+    expect(resolveWizardBucket(tagTx, { matchType: 'AMOUNT_VARIANCE', isAmbiguous: true })).toBe('needs-review');
+  });
+
+  it('zero-match tag toll → personal-use', () => {
+    expect(resolveWizardBucket(tagTx, undefined)).toBe('personal-use');
+  });
+
+  it('personal_use_pending stage wins over stale needs_review live path', () => {
+    expect(resolveWizardBucket(
+      { ...tagTx, workflowStage: 'personal_use_pending' },
+      undefined,
+    )).toBe('personal-use');
+  });
+
+  it('orphan_personal matchStatus → personal-use', () => {
+    expect(resolveWizardBucket(
+      { ...tagTx, matchStatus: 'orphan_personal' },
+      undefined,
+    )).toBe('personal-use');
+  });
+
+  it('resolved personal_use_resolved → excluded (null)', () => {
+    expect(resolveWizardBucket(
+      { ...tagTx, workflowStage: 'personal_use_resolved' },
+      undefined,
+    )).toBeNull();
+  });
+
+  it('cash claim with no match stays needs-review', () => {
+    expect(resolveWizardBucket(
+      { paymentMethod: 'Cash' },
+      undefined,
+    )).toBe('needs-review');
   });
 });
 

@@ -848,6 +848,8 @@ export interface FinancialTransaction {
   // See apps/fleet/src/utils/tollBucket.ts's TollWorkflowStage for the value set.
   workflowStage?: string;
   claimId?: string | null;
+  matchStatus?: 'unmatched' | 'matched' | 'orphan_personal' | 'ambiguous';
+  isAmbiguous?: boolean;
 
   // Unlinked refund apply provenance (nullable on legacy rows).
   unlinkedSourceTripId?: string | null;

@@ -32,7 +32,7 @@ import { FinancialTransaction, Trip } from "../../../types/data";
 import { EditTollModal } from "./EditTollModal";
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
 import { MatchResult } from "../../../utils/tollReconciliation";
-import { isTripLinkConfirmed } from "../../../utils/tollBucket";
+import { isTripLinkConfirmed, isOrphanPersonalMatch, personalMatchReasonLabel } from "../../../utils/tollBucket";
 import { SuggestedMatchCard } from "./SuggestedMatchCard";
 import { ManualMatchModal } from "./ManualMatchModal";
 import { TollDetailOverlay } from "./TollDetailOverlay";
@@ -83,6 +83,10 @@ export interface TollBucketPanelProps {
   approveLabel?: string;
   /** Deadhead-only: bill this toll to the driver instead of the fleet absorbing it. */
   onChargeDriver?: (tx: FinancialTransaction, match: MatchResult) => void;
+  /** Personal-use step: charge driver for orphan or trip-linked personal tolls. */
+  onChargePersonal?: (tx: FinancialTransaction, match?: MatchResult) => void;
+  /** Wizard step — controls orphan card surfacing and status labels. */
+  stepId?: 'needs-review' | 'personal-use' | 'deadhead';
   /** Period wizard: one card + one list (no duplicate week headers / stacked smart zone). */
   unifiedPeriodView?: boolean;
 }
@@ -90,7 +94,7 @@ export interface TollBucketPanelProps {
 export function TollBucketPanel({
   tolls, suggestions, onReconcile, allTrips, onApprove, onReject, onFlag, onManualResolve, onEdit, drivers = [],
   emptyState, listTitle = 'Tolls', listDescription = "Toll provider charges that haven't been linked to a specific trip.",
-  approveLabel = 'Approve', onChargeDriver, unifiedPeriodView = false,
+  approveLabel = 'Approve', onChargeDriver, onChargePersonal, stepId, unifiedPeriodView = false,
 }: TollBucketPanelProps) {
     const [hiddenSuggestions, setHiddenSuggestions] = useState<Set<string>>(new Set());
     const [selectedTxForManual, setSelectedTxForManual] = useState<FinancialTransaction | null>(null);
@@ -183,7 +187,7 @@ export function TollBucketPanel({
 
     const renderActionButtons = (tx: FinancialTransaction, match?: MatchResult) => {
         const isClaim = tx.paymentMethod === 'Cash' || !!tx.receiptUrl;
-        const isOrphan = !!match && !match.trip?.id;
+        const isOrphan = !!match && isOrphanPersonalMatch(match);
         const tripPickRequired = needsTripPick(tx, match);
 
         if (tripPickRequired && match) {
@@ -209,6 +213,15 @@ export function TollBucketPanel({
         if (!match || isOrphan) {
              return (
                 <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                    {stepId === 'personal-use' && isOrphan && onChargePersonal && (
+                        <Button
+                            size="sm"
+                            className="bg-rose-600 hover:bg-rose-700"
+                            onClick={() => onChargePersonal(tx, match)}
+                        >
+                            Charge Driver
+                        </Button>
+                    )}
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button size="sm" variant="outline" className="gap-2">
@@ -278,29 +291,49 @@ export function TollBucketPanel({
         }
 
         return (
-            <Button size="sm" variant="outline" onClick={() => onReconcile(tx, match.trip)}>
-                Link
+            <Button
+                size="sm"
+                className={match.matchType === 'PERSONAL_MATCH' ? 'bg-rose-600 hover:bg-rose-700' : undefined}
+                variant={match.matchType === 'PERSONAL_MATCH' ? 'default' : 'outline'}
+                onClick={() => {
+                    if (match.matchType === 'PERSONAL_MATCH' && onChargePersonal) {
+                        onChargePersonal(tx, match);
+                    } else {
+                        onReconcile(tx, match.trip);
+                    }
+                }}
+            >
+                {match.matchType === 'PERSONAL_MATCH' ? 'Charge Driver' : 'Link'}
             </Button>
         );
     };
 
+    const orphanSmartMatches = stepId === 'personal-use'
+        ? filteredTolls.filter((tx) => {
+            const best = suggestions.get(tx.id)?.[0];
+            return best && isOrphanPersonalMatch(best) && !hiddenSuggestions.has(tx.id);
+        })
+        : [];
+
     const smartMatches = filteredTolls.filter(tx => {
         const matches = suggestions.get(tx.id);
         const best = matches?.[0];
-        const isOrphan = best && !best.trip?.id;
+        if (best && isOrphanPersonalMatch(best)) return false;
         const hasHighScore = best?.confidenceScore != null ? best.confidenceScore >= 50 : (
             best?.confidence === 'high' ||
             best?.matchType === 'DEADHEAD_MATCH' ||
             best?.matchType === 'PERSONAL_MATCH'
         );
-        return best && hasHighScore && !isOrphan && !hiddenSuggestions.has(tx.id);
+        return best && hasHighScore && !hiddenSuggestions.has(tx.id);
     });
 
     const visibleSmart = smartMatches.slice(0, visibleSmartMatches);
     const ambiguousSmartMatches = visibleSmart.filter(tx => needsTripPick(tx, suggestions.get(tx.id)?.[0]));
     const normalSmartMatches = visibleSmart.filter(tx => !needsTripPick(tx, suggestions.get(tx.id)?.[0]));
 
-    const otherTolls = filteredTolls.filter(tx => !smartMatches.includes(tx));
+    const otherTolls = filteredTolls.filter(
+        (tx) => !smartMatches.includes(tx) && !orphanSmartMatches.includes(tx),
+    );
 
     const renderSmartMatchCards = (items: FinancialTransaction[]) => (
         smartWeekGroupsFor(items).map((week) => (
@@ -346,7 +379,11 @@ export function TollBucketPanel({
                 if (isApproach) {
                     return <Badge className="bg-purple-600 hover:bg-purple-700">Unreimbursed</Badge>;
                 }
-                return <Badge className="bg-purple-500 hover:bg-purple-600">Personal</Badge>;
+                return (
+                    <Badge className="bg-purple-500 hover:bg-purple-600">
+                        {personalMatchReasonLabel(match.reasonCode, match.reason)}
+                    </Badge>
+                );
             }
             default:
                 return <Badge variant="secondary">{match.confidence === 'medium' ? 'Possible Match' : 'Low Confidence'}</Badge>;
@@ -359,7 +396,7 @@ export function TollBucketPanel({
         return 'text-rose-600';
     };
 
-    const renderSuggestedMatchCard = (tx: FinancialTransaction) => {
+    const renderSuggestedMatchCard = (tx: FinancialTransaction, orphanMode = false) => {
         const matches = suggestions.get(tx.id) ?? [];
         const match = matches[0];
         if (!match) return null;
@@ -368,7 +405,16 @@ export function TollBucketPanel({
                 transaction={tx}
                 match={match}
                 allMatches={matches}
-                onConfirm={() => onReconcile(tx, match.trip)}
+                orphanMode={orphanMode}
+                onConfirm={() => {
+                    if (orphanMode && onChargePersonal) {
+                        onChargePersonal(tx, match);
+                    } else if (match.matchType === 'PERSONAL_MATCH' && onChargePersonal) {
+                        onChargePersonal(tx, match);
+                    } else {
+                        onReconcile(tx, match.trip);
+                    }
+                }}
                 onDismiss={() => handleDismiss(tx.id)}
                 onApprove={onApprove ? () => onApprove(tx) : undefined}
                 onReject={onReject ? () => onReject(tx) : undefined}
@@ -472,7 +518,9 @@ export function TollBucketPanel({
                             )}
                         </div>
                     ) : (
-                        <Badge variant="outline" className="text-slate-600 border-slate-300 bg-slate-50">Unclassified</Badge>
+                        <Badge variant="outline" className="text-slate-600 border-slate-300 bg-slate-50">
+                            {stepId === 'personal-use' ? 'Personal — confirm' : 'Unclassified'}
+                        </Badge>
                     )}
                 </TableCell>
                 <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
@@ -580,6 +628,20 @@ export function TollBucketPanel({
                         </div>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                        {orphanSmartMatches.length > 0 && (
+                            <div className="space-y-3 w-full min-w-0">
+                                <div className="flex items-center gap-2 rounded-lg border border-purple-200 bg-purple-50/60 px-3 py-2 text-purple-900 text-sm">
+                                    <Sparkles className="h-4 w-4 shrink-0" />
+                                    <span className="font-semibold">No trip explains these tolls ({orphanSmartMatches.length})</span>
+                                    <span className="text-purple-800/80">— confirm personal use before charging.</span>
+                                </div>
+                                {orphanSmartMatches.map((tx) => (
+                                    <div key={tx.id} className="w-full min-w-0">
+                                        {renderSuggestedMatchCard(tx, true)}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                         {ambiguousSmartMatches.length > 0 && (
                             <div className="flex items-start gap-2 rounded-lg border border-orange-200 bg-orange-50/80 px-3 py-2.5 text-orange-800">
                                 <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />

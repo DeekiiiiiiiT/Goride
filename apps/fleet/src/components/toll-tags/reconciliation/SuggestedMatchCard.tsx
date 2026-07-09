@@ -7,7 +7,7 @@ import { FinancialTransaction, Trip } from "../../../types/data";
 import { normalizePlatform } from '../../../utils/normalizePlatform';
 import { format } from "date-fns";
 import { MatchResult } from "../../../utils/tollReconciliation";
-import { isTripLinkConfirmed } from "../../../utils/tollBucket";
+import { isTripLinkConfirmed, personalMatchReasonLabel } from "../../../utils/tollBucket";
 import { MatchAlternatesPanel } from "./MatchAlternatesPanel";
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
 
@@ -23,6 +23,8 @@ interface SuggestedMatchCardProps {
   match: MatchResult;
   /** Full ranked match list when ambiguous — drives the alternates panel. */
   allMatches?: MatchResult[];
+  /** Orphan personal toll — no linked trip column. */
+  orphanMode?: boolean;
   onConfirm: () => void;
   onDismiss: () => void;
   onApprove?: () => void;
@@ -37,10 +39,10 @@ interface SuggestedMatchCardProps {
 }
 
 export function SuggestedMatchCard({
-  transaction, match, allMatches, onConfirm, onDismiss, onApprove, onReject, onFlag, onChargeDriver,
+  transaction, match, allMatches, orphanMode = false, onConfirm, onDismiss, onApprove, onReject, onFlag, onChargeDriver,
   onClickDetail, onSelectTrip, onFindMatch,
 }: SuggestedMatchCardProps) {
-  const { trip, confidence, reason, timeDifferenceMinutes, matchType, varianceAmount, confidenceScore, vehicleMatch, driverMatch, dataQuality, windowHit, isAmbiguous } = match;
+  const { trip, confidence, reason, timeDifferenceMinutes, matchType, varianceAmount, confidenceScore, vehicleMatch, driverMatch, dataQuality, windowHit, isAmbiguous, reasonCode } = match;
   const isClaim = transaction.paymentMethod === 'Cash' || !!transaction.receiptUrl;
   const fleetTz = useFleetTimezone();
 
@@ -62,7 +64,11 @@ export function SuggestedMatchCard({
         if (reason?.includes('Approach')) {
              return <Badge className="mb-2 bg-purple-600 hover:bg-purple-700">Unreimbursed Approach</Badge>;
         }
-        return <Badge className="mb-2 bg-purple-500 hover:bg-purple-600">Personal</Badge>;
+        return (
+          <Badge className="mb-2 bg-purple-500 hover:bg-purple-600">
+            {personalMatchReasonLabel(reasonCode, reason)}
+          </Badge>
+        );
       default:
         return <Badge className="mb-2 bg-slate-500 hover:bg-slate-600">Possible Match</Badge>;
     }
@@ -148,10 +154,8 @@ export function SuggestedMatchCard({
 
       // Logic for Tag Imports (Fleet Expenses)
       // For tags, we generally "Link" them. Personal tags mean deducting from driver.
-      // Variance tags might need review, but usually just linking to track the loss.
-      // Phase 5: Contextual labels per matchType
       let label = 'Link Trip';
-      if (matchType === 'PERSONAL_MATCH') label = 'Mark Personal';
+      if (orphanMode || matchType === 'PERSONAL_MATCH') label = 'Charge Driver';
       else if (matchType === 'DEADHEAD_MATCH') label = 'Confirm Deadhead';
       else if (matchType === 'AMOUNT_VARIANCE') label = 'Confirm & Flag';
 
@@ -227,12 +231,21 @@ export function SuggestedMatchCard({
                   </div>
                 )}
                 
+                {!orphanMode && (
                 <div className="flex items-center text-xs text-slate-500 space-x-1">
                     <Clock className="h-3 w-3" />
                     <span>
                         {timeDifferenceMinutes === 0 ? 'Exact time' : `${Math.abs(timeDifferenceMinutes)} min diff`}
                     </span>
                 </div>
+                )}
+
+                {orphanMode && timeDifferenceMinutes > 0 && (
+                  <div className="flex items-center text-xs text-slate-500 space-x-1">
+                    <Clock className="h-3 w-3" />
+                    <span>{Math.abs(timeDifferenceMinutes)} min from nearest trip</span>
+                  </div>
+                )}
 
                 {/* Identity Indicators */}
                 {(vehicleMatch || driverMatch) && (
@@ -281,10 +294,11 @@ export function SuggestedMatchCard({
                   </div>
                 )}
 
-                <ArrowRight className="hidden xl:block h-4 w-4 text-slate-300 mt-2 rotate-90 xl:rotate-0" />
+                <ArrowRight className={`hidden xl:block h-4 w-4 text-slate-300 mt-2 ${orphanMode ? 'invisible' : 'rotate-90 xl:rotate-0'}`} />
             </div>
 
-            {/* Right: Trip (The Solution) */}
+            {/* Right: Trip (The Solution) — hidden for orphan personal */}
+            {!orphanMode && (
             <div className="flex-1 min-w-0 basis-0 text-left" onClick={onClickDetail}>
                 <div className="flex items-center justify-start space-x-2 mb-2 flex-wrap">
                     <Badge variant="outline" className="bg-white border-emerald-200 text-emerald-700">
@@ -305,6 +319,7 @@ export function SuggestedMatchCard({
                     Driver: {trip.driverName || "Unknown"}
                 </div>
             </div>
+            )}
 
             {/* Actions */}
             <div className="flex flex-col gap-2 w-full xl:w-auto xl:shrink-0 border-t xl:border-t-0 xl:border-l border-slate-200 pt-4 xl:pt-0 xl:pl-4">

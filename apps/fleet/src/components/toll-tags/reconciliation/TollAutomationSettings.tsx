@@ -311,9 +311,8 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
                 <div>
                   <h4 className="text-sm font-semibold text-slate-900">Personal-use detection</h4>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Classifies tolls that no trip explains as likely personal use, moving them out
-                    of “Needs Review” into “Personal Use”. Classify-only — a human still confirms
-                    any driver charge.
+                    Personal tolls are classified automatically and moved into the Personal Use step.
+                    You still confirm each driver charge manually — nothing auto-bills.
                   </p>
                 </div>
 
@@ -344,8 +343,8 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
                     className="w-full mt-2 accent-indigo-600"
                   />
                   <p className="text-xs text-slate-500 mt-1">
-                    A same-day trip within this window keeps a toll under review; beyond it (or no
-                    trip that day) the toll is flagged personal.
+                    Tolls with no trip match are routed to Personal Use. Higher proximity values
+                    only affect how confidently “no trip explains this toll” is labeled.
                   </p>
                 </div>
               </div>
@@ -365,8 +364,8 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
                   </label>
                   <p className="text-xs text-slate-500 mt-1">
                     When a toll is resolved as “Charge Driver”, post it to the driver's Expenses,
-                    Settlement and Cash Wallet. Classify-only stays intact; this only controls
-                    whether the confirmed charge appears in the driver's financials.
+                    Settlement and Cash Wallet. Personal Use step charges need this enabled to
+                    affect driver payout — otherwise only the claim is recorded.
                   </p>
                 </div>
 

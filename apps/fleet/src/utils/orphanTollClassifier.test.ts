@@ -53,24 +53,26 @@ describe('classifyOrphanToll', () => {
     expect(r.nearestTripDiffMinutes).toBe(240);
   });
 
-  it('is NOT an orphan when a same-day trip is within proximity', () => {
+  it('flags low/ORPHAN_NEARBY_UNEXPLAINED when a same-day trip is within proximity', () => {
     const r = classifyOrphanToll({
       txDate: new Date('2026-03-10T12:00:00Z'),
       candidateTrips: [tripAt('2026-03-10T11:00:00Z')], // 60 min away
       orphanProximityMinutes: PROXIMITY,
     });
-    expect(r.isOrphan).toBe(false);
+    expect(r.isOrphan).toBe(true);
     expect(r.confidence).toBe('low');
+    expect(r.reasonCode).toBe('ORPHAN_NEARBY_UNEXPLAINED');
     expect(r.nearestTripDiffMinutes).toBe(60);
   });
 
-  it('treats the exact proximity boundary as NOT an orphan (strictly greater)', () => {
+  it('flags low/ORPHAN_NEARBY_UNEXPLAINED at the exact proximity boundary', () => {
     const r = classifyOrphanToll({
       txDate: new Date('2026-03-10T12:00:00Z'),
       candidateTrips: [tripAt('2026-03-10T09:00:00Z')], // exactly 180 min away
       orphanProximityMinutes: PROXIMITY,
     });
-    expect(r.isOrphan).toBe(false);
+    expect(r.isOrphan).toBe(true);
+    expect(r.reasonCode).toBe('ORPHAN_NEARBY_UNEXPLAINED');
     expect(r.nearestTripDiffMinutes).toBe(180);
   });
 
@@ -83,17 +85,19 @@ describe('classifyOrphanToll', () => {
       ],
       orphanProximityMinutes: PROXIMITY,
     });
-    expect(r.isOrphan).toBe(false); // nearest is within window → ambiguous, not orphan
+    expect(r.isOrphan).toBe(true); // nearest is within window → low-confidence personal
+    expect(r.reasonCode).toBe('ORPHAN_NEARBY_UNEXPLAINED');
     expect(r.nearestTripDiffMinutes).toBe(30);
   });
 
-  it('stays conservative (not orphan) when the toll timestamp is unparseable', () => {
+  it('flags low/ORPHAN_NEARBY_UNEXPLAINED when the toll timestamp is unparseable', () => {
     const r = classifyOrphanToll({
       txDate: new Date('not-a-date'),
       candidateTrips: [tripAt('2026-03-10T08:00:00Z')],
       orphanProximityMinutes: PROXIMITY,
     });
-    expect(r.isOrphan).toBe(false);
+    expect(r.isOrphan).toBe(true);
+    expect(r.reasonCode).toBe('ORPHAN_NEARBY_UNEXPLAINED');
     expect(r.nearestTripDiffMinutes).toBeNull();
   });
 
