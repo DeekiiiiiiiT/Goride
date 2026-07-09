@@ -2469,7 +2469,7 @@ export const api = {
   previewPeriodReset(
     startDate: string,
     endDate: string,
-    confirmationLabel: string,
+    _confirmationLabel: string,
     driverIds?: string[],
   ) {
     return api.resetReconciliationPeriod({
@@ -2477,7 +2477,7 @@ export const api = {
       endDate,
       driverIds,
       dryRun: true,
-      confirmationLabel,
+      confirmationLabel: '',
     });
   },
 

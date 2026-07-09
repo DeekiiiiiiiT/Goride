@@ -5298,6 +5298,31 @@ app.post("/make-server-37f42386/toll-reconciliation/reset-for-reconciliation", a
   }
 });
 
+app.post("/make-server-37f42386/toll-reconciliation/reset-period", async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const { executePeriodReconciliationReset } = await import("./period_reset.ts");
+    const result = await executePeriodReconciliationReset(
+      {
+        startDate: body.startDate,
+        endDate: body.endDate,
+        driverIds: Array.isArray(body.driverIds) ? body.driverIds : undefined,
+        dryRun: body.dryRun === true,
+        confirmationLabel: String(body.confirmationLabel || ""),
+      },
+      c,
+    );
+    return c.json({ success: true, ...result });
+  } catch (e: any) {
+    const status =
+      typeof e.status === "number" && e.status >= 400 && e.status < 600
+        ? e.status
+        : 500;
+    console.log(`[PeriodReset] Error (main router): ${e.message}`);
+    return c.json({ error: e.message }, status);
+  }
+});
+
 // ─── POST /ledger/repair-driver-ids — Phase 5.2b: Fix Uber UUID → Roam UUID in canonical ledger ──────
 // Scans `ledger_event:*` rows, resolves each driverId to the canonical Roam UUID, updates mismatches in place.
 // Supports: ?dryRun=true (preview only), ?driverId=xxx (repair only one driver's entries)

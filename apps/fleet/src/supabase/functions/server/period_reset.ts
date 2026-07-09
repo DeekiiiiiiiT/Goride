@@ -222,12 +222,14 @@ export async function executePeriodReconciliationReset(
   },
   c: unknown,
 ): Promise<PeriodResetResult> {
-  const expectedLabel = formatPeriodConfirmationLabel(opts.startDate, opts.endDate);
-  if (opts.confirmationLabel.trim() !== expectedLabel.trim()) {
-    throw Object.assign(
-      new Error(`Confirmation label must exactly match: ${expectedLabel}`),
-      { status: 400 },
-    );
+  if (!opts.dryRun) {
+    const expectedLabel = formatPeriodConfirmationLabel(opts.startDate, opts.endDate);
+    if (opts.confirmationLabel.trim() !== expectedLabel.trim()) {
+      throw Object.assign(
+        new Error(`Confirmation label must exactly match: ${expectedLabel}`),
+        { status: 400 },
+      );
+    }
   }
 
   const inventory = await buildPeriodResetInventory({

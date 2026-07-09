@@ -97,7 +97,8 @@ export function PeriodResetDialog({
         toast.info('Nothing to reset for this scope');
       }
     } catch (e: any) {
-      toast.error(e?.message || 'Preview failed');
+      const msg = e?.message || 'Preview failed';
+      toast.error(msg.includes('reset') ? msg : `Preview failed: ${msg}`);
     } finally {
       setPreviewLoading(false);
     }
