@@ -730,6 +730,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               tolls={classified['needs-review']}
               suggestions={suggestions}
               allTrips={trips}
+              drivers={drivers}
               onReconcile={handleSmartReconcile}
               onApprove={handleApprove}
               onReject={handleReject}
@@ -746,6 +747,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               tolls={classified['personal-use']}
               suggestions={suggestions}
               allTrips={trips}
+              drivers={drivers}
               onReconcile={handleSmartReconcile}
               onApprove={handleApprove}
               onReject={handleReject}
@@ -762,6 +764,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               tolls={classified['deadhead']}
               suggestions={suggestions}
               allTrips={trips}
+              drivers={drivers}
               onReconcile={handleSmartReconcile}
               onApprove={handleApprove}
               onReject={handleReject}

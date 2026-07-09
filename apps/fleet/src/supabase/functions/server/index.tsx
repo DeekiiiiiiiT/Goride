@@ -118,6 +118,7 @@ import tollApp, {
   reconsiderTollsForNewTrips,
   invalidateStaleTollMatchesForTrip,
 } from "./toll_controller.tsx";
+import { resolveDriverFromFleetRecords } from "./driver_identity.ts";
 import disputeRefundApp from "./dispute_refund_controller.tsx";
 import tollPeriodApp from "./toll_period_controller.tsx";
 import paymentLedgerLineApp from "./payment_ledger_line_controller.tsx";
@@ -345,6 +346,16 @@ registerPartSourcingRoutes(app, supabase);
 async function writeTollToLedger(transaction: any, c: Context): Promise<void> {
   if (!isTollCategoryServer(transaction.category)) return;
 
+  const drivers = await loadDriverCache();
+  const normalized = resolveDriverFromFleetRecords(
+    { driverId: transaction.driverId, driverName: transaction.driverName },
+    drivers,
+  );
+  if (normalized.resolved) {
+    transaction.driverId = normalized.canonicalId;
+    transaction.driverName = normalized.driverName;
+  }
+
   const tollRecord = transactionToTollLedgerServer(transaction);
   await saveTollLedgerEntry(tollRecord);
   console.log(`[TollLedger] Saved toll_ledger:${tollRecord.id}`);
@@ -396,40 +407,15 @@ async function resolveCanonicalDriverId(input: string): Promise<ResolvedDriver> 
 
     const trimmed = input.trim();
     const drivers = await loadDriverCache();
+    const resolved = resolveDriverFromFleetRecords(
+      { driverId: trimmed, driverName: trimmed },
+      drivers,
+    );
 
-    // 1. Direct match: input is a Roam UUID
-    const directMatch = drivers.find((d: any) => d.id === trimmed);
-    if (directMatch) {
-        const name = directMatch.name || [directMatch.firstName, directMatch.lastName].filter(Boolean).join(' ') || 'Unknown';
-        return { canonicalId: directMatch.id, driverName: name, resolved: true };
+    if (resolved.resolved) {
+        return { canonicalId: resolved.canonicalId, driverName: resolved.driverName, resolved: true };
     }
 
-    // 2. Uber UUID match
-    const uberMatch = drivers.find((d: any) => d.uberDriverId === trimmed);
-    if (uberMatch) {
-        const name = uberMatch.name || [uberMatch.firstName, uberMatch.lastName].filter(Boolean).join(' ') || 'Unknown';
-        return { canonicalId: uberMatch.id, driverName: name, resolved: true };
-    }
-
-    // 3. InDrive UUID match
-    const indriveMatch = drivers.find((d: any) => d.inDriveDriverId === trimmed);
-    if (indriveMatch) {
-        const name = indriveMatch.name || [indriveMatch.firstName, indriveMatch.lastName].filter(Boolean).join(' ') || 'Unknown';
-        return { canonicalId: indriveMatch.id, driverName: name, resolved: true };
-    }
-
-    // 4. Name match (case-insensitive)
-    const inputLower = trimmed.toLowerCase();
-    const nameMatch = drivers.find((d: any) => {
-        const fullName = d.name || [d.firstName, d.lastName].filter(Boolean).join(' ') || '';
-        return fullName.toLowerCase() === inputLower;
-    });
-    if (nameMatch) {
-        const name = nameMatch.name || [nameMatch.firstName, nameMatch.lastName].filter(Boolean).join(' ') || 'Unknown';
-        return { canonicalId: nameMatch.id, driverName: name, resolved: true };
-    }
-
-    // 5. No match — return input as-is
     console.log(`[DriverResolve] Could not resolve "${trimmed}" to a canonical ID`);
     return { canonicalId: trimmed, driverName: trimmed, resolved: false };
 }

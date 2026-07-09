@@ -38,6 +38,7 @@ import { api } from '../../services/api';
 import { uploadEvidenceFile } from '../../services/uploadEvidence';
 import { EvidenceRetentionNotice } from '../evidence/EvidenceRetentionNotice';
 import { resolveVehicleIdForDriver } from '../../utils/resolveDriverVehicleId';
+import { resolveCanonicalDriverIdentity } from '@roam/types/driverIdentity';
 import { FinancialTransaction, TransactionCategory } from '../../types/data';
 import { StationProfile } from '../../types/station';
 import { DriverClaims } from './DriverClaims';
@@ -487,10 +488,15 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         ? (vehicles as any[]).find((v: any) => v.id === resolvedVehicleId)
         : undefined;
 
+      const { driverId: canonicalDriverId, driverName: canonicalDriverName } = resolveCanonicalDriverIdentity(
+        driverRecord,
+        { id: user?.id, name: user?.user_metadata?.name, email: user?.email },
+      );
+
       const baseTx: Partial<FinancialTransaction> = {
         id: txId,
-        driverId: driverRecord?.id || user?.id,
-        driverName: driverRecord?.driverName || driverRecord?.name || user?.email,
+        driverId: canonicalDriverId || user?.id,
+        driverName: canonicalDriverName,
         vehicleId: resolvedVehicleId,
         vehiclePlate:
           driverRecord?.assignedVehiclePlate ||

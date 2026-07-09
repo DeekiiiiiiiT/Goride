@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../components/auth/AuthContext';
 import { api } from '../services/api';
+import { getCanonicalDriverName } from '@roam/types/driverIdentity';
 
 export function useCurrentDriver() {
   const { user } = useAuth();
@@ -49,8 +50,10 @@ export function useCurrentDriver() {
             }
 
             if (match) {
-                console.log(`[DriverSync] Resolved Identity: ${user.email} -> ${match.driverName || match.name} (${match.id})`);
-                match.name = match.driverName || match.name;
+                const canonicalName = getCanonicalDriverName(match);
+                console.log(`[DriverSync] Resolved Identity: ${user.email} -> ${canonicalName} (${match.id})`);
+                match.name = canonicalName;
+                match.driverName = canonicalName;
                 
                 // Enhanced Vehicle Resolution: backfill whenever EITHER the vehicle id
                 // OR its display plate/name is missing. Previously this only ran when
@@ -107,7 +110,8 @@ export function useCurrentDriver() {
                                 console.log(
                                     `[DriverSync] Resolved via vehicle assignment: ${assignedVehicle.currentDriverName} (${match.id})`
                                 );
-                                match.name = match.driverName || match.name;
+                                match.name = getCanonicalDriverName(match);
+                                match.driverName = getCanonicalDriverName(match);
                                 match.assignedVehicleId = assignedVehicle.id;
                                 match.assignedVehiclePlate =
                                     assignedVehicle.plateNumber || assignedVehicle.licensePlate || 'Unknown Plate';

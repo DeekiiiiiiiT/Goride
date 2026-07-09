@@ -47,6 +47,11 @@ import {
   resolveFleetInstant,
 } from "./timezone_helper.tsx";
 import {
+  buildDriverAliasMap,
+  driverIdsReferToSamePerson,
+  type DriverIdentityLike,
+} from "./driver_identity.ts";
+import {
   parseISO,
   subMinutes,
   addMinutes,
@@ -287,6 +292,7 @@ function calculateConfidenceScore(params: {
   tripDriverId: string | undefined;
   txAmount: number;
   tripTollCharges: number;
+  driverAliasMap?: Map<string, string>;
 }): ScoreResult | null {
   const {
     txDate,
@@ -298,6 +304,7 @@ function calculateConfidenceScore(params: {
     tripDriverId,
     txAmount,
     tripTollCharges,
+    driverAliasMap,
   } = params;
 
   // ── Step 1: Determine time window hit and base score ──
@@ -334,11 +341,7 @@ function calculateConfidenceScore(params: {
     tripVehicleId &&
     txVehicleId === tripVehicleId
   );
-  const driverMatch = !!(
-    txDriverId &&
-    tripDriverId &&
-    txDriverId === tripDriverId
-  );
+  const driverMatch = driverIdsReferToSamePerson(txDriverId, tripDriverId, driverAliasMap);
   const amountMatch = isAmountMatch(tripTollCharges, txAmount);
 
   let score = base;
@@ -567,6 +570,7 @@ function findTollMatchesServer(
   transaction: any,
   trips: any[],
   timezone: string,
+  driverAliasMap?: Map<string, string>,
 ): MatchResult[] {
   const txDate = getTransactionDateTime(transaction, timezone);
   if (!txDate) return [];
@@ -605,6 +609,7 @@ function findTollMatchesServer(
       tripDriverId: trip.driverId,
       txAmount: txAmountAbs,
       tripTollCharges: tripRefundAmount,
+      driverAliasMap,
     });
 
     // null = toll fell outside all windows, skip
@@ -1112,9 +1117,30 @@ async function projectUnifiedTollEventsPage(q: UnifiedQuery): Promise<
   };
 }
 
-function filterByDriver(items: any[], driverId?: string): any[] {
+function filterByDriver(items: any[], driverId?: string, driverAliasMap?: Map<string, string>): any[] {
   if (!driverId) return items;
-  return items.filter((item: any) => item.driverId === driverId);
+  if (!driverAliasMap) return items.filter((item: any) => item.driverId === driverId);
+  const canonical = driverAliasMap.get(driverId) ?? driverId;
+  return items.filter((item: any) => {
+    const id = item.driverId;
+    if (!id) return false;
+    return (driverAliasMap.get(id) ?? id) === canonical;
+  });
+}
+
+let _driverAliasMapCache: Map<string, string> | null = null;
+let _driverAliasMapTimestamp = 0;
+const DRIVER_ALIAS_CACHE_TTL_MS = 5 * 60 * 1000;
+
+async function getDriverAliasMap(): Promise<Map<string, string>> {
+  const now = Date.now();
+  if (_driverAliasMapCache && now - _driverAliasMapTimestamp < DRIVER_ALIAS_CACHE_TTL_MS) {
+    return _driverAliasMapCache;
+  }
+  const drivers = (await loadAllByPrefix("driver:")) as DriverIdentityLike[];
+  _driverAliasMapCache = buildDriverAliasMap(drivers);
+  _driverAliasMapTimestamp = now;
+  return _driverAliasMapCache;
 }
 
 // ─── GET /summary ──────────────────────────────────────────────────────
@@ -1128,9 +1154,10 @@ app.get(`${BASE}/summary`, async (c) => {
     let tollTx = loaded.tollTx;
     let trips = loaded.trips;
 
+    const driverAliasMap = await getDriverAliasMap();
     if (driverId) {
-      tollTx = filterByDriver(tollTx, driverId);
-      trips = filterByDriver(trips, driverId);
+      tollTx = filterByDriver(tollTx, driverId, driverAliasMap);
+      trips = filterByDriver(trips, driverId, driverAliasMap);
     }
 
     // Unreconciled: tag imports without link, OR pending cash claims
@@ -1223,9 +1250,10 @@ app.get(`${BASE}/resolved-cash-claims-audit`, async (c) => {
     let tollTx = loaded.tollTx;
     let trips = loaded.trips;
 
+    const driverAliasMap = await getDriverAliasMap();
     if (driverId) {
-      tollTx = filterByDriver(tollTx, driverId);
-      trips = filterByDriver(trips, driverId);
+      tollTx = filterByDriver(tollTx, driverId, driverAliasMap);
+      trips = filterByDriver(trips, driverId, driverAliasMap);
     }
 
     // Resolved cash claims: same "isCashClaim" test as the live filter, but
@@ -1240,7 +1268,7 @@ app.get(`${BASE}/resolved-cash-claims-audit`, async (c) => {
     const rematchCandidates: any[] = [];
     for (const tx of resolvedCashClaims) {
       if (tx.tripId) continue; // already linked — nothing to find
-      const matches = findTollMatchesServer(tx, trips, timezone);
+      const matches = findTollMatchesServer(tx, trips, timezone, driverAliasMap);
       const best = matches[0];
       if (best && (best.matchType === "PERFECT_MATCH" || best.matchType === "AMOUNT_VARIANCE")) {
         rematchCandidates.push({
@@ -1349,9 +1377,10 @@ app.get(`${BASE}/unreconciled`, async (c) => {
     let tollTx = loaded.tollTx;
     let trips = loaded.trips;
 
+    const driverAliasMap = await getDriverAliasMap();
     if (driverId) {
-      tollTx = filterByDriver(tollTx, driverId);
-      trips = filterByDriver(trips, driverId);
+      tollTx = filterByDriver(tollTx, driverId, driverAliasMap);
+      trips = filterByDriver(trips, driverId, driverAliasMap);
     }
 
     // Unreconciled filter (same logic as the hook)
@@ -1401,7 +1430,7 @@ app.get(`${BASE}/unreconciled`, async (c) => {
       // Guard: skip if admin previously un-matched this auto-match
       if (tx.metadata?.autoMatchOverridden) continue;
 
-      const matches = findTollMatchesServer(tx, trips, timezone);
+      const matches = findTollMatchesServer(tx, trips, timezone, driverAliasMap);
       const best = matches[0];
       if (best?.isAmbiguous) continue;
       if (best?.matchType !== "PERFECT_MATCH") continue;
@@ -1487,7 +1516,7 @@ app.get(`${BASE}/unreconciled`, async (c) => {
     // Compute match suggestions for the current page (display only).
     const suggestionsMap: Record<string, MatchResult[]> = {};
     for (const tx of page) {
-      const matches = findTollMatchesServer(tx, trips, timezone);
+      const matches = findTollMatchesServer(tx, trips, timezone, driverAliasMap);
       if (matches.length > 0) {
         suggestionsMap[tx.id] = matches;
       } else if (puSettings.personalUseDetectionEnabled) {
@@ -2245,7 +2274,8 @@ async function computeTollMatchPatch(
     vehicleId: tollRecord.vehicleId || undefined,
   });
 
-  const matches = findTollMatchesServer(tollRecord, trips, timezone);
+  const driverAliasMap = await getDriverAliasMap();
+  const matches = findTollMatchesServer(tollRecord, trips, timezone, driverAliasMap);
   const best = matches[0];
 
   if (best) {
@@ -2411,6 +2441,7 @@ export async function reconsiderTollsForNewTrips(
       return { scanned, wouldUpdate, wouldFlag };
     }
 
+    const driverAliasMap = await getDriverAliasMap();
     for (const [weekKey, weekTrips] of tripsByWeek) {
       const monday = new Date(`${weekKey}T00:00:00.000Z`);
       const windowStart = new Date(monday);
@@ -2428,7 +2459,7 @@ export async function reconsiderTollsForNewTrips(
 
       for (const toll of candidateTolls) {
         scanned++;
-        const matches = findTollMatchesServer(toll, weekTrips, timezone);
+        const matches = findTollMatchesServer(toll, weekTrips, timezone, driverAliasMap);
         const best = matches[0];
         if (!best) continue;
 
@@ -2533,13 +2564,14 @@ export async function invalidateStaleTollMatchesForTrip(
     if (pointingTolls.length === 0) return { scanned, invalidated, flagged };
 
     const timezone = await getFleetTimezone();
+    const driverAliasMap = await getDriverAliasMap();
 
     for (const toll of pointingTolls) {
       scanned++;
 
       const stillValid =
         !!opts.currentTrip &&
-        findTollMatchesServer(toll, [opts.currentTrip], timezone).some((m) => m.tripId === tripId);
+        findTollMatchesServer(toll, [opts.currentTrip], timezone, driverAliasMap).some((m) => m.tripId === tripId);
       if (stillValid) continue;
 
       const isFormallyResolved =
@@ -6426,8 +6458,9 @@ app.get(`${BASE}/export`, async (c) => {
     if (unmatched.length > 0) {
       const timezone = await getFleetTimezone();
       const puSettings = await getRefundAutomationSettings();
+      const driverAliasMap = await getDriverAliasMap();
       for (const tx of unmatched) {
-        const matches = findTollMatchesServer(tx, allTrips, timezone);
+        const matches = findTollMatchesServer(tx, allTrips, timezone, driverAliasMap);
         if (matches.length > 0) {
           suggestionsMap[tx.id] = matches;
         } else if (puSettings.personalUseDetectionEnabled) {

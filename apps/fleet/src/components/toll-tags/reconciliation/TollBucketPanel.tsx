@@ -38,6 +38,7 @@ import {
   TooltipTrigger,
 } from "../../ui/tooltip";
 import { groupTollsByWeek } from "../../../utils/tollWeekPeriod";
+import { resolveTollDisplayDriverName } from "@roam/types/driverIdentity";
 
 function needsTripPick(tx: FinancialTransaction, match?: MatchResult): boolean {
   return !!(match?.isAmbiguous && !isTripLinkConfirmed(tx));
@@ -64,6 +65,7 @@ export interface TollBucketPanelProps {
   onFlag?: (tx: FinancialTransaction) => void;
   onManualResolve?: (tx: FinancialTransaction, type: 'Personal' | 'WriteOff' | 'Business') => void;
   onEdit?: (transactionId: string, updates: Record<string, any>) => Promise<void>;
+  drivers?: Array<{ id: string; name?: string; driverName?: string; firstName?: string; lastName?: string; uberDriverId?: string; inDriveDriverId?: string }>;
   emptyState: { icon: LucideIcon; title: string; description: string };
   listTitle?: string;
   listDescription?: string;
@@ -76,7 +78,7 @@ export interface TollBucketPanelProps {
 }
 
 export function TollBucketPanel({
-  tolls, suggestions, onReconcile, allTrips, onApprove, onReject, onFlag, onManualResolve, onEdit,
+  tolls, suggestions, onReconcile, allTrips, onApprove, onReject, onFlag, onManualResolve, onEdit, drivers = [],
   emptyState, listTitle = 'Tolls', listDescription = "Toll provider charges that haven't been linked to a specific trip.",
   approveLabel = 'Approve', onChargeDriver,
 }: TollBucketPanelProps) {
@@ -497,7 +499,10 @@ export function TollBucketPanel({
                                                                 const hasHiddenMatch = hiddenSuggestions.has(tx.id);
                                                                 const vehicleId = tx.vehiclePlate || tx.vehicleId || '';
                                                                 const inferredDriver = getInferredDriver(vehicleId, tx.date);
-                                                                const displayDriver = tx.driverName || bestMatch?.trip.driverName || inferredDriver;
+                                                                const profileDriver = drivers.length > 0
+                                                                  ? resolveTollDisplayDriverName(tx, drivers)
+                                                                  : '';
+                                                                const displayDriver = profileDriver || tx.driverName || bestMatch?.trip.driverName || inferredDriver;
 
                                                                 return (
                                                                     <TableRow key={tx.id} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors" onClick={() => openDetail(tx, bestMatch || undefined, txMatches)}>

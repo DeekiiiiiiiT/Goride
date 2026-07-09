@@ -1,5 +1,6 @@
 export * from './data';
 export * from './driver';
+export * from './driverIdentity';
 export * from './fuel';
 export * from './toll';
 export * from './tollCrossings';

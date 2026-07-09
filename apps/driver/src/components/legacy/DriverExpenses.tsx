@@ -32,6 +32,7 @@ import { format, isValid, startOfWeek, endOfWeek, isWithinInterval, parseISO } f
 import { cn } from '@roam/ui';
 import { formatSafeDate, formatSafeTime } from '../../utils/timeUtils';
 import { resolveVehicleIdForDriver } from '../../utils/resolveDriverVehicleId';
+import { resolveCanonicalDriverIdentity } from '@roam/types/driverIdentity';
 import { toast } from "sonner";
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
@@ -681,10 +682,15 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         ? (vehicles as any[]).find((v: any) => v.id === resolvedVehicleId)
         : undefined;
 
+      const { driverId: canonicalDriverId, driverName: canonicalDriverName } = resolveCanonicalDriverIdentity(
+        driverRecord,
+        { id: user?.id, name: user?.user_metadata?.name, email: user?.email },
+      );
+
       const baseTx: Partial<FinancialTransaction> = {
         id: txId,
-        driverId: driverRecord?.id || user?.id,
-        driverName: driverRecord?.driverName || driverRecord?.name || user?.email,
+        driverId: canonicalDriverId || user?.id,
+        driverName: canonicalDriverName,
         vehicleId: resolvedVehicleId,
         vehiclePlate:
           driverRecord?.assignedVehiclePlate ||
