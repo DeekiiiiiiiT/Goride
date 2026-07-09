@@ -87,6 +87,9 @@ export interface UpsertClaimOptions {
    *   bookkeeping only. For that same caller's own flag being off.
    */
   syncMode?: "auto" | "force" | "skip";
+  /** Dispute match: trip used for pooled shortfall guard. */
+  suggestedTripId?: string | null;
+  fleetTz?: string;
 }
 
 const CLAIM_STATUS_PRIORITY: Record<string, number> = {
@@ -104,7 +107,7 @@ function claimPriorityScore(cl: any): number {
 }
 
 /** Find the best existing claim id for a toll (toll.claimId, then claims scan). */
-async function resolveExistingClaimIdForToll(transactionId: string): Promise<string | null> {
+export async function findExistingClaimIdForToll(transactionId: string): Promise<string | null> {
   try {
     const toll = await getTollLedgerEntry(transactionId);
     if (toll?.claimId) {
@@ -125,7 +128,7 @@ async function resolveExistingClaimIdForToll(transactionId: string): Promise<str
 }
 
 /** Block full-toll charges/filings when platform credits leave only a shortfall. */
-async function enforceClaimChargeGuard(claim: any): Promise<void> {
+async function enforceClaimChargeGuard(claim: any, opts?: UpsertClaimOptions): Promise<void> {
   const filingOrCharging =
     (claim.status === "Resolved" && claim.resolutionReason === "Charge Driver") ||
     claim.status === "Sent_to_Driver" ||
@@ -137,10 +140,22 @@ async function enforceClaimChargeGuard(claim: any): Promise<void> {
 
   const tollCost = Math.abs(Number(toll.amount) || 0);
   let platformRefund = 0;
-  const tripId = claim.tripId || toll.tripId;
+  const tripId = claim.tripId || toll.tripId || opts?.suggestedTripId;
   if (tripId) {
     const trip = (await kv.get(`trip:${tripId}`)) as { tollCharges?: number } | null;
     platformRefund = Math.abs(Number(trip?.tollCharges) || 0);
+    try {
+      const { computeLiveTripRefundForToll } = await import("./dispute_match_toll_enrichment.ts");
+      const fleetTz = opts?.fleetTz;
+      if (fleetTz) {
+        const allocated = await computeLiveTripRefundForToll(toll, fleetTz, {
+          suggestedTripId: tripId,
+        });
+        if (allocated != null) platformRefund = allocated;
+      }
+    } catch {
+      /* fall back to raw trip.tollCharges */
+    }
   }
 
   const guard = guardClaimChargeAmount({
@@ -167,7 +182,7 @@ export async function upsertClaim(claimInput: any, c: unknown, opts?: UpsertClai
   // Reuse existing claim for this toll — prevents duplicate rows when the client
   // POSTs without an id (DisputeModal create path, auto-create paths).
   if (!claimInput.id && claim.transactionId) {
-    const resolvedId = await resolveExistingClaimIdForToll(String(claim.transactionId));
+    const resolvedId = await findExistingClaimIdForToll(String(claim.transactionId));
     if (resolvedId) claim.id = resolvedId;
   }
 
@@ -175,7 +190,7 @@ export async function upsertClaim(claimInput: any, c: unknown, opts?: UpsertClai
   if (!claim.createdAt) claim.createdAt = new Date().toISOString();
   claim.updatedAt = new Date().toISOString();
 
-  await enforceClaimChargeGuard(claim);
+  await enforceClaimChargeGuard(claim, opts);
 
   const mode = opts?.syncMode ?? "auto";
   if (mode === "skip") {

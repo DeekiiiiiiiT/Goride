@@ -21,7 +21,7 @@ import { Hono } from "npm:hono";
 import * as kv from "./kv_store.tsx";
 import { isTollCategory } from "./toll_category_flags.ts";
 import { getFleetTimezone, hasTzSuffix } from "./timezone_helper.tsx";
-import { upsertClaim, deleteClaim } from "./claim_service.ts";
+import { upsertClaim, deleteClaim, findExistingClaimIdForToll } from "./claim_service.ts";
 import {
   applyRefundResolution,
   isUnresolvedRefund,
@@ -116,6 +116,21 @@ async function loadAllByPrefix(prefix: string): Promise<any[]> {
 // resolving the claim as "Reimbursed" closes the loop into the Reimbursed tile.
 
 const OPEN_CLAIM_STATUSES = ["Open", "Sent_to_Driver", "Submitted_to_Uber"];
+const TOLL_REFUND_LINK_PREFIX = "dispute-refund-toll:";
+
+async function getRefundIdLinkedToToll(tollId: string, excludeRefundId?: string): Promise<string | null> {
+  const linked = await kv.get(`${TOLL_REFUND_LINK_PREFIX}${tollId}`);
+  if (typeof linked === "string" && linked && linked !== excludeRefundId) return linked;
+  return null;
+}
+
+async function setRefundTollLink(tollId: string, refundId: string): Promise<void> {
+  await kv.set(`${TOLL_REFUND_LINK_PREFIX}${tollId}`, refundId);
+}
+
+async function clearRefundTollLink(tollId: string): Promise<void> {
+  await kv.del(`${TOLL_REFUND_LINK_PREFIX}${tollId}`);
+}
 
 /** Load a toll behind a claim from the ledger (falls back to legacy transaction). */
 async function loadTollForClaim(transactionId: string | undefined): Promise<any | null> {
@@ -210,7 +225,7 @@ async function matchRefundToClaim(
   claimId: string | null,
   auto: boolean,
   c: unknown,
-  opts?: { tripId?: string | null },
+  opts?: { tripId?: string | null; manualPick?: boolean },
 ): Promise<{ ok: true; data: any; warning?: string } | { ok: false; status: number; error: string }> {
   const id = refund.id;
   const recordKey = `dispute-refund:${id}`;
@@ -218,14 +233,9 @@ async function matchRefundToClaim(
   if (refund.status === "matched" || refund.status === "auto_resolved") {
     return { ok: false, status: 409, error: `Refund ${id} is already matched to toll ${refund.matchedTollId}. Unmatch it first.` };
   }
-  const allRefunds = await loadAllByPrefix("dispute-refund:");
-  const existingMatch = allRefunds.find(
-    (r: any) => r && typeof r === "object" && r.id && r.id !== id &&
-      r.matchedTollId === tollTransactionId &&
-      (r.status === "matched" || r.status === "auto_resolved"),
-  );
-  if (existingMatch) {
-    return { ok: false, status: 409, error: `Toll ${tollTransactionId} is already linked to refund ${existingMatch.id}. Unlink it first.` };
+  const existingRefundId = await getRefundIdLinkedToToll(tollTransactionId, id);
+  if (existingRefundId) {
+    return { ok: false, status: 409, error: `Toll ${tollTransactionId} is already linked to refund ${existingRefundId}. Unlink it first.` };
   }
 
   const settings = await getRefundAutomationSettings();
@@ -244,7 +254,9 @@ async function matchRefundToClaim(
   }
 
   let matchWarning: string | undefined;
-  if (!auto) {
+  // Manual UI picks already passed eligibility in match-candidates — skip the
+  // heavy full-ledger candidate rebuild (was exhausting edge compute).
+  if (!auto && !opts?.manualPick) {
     const evaluated = await buildDisputeCandidates(refund);
     const picked = evaluated.find(
       (c) => c.tollId === tollTransactionId && (claimId ? c.claimId === claimId : !c.claimId),
@@ -263,6 +275,7 @@ async function matchRefundToClaim(
     resolvedBy: auto ? "system-auto" : "admin",
   };
   await kv.set(recordKey, updated);
+  await setRefundTollLink(tollTransactionId, id);
 
   if (claimId) {
     const claimKey = `claim:${claimId}`;
@@ -286,7 +299,7 @@ async function matchRefundToClaim(
             // Prior resolutionReason (e.g. "Charge Driver") — lets unmatch
             // restore the exact prior reason, not just null. Only meaningful
             // once cs === "Resolved" was reachable here at all.
-            preDisputeResolutionReason: cs === "Resolved" ? (claim as any).resolutionReason : null,
+            preDisputeResolutionReason: cs === "Resolved" ? (claim as any).resolutionReason : (claim as any).preDisputeResolutionReason,
           },
           c,
           // disputeRefundTripSyncEnabled is this cascade's OWN outer gate,
@@ -295,7 +308,7 @@ async function matchRefundToClaim(
           // legacy branch, which this cascade never had), or skip entirely
           // when off (matches this cascade's prior conservative behavior of
           // doing nothing financial while its flag is off).
-          { syncMode: "force" },
+          { syncMode: "force", suggestedTripId: opts?.tripId ?? (claim as any).tripId, fleetTz: await getFleetTimezone() },
         );
         updated = { ...updated, status: "auto_resolved", matchedClaimId: claimId };
         await kv.set(recordKey, updated);
@@ -309,14 +322,12 @@ async function matchRefundToClaim(
     try {
       const tollEntry = await loadTollForClaim(tollTransactionId);
       const claimForTrip: any = claimId ? await kv.get(`claim:${claimId}`) : null;
-      const tripId = claimForTrip?.tripId || tollEntry?.tripId || null;
+      const tripId = opts?.tripId || claimForTrip?.tripId || tollEntry?.tripId || null;
       if (tripId) {
         const trip = await kv.get(`trip:${tripId}`);
         if (trip) {
-          const { tollTx } = await loadAllTollLedgerWithTrips();
-          const linkedTripIds = new Set(
-            tollTx.filter((tx: any) => tx.tripId).map((tx: any) => tx.tripId),
-          );
+          // This toll is now linked to the trip — no full-ledger scan needed.
+          const linkedTripIds = new Set([tripId]);
           if (isUnresolvedRefund(trip, linkedTripIds)) {
             await applyRefundResolution({
               tripId,
@@ -525,38 +536,70 @@ app.patch(`${BASE}/:id/match`, async (c) => {
       return c.json({ error: `Dispute refund not found: ${id}` }, 404);
     }
 
-    // Manual link to a bare toll (no claim yet) → create the claim on the fly,
+    // Manual link to a bare toll (no claim yet) → create or reuse the claim on the fly,
     // sized to the amount we won back, so the loop still closes.
     if (!claimId && createClaim) {
       let toll = await loadTollForClaim(tollTransactionId);
-      // The toll usually has no persisted trip yet (only "Flag for Claim" in
-      // Underpaid & Claims reconciles a toll to its trip) — the caller sends
-      // along the same live-suggested trip that step would show, so this
-      // path reconciles first and ends in the exact same state, regardless
-      // of which step the fleet manager resolved it from.
       if (!toll?.tripId && suggestedTripId) {
         await reconcileTollForDisputeMatch(tollTransactionId, suggestedTripId);
         toll = await loadTollForClaim(tollTransactionId);
       }
-      const newClaimId = `claim-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-      const newClaim = await upsertClaim(
-        {
-          id: newClaimId,
-          transactionId: tollTransactionId,
-          tripId: toll?.tripId || null,
-          driverId: toll?.driverId || refund.driverId || "unknown",
-          driverName: toll?.driverName || refund.driverName || null,
-          type: "Toll_Refund",
-          status: "Submitted_to_Uber",
-          amount: Math.abs(refund.amount || 0),
-          expectedAmount: Math.abs(toll?.amount || 0),
-          subject: "Toll Underpayment (manual dispute match)",
-          date: toll?.date || undefined,
-          _createdByRefund: id, // so unmatch can delete it
-        },
-        c,
-      );
-      claimId = newClaim.id;
+
+      const fleetTz = await getFleetTimezone();
+      // Bare-toll candidates are pre-filtered to have no claim — skip the
+      // all-claims scan that was blowing edge compute budgets.
+      const existingClaimId = toll?.claimId
+        ? await findExistingClaimIdForToll(tollTransactionId)
+        : null;
+      const refundAmount = Math.abs(refund.amount || 0);
+      const tollAmount = Math.abs(toll?.amount || 0);
+
+      if (existingClaimId) {
+        const existing: any = await kv.get(`claim:${existingClaimId}`);
+        const upgraded = await upsertClaim(
+          {
+            ...(existing && typeof existing === "object" ? existing : {}),
+            id: existingClaimId,
+            transactionId: tollTransactionId,
+            tripId: toll?.tripId || suggestedTripId || existing?.tripId || null,
+            driverId: toll?.driverId || refund.driverId || existing?.driverId || "unknown",
+            driverName: toll?.driverName || refund.driverName || existing?.driverName || null,
+            type: "Toll_Refund",
+            // Keep Resolved claims as-is so matchRefundToClaim can transition
+            // Charge Driver → Reimbursed and reverse the driver charge.
+            status: existing?.status === "Resolved" ? existing.status : "Submitted_to_Uber",
+            resolutionReason: existing?.status === "Resolved" ? existing.resolutionReason : null,
+            amount: refundAmount,
+            expectedAmount: tollAmount,
+            subject: existing?.subject || "Toll Underpayment (manual dispute match)",
+            date: toll?.date || existing?.date || undefined,
+          },
+          c,
+          { syncMode: "skip", suggestedTripId: suggestedTripId ?? toll?.tripId, fleetTz },
+        );
+        claimId = upgraded.id;
+      } else {
+        const newClaimId = `claim-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        const newClaim = await upsertClaim(
+          {
+            id: newClaimId,
+            transactionId: tollTransactionId,
+            tripId: toll?.tripId || suggestedTripId || null,
+            driverId: toll?.driverId || refund.driverId || "unknown",
+            driverName: toll?.driverName || refund.driverName || null,
+            type: "Toll_Refund",
+            status: "Submitted_to_Uber",
+            amount: refundAmount,
+            expectedAmount: tollAmount,
+            subject: "Toll Underpayment (manual dispute match)",
+            date: toll?.date || undefined,
+            _createdByRefund: id,
+          },
+          c,
+          { syncMode: "skip", suggestedTripId: suggestedTripId ?? toll?.tripId, fleetTz },
+        );
+        claimId = newClaim.id;
+      }
     }
 
     const result = await matchRefundToClaim(
@@ -565,7 +608,7 @@ app.patch(`${BASE}/:id/match`, async (c) => {
       claimId || null,
       false,
       c,
-      { tripId: suggestedTripId || null },
+      { tripId: suggestedTripId || null, manualPick: true },
     );
     if (!result.ok) return c.json({ error: result.error }, result.status as any);
 
@@ -649,6 +692,10 @@ export async function unmatchDisputeRefundById(id: string, c: unknown): Promise<
     }
   }
 
+  if (refund.matchedTollId) {
+    await clearRefundTollLink(String(refund.matchedTollId));
+  }
+
   const updated = {
     ...refund,
     status: "unmatched",
@@ -727,6 +774,11 @@ app.get(`${BASE}/match-candidates`, async (c) => {
         OPEN_CLAIM_STATUSES.includes(cl.status) && !cl.disputeRefundId,
     );
     const claimTollIds = new Set(openClaims.map((cl: any) => cl.transactionId).filter(Boolean));
+    const anyClaimTollIds = new Set(
+      allClaims
+        .filter((cl: any) => cl && typeof cl === "object" && cl.type === "Toll_Refund" && cl.transactionId && !cl.disputeRefundId)
+        .map((cl: any) => cl.transactionId),
+    );
 
     const claimCandidates: any[] = [];
     for (const cl of openClaims) {
@@ -765,7 +817,7 @@ app.get(`${BASE}/match-candidates`, async (c) => {
     for (const toll of ledger) {
       if (!toll || typeof toll !== "object" || !toll.id) continue;
       if (toll.type && toll.type !== "usage") continue;
-      if (claimTollIds.has(toll.id) || linkedTollIds.has(toll.id)) continue;
+      if (claimTollIds.has(toll.id) || linkedTollIds.has(toll.id) || anyClaimTollIds.has(toll.id)) continue;
       // Only tolls still needing a claim decision (untriaged) or already
       // flagged underpaid belong here — Deadhead never gets a claim at all
       // (fleet-absorbed by design) and a resolved Personal-Use claim isn't
@@ -789,6 +841,7 @@ app.get(`${BASE}/match-candidates`, async (c) => {
         // at a glance instead of hidden behind a date-only display.
         tollTime: toll.time || null,
         status: null,
+        workflowStage: toll.workflowStage || null,
       });
     }
 

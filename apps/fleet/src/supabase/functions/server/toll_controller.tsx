@@ -6796,5 +6796,5 @@ export { recomputeAndPersistWorkflowStage, undoApplyUnlinkedRefundToClaim };
 export { loadAllByPrefix, loadDisputeRefundRecords, filterByDriver };
 
 // ── Exported helpers for dispute-refund match candidates ───────────────────
-export { findTollMatchesServer, pickBestValidTollMatch, reconcileTollForDisputeMatch };
+export { findTollMatchesServer, pickBestValidTollMatch, reconcileTollForDisputeMatch, getDriverAliasMap };
 export type { TollWorkflowStage };

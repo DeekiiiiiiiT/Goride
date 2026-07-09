@@ -2619,7 +2619,8 @@ export const api = {
     });
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
-      throw new Error(err.error || "Failed to match dispute refund");
+      const detail = err.error || err.message || `Request failed (${response.status})`;
+      throw new Error(detail);
     }
     return response.json();
   },

@@ -53,6 +53,7 @@ interface Candidate {
   tollTime?: string | null;
   date: string | null;
   status: string | null;
+  workflowStage?: string | null;
 }
 
 interface DisputeMatchModalProps {
@@ -390,18 +391,21 @@ function ClaimCandidateCard({ candidate: c, fleetTz, fmtDate, linking, onLink }:
 function TollCandidateCard({ candidate: c, fleetTz, fmtDate, linking, onLink }: CandidateCardProps) {
   const [expanded, setExpanded] = useState(false);
   const hasTripRefund = c.tripRefund != null;
-  const underpaidBy = hasTripRefund ? Math.abs(c.tollAmount || 0) - Math.abs(c.tripRefund || 0) : null;
+  const flaggedUnderpaid = c.workflowStage === 'underpaid_pending';
+  const showBreakdown = hasTripRefund || flaggedUnderpaid;
+  const tripRefundAmt = hasTripRefund ? Math.abs(c.tripRefund || 0) : 0;
+  const underpaidBy = showBreakdown ? Math.abs(c.tollAmount || 0) - tripRefundAmt : null;
   const linkedTripId = c.tripId || c.suggestedTripId;
   return (
     <Card className="border-slate-200 shadow-none">
       <CardContent className="p-2.5 flex items-center justify-between gap-3">
         <div className="min-w-0 text-xs flex-1">
           <div className="font-medium text-slate-800 truncate">{c.driverName}</div>
-          {hasTripRefund ? (
+          {showBreakdown ? (
             <div className="flex flex-wrap items-center gap-x-1.5 mt-0.5">
               <span>Toll <span className="font-semibold text-rose-600">-${Math.abs(c.tollAmount || 0).toFixed(2)}</span></span>
               <span className="text-slate-300">·</span>
-              <span>Refund <span className="font-semibold text-emerald-600">${Math.abs(c.tripRefund || 0).toFixed(2)}</span></span>
+              <span>Refund <span className="font-semibold text-emerald-600">${tripRefundAmt.toFixed(2)}</span></span>
               <span className="text-slate-300">·</span>
               <span>Underpaid <span className="font-semibold text-amber-600">-${(underpaidBy || 0).toFixed(2)}</span></span>
             </div>
