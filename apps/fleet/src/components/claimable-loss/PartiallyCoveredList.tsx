@@ -10,14 +10,19 @@ import {
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { DollarSign, FileText, Send, UserMinus } from 'lucide-react';
-import { Claim, Trip } from '../../types/data';
+import { Claim, Trip, FinancialTransaction } from '../../types/data';
 import { PlatformSourceBadge } from '../toll-tags/reconciliation/PlatformSourceBadge';
 import { VARIANCE_THRESHOLD } from '../../utils/tollReconciliation';
-import { getTollRefundSource, refundSourceLabel } from './LossList';
+import { dedupeClaimsForDisplay } from '../../utils/claimByToll';
+import { isActionablePartialShortfall } from '../../utils/tollWeekPeriod';
 
 interface PartiallyCoveredListProps {
   claims: Claim[];
   trips: Trip[];
+  /** Toll ledger rows keyed by id — used to detect unlinked apply on the toll. */
+  tollById?: ReadonlyMap<string, FinancialTransaction>;
+  /** When set, only claims linked to these toll ids are shown. */
+  tollIds?: ReadonlySet<string>;
   isLoading?: boolean;
   getDriverName?: (id: string) => string;
   onChargeDriver: (claim: Claim) => void;
@@ -29,6 +34,8 @@ interface PartiallyCoveredListProps {
 export function PartiallyCoveredList({
   claims,
   trips,
+  tollById,
+  tollIds,
   isLoading,
   getDriverName,
   onChargeDriver,
@@ -38,12 +45,13 @@ export function PartiallyCoveredList({
 }: PartiallyCoveredListProps) {
   const tripById = new Map(trips.filter((t) => t?.id).map((t) => [t.id, t]));
 
-  const partialClaims = claims.filter(
-    (c) =>
-      c.status === 'Open' &&
-      (Number(c.paidAmount) || 0) > VARIANCE_THRESHOLD &&
-      (Number(c.amount) || 0) > VARIANCE_THRESHOLD,
-  );
+  const partialClaims = dedupeClaimsForDisplay(
+    claims.filter((c) => {
+      if (tollIds && (!c.transactionId || !tollIds.has(c.transactionId))) return false;
+      const toll = c.transactionId ? tollById?.get(c.transactionId) : undefined;
+      return isActionablePartialShortfall(c, toll);
+    }),
+  ).displayClaims;
 
   if (isLoading) {
     return <div className="p-8 text-center text-slate-500">Loading partially covered claims...</div>;

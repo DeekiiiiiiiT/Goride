@@ -28,7 +28,8 @@ import {
 } from "../../../utils/tollBucket";
 import { StepId, StepCounts, STEP_ORDER, computeStepCounts } from "../../../utils/tollPeriodGating";
 import { hasBlockingUnlinkedRefund } from "../../../utils/unlinkedShortfallEligibility";
-import { isClaimInPeriod } from "../../../utils/tollWeekPeriod";
+import { isClaimVisibleInPeriod, tollWeekKey } from "../../../utils/tollWeekPeriod";
+import { mergeReconciledTollsForUnderpaid } from "../../../utils/claimByToll";
 import type { UnlinkedShortfallSuggestion } from "../../../hooks/useTollReconciliation";
 import { toast } from "sonner@2.0.3";
 import { Trip as TripType } from "../../../types/data";
@@ -99,6 +100,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
     loading: tollsLoading,
     unreconciledTolls,
     reconciledTolls,
+    allReconciledTolls,
     unclaimedRefunds,
     resolvedRefunds,
     refundSuggestions,
@@ -262,17 +264,59 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
   // createdAt, which can bucket resolved claims into the wrong week). ───────
   const tollDateById = useMemo(() => {
     const map = new Map<string, string>();
-    [...unreconciledTolls, ...reconciledTolls].forEach(tx => { if (tx?.id && tx?.date) map.set(tx.id, tx.date); });
+    [...unreconciledTolls, ...reconciledTolls, ...allReconciledTolls].forEach(tx => { if (tx?.id && tx?.date) map.set(tx.id, tx.date); });
     return map;
-  }, [unreconciledTolls, reconciledTolls]);
+  }, [unreconciledTolls, reconciledTolls, allReconciledTolls]);
+  const periodTollIds = useMemo(() => {
+    const ids = new Set<string>();
+    [...unreconciledTolls, ...reconciledTolls, ...allReconciledTolls].forEach((tx) => {
+      if (tx?.id) ids.add(tx.id);
+    });
+    return ids;
+  }, [unreconciledTolls, reconciledTolls, allReconciledTolls]);
   const periodClaims = useMemo(
     () =>
       claims.filter((c: Claim) =>
-        isClaimInPeriod(c, { startDate: period.startDate, endDate: period.endDate }, tollDateById, fleetTz),
+        isClaimVisibleInPeriod(
+          c,
+          { startDate: period.startDate, endDate: period.endDate },
+          tollDateById,
+          fleetTz,
+          periodTollIds,
+        ),
       ),
-    [claims, tollDateById, period.startDate, period.endDate, fleetTz],
+    [claims, tollDateById, period.startDate, period.endDate, fleetTz, periodTollIds],
   );
   const pPeriodClaims = platformFilter === 'all' ? periodClaims : periodClaims.filter(claimInPlatform);
+
+  const claimTollIdsForPeriod = useMemo(() => {
+    const ids = new Set<string>();
+    claims.forEach((c) => {
+      if (
+        c.transactionId &&
+        isClaimVisibleInPeriod(
+          c,
+          { startDate: period.startDate, endDate: period.endDate },
+          tollDateById,
+          fleetTz,
+          periodTollIds,
+        )
+      ) {
+        ids.add(c.transactionId);
+      }
+    });
+    return ids;
+  }, [claims, period.startDate, period.endDate, tollDateById, fleetTz, periodTollIds]);
+  const underpaidReconciledTolls = useMemo(() => {
+    const merged = mergeReconciledTollsForUnderpaid(
+      pReconciled,
+      allReconciledTolls.length ? allReconciledTolls : reconciledTolls,
+      period.startDate,
+      fleetTz,
+      claimTollIdsForPeriod,
+    );
+    return platformFilter === 'all' ? merged : merged.filter(tollInPlatform);
+  }, [pReconciled, allReconciledTolls, reconciledTolls, period.startDate, fleetTz, claimTollIdsForPeriod, platformFilter]);
 
   // Claimed-toll exclusion is deliberately ALL-TIME (not period-scoped): "does
   // this toll already have a claim at all" doesn't depend on which period the
@@ -743,7 +787,8 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
           {activeStepId === 'underpaid-claims' && (
             <UnderpaidClaimsStep
               claims={pPeriodClaims}
-              reconciledTolls={pReconciled}
+              allClaims={claims}
+              reconciledTolls={underpaidReconciledTolls}
               trips={trips}
               disputeRefunds={disputeRefunds}
               unlinkedRefundTrips={unclaimedRefunds}
@@ -753,6 +798,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               loadingTolls={tollsLoading}
               loadingClaims={claimsLoading}
               unreconcile={unreconcile}
+              createClaim={createClaim}
               updateClaim={updateClaim}
               deleteClaim={deleteClaim}
               refreshClaims={refreshClaims}

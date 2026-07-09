@@ -28,6 +28,7 @@ import { stampOrg } from "./org_scope.ts";
 import { isDriverTollChargeSyncEnabled } from "./driver_toll_charge.ts";
 import { syncClaimTollResolution } from "./claim_toll_sync.ts";
 import { type ClaimResolutionReason } from "./claim_resolution_sync.ts";
+import { guardClaimChargeAmount } from "./claim_charge_guard.ts";
 import { getTollLedgerEntry, updateTollLedgerEntry, recomputeAndPersistWorkflowStage, loadAllByPrefix } from "./toll_controller.tsx";
 
 /**
@@ -88,6 +89,72 @@ export interface UpsertClaimOptions {
   syncMode?: "auto" | "force" | "skip";
 }
 
+const CLAIM_STATUS_PRIORITY: Record<string, number> = {
+  Sent_to_Driver: 50,
+  Submitted_to_Uber: 40,
+  Open: 30,
+  Rejected: 20,
+  Resolved: 10,
+};
+
+function claimPriorityScore(cl: any): number {
+  const statusScore = CLAIM_STATUS_PRIORITY[String(cl?.status)] ?? 0;
+  const updated = new Date(cl?.updatedAt || cl?.createdAt || 0).getTime();
+  return statusScore * 1e15 + updated;
+}
+
+/** Find the best existing claim id for a toll (toll.claimId, then claims scan). */
+async function resolveExistingClaimIdForToll(transactionId: string): Promise<string | null> {
+  try {
+    const toll = await getTollLedgerEntry(transactionId);
+    if (toll?.claimId) {
+      const linked = (await kv.get(`claim:${toll.claimId}`)) as { id?: string; transactionId?: string } | null;
+      if (linked?.id && linked.transactionId === transactionId) return linked.id;
+    }
+  } catch {
+    /* fall through to scan */
+  }
+
+  const allClaims = (await loadAllByPrefix("claim:")) as any[];
+  const matches = allClaims.filter(
+    (cl) => cl && typeof cl === "object" && cl.transactionId === transactionId && cl.id,
+  );
+  if (matches.length === 0) return null;
+  const best = matches.reduce((a, b) => (claimPriorityScore(b) > claimPriorityScore(a) ? b : a));
+  return best.id ?? null;
+}
+
+/** Block full-toll charges/filings when platform credits leave only a shortfall. */
+async function enforceClaimChargeGuard(claim: any): Promise<void> {
+  const filingOrCharging =
+    (claim.status === "Resolved" && claim.resolutionReason === "Charge Driver") ||
+    claim.status === "Sent_to_Driver" ||
+    claim.status === "Open";
+  if (!filingOrCharging || !claim.transactionId) return;
+
+  const toll = await getTollLedgerEntry(String(claim.transactionId));
+  if (!toll) return;
+
+  const tollCost = Math.abs(Number(toll.amount) || 0);
+  let platformRefund = 0;
+  const tripId = claim.tripId || toll.tripId;
+  if (tripId) {
+    const trip = (await kv.get(`trip:${tripId}`)) as { tollCharges?: number } | null;
+    platformRefund = Math.abs(Number(trip?.tollCharges) || 0);
+  }
+
+  const guard = guardClaimChargeAmount({
+    chargeAmount: claim.amount,
+    tollCost,
+    platformRefund,
+    claimPaidAmount: claim.paidAmount,
+  });
+  if (!guard.ok) {
+    throw new Error(guard.message);
+  }
+  claim.amount = guard.amount;
+}
+
 /**
  * Upsert a claim, applying the reversible claim/driver-charge/toll_ledger
  * sync when the claim's resolvedness changes. `claimInput` is the FULL
@@ -96,9 +163,19 @@ export interface UpsertClaimOptions {
  */
 export async function upsertClaim(claimInput: any, c: unknown, opts?: UpsertClaimOptions): Promise<any> {
   const claim = { ...claimInput };
+
+  // Reuse existing claim for this toll — prevents duplicate rows when the client
+  // POSTs without an id (DisputeModal create path, auto-create paths).
+  if (!claimInput.id && claim.transactionId) {
+    const resolvedId = await resolveExistingClaimIdForToll(String(claim.transactionId));
+    if (resolvedId) claim.id = resolvedId;
+  }
+
   if (!claim.id) claim.id = crypto.randomUUID();
   if (!claim.createdAt) claim.createdAt = new Date().toISOString();
   claim.updatedAt = new Date().toISOString();
+
+  await enforceClaimChargeGuard(claim);
 
   const mode = opts?.syncMode ?? "auto";
   if (mode === "skip") {

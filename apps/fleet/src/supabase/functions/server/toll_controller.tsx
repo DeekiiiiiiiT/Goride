@@ -38,6 +38,7 @@ import {
   isEligibleUnlinkedShortfallToll,
   UNLINKED_PICKER_MIN_CONFIDENCE,
 } from "./unlinked_shortfall_eligibility.ts";
+import { computeChargeShortfall } from "./claim_charge_guard.ts";
 import {
   getFleetTimezone,
   naiveToUtc,
@@ -5550,6 +5551,9 @@ async function applyUnlinkedRefundToClaim(
       };
     }
     const tollAmount = Math.abs(Number(toll.amount) || 0);
+    const matchedTrip = toll.tripId ? trips.find((t: any) => t?.id === toll.tripId) : null;
+    const platformRefund = Math.abs(Number(matchedTrip?.tollCharges) || 0);
+    const initialShortfall = computeChargeShortfall(tollAmount, platformRefund, 0);
     claim = await upsertClaimFn(
       {
         type: "Toll_Refund",
@@ -5559,9 +5563,9 @@ async function applyUnlinkedRefundToClaim(
         vehicleId: trip.vehicleId || toll.vehicleId,
         tripId: toll.tripId || undefined,
         transactionId: resolvedTollId,
-        amount: tollAmount,
+        amount: initialShortfall > 0 ? initialShortfall : tollAmount,
         expectedAmount: tollAmount,
-        paidAmount: 0,
+        paidAmount: platformRefund,
         subject: `Unlinked refund applied from trip ${tripId}`,
         message: `Platform trip refund $${tripRefund.toFixed(2)} applied toward underpaid toll.`,
         date: toll.date || trip.date,

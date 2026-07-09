@@ -310,7 +310,12 @@ export function LossList({
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => onSelectLoss(item)}>
+                      <DropdownMenuItem
+                        onSelect={(e) => {
+                          e.preventDefault();
+                          onSelectLoss(item);
+                        }}
+                      >
                         <ArrowRight className="mr-2 h-4 w-4" />
                         View Match
                       </DropdownMenuItem>

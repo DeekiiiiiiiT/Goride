@@ -294,8 +294,10 @@ export function calculateTollFinancials(
     let driverRecovered = 0;
     let fleetAbsorbed = 0;
     if (claim?.status === 'Resolved') {
-        if (claim.resolutionReason === 'Charge Driver') {
-            driverRecovered = finiteAmount(claim.amount);
+    if (claim.resolutionReason === 'Charge Driver') {
+            if (claim.resolutionTransactionId) {
+                driverRecovered = finiteAmount(claim.amount);
+            }
         } else if (claim.resolutionReason === 'Write Off' || claim.resolutionReason === 'Business Expense') {
             fleetAbsorbed = finiteAmount(claim.amount);
         } else if (claim.resolutionReason === 'Reimbursed') {

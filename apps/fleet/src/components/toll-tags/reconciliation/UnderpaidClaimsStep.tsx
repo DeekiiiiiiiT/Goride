@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/tabs";
 import { Button } from "../../ui/button";
 import { toast } from "sonner@2.0.3";
@@ -18,6 +18,9 @@ import { StatCard } from "../../claimable-loss/StatCard";
 import { FinancialTransaction, Trip, Claim, DisputeRefund } from "../../../types/data";
 import { MatchResult, VARIANCE_THRESHOLD, calculateTollFinancials, buildTollFinancialsContext, buildTripRefundAllocation } from "../../../utils/tollReconciliation";
 import { hasBlockingUnlinkedRefund } from "../../../utils/unlinkedShortfallEligibility";
+import { buildClaimByTollId, dedupeClaimsForDisplay, collectDuplicateClaimIds } from "../../../utils/claimByToll";
+import { isActionablePartialShortfall } from "../../../utils/tollWeekPeriod";
+import { guardClaimChargeAmount } from "../../../utils/claimChargeGuard";
 import { formatDateJM } from "../../../utils/csv-helper";
 
 /**
@@ -33,7 +36,10 @@ import { formatDateJM } from "../../../utils/csv-helper";
  */
 
 interface UnderpaidClaimsStepProps {
+  /** Period-scoped claims for pipeline tabs and stats. */
   claims: Claim[];
+  /** All-time claims — used to link tolls ↔ claims (prevents duplicate filing). */
+  allClaims: Claim[];
   reconciledTolls: FinancialTransaction[];
   trips: Trip[];
   disputeRefunds: DisputeRefund[];
@@ -50,17 +56,18 @@ interface UnderpaidClaimsStepProps {
   loadingTolls: boolean;
   loadingClaims: boolean;
   unreconcile: (tx: FinancialTransaction) => Promise<any>;
+  createClaim: (claim: Partial<Claim>) => Promise<any>;
   updateClaim: (claim: Claim) => Promise<any>;
   deleteClaim: (id: string) => Promise<any>;
   refreshClaims: () => void;
 }
 
 export function UnderpaidClaimsStep({
-  claims, reconciledTolls, trips, disputeRefunds, unlinkedRefundTrips = [], onUndoUnlinkedApply, busyUnlinkedTripId,
+  claims, allClaims, reconciledTolls, trips, disputeRefunds, unlinkedRefundTrips = [], onUndoUnlinkedApply, busyUnlinkedTripId,
   periodReimbursedAmount,
   periodChargedToDrivers,
   drivers, loadingTolls, loadingClaims,
-  unreconcile, updateClaim, deleteClaim, refreshClaims,
+  unreconcile, createClaim, updateClaim, deleteClaim, refreshClaims,
 }: UnderpaidClaimsStepProps) {
   const tripMap = useMemo(() => new Map(trips.map(t => [t.id, t])), [trips]);
 
@@ -74,6 +81,7 @@ export function UnderpaidClaimsStep({
 
   const [selectedLoss, setSelectedLoss] = useState<LossItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('unmatched');
   const [selectedClaimDetail, setSelectedClaimDetail] = useState<Claim | null>(null);
   const [isClaimDetailOpen, setIsClaimDetailOpen] = useState(false);
   const [itemsToDelete, setItemsToDelete] = useState<string[]>([]);
@@ -84,32 +92,71 @@ export function UnderpaidClaimsStep({
     onConfirm: () => void; isDestructive?: boolean;
   }>({ isOpen: false, title: "", description: "", actionLabel: "Continue", onConfirm: () => {}, isDestructive: false });
 
+  const prunedDupesRef = useRef('');
+
+  useEffect(() => {
+    if (loadingClaims) return;
+    const dupIds = collectDuplicateClaimIds(allClaims);
+    const key = [...dupIds].sort().join(',');
+    if (!dupIds.length || prunedDupesRef.current === key) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        await Promise.all(dupIds.map((id) => deleteClaim(id)));
+        if (cancelled) return;
+        prunedDupesRef.current = key;
+        refreshClaims();
+      } catch {
+        if (!cancelled) toast.error('Failed to remove duplicate claims');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [allClaims, loadingClaims, deleteClaim, refreshClaims]);
+
   const refundByTollId = useMemo(() => {
     const map = new Map<string, DisputeRefund>();
     (disputeRefunds || []).forEach(r => { if (r.matchedTollId) map.set(r.matchedTollId, r); });
     return map;
   }, [disputeRefunds]);
 
-  const claimByTollId = useMemo(() => {
-    const map = new Map<string, Claim>();
-    claims.forEach((c) => { if (c.transactionId) map.set(c.transactionId, c); });
-    return map;
-  }, [claims]);
+  const claimByTollId = useMemo(() => buildClaimByTollId(allClaims), [allClaims]);
 
   const allocation = useMemo(
     () => buildTripRefundAllocation(reconciledTolls, tripMap),
     [reconciledTolls, tripMap],
   );
 
+  const reconciledTollIds = useMemo(
+    () => new Set(reconciledTolls.map((t) => t.id)),
+    [reconciledTolls],
+  );
+
+  const visibleTollIds = useMemo(() => {
+    const ids = new Set(reconciledTollIds);
+    claims.forEach((c) => { if (c.transactionId) ids.add(c.transactionId); });
+    return ids;
+  }, [reconciledTollIds, claims]);
+
+  const reconciledTollById = useMemo(
+    () => new Map(reconciledTolls.map((t) => [t.id, t])),
+    [reconciledTolls],
+  );
+
   const partialClaims = useMemo(
     () =>
-      claims.filter(
-        (c) =>
-          c.status === 'Open' &&
-          (Number(c.paidAmount) || 0) > VARIANCE_THRESHOLD &&
-          (Number(c.amount) || 0) > VARIANCE_THRESHOLD,
-      ),
-    [claims],
+      dedupeClaimsForDisplay(
+        allClaims.filter((c) => {
+          if (!c.transactionId || !visibleTollIds.has(c.transactionId)) return false;
+          return isActionablePartialShortfall(c, reconciledTollById.get(c.transactionId));
+        }),
+      ).displayClaims,
+    [allClaims, visibleTollIds, reconciledTollById],
+  );
+
+  const partialByTollId = useMemo(
+    () => new Map(partialClaims.map((c) => [c.transactionId!, c])),
+    [partialClaims],
   );
 
   const losses = useMemo(() => {
@@ -120,15 +167,13 @@ export function UnderpaidClaimsStep({
       if (!trip) continue;
       const claim = claimByTollId.get(tx.id);
 
-      if (
-        claim?.status === 'Open' &&
-        (Number(claim.paidAmount) || 0) > VARIANCE_THRESHOLD &&
-        (Number(claim.amount) || 0) > VARIANCE_THRESHOLD
-      ) {
+      // Only hide from Underpaid when Partially Covered will show this toll.
+      if (partialByTollId.has(tx.id)) continue;
+
+      if (claim && ['Sent_to_Driver', 'Submitted_to_Uber', 'Rejected'].includes(claim.status)) {
         continue;
       }
-
-      if (claim && ['Sent_to_Driver', 'Submitted_to_Uber', 'Rejected', 'Resolved'].includes(claim.status)) {
+      if (claim?.status === 'Resolved' && !isActionablePartialShortfall(claim, reconciledTollById.get(tx.id))) {
         continue;
       }
 
@@ -150,22 +195,37 @@ export function UnderpaidClaimsStep({
     return items.sort(
       (a, b) => new Date(b.transaction.date).getTime() - new Date(a.transaction.date).getTime(),
     );
-  }, [reconciledTolls, tripMap, claimByTollId, trips, disputeRefunds, allocation]);
+  }, [reconciledTolls, tripMap, claimByTollId, partialByTollId, trips, disputeRefunds, allocation, reconciledTollById]);
 
-  const pendingClaims = claims.filter(c => c.status === 'Submitted_to_Uber');
-  const lostClaims = claims.filter(c => c.status === 'Rejected');
-  const awaitingDriverClaims = claims.filter(c => c.status === 'Sent_to_Driver');
-  const resolvedClaims = claims.filter(c => c.status === 'Resolved');
+  const pendingClaims = useMemo(
+    () => dedupeClaimsForDisplay(claims.filter((c) => c.status === 'Submitted_to_Uber')).displayClaims,
+    [claims],
+  );
+  const lostClaims = useMemo(
+    () => dedupeClaimsForDisplay(claims.filter((c) => c.status === 'Rejected')).displayClaims,
+    [claims],
+  );
+  const awaitingDriverClaims = useMemo(
+    () => dedupeClaimsForDisplay(claims.filter((c) => c.status === 'Sent_to_Driver')).displayClaims,
+    [claims],
+  );
+
+  const resolvedClaims = useMemo(
+    () => dedupeClaimsForDisplay(claims.filter((c) => c.status === 'Resolved')).displayClaims,
+    [claims],
+  );
 
   const { unclaimedTotal, pendingTotal, atRiskTotal } = useMemo(() => {
     const lossTotal = losses.reduce((sum, item) => sum + item.financials.netLoss, 0);
     const partialTotal = partialClaims.reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
     const unclaimed = lossTotal + partialTotal;
+    const pipelinePending = dedupeClaimsForDisplay(
+      claims.filter((c) => c.status === 'Submitted_to_Uber' || c.status === 'Sent_to_Driver'),
+    ).displayClaims;
     const pending =
-      claims
-        .filter((c) => c.status === 'Submitted_to_Uber' || c.status === 'Sent_to_Driver')
-        .reduce((sum, c) => sum + (Number(c.amount) || 0), 0) + partialTotal;
-    const atRisk = claims.filter((c) => c.status === 'Rejected').reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
+      pipelinePending.reduce((sum, c) => sum + (Number(c.amount) || 0), 0) + partialTotal;
+    const atRisk = dedupeClaimsForDisplay(claims.filter((c) => c.status === 'Rejected')).displayClaims
+      .reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
     return { unclaimedTotal: unclaimed, pendingTotal: pending, atRiskTotal: atRisk };
   }, [losses, partialClaims, claims]);
 
@@ -215,6 +275,18 @@ export function UnderpaidClaimsStep({
     } catch (e) { toast.error("Failed to re-open claim"); }
   };
 
+  const guardChargeAmountForClaim = (claim: Claim) => {
+    const tx = reconciledTolls.find((t) => t.id === claim.transactionId);
+    const trip = claim.tripId ? tripMap.get(claim.tripId) : tx?.tripId ? tripMap.get(tx.tripId) : undefined;
+    if (!tx) return { ok: true as const, amount: Math.abs(Number(claim.amount) || 0) };
+    return guardClaimChargeAmount({
+      chargeAmount: Number(claim.amount) || 0,
+      tollCost: Math.abs(tx.amount),
+      platformRefund: trip?.tollCharges ?? 0,
+      claimPaidAmount: claim.paidAmount ?? 0,
+    });
+  };
+
   const handleChargeDriver = async (claim: Claim) => {
     if (hasBlockingUnlinkedRefund({ claimDriverId: claim.driverId, unlinkedTrips: unlinkedRefundTrips })) {
       toast.error('Pick Apply to underpaid on Unlinked Refunds first', {
@@ -231,9 +303,22 @@ export function UnderpaidClaimsStep({
       toast.error('A dispute refund already covers this toll — set Reimbursed instead of charging the driver.');
       return;
     }
+    const chargeGuard = guardChargeAmountForClaim(claim);
+    if (!chargeGuard.ok) {
+      toast.error('Cannot charge full toll amount', {
+        description: `${chargeGuard.message} Charge $${chargeGuard.suggestedAmount.toFixed(2)} instead.`,
+      });
+      return;
+    }
     try {
-      await updateClaim({ ...claim, status: 'Resolved', resolutionReason: 'Charge Driver', updatedAt: new Date().toISOString() });
-      toast.success(`Claim resolved. $${claim.amount.toFixed(2)} will be deducted from driver pay.`);
+      await updateClaim({
+        ...claim,
+        amount: chargeGuard.amount,
+        status: 'Resolved',
+        resolutionReason: 'Charge Driver',
+        updatedAt: new Date().toISOString(),
+      });
+      toast.success(`Claim resolved. $${chargeGuard.amount.toFixed(2)} will be deducted from driver pay.`);
       refreshClaims();
     } catch (e) { toast.error("Failed to charge driver"); }
   };
@@ -249,6 +334,26 @@ export function UnderpaidClaimsStep({
   const handleUpdateStatus = async (claim: Claim, newReason: 'Charge Driver' | 'Write Off' | 'Reimbursed') => {
     if (newReason === 'Charge Driver' && hasBlockingUnlinkedRefund({ claimDriverId: claim.driverId, unlinkedTrips: unlinkedRefundTrips })) {
       toast.error('Pick Apply to underpaid on Unlinked Refunds first');
+      return;
+    }
+    if (newReason === 'Charge Driver') {
+      const chargeGuard = guardChargeAmountForClaim(claim);
+      if (!chargeGuard.ok) {
+        toast.error('Cannot charge full toll amount', {
+          description: `${chargeGuard.message} Charge $${chargeGuard.suggestedAmount.toFixed(2)} instead.`,
+        });
+        return;
+      }
+      try {
+        await updateClaim({
+          ...claim,
+          amount: chargeGuard.amount,
+          resolutionReason: newReason,
+          updatedAt: new Date().toISOString(),
+        });
+        toast.success(`Claim updated to: ${newReason}`);
+        refreshClaims();
+      } catch (e) { toast.error("Failed to update claim status"); }
       return;
     }
     try {
@@ -384,6 +489,11 @@ export function UnderpaidClaimsStep({
     });
   };
 
+  const handleClaimSentToDriver = () => {
+    setActiveTab('awaiting');
+    refreshClaims();
+  };
+
   const handleSendPartialToDriver = async (claim: Claim) => {
     const tx = reconciledTolls.find((t) => t.id === claim.transactionId);
     const trip = claim.tripId ? tripMap.get(claim.tripId) : undefined;
@@ -439,7 +549,7 @@ export function UnderpaidClaimsStep({
         </div>
       </div>
 
-      <Tabs defaultValue="unmatched" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-6 lg:max-w-[1100px]">
           <TabsTrigger value="unmatched">
             Underpaid Tolls {losses.length > 0 && <span className="ml-2 bg-slate-200 text-slate-700 px-1.5 rounded-full text-xs">{losses.length}</span>}
@@ -473,7 +583,9 @@ export function UnderpaidClaimsStep({
 
         <TabsContent value="partial" className="mt-6">
           <PartiallyCoveredList
-            claims={claims}
+            claims={allClaims}
+            tollIds={visibleTollIds}
+            tollById={reconciledTollById}
             trips={trips}
             isLoading={loadingClaims}
             getDriverName={getDriverName}
@@ -554,11 +666,13 @@ export function UnderpaidClaimsStep({
 
       <DisputeModal
         isOpen={isModalOpen}
-        onClose={() => { setIsModalOpen(false); refreshClaims(); }}
+        onClose={() => { setIsModalOpen(false); setSelectedLoss(null); }}
         lossItem={selectedLoss ? { transaction: selectedLoss.transaction, match: selectedLoss.match } : null}
         claim={selectedLoss?.claim ?? null}
         financials={selectedLoss?.financials}
+        onCreateClaim={createClaim}
         onUpdateClaim={updateClaim}
+        onClaimSuccess={handleClaimSentToDriver}
       />
 
       <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>

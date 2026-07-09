@@ -1,6 +1,7 @@
 import { startOfWeek, endOfWeek, format, parseISO } from 'date-fns';
 import type { Claim, DisputeRefund, FinancialTransaction, Trip } from '../types/data';
 import { fleetTzDateKey, ymdToLocalDate } from './timezoneDisplay';
+import { VARIANCE_THRESHOLD } from './tollReconciliation';
 
 /**
  * Monday-start week key + bounds for a row's date.
@@ -279,6 +280,68 @@ export function getClaimPeriodAnchorDate(
   return null;
 }
 
+/** Monday-start week key for a toll row (matches period landing `period.id`). */
+export function tollWeekKey(
+  tx: Pick<FinancialTransaction, 'date' | 'time'>,
+  timezone?: string,
+): string {
+  const d = getTollTransactionDate(tx as FinancialTransaction);
+  return weekBucketForDate(d, timezone).key;
+}
+
+/** True when a toll belongs to the same Monday-start week as the wizard period. */
+export function isTollInWizardPeriod(
+  tx: Pick<FinancialTransaction, 'date' | 'time'>,
+  periodWeekKey: string,
+  timezone?: string,
+): boolean {
+  return tollWeekKey(tx, timezone) === periodWeekKey;
+}
+
+/** True when a claim is Open with credits applied and a remaining shortfall. */
+export function isOpenPartialClaim(
+  claim: Pick<Claim, 'status' | 'paidAmount' | 'amount'> | null | undefined,
+): boolean {
+  if (!claim || claim.status !== 'Open') return false;
+  return (
+    (Number(claim.paidAmount) || 0) > VARIANCE_THRESHOLD &&
+    (Number(claim.amount) || 0) > VARIANCE_THRESHOLD
+  );
+}
+
+/**
+ * Partial shortfall still owed — Open claims OR wrongly auto-Resolved after
+ * unlinked apply left amount > 0 (logs: f1bc030a toll, Resolved, paid 275, amt 10).
+ */
+export function isActionablePartialShortfall(
+  claim: Pick<
+    Claim,
+    | 'status'
+    | 'paidAmount'
+    | 'amount'
+    | 'resolutionReason'
+    | 'unlinkedTripId'
+    | 'resolutionTransactionId'
+  > | null | undefined,
+  toll?: Pick<FinancialTransaction, 'unlinkedSourceTripId'> | null,
+): boolean {
+  if (!claim) return false;
+  const paid = Math.abs(Number(claim.paidAmount) || 0);
+  const remaining = Math.abs(Number(claim.amount) || 0);
+  if (remaining <= VARIANCE_THRESHOLD || paid <= VARIANCE_THRESHOLD) return false;
+  if (claim.status === 'Open') return true;
+  if (claim.status !== 'Resolved') return false;
+
+  const hasUnlinkedApply = !!(claim.unlinkedTripId || toll?.unlinkedSourceTripId);
+  if (claim.resolutionReason === 'Reimbursed' && hasUnlinkedApply) return true;
+
+  // Partial unlinked apply closed as Charge Driver without posting a driver debit.
+  return (
+    claim.resolutionReason === 'Charge Driver' &&
+    !claim.resolutionTransactionId
+  );
+}
+
 /** True when a claim's toll/claim/trip anchor falls inside [startDate, endDate] (fleet tz). */
 export function isClaimInPeriod(
   claim: Pick<Claim, 'date' | 'transactionId' | 'tripDate'>,
@@ -291,4 +354,20 @@ export function isClaimInPeriod(
   const ymd = fleetTzDateKey(anchor, fleetTz);
   if (!ymd) return false;
   return ymd >= period.startDate && ymd <= period.endDate;
+}
+
+/**
+ * Wizard period visibility — anchor date in range OR claim is tied to a toll
+ * already loaded for this period (reconciled/unreconciled). Keeps active claims
+ * visible when toll rows are shown even if anchor dates disagree.
+ */
+export function isClaimVisibleInPeriod(
+  claim: Pick<Claim, 'date' | 'transactionId' | 'tripDate'>,
+  period: { startDate: string; endDate: string },
+  tollDateById: Map<string, string> | undefined,
+  fleetTz: string,
+  periodTollIds?: ReadonlySet<string>,
+): boolean {
+  if (claim.transactionId && periodTollIds?.has(claim.transactionId)) return true;
+  return isClaimInPeriod(claim, period, tollDateById, fleetTz);
 }

@@ -93,6 +93,26 @@ describe('calculateTollFinancials enriched', () => {
     expect(f.netLoss).toBe(0);
   });
 
+  it('does not count Charge Driver amount as recovered without a posted debit', () => {
+    const claim: Claim = {
+      id: 'c3',
+      type: 'Toll_Refund',
+      status: 'Resolved',
+      resolutionReason: 'Charge Driver',
+      driverId: 'd1',
+      amount: 10,
+      expectedAmount: 285,
+      paidAmount: 275,
+      subject: 'test',
+      message: '',
+      createdAt: '',
+      updatedAt: '',
+    };
+    const f = calculateTollFinancials(toll285, { ...uberTrip, tollCharges: 275 }, claim);
+    expect(f.driverRecovered).toBe(0);
+    expect(f.totalRecovered).toBe(285);
+  });
+
   it('legacy path without ctx still uses trip.tollCharges', () => {
     const f = calculateTollFinancials(toll285, { ...uberTrip, tollCharges: 275 });
     expect(f.platformRefund).toBe(275);

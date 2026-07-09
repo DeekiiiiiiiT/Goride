@@ -162,6 +162,8 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
   const [loading, setLoading] = useState(true);
   const [unreconciledTolls, setUnreconciledTolls] = useState<FinancialTransaction[]>([]);
   const [reconciledTolls, setReconciledTolls] = useState<FinancialTransaction[]>([]);
+  /** Unscoped reconciled tolls — used to recover same-week rows the date filter drops. */
+  const [allReconciledTolls, setAllReconciledTolls] = useState<FinancialTransaction[]>([]);
   const [unclaimedRefunds, setUnclaimedRefunds] = useState<Trip[]>([]);
   // Phase 3: refund resolution
   const [resolvedRefunds, setResolvedRefunds] = useState<Trip[]>([]);
@@ -188,18 +190,23 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
       const unreconciledRes = await fetchAllUnreconciled(filterParams);
 
       // Step 2: Now fetch reconciled + refunds + trips (after auto-reconciliation writes have persisted)
-      const [reconciledRes, refundsRes, allTrips] = await Promise.all([
+      const [reconciledRes, reconciledAllRes, refundsRes, allTrips] = await Promise.all([
         api.getTollReconciled({ limit: 1000, ...(driverId ? { driverId } : {}), ...dateParams }),
+        period
+          ? api.getTollReconciled({ limit: 1000, ...(driverId ? { driverId } : {}) })
+          : Promise.resolve({ data: [] as FinancialTransaction[] }),
         api.getTollUnclaimedRefunds({ limit: 1000, ...(driverId ? { driverId } : {}), ...dateParams }),
         fetchAllTrips()
       ]);
 
       const unreconciled: FinancialTransaction[] = unreconciledRes.data || [];
       const reconciled: FinancialTransaction[] = reconciledRes.data || [];
+      const reconciledAll: FinancialTransaction[] = reconciledAllRes.data || reconciled;
       const refunds: Trip[] = refundsRes.data || [];
 
       setUnreconciledTolls(unreconciled);
       setReconciledTolls(reconciled);
+      setAllReconciledTolls(reconciledAll);
       setUnclaimedRefunds(refunds);
       setTrips(allTrips);
 
@@ -559,6 +566,7 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
     loading,
     unreconciledTolls,
     reconciledTolls,
+    allReconciledTolls,
     unclaimedRefunds,
     resolvedRefunds,
     refundSuggestions,
