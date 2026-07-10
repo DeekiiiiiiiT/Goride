@@ -19,6 +19,7 @@ import { FinancialTransaction, Trip, Claim, DisputeRefund } from "../../../types
 import { TollFinancials, calculateTollFinancials, buildTollFinancialsContext, buildTripRefundAllocation } from "../../../utils/tollReconciliation";
 import { normalizePlatform } from '../../../utils/normalizePlatform';
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
+import { calculateTripTimes } from '../../../utils/timeUtils';
 
 interface MatchedTollDetailOverlayProps {
   isOpen: boolean;
@@ -76,15 +77,21 @@ export function MatchedTollDetailOverlay({
   const formatTripDate = () => {
     if (!trip) return null;
     try {
-      const pickupSource = trip.requestTime || trip.date;
-      const d = new Date(pickupSource);
+      const times = calculateTripTimes(trip);
+      const dateSource = trip.requestTime || trip.dropoffTime || trip.date;
       return {
-        date: formatInFleetTz(d, fleetTz, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
-        time: trip.requestTime
-          ? formatInFleetTz(d, fleetTz, { hour: 'numeric', minute: '2-digit', hour12: true })
+        date: formatInFleetTz(new Date(dateSource), fleetTz, {
+          weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+        }),
+        time: times.isValid
+          ? formatInFleetTz(times.pickupTime, fleetTz, {
+              hour: 'numeric', minute: '2-digit', hour12: true,
+            })
           : 'N/A',
         dropoff: trip.dropoffTime
-          ? formatInFleetTz(new Date(trip.dropoffTime), fleetTz, { hour: 'numeric', minute: '2-digit', hour12: true })
+          ? formatInFleetTz(new Date(trip.dropoffTime), fleetTz, {
+              hour: 'numeric', minute: '2-digit', hour12: true,
+            })
           : 'N/A',
       };
     } catch {

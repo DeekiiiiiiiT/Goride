@@ -124,6 +124,7 @@ import { CatalogFacetSelect } from './CatalogFacetSelect';
 import { useCatalogCandidates } from '../../hooks/useCatalogCandidates';
 import { useVehicleCatalogAnchorFacets } from '../../hooks/useVehicleCatalogAnchorFacets';
 import { PendingCatalogRequestsDrawer } from './PendingCatalogRequestsDrawer';
+import { TollClassPicker } from './TollClassPicker';
 
 import { OdometerHistory } from './odometer/OdometerHistory';
 import { OdometerDisplay } from './odometer/OdometerDisplay';
@@ -1271,6 +1272,26 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                                         </Button>
                                     )}
                                 </div>
+                             </div>
+                             <div className="mt-3 max-w-md">
+                               <TollClassPicker
+                                 value={vehicle.tollClassId || 'class1'}
+                                 needsReview={!!vehicle.tollClassNeedsReview || !vehicle.tollClassId}
+                                 onChange={async (classId) => {
+                                   const updatedVehicle = {
+                                     ...vehicle,
+                                     tollClassId: classId,
+                                     tollClassNeedsReview: false,
+                                   };
+                                   try {
+                                     await api.saveVehicle(updatedVehicle);
+                                     onUpdate?.(updatedVehicle);
+                                     toast.success('Toll class updated');
+                                   } catch (e: any) {
+                                     toast.error(e?.message || 'Failed to save toll class');
+                                   }
+                                 }}
+                               />
                              </div>
                      </div>
                  </div>

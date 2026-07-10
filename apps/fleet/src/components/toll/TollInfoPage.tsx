@@ -194,6 +194,17 @@ const DEFAULT_VEHICLE_CLASSES: VehicleClass[] = [
     fleetRelevance: 'Rare in Fleet',
     fleetRelevanceColor: 'slate',
   },
+  {
+    id: 'class4',
+    label: 'Class 4',
+    iconName: 'bike',
+    description: 'Motorized two-wheel and three-wheel vehicles',
+    examples: 'Motorcycles, scooters',
+    height: 'N/A',
+    length: 'N/A',
+    fleetRelevance: 'Rare in Fleet',
+    fleetRelevanceColor: 'slate',
+  },
 ];
 
 const JAMAICA_OPERATORS: TollOperator[] = [
@@ -320,6 +331,12 @@ const KV_KEY = 'toll_rate_schedule';
 // ── Migration: convert old class1/class2/class3 format to rates map ──
 
 function migrateSchedule(raw: any): TollRateSchedule {
+  if (!raw) return DEFAULT_RATE_SCHEDULE;
+  // Versioned store → edit the current snapshot
+  if (raw.current && typeof raw.current === 'object') {
+    raw = { ...raw.current, versions: raw.versions };
+  }
+
   const vehicleClasses: VehicleClass[] = raw.vehicleClasses || DEFAULT_VEHICLE_CLASSES;
 
   const plazas: PlazaRates[] = (raw.plazas || []).map((p: any) => {
@@ -411,6 +428,7 @@ function isRoutePlaza(plazaName: string, routeGroups: RouteRateGroup[]): boolean
 
 export function TollInfoPage() {
   const [schedule, setSchedule] = useState<TollRateSchedule>(DEFAULT_RATE_SCHEDULE);
+  const [rateVersions, setRateVersions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -494,6 +512,7 @@ export function TollInfoPage() {
         setSchedule(migrated);
         setEditSchedule(migrated);
         setEditClasses(migrated.vehicleClasses);
+        setRateVersions(Array.isArray(raw.versions) ? raw.versions : []);
       }
     } catch (err) {
       console.log('[TollInfo] No saved schedule, using defaults');
@@ -533,10 +552,15 @@ export function TollInfoPage() {
     }
     setSaving(true);
     try {
-      await api.saveTollInfo(editSchedule);
+      // Publishes a NEW date-locked version — past effective dates keep prior rates.
+      const result = await api.saveTollInfo(editSchedule);
       setSchedule(editSchedule);
+      if (result?.versions) setRateVersions(result.versions);
+      else if (result?.store?.versions) setRateVersions(result.store.versions);
       setEditMode(false);
-      toast.success('Toll rates saved successfully');
+      toast.success(
+        `Toll rates locked from ${editSchedule.effectiveDate} forward. Earlier dates keep previous rates.`,
+      );
     } catch (err) {
       console.error('[TollInfo] Save failed:', err);
       toast.error('Failed to save toll rates');
@@ -1148,6 +1172,11 @@ export function TollInfoPage() {
                 </span>
               )}
             </div>
+            {rateVersions.length > 1 && (
+              <Badge variant="outline" className="text-xs text-slate-600">
+                {rateVersions.length} rate versions (date-locked)
+              </Badge>
+            )}
             <Badge variant="outline" className="text-xs">
               <DollarSign className="h-3 w-3 mr-1" />
               {displaySchedule.currency}

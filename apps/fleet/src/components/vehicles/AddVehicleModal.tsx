@@ -17,6 +17,8 @@ import { useCatalogCandidates } from '../../hooks/useCatalogCandidates';
 import { useVehicleCatalogAnchorFacets } from '../../hooks/useVehicleCatalogAnchorFacets';
 import { extractChassisPrefix } from '../../utils/chassisPrefix';
 import type { VehicleCatalogRecord } from '../../types/vehicleCatalog';
+import { TollClassPicker } from './TollClassPicker';
+import { TollClassPicker } from './TollClassPicker';
 
 interface AddVehicleModalProps {
   isOpen: boolean;
@@ -217,6 +219,8 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
     fuelType: '',
     /** OEM chassis / frame index prefix (e.g. M900A); seeded from VIN/chassisNo on scan. */
     chassis: '',
+    /** Super Admin Toll Info class (class1 default for passenger fleet). */
+    tollClassId: 'class1',
   });
 
   /**
@@ -655,6 +659,8 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
 
               // Hybrid catalog matching: catalog id + hints from the picker.
               ...catalogHints,
+              tollClassId: formData.tollClassId || 'class1',
+              tollClassNeedsReview: false,
           };
           toast.info(`Updated existing vehicle: ${plateToUse}`);
       } else {
@@ -698,6 +704,8 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
             registrationCertificateUrl: registrationUrl,
             mvid: formData.mvid,
             laNumber: formData.laNumber,
+            tollClassId: formData.tollClassId || 'class1',
+            tollClassNeedsReview: false,
 
             // Hybrid catalog matching: catalog id + hints from the picker.
             ...catalogHints,
@@ -1123,6 +1131,14 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
                 )}
             </div>
           )}
+
+          <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <TollClassPicker
+              value={formData.tollClassId}
+              onChange={(id) => setFormData((prev) => ({ ...prev, tollClassId: id }))}
+              required
+            />
+          </div>
           
           <DialogFooter className="mt-6">
              <Button type="button" variant="outline" onClick={handleClose}>

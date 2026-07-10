@@ -28,6 +28,8 @@ export interface RefundClassifierInput {
   plazaRadiusMeters?: number;
   /** True when a tag statement covering this trip's period is still expected. */
   pendingTagImport?: boolean;
+  /** Refund amount matches a Super Admin Toll Info plaza rate. */
+  matchesOfficialRate?: boolean;
 }
 
 export interface RefundClassification {
@@ -56,6 +58,7 @@ export function classifyRefund(input: RefundClassifierInput): RefundClassificati
     nearestPlazaMeters = null,
     plazaRadiusMeters = DEFAULT_PLAZA_RADIUS_M,
     pendingTagImport = false,
+    matchesOfficialRate = false,
   } = input;
 
   if (!(tollCharges > 0)) {
@@ -97,6 +100,13 @@ export function classifyRefund(input: RefundClassifierInput): RefundClassificati
       status: 'cash_wash',
       confidence: 70,
       reason: 'A toll plaza sits on this route; likely paid in cash and reimbursed.',
+    };
+  }
+  if (matchesOfficialRate) {
+    return {
+      status: 'cash_wash',
+      confidence: 75,
+      reason: 'Refund amount matches Super Admin Toll Info rate — likely cash wash.',
     };
   }
   // We have coordinates and NO plaza is near — likely a platform estimate.

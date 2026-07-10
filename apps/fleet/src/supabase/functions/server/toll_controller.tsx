@@ -524,6 +524,14 @@ interface MatchResult {
   tripDuration?: number;     // minutes
   tripDistance?: number;     // km
   tripServiceType?: string;
+  /** Official Toll Info expected cost when resolved. */
+  officialAmount?: number | null;
+  /** Tag charged amount (audit). */
+  tagAmount?: number;
+  /** True when shortfall used official rate. */
+  usedOfficialRate?: boolean;
+  /** Tag differs from Toll Info. */
+  rateDrift?: boolean;
 }
 
 /** Sort toll match candidates: score → time proximity → Uber toll refund pool. */
@@ -539,6 +547,55 @@ function compareTollMatchResults(a: MatchResult, b: MatchResult): number {
 
 function isAmountMatch(a: number, b: number): boolean {
   return Math.abs(a - b) < VARIANCE_THRESHOLD;
+}
+
+/** Official Toll Info cost for a ledger/tx row (hybrid: official when resolved). */
+async function resolveTollExpectedCost(tx: any): Promise<{
+  expectedCost: number;
+  tagAmount: number;
+  usedOfficialRate: boolean;
+  rateDrift: boolean;
+  officialAmount: number | null;
+}> {
+  const tagAmount = Math.abs(Number(tx?.amount) || 0);
+  try {
+    const { loadTollRateStore, resolveOfficialTollRate } = await import("./toll_rate_schedule.ts");
+    const store = await loadTollRateStore();
+    let classId = "class1";
+    const vehicleId = tx?.vehicleId;
+    if (vehicleId) {
+      const v = await kv.get(`vehicle:${vehicleId}`);
+      if (v?.tollClassId) classId = String(v.tollClassId);
+    }
+    const pm = String(tx?.paymentMethod || "").toLowerCase();
+    const paymentMethod = pm === "cash" ? "withoutTag" : "withTag";
+    const official = resolveOfficialTollRate({
+      store,
+      asOfDate: String(tx?.date || new Date().toISOString()).slice(0, 10),
+      tollClassId: classId,
+      paymentMethod: paymentMethod as "withTag" | "withoutTag",
+      plazaId: tx?.plazaId || null,
+      plazaName: tx?.plaza || tx?.location || tx?.vendor || null,
+    });
+    if (official && official.amount > 0) {
+      return {
+        expectedCost: official.amount,
+        tagAmount,
+        usedOfficialRate: true,
+        rateDrift: Math.abs(tagAmount - official.amount) > VARIANCE_THRESHOLD,
+        officialAmount: official.amount,
+      };
+    }
+  } catch (e: any) {
+    console.warn(`[TollExpectedCost] fallback to tag: ${e?.message}`);
+  }
+  return {
+    expectedCost: tagAmount,
+    tagAmount,
+    usedOfficialRate: false,
+    rateDrift: false,
+    officialAmount: null,
+  };
 }
 
 function getTransactionDateTime(tx: any, timezone: string): Date | null {
@@ -571,11 +628,24 @@ function findTollMatchesServer(
   trips: any[],
   timezone: string,
   driverAliasMap?: Map<string, string>,
+  /** Official expected cost when resolved; defaults to |tx.amount|. */
+  expectedCostAbs?: number,
+  costMeta?: {
+    officialAmount?: number | null;
+    tagAmount?: number;
+    usedOfficialRate?: boolean;
+    rateDrift?: boolean;
+  },
 ): MatchResult[] {
   const txDate = getTransactionDateTime(transaction, timezone);
   if (!txDate) return [];
 
   const matches: MatchResult[] = [];
+  const tagAmountAbs = Math.abs(Number(transaction.amount) || 0);
+  const txAmountAbs =
+    typeof expectedCostAbs === "number" && expectedCostAbs > 0
+      ? expectedCostAbs
+      : tagAmountAbs;
 
   // Phase 6: Replace hard vehicle/driver gate with time-based pre-filter
   const candidateTrips = sameDayPreFilter(txDate, trips);
@@ -594,7 +664,6 @@ function findTollMatchesServer(
     else if (txDate > windows.activeEnd)
       diff = differenceInMinutes(txDate, windows.activeEnd);
 
-    const txAmountAbs = Math.abs(transaction.amount);
     const tripRefundAmount = trip.tollCharges || 0;
     const varianceAmount = tripRefundAmount - txAmountAbs;
 
@@ -666,6 +735,10 @@ function findTollMatchesServer(
       tripPlatform: trip.platform || "Unknown",
       tripDriverId: trip.driverId || "",
       tripDriverName: trip.driverName || "",
+      officialAmount: costMeta?.officialAmount ?? null,
+      tagAmount: costMeta?.tagAmount ?? tagAmountAbs,
+      usedOfficialRate: costMeta?.usedOfficialRate ?? false,
+      rateDrift: costMeta?.rateDrift ?? false,
       // ─── Trip timing & detail fields for overlay display ───
       tripRequestTime: trip.requestTime || trip.date,
       tripDropoffTime: trip.dropoffTime || trip.date,
@@ -1436,7 +1509,20 @@ app.get(`${BASE}/unreconciled`, async (c) => {
       // Guard: skip if admin previously un-matched this auto-match
       if (tx.metadata?.autoMatchOverridden) continue;
 
-      const matches = findTollMatchesServer(tx, trips, timezone, driverAliasMap);
+      const cost = await resolveTollExpectedCost(tx);
+      const matches = findTollMatchesServer(
+        tx,
+        trips,
+        timezone,
+        driverAliasMap,
+        cost.expectedCost,
+        {
+          officialAmount: cost.officialAmount,
+          tagAmount: cost.tagAmount,
+          usedOfficialRate: cost.usedOfficialRate,
+          rateDrift: cost.rateDrift,
+        },
+      );
       const best = matches[0];
       if (best?.isAmbiguous) continue;
       if (best?.matchType !== "PERFECT_MATCH") continue;
@@ -1522,7 +1608,34 @@ app.get(`${BASE}/unreconciled`, async (c) => {
     // Compute match suggestions for the current page (display only).
     const suggestionsMap: Record<string, MatchResult[]> = {};
     for (const tx of page) {
-      const matches = findTollMatchesServer(tx, trips, timezone, driverAliasMap);
+      const cost = await resolveTollExpectedCost(tx);
+      // Stamp official cost onto the row for client financials / drift UI
+      (tx as any).officialAmount = cost.officialAmount;
+      (tx as any).tagAmount = cost.tagAmount;
+      (tx as any).usedOfficialRate = cost.usedOfficialRate;
+      (tx as any).rateDrift = cost.rateDrift;
+      if (cost.usedOfficialRate) {
+        (tx as any).metadata = {
+          ...((tx as any).metadata || {}),
+          officialAmount: cost.officialAmount,
+          usedOfficialRate: true,
+          rateDrift: cost.rateDrift,
+          tagAmount: cost.tagAmount,
+        };
+      }
+      const matches = findTollMatchesServer(
+        tx,
+        trips,
+        timezone,
+        driverAliasMap,
+        cost.expectedCost,
+        {
+          officialAmount: cost.officialAmount,
+          tagAmount: cost.tagAmount,
+          usedOfficialRate: cost.usedOfficialRate,
+          rateDrift: cost.rateDrift,
+        },
+      );
       if (matches.length > 0) {
         suggestionsMap[tx.id] = matches;
       } else if (puSettings.personalUseDetectionEnabled) {
@@ -1654,11 +1767,17 @@ app.get(`${BASE}/unclaimed-refunds`, async (c) => {
       const plazas = await loadActivePlazaPoints();
       for (const t of candidates) {
         const nearest = nearestPlazaMetersForTrip(t, plazas);
+        const { amountMatchesAnyOfficialRate } = await import("./toll_rate_schedule.ts");
+        const matchesOfficialRate = await amountMatchesAnyOfficialRate(
+          Number(t.tollCharges) || 0,
+          t.date,
+        );
         const cls = classifyRefundServer({
           tollCharges: Number(t.tollCharges) || 0,
           platform: t.platform,
           paymentMethod: t.paymentMethod,
           nearestPlazaMeters: nearest,
+          matchesOfficialRate,
         });
         if (isSafeAutoApplyServer(cls, automation.refundAutoMinConfidence)) {
           try {
@@ -2015,6 +2134,7 @@ interface TollLedgerRecord {
   tollTagId: string | null;
   tagNumber: string | null;
   plaza: string | null;
+  plazaId?: string | null;
   highway: string | null;
   location: string | null;
   date: string;
@@ -2111,6 +2231,19 @@ async function saveTollLedgerEntry(entry: TollLedgerRecord): Promise<void> {
     entry.amount = -Math.abs(entry.amount);
   } else if ((entry.type === "top_up" || entry.type === "refund") && entry.amount < 0) {
     entry.amount = Math.abs(entry.amount);
+  }
+
+  // Resolve plazaId from Toll Info / name when missing (Phase 3)
+  if (!entry.plazaId) {
+    try {
+      const { loadTollRateStore, matchPlazaIdFromText } = await import("./toll_rate_schedule.ts");
+      const store = await loadTollRateStore();
+      const search = `${entry.plaza || ""} ${entry.location || ""} ${entry.highway || ""}`;
+      const plazaId = matchPlazaIdFromText(search, store.current.plazas || []);
+      if (plazaId) entry.plazaId = plazaId;
+    } catch (e: any) {
+      console.warn(`[TollLedgerStorage] plazaId enrich skipped: ${e?.message}`);
+    }
   }
 
   await kv.set(`${TOLL_LEDGER_PREFIX}${entry.id}`, entry);
@@ -2790,6 +2923,7 @@ function transactionToTollLedgerServer(tx: any): TollLedgerRecord {
     tagNumber: tx.metadata?.tagNumber || null,
 
     plaza: tx.vendor || tx.metadata?.tollPlaza || null,
+    plazaId: tx.metadata?.plazaId || tx.plazaId || null,
     highway: tx.metadata?.highway || null,
     location: tx.vendor || tx.description || null,
 
@@ -3068,6 +3202,31 @@ app.get(`${BASE}/toll-ledger/backup-ledger`, async (c) => {
     return c.json(backup);
   } catch (e: any) {
     console.log(`[TollLedgerBackup] Error (ledger): ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+/**
+ * Manual plaza link override for a toll ledger row (Phase 3).
+ * Body: { plazaId: string | null }
+ */
+app.post(`${BASE}/toll-ledger/:id/plaza`, async (c) => {
+  try {
+    const id = c.req.param("id");
+    const body = await c.req.json().catch(() => ({}));
+    const plazaId = body?.plazaId === null || body?.plazaId === ""
+      ? null
+      : String(body?.plazaId || "");
+    const updated = await updateTollLedgerEntry(
+      id,
+      { plazaId },
+      "updated",
+      "admin",
+      "Plaza link override",
+    );
+    if (!updated) return c.json({ error: "Toll not found" }, 404);
+    return c.json({ success: true, data: updated });
+  } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
 });
@@ -5168,6 +5327,8 @@ function classifyRefundServer(params: {
   nearestPlazaMeters: number | null;
   plazaRadiusMeters?: number;
   pendingTagImport?: boolean;
+  /** True when trip.tollCharges matches a Super Admin Toll Info rate. */
+  matchesOfficialRate?: boolean;
 }): RefundClassification {
   const {
     tollCharges,
@@ -5196,6 +5357,14 @@ function classifyRefundServer(params: {
   }
   if (!cashSettled && nearPlaza) {
     return { status: "cash_wash", confidence: 70, reason: "A toll plaza sits on this route; likely paid in cash and reimbursed." };
+  }
+  // Rate-card signal: refund amount matches an official plaza T-Tag/Cash rate
+  if (params.matchesOfficialRate) {
+    return {
+      status: "cash_wash",
+      confidence: 75,
+      reason: "Refund amount matches Super Admin Toll Info rate — likely cash wash.",
+    };
   }
   if (hasGeo && !nearPlaza) {
     return { status: "phantom", confidence: 64, reason: "No toll plaza near this route — likely a platform fare estimate." };
@@ -5347,13 +5516,19 @@ app.get(`${BASE}/refund-suggestions`, async (c) => {
     const plazas = await loadActivePlazaPoints();
 
     const suggestions: Record<string, RefundClassification> = {};
+    const { amountMatchesAnyOfficialRate } = await import("./toll_rate_schedule.ts");
     for (const t of unresolved) {
       const nearest = nearestPlazaMetersForTrip(t, plazas);
+      const matchesOfficialRate = await amountMatchesAnyOfficialRate(
+        Number(t.tollCharges) || 0,
+        t.date,
+      );
       suggestions[t.id] = classifyRefundServer({
         tollCharges: Number(t.tollCharges) || 0,
         platform: t.platform,
         paymentMethod: t.paymentMethod,
         nearestPlazaMeters: nearest,
+        matchesOfficialRate,
       });
     }
 
@@ -5689,7 +5864,8 @@ async function applyUnlinkedRefundToClaim(
         error: "That toll was already handled in an earlier step (Personal Use, Deadhead, or Dispute). Pick an open underpaid shortfall instead.",
       };
     }
-    const tollAmount = Math.abs(Number(toll.amount) || 0);
+    const costBasis = await resolveTollExpectedCost(toll);
+    const tollAmount = costBasis.expectedCost;
     const matchedTrip = toll.tripId ? trips.find((t: any) => t?.id === toll.tripId) : null;
     const platformRefund = Math.abs(Number(matchedTrip?.tollCharges) || 0);
     const initialShortfall = computeChargeShortfall(tollAmount, platformRefund, 0);
@@ -5708,6 +5884,12 @@ async function applyUnlinkedRefundToClaim(
         subject: `Unlinked refund applied from trip ${tripId}`,
         message: `Platform trip refund $${tripRefund.toFixed(2)} applied toward underpaid toll.`,
         date: toll.date || trip.date,
+        metadata: {
+          usedOfficialRate: costBasis.usedOfficialRate,
+          tagAmount: costBasis.tagAmount,
+          rateDrift: costBasis.rateDrift,
+          officialAmount: costBasis.officialAmount,
+        },
       },
       c,
       { syncMode: "skip" },

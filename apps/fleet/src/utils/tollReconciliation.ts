@@ -274,7 +274,14 @@ export function calculateTollFinancials(
     claim?: Claim,
     ctx?: TollFinancialsContext,
 ): TollFinancials {
-    const cost = Math.abs(transaction.amount);
+    const tagCost = Math.abs(transaction.amount);
+    const metaOfficial =
+      finiteAmount((transaction as any).officialAmount) ||
+      finiteAmount((transaction as any).metadata?.officialAmount);
+    const usedOfficial =
+      (transaction as any).usedOfficialRate === true ||
+      (transaction as any).metadata?.usedOfficialRate === true;
+    const cost = usedOfficial && metaOfficial > 0 ? metaOfficial : tagCost;
 
     const tripRefund =
         ctx?.allocatedTripRefund !== undefined

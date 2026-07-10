@@ -35,7 +35,7 @@ interface RefundResolutionDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   trip: RefundTripLike | null;
-  /** Leftover resolution suggestion (cash wash / phantom / etc.) — not primary. */
+  /** Leftover resolution suggestion — reserved for future row pre-select; not shown as hint copy. */
   suggestion?: RefundSuggestion | null;
   /** Underpaid claim/toll candidates for Apply to underpaid. */
   shortfallCandidates?: UnlinkedShortfallSuggestion[];
@@ -64,6 +64,82 @@ function candidateKey(c: UnlinkedShortfallSuggestion): string {
   return `${c.tollId}::${c.claimId ?? ""}`;
 }
 
+function pickPrimaryCandidate(
+  ranked: UnlinkedShortfallSuggestion[],
+  platform?: string | null,
+): UnlinkedShortfallSuggestion | null {
+  return (
+    ranked.find((c) => isRecommendedUnlinkedShortfall(c, platform)) ??
+    ranked.find((c) => !isUnlinkedShortfallPlatformMismatch(c, platform)) ??
+    ranked[0] ??
+    null
+  );
+}
+
+function ShortfallCandidateRow({
+  candidate: c,
+  tripPlatform,
+  active,
+  showRecommended,
+  onSelect,
+}: {
+  candidate: UnlinkedShortfallSuggestion;
+  tripPlatform?: string | null;
+  active: boolean;
+  showRecommended: boolean;
+  onSelect: () => void;
+}) {
+  const recommended = showRecommended && isRecommendedUnlinkedShortfall(c, tripPlatform);
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={cn(
+        "flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors",
+        active ? "border-orange-400 bg-orange-50/60" : "border-slate-200 hover:border-orange-300",
+      )}
+    >
+      <span
+        className={cn(
+          "mt-1 h-4 w-4 shrink-0 rounded-full border",
+          active ? "border-orange-600 bg-orange-600 ring-2 ring-orange-100" : "border-slate-300",
+        )}
+      />
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-2 flex-wrap">
+          <PlatformSourceBadge platform={c.tollPlatform} size="sm" />
+          <span className="text-sm font-medium text-slate-900">
+            {formatDate(c.date)} · ${c.tollAmount.toFixed(2)}
+          </span>
+          {recommended && (
+            <span className="inline-flex items-center rounded-full bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-800">
+              Recommended
+            </span>
+          )}
+          <span className="ml-auto text-[11px] font-semibold text-slate-500">
+            {c.confidence}%
+          </span>
+        </span>
+        {c.location && (
+          <span className="block text-xs text-slate-500 mt-0.5 truncate">{c.location}</span>
+        )}
+        <span className="block text-xs text-slate-500 mt-0.5">
+          Shortfall ${c.remainingShortfall.toFixed(2)}
+          {c.leftoverShortfall > 0.05
+            ? ` · leftover $${c.leftoverShortfall.toFixed(2)} after apply`
+            : " · fully covered"}
+        </span>
+        {(c.platformMismatch ||
+          platformsMismatch(c.tripPlatform || tripPlatform, c.tollPlatform)) && (
+          <span className="mt-1 inline-flex text-[10px] font-semibold text-amber-700">
+            Platform differs from refund
+          </span>
+        )}
+      </span>
+    </button>
+  );
+}
+
 /**
  * Review drawer: primary path is Apply to underpaid (picker).
  * Cash wash / Phantom / Pending / Expense logged live under "Other ways to clear".
@@ -72,7 +148,6 @@ export function RefundResolutionDrawer({
   open,
   onOpenChange,
   trip,
-  suggestion,
   shortfallCandidates = [],
   drivers = [],
   onResolve,
@@ -83,7 +158,8 @@ export function RefundResolutionDrawer({
   const [notes, setNotes] = useState("");
   const [driverId, setDriverId] = useState<string | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
-  const [otherOpen, setOtherOpen] = useState(false);
+  const [otherOpen, setOtherOpen] = useState(true);
+  const [moreUnderpaidOpen, setMoreUnderpaidOpen] = useState(false);
   const [acknowledgedMismatch, setAcknowledgedMismatch] = useState(false);
 
   const amount = useMemo(() => Math.abs(trip?.tollCharges ?? 0), [trip]);
@@ -93,18 +169,26 @@ export function RefundResolutionDrawer({
     [shortfallCandidates],
   );
 
+  const primaryCandidate = useMemo(
+    () => pickPrimaryCandidate(rankedCandidates, trip?.platform),
+    [rankedCandidates, trip?.platform],
+  );
+
+  const otherCandidates = useMemo(() => {
+    if (!primaryCandidate) return rankedCandidates;
+    const primaryKey = candidateKey(primaryCandidate);
+    return rankedCandidates.filter((c) => candidateKey(c) !== primaryKey);
+  }, [rankedCandidates, primaryCandidate]);
+
   // Reset when trip changes; auto-select top recommended shortfall once candidates are present.
   useEffect(() => {
     setSelected(null);
     setNotes("");
     setDriverId(trip?.driverId ?? undefined);
-    setOtherOpen(false);
+    setOtherOpen(true);
+    setMoreUnderpaidOpen(false);
     setAcknowledgedMismatch(false);
-    const recommended =
-      rankedCandidates.find((c) => isRecommendedUnlinkedShortfall(c, trip?.platform)) ??
-      rankedCandidates.find((c) => !isUnlinkedShortfallPlatformMismatch(c, trip?.platform)) ??
-      rankedCandidates[0] ??
-      null;
+    const recommended = pickPrimaryCandidate(rankedCandidates, trip?.platform);
     setSelectedShortfallKey(recommended ? candidateKey(recommended) : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-init selection when trip or candidate set identity changes
   }, [trip?.id, trip?.driverId, shortfallCandidates]);
@@ -153,7 +237,7 @@ export function RefundResolutionDrawer({
         <SheetHeader className="p-5 border-b border-slate-200">
           <SheetTitle className="text-lg text-slate-900">Resolve Unlinked Refund</SheetTitle>
           <SheetDescription>
-            Apply this credit to an underpaid toll, or use another way to clear it.
+            This trip has a toll credit with no linked expense.
           </SheetDescription>
         </SheetHeader>
 
@@ -182,69 +266,64 @@ export function RefundResolutionDrawer({
               Apply to underpaid
             </div>
             {rankedCandidates.length === 0 ? (
-              <p className="text-sm text-slate-500 rounded-lg border border-dashed border-slate-200 p-3">
-                No underpaid tolls found for this driver — use Other ways to clear below.
-              </p>
+              <div className="rounded-lg border border-dashed border-slate-200 p-3 space-y-1">
+                <p className="text-sm font-medium text-slate-700">
+                  No underpaid toll for this driver right now.
+                </p>
+                <p className="text-sm text-slate-500">
+                  Clear this credit another way below, or finish underpaid matching first and come back.
+                </p>
+              </div>
             ) : (
               <div className="space-y-2">
-                {rankedCandidates.map((c) => {
-                  const key = candidateKey(c);
-                  const active = selectedShortfallKey === key;
-                  const recommended = isRecommendedUnlinkedShortfall(c, trip.platform);
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => {
-                        setSelectedShortfallKey(key);
-                        setSelected(null);
-                        setAcknowledgedMismatch(false);
-                      }}
-                      className={cn(
-                        "flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors",
-                        active ? "border-orange-400 bg-orange-50/60" : "border-slate-200 hover:border-orange-300",
-                      )}
-                    >
-                      <span
+                {primaryCandidate && (
+                  <ShortfallCandidateRow
+                    candidate={primaryCandidate}
+                    tripPlatform={trip.platform}
+                    active={selectedShortfallKey === candidateKey(primaryCandidate)}
+                    showRecommended
+                    onSelect={() => {
+                      setSelectedShortfallKey(candidateKey(primaryCandidate));
+                      setSelected(null);
+                      setAcknowledgedMismatch(false);
+                    }}
+                  />
+                )}
+                {otherCandidates.length > 0 && (
+                  <Collapsible open={moreUnderpaidOpen} onOpenChange={setMoreUnderpaidOpen}>
+                    <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md px-1 py-1.5 text-left text-xs font-medium text-slate-600 hover:text-slate-900 transition-colors">
+                      <span>
+                        {moreUnderpaidOpen ? "Hide" : "Show"} {otherCandidates.length} other underpaid toll
+                        {otherCandidates.length === 1 ? "" : "s"}
+                      </span>
+                      <ChevronDown
                         className={cn(
-                          "mt-1 h-4 w-4 shrink-0 rounded-full border",
-                          active ? "border-orange-600 bg-orange-600 ring-2 ring-orange-100" : "border-slate-300",
+                          "h-3.5 w-3.5 text-slate-500 transition-transform",
+                          moreUnderpaidOpen ? "rotate-0" : "-rotate-90",
                         )}
                       />
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-2 flex-wrap">
-                          <PlatformSourceBadge platform={c.tollPlatform} size="sm" />
-                          <span className="text-sm font-medium text-slate-900">
-                            {formatDate(c.date)} · ${c.tollAmount.toFixed(2)}
-                          </span>
-                          {recommended && (
-                            <span className="inline-flex items-center rounded-full bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-800">
-                              Recommended
-                            </span>
-                          )}
-                          <span className="ml-auto text-[11px] font-semibold text-slate-500">
-                            {c.confidence}%
-                          </span>
-                        </span>
-                        {c.location && (
-                          <span className="block text-xs text-slate-500 mt-0.5 truncate">{c.location}</span>
-                        )}
-                        <span className="block text-xs text-slate-500 mt-0.5">
-                          Shortfall ${c.remainingShortfall.toFixed(2)}
-                          {c.leftoverShortfall > 0.05
-                            ? ` · leftover $${c.leftoverShortfall.toFixed(2)} after apply`
-                            : " · fully covered"}
-                        </span>
-                        {(c.platformMismatch ||
-                          platformsMismatch(c.tripPlatform || trip.platform, c.tollPlatform)) && (
-                          <span className="mt-1 inline-flex text-[10px] font-semibold text-amber-700">
-                            Platform differs from refund
-                          </span>
-                        )}
-                      </span>
-                    </button>
-                  );
-                })}
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="space-y-2 pt-1">
+                      {otherCandidates.map((c) => {
+                        const key = candidateKey(c);
+                        return (
+                          <ShortfallCandidateRow
+                            key={key}
+                            candidate={c}
+                            tripPlatform={trip.platform}
+                            active={selectedShortfallKey === key}
+                            showRecommended={false}
+                            onSelect={() => {
+                              setSelectedShortfallKey(key);
+                              setSelected(null);
+                              setAcknowledgedMismatch(false);
+                            }}
+                          />
+                        );
+                      })}
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
                 {selectedCandidate && selectedMismatch && (
                   <PlatformMismatchWarning
                     sourcePlatform={selectedCandidate.tripPlatform || trip.platform}
@@ -283,11 +362,6 @@ export function RefundResolutionDrawer({
               />
             </CollapsibleTrigger>
             <CollapsibleContent className="mt-3 space-y-2">
-              {suggestion && suggestion.confidence >= 40 && (
-                <p className="text-xs text-slate-500 px-0.5">
-                  System hint: {REFUND_RESOLUTION_META[suggestion.type]?.label} ({suggestion.confidence}%) — {suggestion.reason}
-                </p>
-              )}
               {REFUND_RESOLUTION_ORDER.map((type) => {
                 const meta = REFUND_RESOLUTION_META[type];
                 const active = selected === type;

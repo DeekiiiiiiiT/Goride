@@ -9323,11 +9323,18 @@ app.post("/make-server-37f42386/settings/preferences", requireAuth(), requirePer
   }
 });
 
-// ── Toll Info Endpoints ──────────────────────────────────────────────────
+// ── Toll Info Endpoints (date-versioned rate card) ───────────────────────
 app.get("/make-server-37f42386/toll-info", async (c) => {
   try {
-    const data = await kv.get("toll:rate_schedule");
-    return c.json(data || null);
+    const { loadTollRateStore } = await import("./toll_rate_schedule.ts");
+    const store = await loadTollRateStore();
+    // Back-compat: clients that expect a flat schedule get `current`,
+    // plus versions for history UI.
+    return c.json({
+      ...store.current,
+      current: store.current,
+      versions: store.versions,
+    });
   } catch (e: any) {
     console.log(`[toll-info GET] Error: ${e.message}`);
     return c.json({ error: e.message }, 500);
@@ -9336,11 +9343,70 @@ app.get("/make-server-37f42386/toll-info", async (c) => {
 
 app.post("/make-server-37f42386/toll-info", async (c) => {
   try {
-    const schedule = await c.req.json();
-    await kv.set("toll:rate_schedule", schedule);
-    return c.json({ success: true });
+    const { publishTollRates, loadTollRateStore, saveTollRateStore, migrateToVersionedStore } =
+      await import("./toll_rate_schedule.ts");
+    const body = await c.req.json();
+    // Explicit republish of a full store (rare)
+    if (body?.current && Array.isArray(body?.versions) && body?.__replaceStore === true) {
+      const store = migrateToVersionedStore(body);
+      await saveTollRateStore(store);
+      return c.json({ success: true, store });
+    }
+    // Default: Edit Rates → new immutable version effective from date forward
+    const store = await publishTollRates({
+      effectiveDate: body.effectiveDate,
+      effectiveFrom: body.effectiveFrom || body.effectiveDate,
+      operator: body.operator,
+      currency: body.currency,
+      plazas: body.plazas || [],
+      vehicleClasses: body.vehicleClasses || [],
+      routeRateGroups: body.routeRateGroups || [],
+      createdBy: body.createdBy,
+    });
+    return c.json({ success: true, store, current: store.current, versions: store.versions });
   } catch (e: any) {
     console.log(`[toll-info POST] Error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+/** Resolve official rate for plaza + class + date (reconciliation / rides). */
+app.get("/make-server-37f42386/toll-info/rate", async (c) => {
+  try {
+    const { lookupOfficialRate } = await import("./toll_rate_schedule.ts");
+    const plazaId = c.req.query("plazaId") || undefined;
+    const plazaName = c.req.query("plazaName") || undefined;
+    const classId = c.req.query("classId") || c.req.query("tollClassId") || "class1";
+    const asOf = c.req.query("asOf") || undefined;
+    const paymentMethod = (c.req.query("paymentMethod") as "withTag" | "withoutTag") || "withTag";
+    const fromPlazaName = c.req.query("fromPlazaName") || undefined;
+    const toPlazaName = c.req.query("toPlazaName") || undefined;
+    const rate = await lookupOfficialRate({
+      plazaId,
+      plazaName,
+      classId,
+      asOf,
+      paymentMethod,
+      fromPlazaName,
+      toPlazaName,
+    });
+    return c.json({ success: true, rate });
+  } catch (e: any) {
+    console.log(`[toll-info/rate GET] Error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.get("/make-server-37f42386/toll-info/versions", async (c) => {
+  try {
+    const { loadTollRateStore } = await import("./toll_rate_schedule.ts");
+    const store = await loadTollRateStore();
+    return c.json({
+      success: true,
+      current: store.current,
+      versions: store.versions,
+    });
+  } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
 });

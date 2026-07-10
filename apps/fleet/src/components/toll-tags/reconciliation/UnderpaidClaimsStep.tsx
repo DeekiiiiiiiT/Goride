@@ -41,6 +41,8 @@ interface UnderpaidClaimsStepProps {
   /** All-time claims — used to link tolls ↔ claims (prevents duplicate filing). */
   allClaims: Claim[];
   reconciledTolls: FinancialTransaction[];
+  /** Extra tolls for History location/platform lookup (may include other weeks). */
+  tollLookup?: FinancialTransaction[];
   trips: Trip[];
   disputeRefunds: DisputeRefund[];
   /** Open unlinked trip refunds — blocks Charge Driver until applied. */
@@ -61,7 +63,7 @@ interface UnderpaidClaimsStepProps {
 }
 
 export function UnderpaidClaimsStep({
-  claims, allClaims, reconciledTolls, trips, disputeRefunds, unlinkedRefundTrips = [], onUndoUnlinkedApply, busyUnlinkedTripId,
+  claims, allClaims, reconciledTolls, tollLookup = [], trips, disputeRefunds, unlinkedRefundTrips = [], onUndoUnlinkedApply, busyUnlinkedTripId,
   periodWeekKey,
   periodLabel: _periodLabel,
   fleetTz,
@@ -69,6 +71,13 @@ export function UnderpaidClaimsStep({
   createClaim, updateClaim, deleteClaim, refreshClaims,
 }: UnderpaidClaimsStepProps) {
   const tripMap = useMemo(() => new Map(trips.map(t => [t.id, t])), [trips]);
+  const displayTollById = useMemo(() => {
+    const map = new Map(reconciledTolls.map((t) => [t.id, t]));
+    for (const t of tollLookup) {
+      if (t?.id && !map.has(t.id)) map.set(t.id, t);
+    }
+    return map;
+  }, [reconciledTolls, tollLookup]);
 
   const getDriverName = (driverId: string) => {
     const driver = drivers.find(d => d.id === driverId || d.uberDriverId === driverId || d.inDriveDriverId === driverId);
@@ -222,6 +231,24 @@ export function UnderpaidClaimsStep({
       return false;
     }
     return true;
+  };
+
+  const resolveClaimDisplayTrip = (claim: Claim | null | undefined): Trip | null => {
+    if (!claim) return null;
+    const tx = claim.transactionId ? displayTollById.get(claim.transactionId) : undefined;
+    const messageTripId = claim.message?.match(/trip\s+([0-9a-f-]{36})/i)?.[1];
+    const underpaidTripId =
+      (claim.tripId && claim.tripId !== claim.unlinkedTripId ? claim.tripId : undefined) ||
+      (tx?.tripId && tx.tripId !== claim.unlinkedTripId ? tx.tripId : undefined) ||
+      tx?.tripId ||
+      claim.tripId ||
+      undefined;
+    return (
+      (underpaidTripId ? tripMap.get(underpaidTripId) : undefined) ||
+      (claim.unlinkedTripId ? tripMap.get(claim.unlinkedTripId) : undefined) ||
+      (messageTripId ? tripMap.get(messageTripId) : undefined) ||
+      null
+    );
   };
 
   /** Resolve underpaid toll + trip for Send to Driver (not the unlinked credit trip). */
@@ -765,7 +792,7 @@ export function UnderpaidClaimsStep({
             onUpdateStatus={handleUpdateStatus}
             onSelectClaim={(claim) => { setSelectedClaimDetail(claim); setIsClaimDetailOpen(true); }}
             trips={trips}
-            tollById={reconciledTollById}
+            tollById={displayTollById}
             onUndoUnlinkedApply={onUndoUnlinkedApply}
             busyUnlinkedTripId={busyUnlinkedTripId}
           />
@@ -776,7 +803,7 @@ export function UnderpaidClaimsStep({
         isOpen={isClaimDetailOpen}
         onClose={() => setIsClaimDetailOpen(false)}
         claim={selectedClaimDetail}
-        trip={selectedClaimDetail?.tripId ? tripMap.get(selectedClaimDetail.tripId) : null}
+        trip={resolveClaimDisplayTrip(selectedClaimDetail)}
         getDriverName={getDriverName}
       />
 

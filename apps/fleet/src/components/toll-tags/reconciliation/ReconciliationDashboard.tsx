@@ -57,7 +57,6 @@ export function ReconciliationDashboard() {
         outstanding={periodData.outstanding}
         reconciled={periodData.reconciled}
         totals={periodData.totals}
-        workflowStageBackfillComplete={periodData.workflowStageBackfillComplete}
         loading={periodData.loading}
       />
     </div>

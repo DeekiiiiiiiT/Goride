@@ -758,16 +758,19 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
   const nextStepId = STEP_ORDER[activeStepIdx + 1];
   const nextStepLabel = nextStepId ? STEP_LABELS[nextStepId] : undefined;
 
+  // Show continue/finish whenever the active step has no actionable work left
+  // (including empty Needs Review / Personal Use / Deadhead — user still needs Next).
+  const showAdvancePrompt =
+    canAdvance || (allStepsComplete && activeStepId === 'underpaid-claims');
+
   const bucketStepIds: StepId[] = ['needs-review', 'personal-use', 'deadhead'];
   const isBucketStepEmpty =
     bucketStepIds.includes(activeStepId) &&
     (activeStepId === 'needs-review' ? classified['needs-review'] :
       activeStepId === 'personal-use' ? classified['personal-use'] :
       classified['deadhead']).length === 0;
-
-  const showAdvancePrompt =
-    (canAdvance || (allStepsComplete && activeStepId === 'underpaid-claims')) &&
-    !(bucketStepIds.includes(activeStepId) && isBucketStepEmpty);
+  // Empty bucket panels already show a compact CTA — skip the duplicate bottom banner.
+  const showBottomAdvancePrompt = showAdvancePrompt && !isBucketStepEmpty;
 
   const handleNext = () => {
     const idx = STEP_ORDER.indexOf(activeStepId);
@@ -1001,6 +1004,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               claims={pPeriodClaims}
               allClaims={claims}
               reconciledTolls={underpaidReconciledTolls}
+              tollLookup={allReconciledTolls.length ? allReconciledTolls : reconciledTolls}
               trips={trips}
               disputeRefunds={disputeRefunds}
               unlinkedRefundTrips={unclaimedRefunds}
@@ -1020,7 +1024,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
           )}
         </div>
 
-        {showAdvancePrompt && (
+        {showBottomAdvancePrompt && (
           <div className="pt-4">
             {renderAdvancePrompt()}
           </div>

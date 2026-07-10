@@ -966,9 +966,42 @@ export const api = {
     return response.json();
   },
 
-  async saveFleetState(state: { 
-      drivers: DriverMetrics[], 
-      vehicles: VehicleMetrics[], 
+  async getOfficialTollRate(params: {
+    plazaId?: string;
+    plazaName?: string;
+    classId: string;
+    asOf?: string;
+    paymentMethod?: 'withTag' | 'withoutTag';
+    fromPlazaName?: string;
+    toPlazaName?: string;
+  }) {
+    const qs = new URLSearchParams();
+    if (params.plazaId) qs.set('plazaId', params.plazaId);
+    if (params.plazaName) qs.set('plazaName', params.plazaName);
+    qs.set('classId', params.classId);
+    if (params.asOf) qs.set('asOf', params.asOf);
+    if (params.paymentMethod) qs.set('paymentMethod', params.paymentMethod);
+    if (params.fromPlazaName) qs.set('fromPlazaName', params.fromPlazaName);
+    if (params.toPlazaName) qs.set('toPlazaName', params.toPlazaName);
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.admin}/toll-info/rate?${qs.toString()}`,
+      { headers: { 'Authorization': `Bearer ${publicAnonKey}` } },
+    );
+    if (!response.ok) throw new Error("Failed to resolve official toll rate");
+    return response.json() as Promise<{ success: boolean; rate: any | null }>;
+  },
+
+  async getTollInfoVersions() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/toll-info/versions`, {
+      headers: { 'Authorization': `Bearer ${publicAnonKey}` },
+    });
+    if (!response.ok) throw new Error("Failed to fetch toll info versions");
+    return response.json();
+  },
+
+  async saveFleetState(state: {
+      drivers: DriverMetrics[],
+      vehicles: VehicleMetrics[],
       trips: Trip[], 
       financials: any,
       metadata?: any,

@@ -1,5 +1,6 @@
-import { Loader2, HelpCircle, CarFront, Route, DollarSign, ShieldCheck, Unlink as UnlinkIcon, Check, AlertTriangle, type LucideIcon } from 'lucide-react';
+import { Loader2, HelpCircle, CarFront, Route, DollarSign, ShieldCheck, Unlink as UnlinkIcon, Check, type LucideIcon } from 'lucide-react';
 import { Card, CardContent } from '../../ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
 import { ReconciliationPeriod, ReconciliationTotals } from '../../../hooks/useTollReconciliationPeriods';
 import { StepId, STEP_ORDER } from '../../../utils/tollPeriodGating';
 import { TollFinancialOverviewCards } from './TollFinancialOverviewCards';
@@ -19,7 +20,6 @@ interface PeriodLandingPageProps {
   outstanding: ReconciliationPeriod[];
   reconciled: ReconciliationPeriod[];
   totals: ReconciliationTotals;
-  workflowStageBackfillComplete: boolean;
   loading: boolean;
 }
 
@@ -60,13 +60,38 @@ function PeriodCard({ period, onSelect }: { period: ReconciliationPeriod; onSele
               {period.actionableTotal} to review
             </span>
           ) : (
-            <span className="shrink-0 rounded-full border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600">
-              Review
+            <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+              Completed
             </span>
           )}
         </CardContent>
       </Card>
     </button>
+  );
+}
+
+function PeriodList({
+  periods,
+  emptyMessage,
+  onSelectPeriod,
+}: {
+  periods: ReconciliationPeriod[];
+  emptyMessage: string;
+  onSelectPeriod: (period: ReconciliationPeriod) => void;
+}) {
+  if (periods.length === 0) {
+    return (
+      <div className="rounded-md border border-dashed border-slate-200 py-12 text-center text-slate-500">
+        {emptyMessage}
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {periods.map((period) => (
+        <PeriodCard key={period.id} period={period} onSelect={() => onSelectPeriod(period)} />
+      ))}
+    </div>
   );
 }
 
@@ -76,10 +101,8 @@ export function PeriodLandingPage({
   outstanding,
   reconciled,
   totals,
-  workflowStageBackfillComplete,
   loading,
 }: PeriodLandingPageProps) {
-
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -90,6 +113,7 @@ export function PeriodLandingPage({
   }
 
   const isEmpty = outstanding.length === 0 && reconciled.length === 0;
+  const defaultTab = outstanding.length > 0 ? 'outstanding' : 'completed';
 
   return (
     <div className="space-y-6">
@@ -98,8 +122,6 @@ export function PeriodLandingPage({
         <p className="text-slate-500">Select a period to reconcile, step by step.</p>
       </div>
 
-      {/* All-time financial snapshot across every period — read-only, no
-          actions live here; select a period below to work through its steps. */}
       <TollFinancialOverviewCards
         tollSpend={totals.tollSpend}
         reimbursedAmount={totals.reimbursedByPlatform}
@@ -112,39 +134,47 @@ export function PeriodLandingPage({
         resolvedRefundsAmount={totals.resolvedRefundsAmount}
       />
 
-      {!workflowStageBackfillComplete && (
-        <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          <AlertTriangle className="h-4 w-4 shrink-0" />
-          Some historical tolls haven't been re-indexed yet — counts for older periods may be incomplete.
-        </div>
-      )}
-
-      {isEmpty && (
+      {isEmpty ? (
         <div className="rounded-md border border-dashed border-slate-200 py-12 text-center text-slate-500">
           No toll activity recorded yet.
         </div>
-      )}
+      ) : (
+        <Tabs defaultValue={defaultTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-2 sm:max-w-md">
+            <TabsTrigger value="outstanding" className="gap-1.5">
+              Outstanding
+              {outstanding.length > 0 && (
+                <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold text-white leading-none">
+                  {outstanding.length}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="completed" className="gap-1.5">
+              Completed
+              {reconciled.length > 0 && (
+                <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 leading-none">
+                  {reconciled.length}
+                </span>
+              )}
+            </TabsTrigger>
+          </TabsList>
 
-      {outstanding.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Outstanding</h3>
-          <div className="space-y-2">
-            {outstanding.map((period) => (
-              <PeriodCard key={period.id} period={period} onSelect={() => onSelectPeriod(period)} />
-            ))}
-          </div>
-        </div>
-      )}
+          <TabsContent value="outstanding" className="mt-4">
+            <PeriodList
+              periods={outstanding}
+              emptyMessage="No outstanding periods — everything is caught up."
+              onSelectPeriod={onSelectPeriod}
+            />
+          </TabsContent>
 
-      {reconciled.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Reconciled</h3>
-          <div className="space-y-2">
-            {reconciled.map((period) => (
-              <PeriodCard key={period.id} period={period} onSelect={() => onSelectPeriod(period)} />
-            ))}
-          </div>
-        </div>
+          <TabsContent value="completed" className="mt-4">
+            <PeriodList
+              periods={reconciled}
+              emptyMessage="No completed periods yet."
+              onSelectPeriod={onSelectPeriod}
+            />
+          </TabsContent>
+        </Tabs>
       )}
     </div>
   );

@@ -206,6 +206,20 @@ export function ResolvedHistoryList({
             const platformDisplay = getClaimPlatformDisplay(claim, toll, tripById);
             const category = getClaimCategoryLabel(claim, toll);
             const linkedTrip = claim.unlinkedTripId ? tripById.get(claim.unlinkedTripId) : undefined;
+            const messageTripId = claim.message?.match(/trip\s+([0-9a-f-]{36})/i)?.[1];
+            const messageTrip = messageTripId ? tripById.get(messageTripId) : undefined;
+            // Prefer underpaid/matched trip; fall back to unlinked-credit trip (common after Apply).
+            const locationTrip =
+              (claim.tripId ? tripById.get(claim.tripId) : undefined) ||
+              (toll?.tripId ? tripById.get(toll.tripId) : undefined) ||
+              linkedTrip ||
+              messageTrip;
+            const location =
+              claim.pickup ||
+              locationTrip?.pickupLocation ||
+              locationTrip?.dropoffLocation ||
+              (toll as { tollPlaza?: string } | undefined)?.tollPlaza ||
+              '';
             const splitApply = isUnlinkedApplySplitState(claim, linkedTrip);
             const staleUnlinkedApply =
               !!claim.unlinkedTripId &&
@@ -240,8 +254,8 @@ export function ResolvedHistoryList({
                     </div> 
                 </TableCell>
                 <TableCell>
-                    <div className="text-sm truncate max-w-[200px]" title={claim.pickup}>
-                        {claim.pickup || 'Unknown Location'}
+                    <div className="text-sm truncate max-w-[200px]" title={location || undefined}>
+                        {location || 'Unknown Location'}
                     </div>
                 </TableCell>
                 <TableCell>

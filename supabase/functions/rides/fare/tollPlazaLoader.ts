@@ -108,6 +108,41 @@ export async function loadTollPlazas(
       }
     }
 
+    // Overlay Super Admin Toll Info rates (single source of truth) when linked.
+    try {
+      const { data: scheduleRows } = await db
+        .from("kv_store_37f42386")
+        .select("key, value")
+        .eq("key", "toll:rate_schedule")
+        .maybeSingle();
+      const raw = scheduleRows?.value as Record<string, unknown> | null;
+      const current = (raw?.current as Record<string, unknown>) || raw;
+      const schedulePlazas = Array.isArray(current?.plazas) ? current.plazas : [];
+      for (const p of plazas) {
+        const hit = schedulePlazas.find(
+          (sp: any) => sp?.plazaId === p.id || String(sp?.plazaName || "").toLowerCase() === p.name.toLowerCase(),
+        );
+        const class1 = hit?.rates?.class1;
+        const withTag = Number(class1?.withTag);
+        if (withTag > 0) {
+          p.defaultRateMinor = Math.round(withTag * 100);
+          p.rates = [
+            { vehicleClass: "Class 1", amount: withTag, currency: "JMD" },
+            ...(Array.isArray(hit.rates)
+              ? []
+              : Object.entries(hit.rates || {}).map(([cid, r]: [string, any]) => ({
+                  vehicleClass: cid.replace("class", "Class "),
+                  amount: Number(r?.withTag) || 0,
+                  currency: "JMD",
+                }))),
+          ];
+          p.currency = "JMD";
+        }
+      }
+    } catch (overlayErr) {
+      console.warn("[tollPlazaLoader] Toll Info overlay skipped:", overlayErr);
+    }
+
     cached = { plazas, at: now };
     return plazas;
   } catch (e) {

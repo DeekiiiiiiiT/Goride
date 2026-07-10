@@ -155,6 +155,10 @@ export interface Vehicle {
   tollTagUuid?: string;     // Link to the TollTag entity ID
   tollTagProvider?: string; // e.g. "JRC", "T-Tag"
   tollBalance?: number;     // Estimated running balance
+  /** Super Admin Toll Info class id (class1…class4). */
+  tollClassId?: string;
+  /** True after backfill default until manager confirms. */
+  tollClassNeedsReview?: boolean;
 
   // Fuel Configuration
   fuelScenarioId?: string; // ID of the assigned FuelScenario

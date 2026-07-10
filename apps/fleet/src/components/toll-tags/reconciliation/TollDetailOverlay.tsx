@@ -22,6 +22,7 @@ import type { GeofenceMatchStatus } from '@roam/types/tollCrossings';
 import { normalizePlatform } from '../../../utils/normalizePlatform';
 import { format } from "date-fns";
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
+import { calculateTripTimes } from '../../../utils/timeUtils';
 
 interface TollDetailOverlayProps {
   isOpen: boolean;
@@ -97,14 +98,25 @@ export function TollDetailOverlay({
   const formatTripDate = () => {
     if (!trip) return { date: 'N/A', time: 'N/A', dropoff: 'N/A' };
     try {
-      // Use requestTime for pickup time (Phase 4 fix — was incorrectly using trip.date)
-      const pickupSource = trip.requestTime || trip.date;
-      const d = new Date(pickupSource);
-      const hasRealPickupTime = !!trip.requestTime && trip.requestTime !== trip.date;
+      const times = calculateTripTimes(trip);
+      const dateSource = trip.requestTime || trip.dropoffTime || trip.date;
+      const dateLabel = formatInFleetTz(new Date(dateSource), fleetTz, {
+        weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+      });
+      // Prefer explicit start/request; else derive pickup = dropoff − duration (same as matching).
+      const pickupLabel = times.isValid
+        ? formatInFleetTz(times.pickupTime, fleetTz, {
+            hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true,
+          })
+        : 'N/A';
       return {
-        date: formatInFleetTz(d, fleetTz, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }),
-        time: hasRealPickupTime ? formatInFleetTz(d, fleetTz, { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true }) : 'N/A',
-        dropoff: trip.dropoffTime ? formatInFleetTz(new Date(trip.dropoffTime), fleetTz, { hour: 'numeric', minute: '2-digit', hour12: true }) : 'N/A',
+        date: dateLabel,
+        time: pickupLabel,
+        dropoff: trip.dropoffTime
+          ? formatInFleetTz(new Date(trip.dropoffTime), fleetTz, {
+              hour: 'numeric', minute: '2-digit', hour12: true,
+            })
+          : 'N/A',
       };
     } catch {
       return { date: trip.date, time: 'N/A', dropoff: 'N/A' };
@@ -314,7 +326,7 @@ export function TollDetailOverlay({
                     <Clock className="h-3 w-3" />
                     {match.timeDifferenceMinutes === 0
                       ? 'Exact time match'
-                      : `${Math.abs(match.timeDifferenceMinutes)} min difference`}
+                      : `${Math.abs(match.timeDifferenceMinutes).toFixed(1)} min difference`}
                   </span>
 
                   {/* Vehicle Match */}
@@ -435,7 +447,7 @@ export function TollDetailOverlay({
                   <DetailRow icon={Route} label="Distance" value={`${trip.distance.toFixed(1)} km`} />
                 )}
                 {trip.duration != null && (
-                  <DetailRow icon={Timer} label="Duration" value={`${trip.duration} min`} />
+                  <DetailRow icon={Timer} label="Duration" value={`${Number(trip.duration).toFixed(1)} min`} />
                 )}
                 {trip.serviceType && (
                   <DetailRow icon={Tag} label="Service" value={trip.serviceType} />

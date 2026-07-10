@@ -97,7 +97,7 @@ export function MatchAlternatesPanel({
                     <Clock className="h-3 w-3" />
                     {timeDifferenceMinutes === 0
                       ? 'Exact time'
-                      : `${Math.abs(timeDifferenceMinutes)} min from toll`}
+                      : `${Math.abs(timeDifferenceMinutes).toFixed(1)} min from toll`}
                   </span>
                   <span>
                     Trip {formatInFleetTz(new Date(trip.requestTime || trip.date), fleetTz, { hour: 'numeric', minute: '2-digit', hour12: true })}

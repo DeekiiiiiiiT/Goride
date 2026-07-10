@@ -178,10 +178,15 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
   // Only blank the UI on first load (or driver filter change) — action refreshes stay silent
   const isInitialLoad = useRef(true);
 
+  // Ignore stale shortfall responses when overlapping refreshes race.
+  const shortfallFetchGen = useRef(0);
+
   const fetchData = useCallback(async (opts?: { autoMatch?: boolean }) => {
     const blockUi = isInitialLoad.current;
     if (blockUi) setLoading(true);
-    setShortfallSuggestions(new Map());
+    // Keep prior shortfall chips until the new fetch lands — clearing here made
+    // Accept flash first, then orange Apply only after Accept/refresh.
+    const shortfallGen = ++shortfallFetchGen.current;
     try {
       const dateParams = period ? { from: period.startDate, to: period.endDate } : {};
       const filterParams = { ...(driverId ? { driverId } : {}), ...dateParams, autoMatch: opts?.autoMatch };
@@ -238,12 +243,16 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
         setDisputeRefunds([]);
       }
 
-      // Phase 3: Refund leftovers + resolved — keep on critical path (fast).
-      // Shortfall picker suggestions are heavier; load them after the wizard paints.
+      // Phase 3: leftovers + underpaid Apply targets together so Unlinked rows show
+      // orange Apply from first paint (not only after a later Accept refresh).
       try {
-        const [sugRes, resolvedRes] = await Promise.all([
+        const [sugRes, resolvedRes, shortRes] = await Promise.all([
           api.getRefundSuggestions(driverId ? { driverId } : undefined),
           api.getResolvedRefunds(filterParams),
+          api.getUnlinkedShortfallSuggestions({
+            ...(driverId ? { driverId } : {}),
+            ...(period ? { from: period.startDate, to: period.endDate } : {}),
+          }),
         ]);
         const sugMap = new Map<string, RefundSuggestion>();
         const rawSug = sugRes?.suggestions || {};
@@ -252,10 +261,22 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
         }
         setRefundSuggestions(sugMap);
         setResolvedRefunds(resolvedRes?.data || []);
+
+        if (shortfallGen === shortfallFetchGen.current) {
+          const shortMap = new Map<string, UnlinkedShortfallSuggestion[]>();
+          const rawShort = shortRes?.suggestions || {};
+          for (const [tripId, list] of Object.entries(rawShort)) {
+            shortMap.set(tripId, list as UnlinkedShortfallSuggestion[]);
+          }
+          setShortfallSuggestions(shortMap);
+        }
       } catch (refErr) {
-        console.error('[Reconciliation] Failed to fetch refund suggestions/resolved:', refErr);
+        console.error('[Reconciliation] Failed to fetch refund/shortfall suggestions:', refErr);
         setRefundSuggestions(new Map());
         setResolvedRefunds([]);
+        if (shortfallGen === shortfallFetchGen.current) {
+          setShortfallSuggestions(new Map());
+        }
       }
 
     } catch (error) {
@@ -263,23 +284,6 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
     } finally {
       isInitialLoad.current = false;
       if (blockUi) setLoading(false);
-    }
-
-    // After UI unlocks: underpaid-match suggestions (period-scoped, non-blocking)
-    try {
-      const shortRes = await api.getUnlinkedShortfallSuggestions({
-        ...(driverId ? { driverId } : {}),
-        ...(period ? { from: period.startDate, to: period.endDate } : {}),
-      });
-      const shortMap = new Map<string, UnlinkedShortfallSuggestion[]>();
-      const rawShort = shortRes?.suggestions || {};
-      for (const [tripId, list] of Object.entries(rawShort)) {
-        shortMap.set(tripId, list as UnlinkedShortfallSuggestion[]);
-      }
-      setShortfallSuggestions(shortMap);
-    } catch (shortErr) {
-      console.error('[Reconciliation] Failed to fetch unlinked shortfall suggestions:', shortErr);
-      setShortfallSuggestions(new Map());
     }
   }, [driverId, period?.startDate, period?.endDate]);
 

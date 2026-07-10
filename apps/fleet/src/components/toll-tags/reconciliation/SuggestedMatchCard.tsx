@@ -35,7 +35,7 @@ export function SuggestedMatchCard({
   transaction, match, allMatches, orphanMode = false, onConfirm, onApprove, onReject, onFlag, onChargeDriver,
   onClickDetail, onFindMatch, onAcceptPersonal,
 }: SuggestedMatchCardProps) {
-  const { trip, confidence, reason, timeDifferenceMinutes, matchType, varianceAmount, confidenceScore, vehicleMatch, driverMatch, dataQuality, windowHit, isAmbiguous, reasonCode } = match;
+  const { trip, confidence, reason, timeDifferenceMinutes, matchType, varianceAmount, confidenceScore, vehicleMatch, driverMatch, dataQuality, windowHit, isAmbiguous, reasonCode, rateDrift, officialAmount, tagAmount, usedOfficialRate } = match as any;
   const isClaim = transaction.paymentMethod === 'Cash' || !!transaction.receiptUrl;
   const fleetTz = useFleetTimezone();
 
@@ -246,7 +246,7 @@ export function SuggestedMatchCard({
                 <div className="flex items-center text-xs text-slate-500 space-x-1">
                     <Clock className="h-3 w-3" />
                     <span>
-                        {timeDifferenceMinutes === 0 ? 'Exact time' : `${Math.abs(timeDifferenceMinutes)} min diff`}
+                        {timeDifferenceMinutes === 0 ? 'Exact time' : `${Math.abs(timeDifferenceMinutes).toFixed(1)} min diff`}
                     </span>
                 </div>
                 )}
@@ -254,7 +254,7 @@ export function SuggestedMatchCard({
                 {orphanMode && timeDifferenceMinutes > 0 && (
                   <div className="flex items-center text-xs text-slate-500 space-x-1">
                     <Clock className="h-3 w-3" />
-                    <span>{Math.abs(timeDifferenceMinutes).toFixed(2)} min from nearest trip</span>
+                    <span>{Math.abs(timeDifferenceMinutes).toFixed(1)} min from nearest trip</span>
                   </div>
                 )}
 
@@ -295,6 +295,17 @@ export function SuggestedMatchCard({
                             ${Math.abs(varianceAmount).toFixed(2)}
                         </span>
                      </div>
+                )}
+                {usedOfficialRate && officialAmount != null && (
+                  <div className="text-[11px] text-slate-500 mt-1">
+                    Official rate ${Number(officialAmount).toFixed(2)}
+                    {tagAmount != null ? ` · Tag $${Number(tagAmount).toFixed(2)}` : ''}
+                  </div>
+                )}
+                {rateDrift && (
+                  <div className="text-[11px] font-semibold text-amber-700 mt-0.5">
+                    Tag differs from Toll Info — check Super Admin rates
+                  </div>
                 )}
 
                 {/* Ambiguity Warning */}

@@ -16,6 +16,8 @@ export type RefundResolutionType =
 export interface RefundResolutionMeta {
   label: string;
   description: string;
+  /** One-line row hint under the suggestion chip. */
+  hint: string;
   /** Tailwind classes for the status chip. */
   chipClass: string;
 }
@@ -23,22 +25,26 @@ export interface RefundResolutionMeta {
 export const REFUND_RESOLUTION_META: Record<RefundResolutionType, RefundResolutionMeta> = {
   cash_wash: {
     label: "Cash wash",
-    description: "Fare reimbursed the driver; driver paid cash. No leakage, no liability.",
+    description: "Clears the credit — fare already covered the toll; no driver charge.",
+    hint: "Fare already covered this toll",
     chipClass: "border-emerald-200 bg-emerald-100 text-emerald-800",
   },
   phantom: {
     label: "Phantom / estimate",
-    description: "No real toll was crossed. Dismiss from leakage.",
+    description: "Clears the credit — no real toll was crossed on this trip.",
+    hint: "No real toll on this route",
     chipClass: "border-slate-200 bg-slate-100 text-slate-700",
   },
   pending: {
     label: "Pending import",
-    description: "Expected to auto-match once the tag statement imports.",
+    description: "Holds the row until the tag statement imports and can auto-match.",
+    hint: "Waiting on tag statement",
     chipClass: "border-yellow-200 bg-yellow-100 text-yellow-800",
   },
   expense_logged: {
     label: "Expense logged",
-    description: "Create a new cash expense — only if no real toll exists.",
+    description: "Creates a cash toll expense for this credit — use only when no tag toll exists.",
+    hint: "Log as cash toll expense",
     chipClass: "border-indigo-200 bg-indigo-100 text-indigo-800",
   },
 };

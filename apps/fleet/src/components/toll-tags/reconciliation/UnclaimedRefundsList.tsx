@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../../ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "../../ui/card";
 import { Badge } from "../../ui/badge";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "../../ui/table";
 import { Trip } from "../../../types/data";
@@ -17,7 +17,10 @@ import { REFUND_RESOLUTION_META, RefundResolutionType } from "./refundResolution
 import { DriverOption } from "../../ui/DriverPicker";
 import type { RefundSuggestion } from "../../../hooks/useTollReconciliation";
 import type { UnlinkedShortfallSuggestion } from "../../../hooks/useTollReconciliation";
-import { isRecommendedUnlinkedShortfall } from "../../../utils/unlinkedShortfallEligibility";
+import {
+  isRecommendedUnlinkedShortfall,
+  isPendingOnlyRefundResolution,
+} from "../../../utils/unlinkedShortfallEligibility";
 import { toast } from "sonner@2.0.3";
 
 const EMPTY_SHORTFALL: UnlinkedShortfallSuggestion[] = [];
@@ -156,6 +159,21 @@ export function UnclaimedRefundsList({
     [selected, suggestions],
   );
 
+  const { needsDecisionCount, waitingImportCount } = useMemo(() => {
+    let waiting = 0;
+    for (const trip of trips) {
+      // Apply-to-underpaid is the primary path — don't count those as "waiting on import".
+      const shortfall = bestShortfallFor(trip.id);
+      if (shortfall && isRecommendedUnlinkedShortfall(shortfall, trip.platform)) continue;
+      const s = suggestionFor(trip.id);
+      if (s?.status === 'pending' || isPendingOnlyRefundResolution(trip)) waiting++;
+    }
+    return {
+      needsDecisionCount: Math.max(0, trips.length - waiting),
+      waitingImportCount: waiting,
+    };
+  }, [trips, suggestions, shortfallSuggestions]);
+
   if (trips.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-slate-500">
@@ -172,11 +190,21 @@ export function UnclaimedRefundsList({
     <Card>
       <CardHeader>
         <CardTitle>Unlinked Refunds</CardTitle>
-        <CardDescription>
-          Trips where the platform paid for a toll, but no corresponding toll expense has been linked.
-          Apply credits to underpaid claims before charging drivers.
-          {interactive && ' Suggestions are automatic — review and apply.'}
-        </CardDescription>
+        <div className="text-sm text-muted-foreground space-y-1">
+          <p>
+            Platform paid a toll on these trips, but no matching toll expense is linked yet.
+          </p>
+          <p>
+            Apply the credit to an underpaid toll when possible; otherwise clear the row with the suggested reason.
+          </p>
+          {interactive && waitingImportCount > 0 && (
+            <p className="text-slate-500 pt-0.5">
+              {needsDecisionCount} need{needsDecisionCount === 1 ? 's' : ''} a decision
+              {' · '}
+              {waitingImportCount} waiting on tag import
+            </p>
+          )}
+        </div>
       </CardHeader>
 
       {interactive && (
@@ -268,12 +296,19 @@ export function UnclaimedRefundsList({
                                         </span>
                                       </div>
                                     ) : s ? (
-                                      <span className={cn(
-                                        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold",
-                                        REFUND_RESOLUTION_META[s.status as RefundResolutionType]?.chipClass || "bg-slate-100 text-slate-600",
-                                      )}>
-                                        {REFUND_RESOLUTION_META[s.status as RefundResolutionType]?.label || s.status} · {s.confidence}%
-                                      </span>
+                                      <div className="flex flex-col gap-0.5">
+                                        <span className={cn(
+                                          "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold border",
+                                          REFUND_RESOLUTION_META[s.status as RefundResolutionType]?.chipClass || "bg-slate-100 text-slate-600 border-slate-200",
+                                        )}>
+                                          {REFUND_RESOLUTION_META[s.status as RefundResolutionType]?.label || s.status} · {s.confidence}%
+                                        </span>
+                                        {REFUND_RESOLUTION_META[s.status as RefundResolutionType]?.hint && (
+                                          <span className="text-[10px] text-slate-500">
+                                            {REFUND_RESOLUTION_META[s.status as RefundResolutionType].hint}
+                                          </span>
+                                        )}
+                                      </div>
                                     ) : (
                                       <span className="text-xs text-slate-400">—</span>
                                     )
@@ -296,7 +331,7 @@ export function UnclaimedRefundsList({
                                         </Button>
                                       ) : s && s.status !== 'pending' ? (
                                         <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700" disabled={busy} onClick={() => handleAcceptRow(trip)}>
-                                          <Sparkles className="h-3.5 w-3.5 mr-1" /> Accept
+                                          <Sparkles className="h-3.5 w-3.5 mr-1" /> Accept suggestion
                                         </Button>
                                       ) : null}
                                       <Button size="sm" variant="outline" onClick={() => setDrawerTrip(trip)}>Review</Button>

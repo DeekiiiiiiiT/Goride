@@ -86,6 +86,8 @@ export interface TollLedgerRecord {
 
   // ─── Location ───
   plaza: string | null;        // Toll plaza name
+  /** Linked Toll Database / Toll Info plaza UUID when resolved. */
+  plazaId?: string | null;
   highway: string | null;      // Highway identifier
   location: string | null;     // Raw location/vendor string
 
