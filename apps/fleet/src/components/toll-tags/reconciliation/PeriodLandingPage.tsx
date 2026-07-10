@@ -1,6 +1,6 @@
 import { Loader2, HelpCircle, CarFront, Route, DollarSign, ShieldCheck, Unlink as UnlinkIcon, Check, AlertTriangle, type LucideIcon } from 'lucide-react';
 import { Card, CardContent } from '../../ui/card';
-import { useTollReconciliationPeriods, ReconciliationPeriod } from '../../../hooks/useTollReconciliationPeriods';
+import { ReconciliationPeriod, ReconciliationTotals } from '../../../hooks/useTollReconciliationPeriods';
 import { StepId, STEP_ORDER } from '../../../utils/tollPeriodGating';
 import { TollFinancialOverviewCards } from './TollFinancialOverviewCards';
 
@@ -16,6 +16,11 @@ const STEP_ICONS: Record<StepId, LucideIcon> = {
 interface PeriodLandingPageProps {
   driverId?: string;
   onSelectPeriod: (period: ReconciliationPeriod) => void;
+  outstanding: ReconciliationPeriod[];
+  reconciled: ReconciliationPeriod[];
+  totals: ReconciliationTotals;
+  workflowStageBackfillComplete: boolean;
+  loading: boolean;
 }
 
 function StepChip({ stepId, counts }: { stepId: StepId; counts: ReconciliationPeriod['counts'] }) {
@@ -65,8 +70,15 @@ function PeriodCard({ period, onSelect }: { period: ReconciliationPeriod; onSele
   );
 }
 
-export function PeriodLandingPage({ driverId, onSelectPeriod }: PeriodLandingPageProps) {
-  const { outstanding, reconciled, totals, workflowStageBackfillComplete, loading } = useTollReconciliationPeriods(driverId);
+export function PeriodLandingPage({
+  driverId: _driverId,
+  onSelectPeriod,
+  outstanding,
+  reconciled,
+  totals,
+  workflowStageBackfillComplete,
+  loading,
+}: PeriodLandingPageProps) {
 
   if (loading) {
     return (

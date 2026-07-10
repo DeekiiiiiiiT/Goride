@@ -19,7 +19,7 @@
  * (actionable-vs-informational, dispute-refund "matched", week-bucketing,
  * claim-date fallback) are mirrored locally below, each with a comment
  * pointing at its client twin that must be kept in sync:
- *   - apps/fleet/src/utils/tollPeriodGating.ts (isClaimActionableNow / isClaimInformationalOnly)
+ *   - apps/fleet/src/utils/tollPeriodGating.ts (underpaid pipeline claim rules)
  *   - apps/fleet/src/utils/tollWeekPeriod.ts (isDisputeRefundMatched, getClaimWeekDate, weekBucketForDate, formatWeekPeriodLabel)
  *   - apps/fleet/src/utils/tollBucket.ts (bucketForWorkflowStage)
  *
@@ -126,26 +126,88 @@ function bucketForWorkflowStage(stage: string | undefined): "needs-review" | "un
   }
 }
 
-/** Mirrors isClaimActionableNow/isClaimInformationalOnly in apps/fleet/src/utils/tollPeriodGating.ts. */
-function isClaimActionableNow(claim: any): boolean {
-  switch (claim?.status) {
-    case "Sent_to_Driver":
-    case "Submitted_to_Uber":
-    case "Resolved":
-      return false;
-    case "Rejected":
-    case "Open":
-    default:
-      return true;
-  }
-}
-function isClaimInformationalOnly(claim: any): boolean {
-  return claim?.status === "Sent_to_Driver" || claim?.status === "Submitted_to_Uber";
-}
-
 /** Mirrors isDisputeRefundMatched in apps/fleet/src/utils/tollWeekPeriod.ts. */
 function isDisputeRefundMatched(r: any): boolean {
   return r?.status === "matched" || r?.status === "auto_resolved";
+}
+
+const VARIANCE_THRESHOLD = 0.05;
+
+/** Mirrors isActionablePartialShortfall in apps/fleet/src/utils/tollWeekPeriod.ts. */
+function isActionablePartialShortfallServer(claim: any, toll?: any): boolean {
+  if (!claim) return false;
+  const paid = Math.abs(Number(claim.paidAmount) || 0);
+  const remaining = Math.abs(Number(claim.amount) || 0);
+  if (remaining <= VARIANCE_THRESHOLD || paid <= VARIANCE_THRESHOLD) return false;
+  if (claim.status === "Open") return true;
+  if (claim.status !== "Resolved") return false;
+  const hasUnlinkedApply = !!(claim.unlinkedTripId || toll?.unlinkedSourceTripId);
+  if (claim.resolutionReason === "Reimbursed" && hasUnlinkedApply) return true;
+  return claim.resolutionReason === "Charge Driver" && !claim.resolutionTransactionId;
+}
+
+/** Mirrors isTollCoveredByDisputeRefund in apps/fleet/src/utils/tollWeekPeriod.ts. */
+function isTollCoveredByDisputeRefundServer(claim: any, disputeRefunds: any[]): boolean {
+  if (!claim?.transactionId && !claim?.id) return false;
+  return disputeRefunds.some(
+    (r) =>
+      isDisputeRefundMatched(r) &&
+      (r.matchedClaimId === claim.id || r.matchedTollId === claim.transactionId),
+  );
+}
+
+/** Mirrors isVisiblePartialShortfallClaim in apps/fleet/src/utils/tollWeekPeriod.ts. */
+function isVisiblePartialShortfallClaimServer(claim: any, toll: any, disputeRefunds: any[]): boolean {
+  if (!claim) return false;
+  if (!isActionablePartialShortfallServer(claim, toll)) return false;
+  if (claim.status === "Resolved" && claim.disputeRefundId) return false;
+  return !isTollCoveredByDisputeRefundServer(claim, disputeRefunds);
+}
+
+/**
+ * Period week for a dispute refund — toll-first, then matched claim, else refund date.
+ * Mirrors isDisputeRefundInWizardPeriod in apps/fleet/src/utils/tollWeekPeriod.ts.
+ */
+function disputeRefundPeriodKey(
+  r: any,
+  tollDateById: Map<string, string>,
+  claims: any[],
+  timezone: string,
+): string | null {
+  if (r.matchedTollId) {
+    const tollDate = tollDateById.get(String(r.matchedTollId));
+    if (tollDate) return weekKeyFor(tollDate, timezone).key;
+  }
+  if (r.matchedClaimId) {
+    const claim = claims.find((c) => String(c.id) === String(r.matchedClaimId));
+    const claimDate = claim ? resolveClaimDate(claim, tollDateById) : null;
+    if (claimDate) return weekKeyFor(claimDate, timezone).key;
+  }
+  if (r?.date) return weekKeyFor(r.date, timezone).key;
+  return null;
+}
+
+function applyUnderpaidClaimCounts(
+  acc: PeriodAccumulator,
+  claim: any,
+  toll: any,
+  disputeRefunds: any[],
+): void {
+  if (claim.status === "Sent_to_Driver") {
+    acc.counts["underpaid-claims"].informational++;
+    return;
+  }
+  if (claim.status === "Submitted_to_Uber") {
+    acc.counts["underpaid-claims"].informational++;
+    return;
+  }
+  if (claim.status === "Rejected") {
+    acc.counts["underpaid-claims"].actionable++;
+    return;
+  }
+  if (isVisiblePartialShortfallClaimServer(claim, toll, disputeRefunds)) {
+    acc.counts["underpaid-claims"].actionable++;
+  }
 }
 
 /** Mirrors getClaimWeekDate's fallback chain in apps/fleet/src/utils/tollWeekPeriod.ts. */
@@ -264,28 +326,41 @@ app.get(`${BASE}/periods`, async (c) => {
 
     let anyMissingWorkflowStage = false;
 
-    // Unclaimed tolls → needs-review / personal-use / deadhead / underpaid-claims.
+    const tollById = new Map<string, any>();
+    for (const tx of scopedTollTx) {
+      if (tx?.id) tollById.set(String(tx.id), tx);
+    }
+
+    // Unclaimed tolls → needs-review / personal-use / deadhead only.
+    // Underpaid & Claims uses reconciled pipeline rules (claims below), not unreconciled bucket tolls.
     for (const tx of unclaimedTolls) {
       if (!tx?.date) continue;
       if (!tx.workflowStage) anyMissingWorkflowStage = true;
       const bucket = resolvePeriodBucket(tx);
-      if (!bucket) continue;
+      if (!bucket || bucket === "underpaid-claims") continue;
       getOrCreatePeriod(tx.date).counts[bucket].actionable++;
     }
 
-    // Claims → underpaid-claims (actionable or informational).
+    // Claims → underpaid-claims (mirror UnderpaidClaimsStep tab rules).
     for (const claim of claims) {
       const dateStr = resolveClaimDate(claim, tollDateById);
       if (!dateStr) continue;
-      const acc = getOrCreatePeriod(dateStr);
-      if (isClaimActionableNow(claim)) acc.counts["underpaid-claims"].actionable++;
-      else if (isClaimInformationalOnly(claim)) acc.counts["underpaid-claims"].informational++;
+      const toll = claim.transactionId ? tollById.get(String(claim.transactionId)) : undefined;
+      applyUnderpaidClaimCounts(getOrCreatePeriod(dateStr), claim, toll, disputeRefunds);
     }
 
-    // Dispute refunds → dispute-refunds (actionable if unmatched, else informational).
+    // Dispute refunds → dispute-refunds, scoped to matched toll/claim week when linked.
     for (const r of disputeRefunds) {
-      if (!r?.date) continue;
-      const acc = getOrCreatePeriod(r.date);
+      const periodKey = disputeRefundPeriodKey(r, tollDateById, claims, timezone);
+      if (!periodKey) continue;
+      let acc = periods.get(periodKey);
+      if (!acc) {
+        const anchorDate = r.matchedTollId
+          ? tollDateById.get(String(r.matchedTollId))
+          : r.date;
+        if (!anchorDate) continue;
+        acc = getOrCreatePeriod(anchorDate);
+      }
       if (isDisputeRefundMatched(r)) acc.counts["dispute-refunds"].informational++;
       else acc.counts["dispute-refunds"].actionable++;
     }

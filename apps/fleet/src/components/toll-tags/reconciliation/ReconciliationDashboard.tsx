@@ -3,7 +3,7 @@ import { Filter } from 'lucide-react';
 import { api } from '../../../services/api';
 import { PeriodLandingPage } from './PeriodLandingPage';
 import { ReconciliationWizard } from './ReconciliationWizard';
-import { ReconciliationPeriod } from '../../../hooks/useTollReconciliationPeriods';
+import { ReconciliationPeriod, useTollReconciliationPeriods } from '../../../hooks/useTollReconciliationPeriods';
 
 /**
  * Period-first Toll Reconciliation entry point (Phase F3/F4). Replaces the
@@ -16,6 +16,7 @@ export function ReconciliationDashboard() {
   const [drivers, setDrivers] = useState<any[]>([]);
   const [selectedDriverId, setSelectedDriverId] = useState<string>('');
   const [selectedPeriod, setSelectedPeriod] = useState<ReconciliationPeriod | null>(null);
+  const periodData = useTollReconciliationPeriods(selectedDriverId || undefined);
 
   useEffect(() => {
     api.getDrivers().then(setDrivers).catch(console.error);
@@ -27,7 +28,10 @@ export function ReconciliationDashboard() {
         period={selectedPeriod}
         driverId={selectedDriverId || undefined}
         drivers={drivers}
-        onExit={() => setSelectedPeriod(null)}
+        onExit={() => {
+          setSelectedPeriod(null);
+          void periodData.refresh();
+        }}
       />
     );
   }
@@ -47,7 +51,15 @@ export function ReconciliationDashboard() {
           ))}
         </select>
       </div>
-      <PeriodLandingPage driverId={selectedDriverId || undefined} onSelectPeriod={setSelectedPeriod} />
+      <PeriodLandingPage
+        driverId={selectedDriverId || undefined}
+        onSelectPeriod={setSelectedPeriod}
+        outstanding={periodData.outstanding}
+        reconciled={periodData.reconciled}
+        totals={periodData.totals}
+        workflowStageBackfillComplete={periodData.workflowStageBackfillComplete}
+        loading={periodData.loading}
+      />
     </div>
   );
 }
