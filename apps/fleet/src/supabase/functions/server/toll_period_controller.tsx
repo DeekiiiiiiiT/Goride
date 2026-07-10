@@ -342,11 +342,38 @@ app.get(`${BASE}/periods`, async (c) => {
     }
 
     // Claims → underpaid-claims (mirror UnderpaidClaimsStep tab rules).
+    // #region agent log
+    const debugUnderpaidHits: any[] = [];
+    // #endregion
     for (const claim of claims) {
       const dateStr = resolveClaimDate(claim, tollDateById);
       if (!dateStr) continue;
       const toll = claim.transactionId ? tollById.get(String(claim.transactionId)) : undefined;
+      const before = getOrCreatePeriod(dateStr).counts["underpaid-claims"].actionable;
       applyUnderpaidClaimCounts(getOrCreatePeriod(dateStr), claim, toll, disputeRefunds);
+      const after = getOrCreatePeriod(dateStr).counts["underpaid-claims"].actionable;
+      // #region agent log
+      if (after > before) {
+        const weekKey = weekKeyFor(dateStr, timezone).key;
+        const tollDate = claim.transactionId ? tollDateById.get(String(claim.transactionId)) : undefined;
+        const tollFirstWeek = tollDate ? weekKeyFor(tollDate, timezone).key : null;
+        debugUnderpaidHits.push({
+          claimId: claim.id,
+          status: claim.status,
+          amount: claim.amount,
+          paidAmount: claim.paidAmount,
+          resolutionReason: claim.resolutionReason,
+          transactionId: claim.transactionId,
+          claimDate: claim.date,
+          createdAt: claim.createdAt,
+          dateStrUsed: dateStr,
+          weekKey,
+          tollDate: tollDate || null,
+          tollFirstWeek,
+          weekMismatch: tollFirstWeek != null && tollFirstWeek !== weekKey,
+        });
+      }
+      // #endregion
     }
 
     // Dispute refunds → dispute-refunds, scoped to matched toll/claim week when linked.
@@ -392,6 +419,34 @@ app.get(`${BASE}/periods`, async (c) => {
       })
       .sort((a, b) => (a.startDate < b.startDate ? 1 : a.startDate > b.startDate ? -1 : 0));
 
+    // #region agent log
+    const target = periodsOut.find((p) => p.startDate === "2026-06-29" || p.id === "2026-06-29");
+    const targetHits = debugUnderpaidHits.filter((h) => h.weekKey === "2026-06-29");
+    fetch("http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9637fe" },
+      body: JSON.stringify({
+        sessionId: "9637fe",
+        hypothesisId: "A,B,C",
+        location: "toll_period_controller.tsx:/periods",
+        message: "period underpaid actionable sources",
+        data: {
+          targetPeriod: target
+            ? {
+                id: target.id,
+                status: target.status,
+                actionableTotal: target.actionableTotal,
+                counts: target.counts,
+              }
+            : null,
+          underpaidHitsForWeek: targetHits,
+          allUnderpaidHitCount: debugUnderpaidHits.length,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+
     // ── All-time financial snapshot (the pre-period-redesign dashboard cards),
     // now sourced from the same single loaded/scoped data this endpoint
     // already builds its per-period counts from, so the two views can never
@@ -428,6 +483,9 @@ app.get(`${BASE}/periods`, async (c) => {
       generatedAt: new Date().toISOString(),
       workflowStageBackfillComplete: !anyMissingWorkflowStage,
       periods: periodsOut,
+      // #region agent log
+      _debugUnderpaidHits: debugUnderpaidHits.filter((h) => h.weekKey === "2026-06-29"),
+      // #endregion
       totals: {
         tollSpend: round2(tollSpend),
         reimbursedByPlatform: round2(reimbursedByPlatform),
