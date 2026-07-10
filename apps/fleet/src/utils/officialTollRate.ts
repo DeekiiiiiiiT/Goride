@@ -9,8 +9,8 @@ import type {
   TollRateScheduleStore,
   TollRateScheduleVersion,
   TollVehicleClassDef,
-} from '../types/tollRateSchedule';
-import { TOLL_RATE_TOLERANCE } from '../types/tollRateSchedule';
+} from '../types/tollRateSchedule.ts';
+import { TOLL_RATE_TOLERANCE } from '../types/tollRateSchedule.ts';
 
 export { TOLL_RATE_TOLERANCE };
 
