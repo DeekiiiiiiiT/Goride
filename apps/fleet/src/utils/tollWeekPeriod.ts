@@ -177,6 +177,30 @@ export function getDisputeRefundWeekDate(r: DisputeRefund): Date {
   return !isNaN(d.getTime()) ? d : new Date(0);
 }
 
+/** Monday-start week key for a dispute refund (`refund.date` in fleet tz). */
+export function disputeRefundPeriodWeekKey(
+  refund: Pick<DisputeRefund, 'date'>,
+  fleetTz?: string,
+): string {
+  return weekBucketForDate(getDisputeRefundWeekDate(refund as DisputeRefund), fleetTz).key;
+}
+
+/**
+ * Period visibility for dispute refunds — mirrors period_reset inventory:
+ * toll-first when matched to a period toll, else refund-date week key.
+ */
+export function isDisputeRefundInWizardPeriod(
+  refund: Pick<DisputeRefund, 'date' | 'matchedTollId' | 'matchedClaimId'>,
+  periodWeekKey: string,
+  fleetTz: string,
+  periodTollIds?: ReadonlySet<string>,
+  periodClaimIds?: ReadonlySet<string>,
+): boolean {
+  if (refund.matchedTollId && periodTollIds?.has(refund.matchedTollId)) return true;
+  if (refund.matchedClaimId && periodClaimIds?.has(refund.matchedClaimId)) return true;
+  return disputeRefundPeriodWeekKey(refund, fleetTz) === periodWeekKey;
+}
+
 export interface DisputeRefundWeekGroup {
   key: string;
   weekStart: Date;

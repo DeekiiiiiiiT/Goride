@@ -19,7 +19,7 @@ export function StepAdvancePrompt({
   onAdvance,
   compact = false,
 }: StepAdvancePromptProps) {
-  const finishLabel = 'Finish — Back to Periods';
+  const finishLabel = 'Reconciliation complete';
   const continueLabel = nextStepLabel ? `Continue to ${nextStepLabel}` : 'Continue';
 
   if (compact) {

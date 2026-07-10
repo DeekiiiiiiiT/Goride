@@ -1,6 +1,6 @@
 import type { Claim, DisputeRefund, FinancialTransaction, Trip } from '../types/data';
 import type { TollBucket } from './tollBucket';
-import { isDisputeRefundMatched } from './tollWeekPeriod';
+import { isDisputeRefundMatched, isDisputeRefundInWizardPeriod } from './tollWeekPeriod';
 import { isPendingOnlyRefundResolution } from './unlinkedShortfallEligibility';
 
 /**
@@ -72,27 +72,55 @@ export function computeStepCounts(input: {
   underpaidClaims: Claim[];
   disputeRefunds: DisputeRefund[];
   unclaimedRefundTrips: Trip[];
+  /** When set, replaces legacy underpaid bucket + open-claim tally. */
+  underpaidPipeline?: { actionable: number; informational: number };
+  /** When set with fleetTz, scopes dispute-refunds counts to this wizard week. */
+  periodWeekKey?: string;
+  fleetTz?: string;
+  periodTollIds?: ReadonlySet<string>;
+  periodClaimIds?: ReadonlySet<string>;
 }): Record<StepId, StepCounts> {
-  const { classified, underpaidClaims, disputeRefunds, unclaimedRefundTrips } = input;
+  const {
+    classified,
+    underpaidClaims,
+    disputeRefunds,
+    unclaimedRefundTrips,
+    underpaidPipeline,
+    periodWeekKey,
+    fleetTz,
+    periodTollIds,
+    periodClaimIds,
+  } = input;
+
+  const scopedDisputeRefunds =
+    periodWeekKey && fleetTz
+      ? disputeRefunds.filter((r) =>
+          isDisputeRefundInWizardPeriod(r, periodWeekKey, fleetTz, periodTollIds, periodClaimIds),
+        )
+      : disputeRefunds;
 
   const actionableClaims = underpaidClaims.filter(isClaimActionableNow).length;
   const informationalClaims = underpaidClaims.filter(isClaimInformationalOnly).length;
 
-  const unmatchedDisputeRefunds = disputeRefunds.filter((r) => !isDisputeRefundMatched(r)).length;
-  const matchedDisputeRefunds = disputeRefunds.filter(isDisputeRefundMatched).length;
+  const unmatchedDisputeRefunds = scopedDisputeRefunds.filter((r) => !isDisputeRefundMatched(r)).length;
+  const matchedDisputeRefunds = scopedDisputeRefunds.filter(isDisputeRefundMatched).length;
 
-  // Pending-import unlinked rows stay visible but must not block Finish —
-  // only truly unresolved (no resolution yet) stay actionable.
   const actionableUnlinked = unclaimedRefundTrips.filter((t) => !isPendingOnlyRefundResolution(t)).length;
   const informationalUnlinked = unclaimedRefundTrips.filter(isPendingOnlyRefundResolution).length;
+
+  const underpaidActionable =
+    underpaidPipeline?.actionable ??
+    classified['underpaid'].length + actionableClaims;
+  const underpaidInformational =
+    underpaidPipeline?.informational ?? informationalClaims;
 
   return {
     'needs-review': { actionable: classified['needs-review'].length, informational: 0 },
     'personal-use': { actionable: classified['personal-use'].length, informational: 0 },
     'deadhead': { actionable: classified['deadhead'].length, informational: 0 },
     'underpaid-claims': {
-      actionable: classified['underpaid'].length + actionableClaims,
-      informational: informationalClaims,
+      actionable: underpaidActionable,
+      informational: underpaidInformational,
     },
     'dispute-refunds': { actionable: unmatchedDisputeRefunds, informational: matchedDisputeRefunds },
     'unlinked-refunds': { actionable: actionableUnlinked, informational: informationalUnlinked },

@@ -189,12 +189,15 @@ export async function buildPeriodResetInventory(opts: {
     })
     .map((t: any) => String(t.id));
 
+  const claimIdSet = new Set(claimIds);
+
   const disputeRefundIds = disputeRefunds
     .filter((r: any) => {
       if (!r?.id) return false;
       if (r.status !== "matched" && r.status !== "auto_resolved") return false;
       if (!driverMatches(r.driverId, driverIds)) return false;
       if (r.matchedTollId && tollIdSet.has(String(r.matchedTollId))) return true;
+      if (r.matchedClaimId && claimIdSet.has(String(r.matchedClaimId))) return true;
       return r.date && weekKeyForDateStr(r.date, fleetTz) === periodWeekKey;
     })
     .map((r: any) => String(r.id));

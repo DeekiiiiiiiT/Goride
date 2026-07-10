@@ -151,7 +151,7 @@ export function PartiallyCoveredList({
                       onClick={() => onSendToDriver(claim)}
                     >
                       <Send className="mr-1 h-3 w-3" />
-                      Send
+                      Send to Driver
                     </Button>
                   </div>
                 </TableCell>

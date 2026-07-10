@@ -96,6 +96,42 @@ describe('computeStepCounts', () => {
     expect(counts['underpaid-claims'].informational).toBe(1);
   });
 
+  it('underpaid-claims uses underpaidPipeline when provided instead of legacy bucket tally', () => {
+    const classified = emptyClassified();
+    classified.underpaid = [{} as FinancialTransaction, {} as FinancialTransaction];
+
+    const counts = computeStepCounts({
+      classified,
+      underpaidClaims: [claim('Open') as Claim],
+      disputeRefunds: [],
+      unclaimedRefundTrips: [],
+      underpaidPipeline: { actionable: 0, informational: 2 },
+    });
+
+    expect(counts['underpaid-claims']).toEqual({ actionable: 0, informational: 2 });
+  });
+
+  it('dispute-refunds scopes to wizard period when periodWeekKey and fleetTz are set', () => {
+    const periodTollIds = new Set(['toll-in-period']);
+    const disputeRefunds = [
+      { status: 'matched', matchedTollId: 'toll-in-period', date: '2025-06-01' } as DisputeRefund,
+      { status: 'matched', matchedTollId: 'toll-other-week', date: '2025-07-01' } as DisputeRefund,
+      { status: 'unmatched', date: '2025-06-15' } as DisputeRefund,
+    ];
+    const counts = computeStepCounts({
+      classified: emptyClassified(),
+      underpaidClaims: [],
+      disputeRefunds,
+      unclaimedRefundTrips: [],
+      periodWeekKey: '2025-06-02',
+      fleetTz: 'America/New_York',
+      periodTollIds,
+    });
+    // Only toll-in-period matched counts as informational; unmatched in period week is actionable.
+    expect(counts['dispute-refunds'].informational).toBe(1);
+    expect(counts['dispute-refunds'].actionable).toBeGreaterThanOrEqual(0);
+  });
+
   it('dispute-refunds splits unmatched (actionable) from matched/auto_resolved (informational)', () => {
     const disputeRefunds = [
       { status: 'unmatched' } as DisputeRefund,

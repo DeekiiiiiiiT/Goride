@@ -28,6 +28,7 @@ import {
 import { StepId, StepCounts, STEP_ORDER, computeStepCounts } from "../../../utils/tollPeriodGating";
 import { buildPeriodTollIdSet, isClaimVisibleInPeriod, isTollInWizardPeriod, tollWeekKey, filterTollsToWizardPeriod, assertTollInWizardPeriod } from "../../../utils/tollWeekPeriod";
 import { mergeReconciledTollsForUnderpaid } from "../../../utils/claimByToll";
+import { computeUnderpaidPipelineCounts } from "../../../utils/underpaidPipelineCounts";
 import type { UnlinkedShortfallSuggestion } from "../../../hooks/useTollReconciliation";
 import { toast } from "sonner@2.0.3";
 import { Trip as TripType } from "../../../types/data";
@@ -415,6 +416,45 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
     return platformFilter === 'all' ? inPeriod : inPeriod.filter(tollInPlatform);
   }, [pReconciledInPeriod, allReconciledTolls, reconciledTolls, period.startDate, fleetTz, claimTollIdsForPeriod, platformFilter]);
 
+  const periodClaimIds = useMemo(
+    () => new Set(periodClaims.map((c) => c.id).filter(Boolean)),
+    [periodClaims],
+  );
+
+  const underpaidPipeline = useMemo(
+    () => {
+      const merged = mergeReconciledTollsForUnderpaid(
+        pReconciledInPeriod,
+        allReconciledTolls.length ? allReconciledTolls : reconciledTolls,
+        period.startDate,
+        fleetTz,
+        claimTollIdsForPeriod,
+      );
+      const reconciledForGating = filterTollsToWizardPeriod(merged, period.startDate, fleetTz);
+      return computeUnderpaidPipelineCounts({
+        reconciledTolls: reconciledForGating,
+        periodClaims,
+        allClaims: claims,
+        trips,
+        disputeRefunds: disputeRefunds || [],
+        periodWeekKey: period.startDate,
+        fleetTz,
+      });
+    },
+    [
+      pReconciledInPeriod,
+      allReconciledTolls,
+      reconciledTolls,
+      period.startDate,
+      fleetTz,
+      claimTollIdsForPeriod,
+      periodClaims,
+      claims,
+      trips,
+      disputeRefunds,
+    ],
+  );
+
   // Claimed-toll exclusion is deliberately ALL-TIME (not period-scoped): "does
   // this toll already have a claim at all" doesn't depend on which period the
   // claim's own date resolves to — matches the same rule the period
@@ -471,7 +511,25 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
     underpaidClaims: periodClaims,
     disputeRefunds: disputeRefunds || [],
     unclaimedRefundTrips: unclaimedRefunds,
-  }), [classifiedAllPlatforms, periodClaims, disputeRefunds, unclaimedRefunds]);
+    underpaidPipeline: {
+      actionable: underpaidPipeline.actionable,
+      informational: underpaidPipeline.informational,
+    },
+    periodWeekKey: period.startDate,
+    fleetTz,
+    periodTollIds,
+    periodClaimIds,
+  }), [
+    classifiedAllPlatforms,
+    periodClaims,
+    disputeRefunds,
+    unclaimedRefunds,
+    underpaidPipeline,
+    period.startDate,
+    fleetTz,
+    periodTollIds,
+    periodClaimIds,
+  ]);
 
   const gatedStates: GatedStepState[] = useMemo(
     () => computeGatedStepStates(stepCounts, STEP_ORDER),
@@ -694,6 +752,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
 
   const activeState = gatedStates.find(s => s.id === activeStepId) ?? gatedStates[0];
   const isLastStep = activeStepId === STEP_ORDER[STEP_ORDER.length - 1];
+  const allStepsComplete = gatedStates.every((s) => s.complete);
   const canAdvance = activeState.actionable === 0;
   const activeStepIdx = STEP_ORDER.indexOf(activeStepId);
   const nextStepId = STEP_ORDER[activeStepIdx + 1];
@@ -705,6 +764,10 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
     (activeStepId === 'needs-review' ? classified['needs-review'] :
       activeStepId === 'personal-use' ? classified['personal-use'] :
       classified['deadhead']).length === 0;
+
+  const showAdvancePrompt =
+    (canAdvance || (allStepsComplete && activeStepId === 'underpaid-claims')) &&
+    !(bucketStepIds.includes(activeStepId) && isBucketStepEmpty);
 
   const handleNext = () => {
     const idx = STEP_ORDER.indexOf(activeStepId);
@@ -866,7 +929,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               onFlag={handleFlag}
               onManualResolve={handleManualResolve}
               onEdit={handleEditToll}
-              advancePrompt={canAdvance ? renderAdvancePrompt(true) : undefined}
+              advancePrompt={showAdvancePrompt ? renderAdvancePrompt(true) : undefined}
               emptyState={{ icon: HelpCircle, title: "No tolls pending review", description: "There are no tolls needing review this period." }}
               listTitle="Needs Review"
               listDescription="Toll charges with no clear trip link, or where multiple trips compete — pick the correct trip first."
@@ -888,7 +951,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               onManualResolve={handleManualResolve}
               onChargePersonal={handleChargePersonal}
               onEdit={handleEditToll}
-              advancePrompt={canAdvance ? renderAdvancePrompt(true) : undefined}
+              advancePrompt={showAdvancePrompt ? renderAdvancePrompt(true) : undefined}
               emptyState={{ icon: CarFront, title: "No personal use tolls this period", description: "No tolls were classified as personal driver use." }}
               listTitle="Personal Use"
               listDescription="Tolls with no trip explaining them, or after dropoff — confirm each driver charge. Approach tolls appear under Deadhead."
@@ -910,7 +973,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               onEdit={handleEditToll}
               onChargeDriver={handleChargeDriverForDeadhead}
               approveLabel="Acknowledge (Fleet Cost)"
-              advancePrompt={canAdvance ? renderAdvancePrompt(true) : undefined}
+              advancePrompt={showAdvancePrompt ? renderAdvancePrompt(true) : undefined}
               emptyState={{ icon: Route, title: "No deadhead tolls this period", description: "No unreimbursed business driving tolls detected." }}
               listTitle="Deadhead"
               listDescription="Unreimbursed business driving (en route to pickup) — normally a fleet cost, but chargeable to the driver on a case-by-case basis."
@@ -944,8 +1007,6 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               periodWeekKey={period.startDate}
               periodLabel={period.label}
               fleetTz={fleetTz}
-              periodReimbursedAmount={reimbursedByUber}
-              periodChargedToDrivers={chargedToDrivers}
               drivers={drivers}
               loadingTolls={tollsLoading}
               loadingClaims={claimsLoading}
@@ -959,7 +1020,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
           )}
         </div>
 
-        {canAdvance && !(isBucketStepEmpty && bucketStepIds.includes(activeStepId)) && (
+        {showAdvancePrompt && (
           <div className="pt-4">
             {renderAdvancePrompt()}
           </div>

@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/tabs";
 import { Button } from "../../ui/button";
 import { toast } from "sonner@2.0.3";
-import { Download, Wallet, CheckCircle2, FileX, UserMinus, AlertCircle, Timer, Banknote } from "lucide-react";
+import { Download, FileX, AlertCircle, Timer, Banknote } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -48,10 +48,6 @@ interface UnderpaidClaimsStepProps {
   /** Undo apply-to-underpaid from claim history (trip id). */
   onUndoUnlinkedApply?: (tripId: string) => Promise<void> | void;
   busyUnlinkedTripId?: string | null;
-  /** Trip + dispute refunds for this period — matches top overview Reimbursed card. */
-  periodReimbursedAmount?: number;
-  /** Charge Driver total for this period — matches top overview card. */
-  periodChargedToDrivers?: number;
   periodWeekKey: string;
   periodLabel: string;
   fleetTz: string;
@@ -66,8 +62,6 @@ interface UnderpaidClaimsStepProps {
 
 export function UnderpaidClaimsStep({
   claims, allClaims, reconciledTolls, trips, disputeRefunds, unlinkedRefundTrips = [], onUndoUnlinkedApply, busyUnlinkedTripId,
-  periodReimbursedAmount,
-  periodChargedToDrivers,
   periodWeekKey,
   periodLabel: _periodLabel,
   fleetTz,
@@ -230,6 +224,42 @@ export function UnderpaidClaimsStep({
     return true;
   };
 
+  /** Resolve underpaid toll + trip for Send to Driver (not the unlinked credit trip). */
+  const resolvePartialClaimSendContext = (
+    claim: Claim,
+  ): { tx: FinancialTransaction; trip: Trip } | null => {
+    if (!claim.transactionId) return null;
+
+    let tx = reconciledTollById.get(claim.transactionId);
+    const underpaidTripId =
+      (claim.tripId && claim.tripId !== claim.unlinkedTripId ? claim.tripId : undefined) ||
+      (tx?.tripId && tx.tripId !== claim.unlinkedTripId ? tx.tripId : undefined) ||
+      tx?.tripId ||
+      claim.tripId ||
+      undefined;
+    const trip = underpaidTripId ? tripMap.get(underpaidTripId) : undefined;
+    if (!trip) return null;
+
+    if (!tx) {
+      const tollCost =
+        Math.abs(Number(claim.expectedAmount) || 0) ||
+        Math.abs(Number(claim.paidAmount) || 0) + Math.abs(Number(claim.amount) || 0);
+      tx = {
+        id: claim.transactionId,
+        amount: -tollCost,
+        date: claim.date || trip.date || '',
+        time: '12:00:00',
+        tripId: trip.id,
+        description: claim.subject || claim.pickup || 'Toll charge',
+        isReconciled: true,
+        driverId: claim.driverId,
+        vehicleId: claim.vehicleId,
+      } as FinancialTransaction;
+    }
+
+    return { tx, trip };
+  };
+
   const pendingClaims = useMemo(
     () => dedupeClaimsForDisplay(claims.filter((c) => c.status === 'Submitted_to_Uber')).displayClaims,
     [claims],
@@ -262,27 +292,13 @@ export function UnderpaidClaimsStep({
     return { unclaimedTotal: unclaimed, pendingTotal: pending, atRiskTotal: atRisk };
   }, [losses, partialClaims, claims]);
 
-  const { reimbursedTotal, writeOffTotal, chargedToDriverTotal, netResult } = useMemo(() => {
-    const reimbursed =
-      periodReimbursedAmount ??
+  const writeOffTotal = useMemo(
+    () =>
       resolvedClaims
-        .filter((c) => c.resolutionReason === 'Reimbursed')
-        .reduce((sum, c) => sum + (Number(c.paidAmount) || 0), 0);
-    const writeOff = resolvedClaims
-      .filter((c) => c.resolutionReason === 'Write Off' || c.resolutionReason === 'Business Expense')
-      .reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
-    const charged =
-      periodChargedToDrivers ??
-      resolvedClaims
-        .filter((c) => c.resolutionReason === 'Charge Driver')
-        .reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
-    return {
-      reimbursedTotal: reimbursed,
-      writeOffTotal: writeOff,
-      chargedToDriverTotal: charged,
-      netResult: reimbursed + charged - writeOff,
-    };
-  }, [resolvedClaims, periodReimbursedAmount, periodChargedToDrivers]);
+        .filter((c) => c.resolutionReason === 'Write Off' || c.resolutionReason === 'Business Expense')
+        .reduce((sum, c) => sum + (Number(c.amount) || 0), 0),
+    [resolvedClaims],
+  );
 
   const handleResolve = async (claim: Claim) => {
     try {
@@ -594,12 +610,12 @@ export function UnderpaidClaimsStep({
   };
 
   const handleSendPartialToDriver = async (claim: Claim) => {
-    const tx = reconciledTolls.find((t) => t.id === claim.transactionId);
-    const trip = claim.tripId ? tripMap.get(claim.tripId) : undefined;
-    if (!tx || !trip) {
+    const resolved = resolvePartialClaimSendContext(claim);
+    if (!resolved) {
       toast.error('Missing toll or trip link for this claim');
       return;
     }
+    const { tx, trip } = resolved;
     if (!guardTollInPeriod(tx)) return;
     if (!assertNotDisputeCovered(claim)) return;
     const ctx = buildTollFinancialsContext(tx, trip, claim, trips, disputeRefunds, allocation);
@@ -637,16 +653,11 @@ export function UnderpaidClaimsStep({
             <Download className="h-4 w-4" /> Export CSV
           </Button>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard title="Unclaimed Potential" amount={unclaimedTotal} type="neutral" icon={Banknote} />
           <StatCard title="Pending Recovery" amount={pendingTotal} type="info" icon={Timer} />
           <StatCard title="Action Required" amount={atRiskTotal} type="warning" icon={AlertCircle} />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <StatCard title="Net Result" amount={netResult} type="net" icon={Wallet} />
-          <StatCard title="Reimbursed" amount={reimbursedTotal} type="gain" icon={CheckCircle2} />
           <StatCard title="Written Off" amount={writeOffTotal * -1} type="loss" icon={FileX} />
-          <StatCard title="Charged to Drivers" amount={chargedToDriverTotal} type="gain" icon={UserMinus} />
         </div>
       </div>
 
