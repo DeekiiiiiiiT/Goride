@@ -60,10 +60,6 @@ export function useTollReconciliationPeriods(driverId?: string) {
       setPeriods(res.periods || []);
       setTotals(res.totals || EMPTY_TOTALS);
       setWorkflowStageBackfillComplete(res.workflowStageBackfillComplete !== false);
-      // #region agent log
-      const p = (res.periods || []).find((x: ReconciliationPeriod) => x.startDate === '2026-06-29' || x.id === '2026-06-29');
-      fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9637fe'},body:JSON.stringify({sessionId:'9637fe',hypothesisId:'A,B,C',location:'useTollReconciliationPeriods.ts:fetchPeriods',message:'periods fetched',data:{driverId:driverId||null,target:p?{id:p.id,status:p.status,actionableTotal:p.actionableTotal,counts:p.counts}:null,debugUnderpaidHits:(res as any)._debugUnderpaidHits||null,outstandingCount:(res.periods||[]).filter((x:ReconciliationPeriod)=>x.status==='outstanding').length},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
     } catch (error) {
       console.error('Failed to fetch reconciliation periods', error);
     } finally {

@@ -336,8 +336,11 @@ export function formatClaimPeriodLabel(
   tollDateById?: Map<string, string>,
 ): string {
   const anchor = getClaimPeriodAnchorDate(claim, tollDateById);
-  const d = anchor ? new Date(anchor) : null;
-  if (!d || isNaN(d.getTime())) return 'Unknown';
+  if (!anchor) return 'Unknown';
+  // Date-only anchors must use local calendar midnight — `new Date('yyyy-MM-dd')`
+  // is UTC and shifts Mon Jun 29 → Sun Jun 28 in US timezones (wrong prior week).
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(anchor) ? ymdToLocalDate(anchor) : new Date(anchor);
+  if (isNaN(d.getTime())) return 'Unknown';
   const { start, end } = getMondaySundayForDate(d);
   return formatWeekPeriodLabel(start, end);
 }

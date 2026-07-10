@@ -54,11 +54,15 @@ export function formatInFleetTz(
 /**
  * Returns the calendar day (yyyy-MM-dd) of a date in the fleet timezone.
  *
- * This is the day the row is *displayed* under (it uses the same `new Date()`
- * parsing as {@link formatInFleetTz}), so grouping by this key guarantees a row
- * always lands in a week whose label contains its own displayed date.
+ * Bare `yyyy-MM-dd` strings are treated as fleet calendar days (no UTC midnight
+ * shift). Timestamps with a zone suffix are converted into the fleet timezone.
  */
 export function fleetTzDateKey(input: string | Date, timezone: string): string {
+  // Date-only ledger/claim anchors must not go through `new Date('yyyy-MM-dd')`
+  // (UTC midnight → previous calendar day in US timezones).
+  if (typeof input === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(input)) {
+    return input;
+  }
   const date = typeof input === 'string'
     ? (hasTzSuffix(input) ? resolveFleetInstantBrowser(input, timezone) : new Date(input))
     : input;

@@ -776,9 +776,6 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
 
   const handleFinish = () => {
     const allPlatformActionable = STEP_ORDER.reduce((sum, id) => sum + (stepCounts[id]?.actionable || 0), 0);
-    // #region agent log
-    fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9637fe'},body:JSON.stringify({sessionId:'9637fe',hypothesisId:'D,E',location:'ReconciliationWizard.tsx:handleFinish',message:'finish clicked',data:{periodId:period.id,periodLabel:period.label,allPlatformActionable,stepCounts,underpaidPipeline,blocked:allPlatformActionable>0},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (allPlatformActionable > 0) {
       toast.error('Still open items on other platforms', {
         description: 'Clear the platform filter to All and finish remaining steps before closing this period.',
