@@ -22,10 +22,11 @@ import { FinancialTransaction, Claim } from "../../../types/data";
 import { MatchResult, calculateTollFinancials, buildTollFinancialsContext, buildTripRefundAllocation } from "../../../utils/tollReconciliation";
 import {
   resolveWizardBucket,
+  isTollExcludedFromWizardBuckets,
   TollBucket,
 } from "../../../utils/tollBucket";
 import { StepId, StepCounts, STEP_ORDER, computeStepCounts } from "../../../utils/tollPeriodGating";
-import { buildPeriodTollIdSet, isClaimVisibleInPeriod, isTollInWizardPeriod, tollWeekKey } from "../../../utils/tollWeekPeriod";
+import { buildPeriodTollIdSet, isClaimVisibleInPeriod, isTollInWizardPeriod, tollWeekKey, filterTollsToWizardPeriod, assertTollInWizardPeriod } from "../../../utils/tollWeekPeriod";
 import { mergeReconciledTollsForUnderpaid } from "../../../utils/claimByToll";
 import type { UnlinkedShortfallSuggestion } from "../../../hooks/useTollReconciliation";
 import { toast } from "sonner@2.0.3";
@@ -404,20 +405,30 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
   }, [periodClaims]);
   const underpaidReconciledTolls = useMemo(() => {
     const merged = mergeReconciledTollsForUnderpaid(
-      pReconciled,
+      pReconciledInPeriod,
       allReconciledTolls.length ? allReconciledTolls : reconciledTolls,
       period.startDate,
       fleetTz,
       claimTollIdsForPeriod,
     );
-    return platformFilter === 'all' ? merged : merged.filter(tollInPlatform);
-  }, [pReconciled, allReconciledTolls, reconciledTolls, period.startDate, fleetTz, claimTollIdsForPeriod, platformFilter]);
+    const inPeriod = filterTollsToWizardPeriod(merged, period.startDate, fleetTz);
+    return platformFilter === 'all' ? inPeriod : inPeriod.filter(tollInPlatform);
+  }, [pReconciledInPeriod, allReconciledTolls, reconciledTolls, period.startDate, fleetTz, claimTollIdsForPeriod, platformFilter]);
 
   // Claimed-toll exclusion is deliberately ALL-TIME (not period-scoped): "does
   // this toll already have a claim at all" doesn't depend on which period the
   // claim's own date resolves to — matches the same rule the period
   // aggregation endpoint (toll_period_controller.tsx) uses.
-  const claimedTransactionIds = new Set(claims.map(c => c.transactionId));
+  const claimedTransactionIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const c of claims) {
+      if (c.transactionId) ids.add(c.transactionId);
+    }
+    for (const tx of unreconciledTolls) {
+      if (isTollExcludedFromWizardBuckets(tx)) ids.add(tx.id);
+    }
+    return ids;
+  }, [claims, unreconciledTolls]);
   const filteredUnreconciledTolls = pUnreconciled.filter(tx => !claimedTransactionIds.has(tx.id));
   const allUnreconciledForGating = unreconciledTolls.filter(tx => !claimedTransactionIds.has(tx.id));
 
@@ -435,13 +446,23 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
     return buckets;
   }, [suggestions]);
 
+  const filterBucketsToPeriod = useCallback(
+    (buckets: Record<TollBucket, FinancialTransaction[]>) => ({
+      'needs-review': filterTollsToWizardPeriod(buckets['needs-review'], period.startDate, fleetTz),
+      underpaid: filterTollsToWizardPeriod(buckets.underpaid, period.startDate, fleetTz),
+      deadhead: filterTollsToWizardPeriod(buckets.deadhead, period.startDate, fleetTz),
+      'personal-use': filterTollsToWizardPeriod(buckets['personal-use'], period.startDate, fleetTz),
+    }),
+    [period.startDate, fleetTz],
+  );
+
   const classified = useMemo(
-    () => buildBuckets(filteredUnreconciledTolls),
-    [buildBuckets, filteredUnreconciledTolls],
+    () => filterBucketsToPeriod(buildBuckets(filteredUnreconciledTolls)),
+    [buildBuckets, filteredUnreconciledTolls, filterBucketsToPeriod],
   );
   const classifiedAllPlatforms = useMemo(
-    () => buildBuckets(allUnreconciledForGating),
-    [buildBuckets, allUnreconciledForGating],
+    () => filterBucketsToPeriod(buildBuckets(allUnreconciledForGating)),
+    [buildBuckets, allUnreconciledForGating, filterBucketsToPeriod],
   );
 
   // ── Phase F4: hard-gate counts use ALL platforms (filter is display-only) ─
@@ -459,7 +480,14 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
 
   const [activeStepId, setActiveStepId] = useState<StepId>(STEP_ORDER[0]);
   const hasInitializedRef = React.useRef(false);
+  /** After an in-step action, stay on that step until it completes or the user picks another. */
+  const holdStepRef = React.useRef<StepId | null>(null);
   const [busyUnlinkedTripId, setBusyUnlinkedTripId] = useState<string | null>(null);
+
+  const selectStep = useCallback((id: StepId) => {
+    holdStepRef.current = null;
+    setActiveStepId(id);
+  }, []);
 
   const handleUndoApply = useCallback(async (tripId: string) => {
     setBusyUnlinkedTripId(tripId);
@@ -504,11 +532,15 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
       setActiveStepId(pickInitialStep(gatedStates));
       return;
     }
+    const activeState = gatedStates.find(s => s.id === activeStepId);
+    if (activeState?.complete && holdStepRef.current === activeStepId) {
+      holdStepRef.current = null;
+    }
     // Re-lock guard: if the active step just became locked (an earlier step
     // regained an actionable item — e.g. a background rematch), snap back to
-    // the new current step rather than leaving the user on a locked step.
-    const activeState = gatedStates.find(s => s.id === activeStepId);
+    // the new current step — unless the user just acted on this step.
     if (activeState?.locked) {
+      if (holdStepRef.current === activeStepId) return;
       setActiveStepId(pickInitialStep(gatedStates));
     }
   }, [isLoading, gatedStates, activeStepId]);
@@ -706,12 +738,24 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
     suggestion: UnlinkedShortfallSuggestion,
     opts?: { acknowledgedPlatformMismatch?: boolean },
   ) => {
+    const targetToll =
+      reconciledTolls.find((t) => t.id === suggestion.tollId) ||
+      allReconciledTolls.find((t) => t.id === suggestion.tollId) ||
+      unreconciledTolls.find((t) => t.id === suggestion.tollId);
+    if (targetToll) {
+      const periodCheck = assertTollInWizardPeriod(targetToll, period.startDate, fleetTz);
+      if (!periodCheck.ok) {
+        toast.error(`This toll belongs to ${periodCheck.weekLabel}. Switch to that period to apply.`);
+        return;
+      }
+    }
+    holdStepRef.current = 'unlinked-refunds';
     await applyUnlinkedToClaim(tripId, {
       claimId: suggestion.claimId,
       tollId: suggestion.tollId,
       acknowledgedPlatformMismatch: opts?.acknowledgedPlatformMismatch,
     });
-    refreshClaims();
+    await refreshClaims();
   };
 
   return (
@@ -802,7 +846,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
         <GatedReconciliationStepper
           states={gatedStates}
           activeStepId={activeStepId}
-          onSelect={setActiveStepId}
+          onSelect={selectStep}
           labels={STEP_LABELS}
           icons={STEP_ICONS}
         />
@@ -897,12 +941,14 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               trips={trips}
               disputeRefunds={disputeRefunds}
               unlinkedRefundTrips={unclaimedRefunds}
+              periodWeekKey={period.startDate}
+              periodLabel={period.label}
+              fleetTz={fleetTz}
               periodReimbursedAmount={reimbursedByUber}
               periodChargedToDrivers={chargedToDrivers}
               drivers={drivers}
               loadingTolls={tollsLoading}
               loadingClaims={claimsLoading}
-              unreconcile={unreconcile}
               createClaim={createClaim}
               updateClaim={updateClaim}
               deleteClaim={deleteClaim}

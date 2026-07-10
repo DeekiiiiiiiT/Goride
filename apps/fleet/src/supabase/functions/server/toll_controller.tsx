@@ -5587,6 +5587,74 @@ function computeUnlinkedShortfallSuggestions(
     .slice(0, 10);
 }
 
+const DISPUTE_REFUND_TOLL_LINK_PREFIX = "dispute-refund-toll:";
+const PARTIAL_SHORTFALL_TOLERANCE = 0.05;
+
+async function isTollLinkedToMatchedDisputeRefund(tollId: string): Promise<boolean> {
+  const refundId = await kv.get(`${DISPUTE_REFUND_TOLL_LINK_PREFIX}${tollId}`);
+  if (!refundId || typeof refundId !== "string") return false;
+  const refund = await kv.get(`dispute-refund:${refundId}`);
+  if (!refund || typeof refund !== "object") return false;
+  return (refund as any).status === "matched" || (refund as any).status === "auto_resolved";
+}
+
+/** Clear stale partial shortfall on claims already covered by a matched dispute refund. */
+async function repairDisputeCoveredPartialClaims(
+  c: unknown,
+  opts?: { dryRun?: boolean; driverId?: string },
+): Promise<{
+  scanned: number;
+  repaired: number;
+  dryRun: boolean;
+  items: Array<{ claimId: string; tollId: string; refundId: string }>;
+}> {
+  const dryRun = opts?.dryRun !== false;
+  const refunds = (await loadAllByPrefix("dispute-refund:")) as any[];
+  const items: Array<{ claimId: string; tollId: string; refundId: string }> = [];
+
+  for (const refund of refunds) {
+    if (!refund?.matchedTollId) continue;
+    if (refund.status !== "matched" && refund.status !== "auto_resolved") continue;
+
+    const tollId = String(refund.matchedTollId);
+    let claimId: string | null = refund.matchedClaimId || null;
+    if (!claimId) {
+      const { findExistingClaimIdForToll } = await import("./claim_service.ts");
+      claimId = await findExistingClaimIdForToll(tollId);
+    }
+    if (!claimId) continue;
+
+    const claim = await kv.get(`claim:${claimId}`);
+    if (!claim || typeof claim !== "object") continue;
+    if (opts?.driverId && (claim as any).driverId !== opts.driverId) continue;
+
+    const remaining = Math.abs(Number((claim as any).amount) || 0);
+    if (remaining <= PARTIAL_SHORTFALL_TOLERANCE) continue;
+
+    items.push({ claimId, tollId, refundId: String(refund.id) });
+
+    if (!dryRun) {
+      const { upsertClaim } = await import("./claim_service.ts");
+      const priorPaid = Math.abs(Number((claim as any).paidAmount) || 0);
+      const disputeAmount = Math.abs(Number(refund.amount) || 0);
+      await upsertClaim(
+        {
+          ...(claim as any),
+          status: "Resolved",
+          resolutionReason: "Reimbursed",
+          disputeRefundId: refund.id,
+          amount: 0,
+          paidAmount: Math.max(priorPaid, disputeAmount),
+        },
+        c,
+        { syncMode: "force", fleetTz: await getFleetTimezone() },
+      );
+    }
+  }
+
+  return { scanned: refunds.length, repaired: items.length, dryRun, items };
+}
+
 async function applyUnlinkedRefundToClaim(
   tripId: string,
   claimId: string | null,
@@ -5660,6 +5728,13 @@ async function applyUnlinkedRefundToClaim(
   }
 
   resolvedTollId = claim.transactionId || resolvedTollId;
+  if (resolvedTollId && (await isTollLinkedToMatchedDisputeRefund(resolvedTollId))) {
+    return {
+      ok: false,
+      status: 409,
+      error: "This toll already has a matched dispute refund.",
+    };
+  }
   const tollForPlatform = resolvedTollId
     ? (await loadTollForUnlinkedMatch(resolvedTollId)) || tollTx.find((t: any) => t.id === resolvedTollId)
     : null;
@@ -6090,6 +6165,27 @@ app.post(`${BASE}/unlinked-refunds/undo-apply`, async (c) => {
     return c.json({ success: true, data: result.data });
   } catch (e: any) {
     console.log(`[TollReconciliation] POST /unlinked-refunds/undo-apply error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── POST /repair-dispute-partial-claims ─────────────────────────────────
+/** Clear stale partial shortfall on claims already covered by dispute refunds. */
+app.post(`${BASE}/repair-dispute-partial-claims`, async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body?.dryRun !== false;
+    const driverId = body?.driverId as string | undefined;
+    const result = await repairDisputeCoveredPartialClaims(c, { dryRun, driverId });
+    return c.json({
+      success: true,
+      ...result,
+      message: result.dryRun
+        ? `Dry run: would repair ${result.repaired} claim(s). Re-run with dryRun=false to apply.`
+        : `Repaired ${result.repaired} claim(s).`,
+    });
+  } catch (e: any) {
+    console.log(`[TollReconciliation] POST /repair-dispute-partial-claims error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
 });

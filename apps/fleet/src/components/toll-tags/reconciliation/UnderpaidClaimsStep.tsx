@@ -19,7 +19,7 @@ import { FinancialTransaction, Trip, Claim, DisputeRefund } from "../../../types
 import { MatchResult, VARIANCE_THRESHOLD, calculateTollFinancials, buildTollFinancialsContext, buildTripRefundAllocation } from "../../../utils/tollReconciliation";
 import { hasBlockingUnlinkedRefund } from "../../../utils/unlinkedShortfallEligibility";
 import { buildClaimByTollId, dedupeClaimsForDisplay, collectDuplicateClaimIds } from "../../../utils/claimByToll";
-import { isActionablePartialShortfall } from "../../../utils/tollWeekPeriod";
+import { isActionablePartialShortfall, isVisiblePartialShortfallClaim, isTollCoveredByDisputeRefund, isTollInWizardPeriod, assertTollInWizardPeriod } from "../../../utils/tollWeekPeriod";
 import { guardClaimChargeAmount } from "../../../utils/claimChargeGuard";
 import { formatDateJM } from "../../../utils/csv-helper";
 
@@ -52,10 +52,12 @@ interface UnderpaidClaimsStepProps {
   periodReimbursedAmount?: number;
   /** Charge Driver total for this period — matches top overview card. */
   periodChargedToDrivers?: number;
+  periodWeekKey: string;
+  periodLabel: string;
+  fleetTz: string;
   drivers: any[];
   loadingTolls: boolean;
   loadingClaims: boolean;
-  unreconcile: (tx: FinancialTransaction) => Promise<any>;
   createClaim: (claim: Partial<Claim>) => Promise<any>;
   updateClaim: (claim: Claim) => Promise<any>;
   deleteClaim: (id: string) => Promise<any>;
@@ -66,8 +68,11 @@ export function UnderpaidClaimsStep({
   claims, allClaims, reconciledTolls, trips, disputeRefunds, unlinkedRefundTrips = [], onUndoUnlinkedApply, busyUnlinkedTripId,
   periodReimbursedAmount,
   periodChargedToDrivers,
+  periodWeekKey,
+  periodLabel: _periodLabel,
+  fleetTz,
   drivers, loadingTolls, loadingClaims,
-  unreconcile, createClaim, updateClaim, deleteClaim, refreshClaims,
+  createClaim, updateClaim, deleteClaim, refreshClaims,
 }: UnderpaidClaimsStepProps) {
   const tripMap = useMemo(() => new Map(trips.map(t => [t.id, t])), [trips]);
 
@@ -127,16 +132,16 @@ export function UnderpaidClaimsStep({
     [reconciledTolls, tripMap],
   );
 
-  const reconciledTollIds = useMemo(
-    () => new Set(reconciledTolls.map((t) => t.id)),
-    [reconciledTolls],
-  );
-
   const visibleTollIds = useMemo(() => {
-    const ids = new Set(reconciledTollIds);
-    claims.forEach((c) => { if (c.transactionId) ids.add(c.transactionId); });
+    const ids = new Set<string>();
+    for (const tx of reconciledTolls) {
+      if (tx?.id && isTollInWizardPeriod(tx, periodWeekKey, fleetTz)) ids.add(tx.id);
+    }
+    for (const c of claims) {
+      if (c.transactionId) ids.add(c.transactionId);
+    }
     return ids;
-  }, [reconciledTollIds, claims]);
+  }, [reconciledTolls, claims, periodWeekKey, fleetTz]);
 
   const reconciledTollById = useMemo(
     () => new Map(reconciledTolls.map((t) => [t.id, t])),
@@ -146,12 +151,16 @@ export function UnderpaidClaimsStep({
   const partialClaims = useMemo(
     () =>
       dedupeClaimsForDisplay(
-        allClaims.filter((c) => {
+        claims.filter((c) => {
           if (!c.transactionId || !visibleTollIds.has(c.transactionId)) return false;
-          return isActionablePartialShortfall(c, reconciledTollById.get(c.transactionId));
+          return isVisiblePartialShortfallClaim(
+            c,
+            reconciledTollById.get(c.transactionId),
+            disputeRefunds,
+          );
         }),
       ).displayClaims,
-    [allClaims, visibleTollIds, reconciledTollById],
+    [claims, visibleTollIds, reconciledTollById, disputeRefunds],
   );
 
   const partialByTollId = useMemo(
@@ -163,6 +172,7 @@ export function UnderpaidClaimsStep({
     const items: LossItem[] = [];
     for (const tx of reconciledTolls) {
       if (!tx.tripId) continue;
+      if (!isTollInWizardPeriod(tx, periodWeekKey, fleetTz)) continue;
       const trip = tripMap.get(tx.tripId);
       if (!trip) continue;
       const claim = claimByTollId.get(tx.id);
@@ -195,7 +205,30 @@ export function UnderpaidClaimsStep({
     return items.sort(
       (a, b) => new Date(b.transaction.date).getTime() - new Date(a.transaction.date).getTime(),
     );
-  }, [reconciledTolls, tripMap, claimByTollId, partialByTollId, trips, disputeRefunds, allocation, reconciledTollById]);
+  }, [reconciledTolls, tripMap, claimByTollId, partialByTollId, trips, disputeRefunds, allocation, reconciledTollById, periodWeekKey, fleetTz]);
+
+  const guardTollInPeriod = (transaction: FinancialTransaction): boolean => {
+    const check = assertTollInWizardPeriod(transaction, periodWeekKey, fleetTz);
+    if (!check.ok) {
+      toast.error(`This toll belongs to ${check.weekLabel}. Switch to that period to act on it.`);
+      return false;
+    }
+    return true;
+  };
+
+  const guardClaimTollInPeriod = (claim: Claim): boolean => {
+    const tx = claim.transactionId ? reconciledTollById.get(claim.transactionId) : undefined;
+    if (!tx) return true;
+    return guardTollInPeriod(tx);
+  };
+
+  const assertNotDisputeCovered = (claim: Pick<Claim, 'id' | 'transactionId'>): boolean => {
+    if (isTollCoveredByDisputeRefund(claim, disputeRefunds)) {
+      toast.error('A dispute refund already covers this toll — see History for the reimbursed claim.');
+      return false;
+    }
+    return true;
+  };
 
   const pendingClaims = useMemo(
     () => dedupeClaimsForDisplay(claims.filter((c) => c.status === 'Submitted_to_Uber')).displayClaims,
@@ -287,20 +320,116 @@ export function UnderpaidClaimsStep({
     });
   };
 
-  const handleChargeDriver = async (claim: Claim) => {
-    if (hasBlockingUnlinkedRefund({ claimDriverId: claim.driverId, unlinkedTrips: unlinkedRefundTrips })) {
+  const buildClaimPayloadFromLoss = (item: LossItem): Partial<Claim> => {
+    const { transaction, match, financials } = item;
+    const trip = match.trip;
+    return {
+      driverId: trip.driverId || 'unknown_driver',
+      tripId: trip.id,
+      transactionId: transaction.id,
+      type: 'Toll_Refund',
+      amount: financials.netLoss,
+      expectedAmount: financials.cost,
+      paidAmount: financials.totalRecovered,
+      subject: `Toll Refund: ${trip.pickupLocation?.split(',')[0] || 'Unknown Location'}`,
+      message: '',
+      tripDate: trip.requestTime || trip.date,
+      pickup: trip.pickupLocation,
+      dropoff: trip.dropoffLocation,
+      date: transaction.date,
+      vehicleId: transaction.vehicleId,
+      driverName: trip.driverName,
+    };
+  };
+
+  const ensureClaimForLoss = async (item: LossItem): Promise<Claim> => {
+    if (item.claim) return item.claim;
+    return createClaim(buildClaimPayloadFromLoss(item));
+  };
+
+  const claimDraftFromLoss = (item: LossItem): Claim => ({
+    id: item.claim?.id || '',
+    status: item.claim?.status || 'Open',
+    createdAt: item.claim?.createdAt || new Date().toISOString(),
+    updatedAt: item.claim?.updatedAt || new Date().toISOString(),
+    ...buildClaimPayloadFromLoss(item),
+    ...item.claim,
+    amount: item.financials.netLoss,
+    expectedAmount: item.financials.cost,
+    paidAmount: item.financials.totalRecovered,
+    type: 'Toll_Refund',
+  } as Claim);
+
+  const handleChargeDriverLoss = async (item: LossItem) => {
+    if (!guardTollInPeriod(item.transaction)) return;
+    const trip = item.match.trip;
+    const driverId = trip.driverId || 'unknown_driver';
+    if (hasBlockingUnlinkedRefund({ claimDriverId: driverId, unlinkedTrips: unlinkedRefundTrips })) {
       toast.error('Pick Apply to underpaid on Unlinked Refunds first', {
         description: 'This driver still has an open unlinked trip refund that may cover this shortfall.',
       });
       return;
     }
-    const coveredByDispute = disputeRefunds.some(
-      (r) =>
-        (r.status === 'matched' || r.status === 'auto_resolved') &&
-        (r.matchedClaimId === claim.id || r.matchedTollId === claim.transactionId),
-    );
-    if (coveredByDispute) {
-      toast.error('A dispute refund already covers this toll — set Reimbursed instead of charging the driver.');
+    const draft = claimDraftFromLoss(item);
+    if (!assertNotDisputeCovered(draft)) return;
+    const chargeGuard = guardChargeAmountForClaim(draft);
+    if (!chargeGuard.ok) {
+      toast.error('Cannot charge full toll amount', {
+        description: `${chargeGuard.message} Charge $${chargeGuard.suggestedAmount.toFixed(2)} instead.`,
+      });
+      return;
+    }
+    try {
+      const claim = await ensureClaimForLoss(item);
+      await updateClaim({
+        ...claim,
+        amount: chargeGuard.amount,
+        status: 'Resolved',
+        resolutionReason: 'Charge Driver',
+        updatedAt: new Date().toISOString(),
+      });
+      toast.success(`Claim resolved. $${chargeGuard.amount.toFixed(2)} will be deducted from driver pay.`);
+      refreshClaims();
+    } catch (e) {
+      toast.error('Failed to charge driver');
+    }
+  };
+
+  const handleWriteOffLoss = (item: LossItem) => {
+    if (!guardTollInPeriod(item.transaction)) return;
+    const amount = item.financials.netLoss;
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Write Off',
+      description: `Fleet absorbs $${amount.toFixed(2)} — no dispute will be sent to the driver.`,
+      actionLabel: 'Write Off',
+      isDestructive: true,
+      onConfirm: async () => {
+        try {
+          const claim = await ensureClaimForLoss(item);
+          await updateClaim({
+            ...claim,
+            amount,
+            status: 'Resolved',
+            resolutionReason: 'Write Off',
+            updatedAt: new Date().toISOString(),
+          });
+          toast.success('Claim written off as company loss.');
+          refreshClaims();
+        } catch (e) {
+          toast.error('Failed to write off claim');
+        }
+      },
+    });
+  };
+
+  const handleChargeDriver = async (claim: Claim) => {
+    if (!guardClaimTollInPeriod(claim)) return;
+    if (!assertNotDisputeCovered(claim)) return;
+    if (hasBlockingUnlinkedRefund({ claimDriverId: claim.driverId, unlinkedTrips: unlinkedRefundTrips })) {
+      toast.error('Pick Apply to underpaid on Unlinked Refunds first', {
+        description: 'This driver still has an open unlinked trip refund that may cover this shortfall.',
+      });
       return;
     }
     const chargeGuard = guardChargeAmountForClaim(claim);
@@ -324,6 +453,8 @@ export function UnderpaidClaimsStep({
   };
 
   const handleWriteOff = async (claim: Claim) => {
+    if (!guardClaimTollInPeriod(claim)) return;
+    if (!assertNotDisputeCovered(claim)) return;
     try {
       await updateClaim({ ...claim, status: 'Resolved', resolutionReason: 'Write Off', updatedAt: new Date().toISOString() });
       toast.success("Claim written off as company loss.");
@@ -418,38 +549,6 @@ export function UnderpaidClaimsStep({
     document.body.removeChild(link);
   };
 
-  const handleReverseLoss = async (item: LossItem) => {
-    try {
-      await unreconcile(item.transaction);
-      toast.success("Transaction reversed to Needs Review");
-    } catch (error) { toast.error("Failed to reverse transaction"); }
-  };
-
-  const handleBulkReverse = (items: LossItem[]) => {
-    if (!items.length) return;
-    setConfirmDialog({
-      isOpen: true, title: "Reverse Transactions",
-      description: `Are you sure you want to reverse ${items.length} items? They will be sent back to Needs Review.`,
-      actionLabel: "Reverse",
-      onConfirm: async () => {
-        let successCount = 0, failCount = 0;
-        const toastId = toast.loading(`Reversing ${items.length} transactions...`);
-        try {
-          await Promise.all(items.map(async (item) => {
-            try { await unreconcile(item.transaction); successCount++; }
-            catch (e) { console.error(e); failCount++; }
-          }));
-          toast.dismiss(toastId);
-          if (failCount > 0) toast.warning(`Reversed ${successCount} items. Failed: ${failCount}`);
-          else toast.success(`Successfully reversed ${successCount} items`);
-        } catch (e) {
-          toast.dismiss(toastId);
-          toast.error("Batch processing failed");
-        }
-      },
-    });
-  };
-
   const handleBulkUpdateStatus = (claimsToUpdate: Claim[], status: Claim['status'], reason?: Claim['resolutionReason']) => {
     if (!claimsToUpdate.length) return;
     if (reason === 'Charge Driver') {
@@ -501,6 +600,8 @@ export function UnderpaidClaimsStep({
       toast.error('Missing toll or trip link for this claim');
       return;
     }
+    if (!guardTollInPeriod(tx)) return;
+    if (!assertNotDisputeCovered(claim)) return;
     const ctx = buildTollFinancialsContext(tx, trip, claim, trips, disputeRefunds, allocation);
     const financials = calculateTollFinancials(tx, trip, claim, ctx);
     setSelectedLoss({
@@ -573,9 +674,14 @@ export function UnderpaidClaimsStep({
           <LossList
             losses={losses}
             isLoading={loadingTolls || loadingClaims}
-            onSelectLoss={(item) => { setSelectedLoss(item); setIsModalOpen(true); }}
-            onReverse={handleReverseLoss}
-            onBulkReverse={handleBulkReverse}
+            onSelectLoss={(item) => {
+              if (!guardTollInPeriod(item.transaction)) return;
+              setSelectedLoss(item);
+              setIsModalOpen(true);
+            }}
+            onChargeDriver={handleChargeDriverLoss}
+            onWriteOff={handleWriteOffLoss}
+            fleetTz={fleetTz}
             onUndoUnlinkedApply={onUndoUnlinkedApply}
             busyUnlinkedTripId={busyUnlinkedTripId}
           />
@@ -583,9 +689,7 @@ export function UnderpaidClaimsStep({
 
         <TabsContent value="partial" className="mt-6">
           <PartiallyCoveredList
-            claims={allClaims}
-            tollIds={visibleTollIds}
-            tollById={reconciledTollById}
+            claims={partialClaims}
             trips={trips}
             isLoading={loadingClaims}
             getDriverName={getDriverName}

@@ -157,6 +157,28 @@ describe('resolveWizardBucket', () => {
     )).toBeNull();
   });
 
+  it('unlinked apply provenance → excluded (null) even with orphan match', () => {
+    expect(resolveWizardBucket(
+      {
+        ...tagTx,
+        unlinkedSourceTripId: 'trip-abc',
+        matchStatus: 'orphan_personal',
+      },
+      {
+        matchType: 'PERSONAL_MATCH',
+        reasonCode: 'ORPHAN_OUT_OF_WINDOW',
+        trip: { id: '' } as any,
+      },
+    )).toBeNull();
+  });
+
+  it('claimId on toll row → excluded from wizard buckets', () => {
+    expect(resolveWizardBucket(
+      { ...tagTx, claimId: 'claim-1', workflowStage: 'underpaid_pending' },
+      { matchType: 'AMOUNT_VARIANCE' },
+    )).toBeNull();
+  });
+
   it('cash claim with no match stays needs-review', () => {
     expect(resolveWizardBucket(
       { paymentMethod: 'Cash' },

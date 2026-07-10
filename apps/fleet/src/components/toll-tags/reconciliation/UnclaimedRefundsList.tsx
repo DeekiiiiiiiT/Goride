@@ -207,7 +207,7 @@ export function UnclaimedRefundsList({
             {visibleWeekGroups.map((week) => (
               <TableRow key={week.key} className="border-0 hover:bg-transparent">
                 <TableCell colSpan={interactive ? 7 : 6} className="p-0 align-top">
-                  <Collapsible defaultOpen={false} className="group border-b border-slate-200 last:border-b-0">
+                  <Collapsible defaultOpen className="group border-b border-slate-200 last:border-b-0">
                     <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 px-2 py-3 text-left bg-slate-50/80 dark:bg-slate-900/40 hover:bg-slate-100/90 dark:hover:bg-slate-800/50 transition-colors">
                       <div className="flex items-center gap-2 min-w-0 flex-wrap">
                         <CalendarRange className="h-4 w-4 text-slate-500 shrink-0" />

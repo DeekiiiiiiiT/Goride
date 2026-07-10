@@ -336,6 +336,52 @@ export function isTollInWizardPeriod(
   return tollWeekKey(tx, timezone) === periodWeekKey;
 }
 
+/** Keep only tolls whose week key matches the active wizard period. */
+export function filterTollsToWizardPeriod<T extends Pick<FinancialTransaction, 'date' | 'time'>>(
+  tolls: readonly T[],
+  periodWeekKey: string,
+  fleetTz: string,
+): T[] {
+  return tolls.filter((tx) => isTollInWizardPeriod(tx, periodWeekKey, fleetTz));
+}
+
+/** Keep only claims whose toll-first anchor week matches the wizard period. */
+export function filterClaimsToWizardPeriod(
+  claims: readonly Claim[],
+  period: { startDate: string; endDate: string },
+  tollDateById: Map<string, string> | undefined,
+  fleetTz: string,
+): Claim[] {
+  return claims.filter((c) => isClaimVisibleInPeriod(c, period, tollDateById, fleetTz));
+}
+
+export type TollPeriodAssertResult =
+  | { ok: true }
+  | { ok: false; weekLabel: string };
+
+/** Guard before period-scoped mutations (charge, write-off, send to driver). */
+export function assertTollInWizardPeriod(
+  tx: Pick<FinancialTransaction, 'date' | 'time'>,
+  periodWeekKey: string,
+  fleetTz: string,
+): TollPeriodAssertResult {
+  if (isTollInWizardPeriod(tx, periodWeekKey, fleetTz)) return { ok: true };
+  const d = getTollTransactionDate(tx as FinancialTransaction);
+  const { start, end } = getMondaySundayForDate(d);
+  return { ok: false, weekLabel: formatWeekPeriodLabel(start, end) };
+}
+
+/** Human-readable week label for a toll row. */
+export function formatTollPeriodLabel(
+  tx: Pick<FinancialTransaction, 'date' | 'time'>,
+  fleetTz?: string,
+): string {
+  const d = getTollTransactionDate(tx as FinancialTransaction);
+  if (isNaN(d.getTime())) return 'Unknown';
+  const { start, end } = getMondaySundayForDate(d);
+  return formatWeekPeriodLabel(start, end);
+}
+
 /**
  * Toll IDs scoped to the active wizard week — date-filtered rows plus same-week
  * reconciled tolls the API date filter may drop. Never includes all-time history.
@@ -401,6 +447,45 @@ export function isActionablePartialShortfall(
     claim.resolutionReason === 'Charge Driver' &&
     !claim.resolutionTransactionId
   );
+}
+
+/** True when a matched dispute refund already covers this claim's toll. */
+export function isTollCoveredByDisputeRefund(
+  claim: Pick<Claim, 'id' | 'transactionId'>,
+  disputeRefunds: DisputeRefund[],
+): boolean {
+  if (!claim.transactionId && !claim.id) return false;
+  return disputeRefunds.some(
+    (r) =>
+      isDisputeRefundMatched(r) &&
+      (r.matchedClaimId === claim.id || r.matchedTollId === claim.transactionId),
+  );
+}
+
+/**
+ * Partial shortfall rows visible in Underpaid → Partially Covered.
+ * Excludes tolls already closed by a matched dispute refund.
+ */
+export function isVisiblePartialShortfallClaim(
+  claim: Pick<
+    Claim,
+    | 'id'
+    | 'status'
+    | 'paidAmount'
+    | 'amount'
+    | 'resolutionReason'
+    | 'unlinkedTripId'
+    | 'resolutionTransactionId'
+    | 'transactionId'
+    | 'disputeRefundId'
+  > | null | undefined,
+  toll: Pick<FinancialTransaction, 'unlinkedSourceTripId'> | null | undefined,
+  disputeRefunds: DisputeRefund[],
+): boolean {
+  if (!claim) return false;
+  if (!isActionablePartialShortfall(claim, toll)) return false;
+  if (claim.status === 'Resolved' && claim.disputeRefundId) return false;
+  return !isTollCoveredByDisputeRefund(claim, disputeRefunds);
 }
 
 /** True when a claim's toll-first anchor week matches the wizard period week key. */

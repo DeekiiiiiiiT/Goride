@@ -9,7 +9,6 @@ import {
 } from '../ui/table';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
-import { Checkbox } from '../ui/checkbox';
 import {
   Tooltip,
   TooltipContent,
@@ -18,17 +17,18 @@ import {
 } from '../ui/tooltip';
 import {
   AlertCircle,
-  ArrowRight,
+  Archive,
   Clock,
   Info,
   MoreHorizontal,
+  Send,
   Undo2,
+  UserMinus,
 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
@@ -36,6 +36,7 @@ import { Claim, FinancialTransaction, Trip } from '../../types/data';
 import { MatchResult, TollFinancials } from '../../utils/tollReconciliation';
 import { calculateDaysRemaining } from '../../utils/timeUtils';
 import { PlatformSourceBadge } from '../toll-tags/reconciliation/PlatformSourceBadge';
+import { formatTollPeriodLabel } from '../../utils/tollWeekPeriod';
 
 export type TollRefundSourceKind = 'trip_match' | 'unlinked_refund' | 'dispute_refund' | 'mixed';
 
@@ -75,51 +76,23 @@ interface LossListProps {
   losses: LossItem[];
   isLoading?: boolean;
   onSelectLoss: (item: LossItem) => void;
-  onReverse?: (item: LossItem) => void;
-  onBulkReverse?: (items: LossItem[]) => void;
+  onChargeDriver?: (item: LossItem) => void;
+  onWriteOff?: (item: LossItem) => void;
   onUndoUnlinkedApply?: (tripId: string) => Promise<void> | void;
   busyUnlinkedTripId?: string | null;
+  fleetTz?: string;
 }
 
 export function LossList({
   losses,
   isLoading,
   onSelectLoss,
-  onReverse,
-  onBulkReverse,
+  onChargeDriver,
+  onWriteOff,
   onUndoUnlinkedApply,
   busyUnlinkedTripId,
+  fleetTz,
 }: LossListProps) {
-  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
-
-  React.useEffect(() => {
-    setSelectedIds(new Set());
-  }, [losses]);
-
-  const toggleSelectAll = () => {
-    if (selectedIds.size === losses.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(losses.map((l) => l.transaction.id)));
-  };
-
-  const toggleSelect = (id: string) => {
-    const next = new Set(selectedIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setSelectedIds(next);
-  };
-
-  const handleBulkAction = () => {
-    if (!onBulkReverse) return;
-    onBulkReverse(losses.filter((l) => selectedIds.has(l.transaction.id)));
-    setSelectedIds(new Set());
-  };
-
-  const canReverse = (item: LossItem) => {
-    const tx = item.transaction;
-    const claim = item.claim;
-    return !tx.unlinkedSourceTripId && !claim?.unlinkedTripId;
-  };
-
   if (isLoading) {
     return <div className="p-8 text-center text-slate-500">Analyzing claims...</div>;
   }
@@ -147,20 +120,6 @@ export function LossList({
           <p className="text-sm text-slate-500">Tolls incurred during a trip that were not fully refunded.</p>
         </div>
         <div className="flex items-center gap-4">
-          {selectedIds.size > 0 && onBulkReverse && (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-slate-500 font-medium">{selectedIds.size} selected</span>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleBulkAction}
-                className="text-orange-600 hover:text-orange-700 hover:bg-orange-50 border-orange-200"
-              >
-                <Undo2 className="mr-2 h-4 w-4" />
-                Reverse
-              </Button>
-            </div>
-          )}
           <div className="text-sm font-medium text-slate-600">
             Total Potential Claim:{' '}
             <span className="text-orange-600 font-bold ml-1">
@@ -172,13 +131,6 @@ export function LossList({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[40px]">
-              <Checkbox
-                checked={losses.length > 0 && selectedIds.size === losses.length}
-                onCheckedChange={toggleSelectAll}
-                aria-label="Select all"
-              />
-            </TableHead>
             <TableHead>Date</TableHead>
             <TableHead>Toll Description</TableHead>
             <TableHead>Platform</TableHead>
@@ -209,17 +161,15 @@ export function LossList({
                     : { color: 'text-emerald-600 font-medium', icon: <Clock className="h-3 w-3" />, text: `${daysRemaining} days left` };
 
             return (
-              <TableRow key={transaction.id} data-state={selectedIds.has(transaction.id) ? 'selected' : undefined}>
-                <TableCell>
-                  <Checkbox
-                    checked={selectedIds.has(transaction.id)}
-                    onCheckedChange={() => toggleSelect(transaction.id)}
-                    aria-label="Select row"
-                  />
-                </TableCell>
+              <TableRow key={transaction.id}>
                 <TableCell className="font-medium text-slate-700">
                   {new Date(transaction.date).toLocaleDateString()}
                   <div className="text-xs text-slate-400">{transaction.time}</div>
+                  {fleetTz && (
+                    <Badge variant="outline" className="mt-1 text-[10px] font-normal text-slate-500 border-slate-200">
+                      {formatTollPeriodLabel(transaction, fleetTz)}
+                    </Badge>
+                  )}
                   <div className={`mt-1 text-xs flex items-center gap-1 ${expiry.color}`}>
                     {expiry.icon}
                     {expiry.text}
@@ -316,9 +266,24 @@ export function LossList({
                           onSelectLoss(item);
                         }}
                       >
-                        <ArrowRight className="mr-2 h-4 w-4" />
-                        View Match
+                        <Send className="mr-2 h-4 w-4" />
+                        Send to Driver
                       </DropdownMenuItem>
+                      {onChargeDriver && (
+                        <DropdownMenuItem
+                          onClick={() => onChargeDriver(item)}
+                          className="text-orange-700 focus:text-orange-800 focus:bg-orange-50"
+                        >
+                          <UserMinus className="mr-2 h-4 w-4" />
+                          Charge Driver
+                        </DropdownMenuItem>
+                      )}
+                      {onWriteOff && (
+                        <DropdownMenuItem onClick={() => onWriteOff(item)}>
+                          <Archive className="mr-2 h-4 w-4" />
+                          Write Off
+                        </DropdownMenuItem>
+                      )}
                       {unlinkedTripId && onUndoUnlinkedApply && (
                         <>
                           <DropdownMenuSeparator />
@@ -331,23 +296,6 @@ export function LossList({
                             Undo apply in History
                           </DropdownMenuItem>
                         </>
-                      )}
-                      {onReverse && canReverse(item) && (
-                        <>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => onReverse(item)}
-                            className="text-orange-600 focus:text-orange-700 focus:bg-orange-50"
-                          >
-                            <Undo2 className="mr-2 h-4 w-4" />
-                            Reverse
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                      {onReverse && !canReverse(item) && !unlinkedTripId && (
-                        <DropdownMenuLabel className="text-xs text-slate-400 font-normal">
-                          Reverse blocked — use Undo apply
-                        </DropdownMenuLabel>
                       )}
                     </DropdownMenuContent>
                   </DropdownMenu>

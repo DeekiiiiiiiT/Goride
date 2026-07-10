@@ -3,10 +3,17 @@ import {
   buildPeriodTollIdSet,
   claimPeriodWeekKey,
   formatClaimPeriodLabel,
+  formatTollPeriodLabel,
   getClaimPeriodAnchorDate,
   isClaimInPeriod,
   isClaimVisibleInPeriod,
   isActionablePartialShortfall,
+  isTollCoveredByDisputeRefund,
+  isVisiblePartialShortfallClaim,
+  filterTollsToWizardPeriod,
+  filterClaimsToWizardPeriod,
+  assertTollInWizardPeriod,
+  isTollInWizardPeriod,
 } from './tollWeekPeriod';
 import type { FinancialTransaction } from '../types/data';
 
@@ -157,6 +164,54 @@ describe('buildPeriodTollIdSet', () => {
   });
 });
 
+describe('period filter helpers', () => {
+  const period = { startDate: '2026-06-29', endDate: '2026-07-05' };
+  const tz = 'America/Jamaica';
+
+  it('filterTollsToWizardPeriod keeps same-week tolls only', () => {
+    const tolls = [
+      tx('in', '2026-06-30'),
+      tx('out', '2026-06-28'),
+    ];
+    const filtered = filterTollsToWizardPeriod(tolls, period.startDate, tz);
+    expect(filtered.map((t) => t.id)).toEqual(['in']);
+  });
+
+  it('filterClaimsToWizardPeriod uses toll-first anchor', () => {
+    const tollMap = new Map([['toll-1', '2026-06-30'], ['toll-old', '2026-06-22']]);
+    const claims = [
+      { date: '2026-06-30', transactionId: 'toll-1' },
+      { date: '2026-06-22', transactionId: 'toll-old' },
+    ] as any[];
+    const filtered = filterClaimsToWizardPeriod(claims, period, tollMap, tz);
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].transactionId).toBe('toll-1');
+  });
+
+  it('assertTollInWizardPeriod fails with week label for cross-week toll', () => {
+    const result = assertTollInWizardPeriod(tx('toll-jun28', '2026-06-28'), period.startDate, tz);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.weekLabel).toContain('Jun 22');
+      expect(result.weekLabel).toContain('Jun 28');
+    }
+  });
+
+  it('assertTollInWizardPeriod passes for same-week toll', () => {
+    expect(assertTollInWizardPeriod(tx('toll-jun30', '2026-06-30'), period.startDate, tz).ok).toBe(true);
+  });
+
+  it('formatTollPeriodLabel matches toll week', () => {
+    const label = formatTollPeriodLabel(tx('t1', '2026-06-30'), tz);
+    expect(label).toContain('Jun 29');
+    expect(label).toContain('Jul 5');
+  });
+
+  it('isTollInWizardPeriod boundary: Jun 28 is not Jun 29 week', () => {
+    expect(isTollInWizardPeriod(tx('t', '2026-06-28'), '2026-06-29', tz)).toBe(false);
+  });
+});
+
 describe('isActionablePartialShortfall', () => {
   it('detects wrongly resolved partial unlinked apply (6 Linen Av case)', () => {
     expect(
@@ -185,6 +240,79 @@ describe('isActionablePartialShortfall', () => {
           resolutionTransactionId: 'tx-charge-1',
         },
         null,
+      ),
+    ).toBe(false);
+  });
+});
+
+describe('dispute-covered partial shortfall visibility', () => {
+  const partialOpen = {
+    id: 'claim-1',
+    status: 'Open' as const,
+    paidAmount: 370,
+    amount: 10,
+    transactionId: 'toll-1',
+    unlinkedTripId: 'trip-unlinked',
+    resolutionReason: null,
+    resolutionTransactionId: undefined,
+    disputeRefundId: null,
+  };
+
+  const matchedDispute = [
+    {
+      id: 'dr-1',
+      status: 'matched' as const,
+      matchedTollId: 'toll-1',
+      matchedClaimId: null,
+    },
+  ];
+
+  it('isTollCoveredByDisputeRefund matches by toll id', () => {
+    expect(isTollCoveredByDisputeRefund(partialOpen, matchedDispute as any)).toBe(true);
+  });
+
+  it('hides open partial when dispute already matched to toll', () => {
+    expect(
+      isVisiblePartialShortfallClaim(partialOpen, { unlinkedSourceTripId: 'trip-unlinked' }, matchedDispute as any),
+    ).toBe(false);
+  });
+
+  it('shows open partial when no dispute match', () => {
+    expect(
+      isVisiblePartialShortfallClaim(partialOpen, { unlinkedSourceTripId: 'trip-unlinked' }, []),
+    ).toBe(true);
+  });
+
+  it('hides Resolved/Reimbursed + unlinked + amount when dispute matched', () => {
+    expect(
+      isVisiblePartialShortfallClaim(
+        {
+          id: 'claim-2',
+          status: 'Resolved',
+          resolutionReason: 'Reimbursed',
+          paidAmount: 370,
+          amount: 10,
+          transactionId: 'toll-2',
+          unlinkedTripId: 'trip-u',
+          disputeRefundId: null,
+        },
+        { unlinkedSourceTripId: 'trip-u' },
+        [{ id: 'dr-2', status: 'auto_resolved', matchedTollId: 'toll-2', matchedClaimId: 'claim-2' }] as any,
+      ),
+    ).toBe(false);
+  });
+
+  it('hides when claim already has disputeRefundId', () => {
+    expect(
+      isVisiblePartialShortfallClaim(
+        {
+          ...partialOpen,
+          status: 'Resolved',
+          resolutionReason: 'Reimbursed',
+          disputeRefundId: 'dr-1',
+        },
+        null,
+        [],
       ),
     ).toBe(false);
   });

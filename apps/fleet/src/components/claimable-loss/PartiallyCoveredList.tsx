@@ -10,19 +10,15 @@ import {
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { DollarSign, FileText, Send, UserMinus } from 'lucide-react';
-import { Claim, Trip, FinancialTransaction } from '../../types/data';
+import { Claim, Trip } from '../../types/data';
 import { PlatformSourceBadge } from '../toll-tags/reconciliation/PlatformSourceBadge';
-import { VARIANCE_THRESHOLD } from '../../utils/tollReconciliation';
 import { dedupeClaimsForDisplay } from '../../utils/claimByToll';
-import { isActionablePartialShortfall } from '../../utils/tollWeekPeriod';
+import { refundSourceLabel } from './LossList';
 
 interface PartiallyCoveredListProps {
+  /** Pre-filtered partial shortfall claims from UnderpaidClaimsStep. */
   claims: Claim[];
   trips: Trip[];
-  /** Toll ledger rows keyed by id — used to detect unlinked apply on the toll. */
-  tollById?: ReadonlyMap<string, FinancialTransaction>;
-  /** When set, only claims linked to these toll ids are shown. */
-  tollIds?: ReadonlySet<string>;
   isLoading?: boolean;
   getDriverName?: (id: string) => string;
   onChargeDriver: (claim: Claim) => void;
@@ -34,8 +30,6 @@ interface PartiallyCoveredListProps {
 export function PartiallyCoveredList({
   claims,
   trips,
-  tollById,
-  tollIds,
   isLoading,
   getDriverName,
   onChargeDriver,
@@ -44,14 +38,7 @@ export function PartiallyCoveredList({
   onSelectClaim,
 }: PartiallyCoveredListProps) {
   const tripById = new Map(trips.filter((t) => t?.id).map((t) => [t.id, t]));
-
-  const partialClaims = dedupeClaimsForDisplay(
-    claims.filter((c) => {
-      if (tollIds && (!c.transactionId || !tollIds.has(c.transactionId))) return false;
-      const toll = c.transactionId ? tollById?.get(c.transactionId) : undefined;
-      return isActionablePartialShortfall(c, toll);
-    }),
-  ).displayClaims;
+  const partialClaims = dedupeClaimsForDisplay(claims).displayClaims;
 
   if (isLoading) {
     return <div className="p-8 text-center text-slate-500">Loading partially covered claims...</div>;

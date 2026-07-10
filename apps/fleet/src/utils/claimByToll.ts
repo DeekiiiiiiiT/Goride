@@ -102,20 +102,19 @@ export function dedupeClaimsForDisplay(claims: Claim[]): {
   return { displayClaims, duplicateCount };
 }
 
-/** Merge period-filtered reconciled tolls with same-week tolls the strict date API may drop. */
+/** Merge period-week reconciled tolls with same-week rows the date API may drop. */
 export function mergeReconciledTollsForUnderpaid(
   periodFiltered: FinancialTransaction[],
   allReconciled: FinancialTransaction[],
   periodWeekKey: string,
   fleetTz: string,
-  claimTollIds: ReadonlySet<string>,
+  _claimTollIds: ReadonlySet<string>,
 ): FinancialTransaction[] {
   const byId = new Map(periodFiltered.map((t) => [t.id, t]));
   for (const tx of allReconciled) {
     if (!tx?.id || !tx.isReconciled || !tx.tripId || byId.has(tx.id)) continue;
-    if (claimTollIds.has(tx.id) || isTollInWizardPeriod(tx, periodWeekKey, fleetTz)) {
-      byId.set(tx.id, tx);
-    }
+    if (!isTollInWizardPeriod(tx, periodWeekKey, fleetTz)) continue;
+    byId.set(tx.id, tx);
   }
   return [...byId.values()];
 }

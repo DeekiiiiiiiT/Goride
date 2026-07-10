@@ -79,4 +79,26 @@ describe('mergeReconciledTollsForUnderpaid', () => {
     );
     expect(merged.map((t) => t.id)).toEqual(['toll-jun30']);
   });
+
+  it('does not pull Jun 28 toll via claimTollIds when week is Jun 29', () => {
+    const merged = mergeReconciledTollsForUnderpaid(
+      [],
+      [toll('toll-jun28', '2026-06-28')],
+      periodWeekKey,
+      tz,
+      new Set(['toll-jun28']),
+    );
+    expect(merged).toHaveLength(0);
+  });
+
+  it('includes same-week toll via claimTollIds when date API dropped it', () => {
+    const merged = mergeReconciledTollsForUnderpaid(
+      [],
+      [toll('toll-jun30', '2026-06-30')],
+      periodWeekKey,
+      tz,
+      new Set(['toll-jun30']),
+    );
+    expect(merged.map((t) => t.id)).toEqual(['toll-jun30']);
+  });
 });

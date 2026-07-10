@@ -120,6 +120,17 @@ export interface WizardBucketTx {
   isAmbiguous?: boolean;
   paymentMethod?: string;
   receiptUrl?: string;
+  claimId?: string | null;
+  unlinkedSourceTripId?: string | null;
+}
+
+/** Toll already handled in Unlinked / Claims — must not reopen earlier wizard steps. */
+export function isTollExcludedFromWizardBuckets(tx: WizardBucketTx): boolean {
+  if (tx.claimId) return true;
+  if (tx.unlinkedSourceTripId) return true;
+  const stage = tx.workflowStage as TollWorkflowStage | undefined;
+  if (stage && bucketForWorkflowStage(stage) === null) return true;
+  return false;
 }
 
 /** Tag-import toll (not a cash/receipt driver claim). */
@@ -168,6 +179,8 @@ export function resolveWizardBucket(
   tx: WizardBucketTx,
   best: Pick<MatchResult, 'matchType' | 'reasonCode' | 'reason' | 'isAmbiguous' | 'trip'> | undefined,
 ): TollBucket | null {
+  if (isTollExcludedFromWizardBuckets(tx)) return null;
+
   const stage = tx.workflowStage as TollWorkflowStage | undefined;
   const resolvedStageBucket = stage ? bucketForWorkflowStage(stage) : undefined;
   if (resolvedStageBucket === null && stage) return null;

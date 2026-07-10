@@ -102,13 +102,23 @@ async function siblingsForTripPool(
   rawTollById: Map<string, any>,
   focusToll: any,
 ): Promise<TollPoolRow[]> {
+  const rows = await gatherSiblingsForTripPool(tripId, focusToll, rawTollById);
+  return rows;
+}
+
+/** All tolls sharing a trip link (persisted tripId or matchedTripId). */
+async function gatherSiblingsForTripPool(
+  tripId: string,
+  focusToll: any,
+  rawTollById?: Map<string, any>,
+): Promise<TollPoolRow[]> {
   const rows = await gatherLinkedTollsForTripFast(tripId, focusToll);
   const seen = new Set(rows.map((r) => r.id));
-  for (const raw of rawTollById.values()) {
-    if (!raw || typeof raw !== "object") continue;
-    if (persistedTripLink(raw) !== tripId) continue;
+  const addFromRaw = (raw: any) => {
+    if (!raw || typeof raw !== "object") return;
+    if (persistedTripLink(raw) !== tripId) return;
     const id = tollLedgerId(raw);
-    if (!id || seen.has(id)) continue;
+    if (!id || seen.has(id)) return;
     seen.add(id);
     rows.push({
       id,
@@ -116,6 +126,12 @@ async function siblingsForTripPool(
       time: raw.time,
       amount: Math.abs(Number(raw.amount) || 0),
     });
+  };
+  if (rawTollById) {
+    for (const raw of rawTollById.values()) addFromRaw(raw);
+  } else {
+    const ledger = await kv.getByPrefix("toll_ledger:");
+    for (const raw of ledger || []) addFromRaw(raw);
   }
   return rows;
 }
@@ -289,7 +305,7 @@ export async function resolveLiveTripContextForToll(
     const trip = (await kv.mget([`trip:${tripId}`]))[0];
     if (!trip) return null;
     const pool = Math.abs(Number(trip.tollCharges) || 0);
-    const siblings = await gatherLinkedTollsForTripFast(tripId, rawToll);
+    const siblings = await gatherSiblingsForTripPool(tripId, rawToll);
     const tripRefund = tollId
       ? allocateTripRefundShare(pool, tollId, siblings)
       : Math.max(0, Math.min(pool, tollCost));

@@ -266,19 +266,25 @@ async function matchRefundToClaim(
     }
   }
 
+  // Toll-only match: resolve the linked claim so partial shortfall rows clear.
+  let resolvedClaimId = claimId;
+  if (!resolvedClaimId) {
+    resolvedClaimId = await findExistingClaimIdForToll(tollTransactionId);
+  }
+
   let updated: any = {
     ...refund,
     status: "matched",
     matchedTollId: tollTransactionId,
-    matchedClaimId: claimId || null,
+    matchedClaimId: resolvedClaimId || null,
     resolvedAt: new Date().toISOString(),
     resolvedBy: auto ? "system-auto" : "admin",
   };
   await kv.set(recordKey, updated);
   await setRefundTollLink(tollTransactionId, id);
 
-  if (claimId) {
-    const claimKey = `claim:${claimId}`;
+  if (resolvedClaimId) {
+    const claimKey = `claim:${resolvedClaimId}`;
     const claim = await kv.get(claimKey);
     if (claim && typeof claim === "object") {
       const cs = (claim as any).status;
@@ -287,14 +293,18 @@ async function matchRefundToClaim(
       // sync too, instead of being silently skipped, so a dispute that
       // proves a toll was actually reimbursed correctly un-charges the driver.
       if (cs === "Rejected") {
-        console.log(`[DisputeRefund] Claim ${claimId} is Rejected — refund marked matched, claim untouched`);
+        console.log(`[DisputeRefund] Claim ${resolvedClaimId} is Rejected — refund marked matched, claim untouched`);
       } else {
+        const priorPaid = Math.abs(Number((claim as any).paidAmount) || 0);
+        const disputeAmount = Math.abs(Number(refund.amount) || 0);
         await upsertClaim(
           {
             ...(claim as any),
             status: "Resolved",
             resolutionReason: "Reimbursed",
             disputeRefundId: id,
+            amount: 0,
+            paidAmount: Math.max(priorPaid, disputeAmount),
             preDisputeStatus: cs, // so unmatch can restore it
             // Prior resolutionReason (e.g. "Charge Driver") — lets unmatch
             // restore the exact prior reason, not just null. Only meaningful
@@ -310,9 +320,9 @@ async function matchRefundToClaim(
           // doing nothing financial while its flag is off).
           { syncMode: "force", suggestedTripId: opts?.tripId ?? (claim as any).tripId, fleetTz: await getFleetTimezone() },
         );
-        updated = { ...updated, status: "auto_resolved", matchedClaimId: claimId };
+        updated = { ...updated, status: "auto_resolved", matchedClaimId: resolvedClaimId };
         await kv.set(recordKey, updated);
-        console.log(`[DisputeRefund] ${auto ? "Auto-" : ""}resolved claim ${claimId} as Reimbursed (refund ${id})`);
+        console.log(`[DisputeRefund] ${auto ? "Auto-" : ""}resolved claim ${resolvedClaimId} as Reimbursed (refund ${id})`);
       }
     }
   }
@@ -321,7 +331,7 @@ async function matchRefundToClaim(
   if (settings.disputeRefundTripSyncEnabled) {
     try {
       const tollEntry = await loadTollForClaim(tollTransactionId);
-      const claimForTrip: any = claimId ? await kv.get(`claim:${claimId}`) : null;
+      const claimForTrip: any = resolvedClaimId ? await kv.get(`claim:${resolvedClaimId}`) : null;
       const tripId = opts?.tripId || claimForTrip?.tripId || tollEntry?.tripId || null;
       if (tripId) {
         const trip = await kv.get(`trip:${tripId}`);
