@@ -80,13 +80,17 @@ export function classifyPeriodUnderpaidClaim(
 
 /**
  * Claimless tolls in the underpaid wizard bucket must count as actionable on
- * GET /periods (mirrored in toll_period_controller unclaimed loop). Skipping
- * them allowed Completed weeks with unfinished Expenses Unmatched rows.
+ * GET /periods only while still unlinked. Trip-linked AMOUNT_VARIANCE leftovers
+ * stay on the wizard (financial shortfall gate) and must not keep the period
+ * Outstanding after Finish.
  */
 export function countUnclaimedUnderpaidAsPeriodActionable(
   bucket: 'needs-review' | 'underpaid-claims' | 'deadhead' | 'personal-use' | null,
+  opts?: { isReconciled?: boolean; hasTripId?: boolean },
 ): boolean {
-  return bucket === 'underpaid-claims';
+  if (bucket !== 'underpaid-claims') return false;
+  if (opts?.isReconciled && opts?.hasTripId) return false;
+  return true;
 }
 
 export interface StepCounts {

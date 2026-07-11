@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   countListablePendingUnderpaid,
   evaluateListableUnderpaidShortfall,
+  listFullyCoveredPendingUnderpaid,
   resolvePendingUnderpaidTripId,
 } from './pendingUnderpaidListable';
 import { computeUnderpaidPipelineCounts } from './underpaidPipelineCounts';
@@ -83,7 +84,7 @@ describe('countListablePendingUnderpaid', () => {
     expect(n).toBe(0);
   });
 
-  it('ignores pending when netLoss is at or below threshold', () => {
+  it('does not list fully-covered pending (auto-clear target, not Underpaid Tolls)', () => {
     const pending = [toll({ id: 't1', matchedTripId: 'trip-b', amount: -380 })];
     const n = countListablePendingUnderpaid({
       pendingUnderpaidTolls: pending,
@@ -98,10 +99,69 @@ describe('countListablePendingUnderpaid', () => {
     });
     expect(n).toBe(0);
   });
+
+  it('pools trip refunds — only real shortfall siblings stay listable', () => {
+    // FIFO: first toll fully covered ($380 of $645), second keeps $20 shortfall.
+    const shared = trip({ id: 'trip-shared', tollCharges: 645 });
+    const pending = [
+      toll({ id: 'a', matchedTripId: 'trip-shared', amount: -380, time: '10:00:00' }),
+      toll({ id: 'b', matchedTripId: 'trip-shared', amount: -285, time: '11:00:00' }),
+    ];
+    const n = countListablePendingUnderpaid({
+      pendingUnderpaidTolls: pending,
+      tripMap: new Map([['trip-shared', shared]]),
+      claimByTollId: new Map(),
+      partialByTollId: new Set(),
+      reconciledTollById: new Map(),
+      trips: [shared],
+      disputeRefunds: [],
+      periodWeekKey,
+      fleetTz,
+    });
+    expect(n).toBe(1);
+  });
+});
+
+describe('listFullyCoveredPendingUnderpaid', () => {
+  it('returns fully covered pending for auto-clear', () => {
+    const fullTrip = trip({ id: 'trip-b', tollCharges: 380 });
+    const covered = listFullyCoveredPendingUnderpaid({
+      pendingUnderpaidTolls: [toll({ id: 't1', matchedTripId: 'trip-b', amount: -380 })],
+      tripMap: new Map([['trip-b', fullTrip]]),
+      claimByTollId: new Map(),
+      partialByTollId: new Set(),
+      reconciledTollById: new Map(),
+      trips: [fullTrip],
+      disputeRefunds: [],
+      periodWeekKey,
+      fleetTz,
+    });
+    expect(covered).toHaveLength(1);
+    expect(covered[0].transaction.id).toBe('t1');
+    expect(covered[0].trip.id).toBe('trip-b');
+    expect(covered[0].financials.netLoss).toBeLessThanOrEqual(0.05);
+  });
+
+  it('skips Open-claim tolls (Partially Covered owns them)', () => {
+    const fullTrip = trip({ id: 'trip-b', tollCharges: 380 });
+    const claim = { id: 'c1', status: 'Open', transactionId: 't1', amount: 10 } as Claim;
+    const covered = listFullyCoveredPendingUnderpaid({
+      pendingUnderpaidTolls: [toll({ id: 't1', matchedTripId: 'trip-b', amount: -380 })],
+      tripMap: new Map([['trip-b', fullTrip]]),
+      claimByTollId: new Map([['t1', claim]]),
+      partialByTollId: new Set(),
+      reconciledTollById: new Map(),
+      trips: [fullTrip],
+      disputeRefunds: [],
+      periodWeekKey,
+      fleetTz,
+    });
+    expect(covered).toHaveLength(0);
+  });
 });
 
 describe('computeUnderpaidPipelineCounts + pending', () => {
-  it('does not treat zero-shortfall pending ghosts as actionable', () => {
+  it('does not block Finish for fully-covered pending (cleared / not listable)', () => {
     const fullTrip = trip({ id: 'trip-b', tollCharges: 380 });
     const counts = computeUnderpaidPipelineCounts({
       reconciledTolls: [],
@@ -119,6 +179,29 @@ describe('computeUnderpaidPipelineCounts + pending', () => {
     });
     expect(counts.underpaidTolls).toBe(0);
     expect(counts.actionable).toBe(0);
+  });
+
+  it('counts Open claims as actionable even without a reconciled trip link', () => {
+    const counts = computeUnderpaidPipelineCounts({
+      reconciledTolls: [],
+      periodClaims: [
+        {
+          id: 'c-open',
+          status: 'Open',
+          amount: 10,
+          paidAmount: 370,
+          transactionId: 'toll-orphan',
+        } as Claim,
+      ],
+      allClaims: [],
+      trips: [],
+      disputeRefunds: [],
+      periodWeekKey,
+      fleetTz,
+      pendingUnderpaidTolls: [],
+    });
+    expect(counts.actionable).toBe(1);
+    expect(counts.partialShortfalls).toBe(1);
   });
 
   it('counts listable pending shortfall as actionable', () => {
@@ -169,6 +252,22 @@ describe('evaluateListableUnderpaidShortfall', () => {
       trips: [t],
       disputeRefunds: [],
       allocation: new Map(),
+      periodWeekKey,
+      fleetTz,
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects when netLoss is within tolerance', () => {
+    const t = trip({ id: 'trip-a', tollCharges: 200 });
+    const tx = toll({ id: 't1', tripId: 'trip-a', amount: -200 });
+    const result = evaluateListableUnderpaidShortfall(tx, t, {
+      claimByTollId: new Map(),
+      partialByTollId: new Set(),
+      reconciledTollById: new Map([['t1', tx]]),
+      trips: [t],
+      disputeRefunds: [],
+      allocation: new Map([['t1', 200]]),
       periodWeekKey,
       fleetTz,
     });

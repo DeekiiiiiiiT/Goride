@@ -23,6 +23,7 @@ import { isVisiblePartialShortfallClaim, isTollCoveredByDisputeRefund, isTollInW
 import {
   evaluateListableUnderpaidShortfall,
   resolvePendingUnderpaidTripId,
+  linkPendingUnderpaidToTrips,
 } from "../../../utils/pendingUnderpaidListable";
 import { guardClaimChargeAmount } from "../../../utils/claimChargeGuard";
 import { formatDateJM } from "../../../utils/csv-helper";
@@ -141,9 +142,14 @@ export function UnderpaidClaimsStep({
 
   const claimByTollId = useMemo(() => buildClaimByTollId(allClaims), [allClaims]);
 
+  const linkedPending = useMemo(
+    () => linkPendingUnderpaidToTrips(pendingUnderpaidTolls, suggestions),
+    [pendingUnderpaidTolls, suggestions],
+  );
+
   const allocation = useMemo(
-    () => buildTripRefundAllocation(reconciledTolls, tripMap),
-    [reconciledTolls, tripMap],
+    () => buildTripRefundAllocation([...reconciledTolls, ...linkedPending], tripMap),
+    [reconciledTolls, linkedPending, tripMap],
   );
 
   const visibleTollIds = useMemo(() => {
@@ -169,12 +175,12 @@ export function UnderpaidClaimsStep({
           if (!c.transactionId || !visibleTollIds.has(c.transactionId)) return false;
           return isVisiblePartialShortfallClaim(
             c,
-            reconciledTollById.get(c.transactionId),
+            displayTollById.get(c.transactionId) || reconciledTollById.get(c.transactionId),
             disputeRefunds,
           );
         }),
       ).displayClaims,
-    [claims, visibleTollIds, reconciledTollById, disputeRefunds],
+    [claims, visibleTollIds, displayTollById, reconciledTollById, disputeRefunds],
   );
 
   const partialByTollId = useMemo(

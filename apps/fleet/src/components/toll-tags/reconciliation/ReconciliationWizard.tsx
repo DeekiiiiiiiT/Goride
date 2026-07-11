@@ -27,8 +27,9 @@ import {
 } from "../../../utils/tollBucket";
 import { StepId, StepCounts, STEP_ORDER, computeStepCounts } from "../../../utils/tollPeriodGating";
 import { buildPeriodTollIdSet, isClaimVisibleInPeriod, isTollInWizardPeriod, tollWeekKey, filterTollsToWizardPeriod, assertTollInWizardPeriod } from "../../../utils/tollWeekPeriod";
-import { mergeReconciledTollsForUnderpaid } from "../../../utils/claimByToll";
+import { mergeReconciledTollsForUnderpaid, buildClaimByTollId } from "../../../utils/claimByToll";
 import { computeUnderpaidPipelineCounts } from "../../../utils/underpaidPipelineCounts";
+import { listFullyCoveredPendingUnderpaid } from "../../../utils/pendingUnderpaidListable";
 import { isRecommendedUnlinkedShortfall } from "../../../utils/unlinkedShortfallEligibility";
 import type { UnlinkedShortfallSuggestion } from "../../../hooks/useTollReconciliation";
 import { toast } from "sonner@2.0.3";
@@ -501,7 +502,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
         disputeRefunds: disputeRefunds || [],
         periodWeekKey: period.startDate,
         fleetTz,
-        // Only listable pending shortfalls block Finish (not raw underpaid bucket length).
+        // Fully covered pending (netLoss ~$0) do not block Finish — auto-cleared below.
         pendingUnderpaidTolls: classifiedAllPlatforms.underpaid,
         suggestions,
       });
@@ -521,6 +522,82 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
       suggestions,
     ],
   );
+
+  // Auto-clear claimless underpaid leftovers already covered by trip refunds.
+  const coveredPendingClearKey = useMemo(() => {
+    if (isLoading) return '';
+    const tripMapLocal = new Map(trips.filter((t) => t?.id).map((t) => [t.id, t]));
+    const claimByTollId = buildClaimByTollId(claims);
+    const covered = listFullyCoveredPendingUnderpaid({
+      pendingUnderpaidTolls: classifiedAllPlatforms.underpaid,
+      suggestions,
+      tripMap: tripMapLocal,
+      claimByTollId,
+      partialByTollId: new Set(),
+      reconciledTollById: new Map(
+        (allReconciledTolls.length ? allReconciledTolls : reconciledTolls).map((t) => [t.id, t]),
+      ),
+      trips,
+      disputeRefunds: disputeRefunds || [],
+      periodWeekKey: period.startDate,
+      fleetTz,
+    });
+    return covered.map((c) => `${c.transaction.id}:${c.trip.id}`).sort().join('|');
+  }, [
+    isLoading,
+    trips,
+    claims,
+    classifiedAllPlatforms.underpaid,
+    suggestions,
+    allReconciledTolls,
+    reconciledTolls,
+    disputeRefunds,
+    period.startDate,
+    fleetTz,
+  ]);
+
+  useEffect(() => {
+    if (!coveredPendingClearKey || isLoading) return;
+    let cancelled = false;
+    (async () => {
+      const tripMapLocal = new Map(trips.filter((t) => t?.id).map((t) => [t.id, t]));
+      const claimByTollId = buildClaimByTollId(claims);
+      const covered = listFullyCoveredPendingUnderpaid({
+        pendingUnderpaidTolls: classifiedAllPlatforms.underpaid,
+        suggestions,
+        tripMap: tripMapLocal,
+        claimByTollId,
+        partialByTollId: new Set(),
+        reconciledTollById: new Map(
+          (allReconciledTolls.length ? allReconciledTolls : reconciledTolls).map((t) => [t.id, t]),
+        ),
+        trips,
+        disputeRefunds: disputeRefunds || [],
+        periodWeekKey: period.startDate,
+        fleetTz,
+      });
+      if (covered.length === 0) return;
+      let cleared = 0;
+      for (const row of covered) {
+        if (cancelled) return;
+        try {
+          await reconcile(row.transaction, row.trip);
+          cleared++;
+        } catch {
+          /* best-effort */
+        }
+      }
+      if (!cancelled && cleared > 0) {
+        toast.success(
+          cleared === 1
+            ? 'Cleared 1 fully covered toll from Underpaid'
+            : `Cleared ${cleared} fully covered tolls from Underpaid`,
+        );
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by coveredPendingClearKey
+  }, [coveredPendingClearKey, isLoading, reconcile]);
 
   // Unlinked: pending-hold alone is informational, but Apply / Accept still count.
   const unlinkedSuggestionStatusByTripId = useMemo(() => {
@@ -1162,8 +1239,8 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
         drivers={drivers.map((d) => ({ id: d.id, name: d.name }))}
         preselectedDriverId={driverId}
         onComplete={() => {
-          setActiveStepId('needs-review');
-          void Promise.all([refresh({ autoMatch: false }), refreshClaims()]);
+          // Back to period list so Outstanding/Completed counts refresh after undo.
+          onExit();
         }}
       />
     </div>

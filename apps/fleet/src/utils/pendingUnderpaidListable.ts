@@ -42,6 +42,7 @@ export interface ListableUnderpaidCtx {
 /**
  * Same gates as UnderpaidClaimsStep `pushLoss` — listable only when period-scoped,
  * not on another pipeline tab, and net shortfall exceeds tolerance.
+ * Fully covered pending rows are NOT listable — auto-clear them to matched instead.
  */
 export function evaluateListableUnderpaidShortfall(
   tx: FinancialTransaction,
@@ -77,8 +78,64 @@ export function evaluateListableUnderpaidShortfall(
 }
 
 /**
- * Count post-reset pending underpaid tolls that would appear on Underpaid Tolls.
- * Blind length of the underpaid bucket over-counts ghosts (no trip / $0 shortfall).
+ * Link pending underpaid rows to their trip for refund pooling (matchedTripId /
+ * suggestion). Without this, siblings each credit the full trip refund and
+ * disappear behind netLoss <= 0.
+ */
+export function linkPendingUnderpaidToTrips(
+  pendingUnderpaidTolls: PendingUnderpaidTx[],
+  suggestions?: PendingUnderpaidSuggestions | null,
+): Array<PendingUnderpaidTx & { tripId: string }> {
+  const out: Array<PendingUnderpaidTx & { tripId: string }> = [];
+  for (const tx of pendingUnderpaidTolls) {
+    if (!tx?.id) continue;
+    const tripId = resolvePendingUnderpaidTripId(tx, suggestions);
+    if (!tripId) continue;
+    out.push({ ...tx, tripId });
+  }
+  return out;
+}
+
+function buildPendingAwareCtx(input: {
+  pendingUnderpaidTolls: PendingUnderpaidTx[];
+  suggestions?: PendingUnderpaidSuggestions | null;
+  tripMap: Map<string, Trip>;
+  claimByTollId: Map<string, Claim>;
+  partialByTollId: ReadonlySet<string>;
+  reconciledTollById: Map<string, FinancialTransaction>;
+  trips: Trip[];
+  disputeRefunds: DisputeRefund[];
+  allocation?: TripRefundAllocation;
+  periodWeekKey: string;
+  fleetTz: string;
+}): { linkedPending: Array<PendingUnderpaidTx & { tripId: string }>; ctx: ListableUnderpaidCtx } {
+  const linkedPending = linkPendingUnderpaidToTrips(
+    input.pendingUnderpaidTolls,
+    input.suggestions,
+  );
+  const allocation =
+    input.allocation ??
+    buildTripRefundAllocation(
+      [...input.reconciledTollById.values(), ...linkedPending],
+      input.tripMap,
+    );
+  return {
+    linkedPending,
+    ctx: {
+      claimByTollId: input.claimByTollId,
+      partialByTollId: input.partialByTollId,
+      reconciledTollById: input.reconciledTollById,
+      trips: input.trips,
+      disputeRefunds: input.disputeRefunds,
+      allocation,
+      periodWeekKey: input.periodWeekKey,
+      fleetTz: input.fleetTz,
+    },
+  };
+}
+
+/**
+ * Count pending underpaid tolls with a real shortfall (Underpaid Tolls tab + Finish).
  */
 export function countListablePendingUnderpaid(input: {
   pendingUnderpaidTolls: PendingUnderpaidTx[];
@@ -89,52 +146,78 @@ export function countListablePendingUnderpaid(input: {
   reconciledTollById: Map<string, FinancialTransaction>;
   trips: Trip[];
   disputeRefunds: DisputeRefund[];
-  /** When omitted, built from reconciledTollById values + tripMap. */
   allocation?: TripRefundAllocation;
   periodWeekKey: string;
   fleetTz: string;
 }): number {
-  const {
-    pendingUnderpaidTolls,
-    suggestions,
-    tripMap,
-    claimByTollId,
-    partialByTollId,
-    reconciledTollById,
-    trips,
-    disputeRefunds,
-    periodWeekKey,
-    fleetTz,
-  } = input;
-
-  const allocation =
-    input.allocation ??
-    buildTripRefundAllocation([...reconciledTollById.values()], tripMap);
-
-  const ctx: ListableUnderpaidCtx = {
-    claimByTollId,
-    partialByTollId,
-    reconciledTollById,
-    trips,
-    disputeRefunds,
-    allocation,
-    periodWeekKey,
-    fleetTz,
-  };
-
+  const { linkedPending, ctx } = buildPendingAwareCtx(input);
   let n = 0;
   const seen = new Set<string>();
-  for (const tx of pendingUnderpaidTolls) {
-    if (!tx?.id || seen.has(tx.id)) continue;
-    const tripId = resolvePendingUnderpaidTripId(tx, suggestions);
-    if (!tripId) continue;
-    const trip = tripMap.get(tripId);
+  for (const tx of linkedPending) {
+    if (seen.has(tx.id)) continue;
+    const trip = input.tripMap.get(tx.tripId);
     if (!trip) continue;
-    const linked = { ...tx, tripId };
-    if (evaluateListableUnderpaidShortfall(linked, trip, ctx).ok) {
+    if (evaluateListableUnderpaidShortfall(tx, trip, ctx).ok) {
       seen.add(tx.id);
       n++;
     }
   }
   return n;
+}
+
+export type CoveredPendingClear = {
+  transaction: PendingUnderpaidTx & { tripId: string };
+  trip: Trip;
+  financials: TollFinancials;
+};
+
+/**
+ * Pending underpaid whose trip refund pool already covers the toll (netLoss ≈ 0).
+ * These should be auto-reconciled to the trip — not shown on Underpaid Tolls.
+ */
+export function listFullyCoveredPendingUnderpaid(input: {
+  pendingUnderpaidTolls: PendingUnderpaidTx[];
+  suggestions?: PendingUnderpaidSuggestions | null;
+  tripMap: Map<string, Trip>;
+  claimByTollId: Map<string, Claim>;
+  partialByTollId: ReadonlySet<string>;
+  reconciledTollById: Map<string, FinancialTransaction>;
+  trips: Trip[];
+  disputeRefunds: DisputeRefund[];
+  allocation?: TripRefundAllocation;
+  periodWeekKey: string;
+  fleetTz: string;
+}): CoveredPendingClear[] {
+  const { linkedPending, ctx } = buildPendingAwareCtx(input);
+  const out: CoveredPendingClear[] = [];
+  const seen = new Set<string>();
+
+  for (const tx of linkedPending) {
+    if (seen.has(tx.id)) continue;
+    if (!isTollInWizardPeriod(tx, ctx.periodWeekKey, ctx.fleetTz)) continue;
+
+    const claim = ctx.claimByTollId.get(tx.id);
+    if (ctx.partialByTollId.has(tx.id)) continue;
+    if (claim && ['Sent_to_Driver', 'Submitted_to_Uber', 'Rejected', 'Open'].includes(claim.status)) {
+      continue;
+    }
+
+    const trip = input.tripMap.get(tx.tripId);
+    if (!trip) continue;
+
+    const finCtx = buildTollFinancialsContext(
+      tx,
+      trip,
+      claim,
+      ctx.trips,
+      ctx.disputeRefunds,
+      ctx.allocation,
+    );
+    const financials = calculateTollFinancials(tx, trip, claim, finCtx);
+    if (financials.netLoss > VARIANCE_THRESHOLD) continue;
+
+    seen.add(tx.id);
+    out.push({ transaction: tx, trip, financials });
+  }
+  return out;
 }

@@ -64,8 +64,14 @@ describe('classifyPeriodUnderpaidClaim (toll_period_controller mirror)', () => {
 });
 
 describe('countUnclaimedUnderpaidAsPeriodActionable', () => {
-  it('counts claimless underpaid bucket tolls so Completed cannot ghost past them', () => {
+  it('counts claimless underpaid only while still unlinked', () => {
     expect(countUnclaimedUnderpaidAsPeriodActionable('underpaid-claims')).toBe(true);
+    expect(
+      countUnclaimedUnderpaidAsPeriodActionable('underpaid-claims', {
+        isReconciled: true,
+        hasTripId: true,
+      }),
+    ).toBe(false);
     expect(countUnclaimedUnderpaidAsPeriodActionable('needs-review')).toBe(false);
     expect(countUnclaimedUnderpaidAsPeriodActionable(null)).toBe(false);
   });

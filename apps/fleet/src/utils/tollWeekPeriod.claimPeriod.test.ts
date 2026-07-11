@@ -277,6 +277,16 @@ describe('dispute-covered partial shortfall visibility', () => {
     ).toBe(false);
   });
 
+  it('shows Open claim even before paidAmount is set (no dispute)', () => {
+    expect(
+      isVisiblePartialShortfallClaim(
+        { id: 'c-new', status: 'Open', paidAmount: 0, amount: 50, transactionId: 'toll-new' },
+        null,
+        [],
+      ),
+    ).toBe(true);
+  });
+
   it('shows open partial when no dispute match', () => {
     expect(
       isVisiblePartialShortfallClaim(partialOpen, { unlinkedSourceTripId: 'trip-unlinked' }, []),

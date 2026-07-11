@@ -8,9 +8,11 @@ import { buildTripRefundAllocation } from './tollReconciliation';
 import {
   countListablePendingUnderpaid,
   evaluateListableUnderpaidShortfall,
+  linkPendingUnderpaidToTrips,
   type PendingUnderpaidSuggestions,
   type PendingUnderpaidTx,
 } from './pendingUnderpaidListable';
+import { classifyPeriodUnderpaidClaim } from './tollPeriodGating';
 
 export interface UnderpaidPipelineCounts {
   underpaidTolls: number;
@@ -25,8 +27,8 @@ export interface UnderpaidPipelineCounts {
 }
 
 /**
- * Same rules as UnderpaidClaimsStep tab lists — used for wizard step completion.
- * Optional pendingUnderpaidTolls count only listable shortfalls (not bucket length).
+ * Same rules as UnderpaidClaimsStep tab lists + period-landing Open/claimless
+ * underpaid counts — used for wizard step completion / Finish gating.
  */
 export function computeUnderpaidPipelineCounts(input: {
   reconciledTolls: FinancialTransaction[];
@@ -36,7 +38,7 @@ export function computeUnderpaidPipelineCounts(input: {
   disputeRefunds: DisputeRefund[];
   periodWeekKey: string;
   fleetTz: string;
-  /** Unreconciled underpaid after reset — only listable rows add to actionable. */
+  /** Unreconciled underpaid after reset — trip-anchored rows block Finish. */
   pendingUnderpaidTolls?: PendingUnderpaidTx[];
   suggestions?: PendingUnderpaidSuggestions | null;
 }): UnderpaidPipelineCounts {
@@ -55,7 +57,11 @@ export function computeUnderpaidPipelineCounts(input: {
   const tripMap = new Map(trips.filter((t) => t?.id).map((t) => [t.id, t]));
   const claimByTollId = buildClaimByTollId(allClaims);
   const reconciledTollById = new Map(reconciledTolls.map((t) => [t.id, t]));
-  const allocation = buildTripRefundAllocation(reconciledTolls, tripMap);
+  const linkedPending = linkPendingUnderpaidToTrips(pendingUnderpaidTolls, suggestions);
+  const allocation = buildTripRefundAllocation(
+    [...reconciledTolls, ...linkedPending],
+    tripMap,
+  );
 
   const visibleTollIds = new Set<string>();
   for (const tx of reconciledTolls) {
@@ -121,7 +127,17 @@ export function computeUnderpaidPipelineCounts(input: {
     periodClaims.filter((c) => c.status === 'Rejected'),
   ).displayClaims.length;
 
-  const actionable = underpaidTolls + partialClaims.length + disputeLost;
+  // Open / Rejected / visible partials — same actionable set as period landing.
+  // Dispute-covered Open claims are done (Charge correctly blocks; do not list/count).
+  const actionableClaims = dedupeClaimsForDisplay(
+    periodClaims.filter((c) => {
+      const toll = c.transactionId ? reconciledTollById.get(c.transactionId) : undefined;
+      const isPartial = isVisiblePartialShortfallClaim(c, toll, disputeRefunds);
+      if (c.status === 'Open' && !isPartial) return false;
+      return classifyPeriodUnderpaidClaim(c, { isVisiblePartialShortfall: isPartial }) === 'actionable';
+    }),
+  ).displayClaims.length;
+
   const informational = awaitingDriver + pendingReimbursement;
 
   return {
@@ -130,7 +146,7 @@ export function computeUnderpaidPipelineCounts(input: {
     disputeLost,
     awaitingDriver,
     pendingReimbursement,
-    actionable,
+    actionable: underpaidTolls + actionableClaims,
     informational,
   };
 }

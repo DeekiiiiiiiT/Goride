@@ -56,4 +56,36 @@ describe('computeUnderpaidPipelineCounts', () => {
     expect(counts.actionable).toBe(1);
     expect(counts.disputeLost).toBe(1);
   });
+
+  it('does not count Open claim when a dispute refund already covers the toll', () => {
+    const periodClaims = [
+      {
+        id: 'c-open',
+        status: 'Open',
+        amount: 10,
+        paidAmount: 370,
+        transactionId: 'toll-covered',
+      } as Claim,
+    ];
+    const disputeRefunds = [
+      {
+        id: 'dr-1',
+        status: 'matched',
+        matchedTollId: 'toll-covered',
+        matchedClaimId: null,
+        amount: 10,
+      } as DisputeRefund,
+    ];
+    const counts = computeUnderpaidPipelineCounts({
+      reconciledTolls: [],
+      periodClaims,
+      allClaims: periodClaims,
+      trips: [],
+      disputeRefunds,
+      periodWeekKey,
+      fleetTz,
+    });
+    expect(counts.partialShortfalls).toBe(0);
+    expect(counts.actionable).toBe(0);
+  });
 });

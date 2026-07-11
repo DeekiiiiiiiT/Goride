@@ -125,7 +125,7 @@ export function PeriodResetDialog({
           description: res.errors.slice(0, 3).join('; '),
         });
       } else {
-        toast.success('Period reset complete — tolls are back in Needs Review');
+        toast.success('Period reset complete — back to period list');
       }
       onOpenChange(false);
       onComplete();

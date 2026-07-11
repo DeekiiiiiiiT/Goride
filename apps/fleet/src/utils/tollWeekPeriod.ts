@@ -492,6 +492,7 @@ export function isTollCoveredByDisputeRefund(
 /**
  * Partial shortfall rows visible in Underpaid → Partially Covered.
  * Excludes tolls already closed by a matched dispute refund.
+ * Open claims always list here (fleet still decides) unless a dispute covers them.
  */
 export function isVisiblePartialShortfallClaim(
   claim: Pick<
@@ -510,9 +511,11 @@ export function isVisiblePartialShortfallClaim(
   disputeRefunds: DisputeRefund[],
 ): boolean {
   if (!claim) return false;
-  if (!isActionablePartialShortfall(claim, toll)) return false;
+  if (isTollCoveredByDisputeRefund(claim, disputeRefunds)) return false;
   if (claim.status === 'Resolved' && claim.disputeRefundId) return false;
-  return !isTollCoveredByDisputeRefund(claim, disputeRefunds);
+  // Open always surfaces on Partially Covered (even before paidAmount is set).
+  if (claim.status === 'Open') return true;
+  return isActionablePartialShortfall(claim, toll);
 }
 
 /** True when a claim's toll-first anchor week matches the wizard period week key. */

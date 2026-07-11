@@ -160,9 +160,11 @@ function isTollCoveredByDisputeRefundServer(claim: any, disputeRefunds: any[]): 
 /** Mirrors isVisiblePartialShortfallClaim in apps/fleet/src/utils/tollWeekPeriod.ts. */
 function isVisiblePartialShortfallClaimServer(claim: any, toll: any, disputeRefunds: any[]): boolean {
   if (!claim) return false;
-  if (!isActionablePartialShortfallServer(claim, toll)) return false;
+  if (isTollCoveredByDisputeRefundServer(claim, disputeRefunds)) return false;
   if (claim.status === "Resolved" && claim.disputeRefundId) return false;
-  return !isTollCoveredByDisputeRefundServer(claim, disputeRefunds);
+  if (claim.status === "Open") return true;
+  if (!isActionablePartialShortfallServer(claim, toll)) return false;
+  return true;
 }
 
 /**
@@ -207,7 +209,13 @@ function applyUnderpaidClaimCounts(
     acc.counts["underpaid-claims"].informational++;
     return;
   }
-  if (claim.status === "Rejected" || claim.status === "Open") {
+  if (claim.status === "Rejected") {
+    acc.counts["underpaid-claims"].actionable++;
+    return;
+  }
+  if (claim.status === "Open") {
+    // Matched dispute refund already covers this toll — do not block the period.
+    if (isTollCoveredByDisputeRefundServer(claim, disputeRefunds)) return;
     acc.counts["underpaid-claims"].actionable++;
     return;
   }
@@ -338,15 +346,18 @@ app.get(`${BASE}/periods`, async (c) => {
     }
 
     // Unclaimed tolls → needs-review / personal-use / deadhead / claimless underpaid.
-    // Claimless underpaid_pending must block Completed (wizard Underpaid step still
-    // lists them; skipping here let Kenny's week show Completed with 3 unfinished tolls).
-    // Tolls that already have a claim are counted only via applyUnderpaidClaimCounts.
+    // Claimless underpaid_pending blocks Completed only while still unlinked.
+    // Already trip-linked rows keep stage underpaid_pending (AMOUNT_VARIANCE) until a
+    // claim is filed, but shortfall work is gated by the wizard financials — counting
+    // them here left Kenny's week at "4 to review" after Finish (3 linked $0 leftovers
+    // + 1 dispute-covered Open claim).
     for (const tx of unclaimedTolls) {
       if (!tx?.date) continue;
       if (!tx.workflowStage) anyMissingWorkflowStage = true;
       const bucket = resolvePeriodBucket(tx);
       if (!bucket) continue;
       if (bucket === "underpaid-claims") {
+        if (tx.isReconciled && tx.tripId) continue;
         getOrCreatePeriod(tx.date).counts["underpaid-claims"].actionable++;
         continue;
       }
