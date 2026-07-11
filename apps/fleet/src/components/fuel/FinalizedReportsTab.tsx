@@ -358,7 +358,7 @@ export function FinalizedReportsTab() {
           <div className="text-center space-y-1">
             <p className="text-base font-semibold text-slate-500">No finalized statements yet</p>
             <p className="text-sm">
-              Finalize a week from the Standard Fleet Rule tab to see it here.
+              Finalize a week from Consumption Reconciliation to see it here.
             </p>
           </div>
         </div>

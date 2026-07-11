@@ -58,6 +58,12 @@ interface ReconciliationTableProps {
     drivers?: any[];
     /** Prior finalized snapshots — used to warn when re-finalizing a vehicle/week that was already posted. */
     finalizedReports?: FinalizedFuelReport[];
+    /** When true, week is locked — hide Add Adjustment / mutate CTAs. */
+    periodLocked?: boolean;
+    hideFinalize?: boolean;
+    hideDashboard?: boolean;
+    /** Emit live weekly reports for period wizard strip / gating. */
+    onReportsChange?: (reports: WeeklyFuelReport[]) => void;
     onFinalize?: (reports: WeeklyFuelReport[]) => void;
     onAddAdjustment?: () => void;
     onResolveDispute?: (dispute: FuelDispute) => void;
@@ -74,15 +80,16 @@ export function ReconciliationTable({
     scenarios = [],
     drivers = [],
     finalizedReports = [],
+    periodLocked = false,
+    hideFinalize = false,
+    hideDashboard = false,
+    onReportsChange,
     onFinalize,
     onAddAdjustment,
     onResolveDispute,
     onViewBuckets
 }: ReconciliationTableProps) {
     const [isFinalizeDialogOpen, setIsFinalizeDialogOpen] = React.useState(false);
-
-    // Phase 1 verification: confirm drivers data arrives
-    console.log(`[ReconciliationTable] Phase 1 check — received ${drivers.length} driver(s)`);
 
     const weekStart = dateRange?.from;
     const weekEnd = dateRange?.to || dateRange?.from;
@@ -100,8 +107,6 @@ export function ReconciliationTable({
 
         const startStr = format(weekStart, 'yyyy-MM-dd');
         const endStr = format(weekEnd, 'yyyy-MM-dd');
-
-        console.log(`[ReconciliationTable] Fetching per-period deadhead: ${startStr} to ${endStr}`);
 
         api.getFleetDeadhead(startStr, endStr)
             .then((data: any) => {
@@ -148,7 +153,6 @@ export function ReconciliationTable({
             }
             map.set(vehicle.id, idSet);
         }
-        console.log(`[ReconciliationTable] Phase 2 — Built driver ID map for ${map.size} vehicle(s):`, Array.from(map.entries()).map(([vId, ids]) => ({ vehicleId: vId, driverIds: Array.from(ids) })));
         return map;
     }, [vehicles, drivers]);
 
@@ -156,16 +160,19 @@ export function ReconciliationTable({
         if (!weekStart) return [];
         return vehicles.map(vehicle => {
             const driverIds = driverIdMap.get(vehicle.id);
-            let driverTrips: Trip[];
-            if (driverIds && driverIds.size > 0) {
-                driverTrips = trips.filter(t => driverIds.has(t.driverId));
-            } else {
-                driverTrips = trips;
-            }
-            console.log(`[ReconciliationTable] Phase 2 — Vehicle ${vehicle.id}: driverIds=${driverIds ? Array.from(driverIds).join(',') : '(none)'}, totalTrips=${trips.length}, driverFilteredTrips=${driverTrips.length}`);
+            // Prefer vehicleId so mid-week driver changes don't undercount trips.
+            const driverTrips = trips.filter((t) => {
+                if (t.vehicleId) return t.vehicleId === vehicle.id;
+                if (driverIds && driverIds.size > 0) return driverIds.has(t.driverId);
+                return false;
+            });
             return FuelCalculationService.calculateReconciliation(vehicle, weekStart, weekEnd!, driverTrips, fuelEntries, adjustments, scenarios, deadheadMap?.get(vehicle.id));
         });
     }, [vehicles, trips, fuelEntries, adjustments, weekStart, weekEnd, scenarios, deadheadMap, driverIdMap]);
+
+    useEffect(() => {
+        onReportsChange?.(reports);
+    }, [reports, onReportsChange]);
 
     // Totals
     const totals = useMemo(() => {
@@ -295,7 +302,9 @@ export function ReconciliationTable({
     return (
         <div className="space-y-4">
             {/* Split Dashboard */}
-            <ScenarioSplitDashboard reports={reports} scenarios={scenarios} vehicles={vehicles} />
+            {!hideDashboard && (
+              <ScenarioSplitDashboard reports={reports} scenarios={scenarios} vehicles={vehicles} />
+            )}
 
             {/* Header */}
             <div className="flex items-center justify-between bg-white p-4 rounded-lg border shadow-sm">
@@ -322,14 +331,18 @@ export function ReconciliationTable({
                         <Download className="mr-2 h-4 w-4" />
                         Export
                     </Button>
-                    <Button onClick={() => { setFinanceWarningAcknowledged(false); setIsFinalizeDialogOpen(true); }} disabled={reports.length === 0}>
-                        <FileCheck className="mr-2 h-4 w-4" />
-                        Finalize
-                    </Button>
-                    <Button variant="outline" onClick={onAddAdjustment}>
-                        <TrendingUp className="mr-2 h-4 w-4" />
-                        Add Adjustment
-                    </Button>
+                    {!hideFinalize && !periodLocked && (
+                      <Button onClick={() => { setFinanceWarningAcknowledged(false); setIsFinalizeDialogOpen(true); }} disabled={reports.length === 0}>
+                          <FileCheck className="mr-2 h-4 w-4" />
+                          Finalize
+                      </Button>
+                    )}
+                    {!periodLocked && onAddAdjustment && (
+                      <Button variant="outline" onClick={onAddAdjustment}>
+                          <TrendingUp className="mr-2 h-4 w-4" />
+                          Add Adjustment
+                      </Button>
+                    )}
                 </div>
             </div>
 
@@ -419,7 +432,7 @@ export function ReconciliationTable({
                                                 </div>
                                                 <div className="border-t border-slate-600 pt-2">
                                                     <p className="font-semibold text-amber-400 text-[11px] uppercase tracking-wide mb-1">Company / Driver Split</p>
-                                                    <p className="text-slate-300">100% company-covered. This is always a company expense and never charged to the driver.</p>
+                                                    <p className="text-slate-300">Split follows the Company Ops coverage % on the vehicle&apos;s fuel policy (often 100% company, but configurable).</p>
                                                 </div>
                                             </div>
                                         </TooltipContent>
@@ -639,22 +652,29 @@ export function ReconciliationTable({
                                                             {driverName}
                                                         </span>
                                                     )}
-                                                    {vehicle && !vehicle.fuelScenarioId && (
+                                                    {vehicle && (() => {
+                                                        const assigned = scenarios.find(s => s.id === vehicle.fuelScenarioId);
+                                                        const fallback = scenarios.find(s => s.isDefault) || scenarios[0];
+                                                        const policyName = assigned?.name || fallback?.name;
+                                                        if (!policyName) return null;
+                                                        return (
                                                         <TooltipProvider>
                                                             <Tooltip>
                                                                 <TooltipTrigger asChild>
-                                                                    <span className="inline-flex items-center gap-1 text-[10px] text-amber-600 cursor-help w-fit">
+                                                                    <span className={`inline-flex items-center gap-1 text-[10px] cursor-help w-fit ${assigned ? 'text-slate-500' : 'text-amber-600'}`}>
                                                                         <Info className="h-2.5 w-2.5" />
-                                                                        Using default
+                                                                        {assigned ? policyName : `${policyName} (default)`}
                                                                     </span>
                                                                 </TooltipTrigger>
                                                                 <TooltipContent side="bottom" className="max-w-xs text-xs">
-                                                                    No fuel scenario explicitly assigned to this vehicle — currently falling back to{' '}
-                                                                    {scenarios.find(s => s.isDefault)?.name || 'the default scenario'}. Assign one from the vehicle's detail page if this isn't intentional.
+                                                                    {assigned
+                                                                      ? `Fuel policy assigned to this vehicle: ${policyName}.`
+                                                                      : `No fuel policy explicitly assigned — falling back to ${policyName}. Assign one from Fleet Policy Configuration if this isn't intentional.`}
                                                                 </TooltipContent>
                                                             </Tooltip>
                                                         </TooltipProvider>
-                                                    )}
+                                                        );
+                                                    })()}
                                                 </div>
                                                 {onViewBuckets && vehicle && (
                                                     <TooltipProvider>
@@ -697,6 +717,17 @@ export function ReconciliationTable({
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex flex-col gap-1 items-start">
+                                                {(() => {
+                                                    const rStartYmd = report.weekStart.split('T')[0];
+                                                    const isLocked = periodLocked || finalizedReports.some(
+                                                        (f) => f.vehicleId === report.vehicleId && String(f.weekStart).split('T')[0] === rStartYmd
+                                                    );
+                                                    return (
+                                                        <Badge variant={isLocked ? 'secondary' : 'outline'} className="text-[10px]">
+                                                            {isLocked ? 'Locked' : 'Draft'}
+                                                        </Badge>
+                                                    );
+                                                })()}
                                                 {dispute && (
                                                     <Badge variant={
                                                         dispute.status === 'Open' ? 'destructive' : 
@@ -705,7 +736,7 @@ export function ReconciliationTable({
                                                     className="cursor-pointer hover:opacity-80 transition-opacity"
                                                     onClick={() => onResolveDispute?.(dispute)}
                                                     >
-                                                        {dispute.status === 'Open' ? 'Dispute' : dispute.status}
+                                                        {dispute.status === 'Open' ? 'Disputed' : dispute.status}
                                                     </Badge>
                                                 )}
 
@@ -713,10 +744,6 @@ export function ReconciliationTable({
                                                     <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200">
                                                         {report.pendingCount} Pending
                                                     </Badge>
-                                                )}
-
-                                                {!dispute && (!report.pendingCount || report.pendingCount === 0) && (
-                                                    <span className="text-slate-400 text-xs">-</span>
                                                 )}
                                             </div>
                                         </TableCell>
@@ -873,6 +900,7 @@ export function ReconciliationTable({
                             <TableRow>
                                 <TableCell>Totals</TableCell>
                                 <TableCell></TableCell>
+                                <TableCell></TableCell>
                                 <TableCell className="text-right border-l border-r border-slate-200">{formatCurrency(totals.gasCard)}</TableCell>
                                 
                                 <TableCell className="text-right">{formatCurrency(totals.rideShare)}</TableCell>
@@ -883,7 +911,7 @@ export function ReconciliationTable({
                                     {formatCurrency(totals.misc)}
                                 </TableCell>
 
-                                <TableCell className="text-right text-emerald-700">-</TableCell>
+                                <TableCell className="text-right text-emerald-700">{formatCurrency(totals.company)}</TableCell>
                                 <TableCell className="text-right text-amber-700">{formatCurrency(totals.driver)}</TableCell>
                                 <TableCell className="text-right">-</TableCell>
                             </TableRow>
@@ -902,8 +930,8 @@ export function ReconciliationTable({
                      <span className="font-semibold block mb-1">Company Ops</span>
                      Authorized business errands & maintenance.
                  </div>
-                 <div className="p-3 bg-amber-50 rounded border border-amber-200">
-                     <span className="font-semibold block mb-1 text-amber-800">Deadhead</span>
+                 <div className="p-3 bg-slate-50 rounded border">
+                     <span className="font-semibold block mb-1">Deadhead</span>
                      Repositioning & cruising fuel (work-related, non-trip).
                  </div>
                  <div className="p-3 bg-slate-50 rounded border">

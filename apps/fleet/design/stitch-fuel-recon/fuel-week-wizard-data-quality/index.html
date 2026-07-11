@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Fuel Reconciliation Wizard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "primary": "#3525cd",
+                    "on-surface-variant": "#464555",
+                    "on-primary-container": "#dad7ff",
+                    "on-secondary-fixed": "#002113",
+                    "surface-container": "#f0ecf9",
+                    "primary-fixed-dim": "#c3c0ff",
+                    "on-error-container": "#93000a",
+                    "error": "#ba1a1a",
+                    "surface-dim": "#dcd8e5",
+                    "primary-fixed": "#e2dfff",
+                    "on-surface": "#1b1b24",
+                    "tertiary-container": "#885500",
+                    "secondary-fixed-dim": "#4edea3",
+                    "tertiary": "#684000",
+                    "outline-variant": "#c7c4d8",
+                    "error-container": "#ffdad6",
+                    "surface-variant": "#e4e1ee",
+                    "on-secondary-fixed-variant": "#005236",
+                    "tertiary-fixed": "#ffddb8",
+                    "surface-container-lowest": "#ffffff",
+                    "surface-container-highest": "#e4e1ee",
+                    "surface": "#fcf8ff",
+                    "outline": "#777587",
+                    "on-secondary": "#ffffff",
+                    "on-tertiary-fixed": "#2a1700",
+                    "on-primary": "#ffffff",
+                    "on-tertiary-container": "#ffd4a4",
+                    "inverse-surface": "#302f39",
+                    "primary-container": "#4f46e5",
+                    "surface-bright": "#fcf8ff",
+                    "surface-tint": "#4d44e3",
+                    "surface-container-high": "#eae6f4",
+                    "inverse-primary": "#c3c0ff",
+                    "background": "#fcf8ff",
+                    "secondary-container": "#6cf8bb",
+                    "on-secondary-container": "#00714d",
+                    "on-tertiary-fixed-variant": "#653e00",
+                    "on-error": "#ffffff",
+                    "inverse-on-surface": "#f3effc",
+                    "secondary": "#006c49",
+                    "tertiary-fixed-dim": "#ffb95f",
+                    "on-tertiary": "#ffffff",
+                    "on-primary-fixed-variant": "#3323cc",
+                    "secondary-fixed": "#6ffbbe",
+                    "on-primary-fixed": "#0f0069",
+                    "on-background": "#1b1b24",
+                    "surface-container-low": "#f5f2ff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "density-high": "4px",
+                    "container-padding": "24px",
+                    "component-gap": "8px",
+                    "density-medium": "12px",
+                    "unit": "4px",
+                    "gutter": "16px"
+            },
+            "fontFamily": {
+                    "body-md": ["Inter"],
+                    "label-md": ["Inter"],
+                    "display": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "headline-md": ["Inter"],
+                    "headline-lg": ["Inter"],
+                    "label-sm": ["Inter"],
+                    "body-sm": ["Inter"]
+            },
+            "fontSize": {
+                    "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                    "display": ["36px", {"lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "headline-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "label-sm": ["11px", {"lineHeight": "14px", "fontWeight": "500"}],
+                    "body-sm": ["13px", {"lineHeight": "18px", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .step-inactive { opacity: 0.5; cursor: not-allowed; }
+        .sidebar-active { background-color: #f0ecf9; border-left: 4px solid #3525cd; font-weight: 600; color: #3525cd; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #c7c4d8; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-background text-on-background antialiased flex flex-col h-screen overflow-hidden">
+<!-- Top Navigation Bar (The Anchor) -->
+<header class="bg-surface dark:bg-inverse-surface border-b border-outline-variant dark:border-outline flex justify-between items-center w-full px-container-padding h-14 z-50">
+<div class="flex items-center gap-4">
+<a class="flex items-center gap-2 text-on-surface-variant hover:text-primary transition-colors font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined text-[18px]">arrow_back</span>
+                Back to Periods
+            </a>
+<div class="h-6 w-[1px] bg-outline-variant"></div>
+<h1 class="font-headline-md text-headline-md text-on-surface">Jun 29 – Jul 5, 2026</h1>
+</div>
+<div class="flex items-center gap-component-gap">
+<button class="p-2 hover:bg-surface-variant transition-colors rounded-full cursor-pointer active:opacity-80">
+<span class="material-symbols-outlined text-primary">refresh</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container text-xs font-bold">
+                AD
+            </div>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden">
+<!-- Sidebar Navigation (The Anchor) -->
+<aside class="bg-surface dark:bg-surface-dim border-r border-outline-variant dark:border-outline fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-64 flex flex-col py-4 z-40">
+<div class="px-6 mb-8">
+<h2 class="font-headline-md text-headline-md font-bold text-on-surface">Reconciliation Wizard</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">6 Steps to Finalize</p>
+</div>
+<nav class="flex-1 space-y-1">
+<div class="sidebar-active flex items-center px-6 py-3 gap-3 transition-all duration-200 ease-in-out">
+<span class="material-symbols-outlined">fact_check</span>
+<span class="font-body-sm text-body-sm">Data Quality</span>
+</div>
+<div class="text-on-surface-variant/40 flex items-center px-6 py-3 gap-3 transition-all duration-200 ease-in-out cursor-not-allowed">
+<span class="material-symbols-outlined">gavel</span>
+<span class="font-body-sm text-body-sm">Disputes</span>
+</div>
+<div class="text-on-surface-variant/40 flex items-center px-6 py-3 gap-3 transition-all duration-200 ease-in-out cursor-not-allowed">
+<span class="material-symbols-outlined">policy</span>
+<span class="font-body-sm text-body-sm">Policy Check</span>
+</div>
+<div class="text-on-surface-variant/40 flex items-center px-6 py-3 gap-3 transition-all duration-200 ease-in-out cursor-not-allowed">
+<span class="material-symbols-outlined">search_insights</span>
+<span class="font-body-sm text-body-sm">Leakage</span>
+</div>
+<div class="text-on-surface-variant/40 flex items-center px-6 py-3 gap-3 transition-all duration-200 ease-in-out cursor-not-allowed">
+<span class="material-symbols-outlined">payments</span>
+<span class="font-body-sm text-body-sm">Settlement</span>
+</div>
+<div class="text-on-surface-variant/40 flex items-center px-6 py-3 gap-3 transition-all duration-200 ease-in-out cursor-not-allowed">
+<span class="material-symbols-outlined">task_alt</span>
+<span class="font-body-sm text-body-sm">Finalize</span>
+</div>
+</nav>
+<div class="px-6 mt-auto">
+<button class="w-full py-2 bg-surface-container-highest hover:bg-slate-100 transition-all rounded-lg border border-outline-variant font-label-md text-label-md text-on-surface">
+                    Save Draft
+                </button>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="ml-64 flex-1 flex flex-col bg-slate-50/50 overflow-hidden relative">
+<!-- Financial Strip -->
+<div class="px-container-padding py-density-medium grid grid-cols-1 md:grid-cols-4 gap-gutter mt-4">
+<div class="bg-white p-4 border border-outline-variant rounded-xl shadow-sm">
+<p class="font-label-sm text-label-sm text-on-surface-variant mb-1">Total Spend</p>
+<p class="font-headline-md text-headline-md font-bold text-on-surface">$25,000</p>
+</div>
+<div class="bg-white p-4 border border-outline-variant rounded-xl shadow-sm">
+<p class="font-label-sm text-label-sm text-on-surface-variant mb-1">Company Share</p>
+<p class="font-headline-md text-headline-md font-bold text-on-surface text-primary">$18,800</p>
+</div>
+<div class="bg-white p-4 border border-outline-variant rounded-xl shadow-sm">
+<p class="font-label-sm text-label-sm text-on-surface-variant mb-1">Driver Deduction</p>
+<p class="font-headline-md text-headline-md font-bold text-on-surface">$6,190</p>
+</div>
+<div class="bg-white p-4 border border-outline-variant rounded-xl shadow-sm bg-error-container/20">
+<div class="flex justify-between items-start">
+<p class="font-label-sm text-label-sm text-on-surface-variant mb-1">Net Leakage</p>
+<span class="px-1.5 py-0.5 rounded-full bg-error-container text-on-error-container font-label-sm text-[10px] uppercase">Alert</span>
+</div>
+<p class="font-headline-md text-headline-md font-bold text-error">$910</p>
+</div>
+</div>
+<!-- Content Area Scrollable -->
+<div class="flex-1 overflow-y-auto px-container-padding pb-32 custom-scrollbar">
+<!-- Main Card: Data Quality Review -->
+<div class="bg-white border border-outline-variant rounded-xl shadow-sm mt-4 overflow-hidden">
+<div class="p-6 border-b border-outline-variant">
+<div class="flex items-center gap-3 mb-2">
+<div class="w-10 h-10 rounded-lg bg-tertiary-fixed flex items-center justify-center text-on-tertiary-fixed">
+<span class="material-symbols-outlined">fact_check</span>
+</div>
+<div>
+<h3 class="font-headline-lg text-headline-lg text-on-surface">Data Quality Review</h3>
+<p class="font-body-md text-body-md text-on-surface-variant">Resolve vehicle health issues and pending logs before proceeding.</p>
+</div>
+</div>
+</div>
+<!-- Table Data -->
+<div id="data-table-container">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low">
+<th class="px-6 py-3 font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Vehicle Health</th>
+<th class="px-6 py-3 font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Vehicle ID</th>
+<th class="px-6 py-3 font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Driver Name</th>
+<th class="px-6 py-3 font-label-md text-label-md text-on-surface-variant uppercase tracking-wider text-right">Pending Logs</th>
+<th class="px-6 py-3"></th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant">
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-100 text-red-700 font-label-sm text-label-sm">
+<span class="w-2 h-2 rounded-full bg-red-600 animate-pulse"></span>
+                                            Critical
+                                        </span>
+</td>
+<td class="px-6 py-4 font-body-md text-body-md text-on-surface font-semibold">TRK-2024-001</td>
+<td class="px-6 py-4 font-body-md text-body-md text-on-surface">Jameson Carter</td>
+<td class="px-6 py-4 font-body-md text-body-md text-on-surface text-right">12</td>
+<td class="px-6 py-4 text-right">
+<button class="text-primary hover:underline font-label-md text-label-md">Fix Now</button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 font-label-sm text-label-sm">
+<span class="w-2 h-2 rounded-full bg-amber-600"></span>
+                                            Warning
+                                        </span>
+</td>
+<td class="px-6 py-4 font-body-md text-body-md text-on-surface font-semibold">VAN-9923-FL</td>
+<td class="px-6 py-4 font-body-md text-body-md text-on-surface">Elena Rodriguez</td>
+<td class="px-6 py-4 font-body-md text-body-md text-on-surface text-right">08</td>
+<td class="px-6 py-4 text-right">
+<button class="text-primary hover:underline font-label-md text-label-md">Fix Now</button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 font-label-sm text-label-sm">
+<span class="w-2 h-2 rounded-full bg-amber-600"></span>
+                                            Warning
+                                        </span>
+</td>
+<td class="px-6 py-4 font-body-md text-body-md text-on-surface font-semibold">TRK-2024-045</td>
+<td class="px-6 py-4 font-body-md text-body-md text-on-surface">Marcus Thorne</td>
+<td class="px-6 py-4 font-body-md text-body-md text-on-surface text-right">03</td>
+<td class="px-6 py-4 text-right">
+<button class="text-primary hover:underline font-label-md text-label-md">Fix Now</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Empty State (Hidden by default for this view) -->
+<div class="hidden p-12 flex flex-col items-center text-center" id="empty-state">
+<div class="w-24 h-24 mb-6 rounded-full bg-emerald-50 flex items-center justify-center">
+<span class="material-symbols-outlined text-4xl text-emerald-600" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<h4 class="font-headline-md text-headline-md text-on-surface mb-2">All clear!</h4>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-sm">No data quality issues found for this period. You are ready to proceed to disputes.</p>
+</div>
+</div>
+<!-- Detail Tip Section -->
+<div class="mt-8 flex gap-6">
+<div class="flex-1 bg-surface-container p-6 rounded-xl border border-outline-variant">
+<h5 class="font-label-md text-label-md text-primary uppercase mb-2">Operational Insight</h5>
+<p class="font-body-md text-body-md text-on-surface-variant">Fuel logs are often delayed by 24-48 hours. If critical data is missing, contact your field operations manager before finalizing the settlement to avoid manual adjustments later.</p>
+</div>
+<div class="w-1/3 bg-white border border-outline-variant rounded-xl p-6 shadow-sm overflow-hidden relative">
+<!-- Subtle Background effect -->
+<div class="absolute -right-4 -bottom-4 opacity-10">
+<span class="material-symbols-outlined text-[120px] text-primary">analytics</span>
+</div>
+<h5 class="font-label-md text-label-md text-on-surface-variant mb-4">Integrity Score</h5>
+<div class="flex items-end gap-2 mb-2">
+<span class="text-4xl font-bold text-on-surface">82%</span>
+<span class="font-label-md text-label-md text-error mb-1">↓ 4% vs LW</span>
+</div>
+<div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-amber-500 h-full w-[82%]"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Sticky Footer (The Anchor) -->
+<footer class="absolute bottom-0 right-0 left-0 bg-surface-container dark:bg-surface-container-highest border-t border-outline-variant dark:border-outline flex justify-between items-center px-container-padding py-4 z-50">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-on-surface-variant">info</span>
+<p class="font-label-sm text-label-sm text-on-surface-variant">Complete all data quality resolutions to proceed.</p>
+</div>
+<div class="flex gap-4">
+<button class="px-6 py-2.5 rounded-lg border border-outline-variant bg-white text-on-surface-variant font-label-md text-label-md hover:bg-slate-50 transition-colors">
+                        View Log History
+                    </button>
+<button class="px-6 py-2.5 rounded-lg bg-primary/40 text-on-primary font-label-md text-label-md cursor-not-allowed opacity-70" disabled="">
+                        Continue to Disputes
+                    </button>
+</div>
+</footer>
+</main>
+</div>
+<!-- Micro-interaction for table rows -->
+<script>
+        document.querySelectorAll('tbody tr').forEach(row => {
+            row.addEventListener('click', () => {
+                // Future expansion: open detail drawer
+                console.log('Row clicked - opening details');
+            });
+        });
+
+        // Example logic for empty state toggle (not used in demo but ready)
+        function toggleEmptyState(show) {
+            const table = document.getElementById('data-table-container');
+            const empty = document.getElementById('empty-state');
+            if (show) {
+                table.classList.add('hidden');
+                empty.classList.remove('hidden');
+            } else {
+                table.classList.remove('hidden');
+                empty.classList.add('hidden');
+            }
+        }
+    </script>
+</body></html>

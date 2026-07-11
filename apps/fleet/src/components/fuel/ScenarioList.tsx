@@ -1,13 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from "../ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
-import { Loader2, Plus, Trash2, Edit2, Star, Fuel, ShieldCheck, AlertCircle, AlertTriangle, Car } from 'lucide-react';
+import { Loader2, Plus, Trash2, Edit2, Star, AlertTriangle, Car, Copy, UserPlus } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { fuelService } from '../../services/fuelService';
 import { api } from '../../services/api';
 import { FuelScenario, FuelRule } from '../../types/fuel';
 import { ScenarioEditor } from './ScenarioEditor';
+import { FuelCoverageMatrix } from './FuelCoverageMatrix';
+import { AssignVehiclesToPolicySheet, type AssignVehicleRow } from './AssignVehiclesToPolicySheet';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,51 +20,74 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../ui/alert-dialog";
+import {
+  SAMPLE_WEEK_COSTS,
+  splitAllCategoryCosts,
+  sumSplitTotals,
+} from '../../utils/fuelCoverageSplit';
+import { orphanVehicles, vehiclesForPolicy } from '../../utils/fuelPolicyAssignment';
+
+function vehiclePlate(v: any): string {
+  return v.licensePlate || v.plate || v.name || v.id?.slice(0, 8) || 'Vehicle';
+}
 
 export function ScenarioList() {
     const [scenarios, setScenarios] = useState<FuelScenario[]>([]);
     const [vehicles, setVehicles] = useState<any[]>([]);
+    const [drivers, setDrivers] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [isEditorOpen, setIsEditorOpen] = useState(false);
     const [editingScenario, setEditingScenario] = useState<FuelScenario | null>(null);
     const [deleteId, setDeleteId] = useState<string | null>(null);
+    const [assignTarget, setAssignTarget] = useState<FuelScenario | null>(null);
 
-    useEffect(() => {
-        loadScenarios();
-        api.getVehicles().then(setVehicles).catch(() => setVehicles([]));
-    }, []);
-
-    const loadScenarios = async () => {
+    const loadAll = async () => {
         setLoading(true);
         try {
-            const data = await fuelService.getFuelScenarios();
-            setScenarios(data);
+            const [scen, vehs, drvs] = await Promise.all([
+                fuelService.getFuelScenarios(),
+                api.getVehicles().catch(() => []),
+                api.getDrivers().catch(() => []),
+            ]);
+            setScenarios(scen);
+            setVehicles(vehs || []);
+            setDrivers(drvs || []);
         } catch (e) {
             console.error(e);
-            toast.error("Failed to load scenarios");
+            toast.error("Failed to load fuel policies");
         } finally {
             setLoading(false);
         }
     };
 
-    // Step 9: editing/deleting a scenario immediately and retroactively changes
-    // live/draft reconciliation numbers for every vehicle referencing it (there's
-    // no snapshotting of the coverage-% rules that applied at the time for
-    // unfinalized weeks). Surface how many vehicles are affected before an admin
-    // commits a change, since this isn't otherwise visible anywhere.
+    useEffect(() => {
+        loadAll();
+    }, []);
+
+    const driverName = (driverId?: string | null) => {
+        if (!driverId) return 'Unassigned';
+        const d = drivers.find((x: any) => x.id === driverId || x.driverId === driverId);
+        if (!d) return 'Unassigned';
+        return d.name || [d.firstName, d.lastName].filter(Boolean).join(' ') || 'Unassigned';
+    };
+
+    const policyLabelForVehicle = (v: any): string => {
+        if (!v.fuelScenarioId) {
+            const def = scenarios.find((s) => s.isDefault);
+            return def ? `Default · ${def.name}` : 'Default';
+        }
+        const s = scenarios.find((x) => x.id === v.fuelScenarioId);
+        return s ? s.name : 'Unknown (orphan)';
+    };
+
     const getAffectedVehicleCount = (scenario: FuelScenario): number =>
-        vehicles.filter((v: any) =>
-            scenario.isDefault ? !v.fuelScenarioId || v.fuelScenarioId === scenario.id : v.fuelScenarioId === scenario.id
-        ).length;
+        vehiclesForPolicy(scenario, vehicles).length;
+
+    const orphans = useMemo(() => orphanVehicles(vehicles, scenarios), [vehicles, scenarios]);
 
     const handleSave = async (scenario: FuelScenario) => {
         try {
-            // Server enforces at most one isDefault:true scenario (unsets any
-            // other default in the same request) — this optimistic local update
-            // just mirrors that so the UI doesn't flash a stale second "Default"
-            // badge before the next reload.
             const saved = await fuelService.saveFuelScenario(scenario);
-
             setScenarios(prev => {
                 const index = prev.findIndex(s => s.id === saved.id);
                 if (index >= 0) {
@@ -70,25 +95,42 @@ export function ScenarioList() {
                 }
                 return [...(saved.isDefault ? prev.map(s => ({ ...s, isDefault: false })) : prev), saved];
             });
-
-            toast.success("Scenario saved");
+            toast.success("Policy saved");
             setIsEditorOpen(false);
             setEditingScenario(null);
         } catch (e: any) {
             console.error(e);
-            toast.error(e?.message || "Failed to save scenario");
+            toast.error(e?.message || "Failed to save policy");
         }
     };
 
     const handleDelete = async () => {
         if (!deleteId) return;
         try {
+            const orphanIds = vehicles
+                .filter((v: any) => v.fuelScenarioId === deleteId)
+                .map((v: any) => v.id);
             await fuelService.deleteFuelScenario(deleteId);
+            // Clear orphan assignments so vehicles fall back to Default cleanly
+            for (const id of orphanIds) {
+                const v = vehicles.find((x: any) => x.id === id);
+                if (!v) continue;
+                try {
+                    await api.saveVehicle({ ...v, fuelScenarioId: undefined });
+                } catch (err) {
+                    console.error('Failed to clear fuelScenarioId after delete', err);
+                }
+            }
             setScenarios(prev => prev.filter(s => s.id !== deleteId));
-            toast.success("Scenario deleted");
+            if (orphanIds.length) {
+                setVehicles((prev) =>
+                    prev.map((v) => (orphanIds.includes(v.id) ? { ...v, fuelScenarioId: undefined } : v)),
+                );
+            }
+            toast.success("Policy deleted");
         } catch (e: any) {
             console.error(e);
-            toast.error(e?.message || "Failed to delete scenario");
+            toast.error(e?.message || "Failed to delete policy");
         } finally {
             setDeleteId(null);
         }
@@ -97,52 +139,106 @@ export function ScenarioList() {
     const handleSetDefault = async (scenario: FuelScenario) => {
         if (scenario.isDefault) return;
         try {
-            const updated = { ...scenario, isDefault: true };
-            await fuelService.saveFuelScenario(updated);
-            // Reload all to ensure consistency or manual update
-            loadScenarios(); 
-            toast.success("Default scenario updated");
+            await fuelService.saveFuelScenario({ ...scenario, isDefault: true });
+            await loadAll();
+            toast.success("Default policy updated");
         } catch (e) {
             console.error(e);
             toast.error("Failed to update default");
         }
     };
 
-    const getRuleSummary = (rules: FuelRule[], category: 'Fuel' | 'Maintenance' | 'Tolls') => {
-        const rule = rules.find(r => r.category === category);
-        if (!rule) return <span className="text-slate-400 italic">Not Covered</span>;
-
-        let text = '';
-        if (rule.coverageType === 'Full') text = '100% Covered';
-        else if (rule.coverageType === 'Percentage') text = `${rule.coverageValue}% Covered (base rate)`;
-        else if (rule.coverageType === 'Fixed_Amount') text = `$${rule.coverageValue} Allowance`;
-
-        return (
-            <div className="flex items-center gap-2 text-sm">
-                <span className="font-medium text-slate-700">{text}</span>
-                {rule.conditions?.maxAmount && (
-                    <span className="text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
-                        Max: ${rule.conditions.maxAmount}
-                    </span>
-                )}
-            </div>
-        );
+    const handleDuplicate = (scenario: FuelScenario) => {
+        const fuelRule = scenario.rules.find((r) => r.category === 'Fuel');
+        const clone: FuelScenario = {
+            id: crypto.randomUUID(),
+            name: `${scenario.name} (Copy)`,
+            description: scenario.description,
+            isDefault: false,
+            rules: fuelRule
+                ? [{ ...fuelRule, id: crypto.randomUUID() }]
+                : [],
+        };
+        setEditingScenario(clone);
+        setIsEditorOpen(true);
     };
 
-    // Step 7: surface the 5 granular per-category %s that actually drive
-    // reconciliation math — a single flattened "50% Covered" line previously
-    // hid whatever Ride Share/Company Ops/Deadhead/Personal/Misc were really
-    // set to. Fallback chain matches fuelCalculationService.ts's getCoverage()
-    // exactly (see the Step 1 fix in ScenarioEditor.tsx/ScenarioSplitDashboard.tsx).
-    const getGranularCoverage = (rule: FuelRule): { label: string; value: number }[] | null => {
-        if (rule.coverageType !== 'Percentage') return null;
-        return [
-            { label: 'Ride Share', value: rule.rideShareCoverage ?? rule.coverageValue },
-            { label: 'Company Ops', value: rule.companyUsageCoverage ?? rule.coverageValue },
-            { label: 'Deadhead', value: rule.deadheadCoverage ?? rule.companyUsageCoverage ?? rule.coverageValue },
-            { label: 'Personal', value: rule.personalCoverage ?? rule.coverageValue },
-            { label: 'Misc', value: rule.miscCoverage ?? rule.coverageValue },
-        ];
+    const assignRows: AssignVehicleRow[] = useMemo(() => {
+        if (!assignTarget) return [];
+        return vehicles.map((v: any) => ({
+            id: v.id,
+            plate: vehiclePlate(v),
+            driverName: driverName(v.currentDriverId),
+            currentPolicyLabel: policyLabelForVehicle(v),
+            alreadyAssigned: assignTarget.isDefault
+                ? !v.fuelScenarioId || v.fuelScenarioId === assignTarget.id
+                : v.fuelScenarioId === assignTarget.id,
+        }));
+    }, [assignTarget, vehicles, drivers, scenarios]);
+
+    const handleAssignConfirm = async (selectedIds: string[]) => {
+        if (!assignTarget) return;
+        const selected = new Set(selectedIds);
+        let ok = 0;
+        let fail = 0;
+        const nextVehicles = [...vehicles];
+
+        for (let i = 0; i < nextVehicles.length; i++) {
+            const v = nextVehicles[i];
+            let nextId: string | undefined | null = v.fuelScenarioId;
+
+            if (assignTarget.isDefault) {
+                // Selected → use Default (clear custom id). Unselected left unchanged.
+                if (!selected.has(v.id)) continue;
+                nextId = undefined;
+            } else {
+                if (selected.has(v.id)) {
+                    nextId = assignTarget.id;
+                } else if (v.fuelScenarioId === assignTarget.id) {
+                    nextId = undefined; // unchecked → back to Default
+                } else {
+                    continue;
+                }
+            }
+
+            const same =
+                (nextId === undefined || nextId === null) && !v.fuelScenarioId
+                    ? true
+                    : nextId === v.fuelScenarioId;
+            if (same) continue;
+
+            const updated = { ...v, fuelScenarioId: nextId || undefined };
+            try {
+                await api.saveVehicle(updated);
+                nextVehicles[i] = updated;
+                ok++;
+            } catch (e) {
+                console.error(e);
+                fail++;
+            }
+        }
+
+        setVehicles(nextVehicles);
+        if (fail === 0) toast.success(`Updated ${ok} vehicle assignment${ok !== 1 ? 's' : ''}`);
+        else if (ok === 0) toast.error('Failed to update assignments');
+        else toast.error(`Updated ${ok}, failed ${fail}`);
+    };
+
+    const clearOrphan = async (vehicleId: string) => {
+        const v = vehicles.find((x) => x.id === vehicleId);
+        if (!v) return;
+        try {
+            await api.saveVehicle({ ...v, fuelScenarioId: undefined });
+            setVehicles((prev) => prev.map((x) => (x.id === vehicleId ? { ...x, fuelScenarioId: undefined } : x)));
+            toast.success('Assignment cleared — vehicle uses Default');
+        } catch (e: any) {
+            toast.error(e?.message || 'Failed to clear assignment');
+        }
+    };
+
+    const examplePreview = (rule: FuelRule | undefined) => {
+        const split = splitAllCategoryCosts(SAMPLE_WEEK_COSTS, rule);
+        return sumSplitTotals(split);
     };
 
     if (loading) {
@@ -155,87 +251,169 @@ export function ScenarioList() {
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h3 className="text-lg font-medium text-slate-900">Fuel Scenarios</h3>
-                    <p className="text-sm text-slate-500">Define coverage rules for different fleet segments.</p>
+                    <h3 className="text-lg font-medium text-slate-900">Fuel Policies</h3>
+                    <p className="text-sm text-slate-500">
+                        Create policies outside Default, then assign vehicles to them.
+                    </p>
                 </div>
-                <Button onClick={() => { setEditingScenario(null); setIsEditorOpen(true); }}>
+                <Button
+                    className="shrink-0"
+                    onClick={() => { setEditingScenario(null); setIsEditorOpen(true); }}
+                >
                     <Plus className="h-4 w-4 mr-2" />
-                    New Scenario
+                    New Policy
                 </Button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {scenarios.map(scenario => (
-                    <Card key={scenario.id} className={`relative group transition-all hover:shadow-md ${scenario.isDefault ? 'border-indigo-500 ring-1 ring-indigo-500 bg-indigo-50/10' : ''}`}>
-                        <CardHeader className="pb-3">
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <CardTitle className="text-base">{scenario.name}</CardTitle>
-                                        {scenario.isDefault && (
-                                            <Badge variant="secondary" className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100 border-0">
-                                                Default
-                                            </Badge>
-                                        )}
-                                        <Badge variant="outline" className="gap-1 text-slate-500 font-normal" title="Vehicles currently using this scenario">
-                                            <Car className="h-3 w-3" />
-                                            {getAffectedVehicleCount(scenario)}
-                                        </Badge>
-                                    </div>
-                                    <CardDescription className="line-clamp-2 min-h-[40px]">
-                                        {scenario.description || "No description provided."}
-                                    </CardDescription>
-                                </div>
-                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditingScenario(scenario); setIsEditorOpen(true); }}>
-                                        <Edit2 className="h-4 w-4 text-slate-500" />
-                                    </Button>
-                                    {!scenario.isDefault && (
-                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleSetDefault(scenario)} title="Set as Default">
-                                            <Star className="h-4 w-4 text-slate-400" />
-                                        </Button>
-                                    )}
-                                    {/* Delete requires: not the default, and not the last remaining scenario
-                                        (server rejects both with a 409 — hide the option pre-emptively). */}
-                                    {!scenario.isDefault && scenarios.length > 1 && (
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-red-50 hover:text-red-600" onClick={() => setDeleteId(scenario.id)} title="Delete Scenario">
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                    )}
-                                </div>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                            <div className="p-2 bg-orange-50 rounded-lg flex items-center gap-3">
-                                <div className="bg-orange-100 p-1.5 rounded-md text-orange-600">
-                                    <Fuel className="h-4 w-4" />
-                                </div>
-                                <div className="flex-1">
-                                    <div className="text-xs text-orange-800 font-semibold mb-0.5">Fuel</div>
-                                    {getRuleSummary(scenario.rules, 'Fuel')}
-                                </div>
-                            </div>
-                            {(() => {
-                                const rule = scenario.rules.find(r => r.category === 'Fuel');
-                                const granular = rule ? getGranularCoverage(rule) : null;
-                                if (!granular) return null;
-                                return (
-                                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 px-1">
-                                        {granular.map(({ label, value }) => (
-                                            <div key={label} className="flex items-center justify-between text-xs">
-                                                <span className="text-slate-500">{label}</span>
-                                                <span className="font-medium text-slate-700">{value}%</span>
+            {orphans.length > 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
+                    <div className="flex items-start gap-2 text-amber-900">
+                        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                        <p className="text-sm font-medium">
+                            {orphans.length} vehicle{orphans.length !== 1 ? 's' : ''} reference a missing policy and fall back to Default.
+                        </p>
+                    </div>
+                    <ul className="space-y-1 pl-6">
+                        {orphans.map((v) => (
+                            <li key={v.id} className="flex items-center justify-between gap-2 text-xs text-amber-900">
+                                <span>{vehiclePlate(v)} · {driverName(v.currentDriverId)}</span>
+                                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => clearOrphan(v.id)}>
+                                    Clear assignment
+                                </Button>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
+            {scenarios.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-slate-200 py-12 text-center text-sm text-slate-400">
+                    No fuel policies yet. Create a Default policy to get started.
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                    {scenarios.map((scenario) => {
+                        const rule = scenario.rules.find((r) => r.category === 'Fuel');
+                        const assigned = vehiclesForPolicy(scenario, vehicles);
+                        const preview = examplePreview(rule);
+                        return (
+                            <Card
+                                key={scenario.id}
+                                className={`relative transition-all hover:shadow-md ${
+                                    scenario.isDefault ? 'border-indigo-300 ring-1 ring-indigo-200' : 'border-slate-200'
+                                }`}
+                            >
+                                <CardHeader className="pb-3 border-b border-slate-100">
+                                    <div className="flex flex-wrap items-start justify-between gap-2">
+                                        <div className="min-w-0 space-y-1">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <CardTitle className="text-base">{scenario.name}</CardTitle>
+                                                {scenario.isDefault && (
+                                                    <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100 border-0">
+                                                        Default
+                                                    </Badge>
+                                                )}
+                                                <Badge variant="outline" className="gap-1 text-slate-500 font-normal">
+                                                    <Car className="h-3 w-3" />
+                                                    {assigned.length} vehicle{assigned.length !== 1 ? 's' : ''}
+                                                </Badge>
                                             </div>
-                                        ))}
+                                            <CardDescription className="line-clamp-2">
+                                                {scenario.description || 'No description provided.'}
+                                            </CardDescription>
+                                        </div>
                                     </div>
-                                );
-                            })()}
-                        </CardContent>
-                    </Card>
-                ))}
-            </div>
+                                </CardHeader>
+                                <CardContent className="space-y-4 pt-4">
+                                    <FuelCoverageMatrix rule={rule} compact />
+
+                                    <div>
+                                        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                            Assigned vehicles
+                                        </p>
+                                        {assigned.length === 0 ? (
+                                            <p className="text-xs text-slate-400">No vehicles on this policy yet.</p>
+                                        ) : (
+                                            <ul className="space-y-1">
+                                                {assigned.slice(0, 5).map((v: any) => (
+                                                    <li key={v.id} className="text-xs text-slate-700">
+                                                        <span className="font-medium">{vehiclePlate(v)}</span>
+                                                        <span className="text-slate-400"> · </span>
+                                                        {driverName(v.currentDriverId)}
+                                                    </li>
+                                                ))}
+                                                {assigned.length > 5 && (
+                                                    <li className="text-xs text-slate-400">+{assigned.length - 5} more</li>
+                                                )}
+                                            </ul>
+                                        )}
+                                    </div>
+
+                                    <div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                                        Example week preview:{' '}
+                                        <span className="font-medium text-indigo-700">
+                                            Company ${preview.company.toFixed(0)}
+                                        </span>
+                                        {' · '}
+                                        <span className="font-medium text-rose-600">
+                                            Driver ${preview.driver.toFixed(0)}
+                                        </span>
+                                    </div>
+
+                                    <div className="flex flex-wrap gap-2 pt-1">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-8"
+                                            onClick={() => { setEditingScenario(scenario); setIsEditorOpen(true); }}
+                                        >
+                                            <Edit2 className="h-3.5 w-3.5 mr-1.5" />
+                                            Edit
+                                        </Button>
+                                        <Button variant="outline" size="sm" className="h-8" onClick={() => handleDuplicate(scenario)}>
+                                            <Copy className="h-3.5 w-3.5 mr-1.5" />
+                                            Duplicate
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-8"
+                                            onClick={() => setAssignTarget(scenario)}
+                                        >
+                                            <UserPlus className="h-3.5 w-3.5 mr-1.5" />
+                                            Assign vehicles
+                                        </Button>
+                                        {!scenario.isDefault && (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-8"
+                                                onClick={() => handleSetDefault(scenario)}
+                                            >
+                                                <Star className="h-3.5 w-3.5 mr-1.5" />
+                                                Make default
+                                            </Button>
+                                        )}
+                                        {!scenario.isDefault && scenarios.length > 1 && (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-8 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                                                onClick={() => setDeleteId(scenario.id)}
+                                            >
+                                                <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                                                Delete
+                                            </Button>
+                                        )}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        );
+                    })}
+                </div>
+            )}
 
             <ScenarioEditor
                 isOpen={isEditorOpen}
@@ -245,13 +423,22 @@ export function ScenarioList() {
                 affectedVehicleCount={editingScenario ? getAffectedVehicleCount(editingScenario) : 0}
             />
 
+            <AssignVehiclesToPolicySheet
+                open={!!assignTarget}
+                onOpenChange={(open) => !open && setAssignTarget(null)}
+                policyName={assignTarget?.name || ''}
+                isDefaultPolicy={!!assignTarget?.isDefault}
+                vehicles={assignRows}
+                onConfirm={handleAssignConfirm}
+            />
+
             <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Scenario?</AlertDialogTitle>
+                        <AlertDialogTitle>Delete Policy?</AlertDialogTitle>
                         <AlertDialogDescription asChild>
                             <div className="space-y-2">
-                                <p>This will permanently remove this configuration. Vehicles assigned to this scenario may revert to default rules.</p>
+                                <p>This permanently removes this policy. Assigned vehicles will be cleared back to Default.</p>
                                 {(() => {
                                     const scenario = scenarios.find(s => s.id === deleteId);
                                     const count = scenario ? getAffectedVehicleCount(scenario) : 0;
@@ -260,7 +447,7 @@ export function ScenarioList() {
                                         <div className="flex items-start gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded text-amber-900">
                                             <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                                             <span className="text-sm">
-                                                {count} vehicle{count !== 1 ? 's' : ''} currently {count !== 1 ? 'use' : 'uses'} this scenario. Their live (unfinalized) reconciliation numbers will change immediately.
+                                                {count} vehicle{count !== 1 ? 's' : ''} currently {count !== 1 ? 'use' : 'uses'} this policy. Live (unfinalized) reconciliation numbers will change immediately.
                                             </span>
                                         </div>
                                     );

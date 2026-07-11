@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Consumption Reconciliation | Precision Ops</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-container-highest": "#e4e1ee",
+                    "primary": "#3525cd",
+                    "primary-fixed-dim": "#c3c0ff",
+                    "on-tertiary-fixed-variant": "#653e00",
+                    "on-background": "#1b1b24",
+                    "on-surface-variant": "#464555",
+                    "tertiary": "#684000",
+                    "secondary-fixed": "#6ffbbe",
+                    "outline-variant": "#c7c4d8",
+                    "on-secondary-fixed-variant": "#005236",
+                    "background": "#fcf8ff",
+                    "surface-container-low": "#f5f2ff",
+                    "outline": "#777587",
+                    "surface-container-lowest": "#ffffff",
+                    "inverse-on-surface": "#f3effc",
+                    "on-primary-fixed": "#0f0069",
+                    "inverse-surface": "#302f39",
+                    "surface-dim": "#dcd8e5",
+                    "secondary-container": "#6cf8bb",
+                    "on-tertiary-fixed": "#2a1700",
+                    "error-container": "#ffdad6",
+                    "on-primary": "#ffffff",
+                    "inverse-primary": "#c3c0ff",
+                    "on-primary-container": "#dad7ff",
+                    "on-error": "#ffffff",
+                    "tertiary-container": "#885500",
+                    "surface-variant": "#e4e1ee",
+                    "primary-container": "#4f46e5",
+                    "on-secondary-fixed": "#002113",
+                    "surface": "#fcf8ff",
+                    "secondary": "#006c49",
+                    "secondary-fixed-dim": "#4edea3",
+                    "on-error-container": "#93000a",
+                    "surface-tint": "#4d44e3",
+                    "tertiary-fixed": "#ffddb8",
+                    "on-primary-fixed-variant": "#3323cc",
+                    "on-secondary-container": "#00714d",
+                    "surface-container-high": "#eae6f4",
+                    "on-tertiary": "#ffffff",
+                    "on-secondary": "#ffffff",
+                    "surface-bright": "#fcf8ff",
+                    "on-tertiary-container": "#ffd4a4",
+                    "primary-fixed": "#e2dfff",
+                    "on-surface": "#1b1b24",
+                    "error": "#ba1a1a",
+                    "surface-container": "#f0ecf9",
+                    "tertiary-fixed-dim": "#ffb95f"
+            },
+            "borderRadius": {
+                    "DEFAULT": "6px",
+                    "lg": "6px",
+                    "xl": "8px",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "unit": "4px",
+                    "density-medium": "12px",
+                    "component-gap": "8px",
+                    "container-padding": "24px",
+                    "gutter": "16px",
+                    "density-high": "4px"
+            },
+            "fontFamily": {
+                    "label-sm": ["Inter"],
+                    "headline-md": ["Inter"],
+                    "body-sm": ["Inter"],
+                    "display": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "headline-lg": ["Inter"],
+                    "body-md": ["Inter"],
+                    "label-md": ["Inter"]
+            },
+            "fontSize": {
+                    "label-sm": ["11px", {"lineHeight": "14px", "fontWeight": "500"}],
+                    "headline-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "body-sm": ["13px", {"lineHeight": "18px", "fontWeight": "400"}],
+                    "display": ["36px", {"lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+            vertical-align: middle;
+            font-size: 20px;
+        }
+        .step-chip {
+            display: flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface">
+<!-- SideNavBar Shell -->
+<aside class="fixed left-0 top-0 h-full w-[260px] bg-surface-container-lowest border-r border-outline-variant flex flex-col py-24 z-50">
+<div class="px-6 mb-8">
+<h1 class="font-headline-md text-headline-md font-bold text-primary">Precision Ops</h1>
+<p class="text-body-sm text-on-surface-variant">Fleet Admin</p>
+</div>
+<nav class="flex-1 px-3 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container transition-colors rounded" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-body-sm text-body-sm">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container transition-colors rounded" href="#">
+<span class="material-symbols-outlined">local_shipping</span>
+<span class="font-body-sm text-body-sm">Fleet Console</span>
+</a>
+<!-- Active Section Group -->
+<div class="pt-2">
+<div class="flex items-center gap-3 px-3 py-2 bg-surface-container-high text-primary border-l-4 border-primary font-medium">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">ev_station</span>
+<span class="font-body-sm text-body-sm">Fuel Management</span>
+</div>
+<div class="ml-9 mt-1 space-y-1">
+<a class="block px-3 py-1.5 text-primary bg-surface-container-low font-semibold text-body-sm rounded" href="#">
+                        Consumption Reconciliation
+                    </a>
+<a class="block px-3 py-1.5 text-on-surface-variant hover:text-on-surface text-body-sm" href="#">
+                        Fuel Cards
+                    </a>
+<a class="block px-3 py-1.5 text-on-surface-variant hover:text-on-surface text-body-sm" href="#">
+                        Transaction Logs
+                    </a>
+</div>
+</div>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container transition-colors rounded" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-body-sm text-body-sm">Configuration</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container transition-colors rounded" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span class="font-body-sm text-body-sm">Reports</span>
+</a>
+</nav>
+<div class="px-3 border-t border-outline-variant pt-4 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container transition-colors rounded" href="#">
+<span class="material-symbols-outlined">help</span>
+<span class="font-body-sm text-body-sm">Support</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container transition-colors rounded text-error" href="#">
+<span class="material-symbols-outlined">logout</span>
+<span class="font-body-sm text-body-sm">Sign Out</span>
+</a>
+</div>
+</aside>
+<!-- TopNavBar Shell -->
+<header class="fixed top-0 right-0 w-[calc(100%-260px)] h-16 bg-surface border-b border-outline-variant flex justify-between items-center px-10 z-40">
+<div class="flex items-center gap-8">
+<span class="font-headline-sm text-headline-sm font-semibold text-on-surface">Precision Operations</span>
+<nav class="flex gap-6">
+<a class="font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors" href="#">Fleet</a>
+<a class="font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors" href="#">Inventory</a>
+<a class="font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors" href="#">Logistics</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex gap-2 mr-4 border-r border-outline-variant pr-4">
+<button class="w-9 h-9 flex items-center justify-center text-on-surface-variant hover:bg-surface-container rounded transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="w-9 h-9 flex items-center justify-center text-on-surface-variant hover:bg-surface-container rounded transition-colors">
+<span class="material-symbols-outlined">history</span>
+</button>
+</div>
+<div class="flex items-center gap-2 cursor-pointer active:opacity-80 transition-opacity">
+<div class="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center text-on-primary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">account_circle</span>
+</div>
+<div class="text-right hidden lg:block">
+<p class="font-label-md text-label-md leading-none">Admin User</p>
+<p class="text-[10px] text-on-surface-variant">Global Fleet</p>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content -->
+<main class="ml-[260px] pt-16 min-h-screen bg-background">
+<div class="max-w-[1200px] mx-auto px-10 py-12">
+<!-- Page Header -->
+<div class="mb-10">
+<h2 class="font-headline-lg text-headline-lg text-on-surface mb-1">Consumption Reconciliation</h2>
+<p class="text-body-md text-on-surface-variant">Close each fuel week step by step — same cadence as toll periods.</p>
+</div>
+<!-- Tabs Navigation -->
+<div class="flex gap-8 border-b border-outline-variant mb-8">
+<button class="pb-3 px-2 font-label-md text-label-md text-primary border-b-2 border-primary">
+                    Outstanding
+                </button>
+<button class="pb-3 px-2 font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors">
+                    Completed
+                </button>
+</div>
+<!-- Outstanding Tab Content -->
+<div class="space-y-6">
+<!-- Period Card 1 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6 transition-all hover:border-outline">
+<div class="flex-1 space-y-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 bg-surface-container flex items-center justify-center rounded">
+<span class="material-symbols-outlined text-on-surface-variant">calendar_month</span>
+</div>
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Jun 29 – Jul 5, 2026</h3>
+<div class="flex gap-4 mt-1">
+<span class="text-body-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">local_shipping</span>
+                                        42 vehicles
+                                    </span>
+<span class="text-body-sm text-on-surface-variant">Total Spend: <strong class="text-on-surface">$12,450.00</strong></span>
+<span class="text-body-sm text-error font-medium">Net Leakage: $340.50</span>
+</div>
+</div>
+</div>
+<!-- Step Chips Container -->
+<div class="flex flex-wrap gap-2 pt-2">
+<div class="step-chip bg-amber-50 text-amber-800 border border-amber-200">
+<span class="w-4 h-4 bg-amber-200 rounded-full flex items-center justify-center text-[10px] mr-1.5">2</span>
+                                Data quality
+                            </div>
+<div class="step-chip text-secondary border border-secondary">
+<span class="material-symbols-outlined text-[14px] mr-1.5" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                Disputes
+                            </div>
+<div class="step-chip text-secondary border border-secondary">
+<span class="material-symbols-outlined text-[14px] mr-1.5" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                Policy check
+                            </div>
+<div class="step-chip bg-amber-50 text-amber-800 border border-amber-200">
+<span class="w-4 h-4 bg-amber-200 rounded-full flex items-center justify-center text-[10px] mr-1.5">1</span>
+                                Leakage
+                            </div>
+<div class="step-chip text-on-surface-variant border border-outline-variant">
+                                Settlement
+                            </div>
+<div class="step-chip text-outline border border-outline-variant opacity-50">
+<span class="material-symbols-outlined text-[14px] mr-1.5">lock</span>
+                                Finalize
+                            </div>
+</div>
+</div>
+<div class="flex items-center">
+<button class="bg-primary text-on-primary px-6 py-2.5 rounded font-label-md text-label-md hover:bg-primary-container transition-colors shadow-sm active:scale-95">
+                            Open week
+                        </button>
+</div>
+</div>
+<!-- Period Card 2 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6 transition-all hover:border-outline">
+<div class="flex-1 space-y-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 bg-surface-container flex items-center justify-center rounded">
+<span class="material-symbols-outlined text-on-surface-variant">calendar_month</span>
+</div>
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Jun 22 – Jun 28, 2026</h3>
+<div class="flex gap-4 mt-1">
+<span class="text-body-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">local_shipping</span>
+                                        38 vehicles
+                                    </span>
+<span class="text-body-sm text-on-surface-variant">Total Spend: <strong class="text-on-surface">$11,280.40</strong></span>
+<span class="text-body-sm text-error font-medium">Net Leakage: $112.20</span>
+</div>
+</div>
+</div>
+<!-- Step Chips Container -->
+<div class="flex flex-wrap gap-2 pt-2">
+<div class="step-chip bg-amber-50 text-amber-800 border border-amber-200">
+<span class="w-4 h-4 bg-amber-200 rounded-full flex items-center justify-center text-[10px] mr-1.5">4</span>
+                                Data quality
+                            </div>
+<div class="step-chip text-on-surface-variant border border-outline-variant">
+                                Disputes
+                            </div>
+<div class="step-chip text-on-surface-variant border border-outline-variant">
+                                Policy check
+                            </div>
+<div class="step-chip text-on-surface-variant border border-outline-variant">
+                                Leakage
+                            </div>
+<div class="step-chip text-on-surface-variant border border-outline-variant">
+                                Settlement
+                            </div>
+<div class="step-chip text-outline border border-outline-variant opacity-50">
+<span class="material-symbols-outlined text-[14px] mr-1.5">lock</span>
+                                Finalize
+                            </div>
+</div>
+</div>
+<div class="flex items-center">
+<button class="bg-primary text-on-primary px-6 py-2.5 rounded font-label-md text-label-md hover:bg-primary-container transition-colors shadow-sm active:scale-95">
+                            Open week
+                        </button>
+</div>
+</div>
+<!-- Period Card 3 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6 transition-all hover:border-outline">
+<div class="flex-1 space-y-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 bg-surface-container flex items-center justify-center rounded">
+<span class="material-symbols-outlined text-on-surface-variant">calendar_month</span>
+</div>
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Jun 15 – Jun 21, 2026</h3>
+<div class="flex gap-4 mt-1">
+<span class="text-body-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">local_shipping</span>
+                                        45 vehicles
+                                    </span>
+<span class="text-body-sm text-on-surface-variant">Total Spend: <strong class="text-on-surface">$14,100.00</strong></span>
+<span class="text-body-sm text-secondary font-medium">No leakage identified</span>
+</div>
+</div>
+</div>
+<!-- Step Chips Container -->
+<div class="flex flex-wrap gap-2 pt-2">
+<div class="step-chip text-secondary border border-secondary">
+<span class="material-symbols-outlined text-[14px] mr-1.5" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                Data quality
+                            </div>
+<div class="step-chip text-secondary border border-secondary">
+<span class="material-symbols-outlined text-[14px] mr-1.5" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                Disputes
+                            </div>
+<div class="step-chip text-secondary border border-secondary">
+<span class="material-symbols-outlined text-[14px] mr-1.5" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                Policy check
+                            </div>
+<div class="step-chip text-secondary border border-secondary">
+<span class="material-symbols-outlined text-[14px] mr-1.5" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                Leakage
+                            </div>
+<div class="step-chip bg-amber-50 text-amber-800 border border-amber-200">
+<span class="w-4 h-4 bg-amber-200 rounded-full flex items-center justify-center text-[10px] mr-1.5">1</span>
+                                Settlement
+                            </div>
+<div class="step-chip text-outline border border-outline-variant opacity-50">
+<span class="material-symbols-outlined text-[14px] mr-1.5">lock</span>
+                                Finalize
+                            </div>
+</div>
+</div>
+<div class="flex items-center">
+<button class="bg-primary text-on-primary px-6 py-2.5 rounded font-label-md text-label-md hover:bg-primary-container transition-colors shadow-sm active:scale-95">
+                            Open week
+                        </button>
+</div>
+</div>
+<!-- Completed Example Section (Hidden or for reference) -->
+<div class="pt-12 opacity-60 grayscale-[0.5]">
+<div class="flex items-center gap-2 mb-4">
+<span class="h-px bg-outline-variant flex-1"></span>
+<span class="text-label-md text-on-surface-variant uppercase tracking-wider">Recently Completed</span>
+<span class="h-px bg-outline-variant flex-1"></span>
+</div>
+<div class="bg-surface-container-low border border-outline-variant rounded p-6 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 bg-surface-container-highest flex items-center justify-center rounded">
+<span class="material-symbols-outlined text-secondary">check_circle</span>
+</div>
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Jun 08 – Jun 14, 2026</h3>
+<div class="flex items-center gap-3 mt-1">
+<span class="bg-secondary-container text-on-secondary-container text-[10px] font-bold px-2 py-0.5 rounded uppercase">Completed</span>
+<span class="text-body-sm text-on-surface-variant">Settled on Jun 16, 2026</span>
+</div>
+</div>
+</div>
+<button class="border border-outline text-on-surface-variant px-4 py-2 rounded text-label-md font-medium hover:bg-surface-container transition-colors">
+                            Reset Period
+                        </button>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Contextual FAB (Hidden on this screen as per rules, but included if needed for high-level dashboard only) -->
+<script>
+        // Micro-interactions
+        document.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const ripple = document.createElement('span');
+                ripple.classList.add('ripple');
+                this.appendChild(ripple);
+                setTimeout(() => ripple.remove(), 600);
+            });
+        });
+
+        // Tab switching logic (UI only)
+        const tabs = document.querySelectorAll('.max-w-\\[1200px\\] nav button');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(t => t.classList.remove('text-primary', 'border-b-2', 'border-primary'));
+                tabs.forEach(t => t.classList.add('text-on-surface-variant'));
+                tab.classList.remove('text-on-surface-variant');
+                tab.classList.add('text-primary', 'border-b-2', 'border-primary');
+            });
+        });
+    </script>
+</body></html>

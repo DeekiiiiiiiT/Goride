@@ -10,20 +10,21 @@ export function FuelConfiguration() {
             <CardHeader className="px-0 pt-0">
                 <div className="flex justify-between items-start">
                     <div>
-                        <CardTitle>Fuel Configuration</CardTitle>
+                        <CardTitle>Fleet Policy Configuration</CardTitle>
                         <CardDescription>
-                            Manage expense coverage scenarios and rules for your fleet.
+                            Manage company and driver expense splits for fuel.
                         </CardDescription>
                     </div>
                 </div>
             </CardHeader>
             <CardContent className="px-0 space-y-8">
-                <Alert className="bg-blue-50 border-blue-200 text-blue-900">
-                    <Info className="h-4 w-4 text-blue-600" />
-                    <AlertTitle>About Scenarios</AlertTitle>
-                    <AlertDescription className="text-blue-800">
-                        Scenarios allow you to define different expense coverage rules (e.g., "Company Car" vs. "Rental"). 
-                        Assign these scenarios to vehicles or drivers to automate reimbursement calculations.
+                <Alert className="bg-slate-50 border-slate-200 text-slate-900">
+                    <Info className="h-4 w-4 text-indigo-600" />
+                    <AlertTitle>How policies work</AlertTitle>
+                    <AlertDescription className="text-slate-700">
+                        The Default policy applies to vehicles without a custom assignment.
+                        Create additional policies for different company/driver splits, then assign vehicles to them.
+                        Drivers inherit the policy through the vehicle they are on.
                     </AlertDescription>
                 </Alert>
 

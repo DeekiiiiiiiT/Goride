@@ -45,6 +45,8 @@ interface BucketReconciliationViewProps {
     dateRange?: DateRange;
     onClose?: () => void;
     onRefresh?: () => void;
+    /** When period is Locked, Charge Gap is read-only. */
+    periodLocked?: boolean;
 }
 
 export function BucketReconciliationView({ 
@@ -54,7 +56,8 @@ export function BucketReconciliationView({
     transactions = [],
     adjustments = [],
     dateRange,
-    onRefresh
+    onRefresh,
+    periodLocked = false,
 }: BucketReconciliationViewProps) {
     const [isPosting, setIsPosting] = React.useState<string | null>(null);
     const [unifiedAnchors, setUnifiedAnchors] = React.useState<{ id: string; date: string; odometer: number }[] | null>(null);
@@ -240,7 +243,7 @@ export function BucketReconciliationView({
                 <History className="h-12 w-12 text-slate-300 mb-4" />
                 <h3 className="text-lg font-medium text-slate-900">No Buckets in Selected Period</h3>
                 <p className="text-sm text-slate-500 max-w-xs mt-2">
-                    No stop-to-stop buckets overlap with the selected date range. Try expanding the calendar filter.
+                    No stop-to-stop buckets overlap with the selected week period. Try another week.
                 </p>
                 <p className="text-xs text-slate-400 mt-2">{buckets.length} total bucket{buckets.length !== 1 ? 's' : ''} exist across all time.</p>
             </div>
@@ -309,9 +312,6 @@ export function BucketReconciliationView({
                             <CardTitle className="text-lg">Stop-to-Stop Buckets</CardTitle>
                             <CardDescription>Precise fuel consumption between odometer anchors</CardDescription>
                         </div>
-                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                            Phase 3 Active
-                        </Badge>
                     </div>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -423,6 +423,7 @@ export function BucketReconciliationView({
                                                         <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-emerald-50 text-emerald-700 border-emerald-100 uppercase font-bold">
                                                             Posted
                                                         </Badge>
+                                                        {!periodLocked && (
                                                         <TooltipProvider>
                                                             <Tooltip>
                                                                 <TooltipTrigger asChild>
@@ -441,7 +442,13 @@ export function BucketReconciliationView({
                                                                 <TooltipContent>Revert (Undo) Deduction</TooltipContent>
                                                             </Tooltip>
                                                         </TooltipProvider>
+                                                        )}
+                                                        {periodLocked && (
+                                                          <span className="text-[10px] text-slate-400">Locked</span>
+                                                        )}
                                                     </div>
+                                                ) : periodLocked ? (
+                                                    <span className="text-[10px] text-slate-400">Read-only</span>
                                                 ) : (
                                                     <Button 
                                                         size="sm" 

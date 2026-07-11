@@ -5,8 +5,13 @@
 import { FuelEntry, MileageAdjustment, WeeklyFuelReport, FuelScenario, FuelRule, OdometerBucket } from '../types/fuel';
 import { Vehicle } from '../types/vehicle';
 import { Trip } from '../types/data';
+import {
+  getCategoryCoverageSplit as splitCategory,
+  splitAllCategoryCosts,
+  type FuelCoverageCategory,
+} from '../utils/fuelCoverageSplit';
 
-export type FuelCoverageCategory = 'rideShare' | 'companyUsage' | 'deadhead' | 'personal' | 'misc';
+export type { FuelCoverageCategory };
 
 /** Per-vehicle deadhead attribution passed in from the API (Phase 2) */
 export interface VehicleDeadheadInput {
@@ -108,40 +113,14 @@ export const FuelCalculationService = {
 
     /**
      * Resolves the company/driver split for one cost category under a Fuel rule.
-     * Fallback chain per category (must stay in sync with ScenarioEditor.tsx's
-     * display pre-fill and ScenarioSplitDashboard.tsx's tile math — all three
-     * used to disagree, which is the "config doesn't match reconciliation" bug):
-     *   rideShare / companyUsage / personal / misc: <category>Coverage ?? coverageValue
-     *   deadhead: deadheadCoverage ?? companyUsageCoverage ?? coverageValue
-     * Extracted as a standalone pure function so this fallback chain is directly
-     * unit-testable without fabricating a full vehicle/trips/entries/scenario set.
+     * Delegates to fuelCoverageSplit (shared with ScenarioSplitDashboard / policy cards).
      */
     getCategoryCoverageSplit: (
         category: FuelCoverageCategory,
         amount: number,
         rule: FuelRule | undefined
     ): { company: number; driver: number } => {
-        if (!rule) return { company: amount, driver: 0 };
-
-        let coveragePercent = rule.coverageValue;
-        if (category === 'rideShare' && rule.rideShareCoverage !== undefined) coveragePercent = rule.rideShareCoverage;
-        if (category === 'companyUsage' && rule.companyUsageCoverage !== undefined) coveragePercent = rule.companyUsageCoverage;
-        if (category === 'deadhead' && rule.deadheadCoverage !== undefined) coveragePercent = rule.deadheadCoverage;
-        else if (category === 'deadhead' && rule.companyUsageCoverage !== undefined) coveragePercent = rule.companyUsageCoverage;
-        if (category === 'personal' && rule.personalCoverage !== undefined) coveragePercent = rule.personalCoverage;
-        if (category === 'misc' && rule.miscCoverage !== undefined) coveragePercent = rule.miscCoverage;
-
-        if (rule.coverageType === 'Full') {
-            return { company: amount, driver: 0 };
-        } else if (rule.coverageType === 'Percentage') {
-            const companyPay = amount * (coveragePercent / 100);
-            return { company: companyPay, driver: amount - companyPay };
-        } else if (rule.coverageType === 'Fixed_Amount') {
-            const companyPay = Math.min(amount, rule.coverageValue);
-            return { company: companyPay, driver: amount - companyPay };
-        }
-
-        return { company: amount, driver: 0 };
+        return splitCategory(category, amount, rule);
     },
 
     /**
@@ -166,11 +145,7 @@ export const FuelCalculationService = {
                              scenarios[0];
 
         // Helper to get rule for a specific category
-        const getCoverage = (category: FuelCoverageCategory, amount: number) => {
-            if (!activeScenario) return { company: amount, driver: 0 }; // Default to company pays all if no scenario
-            const rule = activeScenario.rules.find(r => r.category === 'Fuel');
-            return FuelCalculationService.getCategoryCoverageSplit(category, amount, rule);
-        };
+        const fuelRule = activeScenario?.rules.find(r => r.category === 'Fuel');
 
         // 2. Filter data for this vehicle and week
         const vehicleEntries = fuelEntries.filter(e => 
@@ -276,12 +251,22 @@ export const FuelCalculationService = {
         // 6. Calculate Leakage (Miscellaneous) — deadheadCost is now subtracted as an explained category
         const miscellaneousCost = totalGasCardCost - (rideShareCost + companyUsageCost + deadheadCost + personalUsageCost);
 
-        // 7. Split Costs dynamically using Scenario Rules
-        const rideShareSplit = getCoverage('rideShare', rideShareCost);
-        const companyUsageSplit = getCoverage('companyUsage', companyUsageCost);
-        const deadheadSplit = getCoverage('deadhead', deadheadCost); // Deadhead is work-related, uses companyUsage rule
-        const personalSplit = getCoverage('personal', personalUsageCost);
-        const miscSplit = getCoverage('misc', miscellaneousCost);
+        // 7. Split Costs dynamically using Scenario Rules (shared contract)
+        const weekSplit = splitAllCategoryCosts(
+            {
+                rideShare: rideShareCost,
+                companyUsage: companyUsageCost,
+                deadhead: deadheadCost,
+                personal: personalUsageCost,
+                misc: miscellaneousCost,
+            },
+            fuelRule,
+        );
+        const rideShareSplit = { company: weekSplit.company.rideShare, driver: weekSplit.driver.rideShare };
+        const companyUsageSplit = { company: weekSplit.company.companyUsage, driver: weekSplit.driver.companyUsage };
+        const deadheadSplit = { company: weekSplit.company.deadhead, driver: weekSplit.driver.deadhead };
+        const personalSplit = { company: weekSplit.company.personal, driver: weekSplit.driver.personal };
+        const miscSplit = { company: weekSplit.company.misc, driver: weekSplit.driver.misc };
 
         const companyShare = rideShareSplit.company + companyUsageSplit.company + deadheadSplit.company + personalSplit.company + miscSplit.company;
         const driverShare = rideShareSplit.driver + companyUsageSplit.driver + deadheadSplit.driver + personalSplit.driver + miscSplit.driver;

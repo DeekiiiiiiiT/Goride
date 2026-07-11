@@ -2,24 +2,25 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { FuelLayout } from '../components/fuel/FuelLayout';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { Fuel, Plus, CreditCard, Banknote, Upload, RefreshCw, History, Loader2, Link2, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Fuel, Plus, CreditCard, Banknote, Upload, RefreshCw, Loader2, Link2, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { FuelCardList } from '../components/fuel/FuelCardList';
 import { FuelCardModal } from '../components/fuel/FuelCardModal';
 import { FuelLogModal } from '../components/fuel/FuelLogModal';
 import { FuelLogTable } from '../components/fuel/FuelLogTable';
 import { ReportsPage } from '../components/fuel/ReportsPage';
 import { FuelConfiguration } from '../components/fuel/FuelConfiguration';
-import { ReconciliationTable } from '../components/fuel/ReconciliationTable';
-import { BucketReconciliationView } from '../components/fuel/BucketReconciliationView';
-import { DatePickerWithRange } from '../components/ui/date-range-picker';
 import { MileageAdjustmentModal } from '../components/fuel/MileageAdjustmentModal';
+import { FuelPeriodLandingPage } from '../components/fuel/reconciliation/FuelPeriodLandingPage';
+import { FuelPeriodWizard } from '../components/fuel/reconciliation/FuelPeriodWizard';
+import { FuelPeriodResetDialog } from '../components/fuel/reconciliation/FuelPeriodResetDialog';
+import { FuelReconBusyProvider } from '../components/fuel/reconciliation/fuelReconBusyLock';
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "../components/ui/sheet";
+  deriveFuelReconciliationPeriods,
+  listFuelWeekOptionsForLanding,
+  type FuelReconciliationPeriod,
+} from '../utils/fuelPeriodStatus';
+import { fuelWeekBoundsFromPeriodId } from '../utils/fuelWeekPeriod';
+import { useFleetTimezone } from '../utils/timezoneDisplay';
 import { DisputeResolutionModal } from '../components/fuel/DisputeResolutionModal';
 import { FuelReimbursementTable } from '../components/fuel/FuelReimbursementTable';
 import { SubmitExpenseModal } from '../components/fuel/SubmitExpenseModal';
@@ -32,8 +33,6 @@ import { settlementService } from '../services/settlementService';
 import { FuelDisputeService } from '../services/fuelDisputeService';
 import { api } from '../services/api';
 import { FinalizedReportsTab } from '../components/fuel/FinalizedReportsTab';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { Badge } from '../components/ui/badge';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,7 +51,6 @@ import type { FuelCard, FuelEntry, FuelScenario, MileageAdjustment, FuelDispute,
 import { FuelCalculationService } from '../services/fuelCalculationService';
 import type { FinancialTransaction } from '../types/data';
 import type { Trip } from '../types/data';
-import type { Vehicle } from '../types/vehicle';
 
 export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, onTabChange }: { 
     defaultTab?: string, 
@@ -64,6 +62,11 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
   useEffect(() => {
     setActiveTab(defaultTab);
   }, [defaultTab]);
+
+  const fleetTz = useFleetTimezone();
+  const [selectedFuelPeriod, setSelectedFuelPeriod] = useState<FuelReconciliationPeriod | null>(null);
+  const [resetFuelPeriod, setResetFuelPeriod] = useState<FuelReconciliationPeriod | null>(null);
+  const [showFuelArchive, setShowFuelArchive] = useState(false);
 
   // Decoupled Date Range States for specific audit views
   const [logDateRange, setLogDateRange] = useState<DateRange | undefined>({
@@ -80,6 +83,20 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
       from: startOfWeek(new Date(), { weekStartsOn: 1 }),
       to: endOfWeek(new Date(), { weekStartsOn: 1 })
   });
+
+  // Anchor reconciliation week to fleet timezone when TZ loads / changes
+  useEffect(() => {
+    if (!fleetTz || selectedFuelPeriod) return;
+    const weeks = listFuelWeekOptionsForLanding(1, fleetTz);
+    const w = weeks[0];
+    if (!w) return;
+    const [sy, sm, sd] = w.startDate.split('-').map(Number);
+    const [ey, em, ed] = w.endDate.split('-').map(Number);
+    setReconciliationDateRange({
+      from: new Date(sy, sm - 1, sd),
+      to: new Date(ey, em - 1, ed),
+    });
+  }, [fleetTz]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fuel Card State
   const [cards, setCards] = useState<FuelCard[]>([]);
@@ -111,17 +128,32 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // Phase 3: Bucket View State
-  const [selectedBucketVehicle, setSelectedBucketVehicle] = useState<Vehicle | null>(null);
-  const [isBucketSheetOpen, setIsBucketSheetOpen] = useState(false);
-
   // Assignment Data
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [drivers, setDrivers] = useState<any[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [scenarios, setScenarios] = useState<FuelScenario[]>([]);
   const [finalizedReports, setFinalizedReports] = useState<FinalizedFuelReport[]>([]);
-  const finalizedCount = finalizedReports.length;
+  const fuelPeriods = useMemo(() => {
+    const weeks = listFuelWeekOptionsForLanding(16, fleetTz || undefined);
+    return deriveFuelReconciliationPeriods({
+      weekOptions: weeks,
+      vehicles,
+      fuelEntries: logs,
+      disputes,
+      finalizedReports,
+      scenarios,
+    });
+  }, [fleetTz, vehicles, logs, disputes, finalizedReports, scenarios]);
+
+  const outstandingFuelPeriods = useMemo(
+    () => fuelPeriods.filter((p) => p.status === 'outstanding'),
+    [fuelPeriods],
+  );
+  const completedFuelPeriods = useMemo(
+    () => fuelPeriods.filter((p) => p.status === 'completed'),
+    [fuelPeriods],
+  );
 
   // Effect to reload trips when Reconciliation Date Range changes
   useEffect(() => {
@@ -827,6 +859,14 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
                   entry.reconciliationStatus === 'Pending' // Only process pending items
               );
 
+              const prior = findPrior(report.vehicleId, rStart);
+
+              // No-op guard: do not rewrite finalized snapshots when nothing new to post
+              if (relevantEntries.length === 0) {
+                  if (prior) continue;
+                  // First-time lock with zero pending still saves a snapshot so the week can Complete
+              }
+
               // Same blended ratio settlementService uses to split these entries —
               // computed here too so the snapshot's cumulative posted totals stay
               // in lockstep with what actually gets posted to the ledger.
@@ -845,7 +885,6 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
               // the cost attributed to already-posted entries). Track the cumulative
               // total actually posted to the ledger separately so drift is visible
               // rather than silently overwritten.
-              const prior = findPrior(report.vehicleId, rStart);
               const postedDriverShare = (prior?.postedDriverShare ?? prior?.driverShare ?? 0) + newlyPostedDriverShare;
               const postedCompanyShare = (prior?.postedCompanyShare ?? prior?.companyShare ?? 0) + newlyPostedCompanyShare;
 
@@ -891,6 +930,11 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
           }
 
           // Persist snapshots to server (non-blocking — settlement is already committed)
+          if (snapshots.length === 0) {
+            toast.info("No pending items found to finalize.");
+            return;
+          }
+
           try {
             await api.saveFinalizedReports(snapshots);
           } catch (snapErr: any) {
@@ -901,9 +945,10 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
           if (successCount > 0) {
               toast.success(`Successfully finalized ${successCount} statements and posted to ledger.`);
           } else {
-              toast.info("No pending items found to finalize.");
+              toast.success(`Week locked — ${snapshots.length} snapshot(s) saved.`);
           }
 
+          setSelectedFuelPeriod(null);
           await loadData(true); // Reload everything
       } catch (e: any) {
           console.error(e);
@@ -925,7 +970,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
       pageDescription = "Forensic analysis of spatial accuracy, cryptographic binding, and systemic drift.";
   } else if (activeTab === 'reconciliation') {
       pageTitle = "Consumption Reconciliation";
-      pageDescription = "Compare actual gas card charges against estimated operating costs.";
+      pageDescription = "Close each Monday–Sunday week with gated steps — Outstanding vs Completed.";
   } else if (activeTab === 'reimbursements') {
       pageTitle = "Review Queue";
       pageDescription = "Review and approve driver fuel submissions.";
@@ -1051,49 +1096,76 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
       )}
 
       {activeTab === 'reconciliation' && (
-        <Tabs defaultValue="auto-generated" className="space-y-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start gap-3">
-            <TabsList className="flex-wrap">
-              <TabsTrigger value="auto-generated">
-                <span className="hidden sm:inline">Standard Fleet Rule</span>
-                <span className="sm:hidden">Fleet Rule</span>
-              </TabsTrigger>
-              <TabsTrigger value="finalized" className="gap-1.5">
-                Finalized
-                {finalizedCount > 0 && (
-                  <Badge variant="secondary" className="ml-1 h-5 min-w-5 px-1.5 text-xs">
-                    {finalizedCount}
-                  </Badge>
-                )}
-              </TabsTrigger>
-            </TabsList>
-            <div className="flex items-center gap-2">
-              <DatePickerWithRange date={reconciliationDateRange} setDate={setReconciliationDateRange} />
+        <FuelReconBusyProvider>
+        <div className="space-y-4">
+          {showFuelArchive ? (
+            <div className="space-y-3">
+              <Button type="button" variant="ghost" size="sm" onClick={() => setShowFuelArchive(false)}>
+                ← Back to periods
+              </Button>
+              <FinalizedReportsTab />
             </div>
-          </div>
-
-          <TabsContent value="auto-generated" className="space-y-4">
-            <ReconciliationTable  
-                vehicles={vehicles}
-                trips={trips}
-                fuelEntries={logs}
-                adjustments={adjustments}
-                disputes={disputes}
-                dateRange={reconciliationDateRange}
-                scenarios={scenarios}
-                drivers={drivers}
-                finalizedReports={finalizedReports}
-                onFinalize={handleFinalize}
-                onAddAdjustment={() => { setAdjustmentDefaults({}); setIsAdjustmentModalOpen(true); }}
-                onResolveDispute={(dispute) => { setSelectedDispute(dispute); setIsResolutionModalOpen(true); }}
-                onViewBuckets={(vehicle) => { setSelectedBucketVehicle(vehicle); setIsBucketSheetOpen(true); }}
+          ) : selectedFuelPeriod && reconciliationDateRange ? (
+            <FuelPeriodWizard
+              period={
+                fuelPeriods.find((p) => p.id === selectedFuelPeriod.id) || selectedFuelPeriod
+              }
+              vehicles={vehicles}
+              trips={trips}
+              fuelEntries={logs}
+              adjustments={adjustments}
+              disputes={disputes}
+              scenarios={scenarios}
+              drivers={drivers}
+              finalizedReports={finalizedReports}
+              dateRange={reconciliationDateRange}
+              isRefreshing={isRefreshing}
+              onBack={() => setSelectedFuelPeriod(null)}
+              onRefresh={() => loadData(true)}
+              onFinalize={handleFinalize}
+              onAddAdjustment={() => { setAdjustmentDefaults({}); setIsAdjustmentModalOpen(true); }}
+              onResolveDispute={(dispute) => { setSelectedDispute(dispute); setIsResolutionModalOpen(true); }}
+              onOpenConfiguration={() => {
+                setActiveTab('configuration');
+                onTabChange?.('configuration');
+              }}
             />
-          </TabsContent>
+          ) : (
+            <FuelPeriodLandingPage
+              outstanding={outstandingFuelPeriods}
+              completed={completedFuelPeriods}
+              loading={isRefreshing && fuelPeriods.length === 0}
+              onSelectPeriod={(period) => {
+                const bounds = fuelWeekBoundsFromPeriodId(period.id);
+                const [sy, sm, sd] = bounds.startDate.split('-').map(Number);
+                const [ey, em, ed] = bounds.endDate.split('-').map(Number);
+                setReconciliationDateRange({
+                  from: new Date(sy, sm - 1, sd),
+                  to: new Date(ey, em - 1, ed),
+                });
+                setSelectedFuelPeriod(period);
+              }}
+              onResetPeriod={(period) => setResetFuelPeriod(period)}
+              onOpenArchive={() => setShowFuelArchive(true)}
+            />
+          )}
 
-          <TabsContent value="finalized">
-            <FinalizedReportsTab />
-          </TabsContent>
-        </Tabs>
+          {resetFuelPeriod && (
+            <FuelPeriodResetDialog
+              open={!!resetFuelPeriod}
+              onOpenChange={(open) => !open && setResetFuelPeriod(null)}
+              period={resetFuelPeriod}
+              finalizedReports={finalizedReports}
+              fuelEntries={logs}
+              onComplete={async () => {
+                setResetFuelPeriod(null);
+                setSelectedFuelPeriod(null);
+                await loadData(true);
+              }}
+            />
+          )}
+        </div>
+        </FuelReconBusyProvider>
       )}
 
       {activeTab === 'cards' && (
@@ -1277,34 +1349,6 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Phase 3: Odometer Bucket Sheet */}
-      <Sheet open={isBucketSheetOpen} onOpenChange={setIsBucketSheetOpen}>
-        <SheetContent className="sm:max-w-[900px] overflow-y-auto">
-          <SheetHeader className="mb-6">
-            <SheetTitle className="flex items-center gap-2">
-              <History className="h-5 w-5 text-blue-600" />
-              Stop-to-Stop Reconciliation
-            </SheetTitle>
-            <SheetDescription>
-              Detailed odometer-anchored analysis for {selectedBucketVehicle?.licensePlate} ({selectedBucketVehicle?.model})
-            </SheetDescription>
-          </SheetHeader>
-          
-          {selectedBucketVehicle && (
-            <BucketReconciliationView 
-              vehicle={selectedBucketVehicle}
-              fuelEntries={logs}
-              trips={trips}
-              transactions={transactions}
-              adjustments={adjustments}
-              dateRange={reconciliationDateRange}
-              onClose={() => setIsBucketSheetOpen(false)}
-              onRefresh={() => loadData(true)}
-            />
-          )}
-        </SheetContent>
-      </Sheet>
 
     </FuelLayout>
   );

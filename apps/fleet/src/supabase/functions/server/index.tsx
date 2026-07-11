@@ -7316,6 +7316,7 @@ app.get("/make-server-37f42386/scenarios", requireAuth(), async (c) => {
                 coverageValue: 50, // Fallback
                 rideShareCoverage: 100,
                 companyUsageCoverage: 100,
+                deadheadCoverage: 50,
                 personalCoverage: 0,
                 miscCoverage: 50,
                 conditions: { requiresReceipt: true }

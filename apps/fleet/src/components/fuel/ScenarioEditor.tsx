@@ -5,15 +5,13 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { Switch } from "../ui/switch";
 import { FuelScenario, FuelRule } from '../../types/fuel';
-import { Fuel, Info, AlertTriangle } from 'lucide-react';
+import { Fuel, AlertTriangle } from 'lucide-react';
+import { normalizePercentageRule } from '../../utils/fuelCoverageSplit';
 
 /**
  * Validates a Fuel rule before save. Blocks NaN/negative/>100% percentages and
- * non-positive allowances, which previously saved silently (parseFloat('abc')
- * → NaN, no bounds check) and could corrupt downstream reconciliation math.
- * Exported for direct unit testing.
+ * non-positive allowances.
  */
 export function validateFuelRule(rule: FuelRule): string | null {
     if (!Number.isFinite(rule.coverageValue) || rule.coverageValue < 0) {
@@ -50,9 +48,16 @@ interface ScenarioEditorProps {
     onClose: () => void;
     onSave: (scenario: FuelScenario) => Promise<void>;
     initialData: FuelScenario | null;
-    /** Number of vehicles currently referencing this scenario — editing it changes their live reconciliation numbers immediately. */
     affectedVehicleCount?: number;
 }
+
+const GRANULAR_FIELDS: { key: keyof FuelRule; label: string }[] = [
+    { key: 'rideShareCoverage', label: 'Ride Share' },
+    { key: 'companyUsageCoverage', label: 'Company Ops' },
+    { key: 'deadheadCoverage', label: 'Deadhead' },
+    { key: 'personalCoverage', label: 'Personal' },
+    { key: 'miscCoverage', label: 'Misc / Leakage' },
+];
 
 export function ScenarioEditor({ isOpen, onClose, onSave, initialData, affectedVehicleCount = 0 }: ScenarioEditorProps) {
     const [name, setName] = useState('');
@@ -65,53 +70,49 @@ export function ScenarioEditor({ isOpen, onClose, onSave, initialData, affectedV
             if (initialData) {
                 setName(initialData.name);
                 setDescription(initialData.description || '');
-                // Ensure we have a fuel rule, or create one if missing
                 const fuelRule = initialData.rules.find(r => r.category === 'Fuel');
                 if (fuelRule) {
-                     setRules([fuelRule]);
+                     setRules([fuelRule.coverageType === 'Percentage' ? normalizePercentageRule(fuelRule) : fuelRule]);
                 } else {
                      setRules([{
                         id: crypto.randomUUID(),
                         category: 'Fuel',
-                        coverageType: 'Full',
-                        coverageValue: 100,
-                        conditions: { requiresReceipt: true }
+                        coverageType: 'Percentage',
+                        coverageValue: 50,
+                        rideShareCoverage: 80,
+                        companyUsageCoverage: 100,
+                        deadheadCoverage: 50,
+                        personalCoverage: 0,
+                        miscCoverage: 50,
                     }]);
                 }
             } else {
-                // Default new scenario
                 setName('');
                 setDescription('');
                 setRules([{
                     id: crypto.randomUUID(),
                     category: 'Fuel',
-                    coverageType: 'Full',
-                    coverageValue: 100,
-                    conditions: { requiresReceipt: true }
+                    coverageType: 'Percentage',
+                    coverageValue: 50,
+                    rideShareCoverage: 80,
+                    companyUsageCoverage: 100,
+                    deadheadCoverage: 50,
+                    personalCoverage: 0,
+                    miscCoverage: 50,
                 }]);
             }
         }
     }, [isOpen, initialData]);
 
-    const updateFuelRule = (field: keyof FuelRule | 'maxAmount' | 'requiresReceipt', value: any) => {
+    const updateFuelRule = (field: keyof FuelRule, value: any) => {
         setRules(prev => prev.map(r => {
             if (r.category !== 'Fuel') return r;
-
-            if (field === 'maxAmount' || field === 'requiresReceipt') {
-                return {
-                    ...r,
-                    conditions: {
-                        ...r.conditions,
-                        [field]: value
-                    }
-                };
-            }
-            
-            // If changing to Full, force value to 100
             if (field === 'coverageType' && value === 'Full') {
                 return { ...r, coverageType: value, coverageValue: 100 };
             }
-
+            if (field === 'coverageType' && value === 'Percentage') {
+                return normalizePercentageRule({ ...r, coverageType: 'Percentage' });
+            }
             return { ...r, [field]: value };
         }));
     };
@@ -123,11 +124,13 @@ export function ScenarioEditor({ isOpen, onClose, onSave, initialData, affectedV
         if (!name.trim() || !fuelRule || validationError) return;
         setIsSubmitting(true);
         try {
+            const ruleToSave =
+                fuelRule.coverageType === 'Percentage' ? normalizePercentageRule(fuelRule) : fuelRule;
             const scenario: FuelScenario = {
                 id: initialData?.id || crypto.randomUUID(),
                 name,
                 description,
-                rules, // Will only contain Fuel rule
+                rules: [ruleToSave],
                 isDefault: initialData?.isDefault || false
             };
             await onSave(scenario);
@@ -138,48 +141,53 @@ export function ScenarioEditor({ isOpen, onClose, onSave, initialData, affectedV
 
     if (!fuelRule) return null;
 
+    const companyPct = (field: keyof FuelRule) => {
+        const v = fuelRule[field];
+        return typeof v === 'number' ? v : fuelRule.coverageValue;
+    };
+
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                    <DialogTitle>{initialData ? 'Edit Scenario' : 'Create New Scenario'}</DialogTitle>
-                    <DialogDescription>
-                        Configure how fuel expenses are covered for this group.
-                    </DialogDescription>
-                </DialogHeader>
+            <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-hidden flex flex-col gap-0 p-0">
+                <div className="shrink-0 space-y-3 px-6 pt-6 pb-3 border-b border-slate-100">
+                    <DialogHeader>
+                        <DialogTitle>{initialData ? 'Edit Policy' : 'Create New Policy'}</DialogTitle>
+                        <DialogDescription>
+                            Set how much the company covers vs what the driver pays for each fuel category.
+                        </DialogDescription>
+                    </DialogHeader>
 
-                {initialData && affectedVehicleCount > 0 && (
-                    <div className="flex items-start gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded text-amber-900">
-                        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                        <span className="text-sm">
-                            {affectedVehicleCount} vehicle{affectedVehicleCount !== 1 ? 's' : ''} currently {affectedVehicleCount !== 1 ? 'use' : 'uses'} this scenario. Saving changes here immediately recalculates their live (unfinalized) reconciliation numbers — already-finalized weeks are unaffected.
-                        </span>
-                    </div>
-                )}
+                    {initialData && affectedVehicleCount > 0 && (
+                        <div className="flex items-start gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded text-amber-900">
+                            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                            <span className="text-sm">
+                                {affectedVehicleCount} vehicle{affectedVehicleCount !== 1 ? 's' : ''} currently {affectedVehicleCount !== 1 ? 'use' : 'uses'} this policy. Saving changes recalculates live unfinalized weeks — finalized weeks are unaffected.
+                            </span>
+                        </div>
+                    )}
+                </div>
 
-                <div className="space-y-6 py-4">
-                    {/* Basic Info */}
+                <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-6">
                     <div className="space-y-4">
                         <div className="space-y-2">
-                            <Label>Scenario Name</Label>
-                            <Input 
-                                placeholder="e.g. Owner Operators (Standard)" 
-                                value={name} 
-                                onChange={(e) => setName(e.target.value)} 
+                            <Label>Policy Name</Label>
+                            <Input
+                                placeholder="e.g. Owner Operators (Standard)"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
                             />
                         </div>
                         <div className="space-y-2">
                             <Label>Description</Label>
-                            <Textarea 
-                                placeholder="Describe who this applies to..." 
-                                value={description} 
+                            <Textarea
+                                placeholder="Describe who this applies to…"
+                                value={description}
                                 onChange={(e) => setDescription(e.target.value)}
                                 className="h-20 resize-none"
                             />
                         </div>
                     </div>
 
-                    {/* Rules Configuration */}
                     <div className="border rounded-xl p-4 bg-slate-50/50">
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="font-medium text-sm text-slate-900 flex items-center gap-2">
@@ -189,154 +197,102 @@ export function ScenarioEditor({ isOpen, onClose, onSave, initialData, affectedV
                         </div>
 
                         <div className="bg-white border rounded-lg p-5 space-y-5 shadow-sm">
-                            <div className="grid grid-cols-1 gap-5">
-                                <div className="grid grid-cols-2 gap-5">
-                                    <div className="space-y-2">
-                                        <Label>Coverage Type</Label>
-                                        <Select 
-                                            value={fuelRule.coverageType} 
-                                            onValueChange={(val) => updateFuelRule('coverageType', val)}
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="Full">Full Coverage (100%)</SelectItem>
-                                                <SelectItem value="Percentage">Percentage Split</SelectItem>
-                                                <SelectItem value="Fixed_Amount">Fixed Allowance</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    
-                                    {fuelRule.coverageType !== 'Percentage' && (
-                                        <div className="space-y-2">
-                                            <Label>
-                                                {fuelRule.coverageType === 'Fixed_Amount' ? 'Allowance Amount ($)' : 'Coverage Value'}
-                                            </Label>
-                                            <Input 
-                                                type="number" 
-                                                min="0"
-                                                disabled={fuelRule.coverageType === 'Full'}
-                                                value={fuelRule.coverageValue}
-                                                onChange={(e) => updateFuelRule('coverageValue', e.target.value === '' ? 0 : parseFloat(e.target.value))}
-                                            />
-                                        </div>
-                                    )}
-                                </div>
-
-                                {fuelRule.coverageType === 'Percentage' && (
-                                    <div className="border rounded-md bg-slate-50 p-4">
-                                        <div className="mb-4">
-                                            <Label className="text-sm font-semibold text-slate-900">Granular Coverage Rules</Label>
-                                            <p className="text-xs text-slate-500">Define the percentage of cost covered by the Company for each category.</p>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="space-y-1.5">
-                                                <Label className="text-xs font-medium text-slate-700">Ride Share</Label>
-                                                <div className="relative">
-                                                    <Input 
-                                                        type="number" min="0" max="100" className="pr-8"
-                                                        value={fuelRule.rideShareCoverage ?? fuelRule.coverageValue ?? 100}
-                                                        onChange={(e) => updateFuelRule('rideShareCoverage', e.target.value === '' ? 0 : parseFloat(e.target.value))}
-                                                    />
-                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">%</span>
-                                                </div>
-                                            </div>
-                                            <div className="space-y-1.5">
-                                                <Label className="text-xs font-medium text-slate-700">Company Ops</Label>
-                                                <div className="relative">
-                                                    <Input
-                                                        type="number" min="0" max="100" className="pr-8"
-                                                        value={fuelRule.companyUsageCoverage ?? fuelRule.coverageValue}
-                                                        onChange={(e) => updateFuelRule('companyUsageCoverage', e.target.value === '' ? 0 : parseFloat(e.target.value))}
-                                                    />
-                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">%</span>
-                                                </div>
-                                            </div>
-                                            <div className="space-y-1.5">
-                                                <Label className="text-xs font-medium text-amber-700">Deadhead</Label>
-                                                <div className="relative">
-                                                    <Input
-                                                        type="number" min="0" max="100" className="pr-8"
-                                                        value={fuelRule.deadheadCoverage ?? fuelRule.companyUsageCoverage ?? fuelRule.coverageValue}
-                                                        onChange={(e) => updateFuelRule('deadheadCoverage', e.target.value === '' ? 0 : parseFloat(e.target.value))}
-                                                    />
-                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">%</span>
-                                                </div>
-                                            </div>
-                                            <div className="space-y-1.5">
-                                                <Label className="text-xs font-medium text-slate-700">Personal Usage</Label>
-                                                <div className="relative">
-                                                    <Input
-                                                        type="number" min="0" max="100" className="pr-8"
-                                                        value={fuelRule.personalCoverage ?? fuelRule.coverageValue}
-                                                        onChange={(e) => updateFuelRule('personalCoverage', e.target.value === '' ? 0 : parseFloat(e.target.value))}
-                                                    />
-                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">%</span>
-                                                </div>
-                                            </div>
-                                            <div className="space-y-1.5">
-                                                <Label className="text-xs font-medium text-slate-700">Misc / Leakage</Label>
-                                                <div className="relative">
-                                                    <Input 
-                                                        type="number" min="0" max="100" className="pr-8"
-                                                        value={fuelRule.miscCoverage ?? fuelRule.coverageValue ?? 50}
-                                                        onChange={(e) => updateFuelRule('miscCoverage', e.target.value === '' ? 0 : parseFloat(e.target.value))}
-                                                    />
-                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">%</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
+                            <div className="space-y-2">
+                                <Label>Coverage Type</Label>
+                                <Select
+                                    value={fuelRule.coverageType}
+                                    onValueChange={(val) => updateFuelRule('coverageType', val)}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="Full">Full (work categories 100% company; Personal on driver)</SelectItem>
+                                        <SelectItem value="Percentage">Percentage Split</SelectItem>
+                                        <SelectItem value="Fixed_Amount">Fixed Allowance</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <p className="text-xs text-slate-500">
+                                    {fuelRule.coverageType === 'Percentage' && 'Company covers %; Driver pays = 100 − Company.'}
+                                    {fuelRule.coverageType === 'Full' && 'Ride Share, Company Ops, Deadhead, and Misc are fully company. Personal is always paid by the driver.'}
+                                    {fuelRule.coverageType === 'Fixed_Amount' && 'One weekly allowance covers Ride Share + Misc. Company Ops and Deadhead are fully company; Personal is fully driver.'}
+                                </p>
                             </div>
 
-                            <div className="border-t pt-4 space-y-4">
-                                <Label className="text-xs uppercase text-slate-500 font-bold tracking-wider">Conditions</Label>
-                                
-                                <div className="flex items-center justify-between">
-                                    <div className="space-y-0.5">
-                                        <Label className="text-sm">Require Receipt</Label>
-                                        <p className="text-xs text-slate-500">Must upload photo proof for reimbursement</p>
-                                    </div>
-                                    <Switch 
-                                        checked={fuelRule.conditions?.requiresReceipt ?? true}
-                                        onCheckedChange={(c) => updateFuelRule('requiresReceipt', c)}
+                            {fuelRule.coverageType === 'Fixed_Amount' && (
+                                <div className="space-y-2">
+                                    <Label>Weekly Allowance ($)</Label>
+                                    <Input
+                                        type="number"
+                                        min="0"
+                                        value={fuelRule.coverageValue}
+                                        onChange={(e) => updateFuelRule('coverageValue', e.target.value === '' ? 0 : parseFloat(e.target.value))}
                                     />
                                 </div>
+                            )}
 
-                                <div className="flex items-center gap-4">
-                                    <div className="flex-1 space-y-0.5">
-                                        <Label className="text-sm">Max Amount Cap ($)</Label>
-                                        <p className="text-xs text-slate-500">Optional limit per transaction</p>
-                                    </div>
-                                    <div className="w-32">
-                                        <Input 
-                                            type="number" 
-                                            placeholder="No Limit"
-                                            value={fuelRule.conditions?.maxAmount || ''}
-                                            onChange={(e) => updateFuelRule('maxAmount', e.target.value ? parseFloat(e.target.value) : undefined)}
-                                        />
-                                    </div>
+                            {fuelRule.coverageType === 'Full' && (
+                                <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 space-y-1">
+                                    <p><span className="font-medium text-indigo-700">Company 100%:</span> Ride Share, Company Ops, Deadhead, Misc</p>
+                                    <p><span className="font-medium text-rose-600">Driver 100%:</span> Personal</p>
                                 </div>
-                            </div>
+                            )}
+
+                            {fuelRule.coverageType === 'Percentage' && (
+                                <div className="border rounded-md bg-slate-50 p-4 space-y-3">
+                                    <div>
+                                        <Label className="text-sm font-semibold text-slate-900">Company covers by category</Label>
+                                        <p className="text-xs text-slate-500">Driver pays updates automatically.</p>
+                                    </div>
+                                    {GRANULAR_FIELDS.map(({ key, label }) => {
+                                        const company = companyPct(key);
+                                        const driver = 100 - company;
+                                        return (
+                                            <div key={key} className="flex items-center gap-3">
+                                                <Label className="w-28 shrink-0 text-xs font-medium text-slate-700">{label}</Label>
+                                                <div className="relative w-28">
+                                                    <Input
+                                                        type="number"
+                                                        min="0"
+                                                        max="100"
+                                                        className="pr-8"
+                                                        value={company}
+                                                        onChange={(e) =>
+                                                            updateFuelRule(
+                                                                key,
+                                                                e.target.value === '' ? 0 : parseFloat(e.target.value),
+                                                            )
+                                                        }
+                                                    />
+                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">%</span>
+                                                </div>
+                                                <span className="text-xs text-rose-600 tabular-nums">
+                                                    Driver pays {driver}%
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
 
-                {validationError && (
-                    <div className="flex items-start gap-2 p-2.5 bg-rose-50 border border-rose-200 rounded text-rose-900">
-                        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                        <span className="text-sm">{validationError}</span>
-                    </div>
-                )}
+                <div className="shrink-0 space-y-3 border-t border-slate-100 px-6 py-4 bg-white">
+                    {validationError && (
+                        <div className="flex items-start gap-2 p-2.5 bg-rose-50 border border-rose-200 rounded text-rose-900">
+                            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                            <span className="text-sm">{validationError}</span>
+                        </div>
+                    )}
 
-                <DialogFooter>
-                    <Button variant="outline" onClick={onClose}>Cancel</Button>
-                    <Button onClick={handleSubmit} disabled={isSubmitting || !name.trim() || !!validationError}>
-                        {isSubmitting ? "Saving..." : "Save Scenario"}
-                    </Button>
-                </DialogFooter>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={onClose}>Cancel</Button>
+                        <Button onClick={handleSubmit} disabled={isSubmitting || !name.trim() || !!validationError}>
+                            {isSubmitting ? "Saving..." : "Save Policy"}
+                        </Button>
+                    </DialogFooter>
+                </div>
             </DialogContent>
         </Dialog>
     );

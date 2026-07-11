@@ -4,6 +4,7 @@ import { WeeklyFuelReport, FuelScenario } from '../../types/fuel';
 import { Vehicle } from '../../types/vehicle';
 import { Car, Building2, User, Info, Navigation } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
+import { splitAllCategoryCosts, sumSplitTotals } from '../../utils/fuelCoverageSplit';
 
 interface ScenarioSplitDashboardProps {
     reports: WeeklyFuelReport[];
@@ -32,85 +33,38 @@ interface SplitBreakdown {
 
 export function ScenarioSplitDashboard({ reports, scenarios, vehicles }: ScenarioSplitDashboardProps) {
 
-    // Helper to calculate the split for a single report
+    // Shared contract with fuelCalculationService / fuelCoverageSplit
     const calculateBreakdown = (report: WeeklyFuelReport, scenario?: FuelScenario): SplitBreakdown => {
         const fuelRule = scenario?.rules.find(r => r.category === 'Fuel');
-        
-        const costs = {
-            rideShare: report.rideShareCost,
-            companyOps: report.companyUsageCost,
-            deadhead: report.deadheadCost || 0,
-            personal: report.personalUsageCost,
-            misc: report.miscellaneousCost
+        const split = splitAllCategoryCosts(
+            {
+                rideShare: report.rideShareCost,
+                companyUsage: report.companyUsageCost,
+                deadhead: report.deadheadCost || 0,
+                personal: report.personalUsageCost,
+                misc: report.miscellaneousCost,
+            },
+            fuelRule,
+        );
+        const totals = sumSplitTotals(split);
+        return {
+            company: {
+                total: totals.company,
+                rideShare: split.company.rideShare,
+                companyOps: split.company.companyUsage,
+                deadhead: split.company.deadhead,
+                personal: split.company.personal,
+                misc: split.company.misc,
+            },
+            driver: {
+                total: totals.driver,
+                rideShare: split.driver.rideShare,
+                companyOps: split.driver.companyUsage,
+                deadhead: split.driver.deadhead,
+                personal: split.driver.personal,
+                misc: split.driver.misc,
+            },
         };
-
-        const result: SplitBreakdown = {
-            company: { total: 0, rideShare: 0, companyOps: 0, deadhead: 0, personal: 0, misc: 0 },
-            driver: { total: 0, rideShare: 0, companyOps: 0, deadhead: 0, personal: 0, misc: 0 }
-        };
-
-        if (!fuelRule) {
-            // Default Logic — deadhead is company-authorized, fully covered
-            result.company.rideShare = costs.rideShare;
-            result.company.companyOps = costs.companyOps;
-            result.company.deadhead = costs.deadhead;
-            result.company.misc = costs.misc * 0.5;
-            
-            result.driver.personal = costs.personal;
-            result.driver.misc = costs.misc * 0.5;
-        } else if (fuelRule.coverageType === 'Full') {
-            result.company.rideShare = costs.rideShare;
-            result.company.companyOps = costs.companyOps;
-            result.company.deadhead = costs.deadhead;
-            result.company.misc = costs.misc;
-            result.driver.personal = costs.personal;
-        } else if (fuelRule.coverageType === 'Percentage') {
-             // Fallback chain must match fuelCalculationService.ts's getCoverage()
-             // exactly — this dashboard's tiles and the per-vehicle table rows below
-             // it must always agree on the same scenario's effective split.
-             const rideSharePct = (fuelRule.rideShareCoverage ?? fuelRule.coverageValue) / 100;
-             const companyOpsPct = (fuelRule.companyUsageCoverage ?? fuelRule.coverageValue) / 100;
-             const personalPct = (fuelRule.personalCoverage ?? fuelRule.coverageValue) / 100;
-             const miscPct = (fuelRule.miscCoverage ?? fuelRule.coverageValue) / 100;
-             // Deadhead follows its own coverage rule, falling back to companyOps coverage
-             const deadheadPct = (fuelRule.deadheadCoverage ?? fuelRule.companyUsageCoverage ?? fuelRule.coverageValue) / 100;
-
-             result.company.rideShare = costs.rideShare * rideSharePct;
-             result.company.companyOps = costs.companyOps * companyOpsPct;
-             result.company.deadhead = costs.deadhead * deadheadPct;
-             result.company.personal = costs.personal * personalPct;
-             result.company.misc = costs.misc * miscPct;
-
-             result.driver.rideShare = costs.rideShare * (1 - rideSharePct);
-             result.driver.companyOps = costs.companyOps * (1 - companyOpsPct);
-             result.driver.deadhead = costs.deadhead * (1 - deadheadPct);
-             result.driver.personal = costs.personal * (1 - personalPct);
-             result.driver.misc = costs.misc * (1 - miscPct);
-        } else if (fuelRule.coverageType === 'Fixed_Amount') {
-            // Approximation for display — deadhead is company-authorized
-            result.company.companyOps = costs.companyOps;
-            result.company.deadhead = costs.deadhead;
-            
-            const allowance = fuelRule.coverageValue || 0;
-            const variable = costs.rideShare + costs.misc;
-            const coveredVariable = Math.min(allowance, variable);
-            
-            if (variable > 0) {
-                const ratio = coveredVariable / variable;
-                result.company.rideShare = costs.rideShare * ratio;
-                result.company.misc = costs.misc * ratio;
-            }
-
-            result.driver.personal = costs.personal;
-            result.driver.rideShare = costs.rideShare - result.company.rideShare;
-            result.driver.misc = costs.misc - result.company.misc;
-        }
-
-        // Sum Totals
-        result.company.total = result.company.rideShare + result.company.companyOps + result.company.deadhead + result.company.personal + result.company.misc;
-        result.driver.total = result.driver.rideShare + result.driver.companyOps + result.driver.deadhead + result.driver.personal + result.driver.misc;
-
-        return result;
     };
 
     // Aggregate Data by Scenario
@@ -229,7 +183,7 @@ export function ScenarioSplitDashboard({ reports, scenarios, vehicles }: Scenari
                                     </div>
                                     <div className="border-t border-slate-600 pt-1.5">
                                         <p className="font-medium text-slate-300 text-[11px] uppercase tracking-wide">Company / Driver split</p>
-                                        <p className="text-slate-400 text-[11px]">Split is determined by the Company Ops coverage % in the active fuel scenario. Typically 100% company-covered.</p>
+                                        <p className="text-slate-400 text-[11px]">Split follows the Company Ops coverage % on the active fuel policy (often 100% company, but configurable).</p>
                                     </div>
                                 </div>
                             }

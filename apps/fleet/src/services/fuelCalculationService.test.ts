@@ -78,16 +78,23 @@ describe('getCategoryCoverageSplit', () => {
     expect(r).toEqual({ company: 100, driver: 0 });
   });
 
-  it('Full coverage: company pays everything regardless of category', () => {
+  it('Full coverage: Personal is driver; other categories company', () => {
     const rule = percentageRule({ coverageType: 'Full', coverageValue: 100 });
-    const r = FuelCalculationService.getCategoryCoverageSplit('personal', 200, rule);
-    expect(r).toEqual({ company: 200, driver: 0 });
+    expect(FuelCalculationService.getCategoryCoverageSplit('personal', 200, rule)).toEqual({
+      company: 0,
+      driver: 200,
+    });
+    expect(FuelCalculationService.getCategoryCoverageSplit('rideShare', 100, rule)).toEqual({
+      company: 100,
+      driver: 0,
+    });
   });
 
-  it('Fixed_Amount: company covers up to the allowance, driver covers the rest', () => {
+  it('Fixed_Amount single-category: rideShare/misc capped by allowance alone', () => {
     const rule = percentageRule({ coverageType: 'Fixed_Amount', coverageValue: 30 });
     expect(FuelCalculationService.getCategoryCoverageSplit('misc', 100, rule)).toEqual({ company: 30, driver: 70 });
     expect(FuelCalculationService.getCategoryCoverageSplit('misc', 20, rule)).toEqual({ company: 20, driver: 0 });
+    expect(FuelCalculationService.getCategoryCoverageSplit('personal', 50, rule)).toEqual({ company: 0, driver: 50 });
   });
 
   it.each([
