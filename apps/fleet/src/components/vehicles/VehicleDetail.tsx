@@ -1293,6 +1293,46 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                                  }}
                                />
                              </div>
+                             <div className="mt-3 max-w-md space-y-1.5">
+                               <Label className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                                 <Fuel className="h-3.5 w-3.5" />
+                                 Fuel Scenario
+                               </Label>
+                               <Select
+                                 value={vehicle.fuelScenarioId || '__default__'}
+                                 onValueChange={async (scenarioId) => {
+                                   const updatedVehicle = {
+                                     ...vehicle,
+                                     fuelScenarioId: scenarioId === '__default__' ? undefined : scenarioId,
+                                   };
+                                   try {
+                                     await api.saveVehicle(updatedVehicle);
+                                     onUpdate?.(updatedVehicle);
+                                     toast.success('Fuel scenario updated');
+                                   } catch (e: any) {
+                                     toast.error(e?.message || 'Failed to save fuel scenario');
+                                   }
+                                 }}
+                               >
+                                 <SelectTrigger className="bg-white">
+                                   <SelectValue placeholder="Using default scenario" />
+                                 </SelectTrigger>
+                                 <SelectContent>
+                                   <SelectItem value="__default__">
+                                     Use default {(() => {
+                                       const def = scenarios.find(s => s.isDefault);
+                                       return def ? `(${def.name})` : '';
+                                     })()}
+                                   </SelectItem>
+                                   {scenarios.map(s => (
+                                     <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                   ))}
+                                 </SelectContent>
+                               </Select>
+                               <p className="text-[11px] text-slate-400">
+                                 Determines how fuel costs split between company and driver in Consumption Reconciliation. Changes apply to future/unfinalized weeks only.
+                               </p>
+                             </div>
                      </div>
                  </div>
              </div>

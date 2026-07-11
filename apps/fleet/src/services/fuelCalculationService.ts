@@ -2,9 +2,11 @@
  * Shared utility for fuel-related calculations to ensure consistency across components.
  */
 
-import { FuelEntry, MileageAdjustment, WeeklyFuelReport, FuelScenario, OdometerBucket } from '../types/fuel';
+import { FuelEntry, MileageAdjustment, WeeklyFuelReport, FuelScenario, FuelRule, OdometerBucket } from '../types/fuel';
 import { Vehicle } from '../types/vehicle';
 import { Trip } from '../types/data';
+
+export type FuelCoverageCategory = 'rideShare' | 'companyUsage' | 'deadhead' | 'personal' | 'misc';
 
 /** Per-vehicle deadhead attribution passed in from the API (Phase 2) */
 export interface VehicleDeadheadInput {
@@ -105,6 +107,44 @@ export const FuelCalculationService = {
     },
 
     /**
+     * Resolves the company/driver split for one cost category under a Fuel rule.
+     * Fallback chain per category (must stay in sync with ScenarioEditor.tsx's
+     * display pre-fill and ScenarioSplitDashboard.tsx's tile math — all three
+     * used to disagree, which is the "config doesn't match reconciliation" bug):
+     *   rideShare / companyUsage / personal / misc: <category>Coverage ?? coverageValue
+     *   deadhead: deadheadCoverage ?? companyUsageCoverage ?? coverageValue
+     * Extracted as a standalone pure function so this fallback chain is directly
+     * unit-testable without fabricating a full vehicle/trips/entries/scenario set.
+     */
+    getCategoryCoverageSplit: (
+        category: FuelCoverageCategory,
+        amount: number,
+        rule: FuelRule | undefined
+    ): { company: number; driver: number } => {
+        if (!rule) return { company: amount, driver: 0 };
+
+        let coveragePercent = rule.coverageValue;
+        if (category === 'rideShare' && rule.rideShareCoverage !== undefined) coveragePercent = rule.rideShareCoverage;
+        if (category === 'companyUsage' && rule.companyUsageCoverage !== undefined) coveragePercent = rule.companyUsageCoverage;
+        if (category === 'deadhead' && rule.deadheadCoverage !== undefined) coveragePercent = rule.deadheadCoverage;
+        else if (category === 'deadhead' && rule.companyUsageCoverage !== undefined) coveragePercent = rule.companyUsageCoverage;
+        if (category === 'personal' && rule.personalCoverage !== undefined) coveragePercent = rule.personalCoverage;
+        if (category === 'misc' && rule.miscCoverage !== undefined) coveragePercent = rule.miscCoverage;
+
+        if (rule.coverageType === 'Full') {
+            return { company: amount, driver: 0 };
+        } else if (rule.coverageType === 'Percentage') {
+            const companyPay = amount * (coveragePercent / 100);
+            return { company: companyPay, driver: amount - companyPay };
+        } else if (rule.coverageType === 'Fixed_Amount') {
+            const companyPay = Math.min(amount, rule.coverageValue);
+            return { company: companyPay, driver: amount - companyPay };
+        }
+
+        return { company: amount, driver: 0 };
+    },
+
+    /**
      * Generates a reconciliation report for a single vehicle.
      */
     calculateReconciliation: (
@@ -126,32 +166,10 @@ export const FuelCalculationService = {
                              scenarios[0];
 
         // Helper to get rule for a specific category
-        const getCoverage = (category: 'rideShare' | 'companyUsage' | 'deadhead' | 'personal' | 'misc', amount: number) => {
+        const getCoverage = (category: FuelCoverageCategory, amount: number) => {
             if (!activeScenario) return { company: amount, driver: 0 }; // Default to company pays all if no scenario
-
             const rule = activeScenario.rules.find(r => r.category === 'Fuel');
-            if (!rule) return { company: amount, driver: 0 };
-
-            // Determine specific percentage/value for this sub-category
-            let coveragePercent = rule.coverageValue;
-            if (category === 'rideShare' && rule.rideShareCoverage !== undefined) coveragePercent = rule.rideShareCoverage;
-            if (category === 'companyUsage' && rule.companyUsageCoverage !== undefined) coveragePercent = rule.companyUsageCoverage;
-            if (category === 'deadhead' && rule.deadheadCoverage !== undefined) coveragePercent = rule.deadheadCoverage;
-            else if (category === 'deadhead' && rule.companyUsageCoverage !== undefined) coveragePercent = rule.companyUsageCoverage;
-            if (category === 'personal' && rule.personalCoverage !== undefined) coveragePercent = rule.personalCoverage;
-            if (category === 'misc' && rule.miscCoverage !== undefined) coveragePercent = rule.miscCoverage;
-
-            if (rule.coverageType === 'Full') {
-                return { company: amount, driver: 0 };
-            } else if (rule.coverageType === 'Percentage') {
-                const companyPay = amount * (coveragePercent / 100);
-                return { company: companyPay, driver: amount - companyPay };
-            } else if (rule.coverageType === 'Fixed_Amount') {
-                const companyPay = Math.min(amount, rule.coverageValue);
-                return { company: companyPay, driver: amount - companyPay };
-            }
-
-            return { company: amount, driver: 0 };
+            return FuelCalculationService.getCategoryCoverageSplit(category, amount, rule);
         };
 
         // 2. Filter data for this vehicle and week

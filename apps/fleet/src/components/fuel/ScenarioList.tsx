@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Button } from "../ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
-import { Loader2, Plus, Trash2, Edit2, Star, Fuel, ShieldCheck, AlertCircle, AlertTriangle } from 'lucide-react';
+import { Loader2, Plus, Trash2, Edit2, Star, Fuel, ShieldCheck, AlertCircle, AlertTriangle, Car } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { fuelService } from '../../services/fuelService';
 import { api } from '../../services/api';
@@ -57,14 +57,12 @@ export function ScenarioList() {
 
     const handleSave = async (scenario: FuelScenario) => {
         try {
-            // Ensure only one default if this one is default
-            if (scenario.isDefault) {
-                 // In a real backend, this would be handled transactionally. 
-                 // Here we might need to optimistic update or just reload.
-            }
-            
+            // Server enforces at most one isDefault:true scenario (unsets any
+            // other default in the same request) — this optimistic local update
+            // just mirrors that so the UI doesn't flash a stale second "Default"
+            // badge before the next reload.
             const saved = await fuelService.saveFuelScenario(scenario);
-            
+
             setScenarios(prev => {
                 const index = prev.findIndex(s => s.id === saved.id);
                 if (index >= 0) {
@@ -72,13 +70,13 @@ export function ScenarioList() {
                 }
                 return [...(saved.isDefault ? prev.map(s => ({ ...s, isDefault: false })) : prev), saved];
             });
-            
+
             toast.success("Scenario saved");
             setIsEditorOpen(false);
             setEditingScenario(null);
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
-            toast.error("Failed to save scenario");
+            toast.error(e?.message || "Failed to save scenario");
         }
     };
 
@@ -88,9 +86,9 @@ export function ScenarioList() {
             await fuelService.deleteFuelScenario(deleteId);
             setScenarios(prev => prev.filter(s => s.id !== deleteId));
             toast.success("Scenario deleted");
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
-            toast.error("Failed to delete scenario");
+            toast.error(e?.message || "Failed to delete scenario");
         } finally {
             setDeleteId(null);
         }
@@ -116,7 +114,7 @@ export function ScenarioList() {
 
         let text = '';
         if (rule.coverageType === 'Full') text = '100% Covered';
-        else if (rule.coverageType === 'Percentage') text = `${rule.coverageValue}% Covered`;
+        else if (rule.coverageType === 'Percentage') text = `${rule.coverageValue}% Covered (base rate)`;
         else if (rule.coverageType === 'Fixed_Amount') text = `$${rule.coverageValue} Allowance`;
 
         return (
@@ -129,6 +127,22 @@ export function ScenarioList() {
                 )}
             </div>
         );
+    };
+
+    // Step 7: surface the 5 granular per-category %s that actually drive
+    // reconciliation math — a single flattened "50% Covered" line previously
+    // hid whatever Ride Share/Company Ops/Deadhead/Personal/Misc were really
+    // set to. Fallback chain matches fuelCalculationService.ts's getCoverage()
+    // exactly (see the Step 1 fix in ScenarioEditor.tsx/ScenarioSplitDashboard.tsx).
+    const getGranularCoverage = (rule: FuelRule): { label: string; value: number }[] | null => {
+        if (rule.coverageType !== 'Percentage') return null;
+        return [
+            { label: 'Ride Share', value: rule.rideShareCoverage ?? rule.coverageValue },
+            { label: 'Company Ops', value: rule.companyUsageCoverage ?? rule.coverageValue },
+            { label: 'Deadhead', value: rule.deadheadCoverage ?? rule.companyUsageCoverage ?? rule.coverageValue },
+            { label: 'Personal', value: rule.personalCoverage ?? rule.coverageValue },
+            { label: 'Misc', value: rule.miscCoverage ?? rule.coverageValue },
+        ];
     };
 
     if (loading) {
@@ -165,6 +179,10 @@ export function ScenarioList() {
                                                 Default
                                             </Badge>
                                         )}
+                                        <Badge variant="outline" className="gap-1 text-slate-500 font-normal" title="Vehicles currently using this scenario">
+                                            <Car className="h-3 w-3" />
+                                            {getAffectedVehicleCount(scenario)}
+                                        </Badge>
                                     </div>
                                     <CardDescription className="line-clamp-2 min-h-[40px]">
                                         {scenario.description || "No description provided."}
@@ -175,14 +193,16 @@ export function ScenarioList() {
                                         <Edit2 className="h-4 w-4 text-slate-500" />
                                     </Button>
                                     {!scenario.isDefault && (
-                                        <>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleSetDefault(scenario)} title="Set as Default">
-                                                <Star className="h-4 w-4 text-slate-400" />
-                                            </Button>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-red-50 hover:text-red-600" onClick={() => setDeleteId(scenario.id)}>
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
-                                        </>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleSetDefault(scenario)} title="Set as Default">
+                                            <Star className="h-4 w-4 text-slate-400" />
+                                        </Button>
+                                    )}
+                                    {/* Delete requires: not the default, and not the last remaining scenario
+                                        (server rejects both with a 409 — hide the option pre-emptively). */}
+                                    {!scenario.isDefault && scenarios.length > 1 && (
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-red-50 hover:text-red-600" onClick={() => setDeleteId(scenario.id)} title="Delete Scenario">
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
                                     )}
                                 </div>
                             </div>
@@ -197,6 +217,21 @@ export function ScenarioList() {
                                     {getRuleSummary(scenario.rules, 'Fuel')}
                                 </div>
                             </div>
+                            {(() => {
+                                const rule = scenario.rules.find(r => r.category === 'Fuel');
+                                const granular = rule ? getGranularCoverage(rule) : null;
+                                if (!granular) return null;
+                                return (
+                                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 px-1">
+                                        {granular.map(({ label, value }) => (
+                                            <div key={label} className="flex items-center justify-between text-xs">
+                                                <span className="text-slate-500">{label}</span>
+                                                <span className="font-medium text-slate-700">{value}%</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                );
+                            })()}
                         </CardContent>
                     </Card>
                 ))}

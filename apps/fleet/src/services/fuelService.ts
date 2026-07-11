@@ -154,7 +154,14 @@ export const fuelService = {
       },
       body: JSON.stringify(scenario)
     });
-    if (!response.ok) throw new Error("Failed to save fuel scenario");
+    if (!response.ok) {
+      // Surface the server's actual validation message (e.g. "Personal Usage
+      // must be a number between 0 and 100") instead of a generic string —
+      // otherwise server-side validation failures are indistinguishable from
+      // network errors in the UI.
+      const errBody = await response.json().catch(() => null);
+      throw new Error(errBody?.error || "Failed to save fuel scenario");
+    }
     const result = await response.json();
     return result.data || result;
   },
@@ -164,7 +171,10 @@ export const fuelService = {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
-    if (!response.ok) throw new Error("Failed to delete fuel scenario");
+    if (!response.ok) {
+      const errBody = await response.json().catch(() => null);
+      throw new Error(errBody?.error || "Failed to delete fuel scenario");
+    }
   },
 
   // --- Phase 4: Finalization & Ledger ---

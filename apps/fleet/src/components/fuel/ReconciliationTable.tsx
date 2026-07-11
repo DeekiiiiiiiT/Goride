@@ -639,6 +639,22 @@ export function ReconciliationTable({
                                                             {driverName}
                                                         </span>
                                                     )}
+                                                    {vehicle && !vehicle.fuelScenarioId && (
+                                                        <TooltipProvider>
+                                                            <Tooltip>
+                                                                <TooltipTrigger asChild>
+                                                                    <span className="inline-flex items-center gap-1 text-[10px] text-amber-600 cursor-help w-fit">
+                                                                        <Info className="h-2.5 w-2.5" />
+                                                                        Using default
+                                                                    </span>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent side="bottom" className="max-w-xs text-xs">
+                                                                    No fuel scenario explicitly assigned to this vehicle — currently falling back to{' '}
+                                                                    {scenarios.find(s => s.isDefault)?.name || 'the default scenario'}. Assign one from the vehicle's detail page if this isn't intentional.
+                                                                </TooltipContent>
+                                                            </Tooltip>
+                                                        </TooltipProvider>
+                                                    )}
                                                 </div>
                                                 {onViewBuckets && vehicle && (
                                                     <TooltipProvider>

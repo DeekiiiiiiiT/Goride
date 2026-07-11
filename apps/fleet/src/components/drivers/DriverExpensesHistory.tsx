@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Button } from "../ui/button";
-import { Download, ChevronDown, TrendingDown, Fuel, Navigation, Loader2, CheckCircle, Clock, Info, LinkIcon, Unlink } from "lucide-react";
+import { Download, ChevronDown, ChevronLeft, ChevronRight, TrendingDown, Fuel, Navigation, Loader2, CheckCircle, Clock, Info, LinkIcon, Unlink } from "lucide-react";
 import { FinancialTransaction, Trip, DisputeRefund } from "../../types/data";
 import type { FuelEntry, MileageAdjustment, FuelScenario } from "../../types/fuel";
 import { api } from "../../services/api";
@@ -53,9 +53,12 @@ interface DriverExpensesHistoryProps {
   trips?: Trip[];
 }
 
+type ExpenseView = 'toll' | 'fuel';
+
 export function DriverExpensesHistory({ driverId, transactions = [], trips = [] }: DriverExpensesHistoryProps) {
   const [periodType, setPeriodType] = React.useState<PeriodType>('weekly');
   const [visibleCount, setVisibleCount] = React.useState(12);
+  const [expenseView, setExpenseView] = React.useState<ExpenseView>('toll');
   const fleetTz = useFleetTimezone();
 
   // ── Fuel data loading flag ──
@@ -439,7 +442,10 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
             )}
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className={`cursor-pointer transition-shadow hover:shadow-md ${expenseView === 'toll' ? 'ring-1 ring-amber-200' : ''}`}
+          onClick={() => setExpenseView('toll')}
+        >
           <CardContent className="pt-4 pb-3 px-4">
             <div className="flex items-center justify-between">
               <div>
@@ -491,7 +497,10 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
             )}
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className={`cursor-pointer transition-shadow hover:shadow-md ${expenseView === 'fuel' ? 'ring-1 ring-red-200' : ''}`}
+          onClick={() => setExpenseView('fuel')}
+        >
           <CardContent className="pt-4 pb-3 px-4">
             <div className="flex items-center justify-between">
               <div>
@@ -529,13 +538,17 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
         </Card>
       </div>
 
-      {/* History table */}
+      {/* History table — Toll / Fuel slide panels */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle className="text-lg">Expense History</CardTitle>
+            <CardTitle className="text-lg">
+              {expenseView === 'toll' ? 'Toll Expenses' : 'Fuel Expenses'}
+            </CardTitle>
             <CardDescription className="text-xs text-slate-500">
-              Period-by-period breakdown of all driver-related expenses
+              {expenseView === 'toll'
+                ? 'Period-by-period toll charges, payment source, and reconciliation status'
+                : 'Period-by-period fuel deductions and finalization status'}
             </CardDescription>
           </div>
           <Button variant="outline" size="sm" onClick={handleExport}>
@@ -544,24 +557,82 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
           </Button>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Period selector */}
-          <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg w-fit">
-            {(['daily', 'weekly', 'monthly'] as PeriodType[]).map(pt => (
+          {/* Period selector + view switcher */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg w-fit">
+              {(['daily', 'weekly', 'monthly'] as PeriodType[]).map(pt => (
+                <button
+                  key={pt}
+                  onClick={() => handlePeriodChange(pt)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                    periodType === pt
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  {pt === 'daily' ? 'Daily' : pt === 'weekly' ? 'Weekly' : 'Monthly'}
+                </button>
+              ))}
+              <span className="ml-2 text-[10px] text-slate-400">
+                {periodData.length} {periodLabel}{periodData.length !== 1 ? 's' : ''} with expenses
+              </span>
+            </div>
+
+            {/* Toll ↔ Fuel slide control */}
+            <div className="flex items-center gap-1.5">
               <button
-                key={pt}
-                onClick={() => handlePeriodChange(pt)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                  periodType === pt
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700'
+                type="button"
+                aria-label="Show toll expenses"
+                disabled={expenseView === 'toll'}
+                onClick={() => setExpenseView('toll')}
+                className={`h-8 w-8 inline-flex items-center justify-center rounded-full border transition-all ${
+                  expenseView === 'toll'
+                    ? 'border-slate-200 text-slate-300 cursor-default'
+                    : 'border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
                 }`}
               >
-                {pt === 'daily' ? 'Daily' : pt === 'weekly' ? 'Weekly' : 'Monthly'}
+                <ChevronLeft className="h-4 w-4" />
               </button>
-            ))}
-            <span className="ml-2 text-[10px] text-slate-400">
-              {periodData.length} {periodLabel}{periodData.length !== 1 ? 's' : ''} with expenses
-            </span>
+              <div className="flex items-center gap-1 p-0.5 bg-slate-100 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => setExpenseView('toll')}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-all ${
+                    expenseView === 'toll'
+                      ? 'bg-white text-amber-700 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  <Navigation className="h-3 w-3" />
+                  Tolls
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExpenseView('fuel')}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-all ${
+                    expenseView === 'fuel'
+                      ? 'bg-white text-red-700 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  <Fuel className="h-3 w-3" />
+                  Fuel
+                </button>
+              </div>
+              <button
+                type="button"
+                aria-label="Show fuel expenses"
+                disabled={expenseView === 'fuel'}
+                onClick={() => setExpenseView('fuel')}
+                className={`h-8 w-8 inline-flex items-center justify-center rounded-full border transition-all ${
+                  expenseView === 'fuel'
+                    ? 'border-slate-200 text-slate-300 cursor-default'
+                    : 'border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
+                }`}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
           {periodData.length === 0 ? (
@@ -570,158 +641,219 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
             </div>
           ) : (
             <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{periodColumnLabel}</TableHead>
-                    <TableHead className="w-28 text-right whitespace-nowrap">Tolls</TableHead>
-                    <TableHead className="text-right text-xs">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="inline-flex items-center gap-1 cursor-help">
-                              Cash / Tag
-                              <Info className="h-3 w-3 text-slate-400" />
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-[260px] text-xs">
-                            How the toll was paid at the plaza: Cash = driver paid cash; Tag = fleet tag / account charge. Personal charges do not change this split.
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </TableHead>
-                    <TableHead className="text-xs text-center">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="inline-flex items-center gap-1 cursor-help">
-                              Toll Status
-                              <Info className="h-3 w-3 text-slate-400" />
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-[250px] text-xs">
-                            Whether toll expenses for this period have been matched to a trip in the Toll Reconciliation system. "Reconciled" = all tolls linked; "X Unmatched" = some tolls still need matching.
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </TableHead>
-                    <TableHead className="text-right">Charged to driver</TableHead>
-                    <TableHead className="text-right">Fuel (Deduction)</TableHead>
-                    <TableHead className="text-right">Total Expenses</TableHead>
-                    <TableHead className="text-xs text-center">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="inline-flex items-center gap-1 cursor-help">
-                              Fuel Status
-                              <Info className="h-3 w-3 text-slate-400" />
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-[300px] text-xs">
-                            Fuel report lock only — not toll reconciliation. &quot;Finalized&quot; means the fuel report for this period is reviewed and locked (fuel deduction is final). &quot;Pending&quot; means fuel may still change. Toll matching uses Toll Status.
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {visibleRows.map((row, idx) => (
-                    <TableRow key={idx} className={!row.isFinalized ? 'bg-amber-50/30' : 'hover:bg-slate-50/60'}>
-                      <TableCell className="font-medium text-xs whitespace-nowrap">
-                        {formatPeriodLabel(row)}
-                      </TableCell>
-                      <TableCell className="w-28 text-right tabular-nums text-amber-600 whitespace-nowrap">
-                        {row.tollExpenses > 0
-                          ? `$${row.tollExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-                          : '-'}
-                      </TableCell>
-                      <TableCell className="text-right text-[11px] leading-tight">
-                        {row.tollExpenses > 0 ? (
-                          <div className="inline-flex flex-col items-end gap-0.5">
-                            <span className="text-sky-700">
-                              Cash ${row.tollCashSpent.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                            </span>
-                            <span className="text-slate-600">
-                              Tag ${row.tollTagSpent.toLocaleString(undefined, {
-                                minimumFractionDigits: 2,
-                              })}
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-slate-300">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-xs text-center">
-                        {(row.tollReconciled + row.tollUnreconciled) === 0 ? (
-                          <span className="text-slate-300">-</span>
-                        ) : row.tollUnreconciled === 0 ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                            <CheckCircle className="h-3 w-3" /> Reconciled
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                            <Unlink className="h-3 w-3" /> {row.tollUnreconciled} Unmatched
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right text-rose-600">
-                        {row.tollCharged > 0
-                          ? `$${row.tollCharged.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-                          : '-'}
-                      </TableCell>
-                      <TableCell className={`text-right ${row.isFinalized ? 'text-red-600' : 'text-slate-300'}`}>
-                        {row.isFinalized && row.fuelDeduction > 0 ? (
-                          <div className="inline-flex flex-col items-end gap-0.5">
-                            <span>${row.fuelDeduction.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                            {row.fuelDriverSpend > 0.005 && (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className={`text-[10px] font-medium cursor-help ${row.fuelNetPay >= 0 ? 'text-emerald-600' : 'text-slate-500'}`}>
-                                      Net {row.fuelNetPay >= 0 ? '+' : '-'}${Math.abs(row.fuelNetPay).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                    </span>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="top" className="max-w-[260px] text-xs">
-                                    Driver already paid ${row.fuelDriverSpend.toLocaleString(undefined, { minimumFractionDigits: 2 })} out-of-pocket for fuel this period. Net = Paid by Driver − Deduction. {row.fuelNetPay >= 0 ? 'Company owes the driver the difference.' : 'The shortfall is deducted from earnings.'}
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            )}
-                          </div>
-                        ) : !row.isFinalized && row.fuelDraftEstimate > 0.005 ? (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="text-amber-600 font-medium cursor-help">
-                                  ~${row.fuelDraftEstimate.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              <div className="overflow-hidden">
+                <div
+                  className="flex transition-transform duration-300 ease-out"
+                  style={{ transform: expenseView === 'toll' ? 'translateX(0%)' : 'translateX(-100%)' }}
+                >
+                  {/* ── Toll panel ── */}
+                  <div className="w-full shrink-0 min-w-full">
+                    <Table className="table-fixed">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[22%] px-3">{periodColumnLabel}</TableHead>
+                          <TableHead className="w-[15%] px-3 text-right">Total Tolls</TableHead>
+                          <TableHead className="w-[15%] px-3 text-right">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="inline-flex items-center gap-1 cursor-help">
+                                    Cash Tolls
+                                    <Info className="h-3 w-3 text-slate-400" />
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-[240px] text-xs">
+                                  Tolls the driver paid in cash at the plaza.
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </TableHead>
+                          <TableHead className="w-[15%] px-3 text-right">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="inline-flex items-center gap-1 cursor-help">
+                                    Tag Tolls
+                                    <Info className="h-3 w-3 text-slate-400" />
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-[240px] text-xs">
+                                  Tolls charged to the fleet tag / account (not paid in cash).
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </TableHead>
+                          <TableHead className="w-[18%] px-3 text-center">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="inline-flex items-center gap-1 cursor-help">
+                                    Toll Status
+                                    <Info className="h-3 w-3 text-slate-400" />
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-[250px] text-xs">
+                                  Whether toll expenses for this period have been matched to a trip in the Toll Reconciliation system. "Reconciled" = all tolls linked; "X Unmatched" = some tolls still need matching.
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </TableHead>
+                          <TableHead className="w-[15%] px-3 text-right">Charged to Driver</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {visibleRows.map((row, idx) => (
+                          <TableRow key={`toll-${idx}`} className="hover:bg-slate-50/60">
+                            <TableCell className="px-3 font-medium text-xs whitespace-nowrap">
+                              {formatPeriodLabel(row)}
+                            </TableCell>
+                            <TableCell className="px-3 text-right tabular-nums text-amber-600">
+                              {row.tollExpenses > 0
+                                ? `$${row.tollExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                                : <span className="text-slate-300">-</span>}
+                            </TableCell>
+                            <TableCell className="px-3 text-right tabular-nums text-sky-700">
+                              {row.tollCashSpent > 0
+                                ? `$${row.tollCashSpent.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                                : <span className="text-slate-300">-</span>}
+                            </TableCell>
+                            <TableCell className="px-3 text-right tabular-nums text-slate-700">
+                              {row.tollTagSpent > 0
+                                ? `$${row.tollTagSpent.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                                : <span className="text-slate-300">-</span>}
+                            </TableCell>
+                            <TableCell className="px-3 text-xs text-center">
+                              {(row.tollReconciled + row.tollUnreconciled) === 0 ? (
+                                <span className="text-slate-300">-</span>
+                              ) : row.tollUnreconciled === 0 ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                                  <CheckCircle className="h-3 w-3" /> Reconciled
                                 </span>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="max-w-[260px] text-xs">
-                                Pending reconciliation — this fuel report has not been finalized yet. Estimate based on current data; the posted amount may change until an admin finalizes this week.
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        ) : '-'}
-                      </TableCell>
-                      <TableCell className="text-right font-bold text-rose-600">
-                        ${row.totalExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </TableCell>
-                      <TableCell className="text-xs text-center">
-                        {row.isFinalized ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                            <CheckCircle className="h-3 w-3" /> Finalized
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                            <Clock className="h-3 w-3" /> Pending
-                          </span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                                  <Unlink className="h-3 w-3" /> {row.tollUnreconciled} Unmatched
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="px-3 text-right tabular-nums text-rose-600">
+                              {row.tollCharged > 0
+                                ? `$${row.tollCharged.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                                : <span className="text-slate-300">-</span>}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* ── Fuel panel ── */}
+                  <div className="w-full shrink-0 min-w-full">
+                    <Table className="table-fixed">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[22%] px-3">{periodColumnLabel}</TableHead>
+                          <TableHead className="w-[20%] px-3 text-right">Fuel Deduction</TableHead>
+                          <TableHead className="w-[20%] px-3 text-right">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="inline-flex items-center gap-1 cursor-help">
+                                    Paid by Driver
+                                    <Info className="h-3 w-3 text-slate-400" />
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-[260px] text-xs">
+                                  What the driver already paid out-of-pocket for fuel this period (finalized reports only).
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </TableHead>
+                          <TableHead className="w-[18%] px-3 text-right">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="inline-flex items-center gap-1 cursor-help">
+                                    Net
+                                    <Info className="h-3 w-3 text-slate-400" />
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-[260px] text-xs">
+                                  Net = Paid by Driver − Deduction. Positive means the company owes the driver; negative means the shortfall is deducted from earnings.
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </TableHead>
+                          <TableHead className="w-[20%] px-3 text-center">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="inline-flex items-center gap-1 cursor-help">
+                                    Fuel Status
+                                    <Info className="h-3 w-3 text-slate-400" />
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-[300px] text-xs">
+                                  Fuel report lock only — not toll reconciliation. &quot;Finalized&quot; means the fuel report for this period is reviewed and locked (fuel deduction is final). &quot;Pending&quot; means fuel may still change.
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {visibleRows.map((row, idx) => (
+                          <TableRow key={`fuel-${idx}`} className={!row.isFinalized ? 'bg-amber-50/30' : 'hover:bg-slate-50/60'}>
+                            <TableCell className="px-3 font-medium text-xs whitespace-nowrap">
+                              {formatPeriodLabel(row)}
+                            </TableCell>
+                            <TableCell className={`px-3 text-right tabular-nums ${row.isFinalized ? 'text-red-600' : 'text-slate-300'}`}>
+                              {row.isFinalized && row.fuelDeduction > 0 ? (
+                                `$${row.fuelDeduction.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                              ) : !row.isFinalized && row.fuelDraftEstimate > 0.005 ? (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="text-amber-600 font-medium cursor-help">
+                                        ~${row.fuelDraftEstimate.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="max-w-[260px] text-xs">
+                                      Pending reconciliation — this fuel report has not been finalized yet. Estimate based on current data; the posted amount may change until an admin finalizes this week.
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              ) : <span className="text-slate-300">-</span>}
+                            </TableCell>
+                            <TableCell className="px-3 text-right tabular-nums text-slate-600">
+                              {row.isFinalized && row.fuelDriverSpend > 0.005
+                                ? `$${row.fuelDriverSpend.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                                : <span className="text-slate-300">-</span>}
+                            </TableCell>
+                            <TableCell className="px-3 text-right tabular-nums">
+                              {row.isFinalized && (row.fuelDeduction > 0 || row.fuelDriverSpend > 0.005) ? (
+                                <span className={`font-medium ${row.fuelNetPay >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                  {row.fuelNetPay >= 0 ? '+' : '-'}${Math.abs(row.fuelNetPay).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </span>
+                              ) : <span className="text-slate-300">-</span>}
+                            </TableCell>
+                            <TableCell className="px-3 text-xs text-center">
+                              {row.isFinalized ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                                  <CheckCircle className="h-3 w-3" /> Finalized
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                                  <Clock className="h-3 w-3" /> Pending
+                                </span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              </div>
 
               {hasMore && (
                 <div className="flex justify-center pt-2">

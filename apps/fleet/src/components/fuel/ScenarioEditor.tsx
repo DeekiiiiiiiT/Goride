@@ -9,6 +9,42 @@ import { Switch } from "../ui/switch";
 import { FuelScenario, FuelRule } from '../../types/fuel';
 import { Fuel, Info, AlertTriangle } from 'lucide-react';
 
+/**
+ * Validates a Fuel rule before save. Blocks NaN/negative/>100% percentages and
+ * non-positive allowances, which previously saved silently (parseFloat('abc')
+ * → NaN, no bounds check) and could corrupt downstream reconciliation math.
+ * Exported for direct unit testing.
+ */
+export function validateFuelRule(rule: FuelRule): string | null {
+    if (!Number.isFinite(rule.coverageValue) || rule.coverageValue < 0) {
+        return rule.coverageType === 'Fixed_Amount'
+            ? 'Allowance amount must be a positive number.'
+            : 'Coverage value must be a number of 0 or greater.';
+    }
+    if (rule.coverageType === 'Fixed_Amount' && rule.coverageValue <= 0) {
+        return 'Allowance amount must be greater than 0.';
+    }
+    if (rule.coverageType === 'Percentage') {
+        const granular: [string, number | undefined][] = [
+            ['Ride Share', rule.rideShareCoverage],
+            ['Company Ops', rule.companyUsageCoverage],
+            ['Deadhead', rule.deadheadCoverage],
+            ['Personal Usage', rule.personalCoverage],
+            ['Misc / Leakage', rule.miscCoverage],
+        ];
+        for (const [label, value] of granular) {
+            if (value === undefined) continue;
+            if (!Number.isFinite(value) || value < 0 || value > 100) {
+                return `${label} must be a number between 0 and 100.`;
+            }
+        }
+    }
+    if (rule.conditions?.maxAmount !== undefined && (!Number.isFinite(rule.conditions.maxAmount) || rule.conditions.maxAmount <= 0)) {
+        return 'Max amount cap must be a positive number.';
+    }
+    return null;
+}
+
 interface ScenarioEditorProps {
     isOpen: boolean;
     onClose: () => void;
@@ -81,9 +117,10 @@ export function ScenarioEditor({ isOpen, onClose, onSave, initialData, affectedV
     };
 
     const fuelRule = rules.find(r => r.category === 'Fuel');
+    const validationError = fuelRule ? validateFuelRule(fuelRule) : null;
 
     const handleSubmit = async () => {
-        if (!name.trim()) return;
+        if (!name.trim() || !fuelRule || validationError) return;
         setIsSubmitting(true);
         try {
             const scenario: FuelScenario = {
@@ -208,9 +245,9 @@ export function ScenarioEditor({ isOpen, onClose, onSave, initialData, affectedV
                                             <div className="space-y-1.5">
                                                 <Label className="text-xs font-medium text-slate-700">Company Ops</Label>
                                                 <div className="relative">
-                                                    <Input 
+                                                    <Input
                                                         type="number" min="0" max="100" className="pr-8"
-                                                        value={fuelRule.companyUsageCoverage ?? 100}
+                                                        value={fuelRule.companyUsageCoverage ?? fuelRule.coverageValue}
                                                         onChange={(e) => updateFuelRule('companyUsageCoverage', e.target.value === '' ? 0 : parseFloat(e.target.value))}
                                                     />
                                                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">%</span>
@@ -219,9 +256,9 @@ export function ScenarioEditor({ isOpen, onClose, onSave, initialData, affectedV
                                             <div className="space-y-1.5">
                                                 <Label className="text-xs font-medium text-amber-700">Deadhead</Label>
                                                 <div className="relative">
-                                                    <Input 
+                                                    <Input
                                                         type="number" min="0" max="100" className="pr-8"
-                                                        value={fuelRule.deadheadCoverage ?? fuelRule.companyUsageCoverage ?? 100}
+                                                        value={fuelRule.deadheadCoverage ?? fuelRule.companyUsageCoverage ?? fuelRule.coverageValue}
                                                         onChange={(e) => updateFuelRule('deadheadCoverage', e.target.value === '' ? 0 : parseFloat(e.target.value))}
                                                     />
                                                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">%</span>
@@ -230,9 +267,9 @@ export function ScenarioEditor({ isOpen, onClose, onSave, initialData, affectedV
                                             <div className="space-y-1.5">
                                                 <Label className="text-xs font-medium text-slate-700">Personal Usage</Label>
                                                 <div className="relative">
-                                                    <Input 
+                                                    <Input
                                                         type="number" min="0" max="100" className="pr-8"
-                                                        value={fuelRule.personalCoverage ?? 0}
+                                                        value={fuelRule.personalCoverage ?? fuelRule.coverageValue}
                                                         onChange={(e) => updateFuelRule('personalCoverage', e.target.value === '' ? 0 : parseFloat(e.target.value))}
                                                     />
                                                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">%</span>
@@ -287,9 +324,16 @@ export function ScenarioEditor({ isOpen, onClose, onSave, initialData, affectedV
                     </div>
                 </div>
 
+                {validationError && (
+                    <div className="flex items-start gap-2 p-2.5 bg-rose-50 border border-rose-200 rounded text-rose-900">
+                        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                        <span className="text-sm">{validationError}</span>
+                    </div>
+                )}
+
                 <DialogFooter>
                     <Button variant="outline" onClick={onClose}>Cancel</Button>
-                    <Button onClick={handleSubmit} disabled={isSubmitting || !name}>
+                    <Button onClick={handleSubmit} disabled={isSubmitting || !name.trim() || !!validationError}>
                         {isSubmitting ? "Saving..." : "Save Scenario"}
                     </Button>
                 </DialogFooter>

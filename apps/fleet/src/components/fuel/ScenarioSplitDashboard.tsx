@@ -65,12 +65,15 @@ export function ScenarioSplitDashboard({ reports, scenarios, vehicles }: Scenari
             result.company.misc = costs.misc;
             result.driver.personal = costs.personal;
         } else if (fuelRule.coverageType === 'Percentage') {
-             const rideSharePct = (fuelRule.rideShareCoverage ?? fuelRule.coverageValue ?? 100) / 100;
-             const companyOpsPct = (fuelRule.companyUsageCoverage ?? 100) / 100;
-             const personalPct = (fuelRule.personalCoverage ?? 0) / 100;
-             const miscPct = (fuelRule.miscCoverage ?? fuelRule.coverageValue ?? 50) / 100;
+             // Fallback chain must match fuelCalculationService.ts's getCoverage()
+             // exactly — this dashboard's tiles and the per-vehicle table rows below
+             // it must always agree on the same scenario's effective split.
+             const rideSharePct = (fuelRule.rideShareCoverage ?? fuelRule.coverageValue) / 100;
+             const companyOpsPct = (fuelRule.companyUsageCoverage ?? fuelRule.coverageValue) / 100;
+             const personalPct = (fuelRule.personalCoverage ?? fuelRule.coverageValue) / 100;
+             const miscPct = (fuelRule.miscCoverage ?? fuelRule.coverageValue) / 100;
              // Deadhead follows its own coverage rule, falling back to companyOps coverage
-             const deadheadPct = (fuelRule.deadheadCoverage ?? fuelRule.companyUsageCoverage ?? 100) / 100;
+             const deadheadPct = (fuelRule.deadheadCoverage ?? fuelRule.companyUsageCoverage ?? fuelRule.coverageValue) / 100;
 
              result.company.rideShare = costs.rideShare * rideSharePct;
              result.company.companyOps = costs.companyOps * companyOpsPct;
