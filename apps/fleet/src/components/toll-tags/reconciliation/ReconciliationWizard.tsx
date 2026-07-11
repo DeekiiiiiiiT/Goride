@@ -29,6 +29,7 @@ import { StepId, StepCounts, STEP_ORDER, computeStepCounts } from "../../../util
 import { buildPeriodTollIdSet, isClaimVisibleInPeriod, isTollInWizardPeriod, tollWeekKey, filterTollsToWizardPeriod, assertTollInWizardPeriod } from "../../../utils/tollWeekPeriod";
 import { mergeReconciledTollsForUnderpaid } from "../../../utils/claimByToll";
 import { computeUnderpaidPipelineCounts } from "../../../utils/underpaidPipelineCounts";
+import { isRecommendedUnlinkedShortfall } from "../../../utils/unlinkedShortfallEligibility";
 import type { UnlinkedShortfallSuggestion } from "../../../hooks/useTollReconciliation";
 import { toast } from "sonner@2.0.3";
 import { Trip as TripType } from "../../../types/data";
@@ -505,6 +506,25 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
     [buildBuckets, allUnreconciledForGating, filterBucketsToPeriod],
   );
 
+  // Unlinked: pending-hold alone is informational, but Apply / Accept still count.
+  const unlinkedSuggestionStatusByTripId = useMemo(() => {
+    const m = new Map<string, string>();
+    refundSuggestions.forEach((s, tripId) => {
+      if (s?.status) m.set(tripId, s.status);
+    });
+    return m;
+  }, [refundSuggestions]);
+
+  const unlinkedRecommendedShortfallTripIds = useMemo(() => {
+    const ids = new Set<string>();
+    shortfallSuggestions.forEach((list, tripId) => {
+      const trip = unclaimedRefunds.find((t) => t.id === tripId);
+      const best = list[0];
+      if (best && isRecommendedUnlinkedShortfall(best, trip?.platform)) ids.add(tripId);
+    });
+    return ids;
+  }, [shortfallSuggestions, unclaimedRefunds]);
+
   // ── Phase F4: hard-gate counts use ALL platforms (filter is display-only) ─
   const stepCounts: Record<StepId, StepCounts> = useMemo(() => computeStepCounts({
     classified: classifiedAllPlatforms,
@@ -519,6 +539,8 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
     fleetTz,
     periodTollIds,
     periodClaimIds,
+    unlinkedSuggestionStatusByTripId,
+    unlinkedRecommendedShortfallTripIds,
   }), [
     classifiedAllPlatforms,
     periodClaims,
@@ -529,6 +551,8 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
     fleetTz,
     periodTollIds,
     periodClaimIds,
+    unlinkedSuggestionStatusByTripId,
+    unlinkedRecommendedShortfallTripIds,
   ]);
 
   const gatedStates: GatedStepState[] = useMemo(

@@ -827,6 +827,66 @@ function buildOrphanSuggestion(
   };
 }
 
+/**
+ * Period reset clears tripId but keeps matchedTripId + matchStatus=matched.
+ * Live window rematch can miss that trip and invent an orphan — restore the
+ * known trip as AMOUNT_VARIANCE / PERFECT_MATCH so Unlinked/Underpaid stay correct.
+ */
+function buildPersistedTripMatchSuggestion(
+  tx: any,
+  trip: any,
+  expectedCostAbs?: number,
+  costMeta?: {
+    officialAmount?: number | null;
+    tagAmount?: number;
+    usedOfficialRate?: boolean;
+    rateDrift?: boolean;
+  },
+): MatchResult | null {
+  if (!trip?.id) return null;
+  const tagAmountAbs = Math.abs(Number(tx.amount) || 0);
+  const txAmountAbs =
+    typeof expectedCostAbs === "number" && expectedCostAbs > 0
+      ? expectedCostAbs
+      : tagAmountAbs;
+  const tripRefundAmount = Number(trip.tollCharges) || 0;
+  const varianceAmount = tripRefundAmount - txAmountAbs;
+  const matchType: MatchResult["matchType"] =
+    Math.abs(varianceAmount) < 0.05 ? "PERFECT_MATCH" : "AMOUNT_VARIANCE";
+
+  return {
+    tripId: trip.id,
+    confidence: "medium",
+    reason:
+      matchType === "PERFECT_MATCH"
+        ? "Restored prior trip link (period reset)"
+        : `Restored prior trip link — Uber refund $${tripRefundAmount.toFixed(2)} vs toll $${txAmountAbs.toFixed(2)}`,
+    timeDifferenceMinutes: 0,
+    matchType,
+    varianceAmount: matchType === "AMOUNT_VARIANCE" ? varianceAmount : undefined,
+    confidenceScore: 70,
+    reasonCode: "ON_TRIP",
+    tripDate: trip.date,
+    tripAmount: trip.amount,
+    tripTollCharges: tripRefundAmount,
+    tripPickup: (trip.pickupLocation || "Unknown").substring(0, 40),
+    tripDropoff: (trip.dropoffLocation || "Unknown").substring(0, 40),
+    tripPlatform: trip.platform || "Unknown",
+    tripDriverId: trip.driverId || "",
+    tripDriverName: trip.driverName || "",
+    officialAmount: costMeta?.officialAmount ?? null,
+    tagAmount: costMeta?.tagAmount ?? tagAmountAbs,
+    usedOfficialRate: costMeta?.usedOfficialRate ?? false,
+    rateDrift: costMeta?.rateDrift ?? false,
+    tripRequestTime: trip.requestTime || trip.date,
+    tripDropoffTime: trip.dropoffTime || trip.date,
+    tripVehicleId: trip.vehicleId,
+    tripDuration: trip.duration,
+    tripDistance: trip.distance,
+    tripServiceType: trip.serviceType,
+  };
+}
+
 // ─── Data Loaders ──────────────────────────────────────────────────────
 
 /**
@@ -1639,6 +1699,34 @@ app.get(`${BASE}/unreconciled`, async (c) => {
       );
       if (matches.length > 0) {
         suggestionsMap[tx.id] = matches;
+      } else if (tx.matchStatus === "matched" && tx.matchedTripId) {
+        // Period reset: tripId cleared, matchedTripId kept — don't invent orphan.
+        let knownTrip = trips.find((t: any) => t.id === tx.matchedTripId);
+        if (!knownTrip) {
+          knownTrip = (await kv.get(`trip:${tx.matchedTripId}`)) as any;
+        }
+        const restored = buildPersistedTripMatchSuggestion(
+          tx,
+          knownTrip,
+          cost.expectedCost,
+          {
+            officialAmount: cost.officialAmount,
+            tagAmount: cost.tagAmount,
+            usedOfficialRate: cost.usedOfficialRate,
+            rateDrift: cost.rateDrift,
+          },
+        );
+        if (restored) {
+          suggestionsMap[tx.id] = [restored];
+        } else if (puSettings.personalUseDetectionEnabled) {
+          const orphan = buildOrphanSuggestion(
+            tx,
+            trips,
+            timezone,
+            puSettings.orphanProximityMinutes,
+          );
+          if (orphan) suggestionsMap[tx.id] = [orphan];
+        }
       } else if (puSettings.personalUseDetectionEnabled) {
         // No real trip match → classify as orphan (personal use) when enabled.
         const orphan = buildOrphanSuggestion(

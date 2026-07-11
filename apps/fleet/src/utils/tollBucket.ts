@@ -174,6 +174,8 @@ export function personalMatchReasonLabel(
 /**
  * Single source of truth for wizard step bucketing (client wizard + tests).
  * Orphan personal wins over stale ambiguous flags — there is no trip to pick.
+ * Exception: period reset clears tripId but keeps underpaid_pending + matchedTripId;
+ * live rematch must not invent ORPHAN_* and hijack those rows into Personal Use.
  */
 export function resolveWizardBucket(
   tx: WizardBucketTx,
@@ -185,7 +187,33 @@ export function resolveWizardBucket(
   const resolvedStageBucket = stage ? bucketForWorkflowStage(stage) : undefined;
   if (resolvedStageBucket === null && stage) return null;
 
-  if (best && isOrphanPersonalMatch(best)) {
+  const linkConfirmed = isTripLinkConfirmed(tx);
+  const knownNonPersonal =
+    stage === 'underpaid_pending' ||
+    stage === 'deadhead_pending' ||
+    (tx.matchStatus === 'matched' && stage !== 'personal_use_pending');
+
+  // Live orphan guesses never override a persisted underpaid/deadhead/matched row.
+  const orphanBest = best && isOrphanPersonalMatch(best) ? best : undefined;
+  const usableBest = orphanBest && knownNonPersonal ? undefined : best;
+
+  if (knownNonPersonal) {
+    if (usableBest && !usableBest.isAmbiguous) {
+      const live = resolveTollBucket(tx, usableBest);
+      if (live !== 'needs-review') {
+        // Unreconciled after reset: confirm the trip link in Needs Review first.
+        if (!linkConfirmed && (live === 'underpaid' || live === 'deadhead')) {
+          return 'needs-review';
+        }
+        return live;
+      }
+    }
+    if (!linkConfirmed) return 'needs-review';
+    if (stage === 'underpaid_pending') return 'underpaid';
+    if (stage === 'deadhead_pending') return 'deadhead';
+  }
+
+  if (orphanBest) {
     return 'personal-use';
   }
 
@@ -193,21 +221,25 @@ export function resolveWizardBucket(
     return 'personal-use';
   }
 
-  const linkConfirmed = isTripLinkConfirmed(tx);
   const ambiguous =
-    (best?.isAmbiguous || tx.matchStatus === 'ambiguous' || tx.isAmbiguous === true) &&
+    (usableBest?.isAmbiguous || tx.matchStatus === 'ambiguous' || tx.isAmbiguous === true) &&
     !linkConfirmed;
   if (ambiguous) return 'needs-review';
 
-  const liveBucket = resolveTollBucket(tx, best);
+  const liveBucket = resolveTollBucket(tx, usableBest);
   if (liveBucket !== 'needs-review') return liveBucket;
 
-  if (!best && isTagImportToll(tx) && tx.matchStatus !== 'ambiguous') {
+  if (
+    !usableBest &&
+    isTagImportToll(tx) &&
+    tx.matchStatus !== 'ambiguous' &&
+    tx.matchStatus !== 'matched'
+  ) {
     return 'personal-use';
   }
 
-  if (best?.matchType === 'PERSONAL_MATCH') {
-    return bucketForBestMatch(best);
+  if (usableBest?.matchType === 'PERSONAL_MATCH') {
+    return bucketForBestMatch(usableBest);
   }
 
   if (resolvedStageBucket) return resolvedStageBucket;

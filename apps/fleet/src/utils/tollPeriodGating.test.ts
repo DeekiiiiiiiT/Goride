@@ -157,6 +157,51 @@ describe('computeStepCounts', () => {
     expect(counts['unlinked-refunds']).toEqual({ actionable: 2, informational: 0 });
   });
 
+  it('unlinked-refunds: pending-hold alone is informational', () => {
+    const pending = {
+      id: 't1',
+      tollRefundResolution: { status: 'pending' },
+    } as Trip;
+    const counts = computeStepCounts({
+      classified: emptyClassified(),
+      underpaidClaims: [],
+      disputeRefunds: [],
+      unclaimedRefundTrips: [pending],
+    });
+    expect(counts['unlinked-refunds']).toEqual({ actionable: 0, informational: 1 });
+  });
+
+  it('unlinked-refunds: pending + Accept suggestion stays actionable', () => {
+    const pending = {
+      id: 't1',
+      tollRefundResolution: { status: 'pending' },
+    } as Trip;
+    const counts = computeStepCounts({
+      classified: emptyClassified(),
+      underpaidClaims: [],
+      disputeRefunds: [],
+      unclaimedRefundTrips: [pending],
+      unlinkedSuggestionStatusByTripId: new Map([['t1', 'cash_wash']]),
+    });
+    expect(counts['unlinked-refunds']).toEqual({ actionable: 1, informational: 0 });
+  });
+
+  it('unlinked-refunds: pending + recommended Apply shortfall stays actionable', () => {
+    const pending = {
+      id: 't1',
+      tollRefundResolution: { status: 'pending' },
+    } as Trip;
+    const counts = computeStepCounts({
+      classified: emptyClassified(),
+      underpaidClaims: [],
+      disputeRefunds: [],
+      unclaimedRefundTrips: [pending],
+      unlinkedSuggestionStatusByTripId: new Map([['t1', 'pending']]),
+      unlinkedRecommendedShortfallTripIds: new Set(['t1']),
+    });
+    expect(counts['unlinked-refunds']).toEqual({ actionable: 1, informational: 0 });
+  });
+
   it('zero-match tag tolls bucketed to personal-use do not block needs-review', () => {
     const classified = emptyClassified();
     classified['personal-use'] = [{ paymentMethod: 'Tag' } as FinancialTransaction];

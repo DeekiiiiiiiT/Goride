@@ -205,6 +205,23 @@ export function isPendingOnlyRefundResolution(trip: {
   return trip.tollRefundResolution?.status === 'pending';
 }
 
+/**
+ * Whether Unlinked Refunds still needs a manager decision on this trip.
+ * Pending-hold alone is informational — but Apply-to-underpaid or Accept
+ * (cash wash / phantom / etc.) means the row is still actionable.
+ */
+export function isUnlinkedRefundActionableNow(
+  trip: { tollRefundResolution?: { status?: string } | null; platform?: string | null },
+  opts?: {
+    suggestionStatus?: string | null;
+    hasRecommendedShortfall?: boolean;
+  },
+): boolean {
+  if (opts?.hasRecommendedShortfall) return true;
+  if (opts?.suggestionStatus && opts.suggestionStatus !== 'pending') return true;
+  return !isPendingOnlyRefundResolution(trip);
+}
+
 /** Expense-logged via Apply to Underpaid (has appliedToClaimId or unlinked shortfall source). */
 export function isUnlinkedApplyResolution(trip: {
   tollRefundResolution?: {

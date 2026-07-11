@@ -19,7 +19,7 @@ import type { RefundSuggestion } from "../../../hooks/useTollReconciliation";
 import type { UnlinkedShortfallSuggestion } from "../../../hooks/useTollReconciliation";
 import {
   isRecommendedUnlinkedShortfall,
-  isPendingOnlyRefundResolution,
+  isUnlinkedRefundActionableNow,
 } from "../../../utils/unlinkedShortfallEligibility";
 import { toast } from "sonner@2.0.3";
 
@@ -160,18 +160,19 @@ export function UnclaimedRefundsList({
   );
 
   const { needsDecisionCount, waitingImportCount } = useMemo(() => {
+    let needsDecision = 0;
     let waiting = 0;
     for (const trip of trips) {
-      // Apply-to-underpaid is the primary path — don't count those as "waiting on import".
       const shortfall = bestShortfallFor(trip.id);
-      if (shortfall && isRecommendedUnlinkedShortfall(shortfall, trip.platform)) continue;
       const s = suggestionFor(trip.id);
-      if (s?.status === 'pending' || isPendingOnlyRefundResolution(trip)) waiting++;
+      const actionable = isUnlinkedRefundActionableNow(trip, {
+        suggestionStatus: s?.status ?? null,
+        hasRecommendedShortfall: !!(shortfall && isRecommendedUnlinkedShortfall(shortfall, trip.platform)),
+      });
+      if (actionable) needsDecision++;
+      else waiting++;
     }
-    return {
-      needsDecisionCount: Math.max(0, trips.length - waiting),
-      waitingImportCount: waiting,
-    };
+    return { needsDecisionCount: needsDecision, waitingImportCount: waiting };
   }, [trips, suggestions, shortfallSuggestions]);
 
   if (trips.length === 0) {

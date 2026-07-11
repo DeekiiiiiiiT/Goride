@@ -1,7 +1,7 @@
 import type { Claim, DisputeRefund, FinancialTransaction, Trip } from '../types/data';
 import type { TollBucket } from './tollBucket';
 import { isDisputeRefundMatched, isDisputeRefundInWizardPeriod } from './tollWeekPeriod';
-import { isPendingOnlyRefundResolution } from './unlinkedShortfallEligibility';
+import { isUnlinkedRefundActionableNow } from './unlinkedShortfallEligibility';
 
 /**
  * The 6 steps of the period-gated reconciliation wizard, in their fixed,
@@ -79,6 +79,12 @@ export function computeStepCounts(input: {
   fleetTz?: string;
   periodTollIds?: ReadonlySet<string>;
   periodClaimIds?: ReadonlySet<string>;
+  /**
+   * Optional Unlinked signals so pending-hold rows with Apply / Accept stay actionable.
+   * Keys are trip ids.
+   */
+  unlinkedSuggestionStatusByTripId?: ReadonlyMap<string, string>;
+  unlinkedRecommendedShortfallTripIds?: ReadonlySet<string>;
 }): Record<StepId, StepCounts> {
   const {
     classified,
@@ -90,6 +96,8 @@ export function computeStepCounts(input: {
     fleetTz,
     periodTollIds,
     periodClaimIds,
+    unlinkedSuggestionStatusByTripId,
+    unlinkedRecommendedShortfallTripIds,
   } = input;
 
   const scopedDisputeRefunds =
@@ -105,8 +113,16 @@ export function computeStepCounts(input: {
   const unmatchedDisputeRefunds = scopedDisputeRefunds.filter((r) => !isDisputeRefundMatched(r)).length;
   const matchedDisputeRefunds = scopedDisputeRefunds.filter(isDisputeRefundMatched).length;
 
-  const actionableUnlinked = unclaimedRefundTrips.filter((t) => !isPendingOnlyRefundResolution(t)).length;
-  const informationalUnlinked = unclaimedRefundTrips.filter(isPendingOnlyRefundResolution).length;
+  let actionableUnlinked = 0;
+  let informationalUnlinked = 0;
+  for (const t of unclaimedRefundTrips) {
+    const actionable = isUnlinkedRefundActionableNow(t, {
+      suggestionStatus: unlinkedSuggestionStatusByTripId?.get(t.id) ?? null,
+      hasRecommendedShortfall: unlinkedRecommendedShortfallTripIds?.has(t.id) ?? false,
+    });
+    if (actionable) actionableUnlinked++;
+    else informationalUnlinked++;
+  }
 
   const underpaidActionable =
     underpaidPipeline?.actionable ??

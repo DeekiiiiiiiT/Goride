@@ -196,6 +196,35 @@ describe('resolveWizardBucket', () => {
       },
     )).toBe('personal-use');
   });
+
+  it('underpaid_pending + live orphan stays needs-review (not personal) when unreconciled', () => {
+    expect(resolveWizardBucket(
+      {
+        ...tagTx,
+        workflowStage: 'underpaid_pending',
+        matchStatus: 'matched',
+        isReconciled: false,
+        tripId: null,
+      },
+      {
+        matchType: 'PERSONAL_MATCH',
+        reasonCode: 'ORPHAN_OUT_OF_WINDOW',
+        trip: { id: '' } as any,
+      },
+    )).toBe('needs-review');
+  });
+
+  it('matched + AMOUNT_VARIANCE unreconciled → needs-review to re-confirm trip', () => {
+    expect(resolveWizardBucket(
+      {
+        ...tagTx,
+        workflowStage: 'underpaid_pending',
+        matchStatus: 'matched',
+        isReconciled: false,
+      },
+      { matchType: 'AMOUNT_VARIANCE', reasonCode: 'ON_TRIP' },
+    )).toBe('needs-review');
+  });
 });
 
 /**
