@@ -1992,6 +1992,9 @@ export const api = {
       tollPlatform?: string | null;
       tripPlatform?: string | null;
       platformMismatch?: boolean;
+      proposedShare?: number;
+      requiresMultiTarget?: boolean;
+      multiTargetTollIds?: string[];
     }>>;
   }> {
     const qs = new URLSearchParams();
@@ -2009,6 +2012,9 @@ export const api = {
     tripId: string;
     claimId?: string | null;
     tollId?: string | null;
+    applyShare?: number;
+    forceSingleTarget?: boolean;
+    targets?: Array<{ claimId?: string | null; tollId?: string | null; share?: number }>;
     acknowledgedPlatformMismatch?: boolean;
     rejectOnPlatformMismatch?: boolean;
   }) {

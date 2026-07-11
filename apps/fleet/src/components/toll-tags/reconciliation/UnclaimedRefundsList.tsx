@@ -35,7 +35,12 @@ interface UnclaimedRefundsListProps {
   onApplyToShortfall?: (
     tripId: string,
     suggestion: UnlinkedShortfallSuggestion,
-    opts?: { acknowledgedPlatformMismatch?: boolean },
+    opts?: {
+      acknowledgedPlatformMismatch?: boolean;
+      forceSingleTarget?: boolean;
+      applyShare?: number;
+      targets?: Array<{ claimId?: string | null; tollId?: string | null; share?: number }>;
+    },
   ) => Promise<void> | void;
 }
 
@@ -73,18 +78,24 @@ export function UnclaimedRefundsList({
   const handleApplyShortfall = async (
     trip: Trip,
     candidate?: UnlinkedShortfallSuggestion,
-    opts?: { acknowledgedPlatformMismatch?: boolean },
+    opts?: {
+      acknowledgedPlatformMismatch?: boolean;
+      forceSingleTarget?: boolean;
+      targets?: Array<{ claimId?: string | null; tollId?: string | null; share?: number }>;
+    },
   ) => {
     const best = candidate ?? bestShortfallFor(trip.id);
     if (!best || !onApplyToShortfall) return;
     setBusy(true);
     try {
       await onApplyToShortfall(trip.id, best, opts);
-      toast.success(
-        best.coversFully
-          ? `Applied $${best.tripRefund.toFixed(2)} — claim reimbursed`
-          : `Applied $${best.tripRefund.toFixed(2)} — $${best.leftoverShortfall.toFixed(2)} shortfall left`,
-      );
+      const share = best.proposedShare ?? best.tripRefund;
+      const appliedLabel = opts?.targets && opts.targets.length > 1
+        ? `Applied $${best.tripRefund.toFixed(2)} across ${opts.targets.length} underpaid tolls`
+        : best.coversFully
+          ? `Applied $${share.toFixed(2)} — claim reimbursed`
+          : `Applied $${share.toFixed(2)} — $${best.leftoverShortfall.toFixed(2)} shortfall left`;
+      toast.success(appliedLabel);
     } catch (e: any) {
       toast.error(e?.message || 'Failed to apply refund to underpaid claim');
       throw e;
@@ -294,6 +305,16 @@ export function UnclaimedRefundsList({
                                           {shortfall.leftoverShortfall > 0.05
                                             ? ` → leftover $${shortfall.leftoverShortfall.toFixed(2)}`
                                             : ' → covered'}
+                                        </span>
+                                      </div>
+                                    ) : shortfall?.requiresMultiTarget ? (
+                                      <div className="flex flex-col gap-0.5">
+                                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold border border-amber-200 bg-amber-50 text-amber-900">
+                                          Multi-plaza credit
+                                        </span>
+                                        <span className="text-[10px] text-slate-500">
+                                          ${shortfall.tripRefund.toFixed(2)} may cover{' '}
+                                          {shortfall.multiTargetTollIds?.length || 2} underpaid tolls — Review to split
                                         </span>
                                       </div>
                                     ) : s ? (

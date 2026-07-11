@@ -151,6 +151,9 @@ export interface UnlinkedShortfallSuggestion {
   tollPlatform?: string | null;
   tripPlatform?: string | null;
   platformMismatch?: boolean;
+  proposedShare?: number;
+  requiresMultiTarget?: boolean;
+  multiTargetTollIds?: string[];
 }
 
 export interface ReconciliationPeriodScope {
@@ -207,7 +210,14 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
       const unreconciled: FinancialTransaction[] = unreconciledRes.data || [];
       const reconciled: FinancialTransaction[] = reconciledRes.data || [];
       const reconciledAll: FinancialTransaction[] = reconciledAllRes.data || reconciled;
-      const refunds: Trip[] = refundsRes.data || [];
+      const refundsRaw: Trip[] = refundsRes.data || [];
+      // Belt: server may historically return duplicate trip ids from unordered pages.
+      const seenRefundIds = new Set<string>();
+      const refunds = refundsRaw.filter((t) => {
+        if (!t?.id || seenRefundIds.has(t.id)) return false;
+        seenRefundIds.add(t.id);
+        return true;
+      });
 
       setUnreconciledTolls(unreconciled);
       setReconciledTolls(reconciled);
@@ -516,6 +526,9 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
     opts: {
       claimId?: string | null;
       tollId?: string | null;
+      applyShare?: number;
+      forceSingleTarget?: boolean;
+      targets?: Array<{ claimId?: string | null; tollId?: string | null; share?: number }>;
       acknowledgedPlatformMismatch?: boolean;
     },
   ) => {
@@ -523,6 +536,9 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
       tripId,
       claimId: opts.claimId,
       tollId: opts.tollId,
+      applyShare: opts.applyShare,
+      forceSingleTarget: opts.forceSingleTarget,
+      targets: opts.targets,
       acknowledgedPlatformMismatch: opts.acknowledgedPlatformMismatch,
       // UI requires Proceed anyway checkbox — enforce on server too.
       rejectOnPlatformMismatch: true,

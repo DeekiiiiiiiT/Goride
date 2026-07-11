@@ -12,6 +12,8 @@ import {
   isEligibleUnlinkedShortfallToll,
   isRecommendedUnlinkedShortfall,
   isUnlinkedShortfallPlatformMismatch,
+  hasMaterialExcessRefund,
+  proposeUnlinkedPoolAllocation,
 } from './unlinkedShortfallEligibility';
 import { normalizePlatform, platformsEqual } from './normalizePlatform';
 
@@ -206,16 +208,64 @@ describe('unlinked shortfall eligibility', () => {
       tripPlatform: 'Uber',
       tollPlatform: 'Uber',
       platformMismatch: false,
+      tripRefund: 275,
+      remainingShortfall: 285,
     };
     const mismatch = {
       confidence: 97,
       tripPlatform: 'Uber',
       tollPlatform: 'Roam',
       platformMismatch: true,
+      tripRefund: 275,
+      remainingShortfall: 285,
     };
     expect(isRecommendedUnlinkedShortfall(highMatch)).toBe(true);
     expect(isRecommendedUnlinkedShortfall(mismatch)).toBe(false);
     expect(isUnlinkedShortfallPlatformMismatch(mismatch)).toBe(true);
     expect(isUnlinkedShortfallPlatformMismatch(highMatch)).toBe(false);
+  });
+
+  it('hasMaterialExcessRefund detects multi-plaza leftover', () => {
+    expect(hasMaterialExcessRefund(645, 380)).toBe(true);
+    expect(hasMaterialExcessRefund(275, 285)).toBe(false);
+    expect(hasMaterialExcessRefund(370, 380)).toBe(false);
+  });
+
+  it('proposeUnlinkedPoolAllocation splits $645 across $285 + $380', () => {
+    const shares = proposeUnlinkedPoolAllocation(645, [
+      { tollId: 't380', remainingShortfall: 380, date: '2026-06-30T18:00:00' },
+      { tollId: 't285', remainingShortfall: 285, date: '2026-06-30T12:00:00' },
+    ]);
+    expect(shares.map((s) => s.tollId)).toEqual(['t285', 't380']);
+    expect(shares[0].proposedShare).toBe(285);
+    expect(shares[1].proposedShare).toBe(360);
+  });
+
+  it('recommended shortcut hidden for multi-target or material excess full dump', () => {
+    expect(
+      isRecommendedUnlinkedShortfall({
+        confidence: 69,
+        tripPlatform: 'Uber',
+        tollPlatform: 'Uber',
+        platformMismatch: false,
+        requiresMultiTarget: true,
+        tripRefund: 645,
+        remainingShortfall: 380,
+        proposedShare: 360,
+      }),
+    ).toBe(false);
+
+    expect(
+      isRecommendedUnlinkedShortfall({
+        confidence: 69,
+        tripPlatform: 'Uber',
+        tollPlatform: 'Uber',
+        platformMismatch: false,
+        tripRefund: 645,
+        remainingShortfall: 380,
+        // proposedShare equals full refund → dumping all on one shortfall
+        proposedShare: 645,
+      }),
+    ).toBe(false);
   });
 });

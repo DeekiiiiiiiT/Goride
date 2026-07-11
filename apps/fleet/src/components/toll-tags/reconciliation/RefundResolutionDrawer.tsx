@@ -29,6 +29,9 @@ export interface RefundResolutionPayload {
 
 export interface ApplyToShortfallOptions {
   acknowledgedPlatformMismatch?: boolean;
+  forceSingleTarget?: boolean;
+  applyShare?: number;
+  targets?: Array<{ claimId?: string | null; tollId?: string | null; share?: number }>;
 }
 
 interface RefundResolutionDrawerProps {
@@ -81,15 +84,20 @@ function ShortfallCandidateRow({
   tripPlatform,
   active,
   showRecommended,
+  multiMode,
+  proposedShare,
   onSelect,
 }: {
   candidate: UnlinkedShortfallSuggestion;
   tripPlatform?: string | null;
   active: boolean;
   showRecommended: boolean;
+  multiMode?: boolean;
+  proposedShare?: number;
   onSelect: () => void;
 }) {
   const recommended = showRecommended && isRecommendedUnlinkedShortfall(c, tripPlatform);
+  const share = proposedShare ?? c.proposedShare;
   return (
     <button
       type="button"
@@ -101,8 +109,13 @@ function ShortfallCandidateRow({
     >
       <span
         className={cn(
-          "mt-1 h-4 w-4 shrink-0 rounded-full border",
-          active ? "border-orange-600 bg-orange-600 ring-2 ring-orange-100" : "border-slate-300",
+          "mt-1 h-4 w-4 shrink-0 border",
+          multiMode ? "rounded-sm" : "rounded-full",
+          active
+            ? multiMode
+              ? "border-orange-600 bg-orange-600"
+              : "border-orange-600 bg-orange-600 ring-2 ring-orange-100"
+            : "border-slate-300",
         )}
       />
       <span className="min-w-0 flex-1">
@@ -125,9 +138,11 @@ function ShortfallCandidateRow({
         )}
         <span className="block text-xs text-slate-500 mt-0.5">
           Shortfall ${c.remainingShortfall.toFixed(2)}
-          {c.leftoverShortfall > 0.05
-            ? ` · leftover $${c.leftoverShortfall.toFixed(2)} after apply`
-            : " · fully covered"}
+          {typeof share === "number"
+            ? ` · apply $${share.toFixed(2)}`
+            : c.leftoverShortfall > 0.05
+              ? ` · leftover $${c.leftoverShortfall.toFixed(2)} after apply`
+              : " · fully covered"}
         </span>
         {(c.platformMismatch ||
           platformsMismatch(c.tripPlatform || tripPlatform, c.tollPlatform)) && (
@@ -154,6 +169,7 @@ export function RefundResolutionDrawer({
   onApplyToShortfall,
 }: RefundResolutionDrawerProps) {
   const [selectedShortfallKey, setSelectedShortfallKey] = useState<string | null>(null);
+  const [selectedMultiKeys, setSelectedMultiKeys] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<RefundResolutionType | null>(null);
   const [notes, setNotes] = useState("");
   const [driverId, setDriverId] = useState<string | undefined>(undefined);
@@ -161,6 +177,7 @@ export function RefundResolutionDrawer({
   const [otherOpen, setOtherOpen] = useState(true);
   const [moreUnderpaidOpen, setMoreUnderpaidOpen] = useState(false);
   const [acknowledgedMismatch, setAcknowledgedMismatch] = useState(false);
+  const [forceSingleOpen, setForceSingleOpen] = useState(false);
 
   const amount = useMemo(() => Math.abs(trip?.tollCharges ?? 0), [trip]);
 
@@ -169,16 +186,33 @@ export function RefundResolutionDrawer({
     [shortfallCandidates],
   );
 
+  const multiMode = useMemo(
+    () => rankedCandidates.some((c) => c.requiresMultiTarget),
+    [rankedCandidates],
+  );
+
+  const poolCandidates = useMemo(() => {
+    if (!multiMode) return [];
+    const ids = new Set(
+      rankedCandidates.find((c) => c.multiTargetTollIds?.length)?.multiTargetTollIds ||
+        rankedCandidates.filter((c) => (c.proposedShare ?? 0) > 0.05).map((c) => c.tollId),
+    );
+    return rankedCandidates
+      .filter((c) => ids.has(c.tollId))
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [rankedCandidates, multiMode]);
+
   const primaryCandidate = useMemo(
     () => pickPrimaryCandidate(rankedCandidates, trip?.platform),
     [rankedCandidates, trip?.platform],
   );
 
   const otherCandidates = useMemo(() => {
+    if (multiMode) return [];
     if (!primaryCandidate) return rankedCandidates;
     const primaryKey = candidateKey(primaryCandidate);
     return rankedCandidates.filter((c) => candidateKey(c) !== primaryKey);
-  }, [rankedCandidates, primaryCandidate]);
+  }, [rankedCandidates, primaryCandidate, multiMode]);
 
   // Reset when trip changes; auto-select top recommended shortfall once candidates are present.
   useEffect(() => {
@@ -188,8 +222,15 @@ export function RefundResolutionDrawer({
     setOtherOpen(true);
     setMoreUnderpaidOpen(false);
     setAcknowledgedMismatch(false);
-    const recommended = pickPrimaryCandidate(rankedCandidates, trip?.platform);
-    setSelectedShortfallKey(recommended ? candidateKey(recommended) : null);
+    setForceSingleOpen(false);
+    if (multiMode && poolCandidates.length > 0) {
+      setSelectedMultiKeys(new Set(poolCandidates.map((c) => candidateKey(c))));
+      setSelectedShortfallKey(null);
+    } else {
+      const recommended = pickPrimaryCandidate(rankedCandidates, trip?.platform);
+      setSelectedShortfallKey(recommended ? candidateKey(recommended) : null);
+      setSelectedMultiKeys(new Set());
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-init selection when trip or candidate set identity changes
   }, [trip?.id, trip?.driverId, shortfallCandidates]);
 
@@ -202,6 +243,23 @@ export function RefundResolutionDrawer({
         selectedCandidate.tripPlatform || trip?.platform,
         selectedCandidate.tollPlatform,
       ));
+
+  const multiSelected = poolCandidates.filter((c) => selectedMultiKeys.has(candidateKey(c)));
+  const multiMismatch = multiSelected.some(
+    (c) =>
+      c.platformMismatch === true ||
+      platformsMismatch(c.tripPlatform || trip?.platform, c.tollPlatform),
+  );
+
+  const toggleMulti = (key: string) => {
+    setSelectedMultiKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+    setSelected(null);
+  };
 
   const submitLeftover = async (resolution: RefundResolutionType, auto: boolean) => {
     if (!trip) return;
@@ -216,12 +274,34 @@ export function RefundResolutionDrawer({
   };
 
   const submitApply = async () => {
-    if (!trip || !selectedCandidate || !onApplyToShortfall) return;
+    if (!trip || !onApplyToShortfall) return;
+    if (multiMode && !forceSingleOpen) {
+      if (multiSelected.length < 2) return;
+      if (multiMismatch && !acknowledgedMismatch) return;
+      setSubmitting(true);
+      try {
+        await onApplyToShortfall(trip.id, multiSelected[0], {
+          acknowledgedPlatformMismatch: multiMismatch ? acknowledgedMismatch : undefined,
+          targets: multiSelected.map((c) => ({
+            claimId: c.claimId,
+            tollId: c.tollId,
+            share: c.proposedShare,
+          })),
+        });
+        onOpenChange(false);
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+    if (!selectedCandidate) return;
     if (selectedMismatch && !acknowledgedMismatch) return;
     setSubmitting(true);
     try {
       await onApplyToShortfall(trip.id, selectedCandidate, {
         acknowledgedPlatformMismatch: selectedMismatch ? acknowledgedMismatch : undefined,
+        forceSingleTarget: multiMode ? true : undefined,
+        applyShare: selectedCandidate.proposedShare,
       });
       onOpenChange(false);
     } finally {
@@ -274,14 +354,74 @@ export function RefundResolutionDrawer({
                   Clear this credit another way below, or finish underpaid matching first and come back.
                 </p>
               </div>
+            ) : multiMode && !forceSingleOpen ? (
+              <div className="space-y-2">
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                  This credit looks like multiple plazas. Apply across both underpaid tolls so leftover
+                  credit is not burned on one shortfall.
+                </div>
+                {poolCandidates.map((c) => {
+                  const key = candidateKey(c);
+                  return (
+                    <ShortfallCandidateRow
+                      key={key}
+                      candidate={c}
+                      tripPlatform={trip.platform}
+                      active={selectedMultiKeys.has(key)}
+                      showRecommended={false}
+                      multiMode
+                      proposedShare={c.proposedShare}
+                      onSelect={() => toggleMulti(key)}
+                    />
+                  );
+                })}
+                {multiMismatch && (
+                  <PlatformMismatchWarning
+                    sourcePlatform={multiSelected[0]?.tripPlatform || trip.platform}
+                    targetPlatform={multiSelected.find((c) => c.tollPlatform)?.tollPlatform}
+                    acknowledged={acknowledgedMismatch}
+                    onAcknowledge={setAcknowledgedMismatch}
+                  />
+                )}
+                <Button
+                  onClick={submitApply}
+                  disabled={
+                    multiSelected.length < 2 ||
+                    !onApplyToShortfall ||
+                    submitting ||
+                    (multiMismatch && !acknowledgedMismatch)
+                  }
+                  className="w-full bg-orange-600 hover:bg-orange-700"
+                >
+                  Apply ${amount.toFixed(2)} across {multiSelected.length} tolls
+                </Button>
+                <button
+                  type="button"
+                  className="text-xs text-slate-500 hover:text-slate-800 underline-offset-2 hover:underline"
+                  onClick={() => {
+                    setForceSingleOpen(true);
+                    setSelectedShortfallKey(
+                      poolCandidates[0] ? candidateKey(poolCandidates[0]) : null,
+                    );
+                  }}
+                >
+                  Apply to one toll only (not recommended)
+                </button>
+              </div>
             ) : (
               <div className="space-y-2">
+                {multiMode && forceSingleOpen && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                    Applying the full credit to one toll clears this unlinked refund. Leftover will not
+                    cover the other plaza.
+                  </div>
+                )}
                 {primaryCandidate && (
                   <ShortfallCandidateRow
                     candidate={primaryCandidate}
                     tripPlatform={trip.platform}
                     active={selectedShortfallKey === candidateKey(primaryCandidate)}
-                    showRecommended
+                    showRecommended={!multiMode}
                     onSelect={() => {
                       setSelectedShortfallKey(candidateKey(primaryCandidate));
                       setSelected(null);
@@ -323,6 +463,27 @@ export function RefundResolutionDrawer({
                       })}
                     </CollapsibleContent>
                   </Collapsible>
+                )}
+                {multiMode && forceSingleOpen && poolCandidates.length > 0 && !primaryCandidate && (
+                  <div className="space-y-2">
+                    {poolCandidates.map((c) => {
+                      const key = candidateKey(c);
+                      return (
+                        <ShortfallCandidateRow
+                          key={key}
+                          candidate={c}
+                          tripPlatform={trip.platform}
+                          active={selectedShortfallKey === key}
+                          showRecommended={false}
+                          onSelect={() => {
+                            setSelectedShortfallKey(key);
+                            setSelected(null);
+                            setAcknowledgedMismatch(false);
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
                 )}
                 {selectedCandidate && selectedMismatch && (
                   <PlatformMismatchWarning

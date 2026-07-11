@@ -39,6 +39,66 @@ export interface UnlinkedShortfallSuggestionShape {
   tripPlatform?: string | null;
   /** True when tollPlatform and tripPlatform both set and differ. */
   platformMismatch?: boolean;
+  /** Share of tripRefund proposed for this target under shared-pool split. */
+  proposedShare?: number;
+  /** True when this credit should be applied across multiple underpaid tolls. */
+  requiresMultiTarget?: boolean;
+  /** Toll ids in the multi-target pool group (same trip credit). */
+  multiTargetTollIds?: string[];
+}
+
+/** Leftover credit after covering one shortfall — material if > $1 or > 15% of refund. */
+export function hasMaterialExcessRefund(
+  tripRefund: number,
+  shortfall: number,
+  opts?: { minDollars?: number; minFraction?: number },
+): boolean {
+  const R = Math.abs(tripRefund) || 0;
+  const S = Math.abs(shortfall) || 0;
+  if (R <= UNLINKED_SHORTFALL_TOLERANCE) return false;
+  const leftover = Math.max(0, R - S);
+  if (leftover <= UNLINKED_SHORTFALL_TOLERANCE) return false;
+  const minDollars = opts?.minDollars ?? 1;
+  const minFraction = opts?.minFraction ?? 0.15;
+  return leftover > minDollars || leftover / R > minFraction;
+}
+
+export interface UnlinkedPoolTarget {
+  tollId: string;
+  claimId?: string | null;
+  remainingShortfall: number;
+  date?: string | null;
+}
+
+export interface UnlinkedPoolShare extends UnlinkedPoolTarget {
+  proposedShare: number;
+}
+
+/**
+ * Shared-pool split (same rule as allocateTripRefundAcrossTolls):
+ * chronological order, each share capped at remaining shortfall.
+ */
+export function proposeUnlinkedPoolAllocation(
+  tripRefund: number,
+  targets: UnlinkedPoolTarget[],
+): UnlinkedPoolShare[] {
+  let remaining = Math.abs(tripRefund) || 0;
+  const sorted = [...targets].sort((a, b) => {
+    const ta = new Date(a.date || 0).getTime();
+    const tb = new Date(b.date || 0).getTime();
+    const na = Number.isFinite(ta) ? ta : 0;
+    const nb = Number.isFinite(tb) ? tb : 0;
+    return na - nb;
+  });
+  return sorted.map((t) => {
+    const cap = Math.max(0, Math.abs(t.remainingShortfall) || 0);
+    const share = Math.max(0, Math.min(remaining, cap));
+    remaining = Math.round((remaining - share) * 100) / 100;
+    return {
+      ...t,
+      proposedShare: Math.round(share * 100) / 100,
+    };
+  });
 }
 
 /** True when refund platform ≠ toll platform (explicit flag or both platforms known). */
@@ -52,13 +112,33 @@ export function isUnlinkedShortfallPlatformMismatch(
   return !platformsEqual(sourcePlatform, candidate.tollPlatform);
 }
 
-/** Recommended badge + row shortcut — high confidence AND same platform only. */
+/** Recommended badge + row shortcut — high confidence, same platform, no multi-plaza excess. */
 export function isRecommendedUnlinkedShortfall(
-  candidate: Pick<UnlinkedShortfallSuggestionShape, 'confidence' | 'tripPlatform' | 'tollPlatform' | 'platformMismatch'>,
+  candidate: Pick<
+    UnlinkedShortfallSuggestionShape,
+    | 'confidence'
+    | 'tripPlatform'
+    | 'tollPlatform'
+    | 'platformMismatch'
+    | 'requiresMultiTarget'
+    | 'tripRefund'
+    | 'remainingShortfall'
+    | 'proposedShare'
+  >,
   refundPlatform?: string | null,
 ): boolean {
+  if (candidate.requiresMultiTarget) return false;
   if (candidate.confidence < UNLINKED_RECOMMENDED_MIN_CONFIDENCE) return false;
-  return !isUnlinkedShortfallPlatformMismatch(candidate, refundPlatform);
+  if (isUnlinkedShortfallPlatformMismatch(candidate, refundPlatform)) return false;
+  const share = candidate.proposedShare ?? candidate.tripRefund;
+  if (
+    hasMaterialExcessRefund(candidate.tripRefund, candidate.remainingShortfall) &&
+    Math.abs((share ?? 0) - (candidate.tripRefund ?? 0)) < UNLINKED_SHORTFALL_TOLERANCE
+  ) {
+    // Full refund dumped on one shortfall with material leftover — not one-click.
+    return false;
+  }
+  return true;
 }
 
 export function remainingClaimShortfall(claim: {

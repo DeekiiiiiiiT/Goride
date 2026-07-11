@@ -836,23 +836,36 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
   const handleApplyUnlinkedShortfall = async (
     tripId: string,
     suggestion: UnlinkedShortfallSuggestion,
-    opts?: { acknowledgedPlatformMismatch?: boolean },
+    opts?: {
+      acknowledgedPlatformMismatch?: boolean;
+      forceSingleTarget?: boolean;
+      applyShare?: number;
+      targets?: Array<{ claimId?: string | null; tollId?: string | null; share?: number }>;
+    },
   ) => {
-    const targetToll =
-      reconciledTolls.find((t) => t.id === suggestion.tollId) ||
-      allReconciledTolls.find((t) => t.id === suggestion.tollId) ||
-      unreconciledTolls.find((t) => t.id === suggestion.tollId);
-    if (targetToll) {
-      const periodCheck = assertTollInWizardPeriod(targetToll, period.startDate, fleetTz);
-      if (!periodCheck.ok) {
-        toast.error(`This toll belongs to ${periodCheck.weekLabel}. Switch to that period to apply.`);
-        return;
+    const targets = opts?.targets;
+    const tollIds = targets?.map((t) => t.tollId).filter(Boolean) as string[] | undefined;
+    const checkIds = tollIds?.length ? tollIds : suggestion.tollId ? [suggestion.tollId] : [];
+    for (const tollId of checkIds) {
+      const targetToll =
+        reconciledTolls.find((t) => t.id === tollId) ||
+        allReconciledTolls.find((t) => t.id === tollId) ||
+        unreconciledTolls.find((t) => t.id === tollId);
+      if (targetToll) {
+        const periodCheck = assertTollInWizardPeriod(targetToll, period.startDate, fleetTz);
+        if (!periodCheck.ok) {
+          toast.error(`This toll belongs to ${periodCheck.weekLabel}. Switch to that period to apply.`);
+          return;
+        }
       }
     }
     holdStepRef.current = 'unlinked-refunds';
     await applyUnlinkedToClaim(tripId, {
       claimId: suggestion.claimId,
       tollId: suggestion.tollId,
+      applyShare: opts?.applyShare ?? suggestion.proposedShare,
+      forceSingleTarget: opts?.forceSingleTarget,
+      targets: opts?.targets,
       acknowledgedPlatformMismatch: opts?.acknowledgedPlatformMismatch,
     });
     await refreshClaims();
