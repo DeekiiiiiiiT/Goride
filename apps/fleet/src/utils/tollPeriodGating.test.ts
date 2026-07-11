@@ -3,6 +3,8 @@ import {
   isClaimActionableNow,
   isClaimInformationalOnly,
   computeStepCounts,
+  classifyPeriodUnderpaidClaim,
+  countUnclaimedUnderpaidAsPeriodActionable,
 } from './tollPeriodGating';
 import type { Claim, DisputeRefund, FinancialTransaction, Trip } from '../types/data';
 import type { TollBucket } from './tollBucket';
@@ -39,6 +41,33 @@ describe('isClaimActionableNow / isClaimInformationalOnly', () => {
   it('an unknown/unrecognized status fails safe to actionable, never silently hidden', () => {
     expect(isClaimActionableNow(claim('SomethingNew' as Claim['status']))).toBe(true);
     expect(isClaimInformationalOnly(claim('SomethingNew' as Claim['status']))).toBe(false);
+  });
+});
+
+describe('classifyPeriodUnderpaidClaim (toll_period_controller mirror)', () => {
+  it('Open and Rejected are actionable', () => {
+    expect(classifyPeriodUnderpaidClaim(claim('Open'))).toBe('actionable');
+    expect(classifyPeriodUnderpaidClaim(claim('Rejected'))).toBe('actionable');
+  });
+
+  it('waiting statuses are informational', () => {
+    expect(classifyPeriodUnderpaidClaim(claim('Sent_to_Driver'))).toBe('informational');
+    expect(classifyPeriodUnderpaidClaim(claim('Submitted_to_Uber'))).toBe('informational');
+  });
+
+  it('Resolved is done unless a visible partial shortfall remains', () => {
+    expect(classifyPeriodUnderpaidClaim(claim('Resolved'))).toBe('done');
+    expect(
+      classifyPeriodUnderpaidClaim(claim('Resolved'), { isVisiblePartialShortfall: true }),
+    ).toBe('actionable');
+  });
+});
+
+describe('countUnclaimedUnderpaidAsPeriodActionable', () => {
+  it('counts claimless underpaid bucket tolls so Completed cannot ghost past them', () => {
+    expect(countUnclaimedUnderpaidAsPeriodActionable('underpaid-claims')).toBe(true);
+    expect(countUnclaimedUnderpaidAsPeriodActionable('needs-review')).toBe(false);
+    expect(countUnclaimedUnderpaidAsPeriodActionable(null)).toBe(false);
   });
 });
 

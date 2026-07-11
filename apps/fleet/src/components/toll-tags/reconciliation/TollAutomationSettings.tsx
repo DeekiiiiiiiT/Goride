@@ -385,6 +385,14 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
                   </p>
                 </div>
 
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  <p className="font-semibold">Production checklist</p>
+                  <p className="mt-1">
+                    For Expenses / Cash Wallet to match Reconciliation, turn ON both
+                    “Sync charges to driver financials” and “Unified toll settlement” in staging and production.
+                  </p>
+                </div>
+
                 <div className="border-t border-slate-100 pt-3">
                   <label className="flex items-center justify-between">
                     <span className="text-sm text-slate-700">Match-on-ingest (beta)</span>

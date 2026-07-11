@@ -8,6 +8,7 @@
 // ════════════════════════════════════════════════════════════════════════════
 
 import { Trip, FinancialTransaction, DriverMetrics } from '../types/data';
+import { isDriverTollChargeRow, netDriverTollCharges } from './netDriverTollCharges';
 import {
     startOfWeek,
     endOfWeek,
@@ -131,15 +132,15 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
             })
             .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
 
-        // Personal-use tolls billed to the driver (the negative 'Toll Charge'
-        // projection). A DEBIT — increases what the driver owes the fleet.
-        const weeklyTollCharges = excludeToll ? 0 : safeTransactions
-            .filter(t => {
-                if (!t || !t.date) return false;
-                const isCharge = t.category === 'Toll Charge' || (t.metadata as any)?.projection === 'driver_toll_charge';
-                return isCharge && isWithinInterval(new Date(t.date), { start: weekStart, end: weekEnd });
-            })
-            .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
+        // Personal-use tolls billed to the driver — net charge projections with reversals.
+        const weeklyTollCharges = excludeToll
+            ? 0
+            : netDriverTollCharges(
+                safeTransactions.filter(t => {
+                    if (!t || !t.date || !isDriverTollChargeRow(t)) return false;
+                    return isWithinInterval(new Date(t.date), { start: weekStart, end: weekEnd });
+                }),
+            );
 
         const amountOwed = Math.max(csvCash, tripCalculatedCash) + weeklyFloat + weeklyTollCharges;
         const isFromCsv = csvCash > tripCalculatedCash;

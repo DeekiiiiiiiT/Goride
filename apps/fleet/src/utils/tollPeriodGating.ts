@@ -56,6 +56,39 @@ export function isClaimInformationalOnly(claim: Pick<Claim, 'status'>): boolean 
   return claim.status === 'Sent_to_Driver' || claim.status === 'Submitted_to_Uber';
 }
 
+/**
+ * Period-landing underpaid claim classification — mirrored in
+ * toll_period_controller.applyUnderpaidClaimCounts. Open/Rejected block
+ * Completed; waiting states are informational; Resolved only blocks when a
+ * visible partial shortfall remains.
+ */
+export type PeriodUnderpaidClaimClass = 'actionable' | 'informational' | 'done';
+
+export function classifyPeriodUnderpaidClaim(
+  claim: Pick<Claim, 'status'>,
+  opts?: { isVisiblePartialShortfall?: boolean },
+): PeriodUnderpaidClaimClass {
+  if (claim.status === 'Sent_to_Driver' || claim.status === 'Submitted_to_Uber') {
+    return 'informational';
+  }
+  if (claim.status === 'Rejected' || claim.status === 'Open') {
+    return 'actionable';
+  }
+  if (opts?.isVisiblePartialShortfall) return 'actionable';
+  return 'done';
+}
+
+/**
+ * Claimless tolls in the underpaid wizard bucket must count as actionable on
+ * GET /periods (mirrored in toll_period_controller unclaimed loop). Skipping
+ * them allowed Completed weeks with unfinished Expenses Unmatched rows.
+ */
+export function countUnclaimedUnderpaidAsPeriodActionable(
+  bucket: 'needs-review' | 'underpaid-claims' | 'deadhead' | 'personal-use' | null,
+): boolean {
+  return bucket === 'underpaid-claims';
+}
+
 export interface StepCounts {
   actionable: number;
   informational: number;

@@ -25,7 +25,8 @@ export interface RefundResolutionMeta {
 export const REFUND_RESOLUTION_META: Record<RefundResolutionType, RefundResolutionMeta> = {
   cash_wash: {
     label: "Cash wash",
-    description: "Clears the credit — fare already covered the toll; no driver charge.",
+    description:
+      "Clears an unlinked trip refund — not the same as a cash toll expense on Financials → Expenses. Fare already covered the toll; no driver charge.",
     hint: "Fare already covered this toll",
     chipClass: "border-emerald-200 bg-emerald-100 text-emerald-800",
   },

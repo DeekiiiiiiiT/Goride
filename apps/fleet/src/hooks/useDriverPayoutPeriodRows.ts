@@ -6,6 +6,7 @@ import { tierService } from '../services/tierService';
 import { computeWeeklyCashSettlement, CashWeekData } from '../utils/cashSettlementCalc';
 import { buildLedgerPayoutPeriodRows } from '../utils/buildLedgerPayoutPeriodRows';
 import { expandDriverTransactionIds } from '../utils/expandDriverTransactionIds';
+import { useFleetTimezone } from '../utils/timezoneDisplay';
 export type PeriodType = 'daily' | 'weekly' | 'monthly';
 
 export function useDriverPayoutPeriodRows(opts: {
@@ -24,6 +25,7 @@ export function useDriverPayoutPeriodRows(opts: {
   ledgerError: boolean;
 } {
   const { driverId, trips, transactions, csvMetrics, periodType } = opts;
+  const fleetTz = useFleetTimezone();
 
   const [tiers, setTiers] = useState<TierConfig[]>([]);
   const [finalizedReports, setFinalizedReports] = useState<any[]>([]);
@@ -124,8 +126,15 @@ export function useDriverPayoutPeriodRows(opts: {
   }, [driverId, periodType]);
 
   const cashWeeks: CashWeekData[] = useMemo(
-    () => computeWeeklyCashSettlement({ trips, transactions, csvMetrics, excludeTollEffects: unifiedToll }),
-    [trips, transactions, csvMetrics, unifiedToll]
+    () =>
+      computeWeeklyCashSettlement({
+        trips,
+        transactions,
+        csvMetrics,
+        excludeTollEffects: unifiedToll,
+        timezone: fleetTz,
+      }),
+    [trips, transactions, csvMetrics, unifiedToll, fleetTz]
   );
 
   const periodData: PayoutPeriodRow[] = useMemo(

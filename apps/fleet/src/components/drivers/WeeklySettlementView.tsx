@@ -10,6 +10,7 @@ import { format } from "date-fns";
 import { DollarSign, Info, Eye, ArrowUpCircle, ArrowDownCircle, Wallet, Banknote, Fuel, Receipt, CreditCard, Scale } from "lucide-react";
 import { cn } from "../ui/utils";
 import { computeWeeklyCashSettlement } from '../../utils/cashSettlementCalc';
+import { useFleetTimezone } from '../../utils/timezoneDisplay';
 
 /** Match PayoutPeriodDetail currency display. */
 function fmtMoney(n: number) {
@@ -42,10 +43,10 @@ interface WeeklySettlementViewProps {
 }
 
 export function WeeklySettlementView({ trips = [], transactions = [], csvMetrics = [], weekSettlementByMonday, onLogPayment, onWeeksComputed, readOnly = false }: WeeklySettlementViewProps) {
-    
+    const fleetTz = useFleetTimezone();
     const weeks = useMemo(() => {
-        return computeWeeklyCashSettlement({ trips, transactions, csvMetrics });
-    }, [trips, transactions, csvMetrics]);
+        return computeWeeklyCashSettlement({ trips, transactions, csvMetrics, timezone: fleetTz });
+    }, [trips, transactions, csvMetrics, fleetTz]);
 
     type WeekData = typeof weeks[number];
     const [selectedWeek, setSelectedWeek] = useState<WeekData | null>(null);

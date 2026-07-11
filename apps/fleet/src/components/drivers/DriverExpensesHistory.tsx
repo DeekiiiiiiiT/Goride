@@ -6,8 +6,7 @@ import { Download, ChevronDown, TrendingDown, Fuel, Navigation, Loader2, CheckCi
 import { FinancialTransaction, Trip, DisputeRefund } from "../../types/data";
 import { api } from "../../services/api";
 import {
-  startOfWeek, endOfWeek, format,
-  eachWeekOfInterval, eachDayOfInterval, eachMonthOfInterval,
+  format,
   startOfDay, endOfDay, startOfMonth, endOfMonth,
   differenceInCalendarDays
 } from "date-fns";
@@ -16,8 +15,10 @@ import { toast } from "sonner@2.0.3";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "../ui/tooltip";
 import { isTollCategory } from '../../utils/tollCategoryHelper';
 import { classifyTollLedgerEntry } from '../../utils/tollDisposition';
-import { computeDisputeRefundCounts, getDisputeRefundWeekDate } from '../../utils/tollWeekPeriod';
+import { computeDisputeRefundCounts, getDisputeRefundWeekDate, weekBucketForDate } from '../../utils/tollWeekPeriod';
 import { expandDriverTransactionIds } from '../../utils/expandDriverTransactionIds';
+import { isDriverTollChargeRow, netDriverTollCharges } from '../../utils/netDriverTollCharges';
+import { fleetTzDateKey, useFleetTimezone, ymdToLocalDate } from '../../utils/timezoneDisplay';
 
 type PeriodType = 'daily' | 'weekly' | 'monthly';
 
@@ -46,6 +47,7 @@ interface DriverExpensesHistoryProps {
 export function DriverExpensesHistory({ driverId, transactions = [], trips = [] }: DriverExpensesHistoryProps) {
   const [periodType, setPeriodType] = React.useState<PeriodType>('weekly');
   const [visibleCount, setVisibleCount] = React.useState(12);
+  const fleetTz = useFleetTimezone();
 
   // ── Fuel data loading flag ──
   const [fuelDataLoading, setFuelDataLoading] = useState(false);
@@ -132,34 +134,46 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
     return () => { cancelled = true; };
   }, [driverId]);
 
-  // ── Compute time buckets ──
+  // ── Compute time buckets (fleet timezone — same Monday keys as Reconciliation) ──
   const timeBuckets: { start: Date; end: Date }[] = useMemo(() => {
-    const allDates: number[] = [];
-    trips.forEach(t => { if (t.date) allDates.push(new Date(t.date).getTime()); });
-    transactions.forEach(t => { if (t.date) allDates.push(new Date(t.date).getTime()); });
-    // A period whose ONLY activity is a dispute refund must still get a
-    // bucket — otherwise the Dispute Status column below is unreachable for
-    // exactly the periods most in need of it.
-    disputeRefunds.forEach(r => { allDates.push(getDisputeRefundWeekDate(r).getTime()); });
-    if (allDates.length === 0) return [];
-
-    const minDate = new Date(Math.min(...allDates));
-    const maxDate = new Date(Math.max(...allDates));
+    const dateObjs: Date[] = [];
+    trips.forEach(t => { if (t.date) dateObjs.push(new Date(t.date)); });
+    transactions.forEach(t => { if (t.date) dateObjs.push(new Date(t.date)); });
+    // A period whose ONLY activity is a dispute refund must still get a bucket.
+    disputeRefunds.forEach(r => { dateObjs.push(getDisputeRefundWeekDate(r)); });
+    if (dateObjs.length === 0) return [];
 
     if (periodType === 'daily') {
-      const days = eachDayOfInterval({ start: startOfDay(minDate), end: endOfDay(maxDate) });
-      return days.map(d => ({ start: startOfDay(d), end: endOfDay(d) }));
-    } else if (periodType === 'monthly') {
-      const months = eachMonthOfInterval({ start: startOfMonth(minDate), end: endOfMonth(maxDate) });
-      return months.map(m => ({ start: startOfMonth(m), end: endOfMonth(m) }));
-    } else {
-      const weeks = eachWeekOfInterval(
-        { start: startOfWeek(minDate, { weekStartsOn: 1 }), end: endOfWeek(maxDate, { weekStartsOn: 1 }) },
-        { weekStartsOn: 1 }
-      );
-      return weeks.map(w => ({ start: w, end: endOfWeek(w, { weekStartsOn: 1 }) }));
+      const byDay = new Map<string, { start: Date; end: Date }>();
+      for (const d of dateObjs) {
+        const ymd = fleetTzDateKey(d, fleetTz);
+        if (!ymd || byDay.has(ymd)) continue;
+        const day = ymdToLocalDate(ymd);
+        byDay.set(ymd, { start: startOfDay(day), end: endOfDay(day) });
+      }
+      return Array.from(byDay.values()).sort((a, b) => a.start.getTime() - b.start.getTime());
     }
-  }, [trips, transactions, disputeRefunds, periodType]);
+
+    if (periodType === 'monthly') {
+      const byMonth = new Map<string, { start: Date; end: Date }>();
+      for (const d of dateObjs) {
+        const ymd = fleetTzDateKey(d, fleetTz);
+        if (!ymd) continue;
+        const day = ymdToLocalDate(ymd);
+        const key = format(startOfMonth(day), 'yyyy-MM');
+        if (byMonth.has(key)) continue;
+        byMonth.set(key, { start: startOfMonth(day), end: endOfMonth(day) });
+      }
+      return Array.from(byMonth.values()).sort((a, b) => a.start.getTime() - b.start.getTime());
+    }
+
+    const byWeek = new Map<string, { start: Date; end: Date }>();
+    for (const d of dateObjs) {
+      const { key, weekStart, weekEnd } = weekBucketForDate(d, fleetTz);
+      if (!byWeek.has(key)) byWeek.set(key, { start: weekStart, end: weekEnd });
+    }
+    return Array.from(byWeek.values()).sort((a, b) => a.start.getTime() - b.start.getTime());
+  }, [trips, transactions, disputeRefunds, periodType, fleetTz]);
 
   const defaultPageSize = (pt: PeriodType) => pt === 'daily' ? 14 : pt === 'monthly' ? 6 : 12;
 
@@ -222,7 +236,6 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
 
       // ── Tolls: from transaction category (Phase 6) ──
       let tollExpenses = 0;
-      let tollCharged = 0;
       let tollReconciled = 0;
       let tollUnreconciled = 0;
       let tollCashWash = 0;
@@ -238,11 +251,17 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
           // resolution yet is identified here too, not just counted as
           // "unmatched" — a different question (link state) than "$ impact".
           if (classifyTollLedgerEntry(tx as any) === 'cashWash') tollCashWash += amt;
-        } else if (tx.category === 'Toll Charge' || (tx.metadata as any)?.projection === 'driver_toll_charge') {
-          // Personal-use toll billed to this driver (the negative projection).
-          tollCharged += amt;
         }
       });
+
+      // Net wallet Toll Charge projections (include reversals — they are positive
+      // Adjustments excluded from expenseTx above).
+      const periodChargeTx = transactions.filter(t => {
+        if (!t?.date || !isDriverTollChargeRow(t)) return false;
+        const d = new Date(t.date).getTime();
+        return d >= pStartTime && d <= pEndTime;
+      });
+      const tollCharged = netDriverTollCharges(periodChargeTx);
 
       // ── Fuel: from finalized reports ONLY ──
       const { deduction, finalized } = getDeductionForPeriod(periodStart, periodEnd);
@@ -333,14 +352,9 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
           : row.tollUnreconciled === 0
             ? `Reconciled (${row.tollReconciled})`
             : `${row.tollUnreconciled} Unmatched`,
-        'Dispute Status': (row.disputeRefundMatched + row.disputeRefundUnmatched) === 0
-          ? 'N/A'
-          : row.disputeRefundUnmatched === 0
-            ? `Matched (${row.disputeRefundMatched})`
-            : `${row.disputeRefundUnmatched} Unmatched`,
         'Charged to driver': row.tollCharged.toFixed(2),
         'Fuel Deduction': row.fuelDeduction.toFixed(2),
-        'Status': row.isFinalized ? 'Finalized' : 'Pending',
+        'Fuel Status': row.isFinalized ? 'Finalized' : 'Pending',
         'Total Expenses': row.totalExpenses.toFixed(2),
       };
     });
@@ -530,21 +544,6 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
                         </Tooltip>
                       </TooltipProvider>
                     </TableHead>
-                    <TableHead className="text-xs text-center">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="inline-flex items-center gap-1 cursor-help">
-                              Dispute Status
-                              <Info className="h-3 w-3 text-slate-400" />
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-[250px] text-xs">
-                            Whether Uber support-case refunds for this period have been matched to a toll in the Dispute Refunds tab. "Matched" = all linked; "X Unmatched" = some still need a manual match.
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </TableHead>
                     <TableHead className="text-right">Charged to driver</TableHead>
                     <TableHead className="text-right">Fuel (Deduction)</TableHead>
                     <TableHead className="text-right">Total Expenses</TableHead>
@@ -553,12 +552,12 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <span className="inline-flex items-center gap-1 cursor-help">
-                              Status
+                              Fuel Status
                               <Info className="h-3 w-3 text-slate-400" />
                             </span>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[300px] text-xs">
-                            Whether all expenses for this period have been confirmed. "Finalized" means a fuel report has been reviewed and locked in, so toll and fuel deduction numbers are final. "Pending" means the fuel report hasn't been finalized yet — fuel deductions may still change.
+                            Fuel report lock only — not toll reconciliation. &quot;Finalized&quot; means the fuel report for this period is reviewed and locked (fuel deduction is final). &quot;Pending&quot; means fuel may still change. Toll matching uses Toll Status.
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -595,21 +594,8 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
                         )}
                         {unifiedTollSettlementEnabled && row.tollCashWash > 0 && (
                           <p className="text-[10px] text-sky-600 mt-0.5">
-                            ${row.tollCashWash.toLocaleString(undefined, { minimumFractionDigits: 2 })} cash wash
+                            ${row.tollCashWash.toLocaleString(undefined, { minimumFractionDigits: 2 })} cash tolls (driver paid)
                           </p>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-xs text-center">
-                        {(row.disputeRefundMatched + row.disputeRefundUnmatched) === 0 ? (
-                          <span className="text-slate-300">-</span>
-                        ) : row.disputeRefundUnmatched === 0 ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                            <CheckCircle className="h-3 w-3" /> Matched
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                            <Unlink className="h-3 w-3" /> {row.disputeRefundUnmatched} Unmatched
-                          </span>
                         )}
                       </TableCell>
                       <TableCell className="text-right text-rose-600">

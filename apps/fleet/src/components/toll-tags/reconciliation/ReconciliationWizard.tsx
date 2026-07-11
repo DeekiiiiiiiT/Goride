@@ -144,16 +144,24 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
 
   const tripMap = useMemo(() => new Map(trips.map(t => [t.id, t])), [trips]);
 
-  const warnIfChargeSyncOff = useCallback(async () => {
+  /** Blocking confirm when charge sync is OFF — Expenses/Cash Wallet will not receive the debit. */
+  const confirmChargeSyncOrAbort = useCallback(async (): Promise<boolean> => {
     try {
       const res = await api.getTollAutomationSettings();
-      if (!res.data?.driverTollChargeSyncEnabled) {
-        toast.warning(
-          'Driver charge recorded as claim only — enable Driver toll charge sync in Automation to post ledger debits.',
-        );
-      }
+      if (res.data?.driverTollChargeSyncEnabled) return true;
+      const proceed = window.confirm(
+        'Driver toll charge sync is OFF.\n\n' +
+          'This will record a claim only — it will NOT post to Expenses or Cash Wallet.\n\n' +
+          'Enable “Sync charges to driver financials” (and Unified toll settlement) in Automation Settings for production parity.\n\n' +
+          'Continue with claim-only?',
+      );
+      if (!proceed) return false;
+      toast.warning(
+        'Driver charge recorded as claim only — enable charge sync in Automation to post wallet debits.',
+      );
+      return true;
     } catch {
-      // non-blocking
+      return true; // don't block if settings fetch fails
     }
   }, []);
 
@@ -170,6 +178,10 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
     if (!resolvedDriverId) {
       setPendingPersonalTx(tx);
       setPendingDriverId('');
+      return;
+    }
+    if (!(await confirmChargeSyncOrAbort())) {
+      toast.message('Charge cancelled — turn on driver charge sync for Expenses/Cash Wallet parity.');
       return;
     }
     try {
@@ -196,14 +208,13 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
         date: tx.date,
       });
       await Promise.all([refresh(), refreshClaims()]);
-      await warnIfChargeSyncOff();
       toast.success(opts.trip?.id ? 'Linked to trip & charged to driver' : 'Marked as personal (driver liability)');
     } catch (error) {
       console.error('Personal charge failed', error);
       toast.error('Failed to charge driver for personal toll');
       throw error;
     }
-  }, [reconcile, reject, createClaim, refresh, refreshClaims, warnIfChargeSyncOff]);
+  }, [reconcile, reject, createClaim, refresh, refreshClaims, confirmChargeSyncOrAbort]);
 
   const handleApprove = async (tx: FinancialTransaction) => {
       const match = suggestions.get(tx.id)?.[0];

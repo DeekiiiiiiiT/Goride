@@ -1015,16 +1015,18 @@ function tollLedgerToTxShape(entry: TollLedgerRecord): any {
                    entry.paymentMethod === "card" ? "Card" :
                    entry.paymentMethod === "fleet_account" ? "Fleet Account" : "Tag Balance",
     status,
-    // A toll is "handled" (out of the Unmatched queue) when it's matched to a
-    // trip, reconciled/resolved, OR carries a terminal resolution
-    // (personal/business/write_off/refunded). Without the `resolution` check a
-    // resolved-personal tag toll (status 'rejected', no tripId) wrongly
-    // reappeared as "Unmatched".
-    isReconciled:
+    // Mirror apps/fleet/src/utils/tollHandledDisplay.ts deriveTollTxIsReconciled —
+    // honor ledger isReconciled so Expenses Toll Status matches toll_ledger SSOT
+    // (e.g. rejected/claim_filed rows already marked reconciled without tripId).
+    isReconciled: !!(
+      entry.isReconciled ||
       entry.status === "reconciled" ||
       entry.status === "resolved" ||
-      !!entry.resolution ||
-      !!entry.tripId,
+      entry.resolution ||
+      entry.tripId
+    ),
+    // Top-level for classifyTollLedgerEntry (Expenses/Cash Wallet); metadata kept too.
+    resolution: entry.resolution ?? null,
     tripId: entry.tripId,
     receiptUrl: entry.receiptUrl,
     notes: entry.notes,

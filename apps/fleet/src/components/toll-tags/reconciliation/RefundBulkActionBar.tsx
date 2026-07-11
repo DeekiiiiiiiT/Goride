@@ -41,7 +41,13 @@ export function RefundBulkActionBar({
           <Sparkles className="mr-1.5 h-4 w-4" />
           Apply suggested ({suggestedCount})
         </Button>
-        <Button size="sm" variant="outline" onClick={onMarkCashWash} disabled={busy}>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onMarkCashWash}
+          disabled={busy}
+          title="Clears an unlinked trip refund — not the same as a cash toll expense on Financials → Expenses."
+        >
           Mark cash wash
         </Button>
         <Button

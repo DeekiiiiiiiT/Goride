@@ -10,6 +10,8 @@
 import { Trip, FinancialTransaction, DriverMetrics } from '../types/data';
 import { getTripPhysicalCashCollected } from './tripPhysicalCash';
 import { isDriverCashPaymentTransaction } from './driverCashPayment';
+import { isDriverTollChargeRow, netDriverTollCharges } from './netDriverTollCharges';
+import { weekBucketForDate } from './tollWeekPeriod';
 import {
     startOfWeek,
     endOfWeek,
@@ -32,6 +34,8 @@ export interface CashSettlementInput {
      * disposition exactly once. Default false = legacy behavior.
      */
     excludeTollEffects?: boolean;
+    /** Fleet IANA tz — Monday–Sunday weeks match Toll Reconciliation. */
+    timezone?: string;
 }
 
 // ── Output ──
@@ -79,19 +83,32 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
 
     if (dates.length === 0) return [];
 
-    const minDate = new Date(Math.min(...dates.map(d => d.getTime())));
-    const maxDate = new Date(); // Up to today
-
-    // Align to weeks (Monday start)
-    const start = startOfWeek(minDate, { weekStartsOn: 1 });
-    const end = endOfWeek(maxDate, { weekStartsOn: 1 });
-
-    // Generate Weeks (Oldest to Newest)
-    const weekIntervals = eachWeekOfInterval({ start, end }, { weekStartsOn: 1 });
+    const fleetTz = input.timezone;
+    let weekIntervals: Date[];
+    if (fleetTz) {
+      const byKey = new Map<string, Date>();
+      const seedDates = [...dates, new Date()];
+      for (const d of seedDates) {
+        if (isNaN(d.getTime())) continue;
+        const { key, weekStart } = weekBucketForDate(d, fleetTz);
+        if (!byKey.has(key)) byKey.set(key, weekStart);
+      }
+      weekIntervals = Array.from(byKey.entries())
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([, weekStart]) => weekStart);
+    } else {
+      const minDate = new Date(Math.min(...dates.map(d => d.getTime())));
+      const maxDate = new Date();
+      const start = startOfWeek(minDate, { weekStartsOn: 1 });
+      const end = endOfWeek(maxDate, { weekStartsOn: 1 });
+      weekIntervals = eachWeekOfInterval({ start, end }, { weekStartsOn: 1 });
+    }
 
     // Phase 1: Calculate Basics (Owed, Allocated Payments, Expenses)
     const weeksData = weekIntervals.map(weekStart => {
-        const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
+        const weekEnd = fleetTz
+            ? weekBucketForDate(weekStart, fleetTz).weekEnd
+            : endOfWeek(weekStart, { weekStartsOn: 1 });
 
         // --- Calculate Owed (Cash Collected + Float Issued) ---
         const relevantCsvMetrics = safeCsvMetrics.filter(m => {
@@ -125,15 +142,16 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
             })
             .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
 
-        // Personal-use tolls billed to the driver (the negative 'Toll Charge'
-        // projection). A DEBIT — increases what the driver owes the fleet.
-        const weeklyTollCharges = excludeToll ? 0 : safeTransactions
-            .filter(t => {
-                if (!t || !t.date) return false;
-                const isCharge = t.category === 'Toll Charge' || (t.metadata as any)?.projection === 'driver_toll_charge';
-                return isCharge && isWithinInterval(new Date(t.date), { start: weekStart, end: weekEnd });
-            })
-            .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
+        // Personal-use tolls billed to the driver — net charge projections with
+        // reversals (Math.abs of every Toll Charge row inflated the debt).
+        const weeklyTollCharges = excludeToll
+            ? 0
+            : netDriverTollCharges(
+                safeTransactions.filter(t => {
+                    if (!t || !t.date || !isDriverTollChargeRow(t)) return false;
+                    return isWithinInterval(new Date(t.date), { start: weekStart, end: weekEnd });
+                }),
+            );
 
         const amountOwed = Math.max(csvCash, tripCalculatedCash) + weeklyFloat + weeklyTollCharges;
         const isFromCsv = csvCash > tripCalculatedCash;

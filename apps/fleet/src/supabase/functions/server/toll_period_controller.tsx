@@ -19,7 +19,8 @@
  * (actionable-vs-informational, dispute-refund "matched", week-bucketing,
  * claim-date fallback) are mirrored locally below, each with a comment
  * pointing at its client twin that must be kept in sync:
- *   - apps/fleet/src/utils/tollPeriodGating.ts (underpaid pipeline claim rules)
+ *   - apps/fleet/src/utils/tollPeriodGating.ts (classifyPeriodUnderpaidClaim,
+ *     countUnclaimedUnderpaidAsPeriodActionable, isClaimActionableNow)
  *   - apps/fleet/src/utils/tollWeekPeriod.ts (isDisputeRefundMatched, getClaimWeekDate, weekBucketForDate, formatWeekPeriodLabel)
  *   - apps/fleet/src/utils/tollBucket.ts (bucketForWorkflowStage)
  *
@@ -187,6 +188,11 @@ function disputeRefundPeriodKey(
   return null;
 }
 
+/**
+ * Mirrors isClaimActionableNow / UnderpaidClaimsStep period gating
+ * (apps/fleet/src/utils/tollPeriodGating.ts). Open + Rejected block Completed;
+ * waiting-on-Uber/driver stay informational; incomplete Resolved partials still actionable.
+ */
 function applyUnderpaidClaimCounts(
   acc: PeriodAccumulator,
   claim: any,
@@ -201,10 +207,11 @@ function applyUnderpaidClaimCounts(
     acc.counts["underpaid-claims"].informational++;
     return;
   }
-  if (claim.status === "Rejected") {
+  if (claim.status === "Rejected" || claim.status === "Open") {
     acc.counts["underpaid-claims"].actionable++;
     return;
   }
+  // Resolved (or other): only leftover partial shortfalls still need a decision.
   if (isVisiblePartialShortfallClaimServer(claim, toll, disputeRefunds)) {
     acc.counts["underpaid-claims"].actionable++;
   }
@@ -330,13 +337,19 @@ app.get(`${BASE}/periods`, async (c) => {
       if (tx?.id) tollById.set(String(tx.id), tx);
     }
 
-    // Unclaimed tolls → needs-review / personal-use / deadhead only.
-    // Underpaid & Claims uses reconciled pipeline rules (claims below), not unreconciled bucket tolls.
+    // Unclaimed tolls → needs-review / personal-use / deadhead / claimless underpaid.
+    // Claimless underpaid_pending must block Completed (wizard Underpaid step still
+    // lists them; skipping here let Kenny's week show Completed with 3 unfinished tolls).
+    // Tolls that already have a claim are counted only via applyUnderpaidClaimCounts.
     for (const tx of unclaimedTolls) {
       if (!tx?.date) continue;
       if (!tx.workflowStage) anyMissingWorkflowStage = true;
       const bucket = resolvePeriodBucket(tx);
-      if (!bucket || bucket === "underpaid-claims") continue;
+      if (!bucket) continue;
+      if (bucket === "underpaid-claims") {
+        getOrCreatePeriod(tx.date).counts["underpaid-claims"].actionable++;
+        continue;
+      }
       getOrCreatePeriod(tx.date).counts[bucket].actionable++;
     }
 

@@ -120,6 +120,9 @@ export function PeriodLandingPage({
       <div>
         <h2 className="text-2xl font-bold tracking-tight text-slate-900">Toll Reconciliation</h2>
         <p className="text-slate-500">Select a period to reconcile, step by step.</p>
+        <p className="mt-1 text-xs text-slate-400">
+          Totals below are fleet-wide (or the current driver filter). Per-driver detail is on Financials → Expenses.
+        </p>
       </div>
 
       <TollFinancialOverviewCards

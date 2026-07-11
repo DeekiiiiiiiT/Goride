@@ -11,7 +11,7 @@ import { VARIANCE_THRESHOLD } from './tollReconciliation';
  * with the dates shown on each row. Without a timezone it falls back to the
  * browser-local week (legacy behavior).
  */
-function weekBucketForDate(
+export function weekBucketForDate(
   d: Date,
   timezone?: string,
 ): { key: string; weekStart: Date; weekEnd: Date } {

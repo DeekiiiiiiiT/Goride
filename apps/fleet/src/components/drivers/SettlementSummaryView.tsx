@@ -22,6 +22,7 @@ import { computeWeeklyCashSettlement, CashWeekData } from '../../utils/cashSettl
 import { computePeriodSettlement } from '../../utils/driverPeriodSettlement';
 import { exportToCSV } from '../../utils/csvHelpers';
 import { differenceInCalendarDays, format } from 'date-fns';
+import { useFleetTimezone } from '../../utils/timezoneDisplay';
 import { SettlementPeriodDetail } from './SettlementPeriodDetail';
 import { isTollCategory } from '../../utils/tollCategoryHelper';
 import { computeDisputeRefundCounts, groupDisputeRefundsByWeek } from '../../utils/tollWeekPeriod';
@@ -82,6 +83,7 @@ export function SettlementSummaryView({
 
   // ── Unified toll settlement flag (default OFF → legacy behavior) ──
   const [unifiedToll, setUnifiedToll] = useState(false);
+  const fleetTz = useFleetTimezone();
   useEffect(() => {
     let cancelled = false;
     api.getTollAutomationSettings()
@@ -180,8 +182,14 @@ export function SettlementSummaryView({
   // Unified mode makes the cash calc toll-NEUTRAL so the shared settlement calc
   // applies the server's reconciliation-aware toll disposition exactly once.
   const cashWeeks: CashWeekData[] = useMemo(() => {
-    return computeWeeklyCashSettlement({ trips, transactions, csvMetrics, excludeTollEffects: unifiedToll });
-  }, [trips, transactions, csvMetrics, unifiedToll]);
+    return computeWeeklyCashSettlement({
+      trips,
+      transactions,
+      csvMetrics,
+      excludeTollEffects: unifiedToll,
+      timezone: fleetTz,
+    });
+  }, [trips, transactions, csvMetrics, unifiedToll, fleetTz]);
 
   // ── Loading gate ──
   const isReady = ledgerLoaded && !fuelDataLoading;

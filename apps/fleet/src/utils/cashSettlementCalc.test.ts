@@ -79,4 +79,19 @@ describe('computeWeeklyCashSettlement — driver toll charge', () => {
     const w = weekOf(computeWeeklyCashSettlement({ trips: [trip()], transactions: [], csvMetrics: [] }));
     expect(w.breakdown.tollCharges).toBe(0);
   });
+
+  it('nets charge + reversal to zero debt', () => {
+    const charge = tollCharge(50, { id: 'c1', metadata: { projection: 'driver_toll_charge' } as any });
+    const reversal = tollCharge(50, {
+      id: 'r1',
+      amount: 50,
+      metadata: { projection: 'driver_toll_charge_reversal' } as any,
+    });
+    const base = weekOf(computeWeeklyCashSettlement({ trips: [trip()], transactions: [], csvMetrics: [] }));
+    const withPair = weekOf(
+      computeWeeklyCashSettlement({ trips: [trip()], transactions: [charge, reversal], csvMetrics: [] }),
+    );
+    expect(+(withPair.amountOwed - base.amountOwed).toFixed(2)).toBe(0);
+    expect(withPair.breakdown.tollCharges).toBe(0);
+  });
 });

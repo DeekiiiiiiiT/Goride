@@ -124,7 +124,9 @@ export function TollFinancialOverviewCards({
                     <HelpCircle className="h-3.5 w-3.5 text-purple-400 hover:text-purple-600 transition-colors" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p className="max-w-[200px] text-xs">Toll cost recovered by billing the driver via resolved "Charge Driver" claims.</p>
+                    <p className="max-w-[240px] text-xs">
+                      Fleet recovery from resolved &quot;Charge Driver&quot; claims. Driver Financials → Expenses / Cash Wallet use posted wallet Toll Charge rows (requires charge sync ON for parity).
+                    </p>
                   </TooltipContent>
                 </Tooltip>
               </div>
