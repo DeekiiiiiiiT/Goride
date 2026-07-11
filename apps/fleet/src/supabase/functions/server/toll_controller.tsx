@@ -6244,6 +6244,28 @@ async function undoApplyUnlinkedRefundToClaim(
   }
 
   if (!resolution || resolution.status !== "expense_logged") {
+    // Period reset / re-entry: already undone or never an Apply — treat as success.
+    if (opts?.skipUndoGate) {
+      if (linkedClaim) {
+        const repair = await repairUnlinkedApplySplitForTrip(tripId, c);
+        if (repair.repaired) {
+          return {
+            ok: true,
+            data: {
+              mode: "repair_split",
+              tripId,
+              claimId: repair.claimId,
+              tollId: repair.tollId,
+              restoredClaimStatus: repair.restoredClaimStatus,
+            },
+          };
+        }
+      }
+      return {
+        ok: true,
+        data: { mode: "noop", tripId, reason: "not_applied" },
+      };
+    }
     return { ok: false, status: 409, error: "Trip was not applied to a claim via Apply to Underpaid" };
   }
 

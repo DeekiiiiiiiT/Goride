@@ -277,8 +277,10 @@ export async function executePeriodReconciliationReset(
   for (const tripId of inventory.unlinkedApplyTripIds) {
     try {
       const result = await undoApplyUnlinkedRefundToClaim(tripId, c, { skipUndoGate: true });
-      if (result.ok) summary.unlinkedAppliesUndone++;
-      else {
+      if (result.ok) {
+        // noop = already clean; still counts as handled for reset progress
+        if (result.data?.mode !== "noop") summary.unlinkedAppliesUndone++;
+      } else {
         errors.push(`undo apply ${tripId}: ${result.error}`);
         unlinkedApplyStillResolved.add(tripId);
       }
