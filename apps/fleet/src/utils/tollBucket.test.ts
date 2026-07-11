@@ -197,7 +197,7 @@ describe('resolveWizardBucket', () => {
     )).toBe('personal-use');
   });
 
-  it('underpaid_pending + live orphan → underpaid (not personal, not needs-review)', () => {
+  it('underpaid_pending + live orphan, no matchedTripId → needs-review (not invisible underpaid)', () => {
     expect(resolveWizardBucket(
       {
         ...tagTx,
@@ -205,6 +205,39 @@ describe('resolveWizardBucket', () => {
         matchStatus: 'matched',
         isReconciled: false,
         tripId: null,
+        matchedTripId: null,
+      },
+      {
+        matchType: 'PERSONAL_MATCH',
+        reasonCode: 'ORPHAN_OUT_OF_WINDOW',
+        trip: { id: '' } as any,
+      },
+    )).toBe('needs-review');
+  });
+
+  it('underpaid_pending + matchedTripId, no live match → underpaid', () => {
+    expect(resolveWizardBucket(
+      {
+        ...tagTx,
+        workflowStage: 'underpaid_pending',
+        matchStatus: 'matched',
+        isReconciled: false,
+        tripId: null,
+        matchedTripId: 'trip-keep',
+      },
+      undefined,
+    )).toBe('underpaid');
+  });
+
+  it('underpaid_pending + live orphan → underpaid when matchedTripId retained', () => {
+    expect(resolveWizardBucket(
+      {
+        ...tagTx,
+        workflowStage: 'underpaid_pending',
+        matchStatus: 'matched',
+        isReconciled: false,
+        tripId: null,
+        matchedTripId: 'trip-keep',
       },
       {
         matchType: 'PERSONAL_MATCH',

@@ -16,10 +16,14 @@ import { DisputeModal } from "../../claimable-loss/DisputeModal";
 import { ClaimDetailOverlay } from "../../claimable-loss/ClaimDetailOverlay";
 import { StatCard } from "../../claimable-loss/StatCard";
 import { FinancialTransaction, Trip, Claim, DisputeRefund } from "../../../types/data";
-import { MatchResult, VARIANCE_THRESHOLD, calculateTollFinancials, buildTollFinancialsContext, buildTripRefundAllocation } from "../../../utils/tollReconciliation";
+import { MatchResult, calculateTollFinancials, buildTollFinancialsContext, buildTripRefundAllocation } from "../../../utils/tollReconciliation";
 import { hasBlockingUnlinkedRefund } from "../../../utils/unlinkedShortfallEligibility";
 import { buildClaimByTollId, dedupeClaimsForDisplay, collectDuplicateClaimIds } from "../../../utils/claimByToll";
-import { isActionablePartialShortfall, isVisiblePartialShortfallClaim, isTollCoveredByDisputeRefund, isTollInWizardPeriod, assertTollInWizardPeriod } from "../../../utils/tollWeekPeriod";
+import { isVisiblePartialShortfallClaim, isTollCoveredByDisputeRefund, isTollInWizardPeriod, assertTollInWizardPeriod } from "../../../utils/tollWeekPeriod";
+import {
+  evaluateListableUnderpaidShortfall,
+  resolvePendingUnderpaidTripId,
+} from "../../../utils/pendingUnderpaidListable";
 import { guardClaimChargeAmount } from "../../../utils/claimChargeGuard";
 import { formatDateJM } from "../../../utils/csv-helper";
 
@@ -181,37 +185,34 @@ export function UnderpaidClaimsStep({
   const losses = useMemo(() => {
     const items: LossItem[] = [];
     const seenTollIds = new Set<string>();
+    const partialIds = new Set(partialByTollId.keys());
+    const listableCtx = {
+      claimByTollId,
+      partialByTollId: partialIds,
+      reconciledTollById,
+      trips,
+      disputeRefunds,
+      allocation,
+      periodWeekKey,
+      fleetTz,
+    };
 
     const pushLoss = (tx: FinancialTransaction, trip: Trip) => {
       if (seenTollIds.has(tx.id)) return;
-      if (!isTollInWizardPeriod(tx, periodWeekKey, fleetTz)) return;
-      const claim = claimByTollId.get(tx.id);
-
-      // Only hide from Underpaid when Partially Covered will show this toll.
-      if (partialByTollId.has(tx.id)) return;
-
-      if (claim && ['Sent_to_Driver', 'Submitted_to_Uber', 'Rejected'].includes(claim.status)) {
-        return;
-      }
-      if (claim?.status === 'Resolved' && !isActionablePartialShortfall(claim, reconciledTollById.get(tx.id))) {
-        return;
-      }
-
-      const ctx = buildTollFinancialsContext(tx, trip, claim, trips, disputeRefunds, allocation);
-      const financials = calculateTollFinancials(tx, trip, claim, ctx);
-      if (financials.netLoss <= VARIANCE_THRESHOLD) return;
+      const result = evaluateListableUnderpaidShortfall(tx, trip, listableCtx);
+      if (!result.ok) return;
 
       const match: MatchResult = {
         transaction: tx,
         trip,
         matchType: 'AMOUNT_VARIANCE',
         confidence: 'high',
-        varianceAmount: -financials.netLoss,
+        varianceAmount: -result.financials.netLoss,
         reason: 'Underpaid — platform reimbursed less than the toll cost',
         timeDifferenceMinutes: 0,
       };
       seenTollIds.add(tx.id);
-      items.push({ transaction: tx, match, claim, financials });
+      items.push({ transaction: tx, match, claim: result.claim, financials: result.financials });
     };
 
     for (const tx of reconciledTolls) {
@@ -224,10 +225,7 @@ export function UnderpaidClaimsStep({
     // After period reset: tripId cleared but matchedTripId / suggestion remain.
     for (const tx of pendingUnderpaidTolls) {
       if (seenTollIds.has(tx.id)) continue;
-      const suggestedTripId =
-        suggestions?.get(tx.id)?.[0]?.trip?.id ||
-        (tx as FinancialTransaction & { matchedTripId?: string | null }).matchedTripId ||
-        null;
+      const suggestedTripId = resolvePendingUnderpaidTripId(tx, suggestions);
       if (!suggestedTripId) continue;
       const trip = tripMap.get(suggestedTripId);
       if (!trip) continue;

@@ -1,16 +1,16 @@
 import type { Claim, DisputeRefund, FinancialTransaction, Trip } from '../types/data';
 import { buildClaimByTollId, dedupeClaimsForDisplay } from './claimByToll';
 import {
-  isActionablePartialShortfall,
   isTollInWizardPeriod,
   isVisiblePartialShortfallClaim,
 } from './tollWeekPeriod';
+import { buildTripRefundAllocation } from './tollReconciliation';
 import {
-  VARIANCE_THRESHOLD,
-  buildTollFinancialsContext,
-  buildTripRefundAllocation,
-  calculateTollFinancials,
-} from './tollReconciliation';
+  countListablePendingUnderpaid,
+  evaluateListableUnderpaidShortfall,
+  type PendingUnderpaidSuggestions,
+  type PendingUnderpaidTx,
+} from './pendingUnderpaidListable';
 
 export interface UnderpaidPipelineCounts {
   underpaidTolls: number;
@@ -26,6 +26,7 @@ export interface UnderpaidPipelineCounts {
 
 /**
  * Same rules as UnderpaidClaimsStep tab lists — used for wizard step completion.
+ * Optional pendingUnderpaidTolls count only listable shortfalls (not bucket length).
  */
 export function computeUnderpaidPipelineCounts(input: {
   reconciledTolls: FinancialTransaction[];
@@ -35,6 +36,9 @@ export function computeUnderpaidPipelineCounts(input: {
   disputeRefunds: DisputeRefund[];
   periodWeekKey: string;
   fleetTz: string;
+  /** Unreconciled underpaid after reset — only listable rows add to actionable. */
+  pendingUnderpaidTolls?: PendingUnderpaidTx[];
+  suggestions?: PendingUnderpaidSuggestions | null;
 }): UnderpaidPipelineCounts {
   const {
     reconciledTolls,
@@ -44,6 +48,8 @@ export function computeUnderpaidPipelineCounts(input: {
     disputeRefunds,
     periodWeekKey,
     fleetTz,
+    pendingUnderpaidTolls = [],
+    suggestions,
   } = input;
 
   const tripMap = new Map(trips.filter((t) => t?.id).map((t) => [t.id, t]));
@@ -71,25 +77,39 @@ export function computeUnderpaidPipelineCounts(input: {
   ).displayClaims;
   const partialByTollId = new Set(partialClaims.map((c) => c.transactionId!));
 
+  const listableCtx = {
+    claimByTollId,
+    partialByTollId,
+    reconciledTollById,
+    trips,
+    disputeRefunds,
+    allocation,
+    periodWeekKey,
+    fleetTz,
+  };
+
   let underpaidTolls = 0;
   for (const tx of reconciledTolls) {
     if (!tx.tripId) continue;
-    if (!isTollInWizardPeriod(tx, periodWeekKey, fleetTz)) continue;
     const trip = tripMap.get(tx.tripId);
     if (!trip) continue;
-    const claim = claimByTollId.get(tx.id);
-    if (partialByTollId.has(tx.id)) continue;
-    if (claim && ['Sent_to_Driver', 'Submitted_to_Uber', 'Rejected'].includes(claim.status)) {
-      continue;
-    }
-    if (claim?.status === 'Resolved' && !isActionablePartialShortfall(claim, reconciledTollById.get(tx.id))) {
-      continue;
-    }
-    const ctx = buildTollFinancialsContext(tx, trip, claim, trips, disputeRefunds, allocation);
-    const financials = calculateTollFinancials(tx, trip, claim, ctx);
-    if (financials.netLoss <= VARIANCE_THRESHOLD) continue;
-    underpaidTolls++;
+    if (evaluateListableUnderpaidShortfall(tx, trip, listableCtx).ok) underpaidTolls++;
   }
+
+  const pendingListable = countListablePendingUnderpaid({
+    pendingUnderpaidTolls,
+    suggestions,
+    tripMap,
+    claimByTollId,
+    partialByTollId,
+    reconciledTollById,
+    trips,
+    disputeRefunds,
+    allocation,
+    periodWeekKey,
+    fleetTz,
+  });
+  underpaidTolls += pendingListable;
 
   const awaitingDriver = dedupeClaimsForDisplay(
     periodClaims.filter((c) => c.status === 'Sent_to_Driver'),

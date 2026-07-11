@@ -173,6 +173,14 @@ export function personalMatchReasonLabel(
   return 'Personal — confirm';
 }
 
+/** Post-reset underpaid needs a trip id (live, matched, or linked) to price shortfalls. */
+function hasUnderpaidTripAnchor(
+  tx: WizardBucketTx,
+  best?: Pick<MatchResult, 'trip'> | undefined,
+): boolean {
+  return !!(tx.tripId || tx.matchedTripId || best?.trip?.id);
+}
+
 /**
  * Single source of truth for wizard step bucketing (client wizard + tests).
  *
@@ -210,12 +218,19 @@ export function resolveWizardBucket(
     if (stage === 'deadhead_pending' || tx.matchTypeCode === 'DEADHEAD_MATCH') {
       return 'deadhead';
     }
-    if (stage === 'underpaid_pending' || tx.matchTypeCode === 'AMOUNT_VARIANCE') {
+    if (
+      stage === 'underpaid_pending' ||
+      tx.matchTypeCode === 'AMOUNT_VARIANCE' ||
+      tx.matchTypeCode === 'PERFECT_MATCH'
+    ) {
+      // Post-reset underpaid with no trip to attach → Needs Review (not an invisible underpaid ghost).
+      if (!hasUnderpaidTripAnchor(tx, usableBest)) return 'needs-review';
       return 'underpaid';
     }
-    if (tx.matchTypeCode === 'PERFECT_MATCH') return 'underpaid';
-    // Matched after reset with no live suggestion — stay on money steps, not Needs Review.
-    return stage === 'deadhead_pending' ? 'deadhead' : 'underpaid';
+    // Matched after reset with no live suggestion — stay on money steps when a trip id remains.
+    if (stage === 'deadhead_pending') return 'deadhead';
+    if (!hasUnderpaidTripAnchor(tx, usableBest)) return 'needs-review';
+    return 'underpaid';
   }
 
   if (orphanBest) {

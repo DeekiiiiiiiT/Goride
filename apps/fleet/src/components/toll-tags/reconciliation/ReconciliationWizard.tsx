@@ -482,7 +482,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
         claimTollIdsForPeriod,
       );
       const reconciledForGating = filterTollsToWizardPeriod(merged, period.startDate, fleetTz);
-      const base = computeUnderpaidPipelineCounts({
+      return computeUnderpaidPipelineCounts({
         reconciledTolls: reconciledForGating,
         periodClaims,
         allClaims: claims,
@@ -490,14 +490,10 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
         disputeRefunds: disputeRefunds || [],
         periodWeekKey: period.startDate,
         fleetTz,
+        // Only listable pending shortfalls block Finish (not raw underpaid bucket length).
+        pendingUnderpaidTolls: classifiedAllPlatforms.underpaid,
+        suggestions,
       });
-      // Unreconciled underpaid (post-reset) still block the underpaid step.
-      const pendingUnderpaid = classifiedAllPlatforms.underpaid.length;
-      return {
-        ...base,
-        underpaidTolls: base.underpaidTolls + pendingUnderpaid,
-        actionable: base.actionable + pendingUnderpaid,
-      };
     },
     [
       pReconciledInPeriod,
@@ -511,6 +507,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
       trips,
       disputeRefunds,
       classifiedAllPlatforms,
+      suggestions,
     ],
   );
 
@@ -720,7 +717,18 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
     .filter(c => c.status === 'Resolved' && c.resolutionReason === 'Charge Driver')
     .reduce((sum, c) => sum + Math.abs(c.amount || 0), 0);
   const netTollLoss = Math.max(0, tollSpend - reimbursedByUber - chargedToDrivers);
-  const needsReviewCount = filteredUnreconciledTolls.length + pUnclaimed.length;
+  const needsReviewCount = STEP_ORDER.reduce(
+    (sum, id) => sum + (stepCounts[id]?.actionable || 0),
+    0,
+  );
+  const tollsNeedingReviewCount =
+    (stepCounts['needs-review']?.actionable || 0) +
+    (stepCounts['personal-use']?.actionable || 0) +
+    (stepCounts['deadhead']?.actionable || 0) +
+    (stepCounts['underpaid-claims']?.actionable || 0);
+  const refundsNeedingReviewCount =
+    (stepCounts['dispute-refunds']?.actionable || 0) +
+    (stepCounts['unlinked-refunds']?.actionable || 0);
 
   const filteredTollIds = new Set(filteredUnreconciledTolls.map(tx => tx.id));
   const highConfidenceCount = Array.from(suggestions.entries())
@@ -936,8 +944,8 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
         chargedToDrivers={chargedToDrivers}
         netTollLoss={netTollLoss}
         needsReviewCount={needsReviewCount}
-        tollsNeedingReviewCount={filteredUnreconciledTolls.length}
-        refundsNeedingReviewCount={pUnclaimed.length}
+        tollsNeedingReviewCount={tollsNeedingReviewCount}
+        refundsNeedingReviewCount={refundsNeedingReviewCount}
         resolvedRefundsAmount={resolvedRefundsAmount}
       />
 
