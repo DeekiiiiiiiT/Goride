@@ -117,6 +117,8 @@ export interface WizardBucketTx {
   tripId?: string | null;
   workflowStage?: TollWorkflowStage | string;
   matchStatus?: TollMatchStatus;
+  matchTypeCode?: string | null;
+  matchedTripId?: string | null;
   isAmbiguous?: boolean;
   paymentMethod?: string;
   receiptUrl?: string;
@@ -173,9 +175,10 @@ export function personalMatchReasonLabel(
 
 /**
  * Single source of truth for wizard step bucketing (client wizard + tests).
- * Orphan personal wins over stale ambiguous flags — there is no trip to pick.
- * Exception: period reset clears tripId but keeps underpaid_pending + matchedTripId;
- * live rematch must not invent ORPHAN_* and hijack those rows into Personal Use.
+ *
+ * Period reset clears tripId but keeps underpaid/deadhead/matched + matchedTripId.
+ * Live rematch must not invent ORPHAN_* into Personal Use, and must not dump
+ * clear underpaid/deadhead matches into Needs Review.
  */
 export function resolveWizardBucket(
   tx: WizardBucketTx,
@@ -198,19 +201,21 @@ export function resolveWizardBucket(
   const usableBest = orphanBest && knownNonPersonal ? undefined : best;
 
   if (knownNonPersonal) {
-    if (usableBest && !usableBest.isAmbiguous) {
+    // Only true ambiguity belongs in Needs Review — not clear underpaid/deadhead.
+    if (usableBest?.isAmbiguous && !linkConfirmed) return 'needs-review';
+    if (usableBest) {
       const live = resolveTollBucket(tx, usableBest);
-      if (live !== 'needs-review') {
-        // Unreconciled after reset: confirm the trip link in Needs Review first.
-        if (!linkConfirmed && (live === 'underpaid' || live === 'deadhead')) {
-          return 'needs-review';
-        }
-        return live;
-      }
+      if (live !== 'needs-review') return live;
     }
-    if (!linkConfirmed) return 'needs-review';
-    if (stage === 'underpaid_pending') return 'underpaid';
-    if (stage === 'deadhead_pending') return 'deadhead';
+    if (stage === 'deadhead_pending' || tx.matchTypeCode === 'DEADHEAD_MATCH') {
+      return 'deadhead';
+    }
+    if (stage === 'underpaid_pending' || tx.matchTypeCode === 'AMOUNT_VARIANCE') {
+      return 'underpaid';
+    }
+    if (tx.matchTypeCode === 'PERFECT_MATCH') return 'underpaid';
+    // Matched after reset with no live suggestion — stay on money steps, not Needs Review.
+    return stage === 'deadhead_pending' ? 'deadhead' : 'underpaid';
   }
 
   if (orphanBest) {

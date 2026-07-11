@@ -422,40 +422,6 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
     [periodClaims],
   );
 
-  const underpaidPipeline = useMemo(
-    () => {
-      const merged = mergeReconciledTollsForUnderpaid(
-        pReconciledInPeriod,
-        allReconciledTolls.length ? allReconciledTolls : reconciledTolls,
-        period.startDate,
-        fleetTz,
-        claimTollIdsForPeriod,
-      );
-      const reconciledForGating = filterTollsToWizardPeriod(merged, period.startDate, fleetTz);
-      return computeUnderpaidPipelineCounts({
-        reconciledTolls: reconciledForGating,
-        periodClaims,
-        allClaims: claims,
-        trips,
-        disputeRefunds: disputeRefunds || [],
-        periodWeekKey: period.startDate,
-        fleetTz,
-      });
-    },
-    [
-      pReconciledInPeriod,
-      allReconciledTolls,
-      reconciledTolls,
-      period.startDate,
-      fleetTz,
-      claimTollIdsForPeriod,
-      periodClaims,
-      claims,
-      trips,
-      disputeRefunds,
-    ],
-  );
-
   // Claimed-toll exclusion is deliberately ALL-TIME (not period-scoped): "does
   // this toll already have a claim at all" doesn't depend on which period the
   // claim's own date resolves to — matches the same rule the period
@@ -504,6 +470,48 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
   const classifiedAllPlatforms = useMemo(
     () => filterBucketsToPeriod(buildBuckets(allUnreconciledForGating)),
     [buildBuckets, allUnreconciledForGating, filterBucketsToPeriod],
+  );
+
+  const underpaidPipeline = useMemo(
+    () => {
+      const merged = mergeReconciledTollsForUnderpaid(
+        pReconciledInPeriod,
+        allReconciledTolls.length ? allReconciledTolls : reconciledTolls,
+        period.startDate,
+        fleetTz,
+        claimTollIdsForPeriod,
+      );
+      const reconciledForGating = filterTollsToWizardPeriod(merged, period.startDate, fleetTz);
+      const base = computeUnderpaidPipelineCounts({
+        reconciledTolls: reconciledForGating,
+        periodClaims,
+        allClaims: claims,
+        trips,
+        disputeRefunds: disputeRefunds || [],
+        periodWeekKey: period.startDate,
+        fleetTz,
+      });
+      // Unreconciled underpaid (post-reset) still block the underpaid step.
+      const pendingUnderpaid = classifiedAllPlatforms.underpaid.length;
+      return {
+        ...base,
+        underpaidTolls: base.underpaidTolls + pendingUnderpaid,
+        actionable: base.actionable + pendingUnderpaid,
+      };
+    },
+    [
+      pReconciledInPeriod,
+      allReconciledTolls,
+      reconciledTolls,
+      period.startDate,
+      fleetTz,
+      claimTollIdsForPeriod,
+      periodClaims,
+      claims,
+      trips,
+      disputeRefunds,
+      classifiedAllPlatforms,
+    ],
   );
 
   // Unlinked: pending-hold alone is informational, but Apply / Accept still count.
@@ -1030,6 +1038,8 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               claims={pPeriodClaims}
               allClaims={claims}
               reconciledTolls={underpaidReconciledTolls}
+              pendingUnderpaidTolls={classified.underpaid}
+              suggestions={suggestions}
               tollLookup={allReconciledTolls.length ? allReconciledTolls : reconciledTolls}
               trips={trips}
               disputeRefunds={disputeRefunds}

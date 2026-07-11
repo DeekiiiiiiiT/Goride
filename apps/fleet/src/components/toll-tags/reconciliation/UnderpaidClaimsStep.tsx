@@ -41,6 +41,13 @@ interface UnderpaidClaimsStepProps {
   /** All-time claims — used to link tolls ↔ claims (prevents duplicate filing). */
   allClaims: Claim[];
   reconciledTolls: FinancialTransaction[];
+  /**
+   * Unreconciled underpaid Tag tolls (e.g. after period reset). Shown on the
+   * Underpaid Tolls tab using matchedTripId / live suggestion trip — not Needs Review.
+   */
+  pendingUnderpaidTolls?: FinancialTransaction[];
+  /** Live match suggestions keyed by toll id (for pending underpaid trip link). */
+  suggestions?: Map<string, MatchResult[]>;
   /** Extra tolls for History location/platform lookup (may include other weeks). */
   tollLookup?: FinancialTransaction[];
   trips: Trip[];
@@ -63,7 +70,7 @@ interface UnderpaidClaimsStepProps {
 }
 
 export function UnderpaidClaimsStep({
-  claims, allClaims, reconciledTolls, tollLookup = [], trips, disputeRefunds, unlinkedRefundTrips = [], onUndoUnlinkedApply, busyUnlinkedTripId,
+  claims, allClaims, reconciledTolls, pendingUnderpaidTolls = [], suggestions, tollLookup = [], trips, disputeRefunds, unlinkedRefundTrips = [], onUndoUnlinkedApply, busyUnlinkedTripId,
   periodWeekKey,
   periodLabel: _periodLabel,
   fleetTz,
@@ -173,26 +180,26 @@ export function UnderpaidClaimsStep({
 
   const losses = useMemo(() => {
     const items: LossItem[] = [];
-    for (const tx of reconciledTolls) {
-      if (!tx.tripId) continue;
-      if (!isTollInWizardPeriod(tx, periodWeekKey, fleetTz)) continue;
-      const trip = tripMap.get(tx.tripId);
-      if (!trip) continue;
+    const seenTollIds = new Set<string>();
+
+    const pushLoss = (tx: FinancialTransaction, trip: Trip) => {
+      if (seenTollIds.has(tx.id)) return;
+      if (!isTollInWizardPeriod(tx, periodWeekKey, fleetTz)) return;
       const claim = claimByTollId.get(tx.id);
 
       // Only hide from Underpaid when Partially Covered will show this toll.
-      if (partialByTollId.has(tx.id)) continue;
+      if (partialByTollId.has(tx.id)) return;
 
       if (claim && ['Sent_to_Driver', 'Submitted_to_Uber', 'Rejected'].includes(claim.status)) {
-        continue;
+        return;
       }
       if (claim?.status === 'Resolved' && !isActionablePartialShortfall(claim, reconciledTollById.get(tx.id))) {
-        continue;
+        return;
       }
 
       const ctx = buildTollFinancialsContext(tx, trip, claim, trips, disputeRefunds, allocation);
       const financials = calculateTollFinancials(tx, trip, claim, ctx);
-      if (financials.netLoss <= VARIANCE_THRESHOLD) continue;
+      if (financials.netLoss <= VARIANCE_THRESHOLD) return;
 
       const match: MatchResult = {
         transaction: tx,
@@ -203,12 +210,47 @@ export function UnderpaidClaimsStep({
         reason: 'Underpaid — platform reimbursed less than the toll cost',
         timeDifferenceMinutes: 0,
       };
+      seenTollIds.add(tx.id);
       items.push({ transaction: tx, match, claim, financials });
+    };
+
+    for (const tx of reconciledTolls) {
+      if (!tx.tripId) continue;
+      const trip = tripMap.get(tx.tripId);
+      if (!trip) continue;
+      pushLoss(tx, trip);
     }
+
+    // After period reset: tripId cleared but matchedTripId / suggestion remain.
+    for (const tx of pendingUnderpaidTolls) {
+      if (seenTollIds.has(tx.id)) continue;
+      const suggestedTripId =
+        suggestions?.get(tx.id)?.[0]?.trip?.id ||
+        (tx as FinancialTransaction & { matchedTripId?: string | null }).matchedTripId ||
+        null;
+      if (!suggestedTripId) continue;
+      const trip = tripMap.get(suggestedTripId);
+      if (!trip) continue;
+      pushLoss({ ...tx, tripId: suggestedTripId }, trip);
+    }
+
     return items.sort(
       (a, b) => new Date(b.transaction.date).getTime() - new Date(a.transaction.date).getTime(),
     );
-  }, [reconciledTolls, tripMap, claimByTollId, partialByTollId, trips, disputeRefunds, allocation, reconciledTollById, periodWeekKey, fleetTz]);
+  }, [
+    reconciledTolls,
+    pendingUnderpaidTolls,
+    suggestions,
+    tripMap,
+    claimByTollId,
+    partialByTollId,
+    trips,
+    disputeRefunds,
+    allocation,
+    reconciledTollById,
+    periodWeekKey,
+    fleetTz,
+  ]);
 
   const guardTollInPeriod = (transaction: FinancialTransaction): boolean => {
     const check = assertTollInWizardPeriod(transaction, periodWeekKey, fleetTz);

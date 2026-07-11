@@ -197,7 +197,7 @@ describe('resolveWizardBucket', () => {
     )).toBe('personal-use');
   });
 
-  it('underpaid_pending + live orphan stays needs-review (not personal) when unreconciled', () => {
+  it('underpaid_pending + live orphan → underpaid (not personal, not needs-review)', () => {
     expect(resolveWizardBucket(
       {
         ...tagTx,
@@ -211,10 +211,27 @@ describe('resolveWizardBucket', () => {
         reasonCode: 'ORPHAN_OUT_OF_WINDOW',
         trip: { id: '' } as any,
       },
-    )).toBe('needs-review');
+    )).toBe('underpaid');
   });
 
-  it('matched + AMOUNT_VARIANCE unreconciled → needs-review to re-confirm trip', () => {
+  it('deadhead_pending + live orphan → deadhead (not needs-review)', () => {
+    expect(resolveWizardBucket(
+      {
+        ...tagTx,
+        workflowStage: 'deadhead_pending',
+        matchStatus: 'matched',
+        matchTypeCode: 'DEADHEAD_MATCH',
+        isReconciled: false,
+      },
+      {
+        matchType: 'PERSONAL_MATCH',
+        reasonCode: 'ORPHAN_NEARBY_UNEXPLAINED',
+        trip: { id: '' } as any,
+      },
+    )).toBe('deadhead');
+  });
+
+  it('matched + AMOUNT_VARIANCE unreconciled → underpaid (not needs-review)', () => {
     expect(resolveWizardBucket(
       {
         ...tagTx,
@@ -223,7 +240,19 @@ describe('resolveWizardBucket', () => {
         isReconciled: false,
       },
       { matchType: 'AMOUNT_VARIANCE', reasonCode: 'ON_TRIP' },
-    )).toBe('needs-review');
+    )).toBe('underpaid');
+  });
+
+  it('matched + DEADHEAD_MATCH unreconciled → deadhead', () => {
+    expect(resolveWizardBucket(
+      {
+        ...tagTx,
+        workflowStage: 'deadhead_pending',
+        matchStatus: 'matched',
+        isReconciled: false,
+      },
+      { matchType: 'DEADHEAD_MATCH', reasonCode: 'ENROUTE_APPROACH' },
+    )).toBe('deadhead');
   });
 });
 

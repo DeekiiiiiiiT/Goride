@@ -830,7 +830,7 @@ function buildOrphanSuggestion(
 /**
  * Period reset clears tripId but keeps matchedTripId + matchStatus=matched.
  * Live window rematch can miss that trip and invent an orphan — restore the
- * known trip as AMOUNT_VARIANCE / PERFECT_MATCH so Unlinked/Underpaid stay correct.
+ * known trip using the persisted match type (deadhead vs underpaid).
  */
 function buildPersistedTripMatchSuggestion(
   tx: any,
@@ -851,21 +851,36 @@ function buildPersistedTripMatchSuggestion(
       : tagAmountAbs;
   const tripRefundAmount = Number(trip.tollCharges) || 0;
   const varianceAmount = tripRefundAmount - txAmountAbs;
-  const matchType: MatchResult["matchType"] =
-    Math.abs(varianceAmount) < 0.05 ? "PERFECT_MATCH" : "AMOUNT_VARIANCE";
+  const persistedType = String(tx.matchTypeCode || "");
+
+  let matchType: MatchResult["matchType"];
+  let reasonCode: MatchResult["reasonCode"];
+  let reason: string;
+
+  if (persistedType === "DEADHEAD_MATCH" || tx.workflowStage === "deadhead_pending") {
+    matchType = "DEADHEAD_MATCH";
+    reasonCode = "ENROUTE_APPROACH";
+    reason = "Restored prior deadhead link (period reset)";
+  } else if (Math.abs(varianceAmount) < 0.05 || persistedType === "PERFECT_MATCH") {
+    matchType = "PERFECT_MATCH";
+    reasonCode = "ON_TRIP";
+    reason = "Restored prior trip link (period reset)";
+  } else {
+    matchType = "AMOUNT_VARIANCE";
+    reasonCode = "ON_TRIP";
+    reason =
+      `Restored prior trip link — Uber refund $${tripRefundAmount.toFixed(2)} vs toll $${txAmountAbs.toFixed(2)}`;
+  }
 
   return {
     tripId: trip.id,
     confidence: "medium",
-    reason:
-      matchType === "PERFECT_MATCH"
-        ? "Restored prior trip link (period reset)"
-        : `Restored prior trip link — Uber refund $${tripRefundAmount.toFixed(2)} vs toll $${txAmountAbs.toFixed(2)}`,
+    reason,
     timeDifferenceMinutes: 0,
     matchType,
     varianceAmount: matchType === "AMOUNT_VARIANCE" ? varianceAmount : undefined,
     confidenceScore: 70,
-    reasonCode: "ON_TRIP",
+    reasonCode,
     tripDate: trip.date,
     tripAmount: trip.amount,
     tripTollCharges: tripRefundAmount,
@@ -1006,6 +1021,8 @@ function tollLedgerToTxShape(entry: TollLedgerRecord): any {
     workflowStage: entry.workflowStage,
     claimId: entry.claimId,
     matchStatus: entry.matchStatus,
+    matchedTripId: entry.matchedTripId ?? null,
+    matchTypeCode: entry.matchTypeCode ?? null,
     isAmbiguous: entry.metadata?.isAmbiguous === true || entry.matchStatus === "ambiguous",
     // Surface unlinked-apply provenance on the API shape for Matched History.
     unlinkedSourceTripId: entry.unlinkedSourceTripId ?? null,

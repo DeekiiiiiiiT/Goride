@@ -849,6 +849,10 @@ export interface FinancialTransaction {
   workflowStage?: string;
   claimId?: string | null;
   matchStatus?: 'unmatched' | 'matched' | 'orphan_personal' | 'ambiguous';
+  /** Persisted best-match trip after period reset clears tripId. */
+  matchedTripId?: string | null;
+  /** Persisted match type (AMOUNT_VARIANCE, DEADHEAD_MATCH, …). */
+  matchTypeCode?: string | null;
   isAmbiguous?: boolean;
 
   // Unlinked refund apply provenance (nullable on legacy rows).
